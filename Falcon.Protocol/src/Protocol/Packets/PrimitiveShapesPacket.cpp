@@ -110,6 +110,7 @@ namespace {
                 stream.putOptionalPresent(shape.mHasBackgroundColor);
                 if (shape.mHasBackgroundColor)
                     stream.putLInt(shape.mBackgroundColor);
+                stream.putLFloat(shape.mLineGapHeight);
                 stream.putBool(shape.mDepthTest);
                 stream.putBool(shape.mShowBackface);
                 stream.putBool(shape.mShowTextBackface);
@@ -217,6 +218,7 @@ namespace {
                 shape.mHasBackgroundColor = stream.getOptionalPresent();
                 if (shape.mHasBackgroundColor)
                     shape.mBackgroundColor = stream.getLInt();
+                shape.mLineGapHeight = stream.getLFloat();
                 shape.mDepthTest = stream.getBool();
                 shape.mShowBackface = stream.getBool();
                 shape.mShowTextBackface = stream.getBool();

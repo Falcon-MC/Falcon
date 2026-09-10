@@ -171,6 +171,10 @@ namespace {
         stream.putLInt((uint32_t) attribute.mCurrentTransitionTicks);
         stream.putLInt((uint32_t) attribute.mTotalTransitionTicks);
         stream.putString(CAMERA_EASE_NAMES[(size_t) attribute.mEasing]);
+        stream.putLInt((uint32_t) attribute.mLocalTransitionTicks);
+        stream.putBool(attribute.mNoiseTransition);
+        stream.putByte((unsigned char) attribute.mNoiseAlignment.mType);
+        stream.putUnsignedVarInt((uint32_t) attribute.mNoiseAlignment.mValue);
     }
 
     EnvironmentAttributeData readEnvironmentAttribute(ReadOnlyBinaryStream &stream) {
@@ -188,6 +192,10 @@ namespace {
         attribute.mCurrentTransitionTicks = (int32_t) stream.getLInt();
         attribute.mTotalTransitionTicks = (int32_t) stream.getLInt();
         attribute.mEasing = (CameraEase) indexOf(stream.getString(), CAMERA_EASE_NAMES.data(), CAMERA_EASE_NAMES.size());
+        attribute.mLocalTransitionTicks = (int32_t) stream.getLInt();
+        attribute.mNoiseTransition = stream.getBool();
+        attribute.mNoiseAlignment.mType = (NoiseAlignmentType) stream.getByte();
+        attribute.mNoiseAlignment.mValue = (int32_t) stream.getUnsignedVarInt();
         return attribute;
     }
 

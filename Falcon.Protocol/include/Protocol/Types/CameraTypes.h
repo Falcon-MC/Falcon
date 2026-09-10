@@ -240,4 +240,8 @@ public:
 
     bool mHasControlScheme = false;
     ControlScheme mControlScheme = ControlScheme::LockedPlayerRelativeStrafe;
+
+    bool mApplyInheritedStartingRotation = false;
+    bool mHasStartingRotation = false;
+    Vector2f mStartingRotation;
 };

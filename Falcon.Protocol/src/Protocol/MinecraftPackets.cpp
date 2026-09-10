@@ -127,6 +127,7 @@
 #include "Protocol/Packets/PacketViolationWarningPacket.h"
 #include "Protocol/Packets/PartyChangedPacket.h"
 #include "Protocol/Packets/PartyDestinationCookieResponsePacket.h"
+#include "Protocol/Packets/RecordStartedPacket.h"
 #include "Protocol/Packets/PhotoInfoRequestPacket.h"
 #include "Protocol/Packets/PhotoTransferPacket.h"
 #include "Protocol/Packets/PlayStatusPacket.h"
@@ -190,6 +191,7 @@
 #include "Protocol/Packets/SetLocalPlayerAsInitializedPacket.h"
 #include "Protocol/Packets/SetMovementAuthorityPacket.h"
 #include "Protocol/Packets/SetPlayerGameTypePacket.h"
+#include "Protocol/Packets/SetPlayerFurnaceOptionsPacket.h"
 #include "Protocol/Packets/SetPlayerInventoryOptionsPacket.h"
 #include "Protocol/Packets/SetScorePacket.h"
 #include "Protocol/Packets/SetScoreboardIdentityPacket.h"
@@ -397,6 +399,7 @@ void MinecraftPackets::_registerDefaultPackets() {
     registerPacket<PacketViolationWarningPacket>();
     registerPacket<PartyChangedPacket>();
     registerPacket<PartyDestinationCookieResponsePacket>();
+    registerPacket<RecordStartedPacket>();
     registerPacket<PhotoInfoRequestPacket>();
     registerPacket<PhotoTransferPacket>();
     registerPacket<PlayStatusPacket>();
@@ -460,6 +463,7 @@ void MinecraftPackets::_registerDefaultPackets() {
     registerPacket<SetLocalPlayerAsInitializedPacket>();
     registerPacket<SetMovementAuthorityPacket>();
     registerPacket<SetPlayerGameTypePacket>();
+    registerPacket<SetPlayerFurnaceOptionsPacket>();
     registerPacket<SetPlayerInventoryOptionsPacket>();
     registerPacket<SetScorePacket>();
     registerPacket<SetScoreboardIdentityPacket>();

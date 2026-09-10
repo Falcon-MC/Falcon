@@ -239,7 +239,9 @@ enum class MinecraftPacketIds : int {
     ServerPresenceInfo = 347,
     ClientboundUpdateSoundData = 348,
     SendPartyDestinationCookie = 349,
-    PartyDestinationCookieResponse = 350
+    PartyDestinationCookieResponse = 350,
+    SetPlayerFurnaceOptions = 351,
+    RecordStarted = 352
 };
 
 const char *toString(MinecraftPacketIds id);

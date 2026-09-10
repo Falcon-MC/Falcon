@@ -4,6 +4,7 @@
 #include "Core/Math/Vector3i.h"
 #include "Protocol/Types/BlockDefinition.h"
 #include "Protocol/Types/InventoryActionData.h"
+#include "Protocol/Types/HandSlot.h"
 #include "Protocol/Types/ItemStack.h"
 
 #include <cstdint>
@@ -29,6 +30,7 @@ public:
     Vector3i mBlockPosition;
     int32_t mBlockFace = 0;
     int32_t mHotbarSlot = 0;
+    HandSlot mHand = HandSlot::MainHand;
     ItemStack mItemInHand;
     Vector3f mPlayerPosition;
     Vector3f mClickPosition;

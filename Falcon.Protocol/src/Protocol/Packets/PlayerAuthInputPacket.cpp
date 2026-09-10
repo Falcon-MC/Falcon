@@ -22,7 +22,6 @@ void PlayerAuthInputPacket::write(BinaryStream &stream, const PacketCodecContext
     stream.putLFloat(mMotionY);
     stream.putLFloat(mRotation.z);
 
-    stream.putBool(true);
     stream.putUnsignedVarInt((uint32_t) mInputData.size());
     for (int32_t entry: mInputData) {
         stream.putVarInt(entry);
@@ -36,7 +35,6 @@ void PlayerAuthInputPacket::write(BinaryStream &stream, const PacketCodecContext
     stream.putUnsignedVarLong((uint64_t) mTick);
     stream.putVector3f(mDelta);
 
-    stream.putBool(true);
     if (hasInputFlag((int32_t) PlayerAuthInputData::PerformItemInteraction)) {
         stream.putBool(true);
         InventoryCodec::writeItemUseTransaction(stream, context, mItemUseTransaction);
@@ -44,7 +42,6 @@ void PlayerAuthInputPacket::write(BinaryStream &stream, const PacketCodecContext
         stream.putBool(false);
     }
 
-    stream.putBool(true);
     if (hasInputFlag((int32_t) PlayerAuthInputData::PerformItemStackRequest)) {
         stream.putBool(true);
         InventoryCodec::writeItemStackRequest(stream, context, mItemStackRequest);
@@ -52,7 +49,6 @@ void PlayerAuthInputPacket::write(BinaryStream &stream, const PacketCodecContext
         stream.putBool(false);
     }
 
-    stream.putBool(true);
     if (hasInputFlag((int32_t) PlayerAuthInputData::PerformBlockActions)) {
         stream.putBool(true);
         stream.putUnsignedVarInt((uint32_t) mPlayerActions.size());
@@ -63,7 +59,6 @@ void PlayerAuthInputPacket::write(BinaryStream &stream, const PacketCodecContext
         stream.putBool(false);
     }
 
-    stream.putBool(true);
     if (hasInputFlag((int32_t) PlayerAuthInputData::InClientPredictedInVehicle)) {
         stream.putBool(true);
         stream.putLFloat(mVehicleRotationX);
@@ -72,7 +67,6 @@ void PlayerAuthInputPacket::write(BinaryStream &stream, const PacketCodecContext
         stream.putBool(false);
     }
 
-    stream.putBool(true);
     if (hasInputFlag((int32_t) PlayerAuthInputData::InClientPredictedInVehicle)) {
         stream.putBool(true);
         stream.putVarLong(mPredictedVehicle);
@@ -96,12 +90,10 @@ void PlayerAuthInputPacket::read(ReadOnlyBinaryStream &stream, const PacketCodec
     float rotationZ = stream.getLFloat();
     mRotation = Vector3f(rotationX, rotationY, rotationZ);
 
-    if (stream.getBool()) {
-        uint32_t count = stream.getUnsignedVarInt();
-        mInputData.reserve(count);
-        for (uint32_t i = 0; i < count; i++) {
-            mInputData.push_back(stream.getVarInt());
-        }
+    uint32_t inputCount = stream.getUnsignedVarInt();
+    mInputData.reserve(inputCount);
+    for (uint32_t i = 0; i < inputCount; i++) {
+        mInputData.push_back(stream.getVarInt());
     }
 
     mInputMode = (PlayerInputMode) stream.getUnsignedVarInt();
@@ -112,17 +104,17 @@ void PlayerAuthInputPacket::read(ReadOnlyBinaryStream &stream, const PacketCodec
     mTick = (int64_t) stream.getUnsignedVarLong();
     mDelta = stream.getVector3f();
 
-    if (stream.getBool() && stream.getBool()) {
+    if (stream.getBool()) {
         mHasItemUseTransaction = true;
         mItemUseTransaction = InventoryCodec::readItemUseTransaction(stream, context);
     }
 
-    if (stream.getBool() && stream.getBool()) {
+    if (stream.getBool()) {
         mHasItemStackRequest = true;
         mItemStackRequest = InventoryCodec::readItemStackRequest(stream, context);
     }
 
-    if (stream.getBool() && stream.getBool()) {
+    if (stream.getBool()) {
         uint32_t count = stream.getUnsignedVarInt();
         mPlayerActions.reserve(count);
         for (uint32_t i = 0; i < count; i++) {
@@ -130,13 +122,13 @@ void PlayerAuthInputPacket::read(ReadOnlyBinaryStream &stream, const PacketCodec
         }
     }
 
-    if (stream.getBool() && stream.getBool()) {
+    if (stream.getBool()) {
         mHasVehicleRotation = true;
         mVehicleRotationX = stream.getLFloat();
         mVehicleRotationY = stream.getLFloat();
     }
 
-    if (stream.getBool() && stream.getBool()) {
+    if (stream.getBool()) {
         mHasPredictedVehicle = true;
         mPredictedVehicle = stream.getVarLong();
     }

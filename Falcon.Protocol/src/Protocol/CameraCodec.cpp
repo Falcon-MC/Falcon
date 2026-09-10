@@ -346,6 +346,13 @@ void CameraCodec::writePreset(BinaryStream &stream, const CameraPreset &preset) 
     if (preset.mHasControlScheme) {
         stream.putByte((unsigned char) preset.mControlScheme);
     }
+
+    stream.putBool(preset.mApplyInheritedStartingRotation);
+
+    stream.putOptionalPresent(preset.mHasStartingRotation);
+    if (preset.mHasStartingRotation) {
+        stream.putVector2f(preset.mStartingRotation);
+    }
 }
 
 CameraPreset CameraCodec::readPreset(ReadOnlyBinaryStream &stream) {
@@ -447,6 +454,13 @@ CameraPreset CameraCodec::readPreset(ReadOnlyBinaryStream &stream) {
     preset.mHasControlScheme = stream.getOptionalPresent();
     if (preset.mHasControlScheme) {
         preset.mControlScheme = (ControlScheme) stream.getByte();
+    }
+
+    preset.mApplyInheritedStartingRotation = stream.getBool();
+
+    preset.mHasStartingRotation = stream.getOptionalPresent();
+    if (preset.mHasStartingRotation) {
+        preset.mStartingRotation = stream.getVector2f();
     }
 
     return preset;

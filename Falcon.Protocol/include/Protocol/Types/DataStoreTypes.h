@@ -9,6 +9,7 @@ enum class DataStoreScalarType {
     Number,
     Bool,
     String,
+    StringArray,
 };
 
 class DataStoreScalar {
@@ -17,6 +18,7 @@ public:
     double mNumberValue = 0.0;
     bool mBoolValue = false;
     std::string mStringValue;
+    std::vector<std::string> mStringArrayValue;
 };
 
 enum class DataStoreChangeValueType {

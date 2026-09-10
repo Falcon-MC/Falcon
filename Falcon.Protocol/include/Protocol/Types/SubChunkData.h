@@ -24,7 +24,8 @@ enum class HeightMapDataType : int {
 };
 
 struct SubChunkData {
-    static const size_t HEIGHT_MAP_LENGTH = 256;
+    static const size_t HEIGHT_MAP_LENGTH = 272;
+    static const size_t HEIGHT_MAP_RUN_LENGTH = 16;
 
     Vector3i mPosition;
     SubChunkRequestResult mResult;

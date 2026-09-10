@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core/Math/Vector3f.h"
+
 #include <cstdint>
 #include <string>
 
@@ -19,6 +21,8 @@ public:
     std::string mEntity;
     int64_t mTimeInNs = 0;
     int8_t mPercentOfTotal = 0;
+    Vector3f mPosition;
+    std::string mDimension;
 };
 
 class SystemDiagnosticTimingInfo {

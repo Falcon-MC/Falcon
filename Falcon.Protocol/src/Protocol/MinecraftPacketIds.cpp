@@ -462,6 +462,10 @@ const char *toString(MinecraftPacketIds id) {
             return "SendPartyDestinationCookie";
         case MinecraftPacketIds::PartyDestinationCookieResponse:
             return "PartyDestinationCookieResponse";
+        case MinecraftPacketIds::SetPlayerFurnaceOptions:
+            return "SetPlayerFurnaceOptions";
+        case MinecraftPacketIds::RecordStarted:
+            return "RecordStarted";
         default:
             return "Unknown";
     }

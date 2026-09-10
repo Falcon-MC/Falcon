@@ -46,4 +46,5 @@ public:
     bool mForceMove = false;
     bool mForceMoveLocalActor = false;
     bool mForceCompletion = false;
+    uint64_t mTicks = 0;
 };

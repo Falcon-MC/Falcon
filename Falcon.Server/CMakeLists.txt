@@ -37,7 +37,7 @@ string(REGEX REPLACE "(0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x
 configure_file(cmake/BlockPaletteNbt.h.in "${FALCON_GENERATED_DIR}/BlockPaletteNbt.h" @ONLY)
 
 if(NOT FALCON_BUILD_VERSION)
-    set(FALCON_BUILD_VERSION "1.26.40.01")
+    set(FALCON_BUILD_VERSION "1.26.50.01")
 endif()
 if(NOT FALCON_BUILD_ID)
     set(FALCON_BUILD_ID "0")

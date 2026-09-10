@@ -87,7 +87,6 @@ FullContainerName InventoryCodec::readFullContainerName(ReadOnlyBinaryStream &st
 void InventoryCodec::writeInventorySource(BinaryStream &stream, const InventorySource &source) {
     stream.putUnsignedVarInt((uint32_t) inventorySourceTypeToId(source.mType));
 
-    stream.putBool(true);
     switch (source.mType) {
         case InventorySourceType::Container:
         case InventorySourceType::NonImplementedTodo:
@@ -99,7 +98,6 @@ void InventoryCodec::writeInventorySource(BinaryStream &stream, const InventoryS
             break;
     }
 
-    stream.putBool(true);
     if (source.mType == InventorySourceType::WorldInteraction) {
         stream.putBool(true);
         stream.putUnsignedVarInt((uint32_t) source.mFlag);
@@ -112,11 +110,11 @@ InventorySource InventoryCodec::readInventorySource(ReadOnlyBinaryStream &stream
     InventorySource source;
     source.mType = inventorySourceTypeFromId((int32_t) stream.getUnsignedVarInt());
 
-    if (stream.getBool() && stream.getBool()) {
+    if (stream.getBool()) {
         source.mContainerId = stream.getByte();
     }
 
-    if (stream.getBool() && stream.getBool()) {
+    if (stream.getBool()) {
         source.mFlag = (InventorySourceFlag) stream.getUnsignedVarInt();
     }
 
@@ -366,8 +364,6 @@ void InventoryCodec::writeItemUseTransaction(BinaryStream &stream, const PacketC
     stream.putVarInt(transaction.mLegacyRequestId);
     stream.putBool(false);
 
-    stream.putBool(true);
-    stream.putBool(true);
     writeInventoryActions(stream, context, transaction.mActions);
 
     stream.putVarInt(transaction.mActionType);
@@ -375,6 +371,7 @@ void InventoryCodec::writeItemUseTransaction(BinaryStream &stream, const PacketC
     stream.putBlockPosition(transaction.mBlockPosition);
     stream.putByte((unsigned char) transaction.mBlockFace);
     stream.putVarInt(transaction.mHotbarSlot);
+    stream.putByte((unsigned char) transaction.mHand);
     ItemCodec::writeNetworkItemStackDescriptor(stream, context, transaction.mItemInHand);
     stream.putVector3f(transaction.mPlayerPosition);
     stream.putVector3f(transaction.mClickPosition);
@@ -397,15 +394,14 @@ ItemUseTransaction InventoryCodec::readItemUseTransaction(ReadOnlyBinaryStream &
         }
     }
 
-    if (stream.getBool() && stream.getBool()) {
-        readInventoryActions(stream, context, transaction.mActions);
-    }
+    readInventoryActions(stream, context, transaction.mActions);
 
     transaction.mActionType = stream.getVarInt();
     transaction.mTriggerType = (ItemUseTriggerType) stream.getByte();
     transaction.mBlockPosition = stream.getBlockPosition();
     transaction.mBlockFace = stream.getByte();
     transaction.mHotbarSlot = stream.getVarInt();
+    transaction.mHand = (HandSlot) stream.getByte();
     transaction.mItemInHand = ItemCodec::readNetworkItemStackDescriptor(stream, context);
     transaction.mPlayerPosition = stream.getVector3f();
     transaction.mClickPosition = stream.getVector3f();

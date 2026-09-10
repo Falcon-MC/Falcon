@@ -129,6 +129,8 @@ class OpenSignPacket;
 class PacketViolationWarningPacket;
 class PartyChangedPacket;
 class PartyDestinationCookieResponsePacket;
+
+class RecordStartedPacket;
 class PhotoInfoRequestPacket;
 class PhotoTransferPacket;
 class PlayStatusPacket;
@@ -191,6 +193,8 @@ class SetHudPacket;
 class SetLastHurtByPacket;
 class SetLocalPlayerAsInitializedPacket;
 class SetPlayerGameTypePacket;
+class SetPlayerFurnaceOptionsPacket;
+
 class SetPlayerInventoryOptionsPacket;
 class SetScorePacket;
 class SetScoreboardIdentityPacket;
@@ -498,6 +502,8 @@ public:
 
     virtual void handle(const NetworkIdentifier &, const PartyDestinationCookieResponsePacket &) {}
 
+    virtual void handle(const NetworkIdentifier &, const RecordStartedPacket &) {}
+
     virtual void handle(const NetworkIdentifier &, const PhotoInfoRequestPacket &) {}
 
     virtual void handle(const NetworkIdentifier &, const PhotoTransferPacket &) {}
@@ -621,6 +627,8 @@ public:
     virtual void handle(const NetworkIdentifier &, const SetLocalPlayerAsInitializedPacket &) {}
 
     virtual void handle(const NetworkIdentifier &, const SetPlayerGameTypePacket &) {}
+
+    virtual void handle(const NetworkIdentifier &, const SetPlayerFurnaceOptionsPacket &) {}
 
     virtual void handle(const NetworkIdentifier &, const SetPlayerInventoryOptionsPacket &) {}
 

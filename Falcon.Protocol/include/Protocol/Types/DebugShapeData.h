@@ -71,6 +71,7 @@ public:
     bool mUseRotation = false;
     bool mHasBackgroundColor = false;
     uint32_t mBackgroundColor = 0;
+    float mLineGapHeight = 0.0f;
     bool mDepthTest = false;
     bool mShowBackface = false;
     bool mShowTextBackface = false;

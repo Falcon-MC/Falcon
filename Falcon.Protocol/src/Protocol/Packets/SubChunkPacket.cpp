@@ -17,7 +17,28 @@ namespace {
                                       std::to_string(SubChunkData::HEIGHT_MAP_LENGTH) + " bytes");
         }
 
-        stream.put(data);
+        for (size_t offset = 0; offset < SubChunkData::HEIGHT_MAP_LENGTH;
+             offset += SubChunkData::HEIGHT_MAP_RUN_LENGTH) {
+            stream.putUnsignedVarInt((uint32_t) SubChunkData::HEIGHT_MAP_RUN_LENGTH);
+            stream.put(data.data() + offset, SubChunkData::HEIGHT_MAP_RUN_LENGTH);
+        }
+    }
+
+    std::string readHeightMap(ReadOnlyBinaryStream &stream) {
+        std::string data;
+        data.reserve(SubChunkData::HEIGHT_MAP_LENGTH);
+
+        for (size_t offset = 0; offset < SubChunkData::HEIGHT_MAP_LENGTH;
+             offset += SubChunkData::HEIGHT_MAP_RUN_LENGTH) {
+            const uint32_t runLength = stream.getUnsignedVarInt();
+            if (runLength != SubChunkData::HEIGHT_MAP_RUN_LENGTH) {
+                throw BinaryDataException("Height map run must be exactly " +
+                                          std::to_string(SubChunkData::HEIGHT_MAP_RUN_LENGTH) + " bytes");
+            }
+            data += stream.get(runLength);
+        }
+
+        return data;
     }
 
     void writeSubChunk(BinaryStream &stream, const SubChunkData &subChunk) {
@@ -53,11 +74,11 @@ namespace {
 
         subChunk.mHeightMapType = (HeightMapDataType) stream.getByte();
         if (stream.getOptionalPresent())
-            subChunk.mHeightMapData = stream.get(SubChunkData::HEIGHT_MAP_LENGTH);
+            subChunk.mHeightMapData = readHeightMap(stream);
 
         subChunk.mRenderHeightMapType = (HeightMapDataType) stream.getByte();
         if (stream.getOptionalPresent())
-            subChunk.mRenderHeightMapData = stream.get(SubChunkData::HEIGHT_MAP_LENGTH);
+            subChunk.mRenderHeightMapData = readHeightMap(stream);
 
         subChunk.mHasBlobId = stream.getOptionalPresent();
         if (subChunk.mHasBlobId)

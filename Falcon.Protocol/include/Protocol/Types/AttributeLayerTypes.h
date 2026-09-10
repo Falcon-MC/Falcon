@@ -62,6 +62,16 @@ public:
     int32_t mColorOperation = 0;
 };
 
+enum class NoiseAlignmentType {
+    MinLocalTransitionEnd,
+};
+
+class NoiseAlignment {
+public:
+    NoiseAlignmentType mType = NoiseAlignmentType::MinLocalTransitionEnd;
+    int32_t mValue = 0;
+};
+
 class EnvironmentAttributeData {
 public:
     std::string mAttributeName;
@@ -77,6 +87,9 @@ public:
     int32_t mCurrentTransitionTicks = 0;
     int32_t mTotalTransitionTicks = 0;
     CameraEase mEasing = CameraEase::Linear;
+    int32_t mLocalTransitionTicks = 0;
+    bool mNoiseTransition = false;
+    NoiseAlignment mNoiseAlignment;
 };
 
 class AttributeLayerData {

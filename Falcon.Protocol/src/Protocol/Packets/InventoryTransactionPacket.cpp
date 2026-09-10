@@ -1,6 +1,5 @@
 #include "Protocol/Packets/InventoryTransactionPacket.h"
 
-#include "Core/Utility/BinaryDataException.h"
 #include "Protocol/ItemCodec.h"
 #include "Protocol/NetworkPacketHandler.h"
 #include "Protocol/Types/BlockDefinition.h"
@@ -10,7 +9,6 @@ namespace {
     void writeInventorySource(BinaryStream &stream, const InventorySource &source) {
         stream.putUnsignedVarInt((uint32_t) inventorySourceTypeToId(source.mType));
 
-        stream.putBool(true);
         switch (source.mType) {
             case InventorySourceType::Container:
             case InventorySourceType::NonImplementedTodo:
@@ -22,7 +20,6 @@ namespace {
                 break;
         }
 
-        stream.putBool(true);
         switch (source.mType) {
             case InventorySourceType::WorldInteraction:
                 stream.putBool(true);
@@ -39,13 +36,13 @@ namespace {
         source.mType = inventorySourceTypeFromId((int32_t) stream.getUnsignedVarInt());
 
         int32_t containerId = 0;
-        bool hasContainerId = stream.getBool() && stream.getBool();
+        bool hasContainerId = stream.getBool();
         if (hasContainerId) {
             containerId = stream.getByte();
         }
 
         InventorySourceFlag flag = InventorySourceFlag::None;
-        bool hasFlag = stream.getBool() && stream.getBool();
+        bool hasFlag = stream.getBool();
         if (hasFlag) {
             flag = (InventorySourceFlag) stream.getUnsignedVarInt();
         }
@@ -108,10 +105,8 @@ void InventoryTransactionPacket::write(BinaryStream &stream, const PacketCodecCo
         stream.putBool(false);
     }
 
-    stream.putBool(true);
     stream.putUnsignedVarInt((uint32_t) mTransactionType);
 
-    stream.putBool(true);
     writeInventoryActions(stream, context, mActions);
 
     switch (mTransactionType) {
@@ -121,6 +116,7 @@ void InventoryTransactionPacket::write(BinaryStream &stream, const PacketCodecCo
             stream.putBlockPosition(mBlockPosition);
             stream.putByte((unsigned char) mBlockFace);
             stream.putVarInt(mHotbarSlot);
+            stream.putByte((unsigned char) mHand);
             ItemCodec::writeNetworkItemStackDescriptor(stream, context, mItemInHand);
             stream.putVector3f(mPlayerPosition);
             stream.putVector3f(mClickPosition);
@@ -163,14 +159,8 @@ void InventoryTransactionPacket::read(ReadOnlyBinaryStream &stream, const Packet
         }
     }
 
-    if (!stream.getBool()) {
-        throw BinaryDataException("Expected InventoryTransactionType");
-    }
     mTransactionType = (InventoryTransactionType) stream.getUnsignedVarInt();
 
-    if (!stream.getBool()) {
-        throw BinaryDataException("Expected InventoryActionData");
-    }
     readInventoryActions(stream, context, mActions);
 
     switch (mTransactionType) {
@@ -180,6 +170,7 @@ void InventoryTransactionPacket::read(ReadOnlyBinaryStream &stream, const Packet
             mBlockPosition = stream.getBlockPosition();
             mBlockFace = stream.getByte();
             mHotbarSlot = stream.getVarInt();
+            mHand = (HandSlot) stream.getByte();
             mItemInHand = ItemCodec::readNetworkItemStackDescriptor(stream, context);
             mPlayerPosition = stream.getVector3f();
             mClickPosition = stream.getVector3f();

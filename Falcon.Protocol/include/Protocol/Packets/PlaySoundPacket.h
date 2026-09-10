@@ -27,6 +27,9 @@ public:
     float mVolume = 0.0f;
     float mPitch = 0.0f;
     int32_t mLoopCount = 0;
+    bool mBypassListenerRangeCheck = false;
     bool mHasServerSoundHandle = false;
     int64_t mServerSoundHandle = 0;
+    bool mHasPlaybackPosition = false;
+    float mPlaybackPositionSeconds = 0.0f;
 };

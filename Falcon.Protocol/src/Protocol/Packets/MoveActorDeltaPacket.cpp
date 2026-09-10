@@ -35,6 +35,7 @@ void MoveActorDeltaPacket::write(BinaryStream &stream, const PacketCodecContext 
     stream.putBool(mForceMove);
     stream.putBool(mForceMoveLocalActor);
     stream.putBool(mForceCompletion);
+    stream.putUnsignedVarLong(mTicks);
 }
 
 void MoveActorDeltaPacket::read(ReadOnlyBinaryStream &stream, const PacketCodecContext &context) {
@@ -68,6 +69,7 @@ void MoveActorDeltaPacket::read(ReadOnlyBinaryStream &stream, const PacketCodecC
     mForceMove = stream.getBool();
     mForceMoveLocalActor = stream.getBool();
     mForceCompletion = stream.getBool();
+    mTicks = stream.getUnsignedVarLong();
 }
 
 void MoveActorDeltaPacket::handle(const NetworkIdentifier &id, NetworkPacketHandler &handler) const {

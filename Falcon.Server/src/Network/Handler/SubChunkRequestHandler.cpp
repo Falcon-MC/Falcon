@@ -23,9 +23,9 @@ namespace {
         bool allTooLow = true;
         bool allTooHigh = true;
         std::string values;
-        values.resize(SubChunkData::HEIGHT_MAP_LENGTH);
+        values.resize(SubChunkData::HEIGHT_MAP_LENGTH, (char) (unsigned char) HEIGHT_TOO_LOW);
 
-        for (size_t i = 0; i < SubChunkData::HEIGHT_MAP_LENGTH; i++) {
+        for (size_t i = 0; i < tops.size(); i++) {
             const int32_t relative = tops[i] - baseY;
             int8_t stored;
 

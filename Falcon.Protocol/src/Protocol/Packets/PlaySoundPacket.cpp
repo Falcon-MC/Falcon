@@ -15,9 +15,15 @@ void PlaySoundPacket::write(BinaryStream &stream, const PacketCodecContext &cont
 
     stream.putUnsignedVarInt((uint32_t) mLoopCount);
 
+    stream.putBool(mBypassListenerRangeCheck);
+
     stream.putOptionalPresent(mHasServerSoundHandle);
     if (mHasServerSoundHandle)
         stream.putLLong((uint64_t) mServerSoundHandle);
+
+    stream.putOptionalPresent(mHasPlaybackPosition);
+    if (mHasPlaybackPosition)
+        stream.putLFloat(mPlaybackPositionSeconds);
 }
 
 void PlaySoundPacket::read(ReadOnlyBinaryStream &stream, const PacketCodecContext &context) {
@@ -31,9 +37,15 @@ void PlaySoundPacket::read(ReadOnlyBinaryStream &stream, const PacketCodecContex
 
     mLoopCount = (int32_t) stream.getUnsignedVarInt();
 
+    mBypassListenerRangeCheck = stream.getBool();
+
     mHasServerSoundHandle = stream.getOptionalPresent();
     if (mHasServerSoundHandle)
         mServerSoundHandle = (int64_t) stream.getLLong();
+
+    mHasPlaybackPosition = stream.getOptionalPresent();
+    if (mHasPlaybackPosition)
+        mPlaybackPositionSeconds = stream.getLFloat();
 }
 
 void PlaySoundPacket::handle(const NetworkIdentifier &id, NetworkPacketHandler &handler) const {

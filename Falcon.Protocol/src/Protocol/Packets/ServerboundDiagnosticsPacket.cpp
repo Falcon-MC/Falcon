@@ -27,6 +27,8 @@ void ServerboundDiagnosticsPacket::write(BinaryStream &stream, const PacketCodec
         stream.putString(info.mEntity);
         stream.putLLong((uint64_t) info.mTimeInNs);
         stream.putByte((unsigned char) info.mPercentOfTotal);
+        stream.putVector3f(info.mPosition);
+        stream.putString(info.mDimension);
     }
 
     stream.putArrayLength((uint32_t) mSystemDiagnostics.size());
@@ -81,6 +83,8 @@ void ServerboundDiagnosticsPacket::read(ReadOnlyBinaryStream &stream, const Pack
         info.mEntity = stream.getString();
         info.mTimeInNs = (int64_t) stream.getLLong();
         info.mPercentOfTotal = (int8_t) stream.getByte();
+        info.mPosition = stream.getVector3f();
+        info.mDimension = stream.getString();
         mEntityDiagnostics.push_back(info);
     }
 

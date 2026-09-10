@@ -39,12 +39,12 @@ void SetScorePacket::write(BinaryStream &stream, const PacketCodecContext &conte
                 break;
             case ScorerType::Player:
             case ScorerType::Entity:
-                stream.putString(info.mObjectiveId.empty() ? " " : info.mObjectiveId);
+                stream.putString(info.mObjectiveId);
                 stream.putLInt((uint32_t) info.mScore);
                 stream.putVarLong(info.mActorId);
                 break;
             case ScorerType::Fake:
-                stream.putString(info.mObjectiveId.empty() ? " " : info.mObjectiveId);
+                stream.putString(info.mObjectiveId);
                 stream.putLInt((uint32_t) info.mScore);
                 stream.putString(info.mName.empty() ? " " : info.mName);
                 break;

@@ -14,6 +14,12 @@ void DataStoreCodec::writeScalar(BinaryStream &stream, const DataStoreScalar &va
         case DataStoreScalarType::String:
             stream.putString(value.mStringValue);
             break;
+        case DataStoreScalarType::StringArray:
+            stream.putUnsignedVarInt((uint32_t) value.mStringArrayValue.size());
+            for (const std::string &entry: value.mStringArrayValue) {
+                stream.putString(entry);
+            }
+            break;
     }
 }
 
@@ -31,6 +37,14 @@ DataStoreScalar DataStoreCodec::readScalar(ReadOnlyBinaryStream &stream) {
         case DataStoreScalarType::String:
             value.mStringValue = stream.getString();
             break;
+        case DataStoreScalarType::StringArray: {
+            const uint32_t count = stream.getUnsignedVarInt();
+            value.mStringArrayValue.reserve(count);
+            for (uint32_t i = 0; i < count; i++) {
+                value.mStringArrayValue.push_back(stream.getString());
+            }
+            break;
+        }
         default:
             throw BinaryDataException("Invalid data store scalar type " + std::to_string(type));
     }

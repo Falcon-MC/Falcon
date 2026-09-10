@@ -14,6 +14,8 @@
 #include <memory>
 #include <vector>
 
+#include "Protocol/Types/HandSlot.h"
+
 class InventoryTransactionPacket : public Packet {
 public:
     static const MinecraftPacketIds ID = MinecraftPacketIds::InventoryTransaction;
@@ -39,6 +41,7 @@ public:
     Vector3i mBlockPosition;
     int32_t mBlockFace = 0;
     int32_t mHotbarSlot = 0;
+    HandSlot mHand = HandSlot::MainHand;
     ItemStack mItemInHand;
     Vector3f mPlayerPosition;
     Vector3f mClickPosition;

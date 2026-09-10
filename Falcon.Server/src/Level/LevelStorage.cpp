@@ -580,7 +580,7 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
     data.putInt("Difficulty", difficulty);
     data.putLong("RandomSeed", seed);
     data.putInt("StorageVersion", 10);
-    data.putInt("NetworkVersion", 2168);
+    data.putInt("NetworkVersion", 2192);
     data.putByte("commandsEnabled", 1);
     data.putInt("limitedWorldOriginX", spawnX);
     data.putInt("limitedWorldOriginY", spawnY);
