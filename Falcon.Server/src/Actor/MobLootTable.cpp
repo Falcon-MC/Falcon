@@ -1,5 +1,6 @@
 #include "Actor/MobLootTable.h"
 
+#include <algorithm>
 #include <random>
 #include <unordered_map>
 
@@ -8,6 +9,7 @@ namespace MobLootTable {
 namespace {
 
 constexpr uint32_t kLootSeed = 0x9E3779B9u;
+constexpr float kLootingChancePerLevel = 0.01f;
 
 struct LootEntry {
     const char *mItemIdentifier;
@@ -15,6 +17,7 @@ struct LootEntry {
     int32_t mMinCount;
     int32_t mMaxCount;
     float mChance;
+    float mLootingChancePerLevel = kLootingChancePerLevel;
 };
 
 std::mt19937 &getRandom() {
@@ -59,7 +62,7 @@ const std::unordered_map<std::string, std::vector<LootEntry>> &getTable() {
         {"minecraft:rabbit", {
             {"minecraft:rabbit_hide", nullptr, 0, 1, 0.5f},
             {"minecraft:rabbit", "minecraft:cooked_rabbit", 0, 1, 0.5f},
-            {"minecraft:rabbit_foot", nullptr, 1, 1, 0.1f}
+            {"minecraft:rabbit_foot", nullptr, 1, 1, 0.1f, 0.03f}
         }},
         {"minecraft:cod", {
             {"minecraft:cod", "minecraft:cooked_cod", 1, 1, 1.0f},
@@ -172,7 +175,7 @@ const std::unordered_map<std::string, std::vector<LootEntry>> &getTable() {
         {"minecraft:parched", {
             {"minecraft:bone", nullptr, 0, 2, 1.0f},
             {"minecraft:arrow", nullptr, 0, 2, 1.0f},
-            {"minecraft:bow", nullptr, 1, 1, 0.08f}
+            {"minecraft:bow", nullptr, 1, 1, 0.08f, 0.05f}
         }},
         {"minecraft:stray", {
             {"minecraft:bone", nullptr, 1, 2, 0.66f},
@@ -181,8 +184,8 @@ const std::unordered_map<std::string, std::vector<LootEntry>> &getTable() {
         {"minecraft:wither_skeleton", {
             {"minecraft:bone", nullptr, 0, 2, 1.0f},
             {"minecraft:coal", nullptr, 1, 1, 0.3333f},
-            {"minecraft:stone_sword", nullptr, 1, 1, 0.085f},
-            {"minecraft:wither_skeleton_skull", nullptr, 1, 1, 0.025f}
+            {"minecraft:stone_sword", nullptr, 1, 1, 0.085f, 0.05f},
+            {"minecraft:wither_skeleton_skull", nullptr, 1, 1, 0.025f, 0.02f}
         }},
         {"minecraft:creeper", {
             {"minecraft:gunpowder", nullptr, 0, 2, 1.0f}
@@ -274,7 +277,7 @@ const std::unordered_map<std::string, std::vector<LootEntry>> &getTable() {
 
 }
 
-std::vector<MobDrop> getMobDrops(const std::string &identifier, bool onFire) {
+std::vector<MobDrop> getMobDrops(const std::string &identifier, bool onFire, int32_t lootingLevel) {
     std::vector<MobDrop> drops;
 
     const std::unordered_map<std::string, std::vector<LootEntry>> &table = getTable();
@@ -282,11 +285,17 @@ std::vector<MobDrop> getMobDrops(const std::string &identifier, bool onFire) {
     if (found == table.end())
         return drops;
 
-    for (const LootEntry &entry: found->second) {
-        if (entry.mChance < 1.0f && nextChanceRoll() >= entry.mChance)
-            continue;
+    const int32_t looting = std::max(lootingLevel, 0);
 
-        const int32_t count = nextCount(entry.mMinCount, entry.mMaxCount);
+    for (const LootEntry &entry: found->second) {
+        if (entry.mChance < 1.0f) {
+            const float chance = std::min(1.0f, entry.mChance + entry.mLootingChancePerLevel * (float) looting);
+            if (nextChanceRoll() >= chance)
+                continue;
+        }
+
+        const int32_t maxCount = entry.mMaxCount > entry.mMinCount ? entry.mMaxCount + looting : entry.mMaxCount;
+        const int32_t count = nextCount(entry.mMinCount, maxCount);
         if (count <= 0)
             continue;
 

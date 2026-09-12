@@ -25,6 +25,7 @@ struct ProjectileData {
     int32_t mLoyaltyLevel = 0;
     int32_t mImpalingLevel = 0;
     int32_t mPiercingLevel = 0;
+    int32_t mLootingLevel = 0;
     bool mChanneling = false;
     bool mReturning = false;
     bool mHadCollision = false;
@@ -49,7 +50,12 @@ public:
 
     virtual void fillSpawnMetadata(EntityDataMap &metadata) const { (void) metadata; }
 
-    bool hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source);
+    /**
+     * Damages the actor. On death the drops use lootingLevel; a negative level reads it from the
+     * item source is holding, which is right for melee but not for a projectile, whose level is
+     * captured when it is launched.
+     */
+    bool hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source, int32_t lootingLevel = -1);
 
     void tickFire(ServerNetworkHandler &owner);
 

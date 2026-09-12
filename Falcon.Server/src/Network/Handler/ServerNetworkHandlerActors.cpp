@@ -309,6 +309,8 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
 
     projectile->setProjectile(true);
     projectile->setOwnerUniqueId((int64_t) player.getRuntimeId());
+    projectile->getProjectileData().mLootingLevel =
+            ItemEnchantments::getLevel(player.getInventory().getItemInHand(), EnchantmentIds::LOOTING);
     projectile->setMotion(Vector3f(direction.x * speed, direction.y * speed, direction.z * speed));
     return projectile;
 }
@@ -590,7 +592,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     } else {
         ServerActor *victimActor = dynamic_cast<ServerActor *>(&target);
         if (victimActor != nullptr)
-            damageActor(*victimActor, damage, shooter);
+            damageActor(*victimActor, damage, shooter, data.mLootingLevel);
     }
 
     const Vector3f targetPosition = target.getPosition();
@@ -958,8 +960,8 @@ void ServerNetworkHandler::broadcastActorEvent(ServerActor &actor, EntityEventTy
     }
 }
 
-bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, ServerPlayer *source) {
-    return actor.hurt(*this, amount, source);
+bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, ServerPlayer *source, int32_t lootingLevel) {
+    return actor.hurt(*this, amount, source, lootingLevel);
 }
 
 void ServerNetworkHandler::broadcastActorMove(ServerActor &actor) {

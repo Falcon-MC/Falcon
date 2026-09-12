@@ -192,7 +192,7 @@ public:
 
     void broadcastActorEvent(ServerActor &actor, EntityEventType eventType);
 
-    bool damageActor(ServerActor &actor, float amount, ServerPlayer *source);
+    bool damageActor(ServerActor &actor, float amount, ServerPlayer *source, int32_t lootingLevel = -1);
 
     void sendActorMotion(Actor &actor);
 

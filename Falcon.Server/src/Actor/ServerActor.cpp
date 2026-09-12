@@ -4,6 +4,8 @@
 #include "Actor/ExperienceValues.h"
 #include "Actor/MobLootTable.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
+#include "Item/EnchantmentData.h"
+#include "Item/ItemEnchantments.h"
 #include "Server/Profiler.h"
 #include "Actor/ServerPlayer.h"
 #include "Level/Level.h"
@@ -198,7 +200,7 @@ void ServerActor::tickFire(ServerNetworkHandler &owner) {
     }
 }
 
-bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) {
+bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source, int32_t lootingLevel) {
     if (!isAlive() || amount < 0.0f)
         return false;
 
@@ -222,7 +224,13 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *
         owner.broadcastActorEvent(*this, EntityEventType::DeathAnimation);
 
         const Vector3f dropPosition = getPosition();
-        for (const MobDrop &drop: MobLootTable::getMobDrops(mIdentifier, isOnFire()))
+        int32_t looting = lootingLevel;
+        if (looting < 0) {
+            looting = source != nullptr
+                      ? ItemEnchantments::getLevel(source->getInventory().getItemInHand(), EnchantmentIds::LOOTING)
+                      : 0;
+        }
+        for (const MobDrop &drop: MobLootTable::getMobDrops(mIdentifier, isOnFire(), looting))
             owner.spawnItemActor(drop.mItemIdentifier, drop.mCount, dropPosition);
 
         const int experience = ExperienceValues::getMobDropExperience(mIdentifier);
