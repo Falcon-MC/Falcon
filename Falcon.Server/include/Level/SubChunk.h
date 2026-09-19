@@ -28,6 +28,8 @@ public:
 
     bool isLayerEmpty(int layer) const;
 
+    bool hasLightEmitter() const;
+
     uint32_t getBiome(int x, int y, int z) const;
 
     void setBiome(int x, int y, int z, uint32_t biomeId);

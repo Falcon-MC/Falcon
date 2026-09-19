@@ -4,7 +4,7 @@
 #include "Level/Generator/DimensionFactory.h"
 #include "Level/Generator/Overworld/Biome/ClimateAttributes.h"
 #include "Level/Particle/Particle.h"
-#include "Level/SkyLightSystem.h"
+#include "Level/LightSystem.h"
 
 #include "Block/BlockData.h"
 #include "Block/BlockShape.h"
@@ -66,6 +66,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mLiquidPhysics.moveStateFrom(std::move(other.mLiquidPhysics));
     mGameRules = std::move(other.mGameRules);
     mPacketBroadcaster = std::move(other.mPacketBroadcaster);
+    mBlockLightQueue = std::move(other.mBlockLightQueue);
     return *this;
 }
 
@@ -292,7 +293,7 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
             continue;
 
         chunk->setBlock(localX, change.mY, localZ, change.mState);
-        chunk->clearSkyLightOnly();
+        LightSystem::onBlockChanged(*this, change.mX, change.mY, change.mZ);
         mChunkNetworkCache.erase(key);
         mRepopulatedChunks.insert(key);
     }
@@ -424,13 +425,26 @@ int Level::getSkyLightAt(int32_t x, int32_t y, int32_t z) {
     if (chunk == nullptr)
         return 0;
 
-    if (!chunk->hasHeightmap())
-        SkyLightSystem::computeHeightmap(*chunk);
-
     if (!chunk->hasSkyLight())
-        SkyLightSystem::computeChunk(*chunk);
+        LightSystem::computeSkyLight(*chunk);
 
     return chunk->getSkyLight(x & 15, y, z & 15);
+}
+
+int Level::getBlockLightAt(int32_t x, int32_t y, int32_t z) {
+    LevelChunk *chunk = peekChunkPtr(x >> 4, z >> 4);
+    if (chunk == nullptr)
+        return 0;
+
+    return chunk->getBlockLight(x & 15, y, z & 15);
+}
+
+void Level::addBlockLightUpdate(int32_t x, int32_t y, int32_t z) {
+    mBlockLightQueue.insert(LightSystem::packPosition(x, y, z));
+}
+
+void Level::updateBlockLight() {
+    LightSystem::updateBlockLight(*this, mBlockLightQueue);
 }
 
 int32_t Level::getHeightAt(int32_t x, int32_t z) {
@@ -442,13 +456,13 @@ int32_t Level::getHeightAt(int32_t x, int32_t z) {
     const int localZ = z & 15;
 
     if (!chunk->hasHeight(localX, localZ))
-        SkyLightSystem::updateHeightAt(*chunk, localX, localZ);
+        LightSystem::updateHeightAt(*chunk, localX, localZ);
 
     return chunk->getHeight(localX, localZ);
 }
 
 void Level::updateSkyLightSubtracted() {
-    mSkyLightSubtracted = SkyLightSystem::calculateSkyLightSubtracted(*this);
+    mSkyLightSubtracted = LightSystem::calculateSkyLightSubtracted(*this);
 }
 
 bool Level::isColumnActive(int32_t chunkX, int32_t chunkZ) const {
@@ -636,7 +650,7 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
         return;
 
     chunk.setBlock(x & 15, y, z & 15, state);
-    SkyLightSystem::onBlockChanged(*this, x, y, z);
+    LightSystem::onBlockChanged(*this, x, y, z);
     mChunkNetworkCache.erase(_packChunk(x >> 4, z >> 4));
 
     if (chunk.getBlock(x & 15, y, z & 15, 1).mName != "minecraft:air")
@@ -693,6 +707,8 @@ void Level::scheduleFluidTick(const Vector3i &position, int64_t delay) {
 }
 
 void Level::tick() {
+    updateBlockLight();
+
     mBlockUpdateScheduler.tick(
             [this](const Vector3i &position) {
                 mLiquidPhysics.onScheduledUpdate(position);

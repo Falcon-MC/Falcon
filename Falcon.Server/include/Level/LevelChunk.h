@@ -92,14 +92,17 @@ public:
 
     void setSkyLight(int x, int32_t y, int z, int value);
 
+    int getBlockLight(int x, int32_t y, int z) const;
+
+    void setBlockLight(int x, int32_t y, int z, int value);
+
     bool hasSkyLight() const { return !mSkyLight.empty(); }
+
+    bool hasBlockLight() const { return !mBlockLight.empty(); }
 
     bool hasHeightmap() const { return !mHeightmap.empty(); }
 
     void clearSkyLight();
-
-    void clearSkyLightOnly() { mSkyLight.clear(); }
-
     void setDimension(DimensionType dimension);
 
     DimensionType getDimension() const { return mDimension; }
@@ -107,7 +110,13 @@ public:
     int getFirstNetworkSubChunk() const { return mFirstNetworkSubChunk; }
 
 private:
+    static const size_t LIGHT_STORAGE_SIZE = (size_t) SUB_CHUNK_COUNT * 16 * 256 / 2;
+
     static int _lightIndex(int x, int32_t y, int z);
+
+    static int _getNibble(const std::vector<uint8_t> &storage, int x, int32_t y, int z);
+
+    static void _setNibble(std::vector<uint8_t> &storage, int x, int32_t y, int z, int value);
     int32_t mX;
     int32_t mZ;
     uint32_t mBiomeId;
@@ -119,6 +128,7 @@ private:
     std::vector<SubChunk> mSubChunks;
     std::vector<int16_t> mHeightmap;
     std::vector<uint8_t> mSkyLight;
+    std::vector<uint8_t> mBlockLight;
     mutable std::vector<std::string> mSubChunkNetworkCache;
     mutable std::vector<uint8_t> mSubChunkNetworkValid;
     mutable std::vector<int32_t> mTopHeightsCache;

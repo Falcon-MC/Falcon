@@ -5,7 +5,7 @@
 #include "Level/Generator/GeneratorChunkSource.h"
 #include "Level/Generator/ChunkGenerator.h"
 #include "Level/LevelStorage.h"
-#include "Level/SkyLightSystem.h"
+#include "Level/LightSystem.h"
 
 #include <algorithm>
 #include <utility>
@@ -162,7 +162,7 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
 
     if (!chunk->isPopulated() && sourceIndex < mSources.size()) {
         if (!chunk->hasHeightmap())
-            SkyLightSystem::computeHeightmap(*chunk);
+            LightSystem::computeHeightmap(*chunk);
 
         mSources[sourceIndex]->populate(*chunk, result.mOverflowChanges);
         chunk->setPopulated(true);
@@ -184,6 +184,9 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
             mStorage.erasePendingBlockChanges(result.mX, result.mZ);
         }
     }
+
+    LightSystem::computeSkyLight(*chunk);
+    LightSystem::computeBlockLight(*chunk);
 
     chunk->buildNetworkCaches();
 

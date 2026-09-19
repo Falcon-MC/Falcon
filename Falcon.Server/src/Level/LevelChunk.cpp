@@ -64,21 +64,44 @@ void LevelChunk::setHeight(int x, int z, int32_t height) {
     mHeightmap[(size_t) ((z << 4) | x)] = (int16_t) height;
 }
 
-int LevelChunk::getSkyLight(int x, int32_t y, int z) const {
-    if (mSkyLight.empty() || y < MIN_Y || y > MAX_Y)
+int LevelChunk::_getNibble(const std::vector<uint8_t> &storage, int x, int32_t y, int z) {
+    if (storage.empty() || y < MIN_Y || y > MAX_Y)
         return 0;
 
-    return mSkyLight[(size_t) _lightIndex(x, y, z)];
+    const int index = _lightIndex(x, y, z);
+    const uint8_t packed = storage[(size_t) (index >> 1)];
+    return (index & 1) != 0 ? packed >> 4 : packed & 0x0F;
 }
 
-void LevelChunk::setSkyLight(int x, int32_t y, int z, int value) {
+void LevelChunk::_setNibble(std::vector<uint8_t> &storage, int x, int32_t y, int z, int value) {
     if (y < MIN_Y || y > MAX_Y)
         return;
 
-    if (mSkyLight.empty())
-        mSkyLight.assign((size_t) (SUB_CHUNK_COUNT * 16 * 256), 0);
+    if (storage.empty())
+        storage.assign(LIGHT_STORAGE_SIZE, 0);
 
-    mSkyLight[(size_t) _lightIndex(x, y, z)] = (uint8_t) value;
+    const int index = _lightIndex(x, y, z);
+    uint8_t &packed = storage[(size_t) (index >> 1)];
+    if ((index & 1) != 0)
+        packed = (uint8_t) ((packed & 0x0F) | ((value & 0x0F) << 4));
+    else
+        packed = (uint8_t) ((packed & 0xF0) | (value & 0x0F));
+}
+
+int LevelChunk::getSkyLight(int x, int32_t y, int z) const {
+    return _getNibble(mSkyLight, x, y, z);
+}
+
+void LevelChunk::setSkyLight(int x, int32_t y, int z, int value) {
+    _setNibble(mSkyLight, x, y, z, value);
+}
+
+int LevelChunk::getBlockLight(int x, int32_t y, int z) const {
+    return _getNibble(mBlockLight, x, y, z);
+}
+
+void LevelChunk::setBlockLight(int x, int32_t y, int z, int value) {
+    _setNibble(mBlockLight, x, y, z, value);
 }
 
 void LevelChunk::clearSkyLight() {

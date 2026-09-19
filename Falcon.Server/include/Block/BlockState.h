@@ -22,6 +22,14 @@ public:
         return mHash;
     }
 
+    int32_t getCachedLightProperties() const {
+        return mLightProperties;
+    }
+
+    void cacheLightProperties(int32_t properties) const {
+        mLightProperties = properties;
+    }
+
     bool operator==(const BlockState &other) const {
         return mName == other.mName && mStates == other.mStates;
     }
@@ -42,4 +50,5 @@ public:
 private:
     mutable int32_t mHash = 0;
     mutable bool mHashValid = false;
+    mutable int32_t mLightProperties = -1;
 };

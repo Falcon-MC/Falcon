@@ -1,5 +1,6 @@
 #include "Level/SubChunk.h"
 
+#include "Block/BlockLightProperties.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -210,6 +211,15 @@ bool SubChunk::isEmpty() const {
         return false;
 
     return isLayerEmpty(1);
+}
+
+bool SubChunk::hasLightEmitter() const {
+    for (const BlockState &state: mPalette) {
+        if (BlockLightProperties::lightLevel(BlockLightProperties::packed(state)) > 0)
+            return true;
+    }
+
+    return false;
 }
 
 bool SubChunk::isLayerEmpty(int layer) const {

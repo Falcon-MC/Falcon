@@ -2,7 +2,7 @@
 
 #include "Core/Math/MathConstants.h"
 #include "Level/Level.h"
-#include "Level/SkyLightSystem.h"
+#include "Level/LightSystem.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include <algorithm>
@@ -25,8 +25,8 @@ int DaylightDetectorBlock::effectiveSkyLightAround(Level &level, const Vector3i 
     const int32_t skyReduction = level.getSkyLightSubtracted();
 
     int best = level.getSkyLightAt(position.x, position.y + 1, position.z) - skyReduction;
-    if (best >= SkyLightSystem::MAX_LIGHT)
-        return SkyLightSystem::MAX_LIGHT;
+    if (best >= LightSystem::MAX_LIGHT)
+        return LightSystem::MAX_LIGHT;
 
     for (int dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; ++dx) {
         for (int dz = -SEARCH_RADIUS; dz <= SEARCH_RADIUS; ++dz) {
@@ -39,8 +39,8 @@ int DaylightDetectorBlock::effectiveSkyLightAround(Level &level, const Vector3i 
 
             if (signal > best) {
                 best = signal;
-                if (best >= SkyLightSystem::MAX_LIGHT)
-                    return SkyLightSystem::MAX_LIGHT;
+                if (best >= LightSystem::MAX_LIGHT)
+                    return LightSystem::MAX_LIGHT;
             }
         }
     }
@@ -51,7 +51,7 @@ int DaylightDetectorBlock::effectiveSkyLightAround(Level &level, const Vector3i 
 int DaylightDetectorBlock::computeSignal(Level &level, const Vector3i &position, bool inverted) {
     int signal = effectiveSkyLightAround(level, position) - level.getSkyLightSubtracted();
 
-    float angle = SkyLightSystem::calculateCelestialAngle(level.getTime()) * MathConstants::TWO_PI_F;
+    float angle = LightSystem::calculateCelestialAngle(level.getTime()) * MathConstants::TWO_PI_F;
 
     if (signal > 0) {
         const float target = angle < MathConstants::PI_F ? 0.0f : MathConstants::TWO_PI_F;
@@ -59,10 +59,10 @@ int DaylightDetectorBlock::computeSignal(Level &level, const Vector3i &position,
         signal = (int) std::lround((float) signal * std::cos(angle));
     }
 
-    signal = std::max(0, std::min(SkyLightSystem::MAX_LIGHT, signal));
+    signal = std::max(0, std::min(LightSystem::MAX_LIGHT, signal));
 
     if (inverted)
-        signal = SkyLightSystem::MAX_LIGHT - signal;
+        signal = LightSystem::MAX_LIGHT - signal;
 
     return signal;
 }

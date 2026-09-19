@@ -161,6 +161,12 @@ public:
 
     int getSkyLightAt(int32_t x, int32_t y, int32_t z);
 
+    int getBlockLightAt(int32_t x, int32_t y, int32_t z);
+
+    void addBlockLightUpdate(int32_t x, int32_t y, int32_t z);
+
+    void updateBlockLight();
+
     int32_t getHeightAt(int32_t x, int32_t z);
 
     int32_t getSkyLightSubtracted() const { return mSkyLightSubtracted; }
@@ -284,4 +290,5 @@ private:
     int32_t mSkyLightSubtracted = 0;
     GameRules mGameRules;
     PacketBroadcaster mPacketBroadcaster;
+    std::unordered_set<int64_t> mBlockLightQueue;
 };
