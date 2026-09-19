@@ -1,6 +1,7 @@
 #include "Player/PlayerDataProvider.h"
 
 #include "Core/NBT/NbtIo.h"
+#include "Core/Text/StringUtil.h"
 #include "Core/Utility/BinaryStream.h"
 
 #include <algorithm>
@@ -28,15 +29,8 @@ PlayerDataProvider::PlayerDataProvider(const std::string &directory) : mDirector
     MAKE_DIRECTORY(mDirectory.c_str());
 }
 
-std::string PlayerDataProvider::_toLowerCase(const std::string &value) {
-    std::string lowered = value;
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-                   [](unsigned char character) { return (char) std::tolower(character); });
-    return lowered;
-}
-
 std::string PlayerDataProvider::_getPlayerDataPath(const std::string &name) const {
-    return mDirectory + "/" + _toLowerCase(name) + ".dat";
+    return mDirectory + "/" + StringUtil::toLowerCase(name) + ".dat";
 }
 
 bool PlayerDataProvider::_gzipCompress(const std::string &input, std::string &output) {

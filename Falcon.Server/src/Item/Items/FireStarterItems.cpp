@@ -46,24 +46,6 @@ namespace {
         return burnChance != FireSystem::UNBURNABLE && (isSolid(identifier) || burnChance > 0);
     }
 
-    void consumeHeldOne(ServerPlayer &player) {
-        if (player.getGameType() == (int32_t) GameType::Creative)
-            return;
-
-        PlayerInventory &inventory = player.getInventory();
-        ItemStack held = inventory.getItemInHand();
-        if (held.isAir())
-            return;
-
-        held.mCount -= 1;
-        if (held.mCount <= 0)
-            inventory.setItemInHand(ItemStack::air());
-        else
-            inventory.setItemInHand(std::move(held));
-
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
-    }
 }
 
 FlintAndSteelItem::FlintAndSteelItem(const Item &base) : Item(base) {}
@@ -109,6 +91,6 @@ bool FireChargeItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
         return false;
 
     owner.playLevelSound(LevelSoundEvent::GHAST_FIREBALL, centerOf(placement));
-    consumeHeldOne(player);
+    player.consumeOneHeldItem();
     return true;
 }

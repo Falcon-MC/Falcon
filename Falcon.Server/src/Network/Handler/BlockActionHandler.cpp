@@ -352,14 +352,11 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     }
 
     const std::string brokenIdentifier = brokenState.mName;
-    const int32_t brokenHash = BlockStateHasher::hash(brokenState.mName, brokenState.mStates);
     const BlockData *brokenData = BlockDataTable::find(brokenState.mName.c_str());
-    const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
+    const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+    const ItemStack heldItem = player.getInventory().getItemInHand();
 
-    level.setBlockState(position.x, position.y, position.z, BlockState("minecraft:air"));
-
-    const BlockState replacement = level.getBlockState(position.x, position.y, position.z);
-    const int32_t replacementHash = BlockStateHasher::hash(replacement.mName, replacement.mStates);
+    destroyBlock(owner, level, position, brokenState, !creative, heldItem);
 
     PlayerBreakBlockAfterEvent brokenEvent(player, position, brokenIdentifier);
     owner.getEventBus().after().mPlayerBreakBlock.emit(brokenEvent);
@@ -367,78 +364,101 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     if (brokenData != nullptr && brokenData->mHardness > 0.0f)
         owner.damagePlayerHeldItem(player, 1);
 
-    if (brokenData != nullptr && player.getGameType() != (int32_t) GameType::Creative) {
-        const ItemStack &heldItem = player.getInventory().getItemInHand();
-        const bool silkTouch = ItemEnchantments::getLevel(heldItem, EnchantmentIds::SILK_TOUCH) > 0;
-        const int32_t fortuneLevel = ItemEnchantments::getLevel(heldItem, EnchantmentIds::FORTUNE);
-
-        auto spawnDrop = [&](const std::string &identifier, int32_t count) {
-            if (identifier.empty() || count <= 0)
-                return;
-
-            Item parsedItem;
-            if (!StringToItemParser::getInstance().parse(identifier, parsedItem))
-                return;
-
-            ItemStack drop;
-            drop.mDefinition = owner.getItemDefinitions().getDefinition(parsedItem.getIdentifier());
-            drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsedItem.getIdentifier());
-            drop.mCount = count;
-
-            if (brokenBlock != nullptr)
-                brokenBlock->writeDropContents(position, drop);
-
-            const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                        (float) position.z + 0.5f);
-            owner.dropItem(dropPosition, drop, ItemActorHandler::randomDropMotion(),
-                           ItemActorHandler::DROP_PICKUP_DELAY);
-        };
-
-        const bool grassLike = brokenState.mName == "minecraft:short_grass"
-                               || brokenState.mName == "minecraft:tall_grass";
-
-        if (grassLike) {
-            const bool usedShears = heldItem.mDefinition != nullptr
-                                    && heldItem.mDefinition->getIdentifier() == "minecraft:shears";
-            if (usedShears)
-                spawnDrop(furnaceDropIdentifier(brokenState.mName), 1);
-
-            if (rand() % 8 == 0) {
-                const int32_t seedCount = fortuneLevel == 0 ? 1 : 1 + rand() % (fortuneLevel * 2);
-                spawnDrop("minecraft:wheat_seeds", seedCount);
-            }
-        } else {
-            std::string dropIdentifier;
-            int32_t dropCount = 0;
-            const std::string normalizedDropIdentifier = furnaceDropIdentifier(brokenState.mName);
-
-            if (silkTouch && brokenData->mSilkTouch) {
-                dropIdentifier = normalizedDropIdentifier;
-                dropCount = 1;
-            } else if (brokenData->mDropKind == BlockDropKind::Self) {
-                dropIdentifier = normalizedDropIdentifier;
-                dropCount = brokenData->mDropMin;
-            } else if (brokenData->mDropKind == BlockDropKind::Other && brokenData->mDropIdentifier != nullptr) {
-                dropIdentifier = brokenData->mDropIdentifier;
-                const int32_t range = (int32_t) brokenData->mDropMax - (int32_t) brokenData->mDropMin + 1;
-                dropCount = (int32_t) brokenData->mDropMin + (range > 0 ? rand() % range : 0);
-
-                if (fortuneLevel > 0)
-                    dropCount += rand() % (fortuneLevel + 1);
-            }
-
-            spawnDrop(dropIdentifier, dropCount);
-        }
-
-        if (!silkTouch) {
-            const int experience = ExperienceValues::getOreDropExperience(brokenState.mName);
-            if (experience > 0) {
-                const Vector3f orbPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                           (float) position.z + 0.5f);
-                owner.spawnExperienceOrbs(orbPosition, experience);
-            }
+    const bool silkTouch = ItemEnchantments::getLevel(heldItem, EnchantmentIds::SILK_TOUCH) > 0;
+    if (!creative && !silkTouch) {
+        const int experience = ExperienceValues::getOreDropExperience(brokenState.mName);
+        if (experience > 0) {
+            const Vector3f orbPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
+                                       (float) position.z + 0.5f);
+            owner.spawnExperienceOrbs(orbPosition, experience);
         }
     }
+
+    player.exhaust(0.005f);
+}
+
+void BlockActionHandler::spawnBlockDrops(ServerNetworkHandler &owner, const Vector3i &position,
+                                         const BlockState &brokenState, const ItemStack &tool) {
+    const BlockData *brokenData = BlockDataTable::find(brokenState.mName.c_str());
+    if (brokenData == nullptr)
+        return;
+
+    const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
+    const bool silkTouch = ItemEnchantments::getLevel(tool, EnchantmentIds::SILK_TOUCH) > 0;
+    const int32_t fortuneLevel = ItemEnchantments::getLevel(tool, EnchantmentIds::FORTUNE);
+
+    auto spawnDrop = [&](const std::string &identifier, int32_t count) {
+        if (identifier.empty() || count <= 0)
+            return;
+
+        Item parsedItem;
+        if (!StringToItemParser::getInstance().parse(identifier, parsedItem))
+            return;
+
+        ItemStack drop;
+        drop.mDefinition = owner.getItemDefinitions().getDefinition(parsedItem.getIdentifier());
+        drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsedItem.getIdentifier());
+        drop.mCount = count;
+
+        if (brokenBlock != nullptr)
+            brokenBlock->writeDropContents(position, drop);
+
+        const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
+                                    (float) position.z + 0.5f);
+        owner.dropItem(dropPosition, drop, ItemActorHandler::randomDropMotion(),
+                       ItemActorHandler::DROP_PICKUP_DELAY);
+    };
+
+    const bool grassLike = brokenState.mName == "minecraft:short_grass"
+                           || brokenState.mName == "minecraft:tall_grass";
+
+    if (grassLike) {
+        const bool usedShears = tool.mDefinition != nullptr
+                                && tool.mDefinition->getIdentifier() == "minecraft:shears";
+        if (usedShears)
+            spawnDrop(furnaceDropIdentifier(brokenState.mName), 1);
+
+        if (rand() % 8 == 0) {
+            const int32_t seedCount = fortuneLevel == 0 ? 1 : 1 + rand() % (fortuneLevel * 2);
+            spawnDrop("minecraft:wheat_seeds", seedCount);
+        }
+        return;
+    }
+
+    std::string dropIdentifier;
+    int32_t dropCount = 0;
+    const std::string normalizedDropIdentifier = furnaceDropIdentifier(brokenState.mName);
+
+    if (silkTouch && brokenData->mSilkTouch) {
+        dropIdentifier = normalizedDropIdentifier;
+        dropCount = 1;
+    } else if (brokenData->mDropKind == BlockDropKind::Self) {
+        dropIdentifier = normalizedDropIdentifier;
+        dropCount = brokenData->mDropMin;
+    } else if (brokenData->mDropKind == BlockDropKind::Other && brokenData->mDropIdentifier != nullptr) {
+        dropIdentifier = brokenData->mDropIdentifier;
+        const int32_t range = (int32_t) brokenData->mDropMax - (int32_t) brokenData->mDropMin + 1;
+        dropCount = (int32_t) brokenData->mDropMin + (range > 0 ? rand() % range : 0);
+
+        if (fortuneLevel > 0)
+            dropCount += rand() % (fortuneLevel + 1);
+    }
+
+    spawnDrop(dropIdentifier, dropCount);
+}
+
+void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                      const BlockState &brokenState, bool dropItems, const ItemStack &tool) {
+    const int32_t brokenHash = BlockStateHasher::hash(brokenState.mName, brokenState.mStates);
+    const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
+
+    level.setBlockState(position.x, position.y, position.z, BlockState("minecraft:air"));
+
+    const BlockState replacement = level.getBlockState(position.x, position.y, position.z);
+    const int32_t replacementHash = BlockStateHasher::hash(replacement.mName, replacement.mStates);
+
+    if (dropItems)
+        spawnBlockDrops(owner, position, brokenState, tool);
 
     UpdateBlockPacket update;
     update.mBlockPosition = position;
@@ -460,9 +480,6 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     RedstoneSystem::onBlockBroken(owner, position, brokenState);
 
     PortalForcer::onFrameBlockBroken(level, position, &owner);
-
-    player.exhaust(0.005f);
-
 }
 
 void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player,
@@ -683,6 +700,18 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     owner.getScriptEngine().onItemUseOnBlock(player, transaction.mBlockPosition.x,
                                              transaction.mBlockPosition.y, transaction.mBlockPosition.z);
 
+    Level &level = owner.getLevelFor(player);
+    const BlockState clickedState = level.getBlockState(transaction.mBlockPosition.x,
+                                                        transaction.mBlockPosition.y,
+                                                        transaction.mBlockPosition.z);
+
+    const bool useBlock = !player.getFlags().get(ActorFlag::Sneaking) || inventory.getItemInHand().isAir();
+
+    const Block *clickedBlock = VanillaBlocks::fromIdentifier(clickedState.mName);
+    if (useBlock && clickedBlock != nullptr &&
+        clickedBlock->onInteract(owner, player, transaction.mBlockPosition, clickedState))
+        return;
+
     const ItemStack &interactItem = inventory.getItemInHand();
     if (!interactItem.isAir() && interactItem.mDefinition != nullptr) {
         const Item *itemType = VanillaItems::fromIdentifier(interactItem.mDefinition->getIdentifier());
@@ -694,18 +723,7 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     if (PortalForcer::tryInsertEnderEye(owner, player, transaction.mBlockPosition))
         return;
 
-    Level &level = owner.getLevelFor(player);
-    const BlockState clickedState = level.getBlockState(transaction.mBlockPosition.x,
-                                                        transaction.mBlockPosition.y,
-                                                        transaction.mBlockPosition.z);
-
     const ItemStack &heldItem = inventory.getItemInHand();
-    const bool useBlock = !player.getFlags().get(ActorFlag::Sneaking) || heldItem.isAir();
-
-    const Block *clickedBlock = VanillaBlocks::fromIdentifier(clickedState.mName);
-    if (useBlock && clickedBlock != nullptr &&
-        clickedBlock->onInteract(owner, player, transaction.mBlockPosition, clickedState))
-        return;
 
     const bool bucket = BucketItem::isBucket(heldItem);
     if (heldItem.isAir() || heldItem.mCount <= 0 || heldItem.mDefinition == nullptr

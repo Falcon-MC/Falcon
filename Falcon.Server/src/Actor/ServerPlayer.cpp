@@ -53,6 +53,9 @@ namespace {
     const char *TAG_XP_PROGRESS = "XpP";
     const char *TAG_LIFETIME_XP_TOTAL = "XpTotal";
     const char *TAG_ACTIVE_EFFECTS = "ActiveEffects";
+    const char *TAG_SPAWN_X = "SpawnX";
+    const char *TAG_SPAWN_Y = "SpawnY";
+    const char *TAG_SPAWN_Z = "SpawnZ";
 
     int64_t currentTimeMillis() {
         using namespace std::chrono;
@@ -543,6 +546,23 @@ void ServerPlayer::tickItemCooldowns(int64_t currentTick) {
     }
 }
 
+void ServerPlayer::consumeOneHeldItem() {
+    if (getGameType() == (int32_t) GameType::Creative)
+        return;
+
+    ItemStack held = mInventory.getItemInHand();
+    if (held.isAir())
+        return;
+
+    held.mCount -= 1;
+    if (held.mCount <= 0)
+        mInventory.setItemInHand(ItemStack::air());
+    else
+        mInventory.setItemInHand(std::move(held));
+
+    getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, mInventory.getSelectedSlot());
+}
+
 void ServerPlayer::sendMessage(const std::string &message) {
     if (mSender == nullptr)
         return;
@@ -627,6 +647,12 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
     data.putString(TAG_LAST_KNOWN_XUID, mXuid);
     data.putString(TAG_NAME, mName);
 
+    if (mHasSpawnPoint) {
+        data.putInt(TAG_SPAWN_X, mSpawnPoint.x);
+        data.putInt(TAG_SPAWN_Y, mSpawnPoint.y);
+        data.putInt(TAG_SPAWN_Z, mSpawnPoint.z);
+    }
+
     data.putInt(TAG_FOOD_LEVEL, (int32_t) getFood());
     data.putFloat(TAG_FOOD_EXHAUSTION_LEVEL, getExhaustion());
     data.putFloat(TAG_FOOD_SATURATION_LEVEL, getSaturation());
@@ -706,6 +732,10 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
     mAirSupply = std::clamp(data.getInt(TAG_AIR, 300), 0, 300);
     mGameType = data.getInt(TAG_GAME_MODE, mGameType);
     mFirstPlayed = data.getLong(TAG_FIRST_PLAYED, 0);
+
+    mHasSpawnPoint = data.contains(TAG_SPAWN_X);
+    if (mHasSpawnPoint)
+        mSpawnPoint = Vector3i(data.getInt(TAG_SPAWN_X, 0), data.getInt(TAG_SPAWN_Y, 0), data.getInt(TAG_SPAWN_Z, 0));
     setFireTicks(std::clamp((int) data.getShort(TAG_FIRE, 0), 0, 32767));
 
     setFood((float) data.getInt(TAG_FOOD_LEVEL, (int32_t) getFood()));

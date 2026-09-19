@@ -5,7 +5,9 @@
 
 class ServerNetworkHandler;
 class ServerPlayer;
+class ItemStack;
 class ItemUseTransaction;
+class Level;
 class Packet;
 class BlockState;
 
@@ -17,6 +19,12 @@ public:
                                      const BlockState &state);
 
     static void breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
+
+    static void destroyBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                             const BlockState &brokenState, bool dropItems, const ItemStack &tool);
+
+    static void spawnBlockDrops(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &brokenState,
+                                const ItemStack &tool);
 
     static void startBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                    int32_t face);

@@ -166,6 +166,42 @@ public:
 
     void setPortalCooldown(int32_t ticks) { mPortalCooldown = ticks; }
 
+    void consumeOneHeldItem();
+
+    bool isSleeping() const {
+        return mSleeping;
+    }
+
+    const Vector3i &getSleepingPosition() const {
+        return mSleepingPosition;
+    }
+
+    void setSleeping(const Vector3i &position) {
+        mSleeping = true;
+        mSleepingPosition = position;
+    }
+
+    void clearSleeping() {
+        mSleeping = false;
+    }
+
+    bool hasSpawnPoint() const {
+        return mHasSpawnPoint;
+    }
+
+    const Vector3i &getSpawnPoint() const {
+        return mSpawnPoint;
+    }
+
+    void setSpawnPoint(const Vector3i &position) {
+        mHasSpawnPoint = true;
+        mSpawnPoint = position;
+    }
+
+    void clearSpawnPoint() {
+        mHasSpawnPoint = false;
+    }
+
     int32_t getTicksSinceInAir() const { return mTicksSinceInAir; }
 
     void tickGroundTracking() {
@@ -330,6 +366,10 @@ private:
     DimensionType mDimension = DimensionType::Overworld;
     bool mAwaitingDimensionAck = false;
     int32_t mPortalCooldown = 0;
+    bool mSleeping = false;
+    Vector3i mSleepingPosition;
+    bool mHasSpawnPoint = false;
+    Vector3i mSpawnPoint;
     int32_t mPortalTicks = 0;
     int32_t mTicksSinceInAir = 0;
     bool mAwaitingConsumableRelease = false;

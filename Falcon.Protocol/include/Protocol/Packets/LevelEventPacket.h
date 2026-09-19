@@ -14,6 +14,7 @@ public:
         BlockUpdateBreak = 3602,
         ParticleDestroy = 2001,
         ParticleSplash = 2002,
+        ParticleExplode = 2025,
         ParticleSmashAttackGroundDust = 9815,
         StartRain = 3001,
         StartThunder = 3002,

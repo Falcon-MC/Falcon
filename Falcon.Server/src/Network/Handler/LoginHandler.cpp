@@ -180,6 +180,14 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         player.setXuid("");
     }
 
+    const BanEntry *ban = owner.getBanList().find(player.getName());
+    if (ban != nullptr) {
+        LOG_INFO(LogAreaID::Server, "Player %s is banned", player.getName().c_str());
+        owner._disconnect(id, ban->mReason.empty() ? "You are banned" : "You are banned. Reason: " + ban->mReason);
+        owner.getPlayers().erase(id);
+        return;
+    }
+
     if (!owner.isAllowListed(player)) {
         LOG_INFO(LogAreaID::Server, "Player %s is not in the allow list", player.getName().c_str());
         owner._disconnect(id, ServerNetworkHandler::NOT_ALLOW_LISTED_MESSAGE);

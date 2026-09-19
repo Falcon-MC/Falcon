@@ -25,6 +25,8 @@ public:
     static CommandParamData makePlayerParameter(const std::string &name,
                                                 const std::vector<std::string> &playerNames);
 
+    static std::string joinArguments(const std::vector<std::string> &arguments, size_t first);
+
     const std::string &getName() const { return mName; }
 
     const std::string &getDescription() const { return mDescription; }

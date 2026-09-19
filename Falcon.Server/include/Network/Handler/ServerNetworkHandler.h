@@ -14,6 +14,7 @@
 #include "Protocol/Types/CommandOriginData.h"
 #include "Player/PlayerDataProvider.h"
 #include "Server/AllowList.h"
+#include "Server/BanList.h"
 #include "Server/OpList.h"
 #include "Core/Event/EventBus.h"
 #include "Scripting/BehaviorPackManager.h"
@@ -22,6 +23,7 @@
 #include "Server/PropertiesSettings.h"
 #include "Server/ResourcePackManager.h"
 #include "Actor/FallingBlockActor.h"
+#include "Actor/PrimedTntActor.h"
 #include "Actor/ItemActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
@@ -126,6 +128,8 @@ public:
     ServerActor *spawnActor(const std::string &identifier, const Vector3f &position);
 
     FallingBlockActor *spawnFallingBlock(const BlockState &state, const Vector3f &position);
+
+    PrimedTntActor *spawnPrimedTnt(const Vector3f &position, const Vector3f &motion, int32_t fuse);
 
     void spawnExperienceOrbs(const Vector3f &position, int amount);
 
@@ -303,9 +307,19 @@ public:
         return mAllowList;
     }
 
+    BanList &getBanList() {
+        return mBanList;
+    }
+
     bool isAllowListed(ServerPlayer &player);
 
     bool isServerFull(const NetworkIdentifier &joining) const;
+
+    bool sleepOn(ServerPlayer &player, const Vector3i &head);
+
+    void stopSleep(ServerPlayer &player);
+
+    void wakeSleepersAt(const Vector3i &head);
 
     void setAllowListEnabled(bool enabled);
 
@@ -526,6 +540,10 @@ private:
 
     void _respawnPlayer(ServerPlayer &player);
 
+    Vector3f _respawnPositionFor(ServerPlayer &player);
+
+    void _tickSleep();
+
     void onReceiveIPSupport(RakPeerHelper::IPSupport support) override;
 
     void _updateServerAnnouncement();
@@ -562,6 +580,7 @@ private:
     PlayerDataProvider mPlayerData;
     OpList mOps;
     AllowList mAllowList;
+    BanList mBanList;
     ResourcePackManager mResourcePacks;
     CommandMap mCommands;
     PingedCompatibleServer mAnnouncement;
@@ -600,6 +619,7 @@ private:
     bool mKeepInventory;
     uint64_t mNextRuntimeId;
     int64_t mCurrentTick = 0;
+    int32_t mSleepTicks = 0;
     std::chrono::steady_clock::time_point mStartTime = std::chrono::steady_clock::now();
 
     Profiler mProfiler;

@@ -57,6 +57,10 @@ public:
 
     void addTime(int64_t time) { setTime(mTime + time); }
 
+    bool isNight() const {
+        return getDayTime() > 13184 && getDayTime() < 22800;
+    }
+
     void tickTime() {
         if (mGameRules.getBool("dodaylightcycle"))
             ++mTime;

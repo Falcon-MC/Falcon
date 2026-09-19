@@ -31,3 +31,13 @@ CommandParamData Command::makePlayerParameter(const std::string &name,
 
     return parameter;
 }
+
+std::string Command::joinArguments(const std::vector<std::string> &arguments, size_t first) {
+    std::string joined;
+    for (size_t index = first; index < arguments.size(); ++index) {
+        if (!joined.empty())
+            joined += " ";
+        joined += arguments[index];
+    }
+    return joined;
+}

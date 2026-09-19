@@ -14,6 +14,7 @@
 #include "Block/Blocks/PlacementRuleBlocks.h"
 #include "Block/Blocks/PlantBlock.h"
 #include "Block/Blocks/RedstoneDiodeBlock.h"
+#include "Block/Blocks/TntBlock.h"
 #include "Block/BlockPaletteRegistry.h"
 #include "Block/BlockTypeIds.h"
 #include "Core/Debug/BedrockLog.h"
@@ -122,6 +123,9 @@ namespace {
 
         if (RedstoneWireBlock::matches(identifier))
             return std::make_unique<RedstoneWireBlock>(block);
+
+        if (TntBlock::matches(identifier))
+            return std::make_unique<TntBlock>(block);
 
         return std::make_unique<Block>(block);
     }

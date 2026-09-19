@@ -1,18 +1,11 @@
 #include "Server/OpList.h"
 
-#include <algorithm>
-#include <cctype>
+#include "Core/Text/StringUtil.h"
+
 #include <fstream>
 
 OpList::OpList(const std::string &path) : mPath(path) {
     reload();
-}
-
-std::string OpList::_toLowerCase(const std::string &value) {
-    std::string lowered = value;
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-                   [](unsigned char character) { return (char) std::tolower(character); });
-    return lowered;
 }
 
 void OpList::reload() {
@@ -28,12 +21,12 @@ void OpList::reload() {
             line.pop_back();
 
         if (!line.empty())
-            mNames.insert(_toLowerCase(line));
+            mNames.insert(StringUtil::toLowerCase(line));
     }
 }
 
 bool OpList::isOp(const std::string &name) const {
-    return mNames.find(_toLowerCase(name)) != mNames.end();
+    return mNames.find(StringUtil::toLowerCase(name)) != mNames.end();
 }
 
 std::vector<std::string> OpList::getNames() const {
@@ -47,12 +40,12 @@ std::vector<std::string> OpList::getNames() const {
 }
 
 void OpList::addOp(const std::string &name) {
-    if (mNames.insert(_toLowerCase(name)).second)
+    if (mNames.insert(StringUtil::toLowerCase(name)).second)
         _save();
 }
 
 void OpList::removeOp(const std::string &name) {
-    if (mNames.erase(_toLowerCase(name)) > 0)
+    if (mNames.erase(StringUtil::toLowerCase(name)) > 0)
         _save();
 }
 

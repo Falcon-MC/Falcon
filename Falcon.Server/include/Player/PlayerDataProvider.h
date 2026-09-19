@@ -18,8 +18,6 @@ public:
 private:
     std::string _getPlayerDataPath(const std::string &name) const;
 
-    static std::string _toLowerCase(const std::string &value);
-
     static bool _gzipCompress(const std::string &input, std::string &output);
 
     static bool _gzipDecompress(const std::string &input, std::string &output);

@@ -1,20 +1,9 @@
 #include "Command/AllowListCommand.h"
 
+#include "Core/Text/StringUtil.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
-#include <algorithm>
-#include <cctype>
-
 namespace {
-    std::string toLowerCase(const std::string &value) {
-        std::string lowered = value;
-        std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-                       [](unsigned char character) {
-                           return (char) std::tolower(character);
-                       });
-        return lowered;
-    }
-
     CommandParamData makeActionParameter(const std::string &enumName, const std::vector<std::string> &actions) {
         CommandParamData parameter;
         parameter.mName = "action";
@@ -48,7 +37,7 @@ bool AllowListCommand::execute(CommandOrigin &sender, const std::vector<std::str
         return false;
     }
 
-    const std::string action = toLowerCase(arguments[0]);
+    const std::string action = StringUtil::toLowerCase(arguments[0]);
     AllowList &allowList = mHandler.getAllowList();
 
     if (action == "on") {

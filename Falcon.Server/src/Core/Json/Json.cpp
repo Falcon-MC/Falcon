@@ -17,6 +17,19 @@ std::string JsonValue::string(const std::string &fallback) const {
     return mType == Type::String ? mString : fallback;
 }
 
+std::string escapeJson(const std::string &value) {
+    std::string escaped;
+    escaped.reserve(value.size());
+
+    for (const char character: value) {
+        if (character == '"' || character == '\\')
+            escaped.push_back('\\');
+        escaped.push_back(character);
+    }
+
+    return escaped;
+}
+
 JsonParser::JsonParser(const std::string &source) : mSource(source) {
 }
 

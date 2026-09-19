@@ -12,24 +12,6 @@
 namespace {
     const std::string SPAWN_EGG_SUFFIX = "_spawn_egg";
 
-    void consumeHeldOne(ServerPlayer &player) {
-        if (player.getGameType() == (int32_t) GameType::Creative)
-            return;
-
-        PlayerInventory &inventory = player.getInventory();
-        ItemStack held = inventory.getItemInHand();
-        if (held.isAir())
-            return;
-
-        held.mCount -= 1;
-        if (held.mCount <= 0)
-            inventory.setItemInHand(ItemStack::air());
-        else
-            inventory.setItemInHand(std::move(held));
-
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
-    }
-
     std::string resolveSpawnedActor(const std::string &identifier) {
         if (identifier == "minecraft:villager")
             return "minecraft:villager_v2";
@@ -58,7 +40,7 @@ bool ThrowableItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, con
     if (mCooldownTicks > 0)
         player.startItemCooldown(item, owner.getCurrentTick(), mCooldownTicks);
 
-    consumeHeldOne(player);
+    player.consumeOneHeldItem();
     return true;
 }
 
@@ -74,7 +56,7 @@ bool ThrownPotionItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, 
     owner.setProjectilePotionData(projectile->getUniqueId(), item.mDamage);
     owner.playLevelSound(LevelSoundEvent::THROW, player.getPosition(), "minecraft:player");
 
-    consumeHeldOne(player);
+    player.consumeOneHeldItem();
     return true;
 }
 
@@ -126,7 +108,7 @@ bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
     if (owner.spawnActor(entityIdentifier, spawnPosition) == nullptr)
         return false;
 
-    consumeHeldOne(player);
+    player.consumeOneHeldItem();
     return true;
 }
 

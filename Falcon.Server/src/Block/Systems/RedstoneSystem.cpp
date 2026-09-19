@@ -3,7 +3,9 @@
 #include "Block/Actor/ChestBlockActor.h"
 #include "Block/BlockActorStore.h"
 #include "Block/BlockData.h"
+#include "Actor/PrimedTntActor.h"
 #include "Block/Blocks/CommandBlock.h"
+#include "Block/Blocks/TntBlock.h"
 #include "Block/Systems/CommandBlockSystem.h"
 #include "Block/Systems/FallingBlockSystem.h"
 #include "Block/Systems/FireSystem.h"
@@ -1321,6 +1323,10 @@ void RedstoneSystem::onUpdate(ServerNetworkHandler &owner, const Vector3i &posit
     } else if (FallingBlockSystem::matches(identifier)) {
         if (type == RedstoneUpdateType::Normal)
             FallingBlockSystem::onNormalUpdate(owner, position, state);
+    } else if (TntBlock::matches(identifier)) {
+        if ((type == RedstoneUpdateType::Normal || type == RedstoneUpdateType::Redstone)
+            && isGettingPower(owner, position))
+            TntBlock::prime(owner, owner.getLevel(), position, PrimedTntActor::DEFAULT_FUSE);
     }
 
     --gDepth;

@@ -174,6 +174,16 @@ void BedOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &pl
                              BlockPlacementComponent::getHorizontalFacing(player.getRotation().y));
 }
 
+bool BedOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                                     const BlockState &state) const {
+    return BedBlock::use(owner, player, position, state);
+}
+
+void BedOrientationBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position,
+                                   const BlockState &state) const {
+    BedBlock::breakOtherHalf(owner, owner.getLevel(), position, state);
+}
+
 bool DoorOrientationBlock::matches(const std::string &identifier) {
     return DoorBlock::matches(identifier);
 }

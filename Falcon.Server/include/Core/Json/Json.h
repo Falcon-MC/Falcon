@@ -31,6 +31,8 @@ struct JsonValue {
     std::string string(const std::string &fallback = std::string()) const;
 };
 
+std::string escapeJson(const std::string &value);
+
 class JsonParser {
 public:
     explicit JsonParser(const std::string &source);

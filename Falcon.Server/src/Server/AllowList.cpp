@@ -2,37 +2,15 @@
 
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Json/Json.h"
+#include "Core/Text/StringUtil.h"
 
 #include <algorithm>
-#include <cctype>
 #include <fstream>
 #include <memory>
 #include <sstream>
 
 AllowList::AllowList(const std::string &path) : mPath(path) {
     reload();
-}
-
-std::string AllowList::_toLowerCase(const std::string &value) {
-    std::string lowered = value;
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-                   [](unsigned char character) {
-                       return (char) std::tolower(character);
-                   });
-    return lowered;
-}
-
-std::string AllowList::_escape(const std::string &value) {
-    std::string escaped;
-    escaped.reserve(value.size());
-
-    for (const char character: value) {
-        if (character == '"' || character == '\\')
-            escaped.push_back('\\');
-        escaped.push_back(character);
-    }
-
-    return escaped;
 }
 
 void AllowList::reload() {
@@ -80,9 +58,9 @@ void AllowList::reload() {
 }
 
 std::vector<AllowListEntry>::iterator AllowList::_findByName(const std::string &name) {
-    const std::string lowered = _toLowerCase(name);
+    const std::string lowered = StringUtil::toLowerCase(name);
     return std::find_if(mEntries.begin(), mEntries.end(), [&lowered](const AllowListEntry &entry) {
-        return _toLowerCase(entry.mName) == lowered;
+        return StringUtil::toLowerCase(entry.mName) == lowered;
     });
 }
 
@@ -166,9 +144,9 @@ void AllowList::_save() const {
         const AllowListEntry &entry = mEntries[index];
         file << "    {\n";
         file << "        \"ignoresPlayerLimit\": " << (entry.mIgnoresPlayerLimit ? "true" : "false") << ",\n";
-        file << "        \"name\": \"" << _escape(entry.mName) << "\"";
+        file << "        \"name\": \"" << escapeJson(entry.mName) << "\"";
         if (!entry.mXuid.empty())
-            file << ",\n        \"xuid\": \"" << _escape(entry.mXuid) << "\"";
+            file << ",\n        \"xuid\": \"" << escapeJson(entry.mXuid) << "\"";
         file << "\n    }" << (index + 1 < mEntries.size() ? "," : "") << "\n";
     }
     file << "]\n";

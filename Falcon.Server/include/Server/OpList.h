@@ -19,8 +19,6 @@ public:
     void reload();
 
 private:
-    static std::string _toLowerCase(const std::string &value);
-
     void _save() const;
 
     std::string mPath;

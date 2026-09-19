@@ -173,6 +173,22 @@ FallingBlockActor *ServerNetworkHandler::spawnFallingBlock(const BlockState &sta
     return result;
 }
 
+PrimedTntActor *ServerNetworkHandler::spawnPrimedTnt(const Vector3f &position, const Vector3f &motion, int32_t fuse) {
+    const uint64_t runtimeId = allocateRuntimeId();
+    const int64_t uniqueId = (int64_t) runtimeId;
+
+    std::unique_ptr<PrimedTntActor> actor(new PrimedTntActor(runtimeId, fuse));
+    actor->getAttributes() = ActorAttributes::createActorDefaults();
+    actor->setPosition(position);
+    actor->setMotion(motion);
+
+    PrimedTntActor *result = actor.get();
+    mActors[uniqueId] = std::move(actor);
+
+    broadcastActorSpawn(*result);
+    return result;
+}
+
 void ServerNetworkHandler::spawnExperienceOrbs(const Vector3f &position, int amount) {
     if (amount <= 0)
         return;

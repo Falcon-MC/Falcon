@@ -15,6 +15,10 @@
 #include "Command/ProfilerCommand.h"
 #include "Command/AboutCommand.h"
 #include "Command/AllowListCommand.h"
+#include "Command/BanCommand.h"
+#include "Command/KickCommand.h"
+#include "Command/PardonCommand.h"
+#include "Command/TeleportCommand.h"
 #include "Command/GameRuleCommand.h"
 #include "Command/LocateCommand.h"
 #include "Command/WeatherCommand.h"
@@ -123,7 +127,9 @@
 #include "Block/Systems/FireSystem.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Protocol/Packets/CommandBlockUpdatePacket.h"
+#include "Block/Blocks/BedBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Protocol/Packets/AnimatePacket.h"
 #include "Item/CraftingRecipeTable.h"
 #include "Item/ItemNetworkIdTable.h"
 #include "Item/ItemData.h"
@@ -148,6 +154,9 @@
 
 static const int64_t RESOURCE_PACK_CHUNK_SIZE = 1024 * 1024;
 static const float PLAYER_BASE_OFFSET = 1.62f;
+static const int32_t SLEEP_CHECK_DELAY_TICKS = 75;
+static const int64_t DAY_LENGTH_TICKS = 24000;
+static const float BED_HEIGHT = 0.5625f;
 static const int64_t FOOD_USE_DURATION_TICKS = 32;
 static const int64_t DRIED_KELP_USE_DURATION_TICKS = 16;
 static const int64_t EARLY_CONSUMABLE_RELEASE_BLOCK_TICKS = 10;
@@ -427,7 +436,8 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
         : mRakNetInstance(nullptr), mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers),
           mIsListening(false), mKeepInventory(false), mNextRuntimeId(1),
           mLevel("Bedrock level", DEFAULT_VIEW_DISTANCE),
-          mPlayerData("players"), mOps("ops.txt"), mAllowList("allowlist.json") {
+          mPlayerData("players"), mOps("ops.txt"), mAllowList("allowlist.json"),
+          mBanList("banned-players.json") {
     std::unique_ptr<Connector> rakNet = TransportFactory::createConnector(TransportLayer::RakNet, *this, true);
 
     if (rakNet != nullptr) {
@@ -470,6 +480,10 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mCommands.registerCommand(std::make_shared<LocateCommand>(*this));
     mCommands.registerCommand(std::make_shared<AboutCommand>(*this));
     mCommands.registerCommand(std::make_shared<AllowListCommand>(*this));
+    mCommands.registerCommand(std::make_shared<TeleportCommand>(*this));
+    mCommands.registerCommand(std::make_shared<KickCommand>(*this));
+    mCommands.registerCommand(std::make_shared<BanCommand>(*this));
+    mCommands.registerCommand(std::make_shared<PardonCommand>(*this));
 
     mResourcePacks.loadFromDirectory("resource_packs");
     mResourcePacks.loadBundledAddonsFrom("behavior_packs");
@@ -852,6 +866,7 @@ void ServerNetworkHandler::tick() {
 
     mCurrentTick++;
     mLevel.tickTime();
+    _tickSleep();
     mProfiler.beginTick(mCurrentTick);
 
     mProfiler.beginSection(ProfilerSection::Weather);
@@ -1166,6 +1181,7 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
                                    ? player->getName()
                                    : id.toString();
     if (player != nullptr && !player->getName().empty()) {
+        stopSleep(*player);
         _savePlayerData(*player);
         EnderChestInventoryStore::getInstance().remove(player->getUniqueId());
 
@@ -1286,6 +1302,8 @@ void ServerNetworkHandler::loadActorsForChunk(int32_t chunkX, int32_t chunkZ) {
         std::unique_ptr<ServerActor> actor;
         if (identifier == FallingBlockActor::IDENTIFIER)
             actor.reset(new FallingBlockActor(runtimeId, BlockState()));
+        else if (identifier == PrimedTntActor::IDENTIFIER)
+            actor.reset(new PrimedTntActor(runtimeId, PrimedTntActor::DEFAULT_FUSE));
         else
             actor.reset(new ServerActor(runtimeId, identifier));
 
@@ -1497,6 +1515,20 @@ void ServerNetworkHandler::_sendEntityData(ServerPlayer &player) {
     flags2.mFormat = EntityDataFormat::Long;
     flags2.mLongValue = player.getFlags().getHighBits();
     entityData.mMetadata.mEntries.push_back(flags2);
+
+    EntityDataEntry playerFlags;
+    playerFlags.mId = ActorFlags::PLAYER_FLAGS_DATA_ID;
+    playerFlags.mFormat = EntityDataFormat::Byte;
+    playerFlags.mByteValue = player.isSleeping() ? ActorFlags::PLAYER_FLAG_SLEEP : 0;
+    entityData.mMetadata.mEntries.push_back(playerFlags);
+
+    if (player.isSleeping()) {
+        EntityDataEntry bedPosition;
+        bedPosition.mId = ActorFlags::BED_POSITION_DATA_ID;
+        bedPosition.mFormat = EntityDataFormat::Vector3i;
+        bedPosition.mVector3iValue = player.getSleepingPosition();
+        entityData.mMetadata.mEntries.push_back(bedPosition);
+    }
 
     for (const auto &entry: mPlayers) {
         if (entry.first == player.getNetworkIdentifier() || entry.second.isSpawned())
@@ -1742,6 +1774,7 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     if (player.isDead())
         return;
 
+    stopSleep(player);
     player.kill();
     player.setOnFire(false);
     _sendEntityData(player);
@@ -1836,11 +1869,106 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     _sendInventory(player);
 }
 
+bool ServerNetworkHandler::sleepOn(ServerPlayer &player, const Vector3i &head) {
+    for (const auto &entry: mPlayers) {
+        const ServerPlayer &other = entry.second;
+        if (&other != &player && other.isSleeping() && other.getSleepingPosition() == head)
+            return false;
+    }
+
+    player.setSleeping(head);
+    player.setSpawnPoint(head);
+    player.getFlags().set(ActorFlag::Sleeping, true);
+    player.teleport(*this, Vector3f((float) head.x + 0.5f, (float) head.y + 0.5f, (float) head.z + 0.5f));
+    BedBlock::setOccupied(*this, head, true);
+    _sendEntityData(player);
+
+    mSleepTicks = SLEEP_CHECK_DELAY_TICKS;
+    return true;
+}
+
+void ServerNetworkHandler::stopSleep(ServerPlayer &player) {
+    if (!player.isSleeping())
+        return;
+
+    const Vector3i head = player.getSleepingPosition();
+    player.clearSleeping();
+    player.getFlags().set(ActorFlag::Sleeping, false);
+    _sendEntityData(player);
+
+    bool bedStillUsed = false;
+    for (const auto &entry: mPlayers) {
+        if (entry.second.isSleeping() && entry.second.getSleepingPosition() == head)
+            bedStillUsed = true;
+    }
+    if (!bedStillUsed)
+        BedBlock::setOccupied(*this, head, false);
+
+    mSleepTicks = 0;
+
+    AnimatePacket wakeUp;
+    wakeUp.mRuntimeActorId = player.getRuntimeId();
+    wakeUp.mAction = AnimatePacket::Action::WakeUp;
+    mNetworkHandler->send(player.getNetworkIdentifier(), wakeUp, mCodecContext);
+}
+
+void ServerNetworkHandler::wakeSleepersAt(const Vector3i &head) {
+    for (auto &entry: mPlayers) {
+        if (entry.second.isSleeping() && entry.second.getSleepingPosition() == head)
+            stopSleep(entry.second);
+    }
+}
+
+void ServerNetworkHandler::_tickSleep() {
+    if (mSleepTicks <= 0 || --mSleepTicks > 0)
+        return;
+
+    int players = 0;
+    int sleeping = 0;
+    for (const auto &entry: mPlayers) {
+        const ServerPlayer &player = entry.second;
+        if (!player.isSpawned() || player.getDimension() != DimensionType::Overworld)
+            continue;
+
+        players++;
+        if (player.isSleeping())
+            sleeping++;
+    }
+
+    if (players == 0 || sleeping < players)
+        return;
+
+    if (!mLevel.isNight() && !mLevel.isThundering())
+        return;
+
+    mLevel.setTime(mLevel.getTime() + DAY_LENGTH_TICKS - mLevel.getDayTime());
+    broadcastWorldTime();
+
+    for (auto &entry: mPlayers) {
+        if (entry.second.isSleeping())
+            stopSleep(entry.second);
+    }
+}
+
+Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player) {
+    if (!player.hasSpawnPoint())
+        return mLevel.getSpawnPositionForPlayer();
+
+    const Vector3i bed = player.getSpawnPoint();
+    if (!BedBlock::isValidAt(mLevel, bed)) {
+        player.clearSpawnPoint();
+        player.sendTranslation("§7%tile.bed.notValid", {});
+        return mLevel.getSpawnPositionForPlayer();
+    }
+
+    return Vector3f((float) bed.x + 0.5f, (float) bed.y + BED_HEIGHT, (float) bed.z + 0.5f);
+}
+
 void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     if (!player.isDead())
         return;
 
-    const Vector3f spawn = mLevel.getSpawnPositionForPlayer();
+    const Vector3f spawn = _respawnPositionFor(player);
 
     if (player.getDimension() != DimensionType::Overworld)
         changePlayerDimension(player, DimensionType::Overworld, spawn);
@@ -1917,6 +2045,9 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerActio
             return;
         case PlayerActionType::DimensionChangeSuccess:
             onPlayerDimensionChangeAck(*player);
+            return;
+        case PlayerActionType::StopSleep:
+            stopSleep(*player);
             return;
         default:
             break;

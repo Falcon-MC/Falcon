@@ -27,25 +27,6 @@ namespace {
     const int8_t DEFAULT_FIREWORK_COLOR = 0;
     const int8_t DEFAULT_FIREWORK_TYPE = 3;
 
-    void consumeHeldOne(ServerPlayer &player) {
-        if (player.getGameType() == (int32_t) GameType::Creative)
-            return;
-
-        PlayerInventory &inventory = player.getInventory();
-        ItemStack held = inventory.getItemInHand();
-        if (held.isAir())
-            return;
-
-        held.mCount -= 1;
-        if (held.mCount <= 0)
-            inventory.setItemInHand(ItemStack::air());
-        else
-            inventory.setItemInHand(std::move(held));
-
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
-    }
-
     Tag makeDefaultExplosion() {
         Tag explosion = Tag::ofCompound();
         explosion.put(FIREWORK_COLOR_TAG, Tag::ofByteArray({DEFAULT_FIREWORK_COLOR}));
@@ -121,7 +102,7 @@ bool FireworkRocketItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player
     }
 
     owner.playLevelSound(LevelSoundEvent::LAUNCH, player.getPosition(), "minecraft:player");
-    consumeHeldOne(player);
+    player.consumeOneHeldItem();
     return true;
 }
 
@@ -171,6 +152,6 @@ bool FireworkRocketItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer 
     owner.syncActorFirework(*rocket);
 
     owner.playLevelSound(LevelSoundEvent::LAUNCH, spawnPosition);
-    consumeHeldOne(player);
+    player.consumeOneHeldItem();
     return true;
 }

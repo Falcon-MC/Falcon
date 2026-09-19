@@ -9,6 +9,7 @@ enum class ActorFlag : int {
     Sprinting = 3,
     UsingItem = 4,
     Invisible = 5,
+    Ignited = 10,
     Baby = 11,
     CanClimb = 19,
     CanWalk = 22,
@@ -18,6 +19,7 @@ enum class ActorFlag : int {
     HasGravity = 49,
     SpinAttack = 56,
     Swimming = 57,
+    Sleeping = 76,
     Crawling = 114,
 };
 
@@ -25,6 +27,10 @@ class ActorFlags {
 public:
     static const int32_t FLAGS_DATA_ID = 0;
     static const int32_t FLAGS_2_DATA_ID = 91;
+    static const int32_t PLAYER_FLAGS_DATA_ID = 26;
+    static const int32_t BED_POSITION_DATA_ID = 28;
+    static const int32_t FUSE_LENGTH_DATA_ID = 55;
+    static const int8_t PLAYER_FLAG_SLEEP = 0x2;
 
     void set(ActorFlag flag, bool value);
 
