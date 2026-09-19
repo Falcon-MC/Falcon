@@ -42,4 +42,8 @@ public:
     static bool canInteractWithBlock(ServerPlayer &player, const Vector3i &position);
 
     static void placeBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemUseTransaction &transaction);
+
+private:
+    static void interactBlock(ServerNetworkHandler &owner, ServerPlayer &player,
+                              const ItemUseTransaction &transaction);
 };

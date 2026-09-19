@@ -110,6 +110,8 @@ public:
     /** Minimum number of seconds between two skin changes of the same player. */
     int getSkinChangeCooldown() const { return getInt("skin-change-cooldown", 30); }
 
+    int getSpawnProtection() const { return getInt("spawn-protection", 16); }
+
     float getPlayerPositionAcceptanceThreshold() const {
         return getFloat("player-position-acceptance-threshold", 0.5f);
     }

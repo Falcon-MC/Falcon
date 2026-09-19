@@ -37,6 +37,7 @@
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <algorithm>
+#include <vector>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -243,26 +244,6 @@ namespace {
         return true;
     }
 
-    bool intersectsPlayer(const ServerPlayer &player, const Vector3i &position, const BlockData *blockData) {
-        if (blockData == nullptr || !blockData->mSolid)
-            return false;
-
-        const Vector3f &playerPosition = player.getPosition();
-        constexpr float halfWidth = 0.3f;
-        constexpr float playerHeight = 1.8f;
-
-        const float playerMinX = playerPosition.x - halfWidth;
-        const float playerMaxX = playerPosition.x + halfWidth;
-        const float playerMinY = playerPosition.y;
-        const float playerMaxY = playerPosition.y + playerHeight;
-        const float playerMinZ = playerPosition.z - halfWidth;
-        const float playerMaxZ = playerPosition.z + halfWidth;
-
-        return playerMinX < (float) position.x + 1.0f && playerMaxX > (float) position.x
-               && playerMinY < (float) position.y + 1.0f && playerMaxY > (float) position.y
-               && playerMinZ < (float) position.z + 1.0f && playerMaxZ > (float) position.z;
-    }
-
     void sendCurrentBlockState(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
         Level &level = owner.getLevelFor(player);
         if (position.y < level.getMinY() || position.y > level.getMaxY())
@@ -280,6 +261,73 @@ namespace {
                                                         (float) position.y + 0.5f,
                                                         (float) position.z + 0.5f),
                                                update);
+    }
+
+    void syncBlocksNearby(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &clicked, int face) {
+        static const int sides[6][3] = {
+                {0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}
+        };
+        constexpr float maxDistanceSquared = 10000.0f;
+
+        const Vector3f &feet = player.getPosition();
+        const float dx = (float) clicked.x - feet.x;
+        const float dy = (float) clicked.y - feet.y;
+        const float dz = (float) clicked.z - feet.z;
+        if (dx * dx + dy * dy + dz * dz >= maxDistanceSquared)
+            return;
+
+        std::vector<Vector3i> positions;
+        positions.reserve(14);
+
+        auto addUnique = [&positions](const Vector3i &position) {
+            if (std::find(positions.begin(), positions.end(), position) == positions.end())
+                positions.push_back(position);
+        };
+
+        auto addWithSides = [&](const Vector3i &center) {
+            addUnique(center);
+            for (const auto &side: sides)
+                addUnique(Vector3i(center.x + side[0], center.y + side[1], center.z + side[2]));
+        };
+
+        addWithSides(clicked);
+        if (face >= 0 && face < 6)
+            addWithSides(Vector3i(clicked.x + sides[face][0], clicked.y + sides[face][1], clicked.z + sides[face][2]));
+
+        Level &level = owner.getLevelFor(player);
+        for (const Vector3i &position: positions) {
+            if (position.y < level.getMinY() || position.y > level.getMaxY())
+                continue;
+
+            for (int32_t layer = 0; layer < 2; ++layer) {
+                const BlockState state = level.getBlockStateAtLayer(position.x, position.y, position.z, layer);
+
+                UpdateBlockPacket update;
+                update.mBlockPosition = position;
+                update.mRuntimeId = (uint32_t) BlockStateHasher::hash(state.mName, state.mStates);
+                update.mFlags = UpdateBlockPacket::Flag::All;
+                update.mDataLayer = layer;
+                owner.getNetworkHandler().send(player.getNetworkIdentifier(), update, owner.getCodecContext());
+            }
+        }
+    }
+
+    bool isInSpawnProtection(ServerNetworkHandler &owner, ServerPlayer &player, Level &level,
+                             const Vector3i &position) {
+        const int radius = owner.getProperties().getSpawnProtection();
+        if (radius < 0 || player.isOp())
+            return false;
+
+        const Vector3i spawn = level.getSpawnPosition();
+        const float dx = (float) position.x - (float) spawn.x;
+        const float dz = (float) position.z - (float) spawn.z;
+        return dx * dx + dz * dz <= (float) (radius * radius);
+    }
+
+    bool isChunkReady(Level &level, const Vector3i &position) {
+        const int32_t chunkX = position.x >> 4;
+        const int32_t chunkZ = position.z >> 4;
+        return level.isChunkResident(chunkX, chunkZ) && level.isChunkPopulated(chunkX, chunkZ);
     }
 
     void broadcastArmSwing(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &position) {
@@ -512,6 +560,11 @@ void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerP
     if (player.isBreakingBlock())
         stopBreakingBlock(owner, player);
 
+    if (isInSpawnProtection(owner, player, level, position)) {
+        sendCurrentBlockState(owner, player, position);
+        return;
+    }
+
     const BlockState &state = level.getChunk(position.x >> 4, position.z >> 4)
                                     .getBlock(position.x & 15, position.y, position.z & 15);
 
@@ -601,7 +654,7 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
     if (position.y < playerLevel.getMinY() || position.y > playerLevel.getMaxY())
         return;
 
-    if (!canInteractWithBlock(player, position)) {
+    if (!canInteractWithBlock(player, position) || isInSpawnProtection(owner, player, playerLevel, position)) {
         sendCurrentBlockState(owner, player, position);
         return;
     }
@@ -689,25 +742,43 @@ void BlockActionHandler::stopBreakingBlock(ServerNetworkHandler &owner, ServerPl
 
 void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &player,
                                     const ItemUseTransaction &transaction) {
+    if (transaction.mBlockFace < 0 || transaction.mBlockFace >= 6)
+        return;
+
+    if (isDuplicateRightClick(player, transaction)) {
+        return;
+    }
+
+    interactBlock(owner, player, transaction);
+
+    if (transaction.mClientInteractPrediction == ItemUsePredictedResult::Success) {
+        const int syncFace = transaction.mItemInHand.mBlockDefinition != nullptr ? -1 : transaction.mBlockFace;
+        syncBlocksNearby(owner, player, transaction.mBlockPosition, syncFace);
+    }
+}
+
+void BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer &player,
+                                       const ItemUseTransaction &transaction) {
     if (!player.isSpawned() || player.isDead() || player.getGameType() == (int32_t) GameType::Spectator)
         return;
 
-    if (transaction.mBlockFace < 0 || transaction.mBlockFace >= 6
-        || transaction.mHotbarSlot < 0 || transaction.mHotbarSlot >= PlayerInventory::HOTBAR_SIZE)
+    if (transaction.mHotbarSlot < 0 || transaction.mHotbarSlot >= PlayerInventory::HOTBAR_SIZE)
         return;
 
     Level &playerLevel = owner.getLevelFor(player);
     if (transaction.mBlockPosition.y < playerLevel.getMinY() || transaction.mBlockPosition.y > playerLevel.getMaxY())
         return;
 
-    if (!canInteractWithBlock(player, transaction.mBlockPosition))
+    if (!canInteractWithBlock(player, transaction.mBlockPosition)) {
         return;
+    }
 
     if (!finiteClickPosition(transaction.mClickPosition))
         return;
 
-    if (isDuplicateRightClick(player, transaction))
+    if (isInSpawnProtection(owner, player, playerLevel, transaction.mBlockPosition)) {
         return;
+    }
 
     PlayerInventory &inventory = player.getInventory();
     bool selectedSlotChanged = false;
@@ -763,14 +834,12 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     }
 
     if (clickedState.mName == "minecraft:air") {
-        sendCurrentBlockState(owner, player, transaction.mBlockPosition);
         return;
     }
 
     if (player.getGameType() == (int32_t) GameType::Adventure
         && std::find(heldItem.mCanPlace.begin(), heldItem.mCanPlace.end(), clickedState.mName)
            == heldItem.mCanPlace.end()) {
-        sendCurrentBlockState(owner, player, transaction.mBlockPosition);
         return;
     }
 
@@ -793,44 +862,62 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     }
     const int placementFace = replacesClicked ? PlacementOrientation::FACE_UP : face;
 
+    const Block *heldBlock = VanillaBlocks::fromIdentifier(heldItem.mBlockDefinition->getIdentifier());
+    if (heldBlock != nullptr)
+        target = heldBlock->resolvePlacementPosition(level, target, face);
+
     if (target.y < level.getMinY() || target.y > level.getMaxY()) {
-        sendCurrentBlockState(owner, player, target);
         return;
     }
 
-    const BlockState targetState = level.getBlockState(target.x, target.y, target.z);
-    if (!BlockSupport::isReplaceable(targetState)) {
-        sendCurrentBlockState(owner, player, target);
+    if (!isChunkReady(level, target)) {
+        return;
+    }
+
+    if (isInSpawnProtection(owner, player, level, target)) {
         return;
     }
 
     const BlockDefinition &definition = *heldItem.mBlockDefinition;
+
+    BlockState mergedState(definition.getIdentifier(), definition.getState());
+    PlacementMergeResult mergeResult = PlacementMergeResult::None;
+    if (heldBlock != nullptr) {
+        mergeResult = heldBlock->mergePlacement(level, transaction.mBlockPosition, face, transaction.mClickPosition,
+                                                target, mergedState);
+    }
+
+    if (mergeResult == PlacementMergeResult::Rejected) {
+        return;
+    }
+
+    const bool merged = mergeResult == PlacementMergeResult::Merged;
+
+    const BlockState targetState = level.getBlockState(target.x, target.y, target.z);
+    if (!merged && !BlockSupport::isReplaceable(targetState)) {
+        return;
+    }
+
     const BlockData *placedData = BlockDataTable::find(definition.getIdentifier().c_str());
 
     const BlockState targetOverlay = level.getBlockStateAtLayer(target.x, target.y, target.z, 1);
     const bool targetHasLiquid = LiquidView(targetState).isLiquid() || LiquidView(targetOverlay).isLiquid();
-    if (targetHasLiquid && placedData != nullptr && placedData->mWaterloggingLevel == 0 && !placedData->mSolid) {
-        sendCurrentBlockState(owner, player, target);
+    if (!merged && targetHasLiquid && placedData != nullptr && placedData->mWaterloggingLevel == 0
+        && !placedData->mSolid) {
         return;
     }
 
-    if (intersectsPlayer(player, target, placedData)) {
-        sendCurrentBlockState(owner, player, target);
-        return;
-    }
-
-    BlockState placedState = BlockPlacementComponent::apply(
+    BlockState placedState = merged ? mergedState : BlockPlacementComponent::apply(
             BlockState(definition.getIdentifier(), definition.getState()), &level,
             player.getRotation().y, player.getRotation().x, placementFace,
             transaction.mClickPosition, player.getPosition(), target);
 
     const Block *placedBlock = VanillaBlocks::fromIdentifier(placedState.mName);
-    if (placedBlock != nullptr && !placedBlock->canPlaceAt(level, target, placementFace)) {
-        sendCurrentBlockState(owner, player, target);
+    if (!merged && placedBlock != nullptr && !placedBlock->canPlaceAt(level, target, placementFace)) {
         return;
     }
 
-    if (placedBlock != nullptr)
+    if (!merged && placedBlock != nullptr)
         placedBlock->onPlacing(owner, level, target, placedState);
 
     const bool waterlogsTarget = LiquidView(targetState).isWater() && placedData != nullptr
