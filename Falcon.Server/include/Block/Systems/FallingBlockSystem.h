@@ -26,8 +26,6 @@ public:
 
     static bool isLava(const std::string &identifier);
 
-    static bool isReplaceable(const BlockState &state);
-
     static bool isTransparent(const BlockState &state);
 
     static bool canFallInto(Level &level, const Vector3i &position);

@@ -109,14 +109,6 @@ bool FallingBlockSystem::isLava(const std::string &identifier) {
     return identifier == "minecraft:lava" || identifier == "minecraft:flowing_lava";
 }
 
-bool FallingBlockSystem::isReplaceable(const BlockState &state) {
-    if (state.mName == "minecraft:air")
-        return true;
-
-    const BlockData *data = BlockDataTable::find(state.mName.c_str());
-    return data != nullptr && !data->mSolid;
-}
-
 bool FallingBlockSystem::isTransparent(const BlockState &state) {
     const BlockData *data = BlockDataTable::find(state.mName.c_str());
     return data != nullptr && data->mTransparent;

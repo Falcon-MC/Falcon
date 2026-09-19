@@ -3,6 +3,7 @@
 #include "Actor/ActorSizeTable.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
+#include "Block/BlockSupport.h"
 #include "Block/Systems/FallingBlockSystem.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
@@ -160,7 +161,7 @@ void FallingBlockActor::_land(ServerNetworkHandler &owner, const Vector3i &posit
     Vector3i target = position;
     while (target.y < LevelChunk::MAX_Y) {
         const BlockState existing = level.getBlockState(target.x, target.y, target.z);
-        if (FallingBlockSystem::isReplaceable(existing))
+        if (BlockSupport::isReplaceable(existing))
             break;
 
         ++target.y;
@@ -168,7 +169,7 @@ void FallingBlockActor::_land(ServerNetworkHandler &owner, const Vector3i &posit
 
     const BlockState existing = level.getBlockState(position.x, position.y, position.z);
     const bool blocked = existing.mName != "minecraft:air" && FallingBlockSystem::isTransparent(existing) &&
-                         !FallingBlockSystem::isReplaceable(existing);
+                         !BlockSupport::isReplaceable(existing);
 
     if (blocked) {
         FallingBlockSystem::spawnDestroyParticle(owner, position, mBlockState);
@@ -188,7 +189,7 @@ void FallingBlockActor::_land(ServerNetworkHandler &owner, const Vector3i &posit
         FallingBlockSystem::isTouchingWater(level, target))
         placed = BlockState(FallingBlockSystem::getConcreteFor(placed.mName));
 
-    if (!FallingBlockSystem::isReplaceable(existing))
+    if (!BlockSupport::isReplaceable(existing))
         FallingBlockSystem::spawnDestroyParticle(owner, position, existing);
 
     _place(owner, target, placed);
