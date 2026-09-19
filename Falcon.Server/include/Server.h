@@ -9,7 +9,7 @@ struct ServerSettings {
     std::string motd = "Falcon Server";
     std::string subMotd = "Falcon";
     std::string gameVersion = "1.26.50";
-    int protocolVersion = 2192;
+    int protocolVersion = 2193;
 };
 
 void startServer(const ServerSettings &settings = ServerSettings());

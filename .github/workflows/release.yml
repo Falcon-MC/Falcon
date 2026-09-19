@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. 1.26.40.02)"
+        description: "Release version (e.g. 1.26.50.01)"
         required: true
         type: string
       prerelease:
@@ -236,7 +236,7 @@ jobs:
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
           body: |
-            **Falcon ${{ needs.prepare.outputs.version }} for Minecraft: Bedrock Edition 1.26.40 (protocol 2168)**
+            **Falcon ${{ needs.prepare.outputs.version }} for Minecraft: Bedrock Edition 1.26.50 (protocol 2193)**
 
             | Platform | Download |
             | --- | --- |
