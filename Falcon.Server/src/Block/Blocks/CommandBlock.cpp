@@ -12,5 +12,6 @@ bool CommandBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
     (void) state;
 
     CommandBlockContainerManagerModel model;
-    return model.open(owner, player, position);
+    model.open(owner, player, position);
+    return true;
 }

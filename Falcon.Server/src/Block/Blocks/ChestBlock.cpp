@@ -118,5 +118,6 @@ bool ChestBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, c
         pair(level, position);
 
     ChestContainerManagerModel model;
-    return model.open(owner, player, position);
+    model.open(owner, player, position);
+    return true;
 }

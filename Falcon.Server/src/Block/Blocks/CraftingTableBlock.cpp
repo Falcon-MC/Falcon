@@ -9,5 +9,6 @@ bool CraftingTableBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &p
     (void) state;
 
     CraftingContainerManagerModel model;
-    return model.open(owner, player, position);
+    model.open(owner, player, position);
+    return true;
 }

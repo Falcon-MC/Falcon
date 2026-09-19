@@ -43,7 +43,8 @@ ContainerType FurnaceBlock::containerType(const BlockState &state) {
 bool FurnaceBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                               const BlockState &state) const {
     FurnaceContainerManagerModel model(state);
-    return model.open(owner, player, position);
+    model.open(owner, player, position);
+    return true;
 }
 
 void FurnaceBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,

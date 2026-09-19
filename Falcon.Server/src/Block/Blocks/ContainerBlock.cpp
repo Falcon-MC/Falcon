@@ -193,7 +193,8 @@ bool ContainerBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
     }
 
     BlockContainerManagerModel model(definition->mContainerType);
-    return model.open(owner, player, position);
+    model.open(owner, player, position);
+    return true;
 }
 
 void ContainerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
