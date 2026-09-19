@@ -84,26 +84,26 @@ namespace {
         return shape;
     }
 
-    bool readCorner(const JsonValue &value, std::array<float, 3> &out) {
-        if (value.mType != JsonValue::Type::Array || value.mArray.size() != 3)
+    bool readCorner(const json::Value &value, std::array<float, 3> &out) {
+        if (value.mType != json::Value::Type::Array || value.mArray.size() != 3)
             return false;
 
         for (size_t axis = 0; axis < 3; ++axis) {
-            if (value.mArray[axis]->mType != JsonValue::Type::Number)
+            if (value.mArray[axis]->mType != json::Value::Type::Number)
                 return false;
             out[axis] = (float) value.mArray[axis]->mNumber / 16.0f;
         }
         return true;
     }
 
-    std::vector<VoxelBox> readBoxes(const JsonValue &entry) {
+    std::vector<VoxelBox> readBoxes(const json::Value &entry) {
         std::vector<VoxelBox> boxes;
-        const JsonValue *list = entry.get("boxes");
-        if (list == nullptr || list->mType != JsonValue::Type::Array)
+        const json::Value *list = entry.get("boxes");
+        if (list == nullptr || list->mType != json::Value::Type::Array)
             return boxes;
 
-        for (const std::unique_ptr<JsonValue> &box : list->mArray) {
-            if (box->mType != JsonValue::Type::Array || box->mArray.size() != 2)
+        for (const std::unique_ptr<json::Value> &box : list->mArray) {
+            if (box->mType != json::Value::Type::Array || box->mArray.size() != 2)
                 continue;
 
             VoxelBox voxelBox;
@@ -117,9 +117,8 @@ namespace {
         VoxelShapesPacket packet;
 
         const std::string source(FalconVoxelShapeData::kVoxelShapesJson);
-        JsonParser parser(source);
-        const std::unique_ptr<JsonValue> root = parser.parse();
-        if (root == nullptr || root->mType != JsonValue::Type::Array) {
+        const std::unique_ptr<json::Value> root = json::parse(source);
+        if (root == nullptr || root->mType != json::Value::Type::Array) {
             LOG_WARN(LogAreaID::Server, "Failed to parse embedded voxel shapes");
             return packet;
         }
@@ -127,13 +126,13 @@ namespace {
         std::unordered_set<std::string> names;
         std::vector<SerializableVoxelShape> anonymousShapes;
 
-        for (const std::unique_ptr<JsonValue> &entry : root->mArray) {
-            if (entry->mType != JsonValue::Type::Object)
+        for (const std::unique_ptr<json::Value> &entry : root->mArray) {
+            if (entry->mType != json::Value::Type::Object)
                 continue;
 
             SerializableVoxelShape shape = convertBoxesToShape(readBoxes(*entry));
-            const JsonValue *identifier = entry->get("identifier");
-            if (identifier == nullptr || identifier->mType != JsonValue::Type::String) {
+            const json::Value *identifier = entry->get("identifier");
+            if (identifier == nullptr || identifier->mType != json::Value::Type::String) {
                 anonymousShapes.push_back(std::move(shape));
                 continue;
             }

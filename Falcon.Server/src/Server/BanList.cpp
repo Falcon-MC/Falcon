@@ -46,28 +46,27 @@ void BanList::reload() {
     buffer << file.rdbuf();
     const std::string source = buffer.str();
 
-    JsonParser parser(source);
-    const std::unique_ptr<JsonValue> root = parser.parse();
-    if (root == nullptr || root->mType != JsonValue::Type::Array) {
+    const std::unique_ptr<json::Value> root = json::parse(source);
+    if (root == nullptr || root->mType != json::Value::Type::Array) {
         LOG_WARN(LogAreaID::Server, "Failed to parse %s", mPath.c_str());
         return;
     }
 
-    for (const std::unique_ptr<JsonValue> &value: root->mArray) {
-        if (value->mType != JsonValue::Type::Object)
+    for (const std::unique_ptr<json::Value> &value: root->mArray) {
+        if (value->mType != json::Value::Type::Object)
             continue;
 
-        const JsonValue *name = value->get("name");
+        const json::Value *name = value->get("name");
         if (name == nullptr || name->string().empty())
             continue;
 
         BanEntry entry;
         entry.mName = StringUtil::toLowerCase(name->string());
 
-        const JsonValue *creationDate = value->get("creationDate");
-        const JsonValue *banSource = value->get("source");
-        const JsonValue *expireDate = value->get("expireDate");
-        const JsonValue *reason = value->get("reason");
+        const json::Value *creationDate = value->get("creationDate");
+        const json::Value *banSource = value->get("source");
+        const json::Value *expireDate = value->get("expireDate");
+        const json::Value *reason = value->get("reason");
 
         entry.mCreationDate = creationDate != nullptr ? creationDate->string() : _currentDate();
         entry.mSource = banSource != nullptr ? banSource->string("(Unknown)") : "(Unknown)";
@@ -135,11 +134,11 @@ void BanList::_save() const {
     for (size_t index = 0; index < mEntries.size(); ++index) {
         const BanEntry &entry = mEntries[index];
         file << "    {\n";
-        file << "        \"name\": \"" << escapeJson(entry.mName) << "\",\n";
-        file << "        \"creationDate\": \"" << escapeJson(entry.mCreationDate) << "\",\n";
-        file << "        \"source\": \"" << escapeJson(entry.mSource) << "\",\n";
-        file << "        \"expireDate\": \"" << escapeJson(entry.mExpireDate) << "\",\n";
-        file << "        \"reason\": \"" << escapeJson(entry.mReason) << "\"\n";
+        file << "        \"name\": \"" << json::escape(entry.mName) << "\",\n";
+        file << "        \"creationDate\": \"" << json::escape(entry.mCreationDate) << "\",\n";
+        file << "        \"source\": \"" << json::escape(entry.mSource) << "\",\n";
+        file << "        \"expireDate\": \"" << json::escape(entry.mExpireDate) << "\",\n";
+        file << "        \"reason\": \"" << json::escape(entry.mReason) << "\"\n";
         file << "    }" << (index + 1 < mEntries.size() ? "," : "") << "\n";
     }
     file << "]\n";

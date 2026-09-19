@@ -268,4 +268,17 @@ namespace json {
         Parser parser(source);
         return parser.parse();
     }
+
+    inline std::string escape(const std::string &value) {
+        std::string escaped;
+        escaped.reserve(value.size());
+
+        for (const char character: value) {
+            if (character == '"' || character == '\\')
+                escaped.push_back('\\');
+            escaped.push_back(character);
+        }
+
+        return escaped;
+    }
 }

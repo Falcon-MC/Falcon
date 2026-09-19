@@ -39,16 +39,16 @@ namespace {
 
     TagMap loadTags() {
         TagMap tags;
-        std::unique_ptr<JsonValue> root = JsonParser(FalconCraftingData::kItemTagsJson).parse();
-        if (root == nullptr || root->mType != JsonValue::Type::Object)
+        std::unique_ptr<json::Value> root = json::parse(FalconCraftingData::kItemTagsJson);
+        if (root == nullptr || root->mType != json::Value::Type::Object)
             return tags;
 
         for (const auto &entry: root->mObject) {
-            if (entry.second->mType != JsonValue::Type::Array)
+            if (entry.second->mType != json::Value::Type::Array)
                 continue;
             std::vector<std::string> values;
-            for (const std::unique_ptr<JsonValue> &value: entry.second->mArray) {
-                if (value->mType == JsonValue::Type::String)
+            for (const std::unique_ptr<json::Value> &value: entry.second->mArray) {
+                if (value->mType == json::Value::Type::String)
                     values.push_back(value->mString);
             }
             tags.emplace(entry.first, std::move(values));
@@ -56,16 +56,16 @@ namespace {
         return tags;
     }
 
-    std::vector<IngredientChoice> parseIngredient(const JsonValue &value, const TagMap &tags) {
-        const JsonValue *typeValue = value.get("type");
+    std::vector<IngredientChoice> parseIngredient(const json::Value &value, const TagMap &tags) {
+        const json::Value *typeValue = value.get("type");
         const std::string type = typeValue == nullptr ? std::string() : typeValue->string();
-        const JsonValue *countValue = value.get("count");
+        const json::Value *countValue = value.get("count");
         const int32_t count = countValue == nullptr ? 1 : countValue->integer(1);
         if (count <= 0)
             return {};
 
         if (type == "item_tag") {
-            const JsonValue *tag = value.get("itemTag");
+            const json::Value *tag = value.get("itemTag");
             if (tag == nullptr)
                 return {};
             const auto it = tags.find(tag->string());
@@ -79,26 +79,26 @@ namespace {
 
         if (type != "name" && type != "default")
             return {};
-        const JsonValue *itemId = value.get("itemId");
-        if (itemId == nullptr || itemId->mType != JsonValue::Type::String)
+        const json::Value *itemId = value.get("itemId");
+        if (itemId == nullptr || itemId->mType != json::Value::Type::String)
             return {};
-        const JsonValue *auxValue = value.get("auxValue");
+        const json::Value *auxValue = value.get("auxValue");
         const int32_t aux = auxValue == nullptr ? 0 : auxValue->integer(0);
         return {{false, itemId->mString, aux, count}};
     }
 
-    void addRecipe(RecipeStorage &storage, const JsonValue &source, int32_t width, int32_t height,
+    void addRecipe(RecipeStorage &storage, const json::Value &source, int32_t width, int32_t height,
                    const std::vector<IngredientChoice> &ingredients, size_t variant) {
-        const JsonValue *outputData = source.get("output");
-        if (outputData == nullptr || outputData->mType != JsonValue::Type::Array || outputData->mArray.empty())
+        const json::Value *outputData = source.get("output");
+        if (outputData == nullptr || outputData->mType != json::Value::Type::Array || outputData->mArray.empty())
             return;
 
         const size_t outputOffset = storage.mOutputs.size();
-        for (const std::unique_ptr<JsonValue> &output: outputData->mArray) {
-            const JsonValue *itemId = output->get("id");
-            if (itemId == nullptr || itemId->mType != JsonValue::Type::String)
+        for (const std::unique_ptr<json::Value> &output: outputData->mArray) {
+            const json::Value *itemId = output->get("id");
+            if (itemId == nullptr || itemId->mType != json::Value::Type::String)
                 continue;
-            const JsonValue *countValue = output->get("count");
+            const json::Value *countValue = output->get("count");
             const int32_t count = countValue == nullptr ? 1 : countValue->integer(1);
             storage.mOutputs.push_back({storage.store(itemId->mString), count});
         }
@@ -114,8 +114,8 @@ namespace {
                                                 ingredient.mCount});
         }
 
-        const JsonValue *id = source.get("id");
-        const JsonValue *uuid = source.get("uuid");
+        const json::Value *id = source.get("id");
+        const json::Value *uuid = source.get("uuid");
         const std::string baseId = id == nullptr ? "falcon.recipe" : id->string("falcon.recipe");
         const std::string recipeId = variant == 0 ? baseId : baseId + "#" + std::to_string(variant);
         const std::string uuidValue = uuid == nullptr ? std::string() : uuid->string();
@@ -126,7 +126,7 @@ namespace {
                                     priority});
     }
 
-    void addVariants(RecipeStorage &storage, const JsonValue &source, int32_t width, int32_t height,
+    void addVariants(RecipeStorage &storage, const json::Value &source, int32_t width, int32_t height,
                      const std::vector<std::vector<IngredientChoice>> &choices) {
         std::vector<IngredientChoice> selected(choices.size());
         size_t variant = 0;
@@ -143,16 +143,16 @@ namespace {
         visit(0);
     }
 
-    void loadShapedRecipe(RecipeStorage &storage, const JsonValue &source, const TagMap &tags) {
-        const JsonValue *shapeData = source.get("shape");
-        const JsonValue *inputData = source.get("input");
-        if (shapeData == nullptr || inputData == nullptr || shapeData->mType != JsonValue::Type::Array ||
-            inputData->mType != JsonValue::Type::Object || shapeData->mArray.empty())
+    void loadShapedRecipe(RecipeStorage &storage, const json::Value &source, const TagMap &tags) {
+        const json::Value *shapeData = source.get("shape");
+        const json::Value *inputData = source.get("input");
+        if (shapeData == nullptr || inputData == nullptr || shapeData->mType != json::Value::Type::Array ||
+            inputData->mType != json::Value::Type::Object || shapeData->mArray.empty())
             return;
 
         std::vector<std::string> shape;
-        for (const std::unique_ptr<JsonValue> &row: shapeData->mArray) {
-            if (row->mType != JsonValue::Type::String)
+        for (const std::unique_ptr<json::Value> &row: shapeData->mArray) {
+            if (row->mType != json::Value::Type::String)
                 return;
             shape.push_back(row->mString);
         }
@@ -170,7 +170,7 @@ namespace {
                 if (symbol == ' ' || symbolIndexes.count(symbol) != 0)
                     continue;
                 const std::string key(1, symbol);
-                const JsonValue *ingredient = inputData->get(key);
+                const json::Value *ingredient = inputData->get(key);
                 if (ingredient == nullptr)
                     return;
                 std::vector<IngredientChoice> choices = parseIngredient(*ingredient, tags);
@@ -210,13 +210,13 @@ namespace {
             addRecipe(storage, source, width, height, ingredients, variant++);
     }
 
-    void loadShapelessRecipe(RecipeStorage &storage, const JsonValue &source, const TagMap &tags) {
-        const JsonValue *inputData = source.get("input");
-        if (inputData == nullptr || inputData->mType != JsonValue::Type::Array)
+    void loadShapelessRecipe(RecipeStorage &storage, const json::Value &source, const TagMap &tags) {
+        const json::Value *inputData = source.get("input");
+        if (inputData == nullptr || inputData->mType != json::Value::Type::Array)
             return;
 
         std::vector<std::vector<IngredientChoice>> choices;
-        for (const std::unique_ptr<JsonValue> &input: inputData->mArray) {
+        for (const std::unique_ptr<json::Value> &input: inputData->mArray) {
             std::vector<IngredientChoice> parsed = parseIngredient(*input, tags);
             if (parsed.empty())
                 return;
@@ -225,11 +225,11 @@ namespace {
         addVariants(storage, source, 0, 0, choices);
     }
 
-    void loadFurnaceRecipe(RecipeStorage &storage, const JsonValue &source, const TagMap &tags) {
-        const JsonValue *inputData = source.get("input");
-        const JsonValue *outputData = source.get("output");
-        if (inputData == nullptr || inputData->mType != JsonValue::Type::Array || inputData->mArray.empty()
-            || outputData == nullptr || outputData->mType != JsonValue::Type::Array || outputData->mArray.empty()) {
+    void loadFurnaceRecipe(RecipeStorage &storage, const json::Value &source, const TagMap &tags) {
+        const json::Value *inputData = source.get("input");
+        const json::Value *outputData = source.get("output");
+        if (inputData == nullptr || inputData->mType != json::Value::Type::Array || inputData->mArray.empty()
+            || outputData == nullptr || outputData->mType != json::Value::Type::Array || outputData->mArray.empty()) {
             return;
         }
 
@@ -238,18 +238,18 @@ namespace {
             return;
         }
 
-        const JsonValue *output = outputData->mArray.front()->get("id");
-        if (output == nullptr || output->mType != JsonValue::Type::String) {
+        const json::Value *output = outputData->mArray.front()->get("id");
+        if (output == nullptr || output->mType != json::Value::Type::String) {
             return;
         }
 
-        const JsonValue *countValue = outputData->mArray.front()->get("count");
+        const json::Value *countValue = outputData->mArray.front()->get("count");
         const int32_t outputCount = countValue == nullptr ? 1 : countValue->integer(1);
         if (outputCount <= 0) {
             return;
         }
 
-        const JsonValue *id = source.get("id");
+        const json::Value *id = source.get("id");
         const std::string baseId = id == nullptr ? "falcon.furnace" : id->string("falcon.furnace");
         const int32_t priority = source.get("priority") == nullptr ? 0 : source.get("priority")->integer(0);
         for (size_t index = 0; index < choices.size(); ++index) {
@@ -270,17 +270,17 @@ namespace {
             return storage;
         storage.mLoaded = true;
 
-        std::unique_ptr<JsonValue> root = JsonParser(FalconCraftingData::kRecipesJson).parse();
+        std::unique_ptr<json::Value> root = json::parse(FalconCraftingData::kRecipesJson);
         if (root == nullptr)
             return storage;
-        const JsonValue *recipes = root->get("recipes");
-        if (recipes == nullptr || recipes->mType != JsonValue::Type::Array)
+        const json::Value *recipes = root->get("recipes");
+        if (recipes == nullptr || recipes->mType != json::Value::Type::Array)
             return storage;
 
         const TagMap tags = loadTags();
-        for (const std::unique_ptr<JsonValue> &recipe: recipes->mArray) {
-            const JsonValue *type = recipe->get("type");
-            const JsonValue *block = recipe->get("block");
+        for (const std::unique_ptr<json::Value> &recipe: recipes->mArray) {
+            const json::Value *type = recipe->get("type");
+            const json::Value *block = recipe->get("block");
             if (type == nullptr || block == nullptr)
                 continue;
 

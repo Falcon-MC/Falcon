@@ -26,31 +26,30 @@ void AllowList::reload() {
     buffer << file.rdbuf();
     const std::string source = buffer.str();
 
-    JsonParser parser(source);
-    const std::unique_ptr<JsonValue> root = parser.parse();
-    if (root == nullptr || root->mType != JsonValue::Type::Array) {
+    const std::unique_ptr<json::Value> root = json::parse(source);
+    if (root == nullptr || root->mType != json::Value::Type::Array) {
         LOG_WARN(LogAreaID::Server, "Failed to parse %s", mPath.c_str());
         return;
     }
 
-    for (const std::unique_ptr<JsonValue> &value: root->mArray) {
-        if (value->mType != JsonValue::Type::Object)
+    for (const std::unique_ptr<json::Value> &value: root->mArray) {
+        if (value->mType != json::Value::Type::Object)
             continue;
 
-        const JsonValue *name = value->get("name");
-        if (name == nullptr || name->mType != JsonValue::Type::String || name->mString.empty())
+        const json::Value *name = value->get("name");
+        if (name == nullptr || name->mType != json::Value::Type::String || name->mString.empty())
             continue;
 
         AllowListEntry entry;
         entry.mName = name->mString;
 
-        const JsonValue *xuid = value->get("xuid");
+        const json::Value *xuid = value->get("xuid");
         if (xuid != nullptr)
             entry.mXuid = xuid->string();
 
-        const JsonValue *ignoresPlayerLimit = value->get("ignoresPlayerLimit");
+        const json::Value *ignoresPlayerLimit = value->get("ignoresPlayerLimit");
         entry.mIgnoresPlayerLimit = ignoresPlayerLimit != nullptr
-                                    && ignoresPlayerLimit->mType == JsonValue::Type::Boolean
+                                    && ignoresPlayerLimit->mType == json::Value::Type::Boolean
                                     && ignoresPlayerLimit->mBoolean;
 
         mEntries.push_back(entry);
@@ -144,9 +143,9 @@ void AllowList::_save() const {
         const AllowListEntry &entry = mEntries[index];
         file << "    {\n";
         file << "        \"ignoresPlayerLimit\": " << (entry.mIgnoresPlayerLimit ? "true" : "false") << ",\n";
-        file << "        \"name\": \"" << escapeJson(entry.mName) << "\"";
+        file << "        \"name\": \"" << json::escape(entry.mName) << "\"";
         if (!entry.mXuid.empty())
-            file << ",\n        \"xuid\": \"" << escapeJson(entry.mXuid) << "\"";
+            file << ",\n        \"xuid\": \"" << json::escape(entry.mXuid) << "\"";
         file << "\n    }" << (index + 1 < mEntries.size() ? "," : "") << "\n";
     }
     file << "]\n";
