@@ -1,5 +1,8 @@
 <p align="center">
-	<img src=".github/logo.png" alt="Falcon" width="256">
+	<picture>
+		<source media="(prefers-color-scheme: dark)" srcset=".github/logo-white.png">
+		<img src=".github/logo.png" alt="Falcon" width="256">
+	</picture>
 	<br>
 	<b>Minecraft: Bedrock Edition server software written from scratch in C++</b>
 	<br>
