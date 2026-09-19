@@ -1,5 +1,5 @@
 <p align="center">
-	<b>Falcon</b>
+	<img src=".github/logo.png" alt="Falcon" width="256">
 	<br>
 	<b>Minecraft: Bedrock Edition server software written from scratch in C++</b>
 	<br>
