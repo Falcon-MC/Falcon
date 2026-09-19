@@ -257,8 +257,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     ActorFlags &flags = player.getFlags();
     const ActorFlags previous = flags;
 
-    // Sprinting is the state the client reports every tick, the start and stop flags only mark its
-    // edges. Reacting to the edges alone leaves the flag stuck on whenever a stop edge is missed.
+    // Sprinting and sneaking are states the client reports every tick, the start and stop flags only
+    // mark their edges. Reacting to the edges alone leaves a flag stuck whenever an edge is missed.
     bool sprinting = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sprinting)
                      || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
 
@@ -270,10 +270,13 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
 
     flags.set(ActorFlag::Sprinting, sprinting);
 
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSneaking))
-        flags.set(ActorFlag::Sneaking, true);
+    bool sneaking = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sneaking)
+                    || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSneaking);
+
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSneaking))
-        flags.set(ActorFlag::Sneaking, false);
+        sneaking = false;
+
+    flags.set(ActorFlag::Sneaking, sneaking);
 
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSwimming))
         flags.set(ActorFlag::Swimming, true);
