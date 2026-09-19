@@ -838,7 +838,7 @@ void ServerNetworkHandler::stopServerListening() {
             if (!player.getName().empty())
                 _savePlayerData(player);
 
-            _disconnect(entry.first, "Server closed");
+            _disconnect(entry.first, "disconnectionScreen.disconnected");
         }
 
         mPlayers.clear();
@@ -1532,14 +1532,14 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
         }
     } catch (const BinaryDataException &exception) {
         LOG_WARN(LogAreaID::Network, "Malformed packet from %s: %s", id.getAddress().c_str(), exception.what());
-        _disconnect(id, "Malformed packet");
+        _disconnect(id, "disconnectionScreen.unexpectedPacket");
     } catch (const std::exception &exception) {
         LOG_ERROR(LogAreaID::Network, "Unhandled exception while processing a packet from %s: %s",
                   id.getAddress().c_str(), exception.what());
-        _disconnect(id, "Internal server error");
+        _disconnect(id, "disconnectionScreen.internalError.cantConnect");
     } catch (...) {
         LOG_ERROR(LogAreaID::Network, "Unknown exception while processing a packet from %s", id.getAddress().c_str());
-        _disconnect(id, "Internal server error");
+        _disconnect(id, "disconnectionScreen.internalError.cantConnect");
     }
 }
 
@@ -1558,6 +1558,11 @@ void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, const std::s
     mNetworkHandler->flush(id);
 }
 
+void ServerNetworkHandler::_rejectBadPacket(const NetworkIdentifier &id, const std::string &reason) {
+    LOG_WARN(LogAreaID::Network, "Bad packet from %s: %s", id.getAddress().c_str(), reason.c_str());
+    _disconnect(id, "disconnectionScreen.unexpectedPacket");
+}
+
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestNetworkSettingsPacket &packet) {
     LoginHandler::handleRequestNetworkSettings(*this, id, packet);
 }
@@ -1565,7 +1570,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestNetw
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const LoginPacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr) {
-        _disconnect(id, "Unexpected login");
+        _disconnect(id, "disconnectionScreen.unexpectedPacket");
         return;
     }
 
@@ -1932,6 +1937,7 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
 
     DeathInfoPacket info;
     info.mCauseAttackName = key;
+    info.mMessageList = parameters;
     mNetworkHandler->send(player.getNetworkIdentifier(), info, mCodecContext);
 
     LOG_INFO(LogAreaID::Server, "%s died", player.getName().c_str());
@@ -2462,7 +2468,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerAuthI
 
     std::string badPacketReason;
     if (BadPacketHandler::inspect(*player, packet, badPacketReason)) {
-        _disconnect(id, "Bad packet: " + badPacketReason);
+        _rejectBadPacket(id, badPacketReason);
         return;
     }
 
@@ -2954,7 +2960,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestChun
 
     std::string badPacketReason;
     if (BadPacketHandler::inspect(*player, packet, badPacketReason)) {
-        _disconnect(id, "Bad packet: " + badPacketReason);
+        _rejectBadPacket(id, badPacketReason);
         return;
     }
 
@@ -3020,7 +3026,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const MobEquipmen
 
     std::string badPacketReason;
     if (BadPacketHandler::inspect(*player, packet, badPacketReason)) {
-        _disconnect(id, "Bad packet: " + badPacketReason);
+        _rejectBadPacket(id, badPacketReason);
         return;
     }
 
@@ -3056,7 +3062,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ItemStackRe
 
     std::string badPacketReason;
     if (BadPacketHandler::inspect(*player, packet, badPacketReason)) {
-        _disconnect(id, "Bad packet: " + badPacketReason);
+        _rejectBadPacket(id, badPacketReason);
         return;
     }
 
@@ -3078,7 +3084,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const InventoryTr
 
     std::string badPacketReason;
     if (BadPacketHandler::inspect(*player, packet, badPacketReason)) {
-        _disconnect(id, "Bad packet: " + badPacketReason);
+        _rejectBadPacket(id, badPacketReason);
         return;
     }
 

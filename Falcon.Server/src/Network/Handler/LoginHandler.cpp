@@ -144,7 +144,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     ConnectionRequest request;
     if (!request.parse(packet.mAuthJwt, packet.mClientJwt)) {
         LOG_WARN(LogAreaID::Network, "%s sent a login that could not be parsed", id.getAddress().c_str());
-        owner._disconnect(id, "Malformed login");
+        owner._disconnect(id, "disconnectionScreen.unexpectedPacket");
         return;
     }
 
@@ -154,14 +154,14 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     if (!verified) {
         LOG_WARN(LogAreaID::Network, "%s sent a login that failed verification: %s", id.getAddress().c_str(),
                  verifier.getFailureReason().c_str());
-        owner._disconnect(id, verifier.getFailureReason());
+        owner._disconnect(id, "disconnectionScreen.notAuthenticated");
         owner.getPlayers().erase(id);
         return;
     }
 
     if (owner.getProperties().getOnlineMode() && !verifier.isSigned()) {
         LOG_WARN(LogAreaID::Network, "%s failed Xbox Live authentication", id.getAddress().c_str());
-        owner._disconnect(id, "You must be authenticated with Xbox Live to join");
+        owner._disconnect(id, "disconnectionScreen.notAuthenticated");
         owner.getPlayers().erase(id);
         return;
     }
@@ -280,7 +280,7 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
             break;
 
         case ResourcePackClientResponsePacket::Status::Refused:
-            owner._disconnect(id, "You must accept the resource packs to join");
+            owner._disconnect(id, "disconnectionScreen.resourcePack");
             break;
 
         default:

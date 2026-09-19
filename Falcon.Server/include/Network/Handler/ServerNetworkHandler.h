@@ -417,6 +417,8 @@ public:
 
     void _disconnect(const NetworkIdentifier &id, const std::string &reason);
 
+    void _rejectBadPacket(const NetworkIdentifier &id, const std::string &reason);
+
     ResourcePackManager &getResourcePacks() { return mResourcePacks; }
 
     PingedCompatibleServer &getAnnouncement() { return mAnnouncement; }
