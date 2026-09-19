@@ -1,0 +1,7 @@
+#pragma once
+
+namespace FalconVoxelShapeData {
+    inline constexpr const char kVoxelShapesJson[] = R"FVS(
+@FALCON_VOXEL_SHAPES_JSON_CONTENT@
+)FVS";
+}

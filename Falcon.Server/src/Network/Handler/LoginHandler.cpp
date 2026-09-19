@@ -4,6 +4,7 @@
 
 #include "Block/Components/CreativeContentTable.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/VoxelShapeRegistry.h"
 #include "Command/Command.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/NBT/NbtIo.h"
@@ -333,6 +334,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mBlockProperties = CustomContentRegistry::getInstance().getBlockProperties();
 
     startGame.mGamerules = owner.getLevel().getGameRules().toNetwork();
+
+    owner.getNetworkHandler().send(id, VoxelShapeRegistry::getPacket(), owner.getCodecContext());
 
     owner.getNetworkHandler().send(id, startGame, owner.getCodecContext());
 
