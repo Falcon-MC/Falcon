@@ -2,6 +2,8 @@
 
 #include "Block/BlockIdentifier.h"
 #include "Block/BlockSupport.h"
+#include "Block/Blocks/LiquidView.h"
+#include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Components/PlacementOrientation.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -10,6 +12,11 @@
 
 namespace {
     const int SNOW_LAYER_MAX_HEIGHT = 7;
+    const int CANDLES_MAX = 3;
+    const char *SNOW_LAYER_HEIGHT = "height";
+    const char *CANDLES = "candles";
+    const char *VERTICAL_HALF = "minecraft:vertical_half";
+    const char *STABILITY_CHECK = "stability_check";
 
     const std::unordered_set<std::string> &replaceableIdentifiers() {
         static const std::unordered_set<std::string> identifiers = {
@@ -18,13 +25,30 @@ namespace {
                 "minecraft:nether_sprouts", "minecraft:fire", "minecraft:soul_fire", "minecraft:large_fern",
                 "minecraft:tall_grass", "minecraft:short_dry_grass", "minecraft:tall_dry_grass",
                 "minecraft:leaf_litter", "minecraft:glow_lichen", "minecraft:sculk_vein", "minecraft:resin_clump",
-                "minecraft:seagrass", "minecraft:vine", "minecraft:snow_layer"
+                "minecraft:seagrass", "minecraft:vine"
         };
         return identifiers;
     }
 
     BlockState belowOf(Level &level, const Vector3i &position) {
         return level.getBlockState(position.x, position.y - 1, position.z);
+    }
+
+    BlockState stateAt(Level &level, const Vector3i &position) {
+        return level.getBlockState(position.x, position.y, position.z);
+    }
+
+    bool isTopSlab(const BlockState &state) {
+        return state.mStates.getString(VERTICAL_HALF, "bottom") == "top";
+    }
+
+    std::string doubleSlabOf(const std::string &identifier) {
+        const std::string copperSuffix = "cut_copper_slab";
+        if (BlockIdentifier::endsWith(identifier, copperSuffix))
+            return identifier.substr(0, identifier.size() - copperSuffix.size()) + "double_" + copperSuffix;
+
+        const std::string slabSuffix = "_slab";
+        return identifier.substr(0, identifier.size() - slabSuffix.size()) + "_double_slab";
     }
 }
 
@@ -34,10 +58,184 @@ bool ReplaceableBlock::matches(const std::string &identifier) {
 }
 
 bool ReplaceableBlock::canBeReplaced(const BlockState &state) const {
-    if (state.mName == "minecraft:snow_layer")
-        return state.mStates.getInt("height", 0) < SNOW_LAYER_MAX_HEIGHT;
+    (void) state;
 
     return true;
+}
+
+bool SnowLayerBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:snow_layer";
+}
+
+bool SnowLayerBlock::canBeReplaced(const BlockState &state) const {
+    return state.mStates.getInt(SNOW_LAYER_HEIGHT, 0) < SNOW_LAYER_MAX_HEIGHT;
+}
+
+PlacementMergeResult SnowLayerBlock::mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
+                                                    const Vector3f &clickPosition, Vector3i &position,
+                                                    BlockState &state) const {
+    (void) blockFace;
+    (void) clickPosition;
+
+    const Vector3i candidates[2] = {clickedPosition, position};
+    for (const Vector3i &candidate: candidates) {
+        const BlockState existing = stateAt(level, candidate);
+        if (existing.mName != getIdentifier())
+            continue;
+
+        const int32_t height = existing.mStates.getInt(SNOW_LAYER_HEIGHT, 0);
+        if (height >= SNOW_LAYER_MAX_HEIGHT)
+            continue;
+
+        Tag states = existing.mStates;
+        states.putInt(SNOW_LAYER_HEIGHT, height + 1);
+        position = candidate;
+        state = BlockState(existing.mName, states);
+        return PlacementMergeResult::Merged;
+    }
+
+    return PlacementMergeResult::None;
+}
+
+bool SlabBlock::matches(const std::string &identifier) {
+    return BlockIdentifier::endsWith(identifier, "_slab") && identifier.find("double_") == std::string::npos;
+}
+
+PlacementMergeResult SlabBlock::mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
+                                               const Vector3f &clickPosition, Vector3i &position,
+                                               BlockState &state) const {
+    using namespace PlacementOrientation;
+
+    const Block *doubleSlab = VanillaBlocks::fromIdentifier(doubleSlabOf(getIdentifier()));
+    const BlockState clicked = stateAt(level, clickedPosition);
+    const bool clickedSameSlab = clicked.mName == getIdentifier();
+
+    bool top = clickPosition.y > 0.5f;
+    if (blockFace == FACE_DOWN) {
+        if (clickedSameSlab && isTopSlab(clicked)) {
+            if (doubleSlab == nullptr)
+                return PlacementMergeResult::Rejected;
+
+            position = clickedPosition;
+            state = doubleSlab->toBlockState();
+            return PlacementMergeResult::Merged;
+        }
+        top = true;
+    } else if (blockFace == FACE_UP) {
+        if (clickedSameSlab && !isTopSlab(clicked)) {
+            if (doubleSlab == nullptr)
+                return PlacementMergeResult::Rejected;
+
+            position = clickedPosition;
+            state = doubleSlab->toBlockState();
+            return PlacementMergeResult::Merged;
+        }
+        top = false;
+    }
+
+    const BlockState existing = stateAt(level, position);
+    if (existing.mName != getIdentifier() || isTopSlab(existing) == top)
+        return PlacementMergeResult::None;
+
+    if (doubleSlab == nullptr)
+        return PlacementMergeResult::Rejected;
+
+    state = doubleSlab->toBlockState();
+    return PlacementMergeResult::Merged;
+}
+
+bool CandleBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:candle" || BlockIdentifier::endsWith(identifier, "_candle");
+}
+
+PlacementMergeResult CandleBlock::mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
+                                                 const Vector3f &clickPosition, Vector3i &position,
+                                                 BlockState &state) const {
+    (void) blockFace;
+    (void) clickPosition;
+
+    Vector3i candidate = clickedPosition;
+    BlockState existing = stateAt(level, candidate);
+    if (!matches(existing.mName)) {
+        const Vector3i above = PlacementOrientation::relativePosition(clickedPosition, PlacementOrientation::FACE_UP);
+        const BlockState aboveState = stateAt(level, above);
+        if (matches(aboveState.mName)) {
+            candidate = above;
+            existing = aboveState;
+        } else {
+            candidate = position;
+            existing = stateAt(level, position);
+        }
+    }
+
+    if (existing.mName == getIdentifier()) {
+        const int32_t candles = existing.mStates.getInt(CANDLES, 0);
+        if (candles >= CANDLES_MAX)
+            return PlacementMergeResult::Rejected;
+
+        Tag states = existing.mStates;
+        states.putInt(CANDLES, candles + 1);
+        position = candidate;
+        state = BlockState(existing.mName, states);
+        return PlacementMergeResult::Merged;
+    }
+
+    if (matches(existing.mName))
+        return PlacementMergeResult::Rejected;
+
+    return PlacementMergeResult::None;
+}
+
+bool ScaffoldingBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:scaffolding";
+}
+
+Vector3i ScaffoldingBlock::resolvePlacementPosition(Level &level, const Vector3i &position, int blockFace) const {
+    if (blockFace != PlacementOrientation::FACE_UP)
+        return position;
+
+    Vector3i resolved = position;
+    while (resolved.y <= level.getMaxY() && stateAt(level, resolved).mName == getIdentifier())
+        resolved.y++;
+
+    return resolved;
+}
+
+bool ScaffoldingBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
+    using namespace PlacementOrientation;
+
+    if (LiquidView(stateAt(level, position)).isLava())
+        return false;
+
+    const BlockState clicked = stateAt(level, BlockSupport::supportOf(position, blockFace));
+    const BlockState below = belowOf(level, position);
+    if (clicked.mName == getIdentifier() || below.mName == getIdentifier()
+        || DecorationSupport::isAir(below) || DecorationSupport::isSolid(below))
+        return true;
+
+    for (int side = FACE_NORTH; side <= FACE_EAST; ++side) {
+        if (side == blockFace)
+            continue;
+
+        if (stateAt(level, relativePosition(position, side)).mName == getIdentifier())
+            return true;
+    }
+
+    return false;
+}
+
+void ScaffoldingBlock::onPlacing(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 BlockState &state) const {
+    (void) owner;
+    (void) level;
+    (void) position;
+
+    if (!state.mStates.contains(STABILITY_CHECK))
+        return;
+
+    Tag states = state.mStates;
+    states.putByte(STABILITY_CHECK, 1);
+    state = BlockState(state.mName, states);
 }
 
 bool CarpetBlock::matches(const std::string &identifier) {

@@ -32,6 +32,12 @@ struct BlockPlacementContext {
     int mPistonFacing;
 };
 
+enum class PlacementMergeResult {
+    None,
+    Merged,
+    Rejected
+};
+
 class Block {
 public:
     virtual ~Block() = default;
@@ -64,6 +70,24 @@ public:
         (void) position;
         (void) blockFace;
         return true;
+    }
+
+    virtual Vector3i resolvePlacementPosition(Level &level, const Vector3i &position, int blockFace) const {
+        (void) level;
+        (void) blockFace;
+        return position;
+    }
+
+    virtual PlacementMergeResult mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
+                                                const Vector3f &clickPosition, Vector3i &position,
+                                                BlockState &state) const {
+        (void) level;
+        (void) clickedPosition;
+        (void) blockFace;
+        (void) clickPosition;
+        (void) position;
+        (void) state;
+        return PlacementMergeResult::None;
     }
 
     virtual void onPlacing(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

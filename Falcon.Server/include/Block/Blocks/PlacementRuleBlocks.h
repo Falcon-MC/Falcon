@@ -16,6 +16,63 @@ public:
     bool canBeReplaced(const BlockState &state) const override;
 };
 
+class SnowLayerBlock final : public Block {
+public:
+    explicit SnowLayerBlock(const Block &block) : Block(block)
+    {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    bool canBeReplaced(const BlockState &state) const override;
+
+    PlacementMergeResult mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
+                                        const Vector3f &clickPosition, Vector3i &position,
+                                        BlockState &state) const override;
+};
+
+class SlabBlock final : public Block {
+public:
+    explicit SlabBlock(const Block &block) : Block(block)
+    {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    PlacementMergeResult mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
+                                        const Vector3f &clickPosition, Vector3i &position,
+                                        BlockState &state) const override;
+};
+
+class CandleBlock final : public Block {
+public:
+    explicit CandleBlock(const Block &block) : Block(block)
+    {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    PlacementMergeResult mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
+                                        const Vector3f &clickPosition, Vector3i &position,
+                                        BlockState &state) const override;
+};
+
+class ScaffoldingBlock final : public Block {
+public:
+    explicit ScaffoldingBlock(const Block &block) : Block(block)
+    {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    Vector3i resolvePlacementPosition(Level &level, const Vector3i &position, int blockFace) const override;
+
+    bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
+
+    void onPlacing(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                   BlockState &state) const override;
+};
+
 class CarpetBlock final : public Block {
 public:
     explicit CarpetBlock(const Block &block) : Block(block)

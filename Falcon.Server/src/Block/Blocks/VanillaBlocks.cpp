@@ -115,6 +115,18 @@ namespace {
         if (ReplaceableBlock::matches(identifier))
             return std::make_unique<ReplaceableBlock>(block);
 
+        if (SnowLayerBlock::matches(identifier))
+            return std::make_unique<SnowLayerBlock>(block);
+
+        if (SlabBlock::matches(identifier))
+            return std::make_unique<SlabBlock>(block);
+
+        if (CandleBlock::matches(identifier))
+            return std::make_unique<CandleBlock>(block);
+
+        if (ScaffoldingBlock::matches(identifier))
+            return std::make_unique<ScaffoldingBlock>(block);
+
         if (CarpetBlock::matches(identifier))
             return std::make_unique<CarpetBlock>(block);
 
