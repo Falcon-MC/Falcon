@@ -1,0 +1,14 @@
+#pragma once
+
+#include <cstdint>
+
+namespace FalconBlockUpgradeData {
+    struct EmbeddedSchema {
+        int32_t mId;
+        const char *mJson;
+    };
+
+    inline constexpr EmbeddedSchema kSchemas[] = {
+@FALCON_BLOCK_UPGRADE_SCHEMAS@
+    };
+}

@@ -42,7 +42,7 @@ public:
         return tag;
     }
 
-    static const int32_t BLOCK_STATE_VERSION = 18163713;
+    static const int32_t BLOCK_STATE_VERSION = 18168865;
 
     std::string mName;
     Tag mStates;

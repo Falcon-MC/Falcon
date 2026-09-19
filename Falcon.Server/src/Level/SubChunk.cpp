@@ -2,7 +2,9 @@
 
 #include "Block/BlockLightProperties.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Core/BlockState/BlockStateUpgradeSchema.h"
 #include "Core/Debug/BedrockLog.h"
+#include "Level/BlockStateUpgrades.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Core/NBT/NbtIo.h"
 
@@ -347,8 +349,20 @@ bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<BlockState
 
     for (uint32_t i = 0; i < paletteSize; i++) {
         const Tag tag = NbtIo::readTag(stream, NbtVariant::LittleEndian);
-        const std::string name = tag.getString("name", "minecraft:air");
-        const Tag *states = tag.get("states");
+        const Tag *storedStates = tag.get("states");
+        BlockStateData stored(tag.getString("name", "minecraft:air"),
+                              storedStates != nullptr && storedStates->isCompound() ? *storedStates
+                                                                                    : Tag::ofCompound(),
+                              tag.getInt("version"));
+
+        try {
+            stored = BlockStateUpgrades::upgrade(stored);
+        } catch (const BlockStateUpgradeException &exception) {
+            LOG_WARN(LogAreaID::Level, "Could not upgrade block %s: %s", stored.getName().c_str(), exception.what());
+        }
+
+        const std::string &name = stored.getName();
+        const Tag *states = &stored.getStates();
 
         if (VanillaBlocks::fromIdentifier(name) == nullptr &&
             !CustomContentRegistry::getInstance().isCustomBlock(name)) {

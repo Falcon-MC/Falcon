@@ -4,23 +4,14 @@ project(Falcon.Server LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(FALCON_RECIPES_JSON "${CMAKE_CURRENT_SOURCE_DIR}/resources/recipes.json")
-set(FALCON_ITEM_TAGS_JSON "${CMAKE_CURRENT_SOURCE_DIR}/resources/item_tags.json")
-set(FALCON_BIOME_DEFINITIONS_NBT "${CMAKE_CURRENT_SOURCE_DIR}/resources/biome_definitions.nbt")
-set(FALCON_BLOCK_PALETTE_NBT "${CMAKE_CURRENT_SOURCE_DIR}/resources/block_palette.nbt")
-set(FALCON_VOXEL_SHAPES_JSON "${CMAKE_CURRENT_SOURCE_DIR}/resources/voxel_shapes.json")
-if(NOT EXISTS "${FALCON_RECIPES_JSON}" OR NOT EXISTS "${FALCON_ITEM_TAGS_JSON}")
-    message(FATAL_ERROR "Falcon crafting data files are missing")
-endif()
-if(NOT EXISTS "${FALCON_BIOME_DEFINITIONS_NBT}")
-    message(FATAL_ERROR "Falcon biome definitions file is missing")
-endif()
-if(NOT EXISTS "${FALCON_BLOCK_PALETTE_NBT}")
-    message(FATAL_ERROR "Falcon block palette file is missing")
-endif()
-if(NOT EXISTS "${FALCON_VOXEL_SHAPES_JSON}")
-    message(FATAL_ERROR "Falcon voxel shapes file is missing")
-endif()
+set(FALCON_BEDROCK_DATA_PROTOCOL 2193)
+include("${falcon_bedrock_data_SOURCE_DIR}/cmake/FalconBedrockData.cmake")
+
+falcon_bedrock_data_file(recipes.json FALCON_RECIPES_JSON)
+falcon_bedrock_data_file(item_tags.json FALCON_ITEM_TAGS_JSON)
+falcon_bedrock_data_file(biome_definitions.nbt FALCON_BIOME_DEFINITIONS_NBT)
+falcon_bedrock_data_file(block_palette.nbt FALCON_BLOCK_PALETTE_NBT)
+falcon_bedrock_data_file(voxel_shapes.json FALCON_VOXEL_SHAPES_JSON)
 
 file(READ "${FALCON_RECIPES_JSON}" FALCON_RECIPES_JSON_CONTENT)
 file(READ "${FALCON_ITEM_TAGS_JSON}" FALCON_ITEM_TAGS_JSON_CONTENT)
@@ -42,6 +33,21 @@ string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_BLOCK_PALETTE_BYTES "$
 string(REGEX REPLACE "(0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,)" "\\1\n"
         FALCON_BLOCK_PALETTE_BYTES "${FALCON_BLOCK_PALETTE_BYTES}")
 configure_file(cmake/BlockPaletteNbt.h.in "${FALCON_GENERATED_DIR}/BlockPaletteNbt.h" @ONLY)
+
+file(GLOB FALCON_BLOCK_UPGRADE_SCHEMA_FILES "${FALCON_BLOCK_UPGRADE_SCHEMA_DIR}/*.json")
+list(SORT FALCON_BLOCK_UPGRADE_SCHEMA_FILES)
+set(FALCON_BLOCK_UPGRADE_SCHEMAS "")
+foreach(schemaFile IN LISTS FALCON_BLOCK_UPGRADE_SCHEMA_FILES)
+    get_filename_component(schemaName "${schemaFile}" NAME)
+    string(REGEX MATCH "^[0-9]+" schemaId "${schemaName}")
+    if(schemaId STREQUAL "")
+        continue()
+    endif()
+    math(EXPR schemaId "${schemaId}")
+    file(READ "${schemaFile}" schemaContent)
+    string(APPEND FALCON_BLOCK_UPGRADE_SCHEMAS "        {${schemaId}, R\"falconschema(${schemaContent})falconschema\"},\n")
+endforeach()
+configure_file(cmake/BlockUpgradeSchemas.h.in "${FALCON_GENERATED_DIR}/BlockUpgradeSchemas.h" @ONLY)
 
 if(NOT FALCON_BUILD_VERSION)
     set(FALCON_BUILD_VERSION "1.26.50.01")
@@ -69,9 +75,7 @@ else()
     set(FALCON_BUILD_CONFIGURATION "Publish")
 endif()
 configure_file(cmake/BuildInfo.h.in "${FALCON_GENERATED_DIR}/BuildInfo.h" @ONLY)
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        "${FALCON_RECIPES_JSON}" "${FALCON_ITEM_TAGS_JSON}" "${FALCON_BIOME_DEFINITIONS_NBT}"
-        "${FALCON_BLOCK_PALETTE_NBT}" "${FALCON_VOXEL_SHAPES_JSON}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FALCON_BLOCK_UPGRADE_SCHEMA_FILES})
 
 file(GLOB_RECURSE FALCON_SERVER_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
@@ -84,7 +88,7 @@ find_package(OpenSSL REQUIRED)
 target_include_directories(FalconServer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${FALCON_GENERATED_DIR} ${ZLIB_INCLUDE_DIRS}
         ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(FalconServer PRIVATE FalconNetwork FalconProtocol leveldb qjs LibDataChannel::LibDataChannelStatic)
+target_link_libraries(FalconServer PRIVATE FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic)
 
 if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_options(FalconServer PRIVATE -static -fuse-ld=lld)

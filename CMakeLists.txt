@@ -80,4 +80,23 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(falcon_network)
 
+FetchContent_Declare(
+    falcon_block_state_updater
+    GIT_REPOSITORY https://github.com/Falcon-MC/BlockStateUpdater.git
+    GIT_TAG main
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+)
+FetchContent_MakeAvailable(falcon_block_state_updater)
+
+FetchContent_Declare(
+    falcon_bedrock_data
+    GIT_REPOSITORY https://github.com/Falcon-MC/BedrockData.git
+    GIT_TAG main
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+    SOURCE_SUBDIR cmake
+)
+FetchContent_MakeAvailable(falcon_bedrock_data)
+
 add_subdirectory(Falcon.Server)
