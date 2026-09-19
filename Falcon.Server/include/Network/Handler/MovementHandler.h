@@ -20,4 +20,11 @@ public:
     static bool checkGroundState(Level &level, const Vector3f &feetPosition);
 
     static void tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    /**
+     * Drains or refills the player's air: it drops by one each tick with the eyes in water and hurts every 20 ticks
+     * once empty, a turtle helmet grants 200 ticks of breath after surfacing, and water breathing or conduit power
+     * stop it from dropping at all. Creative and spectator players never lose air.
+     */
+    static void tickBreathing(ServerNetworkHandler &owner, ServerPlayer &player, bool eyeInWater);
 };

@@ -1604,6 +1604,18 @@ void ServerNetworkHandler::_sendEntityData(ServerPlayer &player) {
     playerFlags.mByteValue = player.isSleeping() ? ActorFlags::PLAYER_FLAG_SLEEP : 0;
     entityData.mMetadata.mEntries.push_back(playerFlags);
 
+    EntityDataEntry air;
+    air.mId = ActorFlags::AIR_SUPPLY_DATA_ID;
+    air.mFormat = EntityDataFormat::Short;
+    air.mShortValue = (int16_t) player.getAirSupply();
+    entityData.mMetadata.mEntries.push_back(air);
+
+    EntityDataEntry maxAir;
+    maxAir.mId = ActorFlags::AIR_SUPPLY_MAX_DATA_ID;
+    maxAir.mFormat = EntityDataFormat::Short;
+    maxAir.mShortValue = (int16_t) ServerPlayer::MAX_AIR_SUPPLY;
+    entityData.mMetadata.mEntries.push_back(maxAir);
+
     if (player.isSleeping()) {
         EntityDataEntry bedPosition;
         bedPosition.mId = ActorFlags::BED_POSITION_DATA_ID;
@@ -2068,6 +2080,7 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     player.setDead(false);
     player.getAttributes().set(HEALTH_ATTRIBUTE, maxHealthOf(player));
     player.teleport(spawn);
+    player.markTeleported();
     player.setRotation(Vector3f(0.0f, 0.0f, 0.0f));
     player.clearPendingMove();
     player.resetAirSupply();
@@ -2842,7 +2855,7 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
     const int32_t previousGameMode = player.getGameType();
 
     player.setGameType(gameMode);
-    player.setHungerEnabled(gameMode == (int32_t) GameType::Survival);
+    player.setHungerEnabled(gameMode == (int32_t) GameType::Survival || gameMode == (int32_t) GameType::Adventure);
 
     const bool mayFly = gameMode == (int32_t) GameType::Creative || gameMode == (int32_t) GameType::Spectator;
     if (!mayFly && player.isFlying()) {

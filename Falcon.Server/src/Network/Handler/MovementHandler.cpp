@@ -27,8 +27,15 @@ namespace {
     const float PLAYER_HEIGHT = 1.8f;
     const float GROUND_PROBE_DEPTH = 0.5f;
     const float AABB_EPSILON = 0.001f;
-    const float MINIMUM_EXHAUSTING_DISTANCE = 0.05f;
     const float SPRINT_EXHAUSTION_PER_BLOCK = 0.1f;
+    const float SWIM_EXHAUSTION_PER_BLOCK = 0.01f;
+    const float JUMP_EXHAUSTION = 0.05f;
+    const float SPRINT_JUMP_EXHAUSTION = 0.2f;
+    const char *TURTLE_HELMET = "minecraft:turtle_helmet";
+    const int TURTLE_HELMET_TICKS = 200;
+    const int DROWNING_AIR = -20;
+    const float DROWNING_DAMAGE = 2.0f;
+    const int AIR_REFILL_PER_TICK = 5;
 
     void ignitePlayer(ServerPlayer &player) {
         int fireProtectionLevel = 0;
@@ -116,14 +123,9 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
                                      const Vector3f &rotation) {
     const Vector3f previous = player.getPosition();
     player.setRotation(rotation);
+    const float requestedX = feetPosition.x - previous.x;
     const float requestedY = feetPosition.y - previous.y;
-    if (player.getFlags().get(ActorFlag::Sprinting)) {
-        const float requestedX = feetPosition.x - previous.x;
-        const float requestedZ = feetPosition.z - previous.z;
-        const float horizontalDistance = std::sqrt(requestedX * requestedX + requestedZ * requestedZ);
-        if (horizontalDistance >= MINIMUM_EXHAUSTING_DISTANCE)
-            player.exhaust(SPRINT_EXHAUSTION_PER_BLOCK * horizontalDistance);
-    }
+    const float requestedZ = feetPosition.z - previous.z;
 
     player.setPosition(feetPosition);
 
@@ -131,6 +133,18 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
     Level &level = owner.getLevelFor(player);
     const bool onGround = checkGroundState(level, feetPosition);
     player.setOnGround(onGround);
+
+    const LiquidContact water = LiquidBlocksFetch::at(level, feetPosition);
+    if (!player.wasRecentlyTeleported()) {
+        const float distance = std::sqrt(requestedX * requestedX + requestedY * requestedY + requestedZ * requestedZ);
+        const float horizontalDistance = std::sqrt(requestedX * requestedX + requestedZ * requestedZ);
+        if (water.eyeInWater)
+            player.exhaust(distance * SWIM_EXHAUSTION_PER_BLOCK);
+        else if (water.feetInWater)
+            player.exhaust(horizontalDistance * SWIM_EXHAUSTION_PER_BLOCK);
+        else if (onGround && player.getFlags().get(ActorFlag::Sprinting))
+            player.exhaust(horizontalDistance * SPRINT_EXHAUSTION_PER_BLOCK);
+    }
 
     if (onGround) {
         BlockState support;
@@ -177,15 +191,52 @@ void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer
             owner.applyDamage(player, fireContact.damage, "death.attack.onFire", {player.getName()});
     }
 
-    if (contact.eyeSubmerged && !player.hasEffect(MobEffectId::WaterBreathing)) {
-        if (player.getAirSupply() > 0) {
-            player.setAirSupply(player.getAirSupply() - 1);
-        } else if (owner.getCurrentTick() % 20 == 0) {
-            owner.applyDamage(player, 2.0f, "death.attack.drown", {player.getName()});
-        }
-    } else {
-        player.resetAirSupply();
+    tickBreathing(owner, player, contact.eyeInWater);
+}
+
+void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &player, bool eyeInWater) {
+    const int32_t gameType = player.getGameType();
+    const bool invulnerable = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator;
+
+    bool breathing = !eyeInWater;
+    const ItemStack &helmet = player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD);
+    const bool turtleHelmet = !helmet.isAir() && helmet.mDefinition != nullptr
+                              && helmet.mDefinition->getIdentifier() == TURTLE_HELMET;
+
+    if (breathing && turtleHelmet) {
+        player.setTurtleHelmetTicks(TURTLE_HELMET_TICKS);
+    } else if (player.getTurtleHelmetTicks() > 0) {
+        breathing = true;
+        player.setTurtleHelmetTicks(player.getTurtleHelmetTicks() - 1);
     }
+
+    if (invulnerable)
+        breathing = true;
+
+    const bool breathingChanged = player.getFlags().get(ActorFlag::Breathing) != breathing;
+    player.getFlags().set(ActorFlag::Breathing, breathing);
+
+    const int previousAir = player.getAirSupply();
+    const bool protectedFromWater = player.hasEffect(MobEffectId::WaterBreathing)
+                                    || player.hasEffect(MobEffectId::ConduitPower);
+
+    if (!protectedFromWater && eyeInWater) {
+        if (invulnerable) {
+            player.resetAirSupply();
+        } else if (player.getTurtleHelmetTicks() == 0 || player.getTurtleHelmetTicks() == TURTLE_HELMET_TICKS) {
+            int air = player.getAirSupply() - 1;
+            if (air <= DROWNING_AIR) {
+                air = 0;
+                owner.applyDamage(player, DROWNING_DAMAGE, "death.attack.drown", {player.getName()});
+            }
+            player.setAirSupply(air);
+        }
+    } else if (player.getAirSupply() < ServerPlayer::MAX_AIR_SUPPLY) {
+        player.setAirSupply(std::min(ServerPlayer::MAX_AIR_SUPPLY, player.getAirSupply() + AIR_REFILL_PER_TICK));
+    }
+
+    if (breathingChanged || player.getAirSupply() != previousAir)
+        owner._sendEntityData(player);
 }
 
 void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id,
@@ -269,7 +320,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
             BlockActionHandler::completeBreakingBlock(owner, player, action.mBlockPosition);
             player.clearLastBlockAttacked();
         } else if (action.mAction == PlayerActionType::Jump) {
-            player.exhaust(player.getFlags().get(ActorFlag::Sprinting) ? 0.2f : 0.05f);
+            if (!LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition()).eyeInWater)
+                player.exhaust(player.getFlags().get(ActorFlag::Sprinting) ? SPRINT_JUMP_EXHAUSTION : JUMP_EXHAUSTION);
         } else if (action.mAction == PlayerActionType::StartUsingItem) {
             player.clearAwaitingConsumableRelease();
             owner._useHeldItem(player);

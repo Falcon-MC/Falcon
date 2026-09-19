@@ -212,6 +212,7 @@ protected:
     MobEffectManager mEffects;
     int mFoodTickTimer = 0;
     bool mHungerEnabled = true;
+    int mDifficulty = 2;
     bool mPendingStarveDamage = false;
     bool mIsDead = false;
     int mNoDamageTicks = 0;

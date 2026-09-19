@@ -180,7 +180,7 @@ void Actor::setExhaustion(float exhaustion) {
 }
 
 void Actor::exhaust(float amount) {
-    if (!mHungerEnabled)
+    if (!mHungerEnabled || mDifficulty == DIFFICULTY_PEACEFUL || hasEffect(MobEffectId::Saturation))
         return;
 
     float exhaustion = getExhaustion() + amount;
@@ -222,6 +222,8 @@ void Actor::resetHungerAndExperience() {
 }
 
 bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
+    mDifficulty = difficulty;
+
     if (!isAlive() || !mHungerEnabled)
         return false;
 

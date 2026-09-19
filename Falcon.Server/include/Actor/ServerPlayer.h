@@ -16,6 +16,7 @@
 #include "Protocol/Types/SerializedSkin.h"
 #include "Actor/MobEffect.h"
 
+#include <chrono>
 #include <string>
 #include <vector>
 #include <unordered_set>
@@ -257,11 +258,26 @@ public:
         mLastRightClickTimeMicros = timeMicros;
     }
 
+    static constexpr int MAX_AIR_SUPPLY = 400;
+
+    static constexpr std::chrono::milliseconds POST_TELEPORT_GRACE{1000};
+
+    void markTeleported() { mLastTeleport = std::chrono::steady_clock::now(); }
+
+    /** Whether the player was teleported less than a second ago, when their movement costs no food. */
+    bool wasRecentlyTeleported() const {
+        return std::chrono::steady_clock::now() - mLastTeleport < POST_TELEPORT_GRACE;
+    }
+
     int getAirSupply() const { return mAirSupply; }
 
     void setAirSupply(int airSupply) { mAirSupply = airSupply; }
 
-    void resetAirSupply() { mAirSupply = 300; }
+    void resetAirSupply() { mAirSupply = MAX_AIR_SUPPLY; }
+
+    int getTurtleHelmetTicks() const { return mTurtleHelmetTicks; }
+
+    void setTurtleHelmetTicks(int ticks) { mTurtleHelmetTicks = ticks; }
 
     bool isBreakingBlock() const { return mIsBreakingBlock; }
 
@@ -375,7 +391,9 @@ private:
     Vector3f mLastRightClickPlayerPosition;
     Vector3f mLastRightClickPosition;
     uint64_t mLastRightClickTimeMicros = 0;
-    int mAirSupply = 300;
+    int mAirSupply = MAX_AIR_SUPPLY;
+    int mTurtleHelmetTicks = 0;
+    std::chrono::steady_clock::time_point mLastTeleport{};
     bool mHasPendingMove = false;
     Vector3f mPendingMovePosition;
     Vector3f mPendingMoveRotation;

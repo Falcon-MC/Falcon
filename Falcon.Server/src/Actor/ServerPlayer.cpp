@@ -473,6 +473,7 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
 void ServerPlayer::teleport(ServerNetworkHandler &owner, const Vector3f &position,
                              MovePlayerTeleportationCause cause) {
     Actor::teleport(position);
+    markTeleported();
     clearPendingMove();
 
     MovePlayerPacket packet;
@@ -743,7 +744,7 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
 
     const float storedHealth = data.getFloat(TAG_HEALTH, 20.0f);
     mAttributes.set("minecraft:health", storedHealth);
-    mAirSupply = std::clamp(data.getInt(TAG_AIR, 300), 0, 300);
+    mAirSupply = std::clamp(data.getInt(TAG_AIR, MAX_AIR_SUPPLY), -20, MAX_AIR_SUPPLY);
     mGameType = data.getInt(TAG_GAME_MODE, mGameType);
     mFirstPlayed = data.getLong(TAG_FIRST_PLAYED, 0);
 

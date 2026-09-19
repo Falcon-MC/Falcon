@@ -49,5 +49,11 @@ LiquidContact LiquidBlocksFetch::at(Level &level, const Vector3f &feet) {
                             ? (float) eyeBlockY + 1.0f
                             : (float) eyeBlockY + 1.0f - (eye.height - 0.1111111f);
     contact.eyeSubmerged = (eye.water || eye.bubble) && eyeY < liquidTop;
+    contact.eyeInWater = eye.water && !eye.bubble && eyeY < liquidTop;
+
+    const int32_t feetBlockY = (int32_t) std::floor(feet.y);
+    const LiquidInfo feetInfo = level.getLiquidInfo(eyeX, feetBlockY, eyeZ);
+    const float feetLiquidTop = (float) feetBlockY + 1.0f - (feetInfo.height - 0.1111111f);
+    contact.feetInWater = feetInfo.water && !feetInfo.bubble && feet.y < feetLiquidTop;
     return contact;
 }
