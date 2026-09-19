@@ -13,9 +13,12 @@
 
 #include <utility>
 
-BlockActorStore &BlockActorStore::getInstance() {
-    static BlockActorStore instance;
-    return instance;
+void BlockActorStore::moveStateFrom(BlockActorStore &&other) {
+    mBlockActors = std::move(other.mBlockActors);
+    mLoadedChunks = std::move(other.mLoadedChunks);
+
+    for (auto &entry: mBlockActors)
+        entry.second->setLevel(mLevel);
 }
 
 int64_t BlockActorStore::packPosition(const Vector3i &position) {
@@ -38,6 +41,7 @@ void BlockActorStore::insert(std::unique_ptr<BlockActor> blockActor) {
     if (blockActor == nullptr)
         return;
 
+    blockActor->setLevel(mLevel);
     mBlockActors[packPosition(blockActor->getPosition())] = std::move(blockActor);
 }
 

@@ -69,11 +69,9 @@ int DaylightDetectorBlock::computeSignal(Level &level, const Vector3i &position,
 
 bool DaylightDetectorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
                                        const Vector3i &position, const BlockState &state) const {
-    (void) player;
-
     BlockState toggled = state;
     toggled.mName = state.mName == DAYLIGHT_DETECTOR ? DAYLIGHT_DETECTOR_INVERTED : DAYLIGHT_DETECTOR;
 
-    owner.getLevel().setBlockState(position.x, position.y, position.z, toggled);
+    owner.getLevelFor(player).setBlockState(position.x, position.y, position.z, toggled);
     return true;
 }

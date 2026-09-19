@@ -76,17 +76,17 @@ void ServerNetworkHandler::setThundering(bool thundering) {
     broadcastWeather();
 }
 
-void ServerNetworkHandler::strikeLightning(const Vector3f &position) {
-    ServerActor *bolt = spawnActor("minecraft:lightning_bolt", position);
+void ServerNetworkHandler::strikeLightning(Level &level, const Vector3f &position) {
+    ServerActor *bolt = spawnActor(level, "minecraft:lightning_bolt", position);
     if (bolt != nullptr)
         bolt->setProjectile(true);
 
-    playLevelSound(LevelSoundEvent::THUNDER, position);
-    playLevelSound(LevelSoundEvent::EXPLODE, position);
+    playLevelSound(level, LevelSoundEvent::THUNDER, position);
+    playLevelSound(level, LevelSoundEvent::EXPLODE, position);
 
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead())
+        if (!player.isSpawned() || player.isDead() || player.getDimension() != level.getDimensionType())
             continue;
 
         const Vector3f playerPosition = player.getPosition();
@@ -104,7 +104,7 @@ void ServerNetworkHandler::strikeLightning(const Vector3f &position) {
 
     for (auto &entry: mActors) {
         ServerActor &actor = *entry.second;
-        if (!actor.isAlive() || actor.isProjectile())
+        if (!actor.isAlive() || actor.isProjectile() || actor.getDimension() != level.getDimensionType())
             continue;
 
         const Vector3f actorPosition = actor.getPosition();
@@ -121,13 +121,15 @@ void ServerNetworkHandler::strikeLightning(const Vector3f &position) {
 }
 
 void ServerNetworkHandler::tickWeather() {
-    mLevel.setRainTime(mLevel.getRainTime() - 1);
-    if (mLevel.getRainTime() <= 0)
-        setRaining(!mLevel.isRaining());
+    if (mLevel.getGameRules().getBool("doweathercycle")) {
+        mLevel.setRainTime(mLevel.getRainTime() - 1);
+        if (mLevel.getRainTime() <= 0)
+            setRaining(!mLevel.isRaining());
 
-    mLevel.setThunderTime(mLevel.getThunderTime() - 1);
-    if (mLevel.getThunderTime() <= 0)
-        setThundering(!mLevel.isThundering());
+        mLevel.setThunderTime(mLevel.getThunderTime() - 1);
+        if (mLevel.getThunderTime() <= 0)
+            setThundering(!mLevel.isThundering());
+    }
 
     if (!mLevel.isThundering())
         return;
@@ -137,7 +139,7 @@ void ServerNetworkHandler::tickWeather() {
 
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
-        if (!player.isSpawned())
+        if (!player.isSpawned() || player.getDimension() != DimensionType::Overworld)
             continue;
 
         if (strike(weatherRandom()) != 0)
@@ -156,6 +158,6 @@ void ServerNetworkHandler::tickWeather() {
         while (surfaceY > 0 && !mLevel.isSolidAt(targetX, surfaceY, targetZ))
             --surfaceY;
 
-        strikeLightning(Vector3f((float) targetX + 0.5f, (float) (surfaceY + 1), (float) targetZ + 0.5f));
+        strikeLightning(mLevel, Vector3f((float) targetX + 0.5f, (float) (surfaceY + 1), (float) targetZ + 0.5f));
     }
 }

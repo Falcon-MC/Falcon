@@ -372,14 +372,20 @@ void InventoryManager::syncAll() {
     }
 }
 
+BlockActorStore *InventoryManager::_blockActors() const {
+    if (mOwner == nullptr || mPlayer == nullptr)
+        return nullptr;
+
+    return &mOwner->getLevelFor(*mPlayer).getBlockActors();
+}
+
 void InventoryManager::_storeFurnaceState(bool clearLocal) {
-    if (mPlayer == nullptr || !isFurnaceOpen()) {
+    BlockActorStore *blockActors = _blockActors();
+    if (mPlayer == nullptr || !isFurnaceOpen() || blockActors == nullptr) {
         return;
     }
 
-    const FurnaceKey key{mFurnacePosition.x, mFurnacePosition.y, mFurnacePosition.z};
-    FurnaceBlockActor &state = BlockActorStore::getInstance()
-            .getOrCreate<FurnaceBlockActor>(Vector3i(key.x, key.y, key.z));
+    FurnaceBlockActor &state = blockActors->getOrCreate<FurnaceBlockActor>(mFurnacePosition);
     state.mKind = mFurnaceKind;
     for (int slot = 0; slot < FurnaceInventory::SIZE; ++slot) {
         const ItemStack &local = mPlayer->getInventory().getFurnaceItem(slot);
@@ -462,20 +468,20 @@ namespace {
         return identifier;
     }
 
-    void updateLitState(ServerNetworkHandler &owner, const Vector3i &position, bool lit) {
-        const BlockState state = owner.getLevel().getBlockState(position.x, position.y, position.z);
+    void updateLitState(ServerNetworkHandler &owner, Level &level, const Vector3i &position, bool lit) {
+        const BlockState state = level.getBlockState(position.x, position.y, position.z);
         const std::string identifier = litIdentifier(state.mName, lit);
         if (identifier == state.mName) {
             return;
         }
         const BlockState updated(identifier, state.mStates);
-        owner.getLevel().setBlockState(position.x, position.y, position.z, updated);
+        level.setBlockState(position.x, position.y, position.z, updated);
         UpdateBlockPacket packet;
         packet.mBlockPosition = position;
         packet.mRuntimeId = (uint32_t) BlockStateHasher::hash(updated.mName, updated.mStates);
         packet.mFlags = UpdateBlockPacket::Flag::All;
         packet.mDataLayer = 0;
-        BlockActionHandler::broadcastToViewers(owner,
+        BlockActionHandler::broadcastToViewers(owner, level,
                                                Vector3f((float) position.x + 0.5f,
                                                         (float) position.y + 0.5f,
                                                         (float) position.z + 0.5f),
@@ -507,7 +513,8 @@ namespace {
     }
 
     bool tickFurnaceState(ServerNetworkHandler &owner, const Vector3i &position, FurnaceBlockActor &state) {
-        if (!FurnaceBlock::matches(owner.getLevel().getBlockState(position.x, position.y, position.z))) {
+        Level *level = state.getLevel();
+        if (level == nullptr || !FurnaceBlock::matches(level->getBlockState(position.x, position.y, position.z))) {
             state.mBurnTime = 0;
             state.mCookTime = 0;
             state.mMaxBurnTime = 0;
@@ -587,15 +594,14 @@ namespace {
             state.mMaxBurnTime = 0;
         }
 
-        const std::string currentIdentifier = owner.getLevel().getBlockState(position.x, position.y,
-                                                                              position.z).mName;
+        const std::string currentIdentifier = level->getBlockState(position.x, position.y, position.z).mName;
         const bool isLit = currentIdentifier == "minecraft:lit_furnace"
                            || currentIdentifier == "minecraft:lit_blast_furnace"
                            || currentIdentifier == "minecraft:lit_smoker";
         if (state.mBurnTime > 0 && (previousBurn == 0 || !isLit))
-            updateLitState(owner, position, true);
+            updateLitState(owner, *level, position, true);
         else if (state.mBurnTime == 0 && isLit)
-            updateLitState(owner, position, false);
+            updateLitState(owner, *level, position, false);
 
         if (previousBurn == state.mBurnTime && previousCook == state.mCookTime
             && previousMaxBurn == state.mMaxBurnTime) {
@@ -614,17 +620,15 @@ void InventoryManager::tickFurnace(ServerNetworkHandler &owner) {
         return;
     }
 
-    if (!FurnaceBlock::matches(owner.getLevel().getBlockState(mFurnacePosition.x,
-                                                               mFurnacePosition.y,
-                                                               mFurnacePosition.z))) {
+    Level &level = owner.getLevelFor(*mPlayer);
+    if (!FurnaceBlock::matches(level.getBlockState(mFurnacePosition.x, mFurnacePosition.y, mFurnacePosition.z))) {
         onClientRemoveWindow(mFurnaceWindowId);
         return;
     }
 
     _storeFurnaceState(false);
     const FurnaceKey key{mFurnacePosition.x, mFurnacePosition.y, mFurnacePosition.z};
-    FurnaceBlockActor &state = BlockActorStore::getInstance()
-            .getOrCreate<FurnaceBlockActor>(Vector3i(key.x, key.y, key.z));
+    FurnaceBlockActor &state = level.getBlockActors().getOrCreate<FurnaceBlockActor>(mFurnacePosition);
     PlayerInventory &inventory = mPlayer->getInventory();
     const int previousBurn = mFurnaceBurnTime;
     const int previousMaxBurn = mFurnaceMaxBurnTime;
@@ -686,33 +690,36 @@ void InventoryManager::tickFurnace(ServerNetworkHandler &owner) {
 }
 
 void InventoryManager::tickStoredFurnaces(ServerNetworkHandler &owner) {
-    std::unordered_map<FurnaceKey, bool, FurnaceKeyHash> openPositions;
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &player = entry.second;
-        if (!player.getInventoryManager().isFurnaceOpen())
-            continue;
-        const Vector3i &position = player.getInventoryManager().getFurnacePosition();
-        openPositions[FurnaceKey{position.x, position.y, position.z}] = true;
-    }
+    for (Level *level: owner.getLevels()) {
+        std::unordered_map<FurnaceKey, bool, FurnaceKeyHash> openPositions;
+        for (auto &entry: owner.getPlayers()) {
+            ServerPlayer &player = entry.second;
+            if (!player.getInventoryManager().isFurnaceOpen() || &owner.getLevelFor(player) != level)
+                continue;
+            const Vector3i &position = player.getInventoryManager().getFurnacePosition();
+            openPositions[FurnaceKey{position.x, position.y, position.z}] = true;
+        }
 
-    for (FurnaceBlockActor *furnace: BlockActorStore::getInstance().findAll<FurnaceBlockActor>()) {
-        const Vector3i &position = furnace->getPosition();
-        if (openPositions.find(FurnaceKey{position.x, position.y, position.z}) != openPositions.end())
-            continue;
+        for (FurnaceBlockActor *furnace: level->getBlockActors().findAll<FurnaceBlockActor>()) {
+            const Vector3i &position = furnace->getPosition();
+            if (openPositions.find(FurnaceKey{position.x, position.y, position.z}) != openPositions.end())
+                continue;
 
-        tickFurnaceState(owner, position, *furnace);
+            tickFurnaceState(owner, position, *furnace);
+        }
     }
 }
 
-void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, const Vector3i &position) {
+void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
     for (auto &entry: owner.getPlayers()) {
         InventoryManager &manager = entry.second.getInventoryManager();
-        if (manager.isFurnaceOpen() && manager.getFurnacePosition() == position)
+        if (manager.isFurnaceOpen() && manager.getFurnacePosition() == position
+            && &owner.getLevelFor(entry.second) == &level)
             manager.onClientRemoveWindow(manager.getFurnaceWindowId());
     }
 
     const FurnaceKey key{position.x, position.y, position.z};
-    FurnaceBlockActor *furnace = BlockActorStore::getInstance().find<FurnaceBlockActor>(position);
+    FurnaceBlockActor *furnace = level.getBlockActors().find<FurnaceBlockActor>(position);
     if (furnace == nullptr)
         return;
 
@@ -720,9 +727,9 @@ void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, const Vector
                                 (float) position.z + 0.5f);
     for (const ItemStack &item: furnace->mInventory.mItems) {
         if (!item.isAir() && item.mCount > 0)
-            owner.dropItem(dropPosition, item, Vector3f(0.0f, 0.2f, 0.0f), ItemActor::DEFAULT_PICKUP_DELAY);
+            owner.dropItem(level, dropPosition, item, Vector3f(0.0f, 0.2f, 0.0f), ItemActor::DEFAULT_PICKUP_DELAY);
     }
-    BlockActorStore::getInstance().remove(position);
+    level.getBlockActors().remove(position);
     furnaceLastTick.erase(key);
 }
 
@@ -896,10 +903,11 @@ void InventoryManager::refreshOpenContainer(const Vector3i &position) {
 }
 
 Container *InventoryManager::getContainer() {
-    if (!isContainerOpen())
+    BlockActorStore *blockActors = _blockActors();
+    if (!isContainerOpen() || blockActors == nullptr)
         return nullptr;
 
-    BlockActor *blockActor = BlockActorStore::getInstance().find(mContainerPosition);
+    BlockActor *blockActor = blockActors->find(mContainerPosition);
     if (blockActor == nullptr)
         return nullptr;
 
@@ -921,7 +929,8 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
         || mFurnaceWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
         return false;
 
-    BlockActor *blockActor = BlockActorStore::getInstance().find(position);
+    BlockActorStore *blockActors = _blockActors();
+    BlockActor *blockActor = blockActors == nullptr ? nullptr : blockActors->find(position);
     if (blockActor == nullptr)
         return false;
 
@@ -961,7 +970,7 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
                                LevelSoundEvent::ENDER_CHEST_CLOSED);
     }
 
-    RedstoneSystem::queueRedstoneNotification(position);
+    RedstoneSystem::queueRedstoneNotification(mOwner->getLevelFor(*mPlayer), position);
     return true;
 }
 
@@ -976,7 +985,8 @@ bool InventoryManager::onClientOpenChest(const Vector3i &position) {
         || mFurnaceWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
         return false;
 
-    ChestBlockActor *chest = BlockActorStore::getInstance().find<ChestBlockActor>(position);
+    BlockActorStore *blockActors = _blockActors();
+    ChestBlockActor *chest = blockActors == nullptr ? nullptr : blockActors->find<ChestBlockActor>(position);
     if (chest == nullptr)
         return false;
 
@@ -1002,7 +1012,7 @@ bool InventoryManager::onClientOpenChest(const Vector3i &position) {
         _sendContentPackets(windowId, *container);
 
     chest->addViewer();
-    RedstoneSystem::queueRedstoneNotification(position);
+    RedstoneSystem::queueRedstoneNotification(mOwner->getLevelFor(*mPlayer), position);
 
     if (chest->getViewerCount() == 1)
         _animateChest(*chest, true);
@@ -1011,7 +1021,8 @@ bool InventoryManager::onClientOpenChest(const Vector3i &position) {
 }
 
 void InventoryManager::_animateChest(ChestBlockActor &chest, bool open) {
-    if (mOwner == nullptr)
+    Level *level = chest.getLevel();
+    if (mOwner == nullptr || level == nullptr)
         return;
 
     const Vector3i &position = chest.getPosition();
@@ -1021,9 +1032,9 @@ void InventoryManager::_animateChest(ChestBlockActor &chest, bool open) {
     event.mBlockPosition = position;
     event.mEventType = CHEST_ANIMATION_EVENT_TYPE;
     event.mEventData = open ? 1 : 0;
-    BlockActionHandler::broadcastToViewers(*mOwner, center, event);
+    BlockActionHandler::broadcastToViewers(*mOwner, *level, center, event);
 
-    mOwner->playLevelSound(open ? LevelSoundEvent::CHEST_OPEN : LevelSoundEvent::CHEST_CLOSED, center);
+    mOwner->playLevelSound(*level, open ? LevelSoundEvent::CHEST_OPEN : LevelSoundEvent::CHEST_CLOSED, center);
 
     ChestBlockActor *pair = chest.getPair();
     if (pair == nullptr)
@@ -1035,7 +1046,7 @@ void InventoryManager::_animateChest(ChestBlockActor &chest, bool open) {
     pairEvent.mBlockPosition = pairPosition;
     pairEvent.mEventType = CHEST_ANIMATION_EVENT_TYPE;
     pairEvent.mEventData = open ? 1 : 0;
-    BlockActionHandler::broadcastToViewers(*mOwner,
+    BlockActionHandler::broadcastToViewers(*mOwner, *level,
                                            Vector3f((float) pairPosition.x + 0.5f,
                                                     (float) pairPosition.y + 0.5f,
                                                     (float) pairPosition.z + 0.5f),
@@ -1044,24 +1055,26 @@ void InventoryManager::_animateChest(ChestBlockActor &chest, bool open) {
 
 void InventoryManager::_animateBlockContainer(const Vector3i &position, bool open, const char *openSound,
                                                const char *closeSound) {
-    if (mOwner == nullptr)
+    if (mOwner == nullptr || mPlayer == nullptr)
         return;
 
+    Level &level = mOwner->getLevelFor(*mPlayer);
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
 
     BlockEventPacket event;
     event.mBlockPosition = position;
     event.mEventType = CHEST_ANIMATION_EVENT_TYPE;
     event.mEventData = open ? 2 : 0;
-    BlockActionHandler::broadcastToViewers(*mOwner, center, event);
-    mOwner->playLevelSound(open ? openSound : closeSound, center);
+    BlockActionHandler::broadcastToViewers(*mOwner, level, center, event);
+    mOwner->playLevelSound(level, open ? openSound : closeSound, center);
 }
 
 void InventoryManager::_animateBarrel(const Vector3i &position, bool open) {
-    if (mOwner == nullptr)
+    if (mOwner == nullptr || mPlayer == nullptr)
         return;
 
-    const BlockState state = mOwner->getLevel().getBlockState(position.x, position.y, position.z);
+    Level &level = mOwner->getLevelFor(*mPlayer);
+    const BlockState state = level.getBlockState(position.x, position.y, position.z);
     if (state.mName != "minecraft:barrel")
         return;
 
@@ -1073,14 +1086,15 @@ void InventoryManager::_animateBarrel(const Vector3i &position, bool open) {
 
     Tag states = state.mStates;
     states.putByte("open_bit", open ? 1 : 0);
-    RedstoneSystem::setBlockState(*mOwner, position, BlockState(state.mName, states));
+    RedstoneSystem::setBlockState(*mOwner, level, position, BlockState(state.mName, states));
 
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    mOwner->playLevelSound(open ? LevelSoundEvent::BARREL_OPEN : LevelSoundEvent::BARREL_CLOSED, center);
+    mOwner->playLevelSound(level, open ? LevelSoundEvent::BARREL_OPEN : LevelSoundEvent::BARREL_CLOSED, center);
 }
 
 void InventoryManager::_closeBlockContainer() {
-    BlockActor *blockActor = BlockActorStore::getInstance().find(mContainerPosition);
+    BlockActorStore *blockActors = _blockActors();
+    BlockActor *blockActor = blockActors == nullptr ? nullptr : blockActors->find(mContainerPosition);
     if (blockActor == nullptr)
         return;
 
@@ -1088,7 +1102,7 @@ void InventoryManager::_closeBlockContainer() {
     if (chest != nullptr) {
         const bool wasLastViewer = chest->getViewerCount() == 1;
         chest->removeViewer();
-        RedstoneSystem::queueRedstoneNotification(mContainerPosition);
+        RedstoneSystem::queueRedstoneNotification(mOwner->getLevelFor(*mPlayer), mContainerPosition);
         if (wasLastViewer)
             _animateChest(*chest, false);
         return;
@@ -1130,6 +1144,10 @@ bool InventoryManager::onClientOpenFurnace(const Vector3i &position, FurnaceKind
         return false;
     }
 
+    BlockActorStore *blockActors = _blockActors();
+    if (blockActors == nullptr)
+        return false;
+
     const int windowId = _getNewWindowId();
     mFurnaceWindowId = windowId;
     mFurnacePosition = position;
@@ -1138,9 +1156,7 @@ bool InventoryManager::onClientOpenFurnace(const Vector3i &position, FurnaceKind
     mFurnaceBurnTime = 0;
     mFurnaceMaxBurnTime = 0;
     mFurnaceCookTime = 0;
-    const FurnaceKey key{position.x, position.y, position.z};
-    FurnaceBlockActor &state = BlockActorStore::getInstance()
-            .getOrCreate<FurnaceBlockActor>(Vector3i(key.x, key.y, key.z));
+    FurnaceBlockActor &state = blockActors->getOrCreate<FurnaceBlockActor>(position);
     state.mKind = kind;
 
     BlockActorDataPacket blockActorData;

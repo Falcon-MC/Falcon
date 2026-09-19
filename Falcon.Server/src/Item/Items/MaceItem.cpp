@@ -48,7 +48,7 @@ namespace {
 
         target.setMotion(motion);
         owner.sendActorMotion(target);
-        owner.spawnParticleEffect(WIND_BURST_PARTICLE,
+        owner.spawnParticleEffect(owner.getLevelFor(target), WIND_BURST_PARTICLE,
                                   Vector3f(position.x, position.y + PLAYER_EYE_HEIGHT * 0.6f, position.z));
     }
 }
@@ -107,9 +107,11 @@ void MaceItem::onPostAttack(ServerNetworkHandler &owner, ServerPlayer &attacker,
         particle.mEventId = LevelEventPacket::Event::ParticleSmashAttackGroundDust;
         particle.mPosition = position;
         particle.mData = 0;
-        BlockActionHandler::broadcastToViewers(owner, position, particle);
+        Level &world = owner.getLevelFor(attacker);
+        BlockActionHandler::broadcastToViewers(owner, world, position, particle);
 
-        owner.playLevelSound(damage >= SMASH_HEAVY_DAMAGE ? LevelSoundEvent::MACE_HEAVY_SMASH_GROUND
+        owner.playLevelSound(world,
+                             damage >= SMASH_HEAVY_DAMAGE ? LevelSoundEvent::MACE_HEAVY_SMASH_GROUND
                                                           : LevelSoundEvent::MACE_SMASH_GROUND,
                              position);
     }
@@ -147,7 +149,7 @@ void MaceItem::applyWindBurst(ServerNetworkHandler &owner, ServerPlayer &attacke
 
     for (auto &entry: owner.getActors()) {
         ServerActor &target = *entry.second;
-        if (!target.isAlive() || target.isProjectile())
+        if (!target.isAlive() || target.isProjectile() || target.getDimension() != attacker.getDimension())
             continue;
 
         gustActor(owner, target, origin, level);
@@ -155,13 +157,15 @@ void MaceItem::applyWindBurst(ServerNetworkHandler &owner, ServerPlayer &attacke
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &target = entry.second;
-        if (&target == &attacker || !target.isSpawned() || target.isDead())
+        if (&target == &attacker || !target.isSpawned() || target.isDead() ||
+            target.getDimension() != attacker.getDimension())
             continue;
 
         gustActor(owner, target, origin, level);
     }
 
-    owner.spawnParticleEffect(WIND_BURST_PARTICLE,
+    Level &world = owner.getLevelFor(attacker);
+    owner.spawnParticleEffect(world, WIND_BURST_PARTICLE,
                               Vector3f(origin.x, origin.y + PLAYER_EYE_HEIGHT * 0.6f, origin.z));
-    owner.playLevelSound(LevelSoundEvent::MACE_SMASH_AIR, origin);
+    owner.playLevelSound(world, LevelSoundEvent::MACE_SMASH_AIR, origin);
 }

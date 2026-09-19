@@ -1,10 +1,13 @@
 #include "Block/Blocks/FurnaceBlock.h"
 
+#include "Level/Level.h"
+
 #include "Inventory/Container/FurnaceContainerManagerModel.h"
 #include "Inventory/InventoryManager.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Actor/FurnaceBlockActor.h"
 #include "Block/BlockActorStore.h"
+#include "Network/Handler/ServerNetworkHandler.h"
 
 bool FurnaceBlock::matches(const BlockState &state) {
     return matches(state.mName);
@@ -45,19 +48,16 @@ bool FurnaceBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
 
 void FurnaceBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                             const BlockState &state, const ItemStack &usedItem, int blockFace) const {
-    (void) owner;
-    (void) player;
     (void) usedItem;
     (void) blockFace;
 
-    FurnaceBlockActor &furnace = BlockActorStore::getInstance().getOrCreate<FurnaceBlockActor>(position);
+    FurnaceBlockActor &furnace = owner.getLevelFor(player).getBlockActors().getOrCreate<FurnaceBlockActor>(position);
     furnace.mKind = kind(state);
 }
 
 void FurnaceBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                             const BlockState &state) const {
-    (void) level;
     (void) state;
 
-    InventoryManager::onFurnaceBroken(owner, position);
+    InventoryManager::onFurnaceBroken(owner, level, position);
 }

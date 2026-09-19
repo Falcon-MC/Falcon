@@ -161,6 +161,23 @@ static const int64_t FOOD_USE_DURATION_TICKS = 32;
 static const int64_t DRIED_KELP_USE_DURATION_TICKS = 16;
 static const int64_t EARLY_CONSUMABLE_RELEASE_BLOCK_TICKS = 10;
 
+static bool isDamageDisabledByGameRule(const GameRules &rules, const std::string &deathMessageKey) {
+    if (deathMessageKey.rfind("death.fell.", 0) == 0 || deathMessageKey == "death.attack.stalagmite")
+        return !rules.getBool("falldamage");
+
+    if (deathMessageKey == "death.attack.lava" || deathMessageKey == "death.attack.onFire"
+        || deathMessageKey == "death.attack.inFire")
+        return !rules.getBool("firedamage");
+
+    if (deathMessageKey == "death.attack.drown")
+        return !rules.getBool("drowningdamage");
+
+    if (deathMessageKey == "death.attack.freeze")
+        return !rules.getBool("freezedamage");
+
+    return false;
+}
+
 static int64_t useDurationTicksFor(const ItemStack &item) {
     if (item.isAir() || item.mDefinition == nullptr)
         return FOOD_USE_DURATION_TICKS;
@@ -434,7 +451,7 @@ namespace {
 ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
                                            TransportLayer transport)
         : mRakNetInstance(nullptr), mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers),
-          mIsListening(false), mKeepInventory(false), mNextRuntimeId(1),
+          mIsListening(false), mNextRuntimeId(1),
           mLevel("Bedrock level", DEFAULT_VIEW_DISTANCE),
           mPlayerData("players"), mOps("ops.txt"), mAllowList("allowlist.json"),
           mBanList("banned-players.json") {
@@ -622,8 +639,17 @@ Level &ServerNetworkHandler::getDimension(DimensionType dimension) {
     return mLevel;
 }
 
-Level &ServerNetworkHandler::getLevelFor(const ServerPlayer &player) {
-    return getDimension(player.getDimension());
+Level &ServerNetworkHandler::getLevelFor(const Actor &actor) {
+    return getDimension(actor.getDimension());
+}
+
+std::vector<Level *> ServerNetworkHandler::getLevels() {
+    std::vector<Level *> levels{&mLevel};
+    if (mNetherLevel != nullptr)
+        levels.push_back(mNetherLevel.get());
+    if (mTheEndLevel != nullptr)
+        levels.push_back(mTheEndLevel.get());
+    return levels;
 }
 
 void ServerNetworkHandler::_tickDimension(Level &level) {
@@ -658,6 +684,7 @@ void ServerNetworkHandler::_tickDimension(Level &level) {
     }
 
     level.setActiveColumns(activeColumns);
+    syncActorPersistence(level, activeColumns);
     level.tick();
 
     for (const Level::FluidChange &change: level.consumeFluidChanges()) {
@@ -666,7 +693,7 @@ void ServerNetworkHandler::_tickDimension(Level &level) {
         update.mRuntimeId = (uint32_t) BlockStateHasher::hash(change.state.mName, change.state.mStates);
         update.mFlags = UpdateBlockPacket::Flag::All;
         update.mDataLayer = (uint32_t) change.layer;
-        BlockActionHandler::broadcastToViewers(*this,
+        BlockActionHandler::broadcastToViewers(*this, level,
                                                Vector3f((float) change.position.x + 0.5f,
                                                         (float) change.position.y + 0.5f,
                                                         (float) change.position.z + 0.5f),
@@ -685,6 +712,7 @@ void ServerNetworkHandler::changePlayerDimension(ServerPlayer &player, Dimension
     previous.unregisterAllChunkLoaders(player.getRuntimeId());
 
     player.setDimension(dimension);
+    player.getVisibleActors().clear();
     player.setAwaitingDimensionAck(true);
     player.resetChunkStreaming();
     player.getChunkStreamState() = ChunkStreamState();
@@ -709,6 +737,7 @@ void ServerNetworkHandler::onPlayerDimensionChangeAck(ServerPlayer &player) {
 
     player.setAwaitingDimensionAck(false);
     player.teleport(*this, player.getPosition(), MovePlayerTeleportationCause::Behavior);
+    ItemActorHandler::sendItemActorsTo(*this, player);
 }
 
 void ServerNetworkHandler::_logPackStack() const {
@@ -875,6 +904,10 @@ void ServerNetworkHandler::tick() {
     mCurrentTick++;
     mLevel.tickTime();
     _tickSleep();
+
+    const int autoSaveInterval = mProperties.getAutoSaveInterval();
+    if (autoSaveInterval > 0 && mCurrentTick % autoSaveInterval == 0)
+        autoSave();
     mProfiler.beginTick(mCurrentTick);
 
     mProfiler.beginSection(ProfilerSection::Weather);
@@ -917,7 +950,7 @@ void ServerNetworkHandler::tick() {
     if (!repopulated.empty()) {
         for (auto &entry: mPlayers) {
             ServerPlayer &player = entry.second;
-            if (!player.isSpawned())
+            if (!player.isSpawned() || player.getDimension() != DimensionType::Overworld)
                 continue;
 
             for (const int64_t hash: repopulated)
@@ -933,6 +966,8 @@ void ServerNetworkHandler::tick() {
         for (auto &entry: mPlayers) {
             ServerPlayer &player = entry.second;
             if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent)
+                continue;
+            if (player.getDimension() != DimensionType::Overworld)
                 continue;
 
             const int32_t centerX = (int32_t) std::floor(player.getPosition().x) >> 4;
@@ -964,7 +999,7 @@ void ServerNetworkHandler::tick() {
             mLevel.setActiveColumns(activeColumns);
 
             mProfiler.beginSection(ProfilerSection::ActorPersistence);
-            mActorPersistencePending = syncActorPersistence(activeColumns);
+            mActorPersistencePending = syncActorPersistence(mLevel, activeColumns);
             mProfiler.endSection(ProfilerSection::ActorPersistence);
         }
     }
@@ -980,7 +1015,7 @@ void ServerNetworkHandler::tick() {
         update.mRuntimeId = (uint32_t) BlockStateHasher::hash(change.state.mName, change.state.mStates);
         update.mFlags = UpdateBlockPacket::Flag::All;
         update.mDataLayer = (uint32_t) change.layer;
-        BlockActionHandler::broadcastToViewers(*this,
+        BlockActionHandler::broadcastToViewers(*this, mLevel,
                                                Vector3f((float) change.position.x + 0.5f,
                                                         (float) change.position.y + 0.5f,
                                                         (float) change.position.z + 0.5f),
@@ -1082,7 +1117,9 @@ void ServerNetworkHandler::tick() {
         }
 
         const bool wasSprinting = player.getFlags().get(ActorFlag::Sprinting);
-        const bool hungerChanged = player.isSpawned() && player.tickHunger(1, (int) mProperties.getDifficulty());
+        const bool naturalRegeneration = getLevelFor(player).getGameRules().getBool("naturalregeneration");
+        const bool hungerChanged = player.isSpawned()
+                                   && player.tickHunger(1, (int) mProperties.getDifficulty(), naturalRegeneration);
         if (hungerChanged)
             _sendAttributes(player);
 
@@ -1121,14 +1158,19 @@ void ServerNetworkHandler::tick() {
     if (mTheEndLevel != nullptr)
         _tickDimension(*mTheEndLevel);
 
+    const std::vector<Level *> levels = getLevels();
+
     mProfiler.beginSection(ProfilerSection::Redstone);
-    RedstoneSystem::tick(*this);
-    PistonSystem::tick(*this);
-    CommandBlockSystem::tickCommandBlocks(*this);
+    for (Level *level: levels) {
+        RedstoneSystem::tick(*this, *level);
+        PistonSystem::tick(*this, *level);
+        CommandBlockSystem::tickCommandBlocks(*this, *level);
+    }
     mProfiler.endSection(ProfilerSection::Redstone);
 
     mProfiler.beginSection(ProfilerSection::Fire);
-    FireSystem::tick(*this);
+    for (Level *level: levels)
+        FireSystem::tick(*this, *level);
     mProfiler.endSection(ProfilerSection::Fire);
 
     mProfiler.beginSection(ProfilerSection::Announcement);
@@ -1203,7 +1245,7 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
     }
 
     if (player != nullptr)
-        mLevel.unregisterAllChunkLoaders(player->getRuntimeId());
+        getLevelFor(*player).unregisterAllChunkLoaders(player->getRuntimeId());
 
     mModalFormCallbacks.erase(id);
     mPlayers.erase(id);
@@ -1296,8 +1338,8 @@ void ServerNetworkHandler::_loadPlayerData(ServerPlayer &player) {
 
 }
 
-void ServerNetworkHandler::loadActorsForChunk(int32_t chunkX, int32_t chunkZ) {
-    const std::vector<Tag> entities = mLevel.loadEntities(chunkX, chunkZ);
+void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ) {
+    const std::vector<Tag> entities = level.loadEntities(chunkX, chunkZ);
 
     for (const Tag &tag: entities) {
         const std::string identifier = tag.getString("identifier", std::string());
@@ -1324,6 +1366,7 @@ void ServerNetworkHandler::loadActorsForChunk(int32_t chunkX, int32_t chunkZ) {
         }
 
         actor->loadNbt(tag);
+        actor->setDimension(level.getDimensionType());
 
         ServerActor *result = actor.get();
         mActors[uniqueId] = std::move(actor);
@@ -1332,24 +1375,24 @@ void ServerNetworkHandler::loadActorsForChunk(int32_t chunkX, int32_t chunkZ) {
     }
 }
 
-void ServerNetworkHandler::loadBlockActorsForChunk(int32_t chunkX, int32_t chunkZ) {
-    BlockActorStore::getInstance().loadChunk(chunkX, chunkZ, mLevel.loadBlockEntities(chunkX, chunkZ), mCodecContext);
+void ServerNetworkHandler::loadBlockActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ) {
+    level.getBlockActors().loadChunk(chunkX, chunkZ, level.loadBlockEntities(chunkX, chunkZ), mCodecContext);
 }
 
-void ServerNetworkHandler::saveBlockActorsForChunk(int32_t chunkX, int32_t chunkZ, bool cull) {
-    mLevel.saveBlockEntities(chunkX, chunkZ, BlockActorStore::getInstance().saveChunk(chunkX, chunkZ));
+void ServerNetworkHandler::saveBlockActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ, bool cull) {
+    level.saveBlockEntities(chunkX, chunkZ, level.getBlockActors().saveChunk(chunkX, chunkZ));
 
     if (cull)
-        BlockActorStore::getInstance().unloadChunk(chunkX, chunkZ);
+        level.getBlockActors().unloadChunk(chunkX, chunkZ);
 }
 
-void ServerNetworkHandler::saveActorsForChunk(int32_t chunkX, int32_t chunkZ, bool cull) {
+void ServerNetworkHandler::saveActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ, bool cull) {
     std::vector<Tag> entities;
     std::vector<int64_t> culled;
 
     for (auto &entry: mActors) {
         ServerActor &actor = *entry.second;
-        if (!actor.shouldSave())
+        if (!actor.shouldSave() || actor.getDimension() != level.getDimensionType())
             continue;
 
         const Vector3f position = actor.getPosition();
@@ -1363,7 +1406,7 @@ void ServerNetworkHandler::saveActorsForChunk(int32_t chunkX, int32_t chunkZ, bo
             culled.push_back(entry.first);
     }
 
-    mLevel.saveEntities(chunkX, chunkZ, entities);
+    level.saveEntities(chunkX, chunkZ, entities);
 
     for (const int64_t uniqueId: culled) {
         auto it = mActors.find(uniqueId);
@@ -1376,38 +1419,68 @@ void ServerNetworkHandler::saveActorsForChunk(int32_t chunkX, int32_t chunkZ, bo
 }
 
 void ServerNetworkHandler::saveAllActors() {
-    for (const int64_t column: mActorLoadedChunks) {
-        const int32_t chunkX = (int32_t) (column >> 32);
-        const int32_t chunkZ = (int32_t) (column & 0xffffffff);
-        saveActorsForChunk(chunkX, chunkZ, false);
+    for (Level *level: getLevels()) {
+        for (const int64_t column: mActorLoadedChunks[level->getDimensionId()]) {
+            const int32_t chunkX = (int32_t) (column >> 32);
+            const int32_t chunkZ = (int32_t) (column & 0xffffffff);
+            saveActorsForChunk(*level, chunkX, chunkZ, false);
+            saveBlockActorsForChunk(*level, chunkX, chunkZ, false);
+        }
     }
 }
 
-bool ServerNetworkHandler::syncActorPersistence(const std::vector<int64_t> &activeColumns) {
+void ServerNetworkHandler::autoSave() {
     if (!mLevel.isStorageOpen())
+        return;
+
+    const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+
+    for (auto &entry: mPlayers) {
+        const ServerPlayer &player = entry.second;
+        if (player.isSpawned() && !player.getName().empty())
+            _savePlayerData(player);
+    }
+
+    saveWorldDynamicProperties();
+    saveAllActors();
+
+    mLevel.saveAll();
+    if (mNetherLevel != nullptr)
+        mNetherLevel->saveAll();
+    if (mTheEndLevel != nullptr)
+        mTheEndLevel->saveAll();
+
+    const long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start).count();
+    LOG_INFO(LogAreaID::Server, "Auto-saved the world in %lld ms", elapsed);
+}
+
+bool ServerNetworkHandler::syncActorPersistence(Level &level, const std::vector<int64_t> &activeColumns) {
+    if (!level.isStorageOpen())
         return false;
 
+    std::unordered_set<int64_t> &loadedChunks = mActorLoadedChunks[level.getDimensionId()];
     const std::unordered_set<int64_t> active(activeColumns.begin(), activeColumns.end());
     bool deferred = false;
 
     for (const int64_t column: active) {
-        if (mActorLoadedChunks.count(column) != 0)
+        if (loadedChunks.count(column) != 0)
             continue;
 
         const int32_t chunkX = (int32_t) (column >> 32);
         const int32_t chunkZ = (int32_t) (column & 0xffffffff);
-        if (!mLevel.isChunkResident(chunkX, chunkZ)) {
+        if (!level.isChunkResident(chunkX, chunkZ)) {
             deferred = true;
             continue;
         }
 
-        loadActorsForChunk(chunkX, chunkZ);
-        loadBlockActorsForChunk(chunkX, chunkZ);
-        mActorLoadedChunks.insert(column);
+        loadActorsForChunk(level, chunkX, chunkZ);
+        loadBlockActorsForChunk(level, chunkX, chunkZ);
+        loadedChunks.insert(column);
     }
 
     std::vector<int64_t> unloaded;
-    for (const int64_t column: mActorLoadedChunks) {
+    for (const int64_t column: loadedChunks) {
         if (active.count(column) == 0)
             unloaded.push_back(column);
     }
@@ -1415,9 +1488,9 @@ bool ServerNetworkHandler::syncActorPersistence(const std::vector<int64_t> &acti
     for (const int64_t column: unloaded) {
         const int32_t chunkX = (int32_t) (column >> 32);
         const int32_t chunkZ = (int32_t) (column & 0xffffffff);
-        saveActorsForChunk(chunkX, chunkZ, true);
-        saveBlockActorsForChunk(chunkX, chunkZ, true);
-        mActorLoadedChunks.erase(column);
+        saveActorsForChunk(level, chunkX, chunkZ, true);
+        saveBlockActorsForChunk(level, chunkX, chunkZ, true);
+        loadedChunks.erase(column);
     }
 
     return deferred;
@@ -1691,16 +1764,16 @@ void ServerNetworkHandler::_handleVoidDamage(ServerPlayer &player) {
     applyDamage(player, 10.0f, "death.attack.outOfWorld", {player.getName()});
 }
 
-bool ServerNetworkHandler::_isEyeInsideSolidBlock(const Vector3f &position, float height) {
+bool ServerNetworkHandler::_isEyeInsideSolidBlock(Level &level, const Vector3f &position, float height) {
     const float eyeY = position.y + height * EYE_HEIGHT_FACTOR;
     const int32_t blockX = (int32_t) std::floor(position.x);
     const int32_t blockY = (int32_t) std::floor(eyeY);
     const int32_t blockZ = (int32_t) std::floor(position.z);
 
-    if (blockY < LevelChunk::MIN_Y || blockY > LevelChunk::MAX_Y)
+    if (blockY < level.getMinY() || blockY > level.getMaxY())
         return false;
 
-    const BlockState *state = mLevel.peekBlockPtr(blockX, blockY, blockZ);
+    const BlockState *state = level.peekBlockPtr(blockX, blockY, blockZ);
     if (state == nullptr)
         return false;
 
@@ -1719,7 +1792,7 @@ void ServerNetworkHandler::_handleSuffocationDamage(ServerPlayer &player) {
     if (gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator)
         return;
 
-    if (!_isEyeInsideSolidBlock(player.getPosition(), PLAYER_COLLISION_HEIGHT))
+    if (!_isEyeInsideSolidBlock(getLevelFor(player), player.getPosition(), PLAYER_COLLISION_HEIGHT))
         return;
 
     applyDamage(player, SUFFOCATION_DAMAGE, "death.attack.inWall", {player.getName()});
@@ -1733,6 +1806,9 @@ void ServerNetworkHandler::applyDamage(ServerPlayer &player, float amount, const
 
     const int32_t gameType = player.getGameType();
     if (gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator)
+        return;
+
+    if (isDamageDisabledByGameRule(getLevelFor(player).getGameRules(), deathMessageKey))
         return;
 
     const float rawAmount = amount;
@@ -1792,18 +1868,22 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
 
     player.getInventoryManager().onCurrentWindowRemove();
 
-    if (!mKeepInventory)
+    const GameRules &rules = getLevelFor(player).getGameRules();
+    const bool keepInventory = rules.getBool("keepinventory");
+
+    if (!keepInventory) {
         _dropInventoryOnDeath(player);
 
-    if (player.getGameType() != (int32_t) GameType::Creative) {
-        const int droppedExperience = player.getExperience().getXpDropAmount();
-        if (droppedExperience > 0)
-            spawnExperienceOrbs(player.getPosition(), droppedExperience);
-    }
+        if (player.getGameType() != (int32_t) GameType::Creative) {
+            const int droppedExperience = player.getExperience().getXpDropAmount();
+            if (droppedExperience > 0)
+                spawnExperienceOrbs(getLevelFor(player), player.getPosition(), droppedExperience);
+        }
 
-    player.getExperience().reset();
-    player.syncExperience();
-    _sendAttributes(player);
+        player.getExperience().reset();
+        player.syncExperience();
+        _sendAttributes(player);
+    }
 
     _sendHealth(player);
     _broadcastEntityEvent(player, (uint8_t) EntityEventType::DeathAnimation);
@@ -1812,7 +1892,8 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     const std::vector<std::string> parameters = deathMessageParameters.empty()
                                                 ? std::vector<std::string>{player.getName()}
                                                 : deathMessageParameters;
-    broadcastTranslation(key, parameters);
+    if (rules.getBool("showdeathmessages"))
+        broadcastTranslation(key, parameters);
 
     const Vector3f spawn = mLevel.getSpawnPositionForPlayer();
 
@@ -1843,33 +1924,34 @@ void ServerNetworkHandler::_throwItem(ServerPlayer &player, const ItemStack &ite
                           -std::sin(pitch) * THROW_SPEED + 0.1f,
                           std::cos(yaw) * std::cos(pitch) * THROW_SPEED);
 
-    dropItem(dropPosition, item, motion, THROW_PICKUP_DELAY);
+    dropItem(getLevelFor(player), dropPosition, item, motion, THROW_PICKUP_DELAY);
 }
 
 void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     PlayerInventory &inventory = player.getInventory();
+    Level &level = getLevelFor(player);
     const Vector3f position = player.getPosition();
     const Vector3f dropPosition(position.x, position.y + ITEM_DROP_HEIGHT, position.z);
 
     for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; slot++) {
-        dropItem(dropPosition, inventory.getItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+        dropItem(level, dropPosition, inventory.getItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
     }
 
     for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; slot++) {
-        dropItem(dropPosition, inventory.getArmor(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+        dropItem(level, dropPosition, inventory.getArmor(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
     }
 
-    dropItem(dropPosition, inventory.getOffhand(), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
-    dropItem(dropPosition, inventory.getCursor(), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+    dropItem(level, dropPosition, inventory.getOffhand(), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+    dropItem(level, dropPosition, inventory.getCursor(), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
 
     for (int slot = 0; slot < PlayerInventory::CRAFTING_SIZE; ++slot)
-        dropItem(dropPosition, inventory.getCraftingItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+        dropItem(level, dropPosition, inventory.getCraftingItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
 
     for (int slot = 0; slot < PlayerInventory::CRAFTING_TABLE_SIZE; ++slot)
-        dropItem(dropPosition, inventory.getCraftingTableItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+        dropItem(level, dropPosition, inventory.getCraftingTableItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
 
     for (int slot = 0; slot < PlayerInventory::FURNACE_SIZE; ++slot)
-        dropItem(dropPosition, inventory.getFurnaceItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+        dropItem(level, dropPosition, inventory.getFurnaceItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
 
     inventory.clear();
     inventory.setSelectedSlot(0);
@@ -1888,7 +1970,7 @@ bool ServerNetworkHandler::sleepOn(ServerPlayer &player, const Vector3i &head) {
     player.setSpawnPoint(head);
     player.getFlags().set(ActorFlag::Sleeping, true);
     player.teleport(*this, Vector3f((float) head.x + 0.5f, (float) head.y + 0.5f, (float) head.z + 0.5f));
-    BedBlock::setOccupied(*this, head, true);
+    BedBlock::setOccupied(*this, getLevelFor(player), head, true);
     _sendEntityData(player);
 
     mSleepTicks = SLEEP_CHECK_DELAY_TICKS;
@@ -1910,7 +1992,7 @@ void ServerNetworkHandler::stopSleep(ServerPlayer &player) {
             bedStillUsed = true;
     }
     if (!bedStillUsed)
-        BedBlock::setOccupied(*this, head, false);
+        BedBlock::setOccupied(*this, getLevelFor(player), head, false);
 
     mSleepTicks = 0;
 
@@ -1943,7 +2025,8 @@ void ServerNetworkHandler::_tickSleep() {
             sleeping++;
     }
 
-    if (players == 0 || sleeping < players)
+    const int32_t percentage = mLevel.getGameRules().getInt("playerssleepingpercentage");
+    if (players == 0 || sleeping == 0 || sleeping * 100 / players < percentage)
         return;
 
     if (!mLevel.isNight() && !mLevel.isThundering())
@@ -2183,8 +2266,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     if (dx * dx + dy * dy + dz * dz > 10000.0f)
         return;
 
-    const BlockState state = mLevel.getBlockState(packet.mBlockPosition.x, packet.mBlockPosition.y,
-                                                  packet.mBlockPosition.z);
+    const BlockState state = getLevelFor(*player).getBlockState(packet.mBlockPosition.x, packet.mBlockPosition.y,
+                                                                packet.mBlockPosition.z);
     if (!packet.mData.isCompound())
         return;
 
@@ -2220,8 +2303,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRe
     if (dx * dx + dy * dy + dz * dz > 10000.0f)
         return;
 
-    const BlockState state = mLevel.getBlockState(packet.mBlockPosition.x, packet.mBlockPosition.y,
-                                                  packet.mBlockPosition.z);
+    const BlockState state = getLevelFor(*player).getBlockState(packet.mBlockPosition.x, packet.mBlockPosition.y,
+                                                                packet.mBlockPosition.z);
     if (state.mName == "minecraft:air")
         return;
 
@@ -2243,7 +2326,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ActorPickRe
         return;
 
     for (const std::unique_ptr<ItemActor> &actor: mItemEntities) {
-        if (actor->isRemoved() || actor->getRuntimeId() != packet.mRuntimeActorId)
+        if (actor->isRemoved() || actor->getRuntimeId() != packet.mRuntimeActorId ||
+            actor->getDimension() != player->getDimension())
             continue;
 
         const Vector3f position = player->getPosition();
@@ -2259,9 +2343,9 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ActorPickRe
     }
 }
 
-ItemActor *ServerNetworkHandler::dropItem(const Vector3f &position, const ItemStack &item, const Vector3f &motion,
-                                          int pickupDelay) {
-    return ItemActorHandler::dropItem(*this, position, item, motion, pickupDelay);
+ItemActor *ServerNetworkHandler::dropItem(Level &level, const Vector3f &position, const ItemStack &item,
+                                          const Vector3f &motion, int pickupDelay) {
+    return ItemActorHandler::dropItem(*this, level, position, item, motion, pickupDelay);
 }
 
 void ServerNetworkHandler::_sendChunks(ServerPlayer &player) {
@@ -2488,7 +2572,8 @@ bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &ite
     InventoryHandler::sendArmorContent(*this, player);
     InventoryHandler::sendHeldItem(*this, player);
 
-    playLevelSound(LevelSoundEvent::ARMOR_EQUIP_GENERIC, player.getPosition(), "minecraft:player");
+    playLevelSound(getLevelFor(player), LevelSoundEvent::ARMOR_EQUIP_GENERIC, player.getPosition(),
+                   "minecraft:player");
     return true;
 }
 
@@ -2630,7 +2715,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         burp.mDisableRelativeVolume = false;
         burp.mActorUniqueId = -1;
         burp.mHasFirePosition = false;
-        BlockActionHandler::broadcastToViewers(*this, player.getPosition(), burp);
+        BlockActionHandler::broadcastToViewers(*this, getLevelFor(player), player.getPosition(), burp);
     }
 
     ItemStack remaining = inventory.getItemInHand();
@@ -2752,7 +2837,7 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
     const bool mayFly = gameMode == (int32_t) GameType::Creative || gameMode == (int32_t) GameType::Spectator;
     if (!mayFly && player.isFlying()) {
         player.setFlying(false);
-        player.setOnGround(MovementHandler::checkGroundState(*this, player.getPosition()));
+        player.setOnGround(MovementHandler::checkGroundState(getLevelFor(player), player.getPosition()));
     }
 
     if (gameMode == (int32_t) GameType::Spectator) {
@@ -2878,7 +2963,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestAbil
     player->setFlying(packet.mBoolValue);
 
     if (!packet.mBoolValue)
-        player->setOnGround(MovementHandler::checkGroundState(*this, player->getPosition()));
+        player->setOnGround(MovementHandler::checkGroundState(getLevelFor(*player), player->getPosition()));
 
     _sendAbilities(*player);
 }

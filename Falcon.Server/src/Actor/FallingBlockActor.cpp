@@ -61,7 +61,7 @@ void FallingBlockActor::tick(ServerNetworkHandler &owner) {
     if (mExpired)
         return;
 
-    Level &level = owner.getLevel();
+    Level &level = owner.getLevelFor(*this);
     const Vector3i restingPosition = _restingPosition();
 
     if (!level.isChunkResident(restingPosition.x >> 4, restingPosition.z >> 4))
@@ -88,7 +88,7 @@ void FallingBlockActor::tick(ServerNetworkHandler &owner) {
     motion.y *= friction;
     motion.z *= friction;
 
-    if (position.y < (float) LevelChunk::MIN_Y) {
+    if (position.y < (float) level.getMinY()) {
         mExpired = true;
         return;
     }
@@ -135,13 +135,17 @@ void FallingBlockActor::tick(ServerNetworkHandler &owner) {
 void FallingBlockActor::_destroy(ServerNetworkHandler &owner, const Vector3i &position, bool dropItem) {
     mExpired = true;
 
-    FallingBlockSystem::spawnDestroyParticle(owner, position, mBlockState);
+    FallingBlockSystem::spawnDestroyParticle(owner, owner.getLevelFor(*this), position, mBlockState);
 
     if (dropItem)
         _dropItem(owner);
 }
 
 void FallingBlockActor::_dropItem(ServerNetworkHandler &owner) {
+    const char *rule = mBlockState.mName == "minecraft:snow_layer" ? "dotiledrops" : "doentitydrops";
+    if (!owner.getLevel().getGameRules().getBool(rule))
+        return;
+
     const Vector3f position = getPosition();
 
     std::string identifier = mBlockState.mName;
@@ -150,16 +154,16 @@ void FallingBlockActor::_dropItem(ServerNetworkHandler &owner) {
         data->mDropIdentifier[0] != '\0')
         identifier = data->mDropIdentifier;
 
-    owner.spawnItemActor(identifier, 1, position);
+    owner.spawnItemActor(owner.getLevelFor(*this), identifier, 1, position);
 }
 
 void FallingBlockActor::_land(ServerNetworkHandler &owner, const Vector3i &position) {
     mExpired = true;
 
-    Level &level = owner.getLevel();
+    Level &level = owner.getLevelFor(*this);
 
     Vector3i target = position;
-    while (target.y < LevelChunk::MAX_Y) {
+    while (target.y < level.getMaxY()) {
         const BlockState existing = level.getBlockState(target.x, target.y, target.z);
         if (BlockSupport::isReplaceable(existing))
             break;
@@ -172,13 +176,13 @@ void FallingBlockActor::_land(ServerNetworkHandler &owner, const Vector3i &posit
                          !BlockSupport::isReplaceable(existing);
 
     if (blocked) {
-        FallingBlockSystem::spawnDestroyParticle(owner, position, mBlockState);
+        FallingBlockSystem::spawnDestroyParticle(owner, level, position, mBlockState);
         _dropItem(owner);
         return;
     }
 
     if (mBreakOnGround) {
-        FallingBlockSystem::spawnDestroyParticle(owner, target, mBlockState);
+        FallingBlockSystem::spawnDestroyParticle(owner, level, target, mBlockState);
         _dropItem(owner);
         return;
     }
@@ -190,7 +194,7 @@ void FallingBlockActor::_land(ServerNetworkHandler &owner, const Vector3i &posit
         placed = BlockState(FallingBlockSystem::getConcreteFor(placed.mName));
 
     if (!BlockSupport::isReplaceable(existing))
-        FallingBlockSystem::spawnDestroyParticle(owner, position, existing);
+        FallingBlockSystem::spawnDestroyParticle(owner, level, position, existing);
 
     _place(owner, target, placed);
 
@@ -205,25 +209,26 @@ void FallingBlockActor::_land(ServerNetworkHandler &owner, const Vector3i &posit
 }
 
 void FallingBlockActor::_place(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
-    FallingBlockSystem::setBlockState(owner, position, state);
+    FallingBlockSystem::setBlockState(owner, owner.getLevelFor(*this), position, state);
 }
 
 void FallingBlockActor::_onAnvilLanded(ServerNetworkHandler &owner, const Vector3i &position,
                                        const BlockState &state) {
     _damageEntitiesAt(owner, position, ANVIL_DEATH_KEY);
 
+    Level &level = owner.getLevelFor(*this);
     if (getFallDistance() > (float) ANVIL_BREAK_FALL_DISTANCE) {
         const std::string next = FallingBlockSystem::getNextAnvilDamage(state.mName);
 
         if (next.empty())
-            FallingBlockSystem::setBlockState(owner, position, BlockState("minecraft:air"));
+            FallingBlockSystem::setBlockState(owner, level, position, BlockState("minecraft:air"));
         else
-            FallingBlockSystem::setBlockState(owner, position, BlockState(next));
+            FallingBlockSystem::setBlockState(owner, level, position, BlockState(next));
     }
 
     const Vector3f soundPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
                                  (float) position.z + 0.5f);
-    owner.playNamedSound(ANVIL_LAND_SOUND, soundPosition, ANVIL_LAND_VOLUME, ANVIL_LAND_PITCH);
+    owner.playNamedSound(level, ANVIL_LAND_SOUND, soundPosition, ANVIL_LAND_VOLUME, ANVIL_LAND_PITCH);
 }
 
 void FallingBlockActor::_onDripstoneLanded(ServerNetworkHandler &owner, const Vector3i &position,
@@ -234,7 +239,8 @@ void FallingBlockActor::_onDripstoneLanded(ServerNetworkHandler &owner, const Ve
 
     const Vector3f soundPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
                                  (float) position.z + 0.5f);
-    owner.playNamedSound(DRIPSTONE_LAND_SOUND, soundPosition, ANVIL_LAND_VOLUME, ANVIL_LAND_PITCH);
+    owner.playNamedSound(owner.getLevelFor(*this), DRIPSTONE_LAND_SOUND, soundPosition, ANVIL_LAND_VOLUME,
+                         ANVIL_LAND_PITCH);
 }
 
 void FallingBlockActor::_damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i &position,
@@ -257,7 +263,7 @@ void FallingBlockActor::_damageEntitiesAt(ServerNetworkHandler &owner, const Vec
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead())
+        if (!player.isSpawned() || player.isDead() || player.getDimension() != getDimension())
             continue;
 
         const ActorSize size = ActorSizeTable::getSize("minecraft:player");
@@ -276,7 +282,8 @@ void FallingBlockActor::_damageEntitiesAt(ServerNetworkHandler &owner, const Vec
 
     for (auto &entry: owner.getActors()) {
         ServerActor *actor = entry.second.get();
-        if (actor == nullptr || actor == this || !actor->isAlive() || actor->isProjectile())
+        if (actor == nullptr || actor == this || !actor->isAlive() || actor->isProjectile() ||
+            actor->getDimension() != getDimension())
             continue;
 
         const ActorSize size = ActorSizeTable::getSize(actor->getTypeId());

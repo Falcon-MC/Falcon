@@ -6,6 +6,7 @@ class ServerNetworkHandler;
 class ServerPlayer;
 class ItemActor;
 class ItemStack;
+class Level;
 
 class ItemActorHandler {
 public:
@@ -16,8 +17,8 @@ public:
 
     static Vector3f randomDropAroundMotion();
 
-    static ItemActor *dropItem(ServerNetworkHandler &owner, const Vector3f &position, const ItemStack &item,
-                               const Vector3f &motion, int pickupDelay);
+    static ItemActor *dropItem(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
+                               const ItemStack &item, const Vector3f &motion, int pickupDelay);
 
     static void sendItemActorsTo(ServerNetworkHandler &owner, ServerPlayer &player);
 

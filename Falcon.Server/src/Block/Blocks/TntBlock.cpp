@@ -33,15 +33,16 @@ bool TntBlock::matches(const std::string &identifier) {
 void TntBlock::prime(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int32_t fuse) {
     const BlockState air("minecraft:air");
     level.setBlockState(position.x, position.y, position.z, air);
-    BlockActionHandler::broadcastBlockUpdate(owner, position, level.getBlockState(position.x, position.y, position.z));
+    BlockActionHandler::broadcastBlockUpdate(owner, level, position,
+                                             level.getBlockState(position.x, position.y, position.z));
 
     const Vector3f spawnPosition((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
     const float angle = nextAngle();
     const Vector3f motion(-std::sin(angle) * PRIME_HORIZONTAL_MOTION, PRIME_VERTICAL_MOTION,
                           -std::cos(angle) * PRIME_HORIZONTAL_MOTION);
 
-    owner.spawnPrimedTnt(spawnPosition, motion, fuse);
-    owner.playNamedSound(FUSE_SOUND, spawnPosition, 1.0f, 1.0f);
+    owner.spawnPrimedTnt(level, spawnPosition, motion, fuse);
+    owner.playNamedSound(level, FUSE_SOUND, spawnPosition, 1.0f, 1.0f);
 }
 
 bool TntBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,

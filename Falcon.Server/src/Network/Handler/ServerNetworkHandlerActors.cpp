@@ -129,12 +129,13 @@ namespace {
     }
 }
 
-ServerActor *ServerNetworkHandler::spawnActor(const std::string &identifier, const Vector3f &position) {
+ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position) {
     const uint64_t runtimeId = allocateRuntimeId();
     const int64_t uniqueId = (int64_t) runtimeId;
 
     std::unique_ptr<ServerActor> actor(new ServerActor(runtimeId, identifier));
     actor->getAttributes() = ActorAttributes::createActorDefaults();
+    actor->setDimension(level.getDimensionType());
     actor->setPosition(position);
     actor->resetFallDistance();
 
@@ -158,12 +159,14 @@ ServerActor *ServerNetworkHandler::spawnActor(const std::string &identifier, con
     return result;
 }
 
-FallingBlockActor *ServerNetworkHandler::spawnFallingBlock(const BlockState &state, const Vector3f &position) {
+FallingBlockActor *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockState &state,
+                                                           const Vector3f &position) {
     const uint64_t runtimeId = allocateRuntimeId();
     const int64_t uniqueId = (int64_t) runtimeId;
 
     std::unique_ptr<FallingBlockActor> actor(new FallingBlockActor(runtimeId, state));
     actor->getAttributes() = ActorAttributes::createActorDefaults();
+    actor->setDimension(level.getDimensionType());
     actor->setPosition(position);
     actor->setHighestPosition(position.y);
 
@@ -174,12 +177,14 @@ FallingBlockActor *ServerNetworkHandler::spawnFallingBlock(const BlockState &sta
     return result;
 }
 
-PrimedTntActor *ServerNetworkHandler::spawnPrimedTnt(const Vector3f &position, const Vector3f &motion, int32_t fuse) {
+PrimedTntActor *ServerNetworkHandler::spawnPrimedTnt(Level &level, const Vector3f &position, const Vector3f &motion,
+                                                     int32_t fuse) {
     const uint64_t runtimeId = allocateRuntimeId();
     const int64_t uniqueId = (int64_t) runtimeId;
 
     std::unique_ptr<PrimedTntActor> actor(new PrimedTntActor(runtimeId, fuse));
     actor->getAttributes() = ActorAttributes::createActorDefaults();
+    actor->setDimension(level.getDimensionType());
     actor->setPosition(position);
     actor->setMotion(motion);
 
@@ -190,7 +195,7 @@ PrimedTntActor *ServerNetworkHandler::spawnPrimedTnt(const Vector3f &position, c
     return result;
 }
 
-void ServerNetworkHandler::spawnExperienceOrbs(const Vector3f &position, int amount) {
+void ServerNetworkHandler::spawnExperienceOrbs(Level &level, const Vector3f &position, int amount) {
     if (amount <= 0)
         return;
 
@@ -198,7 +203,7 @@ void ServerNetworkHandler::spawnExperienceOrbs(const Vector3f &position, int amo
     std::uniform_real_distribution<float> unit(0.0f, 1.0f);
 
     for (int value: ExperienceValues::splitIntoOrbSizes(amount)) {
-        ServerActor *orb = spawnActor("minecraft:xp_orb", position);
+        ServerActor *orb = spawnActor(level, "minecraft:xp_orb", position);
         if (orb == nullptr)
             continue;
 
@@ -227,6 +232,8 @@ bool ServerNetworkHandler::tickExperienceOrb(ServerActor &orb) {
             continue;
         if (player.getGameType() == (int32_t) GameType::Spectator)
             continue;
+        if (player.getDimension() != orb.getDimension())
+            continue;
 
         const Vector3f playerPosition = player.getPosition();
         const float dx = playerPosition.x - position.x;
@@ -250,7 +257,7 @@ bool ServerNetworkHandler::tickExperienceOrb(ServerActor &orb) {
             closest->getExperience().addXp(orb.getExperienceValue());
             closest->syncExperience();
             _sendAttributes(*closest);
-            playNamedSound("random.orb", position, 0.1f, 1.0f);
+            playNamedSound(getLevelFor(orb), "random.orb", position, 0.1f, 1.0f);
             return true;
         }
     }
@@ -280,7 +287,7 @@ bool ServerNetworkHandler::tickExperienceOrb(ServerActor &orb) {
     const int32_t blockY = (int32_t) std::floor(next.y);
 
     bool onGround = false;
-    if (motion.y < 0.0f && mLevel.isSolidAt(blockX, blockY, blockZ)) {
+    if (motion.y < 0.0f && getLevelFor(orb).isSolidAt(blockX, blockY, blockZ)) {
         next.y = (float) (blockY + 1);
         onGround = true;
     }
@@ -320,7 +327,7 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     Vector3f spawnPosition = player.getPosition();
     spawnPosition.y += PLAYER_EYE_HEIGHT + verticalOffset;
 
-    ServerActor *projectile = spawnActor(identifier, spawnPosition);
+    ServerActor *projectile = spawnActor(getLevelFor(player), identifier, spawnPosition);
     if (projectile == nullptr)
         return nullptr;
 
@@ -335,6 +342,7 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
 bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const Vector3f &hitPosition,
                                                  ServerPlayer *hitPlayer) {
     const std::string identifier = projectile.getIdentifier();
+    Level &level = getLevelFor(projectile);
 
     if (isArrowProjectile(identifier)) {
         if (hitPlayer != nullptr)
@@ -342,11 +350,12 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
 
         ProjectileData &data = projectile.getProjectileData();
         const bool isTrident = identifier == "minecraft:thrown_trident";
-        playLevelSound(isTrident ? LevelSoundEvent::TRIDENT_HIT_GROUND : LevelSoundEvent::BOW_HIT, hitPosition);
+        playLevelSound(level, isTrident ? LevelSoundEvent::TRIDENT_HIT_GROUND : LevelSoundEvent::BOW_HIT,
+                       hitPosition);
 
         if (isTrident && data.mLoyaltyLevel > 0) {
             data.mReturning = true;
-            playLevelSound(LevelSoundEvent::TRIDENT_RETURN, hitPosition);
+            playLevelSound(level, LevelSoundEvent::TRIDENT_RETURN, hitPosition);
             return false;
         }
 
@@ -365,7 +374,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
             applyDamage(shooter, 5.0f, "death.fell.accident.generic", {shooter.getName()}, false, false);
             break;
         }
-        spawnParticleEffect("minecraft:endermanpop_emitter", hitPosition);
+        spawnParticleEffect(level, "minecraft:endermanpop_emitter", hitPosition);
         return true;
     }
 
@@ -374,12 +383,12 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
             const Vector3f target = hitPlayer->getPosition();
             knockBack(*hitPlayer, target.x - hitPosition.x, target.z - hitPosition.z, 0.3f);
         }
-        spawnParticleEffect("minecraft:snowballpoof", hitPosition);
+        spawnParticleEffect(level, "minecraft:snowballpoof", hitPosition);
         return true;
     }
 
     if (identifier == "minecraft:egg") {
-        _hatchEggChicks(hitPosition);
+        _hatchEggChicks(level, hitPosition);
         return true;
     }
 
@@ -387,7 +396,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
         const float burstRadius = 3.5f;
         for (auto &entry: mPlayers) {
             ServerPlayer &nearby = entry.second;
-            if (!nearby.isSpawned())
+            if (!nearby.isSpawned() || nearby.getDimension() != projectile.getDimension())
                 continue;
 
             const Vector3f position = nearby.getPosition();
@@ -403,7 +412,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
 
         for (auto &entry: mActors) {
             ServerActor &nearby = *entry.second;
-            if (!nearby.isAlive() || nearby.isProjectile())
+            if (!nearby.isAlive() || nearby.isProjectile() || nearby.getDimension() != projectile.getDimension())
                 continue;
 
             const Vector3f position = nearby.getPosition();
@@ -418,8 +427,8 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
         }
 
         const Vector3f burstPosition(hitPosition.x, hitPosition.y + 1.0f, hitPosition.z);
-        spawnParticleEffect("minecraft:wind_explosion_emitter", burstPosition);
-        playLevelSound(LevelSoundEvent::WIND_CHARGE_BURST, burstPosition);
+        spawnParticleEffect(level, "minecraft:wind_explosion_emitter", burstPosition);
+        playLevelSound(level, LevelSoundEvent::WIND_CHARGE_BURST, burstPosition);
         return true;
     }
 
@@ -427,7 +436,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
         static std::mt19937 bottleRandom(0x3A5F19C7u);
         std::uniform_int_distribution<int> amount(3, 11);
 
-        spawnExperienceOrbs(hitPosition, amount(bottleRandom));
+        spawnExperienceOrbs(level, hitPosition, amount(bottleRandom));
 
         LevelEventPacket splash;
         splash.mEventId = LevelEventPacket::ParticleSplash;
@@ -435,11 +444,11 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
         splash.mData = 0x00385dc6;
 
         for (auto &entry: mPlayers) {
-            if (entry.second.isSpawned())
+            if (entry.second.isSpawned() && entry.second.getDimension() == level.getDimensionType())
                 mNetworkHandler->send(entry.first, splash, mCodecContext);
         }
 
-        playLevelSound(LevelSoundEvent::GLASS, hitPosition);
+        playLevelSound(level, LevelSoundEvent::GLASS, hitPosition);
         return true;
     }
 
@@ -451,7 +460,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
 
         for (auto &entry: mPlayers) {
             ServerPlayer &nearby = entry.second;
-            if (!nearby.isSpawned())
+            if (!nearby.isSpawned() || nearby.getDimension() != projectile.getDimension())
                 continue;
 
             const Vector3f position = nearby.getPosition();
@@ -466,7 +475,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
             applyPotionEffects(nearby, potionId, scale);
         }
 
-        spawnParticleEffect("minecraft:splash_spell_emitter", hitPosition);
+        spawnParticleEffect(level, "minecraft:splash_spell_emitter", hitPosition);
         return true;
     }
 
@@ -476,7 +485,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
         if (it != mProjectilePotionId.end())
             mProjectilePotionId.erase(it);
 
-        ServerActor *cloud = spawnActor("minecraft:area_effect_cloud", hitPosition);
+        ServerActor *cloud = spawnActor(level, "minecraft:area_effect_cloud", hitPosition);
         if (cloud != nullptr) {
             const float cloudRadius = 3.0f;
 
@@ -531,6 +540,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
             state.mRadiusPerTick = LINGERING_CLOUD_RADIUS_PER_TICK;
             state.mRadiusOnUse = LINGERING_CLOUD_RADIUS_ON_USE;
             state.mPosition = hitPosition;
+            state.mDimension = cloud->getDimension();
             mLingeringClouds[cloud->getUniqueId()] = state;
         }
         return true;
@@ -544,8 +554,8 @@ void ServerNetworkHandler::dropProjectileItem(ServerActor &projectile, const Vec
     if (data.mPickupItem.isAir())
         return;
 
-    ItemActorHandler::dropItem(*this, position, data.mPickupItem, ItemActorHandler::randomDropMotion(),
-                               ItemActorHandler::DROP_PICKUP_DELAY);
+    ItemActorHandler::dropItem(*this, getLevelFor(projectile), position, data.mPickupItem,
+                               ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
 }
 
 void ServerNetworkHandler::returnProjectileToOwner(ServerPlayer &player, ServerActor &projectile) {
@@ -592,7 +602,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     const bool isTrident = std::string(projectile.getIdentifier()) == "minecraft:thrown_trident";
 
     float damage = computeProjectileDamage(projectile);
-    if (isTrident && data.mImpalingLevel > 0 && LiquidBlocksFetch::at(mLevel, target.getPosition()).water)
+    if (isTrident && data.mImpalingLevel > 0 && LiquidBlocksFetch::at(getLevelFor(target), target.getPosition()).water)
         damage += IMPALING_DAMAGE_PER_LEVEL * (float) data.mImpalingLevel;
 
     ServerPlayer *shooter = nullptr;
@@ -627,17 +637,18 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
             _sendEntityData(*victimPlayer);
     }
 
-    playLevelSound(isTrident ? LevelSoundEvent::TRIDENT_HIT : LevelSoundEvent::BOW_HIT, hitPosition);
+    Level &level = getLevelFor(projectile);
+    playLevelSound(level, isTrident ? LevelSoundEvent::TRIDENT_HIT : LevelSoundEvent::BOW_HIT, hitPosition);
 
     if (isTrident) {
         data.mHadCollision = true;
 
-        if (data.mChanneling && mLevel.isThundering())
-            strikeLightning(targetPosition);
+        if (data.mChanneling && level.hasSkyLight() && mLevel.isThundering())
+            strikeLightning(level, targetPosition);
 
         if (data.mLoyaltyLevel > 0 && shooter != nullptr) {
             data.mReturning = true;
-            playLevelSound(LevelSoundEvent::TRIDENT_RETURN, hitPosition);
+            playLevelSound(level, LevelSoundEvent::TRIDENT_RETURN, hitPosition);
             return false;
         }
 
@@ -671,7 +682,7 @@ bool ServerNetworkHandler::onThrownProjectileHitActor(ServerActor &projectile, c
         const float snowballDamage = std::string(hitActor.getIdentifier()) == "minecraft:blaze" ? 3.0f : 0.0f;
         damageActor(hitActor, snowballDamage, nullptr);
         knockBack(hitActor, hitActor.getPosition().x - hitPosition.x, hitActor.getPosition().z - hitPosition.z, 0.3f);
-        spawnParticleEffect("minecraft:snowballpoof", hitPosition);
+        spawnParticleEffect(getLevelFor(projectile), "minecraft:snowballpoof", hitPosition);
         return true;
     }
 
@@ -721,7 +732,7 @@ void ServerNetworkHandler::removeActor(int64_t uniqueId) {
 }
 
 bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const ServerActor &actor) const {
-    if (!player.isSpawned())
+    if (!player.isSpawned() || player.getDimension() != actor.getDimension())
         return false;
 
     const Vector3f position = actor.getPosition();
@@ -737,6 +748,7 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
     packet.mRuntimeActorId = (int64_t) actor.getRuntimeId();
     packet.mIdentifier = actor.getTypeId();
     packet.mPosition = actor.getPosition();
+    packet.mPosition.y += actor.getBaseOffset();
     packet.mMotion = actor.getMotion();
     packet.mRotation = Vector2f(actor.getRotation().x, actor.getRotation().y);
     packet.mProperties = buildActorProperties(actor);
@@ -880,7 +892,7 @@ void ServerNetworkHandler::syncActorProperties(ServerActor &actor) {
     }
 }
 
-void ServerNetworkHandler::_hatchEggChicks(const Vector3f &hitPosition) {
+void ServerNetworkHandler::_hatchEggChicks(Level &level, const Vector3f &hitPosition) {
     static std::mt19937 hatchRandom(std::random_device{}());
 
     if (std::uniform_int_distribution<int32_t>(0, EGG_HATCH_CHANCE - 1)(hatchRandom) != 0)
@@ -893,7 +905,7 @@ void ServerNetworkHandler::_hatchEggChicks(const Vector3f &hitPosition) {
     const Vector3f spawnPosition(hitPosition.x, hitPosition.y + EGG_HATCH_HEIGHT, hitPosition.z);
 
     for (int32_t chick = 0; chick < chicks; ++chick) {
-        ServerActor *hatched = spawnActor("minecraft:chicken", spawnPosition);
+        ServerActor *hatched = spawnActor(level, "minecraft:chicken", spawnPosition);
         if (hatched == nullptr)
             continue;
 
@@ -1005,21 +1017,22 @@ void ServerNetworkHandler::playActorAnimation(ServerActor &actor, const std::str
     }
 }
 
-void ServerNetworkHandler::spawnParticleEffect(const std::string &identifier, const Vector3f &position) {
+void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &identifier,
+                                               const Vector3f &position) {
     SpawnParticleEffectPacket packet;
-    packet.mDimensionId = 0;
+    packet.mDimensionId = level.getDimensionId();
     packet.mUniqueActorId = -1;
     packet.mPosition = position;
     packet.mIdentifier = identifier;
     packet.mHasMolangVariablesJson = false;
 
     for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
+        if (entry.second.isSpawned() && entry.second.getDimension() == level.getDimensionType())
             mNetworkHandler->send(entry.first, packet, mCodecContext);
     }
 }
 
-void ServerNetworkHandler::playLevelSound(const std::string &sound, const Vector3f &position,
+void ServerNetworkHandler::playLevelSound(Level &level, const std::string &sound, const Vector3f &position,
                                           const std::string &actorType, int32_t extraData) {
     LevelSoundEventPacket packet;
     packet.mSound = sound;
@@ -1031,11 +1044,11 @@ void ServerNetworkHandler::playLevelSound(const std::string &sound, const Vector
     packet.mActorUniqueId = -1;
     packet.mHasFirePosition = false;
 
-    BlockActionHandler::broadcastToViewers(*this, position, packet);
+    BlockActionHandler::broadcastToViewers(*this, level, position, packet);
 }
 
-void ServerNetworkHandler::playNamedSound(const std::string &sound, const Vector3f &position, float volume,
-                                          float pitch) {
+void ServerNetworkHandler::playNamedSound(Level &level, const std::string &sound, const Vector3f &position,
+                                          float volume, float pitch) {
     PlaySoundPacket packet;
     packet.mSound = sound;
     packet.mPosition = position;
@@ -1043,12 +1056,13 @@ void ServerNetworkHandler::playNamedSound(const std::string &sound, const Vector
     packet.mPitch = pitch;
 
     for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
+        if (entry.second.isSpawned() && entry.second.getDimension() == level.getDimensionType())
             mNetworkHandler->send(entry.first, packet, mCodecContext);
     }
 }
 
-void ServerNetworkHandler::spawnItemActor(const std::string &typeId, int32_t amount, const Vector3f &position) {
+void ServerNetworkHandler::spawnItemActor(Level &level, const std::string &typeId, int32_t amount,
+                                          const Vector3f &position) {
     Item item;
     if (!StringToItemParser::getInstance().parse(typeId, item))
         return;
@@ -1062,7 +1076,7 @@ void ServerNetworkHandler::spawnItemActor(const std::string &typeId, int32_t amo
     stack.mBlockDefinition = mBlockDefinitions.getDefinition(item.getIdentifier());
     stack.mCount = amount < 1 ? 1 : amount;
 
-    ItemActorHandler::dropItem(*this, position, stack, ItemActorHandler::randomDropMotion(),
+    ItemActorHandler::dropItem(*this, level, position, stack, ItemActorHandler::randomDropMotion(),
                                ItemActorHandler::DROP_PICKUP_DELAY);
 }
 
@@ -1255,6 +1269,7 @@ void ServerNetworkHandler::tickActors() {
             continue;
 
         ServerActor &actor = *actorEntry->second;
+        Level &level = getLevelFor(actor);
         actor.addLifetimeTick();
         actor.tickCombat(1);
 
@@ -1273,7 +1288,7 @@ void ServerNetworkHandler::tickActors() {
 
         if (!actor.isProjectile()) {
             const ActorSize size = ActorSizeTable::getSize(actor.getIdentifier());
-            if (_isEyeInsideSolidBlock(actor.getPosition(), size.mHeight))
+            if (_isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
                 actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE, nullptr);
         }
 
@@ -1315,7 +1330,7 @@ void ServerNetworkHandler::tickActors() {
 
             if (firework.mFireworkAge >= firework.mFireworkLifetime) {
                 broadcastActorEvent(actor, EntityEventType::FireworkParticles);
-                playLevelSound(LevelSoundEvent::LARGE_BLAST, actor.getPosition());
+                playLevelSound(level, LevelSoundEvent::LARGE_BLAST, actor.getPosition());
 
                 if (rider != nullptr && rider->getFlags().get(ActorFlag::Gliding))
                     rider->getFlags().set(ActorFlag::Gliding, true);
@@ -1391,12 +1406,12 @@ void ServerNetworkHandler::tickActors() {
                 continue;
             }
 
-            if (actor.getLifetimeTicks() > 1 && mLevel.isSolidAt(blockX, blockY, blockZ)) {
+            if (actor.getLifetimeTicks() > 1 && level.isSolidAt(blockX, blockY, blockZ)) {
                 const Vector3f hitPosition((float) blockX + 0.5f, (float) blockY + 0.5f, (float) blockZ + 0.5f);
                 const Vector3i hitBlock(blockX, blockY, blockZ);
-                const BlockState hitState = mLevel.getBlockState(blockX, blockY, blockZ);
+                const BlockState hitState = level.getBlockState(blockX, blockY, blockZ);
                 const Block *block = VanillaBlocks::fromIdentifier(hitState.mName);
-                if (block != nullptr && block->onProjectileHit(*this, mLevel, hitBlock, hitState, actor)) {
+                if (block != nullptr && block->onProjectileHit(*this, level, hitBlock, hitState, actor)) {
                     expired.push_back(actorId);
                     continue;
                 }
@@ -1435,7 +1450,7 @@ void ServerNetworkHandler::tickActors() {
 
                     for (auto &playerEntry: mPlayers) {
                         ServerPlayer &candidate = playerEntry.second;
-                        if (!candidate.isSpawned())
+                        if (!candidate.isSpawned() || candidate.getDimension() != actor.getDimension())
                             continue;
                         if ((int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId() &&
                             actor.getLifetimeTicks() < 8)
@@ -1454,7 +1469,8 @@ void ServerNetworkHandler::tickActors() {
 
                     for (auto &actorEntry: mActors) {
                         ServerActor &candidate = *actorEntry.second;
-                        if (&candidate == &actor || !candidate.isAlive())
+                        if (&candidate == &actor || !candidate.isAlive() ||
+                            candidate.getDimension() != actor.getDimension())
                             continue;
 
                         const bool candidateIsProjectile = candidate.isProjectile();
@@ -1491,7 +1507,7 @@ void ServerNetworkHandler::tickActors() {
             move.mRotation = actor.getRotation();
 
             for (auto &playerEntry: mPlayers) {
-                if (playerEntry.second.isSpawned())
+                if (playerEntry.second.isSpawned() && playerEntry.second.getDimension() == actor.getDimension())
                     mNetworkHandler->send(playerEntry.first, move, mCodecContext);
             }
 
@@ -1530,7 +1546,7 @@ void ServerNetworkHandler::tickActors() {
 
             for (auto &playerEntry: mPlayers) {
                 ServerPlayer &nearby = playerEntry.second;
-                if (!nearby.isSpawned())
+                if (!nearby.isSpawned() || nearby.getDimension() != cloud.mDimension)
                     continue;
 
                 const Vector3f position = nearby.getPosition();
@@ -1546,7 +1562,8 @@ void ServerNetworkHandler::tickActors() {
 
             for (auto &actorEntry: mActors) {
                 ServerActor &nearby = *actorEntry.second;
-                if (!nearby.isAlive() || nearby.isProjectile() || nearby.isDead())
+                if (!nearby.isAlive() || nearby.isProjectile() || nearby.isDead() ||
+                    nearby.getDimension() != cloud.mDimension)
                     continue;
 
                 const Vector3f position = nearby.getPosition();

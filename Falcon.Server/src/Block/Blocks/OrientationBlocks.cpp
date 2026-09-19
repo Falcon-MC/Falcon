@@ -10,6 +10,7 @@
 #include "Block/Components/PlacementOrientation.h"
 #include "Block/Systems/PistonSystem.h"
 #include "Level/Level.h"
+#include "Network/Handler/ServerNetworkHandler.h"
 
 namespace {
     using BlockIdentifier::endsWith;
@@ -56,9 +57,7 @@ bool PistonBlock::matches(const std::string &identifier) {
 
 void PistonBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) const {
-    (void) level;
-
-    PistonSystem::onBlockBroken(owner, position, state);
+    PistonSystem::onBlockBroken(owner, level, position, state);
 }
 
 bool TorchOrientationBlock::matches(const std::string &identifier) {
@@ -173,7 +172,7 @@ void BedOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &pl
     (void) usedItem;
     (void) blockFace;
 
-    BedBlock::placeHeadPiece(owner, position, state,
+    BedBlock::placeHeadPiece(owner, owner.getLevelFor(player), position, state,
                              BlockPlacementComponent::getHorizontalFacing(player.getRotation().y));
 }
 
@@ -193,11 +192,10 @@ bool DoorOrientationBlock::matches(const std::string &identifier) {
 
 void DoorOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                     const BlockState &state, const ItemStack &usedItem, int blockFace) const {
-    (void) player;
     (void) usedItem;
     (void) blockFace;
 
-    DoorBlock::placeUpperHalf(owner, position, state);
+    DoorBlock::placeUpperHalf(owner, owner.getLevelFor(player), position, state);
 }
 
 BlockState DoorOrientationBlock::applyPlacementOrientation(const BlockState &state,

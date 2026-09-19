@@ -33,6 +33,7 @@
 #include "Protocol/Packets/CraftingDataPacket.h"
 #include "Protocol/Packets/CreativeContentPacket.h"
 
+#include <array>
 #include <memory>
 #include <mutex>
 #include <cstdint>
@@ -115,7 +116,10 @@ public:
 
     Level &getDimension(DimensionType dimension);
 
-    Level &getLevelFor(const ServerPlayer &player);
+    Level &getLevelFor(const Actor &actor);
+
+    /** Every loaded level: the Overworld, then the Nether and the End when they exist. */
+    std::vector<Level *> getLevels();
 
     void changePlayerDimension(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
 
@@ -125,13 +129,13 @@ public:
 
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> &getActors() { return mActors; }
 
-    ServerActor *spawnActor(const std::string &identifier, const Vector3f &position);
+    ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position);
 
-    FallingBlockActor *spawnFallingBlock(const BlockState &state, const Vector3f &position);
+    FallingBlockActor *spawnFallingBlock(Level &level, const BlockState &state, const Vector3f &position);
 
-    PrimedTntActor *spawnPrimedTnt(const Vector3f &position, const Vector3f &motion, int32_t fuse);
+    PrimedTntActor *spawnPrimedTnt(Level &level, const Vector3f &position, const Vector3f &motion, int32_t fuse);
 
-    void spawnExperienceOrbs(const Vector3f &position, int amount);
+    void spawnExperienceOrbs(Level &level, const Vector3f &position, int amount);
 
     bool tickExperienceOrb(ServerActor &orb);
 
@@ -161,7 +165,7 @@ public:
 
     void setThundering(bool thundering);
 
-    void strikeLightning(const Vector3f &position);
+    void strikeLightning(Level &level, const Vector3f &position);
 
     void tickWeather();
 
@@ -213,14 +217,15 @@ public:
     void playSoundFor(ServerPlayer &player, const std::string &sound, const Vector3f &position, float volume,
                       float pitch);
 
-    void spawnParticleEffect(const std::string &identifier, const Vector3f &position);
+    void spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position);
 
-    void playLevelSound(const std::string &sound, const Vector3f &position,
+    void playLevelSound(Level &level, const std::string &sound, const Vector3f &position,
                         const std::string &actorType = ":", int32_t extraData = -1);
 
-    void playNamedSound(const std::string &sound, const Vector3f &position, float volume, float pitch);
+    void playNamedSound(Level &level, const std::string &sound, const Vector3f &position, float volume,
+                        float pitch);
 
-    void spawnItemActor(const std::string &typeId, int32_t amount, const Vector3f &position);
+    void spawnItemActor(Level &level, const std::string &typeId, int32_t amount, const Vector3f &position);
 
     void sendActionBar(ServerPlayer &player, const std::string &text, bool json);
 
@@ -257,17 +262,19 @@ public:
 
     void tickActors();
 
-    void loadActorsForChunk(int32_t chunkX, int32_t chunkZ);
+    void loadActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ);
 
-    void saveActorsForChunk(int32_t chunkX, int32_t chunkZ, bool cull);
+    void saveActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ, bool cull);
 
-    void loadBlockActorsForChunk(int32_t chunkX, int32_t chunkZ);
+    void loadBlockActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ);
 
-    void saveBlockActorsForChunk(int32_t chunkX, int32_t chunkZ, bool cull);
+    void saveBlockActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ, bool cull);
 
     void saveAllActors();
 
-    bool syncActorPersistence(const std::vector<int64_t> &activeColumns);
+    void autoSave();
+
+    bool syncActorPersistence(Level &level, const std::vector<int64_t> &activeColumns);
 
     void emitItemUse(ServerPlayer &player);
 
@@ -336,7 +343,8 @@ public:
 
     void broadcastWorldTime();
 
-    ItemActor *dropItem(const Vector3f &position, const ItemStack &item, const Vector3f &motion, int pickupDelay);
+    ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
+                        int pickupDelay);
 
     void applyDamage(ServerPlayer &player, float amount, const std::string &deathMessageKey,
                      const std::vector<std::string> &deathMessageParameters = {},
@@ -375,7 +383,7 @@ public:
 
     void _sendActorRemove(ServerPlayer &player, const ServerActor &actor);
 
-    void _hatchEggChicks(const Vector3f &hitPosition);
+    void _hatchEggChicks(Level &level, const Vector3f &hitPosition);
 
     bool _equipHeldArmor(ServerPlayer &player, const Item &itemType);
 
@@ -432,10 +440,6 @@ public:
     void _sendCreativeContent(ServerPlayer &player);
 
     void _sendAvailableCommands(ServerPlayer &player);
-
-    bool getKeepInventory() const { return mKeepInventory; }
-
-    void setKeepInventory(bool keepInventory) { mKeepInventory = keepInventory; }
 
     void sendPacketTo(const NetworkIdentifier &id, const Packet &packet) override;
 
@@ -534,7 +538,7 @@ private:
 
     void _handleSuffocationDamage(ServerPlayer &player);
 
-    bool _isEyeInsideSolidBlock(const Vector3f &position, float height);
+    bool _isEyeInsideSolidBlock(Level &level, const Vector3f &position, float height);
 
     void _dropInventoryOnDeath(ServerPlayer &player);
 
@@ -603,10 +607,11 @@ private:
         float mRadiusPerTick;
         float mRadiusOnUse;
         Vector3f mPosition;
+        DimensionType mDimension = DimensionType::Overworld;
     };
 
     std::unordered_map<int64_t, LingeringCloud> mLingeringClouds;
-    std::unordered_set<int64_t> mActorLoadedChunks;
+    std::array<std::unordered_set<int64_t>, Dimension::DIMENSION_COUNT> mActorLoadedChunks;
     std::vector<int64_t> mActiveCenters;
     int mActiveTickDistance = -1;
     bool mActorPersistencePending = true;
@@ -616,7 +621,6 @@ private:
     std::unordered_map<NetworkIdentifier, std::unordered_map<uint32_t, ModalFormCallback>,
                        NetworkIdentifier::Hasher> mModalFormCallbacks;
     std::vector<std::unique_ptr<ItemActor>> mItemEntities;
-    bool mKeepInventory;
     uint64_t mNextRuntimeId;
     int64_t mCurrentTick = 0;
     int32_t mSleepTicks = 0;

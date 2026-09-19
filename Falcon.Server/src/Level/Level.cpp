@@ -67,6 +67,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mGameRules = std::move(other.mGameRules);
     mPacketBroadcaster = std::move(other.mPacketBroadcaster);
     mBlockLightQueue = std::move(other.mBlockLightQueue);
+    mBlockActors.moveStateFrom(std::move(other.mBlockActors));
     return *this;
 }
 
@@ -84,11 +85,19 @@ bool Level::openStorage(const std::string &worldsDirectory) {
         return false;
 
     if (mDimension == DimensionType::Overworld) {
-        const Vector3i spawn = getSpawnPosition();
-        mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed);
+        int64_t storedTime = 0;
+        if (mStorage.readLevelDatTime(storedTime))
+            setTime(storedTime);
+
+        saveLevelDat();
     }
 
     return true;
+}
+
+void Level::saveLevelDat() {
+    const Vector3i spawn = getSpawnPosition();
+    mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime);
 }
 
 bool Level::attachStorage(Level &overworld) {
@@ -102,6 +111,7 @@ void Level::saveAll() {
     if (mDimension == DimensionType::Overworld) {
         saveWeather();
         saveGameRules();
+        saveLevelDat();
     }
 
     const bool async = mChunkWorker != nullptr && mChunkWorker->isRunning();

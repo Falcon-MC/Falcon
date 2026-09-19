@@ -115,8 +115,7 @@ namespace {
         return state.mStates.getInt("rail_direction", 0);
     }
 
-    void writeOrientation(ServerNetworkHandler &owner, const Vector3i &position, int orientation) {
-        Level &level = owner.getLevel();
+    void writeOrientation(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int orientation) {
         BlockState state = level.getBlockState(position.x, position.y, position.z);
         if (state.mStates.getInt("rail_direction", 0) == orientation)
             return;
@@ -126,7 +125,7 @@ namespace {
 
         const BlockState updated(state.mName, states);
         level.setBlockState(position.x, position.y, position.z, updated);
-        BlockActionHandler::broadcastBlockUpdate(owner, position, updated);
+        BlockActionHandler::broadcastBlockUpdate(owner, level, position, updated);
     }
 
     std::vector<RailNeighbour> railsAround(Level &level, const Vector3i &position,
@@ -184,16 +183,15 @@ namespace {
         return connected;
     }
 
-    int connectSingle(ServerNetworkHandler &owner, const Vector3i &position, const RailNeighbour &other,
-                      int face) {
-        Level &level = owner.getLevel();
+    int connectSingle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                      const RailNeighbour &other, int face) {
         const int delta = position.y - other.mPosition.y;
         const int opposite = RedstoneFace::opposite(face);
         const std::vector<RailNeighbour> connected = railsConnected(level, other.mPosition,
                                                                     readOrientation(level, other.mPosition));
 
         if (connected.empty()) {
-            writeOrientation(owner, other.mPosition,
+            writeOrientation(owner, level, other.mPosition,
                              delta == 1 ? ascendingOrientation(opposite) : straightOrientation(face));
             return delta == -1 ? ascendingOrientation(face) : straightOrientation(face);
         }
@@ -203,13 +201,13 @@ namespace {
             const int otherOrientation = readOrientation(level, other.mPosition);
 
             if (BaseRailBlock::isAbstract(other.mName) && faceConnected != face) {
-                writeOrientation(owner, other.mPosition, curvedOrientation(opposite, faceConnected));
+                writeOrientation(owner, level, other.mPosition, curvedOrientation(opposite, faceConnected));
                 return delta == -1 ? ascendingOrientation(face) : straightOrientation(face);
             }
 
             if (faceConnected == face) {
                 if (orientationOf(otherOrientation).mShape != RailShape::Ascending) {
-                    writeOrientation(owner, other.mPosition,
+                    writeOrientation(owner, level, other.mPosition,
                                      delta == 1 ? ascendingOrientation(opposite) : straightOrientation(face));
                 }
                 return delta == -1 ? ascendingOrientation(face) : straightOrientation(face);
@@ -217,7 +215,7 @@ namespace {
 
             if (connectsTo(otherOrientation, RedstoneFace::NORTH)
                 && connectsTo(otherOrientation, RedstoneFace::SOUTH)) {
-                writeOrientation(owner, other.mPosition,
+                writeOrientation(owner, level, other.mPosition,
                                  delta == 1 ? ascendingOrientation(opposite) : straightOrientation(face));
                 return delta == -1 ? ascendingOrientation(face) : straightOrientation(face);
             }
@@ -226,10 +224,10 @@ namespace {
         return BaseRailBlock::STRAIGHT_NORTH_SOUTH;
     }
 
-    int connectPair(ServerNetworkHandler &owner, const Vector3i &position, const RailNeighbour &first,
-                    int firstFace, const RailNeighbour &second, int secondFace) {
-        connectSingle(owner, position, first, firstFace);
-        connectSingle(owner, position, second, secondFace);
+    int connectPair(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                    const RailNeighbour &first, int firstFace, const RailNeighbour &second, int secondFace) {
+        connectSingle(owner, level, position, first, firstFace);
+        connectSingle(owner, level, position, second, secondFace);
 
         if (RedstoneFace::opposite(firstFace) == secondFace) {
             if (position.y - first.mPosition.y == -1)
@@ -273,11 +271,11 @@ bool BaseRailBlock::isAbstract(const std::string &identifier) {
     return identifier == "minecraft:rail";
 }
 
-void BaseRailBlock::onPlacing(ServerNetworkHandler &owner, const Vector3i &position, BlockState &state) const {
+void BaseRailBlock::onPlacing(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              BlockState &state) const {
     if (!state.mStates.contains("rail_direction"))
         return;
 
-    Level &level = owner.getLevel();
     const bool abstractRail = isAbstract(state.mName);
 
     std::vector<RailNeighbour> around = railsAround(level, position, horizontalFaces());
@@ -299,11 +297,11 @@ void BaseRailBlock::onPlacing(ServerNetworkHandler &owner, const Vector3i &posit
     int orientation = STRAIGHT_NORTH_SOUTH;
 
     if (affected.size() == 1) {
-        orientation = connectSingle(owner, position, affected.front(), affected.front().mFace);
+        orientation = connectSingle(owner, level, position, affected.front(), affected.front().mFace);
     } else if (distinctFaces == 4) {
         const int firstFace = abstractRail ? RedstoneFace::SOUTH : RedstoneFace::EAST;
         const int secondFace = abstractRail ? RedstoneFace::EAST : RedstoneFace::WEST;
-        orientation = connectPair(owner, position, *findByFace(affected, firstFace), firstFace,
+        orientation = connectPair(owner, level, position, *findByFace(affected, firstFace), firstFace,
                                   *findByFace(affected, secondFace), secondFace);
     } else if (abstractRail) {
         int firstFace = RedstoneFace::NONE;
@@ -331,10 +329,10 @@ void BaseRailBlock::onPlacing(ServerNetworkHandler &owner, const Vector3i &posit
         }
 
         if (firstFace != RedstoneFace::NONE && secondFace != RedstoneFace::NONE) {
-            orientation = connectPair(owner, position, *findByFace(affected, firstFace), firstFace,
+            orientation = connectPair(owner, level, position, *findByFace(affected, firstFace), firstFace,
                                       *findByFace(affected, secondFace), secondFace);
         } else {
-            orientation = connectSingle(owner, position, affected.front(), affected.front().mFace);
+            orientation = connectSingle(owner, level, position, affected.front(), affected.front().mFace);
         }
     } else {
         int face = affected.front().mFace;
@@ -345,10 +343,10 @@ void BaseRailBlock::onPlacing(ServerNetworkHandler &owner, const Vector3i &posit
 
         const int opposite = RedstoneFace::opposite(face);
         if (containsFace(affected, opposite)) {
-            orientation = connectPair(owner, position, *findByFace(affected, face), face,
+            orientation = connectPair(owner, level, position, *findByFace(affected, face), face,
                                       *findByFace(affected, opposite), opposite);
         } else {
-            orientation = connectSingle(owner, position, *findByFace(affected, face), face);
+            orientation = connectSingle(owner, level, position, *findByFace(affected, face), face);
         }
     }
 

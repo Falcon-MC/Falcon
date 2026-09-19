@@ -57,11 +57,11 @@ namespace {
         return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
     }
 
-    bool isChunkReady(ServerNetworkHandler &owner, const Vector3i &position) {
-        if (position.y < LevelChunk::MIN_Y || position.y > LevelChunk::MAX_Y)
+    bool isChunkReady(Level &level, const Vector3i &position) {
+        if (position.y < level.getMinY() || position.y > level.getMaxY())
             return false;
 
-        return owner.getLevel().isChunkResident(position.x >> 4, position.z >> 4);
+        return level.isChunkResident(position.x >> 4, position.z >> 4);
     }
 }
 
@@ -115,7 +115,7 @@ bool FallingBlockSystem::isTransparent(const BlockState &state) {
 }
 
 bool FallingBlockSystem::canFallInto(Level &level, const Vector3i &position) {
-    if (position.y < LevelChunk::MIN_Y)
+    if (position.y < level.getMinY())
         return false;
 
     const BlockState state = level.getBlockState(position.x, position.y, position.z);
@@ -154,12 +154,12 @@ bool FallingBlockSystem::isTouchingWater(Level &level, const Vector3i &position)
     return false;
 }
 
-void FallingBlockSystem::setBlockState(ServerNetworkHandler &owner, const Vector3i &position,
+void FallingBlockSystem::setBlockState(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                        const BlockState &state) {
-    if (!isChunkReady(owner, position))
+    if (!isChunkReady(level, position))
         return;
 
-    owner.getLevel().setBlockState(position.x, position.y, position.z, state);
+    level.setBlockState(position.x, position.y, position.z, state);
 
     UpdateBlockPacket update;
     update.mBlockPosition = position;
@@ -167,56 +167,56 @@ void FallingBlockSystem::setBlockState(ServerNetworkHandler &owner, const Vector
     update.mFlags = UpdateBlockPacket::Flag::All;
     update.mDataLayer = 0;
 
-    BlockActionHandler::broadcastToViewers(owner, centerOf(position), update);
+    BlockActionHandler::broadcastToViewers(owner, level, centerOf(position), update);
 }
 
-void FallingBlockSystem::spawnDestroyParticle(ServerNetworkHandler &owner, const Vector3i &position,
+void FallingBlockSystem::spawnDestroyParticle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                               const BlockState &state) {
     LevelEventPacket destroy;
     destroy.mEventId = LevelEventPacket::Event::ParticleDestroy;
     destroy.mPosition = centerOf(position);
     destroy.mData = BlockStateHasher::hash(state.mName, state.mStates);
 
-    BlockActionHandler::broadcastToViewers(owner, destroy.mPosition, destroy);
+    BlockActionHandler::broadcastToViewers(owner, level, destroy.mPosition, destroy);
 }
 
-void FallingBlockSystem::spawnFallingBlock(ServerNetworkHandler &owner, const Vector3i &position,
+void FallingBlockSystem::spawnFallingBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                            const BlockState &state) {
-    if (!isChunkReady(owner, position))
+    if (!isChunkReady(level, position))
         return;
 
-    setBlockState(owner, position, BlockState("minecraft:air"));
+    setBlockState(owner, level, position, BlockState("minecraft:air"));
 
     const Vector3f spawnPosition((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
 
-    FallingBlockActor *actor = owner.spawnFallingBlock(state, spawnPosition);
+    FallingBlockActor *actor = owner.spawnFallingBlock(level, state, spawnPosition);
     if (actor == nullptr)
         return;
 
     actor->setBreakOnLava(breaksOnLava(state.mName));
     actor->setBreakOnGround(breaksOnGround(state.mName));
 
-    RedstoneSystem::onBlockBroken(owner, position, state);
+    RedstoneSystem::onBlockBroken(owner, level, position, state);
 }
 
-void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, const Vector3i &position,
+void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                         const BlockState &state) {
-    if (!isChunkReady(owner, position))
+    if (!isChunkReady(level, position))
         return;
 
-    if (isConcretePowder(state.mName) && isTouchingWater(owner.getLevel(), position)) {
-        setBlockState(owner, position, BlockState(getConcreteFor(state.mName)));
+    if (isConcretePowder(state.mName) && isTouchingWater(level, position)) {
+        setBlockState(owner, level, position, BlockState(getConcreteFor(state.mName)));
         return;
     }
 
     const Vector3i below(position.x, position.y - 1, position.z);
-    if (!canFallInto(owner.getLevel(), below))
+    if (!canFallInto(level, below))
         return;
 
-    spawnFallingBlock(owner, position, state);
+    spawnFallingBlock(owner, level, position, state);
 }
 
-void FallingBlockSystem::onBlockPlaced(ServerNetworkHandler &owner, const Vector3i &position,
+void FallingBlockSystem::onBlockPlaced(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                        const BlockState &state) {
-    onNormalUpdate(owner, position, state);
+    onNormalUpdate(owner, level, position, state);
 }

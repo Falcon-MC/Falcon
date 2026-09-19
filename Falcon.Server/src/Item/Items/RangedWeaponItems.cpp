@@ -147,7 +147,7 @@ bool BowItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player, con
     if (data.mPickupCreativeOnly)
         data.mPickupItem = ItemStack::air();
 
-    owner.playLevelSound(LevelSoundEvent::BOW, player.getPosition(), "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::BOW, player.getPosition(), "minecraft:player");
 
     if (finiteResources) {
         if (!data.mPickupCreativeOnly)
@@ -202,7 +202,8 @@ bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
     player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
                                           player.getInventory().getSelectedSlot());
 
-    owner.playLevelSound(LevelSoundEvent::CROSSBOW_SHOOT, player.getPosition(), "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::CROSSBOW_SHOOT, player.getPosition(),
+                         "minecraft:player");
     return true;
 }
 
@@ -214,7 +215,8 @@ bool CrossbowItem::onStartUsing(ServerNetworkHandler &owner, ServerPlayer &playe
         return false;
 
     const bool quickCharge = ItemEnchantments::getLevel(item, EnchantmentIds::QUICK_CHARGE) > 0;
-    owner.playLevelSound(quickCharge ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_START
+    owner.playLevelSound(owner.getLevelFor(player),
+                         quickCharge ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_START
                                      : LevelSoundEvent::CROSSBOW_LOADING_START,
                          player.getPosition(), "minecraft:player");
     return true;
@@ -252,7 +254,8 @@ void CrossbowItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player
         owner.damagePlayerHeldItem(player, 2);
     }
 
-    owner.playLevelSound(quickCharge > 0 ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_END
+    owner.playLevelSound(owner.getLevelFor(player),
+                         quickCharge > 0 ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_END
                                          : LevelSoundEvent::CROSSBOW_LOADING_END,
                          player.getPosition(), "minecraft:player");
 }
@@ -270,7 +273,9 @@ TridentItem::TridentItem(const Item &base) : Item(base) {
 }
 
 bool TridentItem::applyRiptide(ServerNetworkHandler &owner, ServerPlayer &player, int32_t level) const {
-    if (!LiquidBlocksFetch::at(owner.getLevel(), player.getPosition()).water && !owner.getLevel().isRaining())
+    Level &world = owner.getLevelFor(player);
+    const bool raining = world.hasSkyLight() && owner.getLevel().isRaining();
+    if (!LiquidBlocksFetch::at(world, player.getPosition()).water && !raining)
         return false;
 
     const Vector3f rotation = player.getRotation();
@@ -305,7 +310,7 @@ bool TridentItem::applyRiptide(ServerNetworkHandler &owner, ServerPlayer &player
     const char *sound = level >= 3 ? LevelSoundEvent::TRIDENT_RIPTIDE_3
                                    : (level == 2 ? LevelSoundEvent::TRIDENT_RIPTIDE_2
                                                  : LevelSoundEvent::TRIDENT_RIPTIDE_1);
-    owner.playLevelSound(sound, player.getPosition(), "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), sound, player.getPosition(), "minecraft:player");
 
     if (hasFiniteResources(player))
         owner.damagePlayerHeldItem(player, 1);
@@ -346,7 +351,8 @@ bool TridentItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player,
     data.mPickupItem.mCount = 1;
     data.mFavoredSlot = player.getInventory().getSelectedSlot();
 
-    owner.playLevelSound(LevelSoundEvent::TRIDENT_THROW, player.getPosition(), "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::TRIDENT_THROW, player.getPosition(),
+                         "minecraft:player");
 
     if (hasFiniteResources(player)) {
         PlayerInventory &inventory = player.getInventory();

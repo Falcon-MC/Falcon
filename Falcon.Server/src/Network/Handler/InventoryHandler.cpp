@@ -48,16 +48,19 @@ namespace {
         if (!inserted && !removed)
             return;
 
+        Level &level = owner.getLevelFor(player);
         if (!succeeded) {
             if (inserted)
-                owner.playLevelSound(LevelSoundEvent::BUNDLE_INSERT_FAIL, player.getPosition(), "minecraft:player");
+                owner.playLevelSound(level, LevelSoundEvent::BUNDLE_INSERT_FAIL, player.getPosition(),
+                                     "minecraft:player");
             return;
         }
 
         if (inserted)
-            owner.playLevelSound(LevelSoundEvent::BUNDLE_INSERT, player.getPosition(), "minecraft:player");
+            owner.playLevelSound(level, LevelSoundEvent::BUNDLE_INSERT, player.getPosition(), "minecraft:player");
         else
-            owner.playLevelSound(LevelSoundEvent::BUNDLE_REMOVE_ONE, player.getPosition(), "minecraft:player");
+            owner.playLevelSound(level, LevelSoundEvent::BUNDLE_REMOVE_ONE, player.getPosition(),
+                                 "minecraft:player");
     }
 }
 
@@ -294,7 +297,7 @@ void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, Server
 
     PlayerEnchantOptionsPacket packet;
     if (!current.isAir())
-        packet.mOptions = EnchantmentHelper::getEnchantOptions(owner.getLevel(), manager.getContainerPosition(),
+        packet.mOptions = EnchantmentHelper::getEnchantOptions(owner.getLevelFor(player), manager.getContainerPosition(),
                                                                current, manager.getEnchantSeed());
 
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), packet, owner.getCodecContext());

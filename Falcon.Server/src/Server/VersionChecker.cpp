@@ -13,7 +13,7 @@
 namespace {
 
     const char *LATEST_RELEASE_URL =
-            "https://api.github.com/repos/xRookieFight/Falcon/releases/latest";
+            "https://api.github.com/repos/Falcon-MC/Falcon/releases/latest";
 
     std::vector<long long> parseVersion(const std::string &version) {
         std::vector<long long> parts;

@@ -1,5 +1,8 @@
 #include "Block/Blocks/BedBlock.h"
 
+#include "Actor/ActorCategory.h"
+#include "Actor/ActorSizeTable.h"
+#include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
 #include "Block/BlockIdentifier.h"
@@ -40,6 +43,30 @@ namespace {
                && position.y > (float) head.y - 5.5f && position.y < (float) head.y + 2.5f
                && position.z > minZ && position.z < maxZ;
     }
+
+    bool isMonsterNearby(ServerNetworkHandler &owner, Level &level, const Vector3i &head,
+                         const Vector3i &footOffset) {
+        const AxisAlignedBB area = AxisAlignedBB((float) head.x - 8.0f, (float) head.y - 6.5f, (float) head.z - 8.0f,
+                                                 (float) head.x + 9.0f, (float) head.y + 5.5f, (float) head.z + 9.0f)
+                .addCoord((float) footOffset.x, 0.0f, (float) footOffset.z);
+
+        for (const auto &entry: owner.getActors()) {
+            const ServerActor *actor = entry.second.get();
+            if (actor == nullptr || !actor->isAlive() || !ActorCategories::isPreventingSleep(*actor) ||
+                actor->getDimension() != level.getDimensionType())
+                continue;
+
+            const Vector3f position = actor->getPosition();
+            const ActorSize size = ActorSizeTable::getSize(actor->getIdentifier());
+            const float halfWidth = size.mWidth * 0.5f;
+            const AxisAlignedBB box(position.x - halfWidth, position.y, position.z - halfWidth,
+                                    position.x + halfWidth, position.y + size.mHeight, position.z + halfWidth);
+            if (box.intersectsWith(area))
+                return true;
+        }
+
+        return false;
+    }
 }
 
 bool BedBlock::matches(const std::string &identifier) {
@@ -59,12 +86,11 @@ int BedBlock::headFace(const BlockState &state) {
     }
 }
 
-void BedBlock::placeHeadPiece(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
-                              int playerFacing) {
+void BedBlock::placeHeadPiece(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state, int playerFacing) {
     if (!state.mStates.contains(HEAD_PIECE_BIT) || !RedstoneFace::isHorizontal(playerFacing))
         return;
 
-    Level &level = owner.getLevel();
     const Vector3i head = RedstoneFace::relative(position, playerFacing);
 
     const BlockState existing = level.getBlockState(head.x, head.y, head.z);
@@ -79,7 +105,7 @@ void BedBlock::placeHeadPiece(ServerNetworkHandler &owner, const Vector3i &posit
 
     const BlockState headState(state.mName, states);
     level.setBlockState(head.x, head.y, head.z, headState);
-    BlockActionHandler::broadcastBlockUpdate(owner, head, headState);
+    BlockActionHandler::broadcastBlockUpdate(owner, level, head, headState);
 }
 
 bool BedBlock::findHead(Level &level, const Vector3i &position, const BlockState &state, Vector3i &head) {
@@ -105,8 +131,7 @@ bool BedBlock::isValidAt(Level &level, const Vector3i &head) {
            && footState.mStates.getInt(DIRECTION, 0) == headState.mStates.getInt(DIRECTION, 0);
 }
 
-void BedBlock::setOccupied(ServerNetworkHandler &owner, const Vector3i &head, bool occupied) {
-    Level &level = owner.getLevel();
+void BedBlock::setOccupied(ServerNetworkHandler &owner, Level &level, const Vector3i &head, bool occupied) {
     const BlockState headState = level.getBlockState(head.x, head.y, head.z);
     if (!matches(headState.mName))
         return;
@@ -123,7 +148,7 @@ void BedBlock::setOccupied(ServerNetworkHandler &owner, const Vector3i &head, bo
         states.putByte(OCCUPIED_BIT, occupied ? 1 : 0);
         const BlockState updated(partState.mName, states);
         level.setBlockState(part.x, part.y, part.z, updated);
-        BlockActionHandler::broadcastBlockUpdate(owner, part, updated);
+        BlockActionHandler::broadcastBlockUpdate(owner, level, part, updated);
     }
 }
 
@@ -148,7 +173,7 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
             return true;
 
         level.setBlockState(position.x, position.y, position.z, BlockState("minecraft:air"));
-        BlockActionHandler::broadcastBlockUpdate(owner, position,
+        BlockActionHandler::broadcastBlockUpdate(owner, level, position,
                                                  level.getBlockState(position.x, position.y, position.z));
         breakOtherHalf(owner, level, position, state);
 
@@ -177,6 +202,11 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
         return true;
     }
 
+    if (player.getGameType() != (int32_t) GameType::Creative && isMonsterNearby(owner, level, head, footOffset)) {
+        player.sendTranslation("§7%tile.bed.notSafe", {});
+        return true;
+    }
+
     if (!owner.sleepOn(player, head))
         player.sendTranslation("§7%tile.bed.occupied", {});
 
@@ -199,5 +229,5 @@ void BedBlock::breakOtherHalf(ServerNetworkHandler &owner, Level &level, const V
 
     const BlockState air("minecraft:air");
     level.setBlockState(other.x, other.y, other.z, air);
-    BlockActionHandler::broadcastBlockUpdate(owner, other, level.getBlockState(other.x, other.y, other.z));
+    BlockActionHandler::broadcastBlockUpdate(owner, level, other, level.getBlockState(other.x, other.y, other.z));
 }

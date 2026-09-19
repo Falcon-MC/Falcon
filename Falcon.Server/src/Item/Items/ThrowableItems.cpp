@@ -35,7 +35,8 @@ bool ThrowableItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, con
     if (projectile == nullptr)
         return false;
 
-    owner.playLevelSound(LevelSoundEvent::THROW, player.getPosition(), "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::THROW, player.getPosition(),
+                         "minecraft:player");
 
     if (mCooldownTicks > 0)
         player.startItemCooldown(item, owner.getCurrentTick(), mCooldownTicks);
@@ -54,7 +55,8 @@ bool ThrownPotionItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, 
         return false;
 
     owner.setProjectilePotionData(projectile->getUniqueId(), item.mDamage);
-    owner.playLevelSound(LevelSoundEvent::THROW, player.getPosition(), "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::THROW, player.getPosition(),
+                         "minecraft:player");
 
     player.consumeOneHeldItem();
     return true;
@@ -105,7 +107,7 @@ bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
             break;
     }
 
-    if (owner.spawnActor(entityIdentifier, spawnPosition) == nullptr)
+    if (owner.spawnActor(owner.getLevelFor(player), entityIdentifier, spawnPosition) == nullptr)
         return false;
 
     player.consumeOneHeldItem();

@@ -15,7 +15,9 @@ class NetworkIdentifier;
 class PacketSender;
 class ServerPlayer;
 class ServerNetworkHandler;
+class BlockActorStore;
 class ChestBlockActor;
+class Level;
 class ContainerBlockActor;
 enum class FurnaceKind : uint8_t;
 
@@ -86,7 +88,7 @@ public:
 
     static void tickStoredFurnaces(ServerNetworkHandler &owner);
 
-    static void onFurnaceBroken(ServerNetworkHandler &owner, const Vector3i &position);
+    static void onFurnaceBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
     bool onClientOpenChest(const Vector3i &position);
 
@@ -155,6 +157,9 @@ private:
     void _sendOutputPacket(const ItemStack &item);
 
     void _storeFurnaceState(bool clearLocal);
+
+    /** Block actors of the level the player is in, where any container they open lives. */
+    BlockActorStore *_blockActors() const;
 
     ServerPlayer *mPlayer;
     PacketSender *mSender;

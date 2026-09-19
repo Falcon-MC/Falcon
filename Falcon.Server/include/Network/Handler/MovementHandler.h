@@ -2,6 +2,7 @@
 
 #include "Core/Math/Vector3f.h"
 
+class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
 class NetworkIdentifier;
@@ -16,7 +17,7 @@ public:
     static void handleMovement(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &feetPosition,
                                const Vector3f &rotation);
 
-    static bool checkGroundState(ServerNetworkHandler &owner, const Vector3f &feetPosition);
+    static bool checkGroundState(Level &level, const Vector3f &feetPosition);
 
     static void tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer &player);
 };

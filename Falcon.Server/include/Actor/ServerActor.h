@@ -52,6 +52,10 @@ public:
         return 0.0f;
     }
 
+    virtual bool isInvulnerable() const {
+        return false;
+    }
+
     virtual void fillSpawnMetadata(EntityDataMap &metadata) const { (void) metadata; }
 
     /**

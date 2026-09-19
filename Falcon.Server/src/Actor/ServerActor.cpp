@@ -93,7 +93,7 @@ void ServerActor::_tickPhysics(ServerNetworkHandler &owner) {
         std::fabs(motion.z) < MOTION_EPSILON)
         return;
 
-    Level &level = owner.getLevel();
+    Level &level = owner.getLevelFor(*this);
     const Vector3f position = getPosition();
     const int32_t footX = (int32_t) std::floor(position.x);
     const int32_t footZ = (int32_t) std::floor(position.z);
@@ -158,8 +158,8 @@ void ServerActor::tickSunlightBurn(ServerNetworkHandler &owner) {
     if (!burnsInSunlight(mIdentifier) || isOnFire() || hasEffect(MobEffectId::FireResistance))
         return;
 
-    Level &level = owner.getLevel();
-    if (level.isRaining() || level.getSkyLightSubtracted() >= DAYLIGHT_SUBTRACTED_THRESHOLD)
+    Level &level = owner.getLevelFor(*this);
+    if (!level.hasSkyLight() || level.isRaining() || level.getSkyLightSubtracted() >= DAYLIGHT_SUBTRACTED_THRESHOLD)
         return;
 
     const Vector3f position = getPosition();
@@ -201,7 +201,7 @@ void ServerActor::tickFire(ServerNetworkHandler &owner) {
 }
 
 bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source, int32_t lootingLevel) {
-    if (!isAlive() || amount < 0.0f)
+    if (!isAlive() || amount < 0.0f || isInvulnerable())
         return false;
 
     if (getNoDamageTicks() > 0 && amount <= getLastDamageAmount())
@@ -212,7 +212,7 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *
     setLastDamageAmount(amount);
 
     owner.broadcastActorEvent(*this, EntityEventType::HurtAnimation);
-    owner.playLevelSound(LevelSoundEvent::HIT, getPosition(), mIdentifier);
+    owner.playLevelSound(owner.getLevelFor(*this), LevelSoundEvent::HIT, getPosition(), mIdentifier);
 
     if (source != nullptr) {
         const Vector3f sourcePosition = source->getPosition();
@@ -230,12 +230,15 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *
                       ? ItemEnchantments::getLevel(source->getInventory().getItemInHand(), EnchantmentIds::LOOTING)
                       : 0;
         }
-        for (const MobDrop &drop: MobLootTable::getMobDrops(mIdentifier, isOnFire(), looting))
-            owner.spawnItemActor(drop.mItemIdentifier, drop.mCount, dropPosition);
+        if (owner.getLevel().getGameRules().getBool("domobloot")) {
+            Level &level = owner.getLevelFor(*this);
+            for (const MobDrop &drop: MobLootTable::getMobDrops(mIdentifier, isOnFire(), looting))
+                owner.spawnItemActor(level, drop.mItemIdentifier, drop.mCount, dropPosition);
 
-        const int experience = ExperienceValues::getMobDropExperience(mIdentifier);
-        if (experience > 0)
-            owner.spawnExperienceOrbs(dropPosition, experience);
+            const int experience = ExperienceValues::getMobDropExperience(mIdentifier);
+            if (experience > 0)
+                owner.spawnExperienceOrbs(level, dropPosition, experience);
+        }
 
         setDead(true);
         setMotion(Vector3f(0.0f, 0.0f, 0.0f));

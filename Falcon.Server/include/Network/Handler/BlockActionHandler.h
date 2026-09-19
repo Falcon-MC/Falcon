@@ -13,12 +13,10 @@ class BlockState;
 
 class BlockActionHandler {
 public:
-    static void broadcastToViewers(ServerNetworkHandler &owner, const Vector3f &position, const Packet &packet);
-
     static void broadcastToViewers(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
                                    const Packet &packet);
 
-    static void broadcastBlockUpdate(ServerNetworkHandler &owner, const Vector3i &position,
+    static void broadcastBlockUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                      const BlockState &state);
 
     static void breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
@@ -26,8 +24,8 @@ public:
     static void destroyBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                              const BlockState &brokenState, bool dropItems, const ItemStack &tool);
 
-    static void spawnBlockDrops(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &brokenState,
-                                const ItemStack &tool);
+    static void spawnBlockDrops(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                const BlockState &brokenState, const ItemStack &tool);
 
     static void startBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                    int32_t face);

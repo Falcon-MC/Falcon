@@ -1,6 +1,7 @@
 #include "Block/Actor/ChestBlockActor.h"
 
 #include "Block/BlockActorStore.h"
+#include "Level/Level.h"
 
 namespace {
     const char *TAG_PAIR_X = "pairx";
@@ -69,10 +70,10 @@ void ChestBlockActor::unpair() {
 }
 
 ChestBlockActor *ChestBlockActor::getPair() {
-    if (!mPaired)
+    if (!mPaired || mLevel == nullptr)
         return nullptr;
 
-    return BlockActorStore::getInstance().find<ChestBlockActor>(mPairPosition);
+    return mLevel->getBlockActors().find<ChestBlockActor>(mPairPosition);
 }
 
 void ChestBlockActor::addViewer() {
@@ -85,11 +86,10 @@ void ChestBlockActor::removeViewer() {
 }
 
 int ChestBlockActor::getViewerCount() const {
-    if (!mPaired)
+    if (!mPaired || mLevel == nullptr)
         return mViewers;
 
-    const ChestBlockActor *pair =
-            BlockActorStore::getInstance().find<ChestBlockActor>(mPairPosition);
+    const ChestBlockActor *pair = mLevel->getBlockActors().find<ChestBlockActor>(mPairPosition);
     return pair == nullptr ? mViewers : mViewers + pair->mViewers;
 }
 

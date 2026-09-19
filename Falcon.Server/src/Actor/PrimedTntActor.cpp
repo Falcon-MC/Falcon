@@ -24,6 +24,8 @@ namespace {
 PrimedTntActor::PrimedTntActor(uint64_t runtimeId, int32_t fuse)
         : ServerActor(runtimeId, IDENTIFIER), mFuse(fuse) {
     getFlags().set(ActorFlag::Ignited, true);
+    getFlags().set(ActorFlag::HasGravity, true);
+    getFlags().set(ActorFlag::HasCollision, true);
 }
 
 void PrimedTntActor::fillSpawnMetadata(EntityDataMap &metadata) const {
@@ -33,21 +35,37 @@ void PrimedTntActor::fillSpawnMetadata(EntityDataMap &metadata) const {
     flags.mLongValue = getFlags().getLowBits();
     metadata.mEntries.push_back(flags);
 
+    EntityDataEntry flags2;
+    flags2.mId = ActorFlags::FLAGS_2_DATA_ID;
+    flags2.mFormat = EntityDataFormat::Long;
+    flags2.mLongValue = getFlags().getHighBits();
+    metadata.mEntries.push_back(flags2);
+
+    metadata.mEntries.push_back(_fuseEntry());
+}
+
+EntityDataEntry PrimedTntActor::_fuseEntry() const {
     EntityDataEntry fuse;
     fuse.mId = ActorFlags::FUSE_LENGTH_DATA_ID;
     fuse.mFormat = EntityDataFormat::Int;
     fuse.mIntValue = mFuse;
-    metadata.mEntries.push_back(fuse);
+    return fuse;
 }
 
 void PrimedTntActor::tick(ServerNetworkHandler &owner) {
     if (mExpired)
         return;
 
-    Level &level = owner.getLevel();
+    Level &level = owner.getLevelFor(*this);
     Vector3f position = getPosition();
     if (!level.isChunkResident((int32_t) std::floor(position.x) >> 4, (int32_t) std::floor(position.z) >> 4))
         return;
+
+    if (mFuse % FUSE_SYNC_INTERVAL == 0) {
+        EntityDataMap metadata;
+        metadata.mEntries.push_back(_fuseEntry());
+        owner.sendActorMetadata(*this, metadata);
+    }
 
     Vector3f motion = getMotion();
     motion.y -= GRAVITY;
@@ -93,7 +111,7 @@ void PrimedTntActor::tick(ServerNetworkHandler &owner) {
         motion.z *= 0.7f;
     }
 
-    if (position.y < (float) LevelChunk::MIN_Y) {
+    if (position.y < (float) level.getMinY()) {
         mExpired = true;
         return;
     }
@@ -111,10 +129,13 @@ void PrimedTntActor::tick(ServerNetworkHandler &owner) {
 }
 
 void PrimedTntActor::_explode(ServerNetworkHandler &owner) {
+    if (!owner.getLevel().getGameRules().getBool("tntexplodes"))
+        return;
+
     const Vector3f position = getPosition();
     const Vector3f center(position.x, (float) ((double) position.y + EXPLOSION_Y_OFFSET), position.z);
 
-    Explosion explosion(owner, owner.getLevel(), center, EXPLOSION_SIZE, this, true);
+    Explosion explosion(owner, owner.getLevelFor(*this), center, EXPLOSION_SIZE, this, true);
     explosion.explode();
 }
 

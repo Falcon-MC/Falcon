@@ -91,7 +91,7 @@ void ServerNetworkHandler::damagePlayerHeldItem(ServerPlayer &player, int32_t am
     held.mDamage += applied;
     if (held.mDamage >= itemData->mMaxDurability) {
         inventory.setItemInHand(ItemStack::air());
-        playLevelSound(LevelSoundEvent::BREAK, player.getPosition(), "minecraft:player");
+        playLevelSound(getLevelFor(player), LevelSoundEvent::BREAK, player.getPosition(), "minecraft:player");
     } else {
         inventory.setItemInHand(std::move(held));
     }

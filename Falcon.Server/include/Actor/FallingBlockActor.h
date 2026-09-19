@@ -42,6 +42,10 @@ public:
         return BASE_OFFSET;
     }
 
+    bool isInvulnerable() const override {
+        return true;
+    }
+
     bool shouldSave() const override { return !mExpired; }
 
     void fillSpawnMetadata(EntityDataMap &metadata) const override;

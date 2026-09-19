@@ -62,8 +62,9 @@ bool TotemItem::consume(ServerNetworkHandler &owner, ServerPlayer &player) {
     }
 
     owner._broadcastEntityEvent(player, (uint8_t) EntityEventType::ConsumeTotem);
-    owner.spawnParticleEffect(TOTEM_PARTICLE, player.getPosition());
-    owner.playLevelSound(LevelSoundEvent::TOTEM, player.getPosition(), "minecraft:player");
+    Level &level = owner.getLevelFor(player);
+    owner.spawnParticleEffect(level, TOTEM_PARTICLE, player.getPosition());
+    owner.playLevelSound(level, LevelSoundEvent::TOTEM, player.getPosition(), "minecraft:player");
     owner._sendHealth(player);
     owner._sendEntityData(player);
 

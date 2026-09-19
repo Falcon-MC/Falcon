@@ -75,7 +75,8 @@ bool BundleItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const 
     inventory.setItem(selectedSlot, std::move(held));
 
     owner._throwItem(player, dropped);
-    owner.playLevelSound(LevelSoundEvent::BUNDLE_DROP_CONTENTS, player.getPosition(), "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::BUNDLE_DROP_CONTENTS, player.getPosition(),
+                         "minecraft:player");
 
     player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, selectedSlot);
     player.getInventoryManager().syncBundle(inventory.getItem(selectedSlot), bundleId, contents);

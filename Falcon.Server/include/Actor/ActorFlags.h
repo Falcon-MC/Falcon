@@ -13,6 +13,7 @@ enum class ActorFlag : int {
     Baby = 11,
     CanClimb = 19,
     CanWalk = 22,
+    Angry = 25,
     Gliding = 32,
     Breathing = 35,
     HasCollision = 48,

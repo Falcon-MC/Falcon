@@ -91,7 +91,7 @@ bool FireworkRocketItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player
                               std::cos(yaw) * std::cos(pitch) * ELYTRA_BOOST_SPEED));
     owner.sendActorMotion(player);
 
-    ServerActor *rocket = owner.spawnActor(FIREWORK_ACTOR, player.getPosition());
+    ServerActor *rocket = owner.spawnActor(owner.getLevelFor(player), FIREWORK_ACTOR, player.getPosition());
     if (rocket != nullptr) {
         rocket->setProjectile(true);
         rocket->setOwnerUniqueId((int64_t) player.getRuntimeId());
@@ -101,7 +101,8 @@ bool FireworkRocketItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player
         rocket->getProjectileData().mFireworkAttached = true;
     }
 
-    owner.playLevelSound(LevelSoundEvent::LAUNCH, player.getPosition(), "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::LAUNCH, player.getPosition(),
+                         "minecraft:player");
     player.consumeOneHeldItem();
     return true;
 }
@@ -141,7 +142,7 @@ bool FireworkRocketItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer 
             break;
     }
 
-    ServerActor *rocket = owner.spawnActor(FIREWORK_ACTOR, spawnPosition);
+    ServerActor *rocket = owner.spawnActor(owner.getLevelFor(player), FIREWORK_ACTOR, spawnPosition);
     if (rocket == nullptr)
         return false;
 
@@ -151,7 +152,7 @@ bool FireworkRocketItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer 
     rocket->getProjectileData().mFireworkData = buildFireworkData(item);
     owner.syncActorFirework(*rocket);
 
-    owner.playLevelSound(LevelSoundEvent::LAUNCH, spawnPosition);
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::LAUNCH, spawnPosition);
     player.consumeOneHeldItem();
     return true;
 }

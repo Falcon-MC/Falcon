@@ -7,6 +7,7 @@
 
 #include <string>
 
+class Level;
 class PacketCodecContext;
 
 class BlockActor {
@@ -35,10 +36,15 @@ public:
 
     void setPosition(const Vector3i &position) { mPosition = position; }
 
+    Level *getLevel() const noexcept { return mLevel; }
+
+    void setLevel(Level *level) { mLevel = level; }
+
     Tag saveWithPosition() const;
 
 protected:
     Vector3i mPosition;
+    Level *mLevel = nullptr;
 
 private:
     BlockState mState;

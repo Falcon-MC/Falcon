@@ -17,5 +17,6 @@ public:
 
     static bool canPlaceUpperHalf(Level &level, const Vector3i &position);
 
-    static void placeUpperHalf(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void placeUpperHalf(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                               const BlockState &state);
 };

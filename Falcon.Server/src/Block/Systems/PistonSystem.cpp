@@ -13,6 +13,7 @@
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
 #include <algorithm>
+#include <array>
 #include <unordered_set>
 
 namespace {
@@ -62,9 +63,9 @@ namespace {
         int mDirection;
     };
 
-    std::vector<PendingMove> gPendingMoves;
+    std::array<std::vector<PendingMove>, Dimension::DIMENSION_COUNT> gPendingMoves;
 
-    void broadcastArmData(ServerNetworkHandler &owner, const PistonArmBlockActor &arm) {
+    void broadcastArmData(ServerNetworkHandler &owner, Level &level, const PistonArmBlockActor &arm) {
         const Vector3i &position = arm.getPosition();
 
         BlockActorDataPacket packet;
@@ -72,7 +73,7 @@ namespace {
         packet.mData = arm.getSpawnCompound();
 
         const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-        BlockActionHandler::broadcastToViewers(owner, center, packet);
+        BlockActionHandler::broadcastToViewers(owner, level, center, packet);
     }
 
     bool contains(const std::unordered_set<std::string> &set, const std::string &value) {
@@ -114,8 +115,8 @@ namespace {
         return data != nullptr && !data->mSolid;
     }
 
-    BlockState stateAt(ServerNetworkHandler &owner, const Vector3i &position) {
-        return owner.getLevel().getBlockState(position.x, position.y, position.z);
+    BlockState stateAt(Level &level, const Vector3i &position) {
+        return level.getBlockState(position.x, position.y, position.z);
     }
 
     bool isAir(const BlockState &state) {
@@ -215,13 +216,13 @@ bool PistonSystem::canSticksBlock(const BlockState &state) {
     return state.mName == "minecraft:slime" || state.mName == "minecraft:honey_block";
 }
 
-bool PistonSystem::isExtended(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
+bool PistonSystem::isExtended(Level &level, const Vector3i &position, const BlockState &state) {
     const int face = getPistonFace(state);
-    const BlockState ahead = stateAt(owner, relative(position, face));
+    const BlockState ahead = stateAt(level, relative(position, face));
     return isArmCollision(ahead.mName) && getPistonFace(ahead) == face;
 }
 
-bool PistonSystem::isGettingPower(ServerNetworkHandler &owner, const Vector3i &position,
+bool PistonSystem::isGettingPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                   const BlockState &state) {
     const int face = getPistonFace(state);
 
@@ -229,46 +230,46 @@ bool PistonSystem::isGettingPower(ServerNetworkHandler &owner, const Vector3i &p
         if (side == face)
             continue;
 
-        if (RedstoneSystem::isSidePowered(owner, relative(position, side), side))
+        if (RedstoneSystem::isSidePowered(owner, level, relative(position, side), side))
             return true;
     }
 
     return false;
 }
 
-void PistonSystem::onRedstoneUpdate(ServerNetworkHandler &owner, const Vector3i &position,
+void PistonSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                     const BlockState &state) {
-    _checkState(owner, position, state, isGettingPower(owner, position, state));
+    _checkState(owner, level, position, state, isGettingPower(owner, level, position, state));
 }
 
-void PistonSystem::onBlockBroken(ServerNetworkHandler &owner, const Vector3i &position,
+void PistonSystem::onBlockBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state) {
     const int face = getPistonFace(state);
     const Vector3i armPosition = relative(position, face);
-    const BlockState arm = stateAt(owner, armPosition);
+    const BlockState arm = stateAt(level, armPosition);
 
     if (isArmCollision(arm.mName) && getPistonFace(arm) == face)
-        RedstoneSystem::setBlockState(owner,armPosition, BlockState(AIR));
+        RedstoneSystem::setBlockState(owner, level, armPosition, BlockState(AIR));
 }
 
-bool PistonSystem::_checkState(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
-                               bool powered) {
-    const PistonArmBlockActor *arm = BlockActorStore::getInstance().find<PistonArmBlockActor>(position);
+bool PistonSystem::_checkState(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                               const BlockState &state, bool powered) {
+    const PistonArmBlockActor *arm = level.getBlockActors().find<PistonArmBlockActor>(position);
     if (arm != nullptr && arm->isMoving())
         return false;
 
-    const bool extended = isExtended(owner, position, state);
+    const bool extended = isExtended(level, position, state);
 
     if (powered && !extended)
-        return _doMove(owner, position, state, true);
+        return _doMove(owner, level, position, state, true);
     if (!powered && extended)
-        return _doMove(owner, position, state, false);
+        return _doMove(owner, level, position, state, false);
 
     return false;
 }
 
-bool PistonSystem::_doMove(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
-                           bool extending) {
+bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                           const BlockState &state, bool extending) {
     const int face = getPistonFace(state);
     const bool sticky = isSticky(state.mName);
     const int moveDirection = extending ? face : RedstoneFace::opposite(face);
@@ -279,7 +280,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, const Vector3i &position
 
     if (extending || sticky) {
         const Vector3i origin = extending ? relative(position, face) : relative(position, face, 2);
-        const BlockState originState = stateAt(owner, origin);
+        const BlockState originState = stateAt(level, origin);
 
         if (!isAir(originState)) {
             const bool pushable = extending ? canBePushed(originState) : canBePulled(originState);
@@ -301,7 +302,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, const Vector3i &position
                     toMove.push_back(current);
 
                     const Vector3i next = relative(current, moveDirection);
-                    const BlockState nextState = stateAt(owner, next);
+                    const BlockState nextState = stateAt(level, next);
 
                     if (isAir(nextState) || (!extending && next == armPosition))
                         break;
@@ -325,50 +326,51 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, const Vector3i &position
 
     for (size_t index = toDestroy.size(); index > 0; --index) {
         const Vector3i &destroyed = toDestroy[index - 1];
-        RedstoneSystem::setBlockState(owner,destroyed, BlockState(AIR));
+        RedstoneSystem::setBlockState(owner, level, destroyed, BlockState(AIR));
     }
 
     std::vector<BlockState> moved;
     moved.reserve(toMove.size());
     for (const Vector3i &source: toMove)
-        moved.push_back(stateAt(owner, source));
+        moved.push_back(stateAt(level, source));
 
-    PistonArmBlockActor &arm = BlockActorStore::getInstance().getOrCreate<PistonArmBlockActor>(position);
+    PistonArmBlockActor &arm = level.getBlockActors().getOrCreate<PistonArmBlockActor>(position);
     arm.setSticky(sticky);
     arm.setFacing(face);
     arm.beginMove(extending, toMove);
 
     for (size_t index = toMove.size(); index > 0; --index)
-        RedstoneSystem::setBlockState(owner,toMove[index - 1], BlockState(AIR));
+        RedstoneSystem::setBlockState(owner, level, toMove[index - 1], BlockState(AIR));
 
-    gPendingMoves.push_back(PendingMove{position, moved, moveDirection});
-    broadcastArmData(owner, arm);
+    gPendingMoves[level.getDimensionId()].push_back(PendingMove{position, moved, moveDirection});
+    broadcastArmData(owner, level, arm);
 
     if (extending) {
         BlockState arm(sticky ? STICKY_PISTON_ARM_COLLISION : PISTON_ARM_COLLISION);
         arm.mStates = Tag::ofCompound();
         arm.mStates.putInt("facing_direction", getStoredFacing(state));
-        RedstoneSystem::setBlockState(owner,armPosition, arm);
-    } else if (isArmCollision(stateAt(owner, armPosition).mName)) {
-        RedstoneSystem::setBlockState(owner,armPosition, BlockState(AIR));
+        RedstoneSystem::setBlockState(owner, level, armPosition, arm);
+    } else if (isArmCollision(stateAt(level, armPosition).mName)) {
+        RedstoneSystem::setBlockState(owner, level, armPosition, BlockState(AIR));
     }
 
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    owner.playLevelSound(extending ? LevelSoundEvent::PISTON_OUT : LevelSoundEvent::PISTON_IN, center);
+    owner.playLevelSound(level, extending ? LevelSoundEvent::PISTON_OUT : LevelSoundEvent::PISTON_IN, center);
 
     (void) faceAxis;
     return true;
 }
 
-void PistonSystem::tick(ServerNetworkHandler &owner) {
-    if (gPendingMoves.empty())
+void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
+    std::vector<PendingMove> &pendingMoves = gPendingMoves[level.getDimensionId()];
+    if (pendingMoves.empty())
         return;
 
     std::vector<PendingMove> pending;
-    pending.swap(gPendingMoves);
+    pending.swap(pendingMoves);
 
     for (PendingMove &move: pending) {
-        PistonArmBlockActor *arm = BlockActorStore::getInstance().find<PistonArmBlockActor>(move.mPiston);
+        PistonArmBlockActor *arm = level.getBlockActors().find<PistonArmBlockActor>(move.mPiston);
         if (arm == nullptr)
             continue;
 
@@ -376,23 +378,23 @@ void PistonSystem::tick(ServerNetworkHandler &owner) {
 
         const bool done = arm->isExtending() ? arm->getProgress() >= 1.0f : arm->getProgress() <= 0.0f;
         if (!done) {
-            broadcastArmData(owner, *arm);
-            gPendingMoves.push_back(std::move(move));
+            broadcastArmData(owner, level, *arm);
+            pendingMoves.push_back(std::move(move));
             continue;
         }
 
         const std::vector<Vector3i> attached = arm->getAttachedBlocks();
         for (size_t index = 0; index < attached.size() && index < move.mMoved.size(); ++index)
-            RedstoneSystem::setBlockState(owner, relative(attached[index], move.mDirection),
+            RedstoneSystem::setBlockState(owner, level, relative(attached[index], move.mDirection),
                                           move.mMoved[index]);
 
         arm->finish();
-        broadcastArmData(owner, *arm);
+        broadcastArmData(owner, level, *arm);
 
         for (const Vector3i &source: attached) {
-            RedstoneSystem::updateAroundRedstone(owner, source);
-            RedstoneSystem::updateAroundRedstone(owner, relative(source, move.mDirection));
+            RedstoneSystem::updateAroundRedstone(owner, level, source);
+            RedstoneSystem::updateAroundRedstone(owner, level, relative(source, move.mDirection));
         }
-        RedstoneSystem::updateAroundRedstone(owner, relative(move.mPiston, arm->getFacing()));
+        RedstoneSystem::updateAroundRedstone(owner, level, relative(move.mPiston, arm->getFacing()));
     }
 }

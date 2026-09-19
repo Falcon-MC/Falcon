@@ -77,6 +77,8 @@ public:
 
     int getMaxThreads() const { return getInt("max-threads", 8); }
 
+    int getAutoSaveInterval() const { return getInt("autosave-interval", 6000); }
+
     std::string getLevelName() const { return getString("level-name", "Bedrock level"); }
 
     std::string getLevelSeed() const { return getString("level-seed"); }

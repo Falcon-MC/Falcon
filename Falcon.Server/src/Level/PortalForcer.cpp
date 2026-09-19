@@ -111,7 +111,7 @@ namespace {
         level.setBlockState(position.x, position.y, position.z, state);
 
         if (owner != nullptr)
-            BlockActionHandler::broadcastBlockUpdate(*owner, position, state);
+            BlockActionHandler::broadcastBlockUpdate(*owner, level, position, state);
     }
 
     int64_t packPosition(const Vector3i &position) {
@@ -274,7 +274,7 @@ bool PortalForcer::tryLightPortal(Level &level, const Vector3i &position, Server
         }
 
         if (owner != nullptr)
-            owner->playLevelSound(LevelSoundEvent::FIRE_IGNITE, centerOf(position));
+            owner->playLevelSound(level, LevelSoundEvent::FIRE_IGNITE, centerOf(position));
 
         return true;
     }
@@ -359,7 +359,7 @@ bool PortalForcer::tryLightPortal(Level &level, const Vector3i &position, Server
         }
 
         if (owner != nullptr)
-            owner->playLevelSound(LevelSoundEvent::FIRE_IGNITE, centerOf(position));
+            owner->playLevelSound(level, LevelSoundEvent::FIRE_IGNITE, centerOf(position));
 
         return true;
     }
@@ -666,7 +666,7 @@ bool PortalForcer::tryCompleteEndPortal(Level &level, const Vector3i &framePosit
     }
 
     if (owner != nullptr)
-        owner->playNamedSound("block.end_portal.spawn", centerOf(center), 1.0f, 1.0f);
+        owner->playNamedSound(level, "block.end_portal.spawn", centerOf(center), 1.0f, 1.0f);
 
     return true;
 }
@@ -698,7 +698,7 @@ bool PortalForcer::tryInsertEnderEye(ServerNetworkHandler &owner, ServerPlayer &
     const BlockState filled(state.mName, states);
     writeBlock(level, position, filled, &owner);
 
-    owner.playNamedSound("block.end_portal_frame.fill", centerOf(position), 1.0f, 1.0f);
+    owner.playNamedSound(level, "block.end_portal_frame.fill", centerOf(position), 1.0f, 1.0f);
 
     if (player.getGameType() != (int32_t) GameType::Creative) {
         ItemStack updated = inventory.getItemInHand();

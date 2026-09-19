@@ -13,6 +13,7 @@
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <map>
 #include <random>
@@ -27,9 +28,17 @@ namespace {
         int32_t z;
     };
 
-    int64_t gTick = 0;
-    std::unordered_map<int64_t, int64_t> gScheduled;
-    std::map<int64_t, std::vector<ScheduledPosition>> gBuckets;
+    struct FireSchedule {
+        int64_t mTick = 0;
+        std::unordered_map<int64_t, int64_t> mScheduled;
+        std::map<int64_t, std::vector<ScheduledPosition>> mBuckets;
+    };
+
+    std::array<FireSchedule, Dimension::DIMENSION_COUNT> gSchedules;
+
+    FireSchedule &scheduleOf(Level &level) {
+        return gSchedules[level.getDimensionId()];
+    }
 
     const char *UNBURNABLE_BLOCKS[] = {
             "minecraft:crimson_button",
@@ -86,18 +95,18 @@ namespace {
         return value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
     }
 
-    bool isChunkReady(ServerNetworkHandler &owner, const Vector3i &position) {
-        if (position.y < LevelChunk::MIN_Y || position.y > LevelChunk::MAX_Y)
+    bool isChunkReady(Level &level, const Vector3i &position) {
+        if (position.y < level.getMinY() || position.y > level.getMaxY())
             return false;
 
-        return owner.getLevel().isChunkResident(position.x >> 4, position.z >> 4);
+        return level.isChunkResident(position.x >> 4, position.z >> 4);
     }
 
-    BlockState stateAt(ServerNetworkHandler &owner, const Vector3i &position) {
-        if (!isChunkReady(owner, position))
+    BlockState stateAt(Level &level, const Vector3i &position) {
+        if (!isChunkReady(level, position))
             return BlockState("minecraft:air");
 
-        return owner.getLevel().getBlockState(position.x, position.y, position.z);
+        return level.getBlockState(position.x, position.y, position.z);
     }
 
     int stateInt(const BlockState &state, const std::string &key, int fallback) {
@@ -154,14 +163,14 @@ namespace {
         return level.getHeightAt(position.x, position.z) <= position.y;
     }
 
-    bool canNeighbourBurn(ServerNetworkHandler &owner, const Vector3i &position) {
+    bool canNeighbourBurn(Level &level, const Vector3i &position) {
         static const int OFFSETS[6][3] = {
                 {0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}
         };
 
         for (const auto &offset: OFFSETS) {
             const Vector3i side = relative(position, offset[0], offset[1], offset[2]);
-            if (FireSystem::getBurnChance(stateAt(owner, side).mName) > 0)
+            if (FireSystem::getBurnChance(stateAt(level, side).mName) > 0)
                 return true;
         }
 
@@ -172,27 +181,27 @@ namespace {
         return owner.getLevel().getGameRules().getBool("dofiretick");
     }
 
-    void extinguish(ServerNetworkHandler &owner, const Vector3i &position) {
-        const BlockState previous = stateAt(owner, position);
-        RedstoneSystem::setBlockState(owner, position, BlockState("minecraft:air"));
-        RedstoneSystem::onBlockBroken(owner, position, previous);
+    void extinguish(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+        const BlockState previous = stateAt(level, position);
+        RedstoneSystem::setBlockState(owner, level, position, BlockState("minecraft:air"));
+        RedstoneSystem::onBlockBroken(owner, level, position, previous);
     }
 
-    void setFire(ServerNetworkHandler &owner, const Vector3i &position, const std::string &identifier, int age) {
+    void setFire(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const std::string &identifier,
+                 int age) {
         Tag states = Tag::ofCompound();
         states.putInt("age", std::clamp(age, 0, FireSystem::MAX_AGE));
 
         const BlockState placed(identifier, states);
-        RedstoneSystem::setBlockState(owner, position, placed);
-        RedstoneSystem::onBlockPlaced(owner, position, placed);
+        RedstoneSystem::setBlockState(owner, level, position, placed);
+        RedstoneSystem::onBlockPlaced(owner, level, position, placed);
     }
 
-    bool checkRain(ServerNetworkHandler &owner, const Vector3i &position) {
-        Level &level = owner.getLevel();
-        if (!level.isRaining())
+    bool checkRain(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+        if (!level.hasSkyLight() || !level.isRaining())
             return false;
 
-        if (burnsForever(stateAt(owner, relative(position, 0, -1, 0)).mName))
+        if (burnsForever(stateAt(level, relative(position, 0, -1, 0)).mName))
             return false;
 
         if (!seesSky(level, position) && !seesSky(level, relative(position, 1, 0, 0))
@@ -200,42 +209,43 @@ namespace {
             && !seesSky(level, relative(position, 0, 0, -1)))
             return false;
 
-        extinguish(owner, position);
+        extinguish(owner, level, position);
         return true;
     }
 
-    int chanceOfNeighboursEncouragingFire(ServerNetworkHandler &owner, const Vector3i &position) {
-        if (stateAt(owner, position).mName != "minecraft:air")
+    int chanceOfNeighboursEncouragingFire(Level &level, const Vector3i &position) {
+        if (stateAt(level, position).mName != "minecraft:air")
             return 0;
 
         int chance = 0;
-        chance = std::max(chance, FireSystem::getBurnChance(stateAt(owner, relative(position, 1, 0, 0)).mName));
-        chance = std::max(chance, FireSystem::getBurnChance(stateAt(owner, relative(position, -1, 0, 0)).mName));
-        chance = std::max(chance, FireSystem::getBurnChance(stateAt(owner, relative(position, 0, -1, 0)).mName));
-        chance = std::max(chance, FireSystem::getBurnChance(stateAt(owner, relative(position, 0, 1, 0)).mName));
-        chance = std::max(chance, FireSystem::getBurnChance(stateAt(owner, relative(position, 0, 0, 1)).mName));
-        chance = std::max(chance, FireSystem::getBurnChance(stateAt(owner, relative(position, 0, 0, -1)).mName));
+        chance = std::max(chance, FireSystem::getBurnChance(stateAt(level, relative(position, 1, 0, 0)).mName));
+        chance = std::max(chance, FireSystem::getBurnChance(stateAt(level, relative(position, -1, 0, 0)).mName));
+        chance = std::max(chance, FireSystem::getBurnChance(stateAt(level, relative(position, 0, -1, 0)).mName));
+        chance = std::max(chance, FireSystem::getBurnChance(stateAt(level, relative(position, 0, 1, 0)).mName));
+        chance = std::max(chance, FireSystem::getBurnChance(stateAt(level, relative(position, 0, 0, 1)).mName));
+        chance = std::max(chance, FireSystem::getBurnChance(stateAt(level, relative(position, 0, 0, -1)).mName));
         return chance;
     }
 
-    void tryToCatchBlockOnFire(ServerNetworkHandler &owner, const Vector3i &position, int bound, int age) {
-        const BlockState state = stateAt(owner, position);
+    void tryToCatchBlockOnFire(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int bound,
+                               int age) {
+        const BlockState state = stateAt(level, position);
         const int burnAbility = FireSystem::getBurnAbility(state.mName);
 
         if (nextInt(bound) >= burnAbility)
             return;
 
         if (nextInt(age + 10) < 5) {
-            setFire(owner, position, "minecraft:fire", std::min(age + nextInt(5) / 4, FireSystem::MAX_AGE));
-            FireSystem::scheduleUpdate(owner, position, FireSystem::TICK_RATE);
+            setFire(owner, level, position, "minecraft:fire", std::min(age + nextInt(5) / 4, FireSystem::MAX_AGE));
+            FireSystem::scheduleUpdate(level, position, FireSystem::TICK_RATE);
             return;
         }
 
-        extinguish(owner, position);
+        extinguish(owner, level, position);
     }
 
-    void touchActor(ServerNetworkHandler &owner, ServerActor &actor) {
-        if (actor.isDead() || actor.isProjectile())
+    void touchActor(ServerNetworkHandler &owner, Level &level, ServerActor &actor) {
+        if (actor.isDead() || actor.isProjectile() || actor.getDimension() != level.getDimensionType())
             return;
 
         if (actor.hasEffect(MobEffectId::FireResistance))
@@ -245,7 +255,7 @@ namespace {
         const Vector3i block((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                              (int32_t) std::floor(position.z));
 
-        if (!FireSystem::matches(stateAt(owner, block).mName))
+        if (!FireSystem::matches(stateAt(level, block).mName))
             return;
 
         actor.hurt(owner, FireSystem::CONTACT_DAMAGE, nullptr);
@@ -256,8 +266,8 @@ namespace {
         }
     }
 
-    void touchPlayer(ServerNetworkHandler &owner, ServerPlayer &player) {
-        if (!player.isSpawned() || player.isDead())
+    void touchPlayer(ServerNetworkHandler &owner, Level &level, ServerPlayer &player) {
+        if (!player.isSpawned() || player.isDead() || player.getDimension() != level.getDimensionType())
             return;
 
         const int32_t gameType = player.getGameType();
@@ -271,7 +281,7 @@ namespace {
         const Vector3i block((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                              (int32_t) std::floor(position.z));
 
-        if (!FireSystem::matches(stateAt(owner, block).mName))
+        if (!FireSystem::matches(stateAt(level, block).mName))
             return;
 
         owner.applyDamage(player, FireSystem::CONTACT_DAMAGE, "death.attack.inFire", {player.getName()});
@@ -307,95 +317,98 @@ bool FireSystem::canBeIgnitedAgainst(const std::string &identifier) {
     return true;
 }
 
-bool FireSystem::canSurviveAt(ServerNetworkHandler &owner, const Vector3i &position) {
-    return isTopFacingSurfaceSolid(stateAt(owner, relative(position, 0, -1, 0)))
-           || canNeighbourBurn(owner, position);
+bool FireSystem::canSurviveAt(Level &level, const Vector3i &position) {
+    return isTopFacingSurfaceSolid(stateAt(level, relative(position, 0, -1, 0)))
+           || canNeighbourBurn(level, position);
 }
 
-bool FireSystem::ignite(ServerNetworkHandler &owner, const Vector3i &position, Level *portalLevel) {
-    if (!isChunkReady(owner, position))
+bool FireSystem::ignite(ServerNetworkHandler &owner, Level &level, const Vector3i &position, bool canLightPortal) {
+    if (!isChunkReady(level, position))
         return false;
 
-    if (stateAt(owner, position).mName != "minecraft:air")
+    if (stateAt(level, position).mName != "minecraft:air")
         return false;
 
     const Vector3i frameBase = relative(position, 0, -1, 0);
-    if (portalLevel != nullptr && stateAt(owner, frameBase).mName == "minecraft:obsidian"
-        && PortalForcer::tryLightPortal(*portalLevel, frameBase, &owner))
+    if (canLightPortal && stateAt(level, frameBase).mName == "minecraft:obsidian"
+        && PortalForcer::tryLightPortal(level, frameBase, &owner))
         return true;
 
-    if (!canSurviveAt(owner, position))
+    if (!canSurviveAt(level, position))
         return false;
 
-    const std::string below = stateAt(owner, relative(position, 0, -1, 0)).mName;
+    const std::string below = stateAt(level, relative(position, 0, -1, 0)).mName;
     const bool soul = below == "minecraft:soul_sand" || below == "minecraft:soul_soil";
 
-    setFire(owner, position, soul ? "minecraft:soul_fire" : "minecraft:fire", 0);
-    scheduleUpdate(owner, position, TICK_RATE + nextInt(MAX_EXTRA_DELAY));
+    setFire(owner, level, position, soul ? "minecraft:soul_fire" : "minecraft:fire", 0);
+    scheduleUpdate(level, position, TICK_RATE + nextInt(MAX_EXTRA_DELAY));
     return true;
 }
 
-void FireSystem::onNormalUpdate(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
+void FireSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                const BlockState &state) {
     if (!matches(state.mName))
         return;
 
-    const std::string below = stateAt(owner, relative(position, 0, -1, 0)).mName;
+    const std::string below = stateAt(level, relative(position, 0, -1, 0)).mName;
 
     if (state.mName == "minecraft:fire" && (below == "minecraft:soul_sand" || below == "minecraft:soul_soil")) {
-        setFire(owner, position, "minecraft:soul_fire", stateInt(state, "age", 0));
+        setFire(owner, level, position, "minecraft:soul_fire", stateInt(state, "age", 0));
         return;
     }
 
-    if (!canSurviveAt(owner, position)) {
-        extinguish(owner, position);
+    if (!canSurviveAt(level, position)) {
+        extinguish(owner, level, position);
         return;
     }
 
-    if (isFireTickEnabled(owner) && gScheduled.count(RedstoneSystem::packPosition(position)) == 0)
-        scheduleUpdate(owner, position, TICK_RATE);
+    if (isFireTickEnabled(owner) &&
+        scheduleOf(level).mScheduled.count(RedstoneSystem::packPosition(position)) == 0)
+        scheduleUpdate(level, position, TICK_RATE);
 
-    checkRain(owner, position);
+    checkRain(owner, level, position);
 }
 
-void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
+void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                   const BlockState &state) {
     if (!matches(state.mName) || !isFireTickEnabled(owner))
         return;
 
-    if (!canSurviveAt(owner, position)) {
-        extinguish(owner, position);
+    if (!canSurviveAt(level, position)) {
+        extinguish(owner, level, position);
         return;
     }
 
-    if (checkRain(owner, position))
+    if (checkRain(owner, level, position))
         return;
 
     const Vector3i below = relative(position, 0, -1, 0);
-    const BlockState belowState = stateAt(owner, below);
+    const BlockState belowState = stateAt(level, below);
     const bool forever = state.mName == "minecraft:soul_fire" || burnsForever(belowState.mName);
     const int age = stateInt(state, "age", 0);
 
     if (age < MAX_AGE)
-        setFire(owner, position, state.mName, std::min(age + nextInt(3), MAX_AGE));
+        setFire(owner, level, position, state.mName, std::min(age + nextInt(3), MAX_AGE));
 
-    scheduleUpdate(owner, position, TICK_RATE + nextInt(MAX_EXTRA_DELAY));
+    scheduleUpdate(level, position, TICK_RATE + nextInt(MAX_EXTRA_DELAY));
 
-    if (!forever && !canNeighbourBurn(owner, position)) {
+    if (!forever && !canNeighbourBurn(level, position)) {
         if (!isTopFacingSurfaceSolid(belowState) || age > SUPPORTED_FADE_AGE)
-            extinguish(owner, position);
+            extinguish(owner, level, position);
         return;
     }
 
     if (!forever && getBurnAbility(belowState.mName) == 0 && age == MAX_AGE && nextInt(4) == 0) {
-        extinguish(owner, position);
+        extinguish(owner, level, position);
         return;
     }
 
-    tryToCatchBlockOnFire(owner, relative(position, 1, 0, 0), NEIGHBOUR_BOUND_HORIZONTAL, age);
-    tryToCatchBlockOnFire(owner, relative(position, -1, 0, 0), NEIGHBOUR_BOUND_HORIZONTAL, age);
-    tryToCatchBlockOnFire(owner, below, NEIGHBOUR_BOUND_VERTICAL, age);
-    tryToCatchBlockOnFire(owner, relative(position, 0, 1, 0), NEIGHBOUR_BOUND_VERTICAL, age);
-    tryToCatchBlockOnFire(owner, relative(position, 0, 0, 1), NEIGHBOUR_BOUND_HORIZONTAL, age);
-    tryToCatchBlockOnFire(owner, relative(position, 0, 0, -1), NEIGHBOUR_BOUND_HORIZONTAL, age);
+    tryToCatchBlockOnFire(owner, level, relative(position, 1, 0, 0), NEIGHBOUR_BOUND_HORIZONTAL, age);
+    tryToCatchBlockOnFire(owner, level, relative(position, -1, 0, 0), NEIGHBOUR_BOUND_HORIZONTAL, age);
+    tryToCatchBlockOnFire(owner, level, below, NEIGHBOUR_BOUND_VERTICAL, age);
+    tryToCatchBlockOnFire(owner, level, relative(position, 0, 1, 0), NEIGHBOUR_BOUND_VERTICAL, age);
+    tryToCatchBlockOnFire(owner, level, relative(position, 0, 0, 1), NEIGHBOUR_BOUND_HORIZONTAL, age);
+    tryToCatchBlockOnFire(owner, level, relative(position, 0, 0, -1), NEIGHBOUR_BOUND_HORIZONTAL, age);
 
     const int difficulty = (int) owner.getProperties().getDifficulty();
 
@@ -410,7 +423,7 @@ void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, const Vector3i &
                     bound += (y - (position.y + 1)) * SPREAD_HEIGHT_PENALTY;
 
                 const Vector3i target(x, y, z);
-                const int chance = chanceOfNeighboursEncouragingFire(owner, target);
+                const int chance = chanceOfNeighboursEncouragingFire(level, target);
                 if (chance <= 0)
                     continue;
 
@@ -419,69 +432,69 @@ void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, const Vector3i &
                 if (threshold <= 0 || nextInt(bound) > threshold)
                     continue;
 
-                setFire(owner, target, "minecraft:fire", std::min(age + nextInt(5) / 4, MAX_AGE));
-                scheduleUpdate(owner, target, TICK_RATE);
+                setFire(owner, level, target, "minecraft:fire", std::min(age + nextInt(5) / 4, MAX_AGE));
+                scheduleUpdate(level, target, TICK_RATE);
             }
         }
     }
 }
 
-void FireSystem::scheduleUpdate(ServerNetworkHandler &owner, const Vector3i &position, int64_t delay) {
-    (void) owner;
-
+void FireSystem::scheduleUpdate(Level &level, const Vector3i &position, int64_t delay) {
     if (delay < 1)
         delay = 1;
 
+    FireSchedule &schedule = scheduleOf(level);
     const int64_t key = RedstoneSystem::packPosition(position);
-    const int64_t target = gTick + delay;
+    const int64_t target = schedule.mTick + delay;
 
-    const auto it = gScheduled.find(key);
-    if (it != gScheduled.end() && it->second <= target)
+    const auto it = schedule.mScheduled.find(key);
+    if (it != schedule.mScheduled.end() && it->second <= target)
         return;
 
-    gScheduled[key] = target;
+    schedule.mScheduled[key] = target;
 
     ScheduledPosition entry;
     entry.x = position.x;
     entry.y = position.y;
     entry.z = position.z;
-    gBuckets[target].push_back(entry);
+    schedule.mBuckets[target].push_back(entry);
 }
 
-void FireSystem::tick(ServerNetworkHandler &owner) {
-    ++gTick;
+void FireSystem::tick(ServerNetworkHandler &owner, Level &level) {
+    FireSchedule &schedule = scheduleOf(level);
+    ++schedule.mTick;
 
     std::vector<ScheduledPosition> due;
 
-    while (!gBuckets.empty()) {
-        const auto it = gBuckets.begin();
-        if (it->first > gTick)
+    while (!schedule.mBuckets.empty()) {
+        const auto it = schedule.mBuckets.begin();
+        if (it->first > schedule.mTick)
             break;
 
         for (const ScheduledPosition &entry: it->second)
             due.push_back(entry);
 
-        gBuckets.erase(it);
+        schedule.mBuckets.erase(it);
     }
 
     for (const ScheduledPosition &entry: due) {
         const Vector3i position(entry.x, entry.y, entry.z);
         const int64_t key = RedstoneSystem::packPosition(position);
 
-        const auto scheduledIt = gScheduled.find(key);
-        if (scheduledIt == gScheduled.end() || scheduledIt->second > gTick)
+        const auto scheduledIt = schedule.mScheduled.find(key);
+        if (scheduledIt == schedule.mScheduled.end() || scheduledIt->second > schedule.mTick)
             continue;
 
-        gScheduled.erase(scheduledIt);
-        onScheduledUpdate(owner, position, stateAt(owner, position));
+        schedule.mScheduled.erase(scheduledIt);
+        onScheduledUpdate(owner, level, position, stateAt(level, position));
     }
 
     for (auto &entry: owner.getPlayers())
-        touchPlayer(owner, entry.second);
+        touchPlayer(owner, level, entry.second);
 
     for (auto &entry: owner.getActors()) {
         ServerActor *actor = entry.second.get();
         if (actor != nullptr)
-            touchActor(owner, *actor);
+            touchActor(owner, level, *actor);
     }
 }

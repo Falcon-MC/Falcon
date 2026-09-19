@@ -70,9 +70,10 @@ namespace {
         const int x = (int) std::floor(position.x);
         const int y = (int) std::floor(position.y);
         const int z = (int) std::floor(position.z);
-        if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
+        Level &level = owner.getLevelFor(actor);
+        if (y < level.getMinY() || y > level.getMaxY())
             return false;
-        return isFireBlock(owner.getLevel().getBlockState(x, y, z).mName);
+        return isFireBlock(level.getBlockState(x, y, z).mName);
     }
 
     int freeSpaceFor(const PlayerInventory &inventory, const ItemStack &item) {
@@ -95,6 +96,9 @@ namespace {
     }
 
     void spawnItemActorTo(ServerNetworkHandler &owner, ServerPlayer &player, const ItemActor &actor) {
+        if (player.getDimension() != actor.getDimension())
+            return;
+
         AddItemActorPacket add;
     add.mUniqueActorId = actor.getUniqueId();
     add.mRuntimeActorId = actor.getRuntimeId();
@@ -135,7 +139,7 @@ namespace {
         move.mForceMove = false;
 
         for (auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned())
+            if (entry.second.isSpawned() && entry.second.getDimension() == actor.getDimension())
                 owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), move, owner.getCodecContext());
         }
     }
@@ -145,7 +149,7 @@ namespace {
     remove.mUniqueActorId = actor.getUniqueId();
 
         for (auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned())
+            if (entry.second.isSpawned() && entry.second.getDimension() == actor.getDimension())
                 owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), remove, owner.getCodecContext());
         }
     }
@@ -153,7 +157,7 @@ namespace {
     bool hasSupportBelow(ServerNetworkHandler &owner, const ItemActor &actor) {
         const Vector3f &position = actor.getPosition();
 
-        return owner.getLevel().isSolidAt((int32_t) std::floor(position.x),
+        return owner.getLevelFor(actor).isSolidAt((int32_t) std::floor(position.x),
                                           (int32_t) std::floor(position.y - ITEM_GROUND_PROBE_DEPTH),
                                           (int32_t) std::floor(position.z));
     }
@@ -171,7 +175,7 @@ namespace {
 
         motion.y -= ITEM_GRAVITY;
 
-        Level &level = owner.getLevel();
+        Level &level = owner.getLevelFor(actor);
         Vector3f next = position;
 
         const int32_t currentY = (int32_t) std::floor(position.y);
@@ -233,6 +237,9 @@ namespace {
             if (player.getGameType() == (int32_t) GameType::Spectator)
                 continue;
 
+            if (player.getDimension() != actor.getDimension())
+                continue;
+
             const Vector3f playerPosition = player.getPosition();
             const float deltaX = playerPosition.x - itemPosition.x;
             const float deltaY = playerPosition.y + 1.0f - itemPosition.y;
@@ -262,7 +269,7 @@ namespace {
     take.mRuntimeActorId = player.getRuntimeId();
 
             for (auto &viewer: owner.getPlayers()) {
-                if (viewer.second.isSpawned())
+                if (viewer.second.isSpawned() && viewer.second.getDimension() == actor.getDimension())
                     owner.getNetworkHandler().send(viewer.second.getNetworkIdentifier(), take, owner.getCodecContext());
             }
 
@@ -275,12 +282,13 @@ namespace {
     }
 }
 
-ItemActor *ItemActorHandler::dropItem(ServerNetworkHandler &owner, const Vector3f &position, const ItemStack &item,
-                                      const Vector3f &motion, int pickupDelay) {
+ItemActor *ItemActorHandler::dropItem(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
+                                      const ItemStack &item, const Vector3f &motion, int pickupDelay) {
     if (item.isAir() || item.mCount <= 0)
         return nullptr;
 
     std::unique_ptr<ItemActor> actor(new ItemActor(owner.allocateRuntimeId(), item));
+    actor->setDimension(level.getDimensionType());
     actor->getItem().mUsingNetId = false;
     actor->getItem().mNetId = 0;
     actor->setPosition(position);

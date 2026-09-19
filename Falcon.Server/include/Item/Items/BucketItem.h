@@ -7,6 +7,7 @@
 
 class ItemStack;
 class ItemUseTransaction;
+class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -38,14 +39,14 @@ private:
     static bool applyResult(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &heldItem,
                             const char *resultIdentifier);
 
-    static void sendBlockState(ServerNetworkHandler &owner, const Vector3i &position);
+    static void sendBlockState(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
-    static void sendBlockUpdate(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
-                                uint32_t layer = 0);
+    static void sendBlockUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                const BlockState &state, uint32_t layer = 0);
 
-    static bool isWaterloggable(ServerNetworkHandler &owner, const Vector3i &position);
+    static bool isWaterloggable(Level &level, const Vector3i &position);
 
-    static void sendSound(ServerNetworkHandler &owner, const Vector3i &position, const char *sound);
+    static void sendSound(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const char *sound);
 
     static void sendArmSwing(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 };

@@ -9,6 +9,7 @@
 #include <string>
 #include <unordered_set>
 
+class Level;
 class ServerNetworkHandler;
 
 enum class RedstoneUpdateType {
@@ -54,65 +55,74 @@ public:
 
     static bool isPowerSource(const BlockState &state);
 
-    static int getWeakPower(ServerNetworkHandler &owner, const Vector3i &position, int face);
+    static int getWeakPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face);
 
-    static int getStrongPower(ServerNetworkHandler &owner, const Vector3i &position, int face);
+    static int getStrongPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face);
 
-    static int getStrongPowerAround(ServerNetworkHandler &owner, const Vector3i &position);
+    static int getStrongPowerAround(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
-    static int getRedstonePower(ServerNetworkHandler &owner, const Vector3i &position, int face);
+    static int getRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face);
 
-    static bool isSidePowered(ServerNetworkHandler &owner, const Vector3i &position, int face);
+    static bool isSidePowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face);
 
-    static bool isBlockPowered(ServerNetworkHandler &owner, const Vector3i &position);
+    static bool isBlockPowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
-    static int isBlockIndirectlyGettingPowered(ServerNetworkHandler &owner, const Vector3i &position);
+    static int isBlockIndirectlyGettingPowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
-    static bool isGettingPower(ServerNetworkHandler &owner, const Vector3i &position);
+    static bool isGettingPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
-    static void updateAroundRedstone(ServerNetworkHandler &owner, const Vector3i &position,
+    static void updateAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                      int ignoredFace = RedstoneFace::NONE);
 
-    static void updateAllAroundRedstone(ServerNetworkHandler &owner, const Vector3i &position,
+    static void updateAllAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                         int ignoredFace = RedstoneFace::NONE);
 
-    static void updateAroundNormal(ServerNetworkHandler &owner, const Vector3i &position);
+    static void updateAroundNormal(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
-    static void updateComparatorOutputLevel(ServerNetworkHandler &owner, const Vector3i &position, bool observer);
+    static void updateComparatorOutputLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                            bool observer);
 
-    static void onUpdate(ServerNetworkHandler &owner, const Vector3i &position, RedstoneUpdateType type);
+    static void onUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                         RedstoneUpdateType type);
 
-    static void scheduleUpdate(ServerNetworkHandler &owner, const Vector3i &position, int64_t delay);
+    static void scheduleUpdate(Level &level, const Vector3i &position, int64_t delay);
 
-    static bool isUpdateScheduled(const Vector3i &position);
+    static bool isUpdateScheduled(Level &level, const Vector3i &position);
 
-    static void cancelScheduledUpdate(const Vector3i &position);
+    static void cancelScheduledUpdate(Level &level, const Vector3i &position);
 
-    static void setBlockState(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void setBlockState(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state);
 
-    static void onBlockPlaced(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void onBlockPlaced(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state);
 
-    static void onBlockBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &previous);
+    static void onBlockBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &previous);
 
-    static void onLeverActivated(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void onLeverActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state);
 
-    static void onButtonActivated(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void onButtonActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                  const BlockState &state);
 
-    static void onRepeaterActivated(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void onRepeaterActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                    const BlockState &state);
 
-    static void onComparatorActivated(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void onComparatorActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                      const BlockState &state);
 
-    static int getComparatorOutput(const Vector3i &position);
+    static int getComparatorOutput(Level &level, const Vector3i &position);
 
-    static void setComparatorOutput(const Vector3i &position, int output);
+    static void setComparatorOutput(Level &level, const Vector3i &position, int output);
 
-    static void queueRedstoneNotification(const Vector3i &position);
+    static void queueRedstoneNotification(Level &level, const Vector3i &position);
 
-    static void tick(ServerNetworkHandler &owner);
+    static void tick(ServerNetworkHandler &owner, Level &level);
 
     static size_t getScheduledCount();
 
 private:
-    static void _touchPressurePlate(ServerNetworkHandler &owner, const Vector3f &feet,
+    static void _touchPressurePlate(ServerNetworkHandler &owner, Level &level, const Vector3f &feet,
                                     std::unordered_set<int64_t> &visited);
 };

@@ -154,10 +154,6 @@ public:
 
     ChunkStreamState &getChunkStreamState() { return mChunkStreamState; }
 
-    DimensionType getDimension() const { return mDimension; }
-
-    void setDimension(DimensionType dimension) { mDimension = dimension; }
-
     bool isAwaitingDimensionAck() const { return mAwaitingDimensionAck; }
 
     void setAwaitingDimensionAck(bool awaiting) { mAwaitingDimensionAck = awaiting; }
@@ -363,7 +359,6 @@ private:
     int64_t mItemUseStartTick = 0;
     int32_t mSpinAttackTicks = 0;
     ChunkStreamState mChunkStreamState;
-    DimensionType mDimension = DimensionType::Overworld;
     bool mAwaitingDimensionAck = false;
     int32_t mPortalCooldown = 0;
     bool mSleeping = false;

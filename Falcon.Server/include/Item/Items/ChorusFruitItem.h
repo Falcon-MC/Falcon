@@ -3,6 +3,7 @@
 #include "Core/Math/Vector3f.h"
 
 class ItemStack;
+class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -15,9 +16,9 @@ public:
     static bool onEaten(ServerNetworkHandler &owner, ServerPlayer &player);
 
 private:
-    static bool isSolid(ServerNetworkHandler &owner, int x, int y, int z);
+    static bool isSolid(Level &level, int x, int y, int z);
 
-    static bool isLiquid(ServerNetworkHandler &owner, int x, int y, int z);
+    static bool isLiquid(Level &level, int x, int y, int z);
 
     static bool findTeleportPosition(ServerNetworkHandler &owner, ServerPlayer &player, Vector3f &destination);
 

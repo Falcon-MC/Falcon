@@ -24,7 +24,7 @@ CommandBlockContainerManagerModel::CommandBlockContainerManagerModel()
 
 bool CommandBlockContainerManagerModel::openWindow(ServerNetworkHandler &owner, ServerPlayer &player,
                                                    const Vector3i &position) {
-    CommandBlockActor &actor = CommandBlockSystem::getOrCreate(owner, position);
+    CommandBlockActor &actor = CommandBlockSystem::getOrCreate(owner.getLevelFor(player), position);
 
     BlockActorDataPacket data;
     data.mBlockPosition = actor.getPosition();

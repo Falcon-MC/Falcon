@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Block/BlockActorStore.h"
 #include "Block/Systems/LiquidPhysicsSystem.h"
 #include "Core/Math/AxisAlignedBB.h"
 #include "Core/Math/Vector3f.h"
@@ -99,6 +100,10 @@ public:
 
     void addParticle(const Particle &particle);
 
+    BlockActorStore &getBlockActors() { return mBlockActors; }
+
+    const BlockActorStore &getBlockActors() const { return mBlockActors; }
+
     GameRules &getGameRules() { return mGameRules; }
 
     const GameRules &getGameRules() const { return mGameRules; }
@@ -106,6 +111,8 @@ public:
     void initializeGameRules();
 
     void saveGameRules();
+
+    void saveLevelDat();
 
     bool canRainAt(int32_t x, int32_t z);
 
@@ -289,6 +296,7 @@ private:
     int32_t mThunderTime = 0;
     int32_t mSkyLightSubtracted = 0;
     GameRules mGameRules;
+    BlockActorStore mBlockActors{*this};
     PacketBroadcaster mPacketBroadcaster;
     std::unordered_set<int64_t> mBlockLightQueue;
 };

@@ -4,6 +4,7 @@
 #include "Block/Components/PlacementOrientation.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Level.h"
+#include "Network/Handler/ServerNetworkHandler.h"
 
 bool RedstoneDiodeBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const
 {
@@ -21,9 +22,7 @@ bool RedstoneRepeaterBlock::matches(const std::string &identifier)
 bool RedstoneRepeaterBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
                                        const Vector3i &position, const BlockState &state) const
 {
-    (void) player;
-
-    RedstoneSystem::onRepeaterActivated(owner, position, state);
+    RedstoneSystem::onRepeaterActivated(owner, owner.getLevelFor(player), position, state);
     return true;
 }
 
@@ -35,8 +34,6 @@ bool RedstoneComparatorBlock::matches(const std::string &identifier)
 bool RedstoneComparatorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
                                          const Vector3i &position, const BlockState &state) const
 {
-    (void) player;
-
-    RedstoneSystem::onComparatorActivated(owner, position, state);
+    RedstoneSystem::onComparatorActivated(owner, owner.getLevelFor(player), position, state);
     return true;
 }

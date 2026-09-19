@@ -121,7 +121,8 @@ bool BucketItem::applyResult(ServerNetworkHandler &owner, ServerPlayer &player, 
         if (remaining > 0) {
             ItemStack overflow = result;
             overflow.mCount = remaining;
-            owner.dropItem(player.getPosition(), overflow, Vector3f(), ItemActor::DEFAULT_PICKUP_DELAY);
+            owner.dropItem(owner.getLevelFor(player), player.getPosition(), overflow, Vector3f(),
+                           ItemActor::DEFAULT_PICKUP_DELAY);
         }
     } else {
         inventory.setItemInHand(result);
@@ -133,30 +134,30 @@ bool BucketItem::applyResult(ServerNetworkHandler &owner, ServerPlayer &player, 
     return true;
 }
 
-void BucketItem::sendBlockState(ServerNetworkHandler &owner, const Vector3i &position) {
-    if (position.y < LevelChunk::MIN_Y || position.y > LevelChunk::MAX_Y)
+void BucketItem::sendBlockState(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+    if (position.y < level.getMinY() || position.y > level.getMaxY())
         return;
 
-    sendBlockUpdate(owner, position, owner.getLevel().getBlockState(position.x, position.y, position.z));
+    sendBlockUpdate(owner, level, position, level.getBlockState(position.x, position.y, position.z));
 }
 
-void BucketItem::sendBlockUpdate(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
-                                 uint32_t layer) {
+void BucketItem::sendBlockUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state, uint32_t layer) {
     UpdateBlockPacket update;
     update.mBlockPosition = position;
     update.mRuntimeId = (uint32_t) BlockStateHasher::hash(state.mName, state.mStates);
     update.mFlags = UpdateBlockPacket::Flag::All;
     update.mDataLayer = layer;
-    BlockActionHandler::broadcastToViewers(owner,
+    BlockActionHandler::broadcastToViewers(owner, level,
                                            Vector3f((float) position.x + 0.5f,
                                                     (float) position.y + 0.5f,
                                                     (float) position.z + 0.5f),
                                            update);
 }
 
-void BucketItem::sendSound(ServerNetworkHandler &owner, const Vector3i &position, const char *sound) {
+void BucketItem::sendSound(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const char *sound) {
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    owner.playLevelSound(sound, center, "");
+    owner.playLevelSound(level, sound, center, "");
 }
 
 void BucketItem::sendArmSwing(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
@@ -165,18 +166,17 @@ void BucketItem::sendArmSwing(ServerNetworkHandler &owner, ServerPlayer &player,
     swing.mEventId = (uint8_t) EntityEventType::ArmSwing;
     swing.mEventData = 0;
     swing.mHasFirePosition = false;
-    BlockActionHandler::broadcastToViewers(owner,
+    BlockActionHandler::broadcastToViewers(owner, owner.getLevelFor(player),
                                            Vector3f((float) position.x + 0.5f,
                                                     (float) position.y + 0.5f,
                                                     (float) position.z + 0.5f),
                                            swing);
 }
 
-bool BucketItem::isWaterloggable(ServerNetworkHandler &owner, const Vector3i &position) {
-    if (position.y < LevelChunk::MIN_Y || position.y > LevelChunk::MAX_Y)
+bool BucketItem::isWaterloggable(Level &level, const Vector3i &position) {
+    if (position.y < level.getMinY() || position.y > level.getMaxY())
         return false;
 
-    Level &level = owner.getLevel();
     const BlockState state = level.getBlockState(position.x, position.y, position.z);
     return LiquidPhysicsSystem::getWaterloggingLevel(state) > 0;
 }
@@ -187,7 +187,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
     if (content == Content::None)
         return false;
 
-    Level &level = owner.getLevel();
+    Level &level = owner.getLevelFor(player);
     const Vector3i clickedPosition = transaction.mBlockPosition;
     const BlockState clickedState = level.getBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z);
     const LiquidBlock clickedLiquid(clickedState);
@@ -196,7 +196,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
         if (clickedState.mName == "minecraft:cauldron") {
             const CauldronBlock cauldron(clickedState);
             if (!cauldron.isFull() || cauldron.getLiquid() == CauldronBlock::Liquid::Empty) {
-                sendBlockState(owner, clickedPosition);
+                sendBlockState(owner, level, clickedPosition);
                 return false;
             }
 
@@ -207,11 +207,11 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
             sendArmSwing(owner, player, clickedPosition);
             level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z,
                                 cauldron.withFillLevel(cauldron.getLiquid(), 0));
-            sendBlockState(owner, clickedPosition);
+            sendBlockState(owner, level, clickedPosition);
             const char *sound = cauldronContent == Content::Water
                                 ? WaterBlock(clickedState).getBucketFillSound()
                                 : LavaBlock(clickedState).getBucketFillSound();
-            sendSound(owner, clickedPosition, sound);
+            sendSound(owner, level, clickedPosition, sound);
             applyResult(owner, player, heldItem, filledIdentifier);
             return true;
         }
@@ -219,8 +219,8 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
         if (clickedState.mName == "minecraft:powder_snow") {
             sendArmSwing(owner, player, clickedPosition);
             level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z, BlockState("minecraft:air"));
-            sendBlockState(owner, clickedPosition);
-            sendSound(owner, clickedPosition, "bucket_fill_powder_snow");
+            sendBlockState(owner, level, clickedPosition);
+            sendSound(owner, level, clickedPosition, "bucket_fill_powder_snow");
             applyResult(owner, player, heldItem, "minecraft:powder_snow_bucket");
             return true;
         }
@@ -231,14 +231,14 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
         if (!clickedLiquid.isLiquid() && overlayLiquid.isWater() && overlayLiquid.isSource()) {
             sendArmSwing(owner, player, clickedPosition);
             level.setBlockStateAtLayer(clickedPosition.x, clickedPosition.y, clickedPosition.z, 1, BlockState());
-            sendBlockUpdate(owner, clickedPosition, BlockState(), 1);
-            sendSound(owner, clickedPosition, WaterBlock(clickedOverlay).getBucketFillSound());
+            sendBlockUpdate(owner, level, clickedPosition, BlockState(), 1);
+            sendSound(owner, level, clickedPosition, WaterBlock(clickedOverlay).getBucketFillSound());
             applyResult(owner, player, heldItem, getFilledIdentifier(Content::Water));
             return true;
         }
 
         if (!clickedLiquid.isSource() || (!clickedLiquid.isWater() && !clickedLiquid.isLava())) {
-            sendBlockState(owner, clickedPosition);
+            sendBlockState(owner, level, clickedPosition);
             return false;
         }
 
@@ -249,19 +249,19 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
 
         sendArmSwing(owner, player, clickedPosition);
         level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z, BlockState("minecraft:air"));
-        sendBlockState(owner, clickedPosition);
+        sendBlockState(owner, level, clickedPosition);
         const LiquidBlock &source = clickedLiquid;
         const char *sound = filledContent == Content::Water
                             ? WaterBlock(source).getBucketFillSound()
                             : LavaBlock(source).getBucketFillSound();
-        sendSound(owner, clickedPosition, sound);
+        sendSound(owner, level, clickedPosition, sound);
         applyResult(owner, player, heldItem, filledIdentifier);
         return true;
     }
 
     if (clickedState.mName == "minecraft:cauldron") {
         if (content == Content::PowderSnow) {
-            sendBlockState(owner, clickedPosition);
+            sendBlockState(owner, level, clickedPosition);
             return false;
         }
         const CauldronBlock cauldron(clickedState);
@@ -269,18 +269,18 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
                                             ? CauldronBlock::Liquid::Lava
                                             : CauldronBlock::Liquid::Water;
         if (!cauldron.canFill(liquid)) {
-            sendBlockState(owner, clickedPosition);
+            sendBlockState(owner, level, clickedPosition);
             return false;
         }
 
         sendArmSwing(owner, player, clickedPosition);
         const BlockState filledCauldron = cauldron.withFillLevel(liquid, 6);
         level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z, filledCauldron);
-        sendBlockUpdate(owner, clickedPosition, filledCauldron);
+        sendBlockUpdate(owner, level, clickedPosition, filledCauldron);
         const char *sound = content == Content::Water
                             ? WaterBlock(filledCauldron).getBucketEmptySound()
                             : LavaBlock(filledCauldron).getBucketEmptySound();
-        sendSound(owner, clickedPosition, sound);
+        sendSound(owner, level, clickedPosition, sound);
         applyResult(owner, player, heldItem, "minecraft:bucket");
         return true;
     }
@@ -290,45 +290,45 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
         const Vector3i adjacent(clickedPosition.x + BLOCK_FACE_OFFSETS[face][0],
                                 clickedPosition.y + BLOCK_FACE_OFFSETS[face][1],
                                 clickedPosition.z + BLOCK_FACE_OFFSETS[face][2]);
-        const Vector3i waterlogged = isWaterloggable(owner, clickedPosition) ? clickedPosition : adjacent;
+        const Vector3i waterlogged = isWaterloggable(level, clickedPosition) ? clickedPosition : adjacent;
 
-        if (isWaterloggable(owner, waterlogged)) {
+        if (isWaterloggable(level, waterlogged)) {
             const BlockState overlay = level.getBlockStateAtLayer(waterlogged.x, waterlogged.y, waterlogged.z, 1);
             if (LiquidBlock(overlay).isLiquid()) {
-                sendBlockUpdate(owner, waterlogged, overlay, 1);
+                sendBlockUpdate(owner, level, waterlogged, overlay, 1);
                 return false;
             }
 
             sendArmSwing(owner, player, clickedPosition);
             const BlockState water = makeLiquidState(content);
             level.setBlockStateAtLayer(waterlogged.x, waterlogged.y, waterlogged.z, 1, water);
-            sendBlockUpdate(owner, waterlogged, water, 1);
-            sendSound(owner, waterlogged, WaterBlock(water).getBucketEmptySound());
+            sendBlockUpdate(owner, level, waterlogged, water, 1);
+            sendSound(owner, level, waterlogged, WaterBlock(water).getBucketEmptySound());
             applyResult(owner, player, heldItem, "minecraft:bucket");
             return true;
         }
     }
 
     const Vector3i target = getPlacementPosition(transaction, clickedState);
-    if (target.y < LevelChunk::MIN_Y || target.y > LevelChunk::MAX_Y) {
-        sendBlockState(owner, clickedPosition);
+    if (target.y < level.getMinY() || target.y > level.getMaxY()) {
+        sendBlockState(owner, level, clickedPosition);
         return false;
     }
 
     const BlockState targetState = level.getBlockState(target.x, target.y, target.z);
     if (!isReplaceable(targetState)) {
-        sendBlockState(owner, target);
+        sendBlockState(owner, level, target);
         return false;
     }
 
     const LiquidBlock targetLiquid(targetState);
     if (content == Content::PowderSnow && targetLiquid.isLiquid()) {
-        sendBlockState(owner, target);
+        sendBlockState(owner, level, target);
         return false;
     }
     if (targetLiquid.isLiquid()
         && targetLiquid.isWater() == (content == Content::Water)) {
-        sendBlockState(owner, target);
+        sendBlockState(owner, level, target);
         return false;
     }
 
@@ -341,7 +341,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
                                    : "minecraft:stone";
         const BlockState hardenedState(result);
         level.setBlockState(target.x, target.y, target.z, hardenedState);
-        sendBlockUpdate(owner, target, hardenedState);
+        sendBlockUpdate(owner, level, target, hardenedState);
     } else {
         const BlockState placedState = content == Content::PowderSnow
                                        ? BlockState("minecraft:powder_snow")
@@ -349,7 +349,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
         level.setBlockState(target.x, target.y, target.z, placedState);
         if (content == Content::Water || content == Content::Lava)
             level.scheduleFluidTick(target, LiquidBlock(placedState).getTickRate());
-        sendBlockUpdate(owner, target, placedState);
+        sendBlockUpdate(owner, level, target, placedState);
     }
 
     const char *sound = content == Content::PowderSnow
@@ -357,7 +357,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
                        : content == Content::Water
                          ? WaterBlock(makeLiquidState(content)).getBucketEmptySound()
                          : LavaBlock(makeLiquidState(content)).getBucketEmptySound();
-    sendSound(owner, target, sound);
+    sendSound(owner, level, target, sound);
     applyResult(owner, player, heldItem, "minecraft:bucket");
     return true;
 }

@@ -43,8 +43,7 @@ namespace {
         player.setFireTicks(std::max(player.getFireTicks(), fireTicks));
     }
 
-    bool findSupportBlock(ServerNetworkHandler &owner, const Vector3f &feetPosition, BlockState &support) {
-        Level &level = owner.getLevel();
+    bool findSupportBlock(Level &level, const Vector3f &feetPosition, BlockState &support) {
         const int32_t lowestY = (int32_t) std::floor(feetPosition.y - GROUND_PROBE_DEPTH);
         const int32_t highestY = (int32_t) std::floor(feetPosition.y);
         const int32_t minX = (int32_t) std::floor(feetPosition.x - PLAYER_HALF_WIDTH + AABB_EPSILON);
@@ -91,14 +90,13 @@ namespace {
     }
 }
 
-bool MovementHandler::checkGroundState(ServerNetworkHandler &owner, const Vector3f &feetPosition) {
+bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPosition) {
     const float shrink = 0.01f;
     const float minX = feetPosition.x - PLAYER_HALF_WIDTH + shrink;
     const float maxX = feetPosition.x + PLAYER_HALF_WIDTH - shrink;
     const float minZ = feetPosition.z - PLAYER_HALF_WIDTH + shrink;
     const float maxZ = feetPosition.z + PLAYER_HALF_WIDTH - shrink;
 
-    Level &level = owner.getLevel();
     const int32_t lowestY = (int32_t) std::floor(feetPosition.y - GROUND_PROBE_DEPTH);
     const int32_t highestY = (int32_t) std::floor(feetPosition.y);
 
@@ -130,12 +128,13 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
     player.setPosition(feetPosition);
 
     const bool wasOnGround = player.isOnGround();
-    const bool onGround = checkGroundState(owner, feetPosition);
+    Level &level = owner.getLevelFor(player);
+    const bool onGround = checkGroundState(level, feetPosition);
     player.setOnGround(onGround);
 
     if (onGround) {
         BlockState support;
-        const bool hasSupport = findSupportBlock(owner, feetPosition, support);
+        const bool hasSupport = findSupportBlock(level, feetPosition, support);
         const Block supportBlock = hasSupport ? Block(support) : Block();
 
         if (!wasOnGround) {

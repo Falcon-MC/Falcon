@@ -32,14 +32,18 @@ public:
 
     static bool isTouchingWater(Level &level, const Vector3i &position);
 
-    static void onNormalUpdate(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void onNormalUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                               const BlockState &state);
 
-    static void onBlockPlaced(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void onBlockPlaced(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state);
 
-    static void spawnFallingBlock(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void spawnFallingBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                  const BlockState &state);
 
-    static void setBlockState(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void setBlockState(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state);
 
-    static void spawnDestroyParticle(ServerNetworkHandler &owner, const Vector3i &position,
+    static void spawnDestroyParticle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                      const BlockState &state);
 };

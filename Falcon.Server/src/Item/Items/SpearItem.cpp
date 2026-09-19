@@ -82,6 +82,9 @@ Actor *SpearItem::findTarget(ServerNetworkHandler &owner, ServerPlayer &player, 
 
     const auto consider = [&](Actor &candidate, float width, float height) {
         (void) width;
+        if (candidate.getDimension() != player.getDimension())
+            return;
+
         const Vector3f candidatePosition = candidate.getPosition();
         const Vector3f target(candidatePosition.x, candidatePosition.y + eyeHeightOf(height) * 0.5f,
                               candidatePosition.z);
@@ -143,6 +146,9 @@ Actor *SpearItem::findSweepTarget(ServerNetworkHandler &owner, ServerPlayer &pla
     float closestDistance = std::numeric_limits<float>::max();
 
     const auto consider = [&](Actor &candidate, float width, float height) {
+        if (candidate.getDimension() != player.getDimension())
+            return;
+
         const Vector3f candidatePosition = candidate.getPosition();
         const float half = width * 0.5f;
         if (candidatePosition.x + half < minX || candidatePosition.x - half > maxX)
@@ -208,7 +214,7 @@ void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, co
     if (player.getFlags().get(ActorFlag::Swimming) || player.getFlags().get(ActorFlag::Gliding))
         return;
 
-    if (LiquidBlocksFetch::at(owner.getLevel(), player.getPosition()).water)
+    if (LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition()).water)
         return;
 
     const int32_t gameType = player.getGameType();
@@ -230,13 +236,15 @@ void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, co
     player.setMotion(motion);
     owner.sendActorMotion(player);
 
-    owner.playLevelSound(LevelSoundEvent::SPEAR_LUNGE, player.getPosition(), "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::SPEAR_LUNGE, player.getPosition(),
+                         "minecraft:player");
 
     player.exhaust(BASE_LUNGE_EXHAUST * (float) lungeLevel);
 }
 
 bool SpearItem::onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
-    owner.playLevelSound("item." + mTierName + ".use", player.getPosition(), "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), "item." + mTierName + ".use", player.getPosition(),
+                         "minecraft:player");
     stab(owner, player, item);
 
     // Staying in the using state is what drives the sweep in onUsingTick.
@@ -250,17 +258,18 @@ void SpearItem::stab(ServerNetworkHandler &owner, ServerPlayer &player, const It
     player.startItemCooldown(item, owner.getCurrentTick(), STAB_COOLDOWN_TICKS);
     applyLunge(owner, player, item);
 
+    Level &level = owner.getLevelFor(player);
     if (movementSpeedOf(player) < MINIMUM_SPEED || !player.getFlags().get(ActorFlag::Sprinting)) {
-        owner.playLevelSound("item." + mTierName + ".attack_miss", player.getPosition(), "minecraft:player");
+        owner.playLevelSound(level, "item." + mTierName + ".attack_miss", player.getPosition(), "minecraft:player");
         return;
     }
 
     Actor *target = findTarget(owner, player, MAX_STAB_DISTANCE);
     if (target != nullptr) {
         applySpearDamage(owner, player, *target, getJabDamage(item));
-        owner.playLevelSound("item." + mTierName + ".attack_hit", player.getPosition(), "minecraft:player");
+        owner.playLevelSound(level, "item." + mTierName + ".attack_hit", player.getPosition(), "minecraft:player");
     } else {
-        owner.playLevelSound("item." + mTierName + ".attack_miss", player.getPosition(), "minecraft:player");
+        owner.playLevelSound(level, "item." + mTierName + ".attack_miss", player.getPosition(), "minecraft:player");
     }
 
     owner.damagePlayerHeldItem(player, 1);
@@ -281,7 +290,8 @@ void SpearItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player, c
 
     const float damage = (float) getAttackDamage() * 1.5f + speed * 3.0f;
     applySpearDamage(owner, player, *target, damage);
-    owner.playLevelSound("item." + mTierName + ".attack_hit", player.getPosition(), "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), "item." + mTierName + ".attack_hit", player.getPosition(),
+                         "minecraft:player");
 }
 
 bool SpearItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,

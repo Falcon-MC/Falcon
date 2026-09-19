@@ -155,7 +155,7 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
 
     const NetworkIdentifier requesterId = player->getNetworkIdentifier();
     ServerNetworkHandler &handler = mHandler;
-    Level &level = handler.getLevel();
+    Level &level = handler.getLevelFor(*player);
 
     std::thread search([&handler, &level, requesterId, biomeName, biomeId, maxRadius, searchType, teleport,
                         originX, originY, originZ]() {
@@ -164,14 +164,14 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
                              ? _findBiomeXAxis(level, originX, originZ, biomeId, maxRadius, found)
                              : _findBiomeSpiral(level, originX, originZ, biomeId, maxRadius, found);
 
-        handler.postToMainThread([&handler, requesterId, biomeName, teleport, located, found,
+        handler.postToMainThread([&handler, &level, requesterId, biomeName, teleport, located, found,
                                   originX, originY, originZ]() {
             auto entry = handler.getPlayers().find(requesterId);
             if (entry == handler.getPlayers().end())
                 return;
 
             ServerPlayer *target = &entry->second;
-            if (!target->isSpawned())
+            if (!target->isSpawned() || target->getDimension() != level.getDimensionType())
                 return;
 
             if (!located) {
@@ -180,7 +180,8 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
             }
 
             Vector3i result = found;
-            result.y = handler.getLevel().getHeightAt(originX, originZ) + TELEPORT_HEIGHT_OFFSET;
+            if (level.hasSkyLight())
+                result.y = level.getHeightAt(originX, originZ) + TELEPORT_HEIGHT_OFFSET;
 
             const double deltaX = (double) result.x - (double) originX;
             const double deltaY = (double) result.y - (double) originY;
@@ -217,7 +218,7 @@ bool LocateCommand::_findBiomeSpiral(Level &level, int32_t centerX, int32_t cent
         OverworldBiomeResult result = level.pickBiomeResult(checkX, SEA_LEVEL, checkZ);
 
         int32_t height = SEA_LEVEL;
-        while (height > LevelChunk::MIN_Y) {
+        while (height > level.getMinY()) {
             if (result.correct(height - SEA_LEVEL).getBiomeId() == biomeId) {
                 found = Vector3i(checkX, height, checkZ);
                 return true;

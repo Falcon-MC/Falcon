@@ -5,6 +5,7 @@
 #include "Actor/MobEffect.h"
 #include "Actor/ExperienceManager.h"
 #include "Core/Math/Vector3f.h"
+#include "Level/Dimension.h"
 
 #include <cstdint>
 #include <algorithm>
@@ -27,6 +28,10 @@ public:
     void setPosition(const Vector3f &position) { mPosition = position; }
 
     void teleport(const Vector3f &position);
+
+    DimensionType getDimension() const { return mDimension; }
+
+    void setDimension(DimensionType dimension) { mDimension = dimension; }
 
     const Vector3f &getRotation() const { return mRotation; }
 
@@ -155,7 +160,7 @@ public:
 
     void resetHungerAndExperience();
 
-    bool tickHunger(int tickDiff, int difficulty);
+    bool tickHunger(int tickDiff, int difficulty, bool naturalRegeneration);
 
     bool isDead() const { return mIsDead; }
 
@@ -194,6 +199,7 @@ protected:
 
     uint64_t mRuntimeId;
     Vector3f mPosition;
+    DimensionType mDimension = DimensionType::Overworld;
     Vector3f mRotation;
     Vector3f mMotion;
     ActorFlags mFlags;

@@ -44,7 +44,7 @@ namespace {
         return item.mDefinition != nullptr && item.mDefinition->getIdentifier() == FILLED_MAP;
     }
 
-    void setStoringMap(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
+    void setStoringMap(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
                        bool storingMap) {
         if (!state.mStates.contains(STATE_MAP_BIT))
             return;
@@ -57,24 +57,25 @@ namespace {
         states.putByte(STATE_MAP_BIT, wanted);
 
         const BlockState updated(state.mName, states);
-        owner.getLevel().setBlockState(position.x, position.y, position.z, updated);
-        BlockActionHandler::broadcastBlockUpdate(owner, position, updated);
+        level.setBlockState(position.x, position.y, position.z, updated);
+        BlockActionHandler::broadcastBlockUpdate(owner, level, position, updated);
     }
 
-    void broadcastFrame(ServerNetworkHandler &owner, const ItemFrameBlockActor &frame) {
+    void broadcastFrame(ServerNetworkHandler &owner, Level &level, const ItemFrameBlockActor &frame) {
         BlockActorDataPacket data;
         data.mBlockPosition = frame.getPosition();
         data.mData = frame.getSpawnCompound();
-        BlockActionHandler::broadcastToViewers(owner, centreOf(frame.getPosition()), data);
+        BlockActionHandler::broadcastToViewers(owner, level, centreOf(frame.getPosition()), data);
     }
 
-    void dropFramedItem(ServerNetworkHandler &owner, const Vector3i &position, const ItemFrameBlockActor &frame) {
+    void dropFramedItem(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                        const ItemFrameBlockActor &frame) {
         if (frame.isEmpty() || !rollsDrop(frame.getDropChance()))
             return;
 
         const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.25f,
                                     (float) position.z + 0.5f);
-        owner.dropItem(dropPosition, frame.getItem(), ItemActorHandler::randomDropMotion(),
+        owner.dropItem(level, dropPosition, frame.getItem(), ItemActorHandler::randomDropMotion(),
                        ItemActorHandler::DROP_PICKUP_DELAY);
     }
 }
@@ -131,13 +132,15 @@ bool ItemFrameBlock::canPlaceAt(Level &level, const Vector3i &position, int bloc
 
 bool ItemFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                 const BlockState &state) const {
-    ItemFrameBlockActor *frame = BlockActorStore::getInstance().find<ItemFrameBlockActor>(position);
+    Level &level = owner.getLevelFor(player);
+    BlockActorStore &blockActors = level.getBlockActors();
+    ItemFrameBlockActor *frame = blockActors.find<ItemFrameBlockActor>(position);
     if (frame == nullptr) {
         std::unique_ptr<BlockActor> created = createBlockActor(state.mName);
         created->setPosition(position);
         created->setState(state);
         frame = static_cast<ItemFrameBlockActor *>(created.get());
-        BlockActorStore::getInstance().insert(std::move(created));
+        blockActors.insert(std::move(created));
     }
 
     PlayerInventory &inventory = player.getInventory();
@@ -160,66 +163,68 @@ bool ItemFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
                                                   inventory.getSelectedSlot());
         }
 
-        setStoringMap(owner, position, state, isFilledMap(held));
-        owner.playLevelSound(LevelSoundEvent::ITEM_FRAME_ADD_ITEM, centreOf(position));
+        setStoringMap(owner, level, position, state, isFilledMap(held));
+        owner.playLevelSound(level, LevelSoundEvent::ITEM_FRAME_ADD_ITEM, centreOf(position));
     } else {
         frame->setRotation(frame->getRotation() + 1);
-        setStoringMap(owner, position, state, false);
-        owner.playLevelSound(LevelSoundEvent::ITEM_FRAME_ROTATE_ITEM, centreOf(position));
+        setStoringMap(owner, level, position, state, false);
+        owner.playLevelSound(level, LevelSoundEvent::ITEM_FRAME_ROTATE_ITEM, centreOf(position));
     }
 
-    broadcastFrame(owner, *frame);
+    broadcastFrame(owner, level, *frame);
     return true;
 }
 
 bool ItemFrameBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                              const BlockState &state) const {
-    ItemFrameBlockActor *frame = BlockActorStore::getInstance().find<ItemFrameBlockActor>(position);
+    Level &level = owner.getLevelFor(player);
+    ItemFrameBlockActor *frame = level.getBlockActors().find<ItemFrameBlockActor>(position);
     if (frame == nullptr || frame->isEmpty())
         return false;
 
     const bool creative = player.getGameType() == (int32_t) GameType::Creative;
     if (!creative)
-        dropFramedItem(owner, position, *frame);
+        dropFramedItem(owner, level, position, *frame);
 
     frame->setItem(ItemStack::air());
     frame->setRotation(0);
-    setStoringMap(owner, position, state, false);
+    setStoringMap(owner, level, position, state, false);
 
-    owner.playLevelSound(creative ? LevelSoundEvent::ITEM_FRAME_REMOVE_ITEM : LevelSoundEvent::ITEM_FRAME_BREAK,
+    owner.playLevelSound(level,
+                         creative ? LevelSoundEvent::ITEM_FRAME_REMOVE_ITEM : LevelSoundEvent::ITEM_FRAME_BREAK,
                          centreOf(position));
 
-    broadcastFrame(owner, *frame);
+    broadcastFrame(owner, level, *frame);
     return true;
 }
 
 void ItemFrameBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                               const BlockState &state, const ItemStack &usedItem, int blockFace) const {
-    (void) player;
     (void) usedItem;
     (void) blockFace;
 
-    BlockActorStore::getInstance().remove(position);
+    Level &level = owner.getLevelFor(player);
+    BlockActorStore &blockActors = level.getBlockActors();
+    blockActors.remove(position);
 
     std::unique_ptr<BlockActor> created = createBlockActor(state.mName);
     created->setPosition(position);
     created->setState(state);
-    BlockActorStore::getInstance().insert(std::move(created));
+    blockActors.insert(std::move(created));
 
-    owner.playLevelSound(LevelSoundEvent::ITEM_FRAME_PLACE, centreOf(position));
+    owner.playLevelSound(level, LevelSoundEvent::ITEM_FRAME_PLACE, centreOf(position));
 }
 
 void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                               const BlockState &state) const {
-    (void) level;
     (void) state;
 
-    ItemFrameBlockActor *frame = BlockActorStore::getInstance().find<ItemFrameBlockActor>(position);
+    ItemFrameBlockActor *frame = level.getBlockActors().find<ItemFrameBlockActor>(position);
     if (frame == nullptr)
         return;
 
-    dropFramedItem(owner, position, *frame);
-    BlockActorStore::getInstance().remove(position);
+    dropFramedItem(owner, level, position, *frame);
+    level.getBlockActors().remove(position);
 
-    owner.playLevelSound(LevelSoundEvent::ITEM_FRAME_BREAK, centreOf(position));
+    owner.playLevelSound(level, LevelSoundEvent::ITEM_FRAME_BREAK, centreOf(position));
 }

@@ -141,7 +141,7 @@ bool PropertiesSettings::_isKnownProperty(const std::string &key) {
     static const std::set<std::string> known = {
             "server-name", "gamemode", "force-gamemode", "difficulty", "allow-cheats", "max-players",
             "online-mode", "allow-list", "server-port", "server-portv6",
-            "enable-lan-visibility", "view-distance", "tick-distance", "player-idle-timeout", "max-threads",
+            "enable-lan-visibility", "view-distance", "tick-distance", "player-idle-timeout", "max-threads", "autosave-interval",
             "level-name", "level-seed", "default-player-permission-level", "texturepack-required",
             "content-log-file-enabled", "content-log-console-output-enabled", "content-log-level",
             "compression-threshold", "compression-algorithm", "chat-restriction", "disable-player-interaction",

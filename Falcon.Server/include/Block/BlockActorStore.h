@@ -11,11 +11,19 @@
 #include <unordered_set>
 #include <vector>
 
+class Level;
 class PacketCodecContext;
 
+/** The block actors of one level. Every stored actor knows that level through BlockActor::getLevel(). */
 class BlockActorStore {
 public:
-    static BlockActorStore &getInstance();
+    explicit BlockActorStore(Level &level) : mLevel(&level) {}
+
+    BlockActorStore(const BlockActorStore &) = delete;
+
+    BlockActorStore &operator=(const BlockActorStore &) = delete;
+
+    void moveStateFrom(BlockActorStore &&other);
 
     static int64_t packPosition(const Vector3i &position);
 
@@ -74,6 +82,7 @@ public:
     }
 
 private:
+    Level *mLevel;
     std::unordered_map<int64_t, std::unique_ptr<BlockActor>> mBlockActors;
     std::unordered_set<int64_t> mLoadedChunks;
 };

@@ -221,7 +221,7 @@ void Actor::resetHungerAndExperience() {
     syncExperience();
 }
 
-bool Actor::tickHunger(int tickDiff, int difficulty) {
+bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
     if (!isAlive() || !mHungerEnabled)
         return false;
 
@@ -243,12 +243,12 @@ bool Actor::tickHunger(int tickDiff, int difficulty) {
             food = getFood();
         }
 
-        if (mFoodTickTimer % 20 == 0 && getHealth() < maxHealth)
+        if (mFoodTickTimer % 20 == 0 && naturalRegeneration && getHealth() < maxHealth)
             mAttributes.setClamped(ATTRIBUTE_HEALTH, getHealth() + 1.0f);
     }
 
     if (mFoodTickTimer == 0) {
-        if (food >= 18.0f) {
+        if (food >= 18.0f && naturalRegeneration) {
             if (getHealth() < maxHealth) {
                 mAttributes.setClamped(ATTRIBUTE_HEALTH, getHealth() + 1.0f);
                 exhaust(6.0f);

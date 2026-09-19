@@ -217,13 +217,12 @@ void Explosion::_damageEntities() {
         mOwner.sendActorMotion(player);
     }
 
-    if (&mLevel != &mOwner.getLevel())
-        return;
+    const DimensionType dimension = mLevel.getDimensionType();
 
     std::vector<ServerActor *> actors;
     for (auto &entry: mOwner.getActors()) {
         ServerActor *actor = entry.second.get();
-        if (actor != nullptr && actor != mSourceActor && actor->isAlive())
+        if (actor != nullptr && actor != mSourceActor && actor->isAlive() && actor->getDimension() == dimension)
             actors.push_back(actor);
     }
 
@@ -246,7 +245,7 @@ void Explosion::_damageEntities() {
     }
 
     for (const std::unique_ptr<ItemActor> &item: mOwner.getItemEntities()) {
-        if (item->isRemoved() || _isInsideWater(item->getPosition()))
+        if (item->isRemoved() || item->getDimension() != dimension || _isInsideWater(item->getPosition()))
             continue;
 
         const ItemStack &stack = item->getItem();
@@ -311,12 +310,12 @@ void Explosion::_ignite() {
 
         const BlockState fire("minecraft:fire");
         mLevel.setBlockState(position.x, position.y, position.z, fire);
-        BlockActionHandler::broadcastBlockUpdate(mOwner, position, fire);
+        BlockActionHandler::broadcastBlockUpdate(mOwner, mLevel, position, fire);
     }
 }
 
 void Explosion::_playEffects() {
-    mOwner.playLevelSound(LevelSoundEvent::EXPLODE, mSource);
+    mOwner.playLevelSound(mLevel, LevelSoundEvent::EXPLODE, mSource);
 
     mLevel.addParticle(ExplodeParticle(mSource, mSize));
     mLevel.addParticle(BlockExplodeParticle(mSource, mSize, mSmokePositions));

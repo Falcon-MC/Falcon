@@ -324,20 +324,22 @@ bool ScriptApi::giveItem(ServerPlayer &player, const std::string &typeId, int32_
     return remaining < stack.mCount;
 }
 
-bool ScriptApi::setBlockType(int32_t x, int32_t y, int32_t z, const std::string &typeId) {
+bool ScriptApi::setBlockType(DimensionType dimension, int32_t x, int32_t y, int32_t z,
+                             const std::string &typeId) {
     std::string identifier = typeId;
     if (identifier.find(':') == std::string::npos)
         identifier = "minecraft:" + identifier;
 
-    mHost.getLevel().setBlockState(x, y, z, BlockState(identifier));
+    Level &level = mHost.getDimension(dimension);
+    level.setBlockState(x, y, z, BlockState(identifier));
 
-    const BlockState state = mHost.getLevel().getBlockState(x, y, z);
+    const BlockState state = level.getBlockState(x, y, z);
     UpdateBlockPacket update;
     update.mBlockPosition = Vector3i(x, y, z);
     update.mRuntimeId = (uint32_t) BlockStateHasher::hash(state.mName, state.mStates);
     update.mFlags = UpdateBlockPacket::Flag::All;
     update.mDataLayer = 0;
-    BlockActionHandler::broadcastToViewers(mHost,
+    BlockActionHandler::broadcastToViewers(mHost, level,
                                            Vector3f((float) x + 0.5f, (float) y + 0.5f, (float) z + 0.5f), update);
     return true;
 }
@@ -598,7 +600,7 @@ namespace {
         if (player == nullptr)
             return JS_ThrowTypeError(ctx, "Player is not valid");
 
-        return api->makeDimension();
+        return api->makeDimension(player->getDimension());
     }
 
     JSValue playerTeleport(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -1084,7 +1086,8 @@ namespace {
         if (!readVector3(ctx, argv[1], x, y, z))
             return JS_UNDEFINED;
 
-        api->host().spawnParticleEffect(identifier, Vector3f((float) x, (float) y, (float) z));
+        api->host().spawnParticleEffect(api->host().getLevelFor(*player), identifier,
+                                        Vector3f((float) x, (float) y, (float) z));
         return JS_UNDEFINED;
     }
 
@@ -1269,9 +1272,23 @@ namespace {
         return array;
     }
 
-    JSValue worldGetDimension(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+    JSValue worldGetDimension(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
-        return api->makeDimension();
+        if (argc < 1)
+            return api->makeDimension(DimensionType::Overworld);
+
+        std::string identifier = toStdString(ctx, argv[0]);
+        if (identifier.find(':') == std::string::npos)
+            identifier = "minecraft:" + identifier;
+
+        if (identifier == "minecraft:nether")
+            return api->makeDimension(DimensionType::Nether);
+        if (identifier == "minecraft:the_end")
+            return api->makeDimension(DimensionType::TheEnd);
+        if (identifier == "minecraft:overworld")
+            return api->makeDimension(DimensionType::Overworld);
+
+        return JS_ThrowTypeError(ctx, "Unknown dimension %s", identifier.c_str());
     }
 
     JSValue worldGetDynamicProperty(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
@@ -1481,7 +1498,7 @@ void ScriptApi::emitProjectileHitBlock(ServerActor &projectile, int32_t x, int32
             JS_SetPropertyStr(mContext, event, "source", makeActor(*owner));
     }
 
-    JSValue block = makeBlock(x, y, z);
+    JSValue block = makeBlock(projectile.getDimension(), x, y, z);
     JSValue hitResult = JS_NewObject(mContext);
     JS_SetPropertyStr(mContext, hitResult, "block", block);
     JS_SetPropertyStr(mContext, hitResult, "_hasBlock", JS_NewBool(mContext, true));
@@ -1561,7 +1578,7 @@ void ScriptApi::emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, i
 
     JSValue event = JS_NewObject(mContext);
     JS_SetPropertyStr(mContext, event, "source", makePlayer(player));
-    JS_SetPropertyStr(mContext, event, "block", makeBlock(x, y, z));
+    JS_SetPropertyStr(mContext, event, "block", makeBlock(player.getDimension(), x, y, z));
     JS_SetPropertyStr(mContext, event, "itemStack", makeHeldItemStack(player, typeId));
 
     if (hasNamedSubscribers("itemUseOn"))
@@ -1949,9 +1966,10 @@ namespace {
 
     JSValue actorGetDimension(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
-        if (api->resolveActor(thisVal) == nullptr)
+        ServerActor *actor = api->resolveActor(thisVal);
+        if (actor == nullptr)
             return JS_ThrowTypeError(ctx, "Entity is not valid");
-        return api->makeDimension();
+        return api->makeDimension(actor->getDimension());
     }
 
     JSValue actorRemove(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -2649,6 +2667,7 @@ void ScriptApi::_buildActorClass() {
 
 namespace {
     struct ScriptBlockData {
+        DimensionType mDimension = DimensionType::Overworld;
         int32_t mX = 0;
         int32_t mY = 0;
         int32_t mZ = 0;
@@ -2669,7 +2688,7 @@ namespace {
     }
 
     std::string blockIdentifierAt(ScriptApi *api, ScriptBlockData *data) {
-        return api->host().getLevel().getBlockState(data->mX, data->mY, data->mZ).mName;
+        return api->host().getDimension(data->mDimension).getBlockState(data->mX, data->mY, data->mZ).mName;
     }
 
     JSValue blockGetTypeId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -2726,9 +2745,12 @@ namespace {
         return makeVector3(ctx, (float) data->mX, (float) data->mY, (float) data->mZ);
     }
 
-    JSValue blockGetDimension(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+    JSValue blockGetDimension(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
-        return api->makeDimension();
+        ScriptBlockData *data = blockData(thisVal, api->blockClassId());
+        if (data == nullptr)
+            return JS_ThrowTypeError(ctx, "Block is not valid");
+        return api->makeDimension(data->mDimension);
     }
 
     JSValue blockCenter(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -2759,7 +2781,7 @@ namespace {
             case 5: x -= steps; break;
             default: break;
         }
-        return api->makeBlock(x, y, z);
+        return api->makeBlock(data->mDimension, x, y, z);
     }
 
     JSValue blockSetType(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -2780,7 +2802,7 @@ namespace {
             identifier = toStdString(ctx, argv[0]);
         }
 
-        api->setBlockType(data->mX, data->mY, data->mZ, identifier);
+        api->setBlockType(data->mDimension, data->mX, data->mY, data->mZ, identifier);
         return JS_UNDEFINED;
     }
 
@@ -2800,7 +2822,7 @@ namespace {
         JS_FreeValue(ctx, typeValue);
 
         if (!identifier.empty())
-            api->setBlockType(data->mX, data->mY, data->mZ, identifier);
+            api->setBlockType(data->mDimension, data->mX, data->mY, data->mZ, identifier);
         return JS_UNDEFINED;
     }
 
@@ -2884,8 +2906,9 @@ void ScriptApi::_buildBlockClass() {
     JS_SetClassProto(mContext, mBlockClassId, JS_DupValue(mContext, mBlockPrototype));
 }
 
-JSValue ScriptApi::makeBlock(int32_t x, int32_t y, int32_t z) {
+JSValue ScriptApi::makeBlock(DimensionType dimension, int32_t x, int32_t y, int32_t z) {
     ScriptBlockData *data = new ScriptBlockData();
+    data->mDimension = dimension;
     data->mX = x;
     data->mY = y;
     data->mZ = z;
@@ -3144,17 +3167,18 @@ JSValue ScriptApi::makeHeldItemStack(ServerPlayer &player, const std::string &id
 // ========================= Dimension =========================
 
 namespace {
-    JSValue dimensionGetBlock(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue dimensionGetBlock(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
 
         double x = 0.0, y = 0.0, z = 0.0;
         if (argc < 1 || !readVector3(ctx, argv[0], x, y, z))
             return JS_ThrowTypeError(ctx, "getBlock requires a location {x,y,z}");
 
-        return api->makeBlock((int32_t) std::floor(x), (int32_t) std::floor(y), (int32_t) std::floor(z));
+        return api->makeBlock(ScriptApi::dimensionOf(ctx, thisVal), (int32_t) std::floor(x), (int32_t) std::floor(y),
+                              (int32_t) std::floor(z));
     }
 
-    JSValue dimensionSetBlockType(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue dimensionSetBlockType(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
         if (argc < 2)
             return JS_UNDEFINED;
@@ -3172,7 +3196,8 @@ namespace {
             identifier = toStdString(ctx, argv[1]);
         }
 
-        api->setBlockType((int32_t) std::floor(x), (int32_t) std::floor(y), (int32_t) std::floor(z), identifier);
+        api->setBlockType(ScriptApi::dimensionOf(ctx, thisVal), (int32_t) std::floor(x), (int32_t) std::floor(y),
+                          (int32_t) std::floor(z), identifier);
         return JS_UNDEFINED;
     }
 
@@ -3187,13 +3212,14 @@ namespace {
         return result;
     }
 
-    JSValue dimensionGetPlayers(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+    JSValue dimensionGetPlayers(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
+        const DimensionType dimension = ScriptApi::dimensionOf(ctx, thisVal);
 
         JSValue array = JS_NewArray(ctx);
         uint32_t index = 0;
         for (auto &entry: api->host().getPlayers()) {
-            if (!entry.second.isSpawned())
+            if (!entry.second.isSpawned() || entry.second.getDimension() != dimension)
                 continue;
 
             JS_SetPropertyUint32(ctx, array, index, api->makePlayer(entry.second));
@@ -3202,7 +3228,7 @@ namespace {
         return array;
     }
 
-    JSValue dimensionSpawnEntity(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue dimensionSpawnEntity(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
         if (argc < 2)
             return JS_ThrowTypeError(ctx, "spawnEntity requires a type and a location");
@@ -3212,13 +3238,14 @@ namespace {
         if (!readVector3(ctx, argv[1], x, y, z))
             return JS_ThrowTypeError(ctx, "spawnEntity requires a location {x,y,z}");
 
-        ServerActor *actor = api->host().spawnActor(typeId, Vector3f((float) x, (float) y, (float) z));
+        ServerActor *actor = api->host().spawnActor(api->host().getDimension(ScriptApi::dimensionOf(ctx, thisVal)),
+                                                    typeId, Vector3f((float) x, (float) y, (float) z));
         if (actor == nullptr)
             return JS_UNDEFINED;
         return api->makeActor(*actor);
     }
 
-    JSValue dimensionSpawnItem(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue dimensionSpawnItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
         if (argc < 2)
             return JS_UNDEFINED;
@@ -3232,11 +3259,12 @@ namespace {
         if (!readVector3(ctx, argv[1], x, y, z))
             return JS_UNDEFINED;
 
-        api->host().spawnItemActor(typeId, amount, Vector3f((float) x, (float) y, (float) z));
+        api->host().spawnItemActor(api->host().getDimension(ScriptApi::dimensionOf(ctx, thisVal)), typeId, amount,
+                                   Vector3f((float) x, (float) y, (float) z));
         return JS_UNDEFINED;
     }
 
-    JSValue dimensionSpawnParticle(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue dimensionSpawnParticle(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
         if (argc < 2)
             return JS_UNDEFINED;
@@ -3246,11 +3274,12 @@ namespace {
         if (!readVector3(ctx, argv[1], x, y, z))
             return JS_UNDEFINED;
 
-        api->host().spawnParticleEffect(identifier, Vector3f((float) x, (float) y, (float) z));
+        api->host().spawnParticleEffect(api->host().getDimension(ScriptApi::dimensionOf(ctx, thisVal)), identifier,
+                                        Vector3f((float) x, (float) y, (float) z));
         return JS_UNDEFINED;
     }
 
-    JSValue dimensionPlaySound(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue dimensionPlaySound(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
         if (argc < 2)
             return JS_UNDEFINED;
@@ -3274,12 +3303,14 @@ namespace {
             JS_FreeValue(ctx, pitchValue);
         }
 
-        api->host().playNamedSound(sound, Vector3f((float) x, (float) y, (float) z), volume, pitch);
+        api->host().playNamedSound(api->host().getDimension(ScriptApi::dimensionOf(ctx, thisVal)), sound,
+                                   Vector3f((float) x, (float) y, (float) z), volume, pitch);
         return JS_UNDEFINED;
     }
 
-    JSValue dimensionGetEntities(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue dimensionGetEntities(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
+        const DimensionType dimension = ScriptApi::dimensionOf(ctx, thisVal);
 
         double centerX = 0.0, centerY = 0.0, centerZ = 0.0;
         double maxDistance = -1.0;
@@ -3300,7 +3331,7 @@ namespace {
         uint32_t index = 0;
         for (auto &entry: api->host().getActors()) {
             ServerActor &actor = *entry.second;
-            if (!actor.isAlive())
+            if (!actor.isAlive() || actor.getDimension() != dimension)
                 continue;
 
             if (hasOptions && !actorMatchesQuery(ctx, actor, argv[0]))
@@ -3354,7 +3385,7 @@ namespace {
 
             for (auto &entry: api->host().getPlayers()) {
                 ServerPlayer &player = entry.second;
-                if (!player.isSpawned())
+                if (!player.isSpawned() || player.getDimension() != dimension)
                     continue;
 
                 if (maxDistance >= 0.0) {
@@ -3392,10 +3423,25 @@ namespace {
     }
 }
 
-JSValue ScriptApi::makeDimension() {
+DimensionType ScriptApi::dimensionOf(JSContext *ctx, JSValueConst dimension) {
+    JSValue idValue = JS_GetPropertyStr(ctx, dimension, "id");
+    const std::string identifier = toStdString(ctx, idValue);
+    JS_FreeValue(ctx, idValue);
+
+    if (identifier == "minecraft:nether")
+        return DimensionType::Nether;
+    if (identifier == "minecraft:the_end")
+        return DimensionType::TheEnd;
+    return DimensionType::Overworld;
+}
+
+JSValue ScriptApi::makeDimension(DimensionType dimensionType) {
     JSValue dimension = JS_NewObject(mContext);
 
-    JS_SetPropertyStr(mContext, dimension, "id", JS_NewString(mContext, "minecraft:overworld"));
+    const char *identifier = dimensionType == DimensionType::Nether
+                             ? "minecraft:nether"
+                             : dimensionType == DimensionType::TheEnd ? "minecraft:the_end" : "minecraft:overworld";
+    JS_SetPropertyStr(mContext, dimension, "id", JS_NewString(mContext, identifier));
     JS_SetPropertyStr(mContext, dimension, "setBlockType",
                       JS_NewCFunction(mContext, dimensionSetBlockType, "setBlockType", 2));
     JS_SetPropertyStr(mContext, dimension, "getBlock",

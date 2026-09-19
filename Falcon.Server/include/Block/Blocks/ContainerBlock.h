@@ -59,5 +59,5 @@ public:
     void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                   const BlockState &state) const override;
 
-    void writeDropContents(const Vector3i &position, ItemStack &item) const override;
+    void writeDropContents(Level &level, const Vector3i &position, ItemStack &item) const override;
 };

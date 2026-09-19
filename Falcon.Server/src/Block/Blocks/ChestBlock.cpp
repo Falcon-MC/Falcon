@@ -48,9 +48,7 @@ bool ChestBlock::matches(const std::string &identifier) {
 }
 
 ChestBlockActor &ChestBlock::getOrCreate(Level &level, const Vector3i &position) {
-    (void) level;
-
-    return BlockActorStore::getInstance().getOrCreate<ChestBlockActor>(position);
+    return level.getBlockActors().getOrCreate<ChestBlockActor>(position);
 }
 
 void ChestBlock::pair(Level &level, const Vector3i &position) {
@@ -70,7 +68,7 @@ void ChestBlock::pair(Level &level, const Vector3i &position) {
         if (neighbourState.mName != state.mName || facingOf(neighbourState) != facing)
             continue;
 
-        ChestBlockActor *other = BlockActorStore::getInstance().find<ChestBlockActor>(neighbour);
+        ChestBlockActor *other = level.getBlockActors().find<ChestBlockActor>(neighbour);
         if (other == nullptr || other->isPaired())
             continue;
 
@@ -90,10 +88,9 @@ void ChestBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, con
 
 void ChestBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                           const BlockState &state) const {
-    (void) level;
     (void) state;
 
-    ChestBlockActor *chest = BlockActorStore::getInstance().find<ChestBlockActor>(position);
+    ChestBlockActor *chest = level.getBlockActors().find<ChestBlockActor>(position);
     if (chest == nullptr)
         return;
 
@@ -105,19 +102,20 @@ void ChestBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vecto
     for (int slot = 0; slot < ChestInventory::SIZE; ++slot) {
         const ItemStack &item = inventory.getContainerItem(slot);
         if (!item.isAir() && item.mCount > 0)
-            ItemActorHandler::dropItem(owner, dropPosition, item, ItemActorHandler::randomDropMotion(),
+            ItemActorHandler::dropItem(owner, level, dropPosition, item, ItemActorHandler::randomDropMotion(),
                                        ItemActorHandler::DROP_PICKUP_DELAY);
     }
 
-    BlockActorStore::getInstance().remove(position);
+    level.getBlockActors().remove(position);
 }
 
 bool ChestBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                             const BlockState &state) const {
     (void) state;
 
-    if (BlockActorStore::getInstance().find<ChestBlockActor>(position) == nullptr)
-        pair(owner.getLevel(), position);
+    Level &level = owner.getLevelFor(player);
+    if (level.getBlockActors().find<ChestBlockActor>(position) == nullptr)
+        pair(level, position);
 
     ChestContainerManagerModel model;
     return model.open(owner, player, position);

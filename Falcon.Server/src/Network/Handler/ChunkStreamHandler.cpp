@@ -222,7 +222,7 @@ namespace {
             chunk.mRequestSubChunks = false;
             chunk.mData = level.getChunkData(chunkX, chunkZ);
 
-            BlockActorStore &blockActors = BlockActorStore::getInstance();
+            BlockActorStore &blockActors = level.getBlockActors();
             if (blockActors.isChunkLoaded(chunkX, chunkZ))
                 chunk.mData += blockActors.encodeChunkNetwork(chunkX, chunkZ);
             else

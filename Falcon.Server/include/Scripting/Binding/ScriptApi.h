@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Level/Dimension.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
 #include "Scripting/ScriptScheduler.h"
 
@@ -57,7 +58,7 @@ public:
 
     bool giveItem(ServerPlayer &player, const std::string &typeId, int32_t amount);
 
-    bool setBlockType(int32_t x, int32_t y, int32_t z, const std::string &typeId);
+    bool setBlockType(DimensionType dimension, int32_t x, int32_t y, int32_t z, const std::string &typeId);
 
     int32_t runCommandAsPlayer(ServerPlayer &player, const std::string &commandLine);
 
@@ -71,13 +72,16 @@ public:
 
     JSClassID actorClassId() const { return mActorClassId; }
 
-    JSValue makeBlock(int32_t x, int32_t y, int32_t z);
+    JSValue makeBlock(DimensionType dimension, int32_t x, int32_t y, int32_t z);
 
     JSValue makeItemStack(const std::string &typeId, int32_t amount);
 
     JSValue makeHeldItemStack(ServerPlayer &player, const std::string &identifier);
 
-    JSValue makeDimension();
+    JSValue makeDimension(DimensionType dimension);
+
+    /** The dimension a script Dimension object stands for, read from its `id`. */
+    static DimensionType dimensionOf(JSContext *ctx, JSValueConst dimension);
 
     JSClassID blockClassId() const { return mBlockClassId; }
 

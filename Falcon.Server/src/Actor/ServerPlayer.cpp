@@ -9,6 +9,7 @@
 #include "Item/ItemData.h"
 #include "Item/ItemEnchantments.h"
 #include "Item/VanillaItems.h"
+#include "Level/Level.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Packets/AnimatePacket.h"
@@ -250,7 +251,8 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (victim == nullptr) {
         for (auto &entry: owner.getActors()) {
             ServerActor &target = *entry.second;
-            if (target.getRuntimeId() != targetRuntimeId || !target.isAlive() || target.isProjectile())
+            if (target.getRuntimeId() != targetRuntimeId || !target.isAlive() || target.isProjectile() ||
+                target.getDimension() != getDimension())
                 continue;
 
             const Vector3f actorDelta(target.getPosition().x - getPosition().x,
@@ -286,6 +288,9 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (victim == nullptr || victim == this || !victim->isSpawned() || victim->isDead() ||
         victim->getGameType() == (int32_t) GameType::Spectator ||
         victim->getGameType() == (int32_t) GameType::Creative)
+        return false;
+
+    if (!owner.getLevelFor(*this).getGameRules().getBool("pvp"))
         return false;
 
     const Vector3f delta(victim->getPosition().x - getPosition().x,
@@ -428,7 +433,8 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
 
     for (auto &entry: owner.getActors()) {
         ServerActor &target = *entry.second;
-        if (!target.isAlive() || target.isDead() || target.isProjectile() || target.getNoDamageTicks() > 0)
+        if (!target.isAlive() || target.isDead() || target.isProjectile() || target.getNoDamageTicks() > 0 ||
+            target.getDimension() != getDimension())
             continue;
 
         const ActorSize size = ActorSizeTable::getSize(target.getTypeId());

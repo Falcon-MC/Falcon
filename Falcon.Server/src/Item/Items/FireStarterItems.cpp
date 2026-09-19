@@ -65,10 +65,10 @@ bool FlintAndSteelItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &
     const bool ignitable = canIgniteAgainst(level, blockPosition, placement);
 
     if (ignitable)
-        FireSystem::ignite(owner, placement, &level);
+        FireSystem::ignite(owner, level, placement, true);
 
     owner.damagePlayerHeldItem(player, 1);
-    owner.playLevelSound(LevelSoundEvent::FIRE_IGNITE, centerOf(placement));
+    owner.playLevelSound(level, LevelSoundEvent::FIRE_IGNITE, centerOf(placement));
     return ignitable;
 }
 
@@ -83,14 +83,15 @@ bool FireChargeItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
     if (player.getGameType() == (int32_t) GameType::Adventure)
         return false;
 
+    Level &level = owner.getLevelFor(player);
     const Vector3i placement = relativeToFace(blockPosition, face);
-    if (!canIgniteAgainst(owner.getLevelFor(player), blockPosition, placement))
+    if (!canIgniteAgainst(level, blockPosition, placement))
         return false;
 
-    if (!FireSystem::ignite(owner, placement))
+    if (!FireSystem::ignite(owner, level, placement))
         return false;
 
-    owner.playLevelSound(LevelSoundEvent::GHAST_FIREBALL, centerOf(placement));
+    owner.playLevelSound(level, LevelSoundEvent::GHAST_FIREBALL, centerOf(placement));
     player.consumeOneHeldItem();
     return true;
 }

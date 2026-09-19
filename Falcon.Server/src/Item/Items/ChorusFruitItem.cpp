@@ -35,34 +35,31 @@ bool ChorusFruitItem::canConsume(ServerNetworkHandler &owner, ServerPlayer &play
     if (!isChorusFruit(player.getInventory().getItemInHand()))
         return false;
 
-    return !LiquidBlocksFetch::at(owner.getLevel(), player.getPosition()).water;
+    return !LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition()).water;
 }
 
-bool ChorusFruitItem::isSolid(ServerNetworkHandler &owner, int x, int y, int z) {
-    const int minWorldY = LevelChunk::LOWEST_SUB_CHUNK_Y * 16;
-    const int maxWorldY = minWorldY + LevelChunk::SUB_CHUNK_COUNT * 16 - 1;
-    if (y < minWorldY || y > maxWorldY)
+bool ChorusFruitItem::isSolid(Level &level, int x, int y, int z) {
+    if (y < level.getMinY() || y > level.getMaxY())
         return true;
 
-    const BlockState state = owner.getLevel().getBlockState(x, y, z);
+    const BlockState state = level.getBlockState(x, y, z);
     const BlockData *data = BlockDataTable::find(state.mName.c_str());
     return data != nullptr && data->mSolid;
 }
 
-bool ChorusFruitItem::isLiquid(ServerNetworkHandler &owner, int x, int y, int z) {
-    const int minWorldY = LevelChunk::LOWEST_SUB_CHUNK_Y * 16;
-    const int maxWorldY = minWorldY + LevelChunk::SUB_CHUNK_COUNT * 16 - 1;
-    if (y < minWorldY || y > maxWorldY)
+bool ChorusFruitItem::isLiquid(Level &level, int x, int y, int z) {
+    if (y < level.getMinY() || y > level.getMaxY())
         return true;
 
-    return LiquidBlock(owner.getLevel().getBlockState(x, y, z)).isLiquid();
+    return LiquidBlock(level.getBlockState(x, y, z)).isLiquid();
 }
 
 bool ChorusFruitItem::findTeleportPosition(ServerNetworkHandler &owner, ServerPlayer &player,
                                             Vector3f &destination) {
+    Level &level = owner.getLevelFor(player);
     const Vector3f origin = player.getPosition();
-    const int minWorldY = LevelChunk::LOWEST_SUB_CHUNK_Y * 16;
-    const int maxWorldY = minWorldY + LevelChunk::SUB_CHUNK_COUNT * 16 - 1;
+    const int minWorldY = level.getMinY();
+    const int maxWorldY = level.getMaxY();
     const int minX = (int) std::floor(origin.x) - TELEPORT_RANGE;
     const int minY = std::max(minWorldY, (int) std::floor(origin.y) - TELEPORT_RANGE);
     const int minZ = (int) std::floor(origin.z) - TELEPORT_RANGE;
@@ -82,15 +79,15 @@ bool ChorusFruitItem::findTeleportPosition(ServerNetworkHandler &owner, ServerPl
         int y = yDistribution(randomGenerator());
         const int z = zDistribution(randomGenerator());
 
-        while (y >= minWorldY && !isSolid(owner, x, y + 1, z))
+        while (y >= minWorldY && !isSolid(level, x, y + 1, z))
             --y;
 
         ++y;
         if (y < minWorldY || y + 2 > maxWorldY)
             continue;
 
-        if (isSolid(owner, x, y + 1, z) || isLiquid(owner, x, y + 1, z)
-            || isSolid(owner, x, y + 2, z) || isLiquid(owner, x, y + 2, z))
+        if (isSolid(level, x, y + 1, z) || isLiquid(level, x, y + 1, z)
+            || isSolid(level, x, y + 2, z) || isLiquid(level, x, y + 2, z))
             continue;
 
         destination = Vector3f((float) x + 0.5f, (float) y + 1.0f, (float) z + 0.5f);
@@ -111,7 +108,7 @@ void ChorusFruitItem::sendTeleportSound(ServerNetworkHandler &owner, ServerPlaye
     sound.mIsBabyMob = false;
     sound.mDisableRelativeVolume = false;
     sound.mHasFirePosition = false;
-    BlockActionHandler::broadcastToViewers(owner, position, sound);
+    BlockActionHandler::broadcastToViewers(owner, owner.getLevelFor(player), position, sound);
 }
 
 bool ChorusFruitItem::onEaten(ServerNetworkHandler &owner, ServerPlayer &player) {

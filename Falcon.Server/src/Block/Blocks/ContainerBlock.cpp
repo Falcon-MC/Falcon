@@ -7,6 +7,7 @@
 #include "Block/BlockActorStore.h"
 #include "Block/Components/PlacementOrientation.h"
 #include "Inventory/Container/BlockContainerManagerModel.h"
+#include "Level/Level.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
@@ -181,13 +182,14 @@ bool ContainerBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
     if (definition == nullptr || !definition->mOpensWindow)
         return false;
 
-    if (BlockActorStore::getInstance().find(position) == nullptr) {
+    BlockActorStore &blockActors = owner.getLevelFor(player).getBlockActors();
+    if (blockActors.find(position) == nullptr) {
         std::unique_ptr<BlockActor> created = createBlockActor(definition->mKind);
         if (created == nullptr)
             return false;
 
         created->setPosition(position);
-        BlockActorStore::getInstance().insert(std::move(created));
+        blockActors.insert(std::move(created));
     }
 
     BlockContainerManagerModel model(definition->mContainerType);
@@ -196,13 +198,12 @@ bool ContainerBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
 
 void ContainerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                               const BlockState &state, const ItemStack &usedItem, int blockFace) const {
-    (void) player;
-
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
     if (definition == nullptr)
         return;
 
-    BlockActorStore::getInstance().remove(position);
+    BlockActorStore &blockActors = owner.getLevelFor(player).getBlockActors();
+    blockActors.remove(position);
 
     std::unique_ptr<BlockActor> created = createBlockActor(definition->mKind);
     if (created == nullptr)
@@ -224,19 +225,17 @@ void ContainerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
         }
     }
 
-    BlockActorStore::getInstance().insert(std::move(created));
+    blockActors.insert(std::move(created));
 }
 
 void ContainerBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                               const BlockState &state) const {
-    (void) level;
-
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
     if (definition == nullptr)
         return;
 
     if (definition->mDropsContentsOnBreak) {
-        ContainerBlockActor *actor = BlockActorStore::getInstance().find<ContainerBlockActor>(position);
+        ContainerBlockActor *actor = level.getBlockActors().find<ContainerBlockActor>(position);
         if (actor != nullptr) {
             const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
                                         (float) position.z + 0.5f);
@@ -245,7 +244,8 @@ void ContainerBlock::onBroken(ServerNetworkHandler &owner, Level &level, const V
             for (int slot = 0; slot < inventory.getContainerSize(); ++slot) {
                 const ItemStack &item = inventory.getContainerItem(slot);
                 if (!item.isAir() && item.mCount > 0) {
-                    ItemActorHandler::dropItem(owner, dropPosition, item, ItemActorHandler::randomDropMotion(),
+                    ItemActorHandler::dropItem(owner, level, dropPosition, item,
+                                               ItemActorHandler::randomDropMotion(),
                                                ItemActorHandler::DROP_PICKUP_DELAY);
                 }
             }
@@ -254,15 +254,15 @@ void ContainerBlock::onBroken(ServerNetworkHandler &owner, Level &level, const V
         }
     }
 
-    BlockActorStore::getInstance().remove(position);
+    level.getBlockActors().remove(position);
 }
 
-void ContainerBlock::writeDropContents(const Vector3i &position, ItemStack &item) const {
+void ContainerBlock::writeDropContents(Level &level, const Vector3i &position, ItemStack &item) const {
     const ContainerBlockDefinition *definition = findDefinition(getIdentifier());
     if (definition == nullptr || definition->mKind != ContainerBlockKind::ShulkerBox)
         return;
 
-    ContainerBlockActor *actor = BlockActorStore::getInstance().find<ContainerBlockActor>(position);
+    ContainerBlockActor *actor = level.getBlockActors().find<ContainerBlockActor>(position);
     if (actor == nullptr || actor->getInventory().isEmpty())
         return;
 

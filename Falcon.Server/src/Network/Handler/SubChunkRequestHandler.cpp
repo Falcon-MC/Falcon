@@ -115,7 +115,7 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
             continue;
         }
 
-        BlockActorStore &blockActors = BlockActorStore::getInstance();
+        BlockActorStore &blockActors = level.getBlockActors();
         std::string blockEntities;
         if (blockActors.isChunkLoaded(chunkX, chunkZ))
             blockEntities = blockActors.encodeSubChunkNetwork(chunkX, subChunkY, chunkZ);

@@ -25,15 +25,18 @@ public:
 
     static bool canBeIgnitedAgainst(const std::string &identifier);
 
-    static bool canSurviveAt(ServerNetworkHandler &owner, const Vector3i &position);
+    static bool canSurviveAt(Level &level, const Vector3i &position);
 
-    static bool ignite(ServerNetworkHandler &owner, const Vector3i &position, Level *portalLevel = nullptr);
+    static bool ignite(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                       bool canLightPortal = false);
 
-    static void onNormalUpdate(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void onNormalUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                               const BlockState &state);
 
-    static void onScheduledUpdate(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                  const BlockState &state);
 
-    static void scheduleUpdate(ServerNetworkHandler &owner, const Vector3i &position, int64_t delay);
+    static void scheduleUpdate(Level &level, const Vector3i &position, int64_t delay);
 
-    static void tick(ServerNetworkHandler &owner);
+    static void tick(ServerNetworkHandler &owner, Level &level);
 };

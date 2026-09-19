@@ -198,8 +198,10 @@ void HopperBlockActor::loadNbt(const Tag &data, const PacketCodecContext &contex
 }
 
 void HopperBlockActor::tickAll(ServerNetworkHandler &owner) {
-    for (HopperBlockActor *hopper: BlockActorStore::getInstance().findAll<HopperBlockActor>())
-        hopper->tick(owner);
+    for (Level *level: owner.getLevels()) {
+        for (HopperBlockActor *hopper: level->getBlockActors().findAll<HopperBlockActor>())
+            hopper->tick(owner);
+    }
 }
 
 void HopperBlockActor::tick(ServerNetworkHandler &owner) {
@@ -208,7 +210,10 @@ void HopperBlockActor::tick(ServerNetworkHandler &owner) {
         return;
     }
 
-    Level &level = owner.getLevel();
+    if (mLevel == nullptr)
+        return;
+
+    Level &level = *mLevel;
     const BlockState state = level.getBlockState(mPosition.x, mPosition.y, mPosition.z);
     if (state.mName != HOPPER)
         return;
@@ -235,8 +240,6 @@ void HopperBlockActor::tick(ServerNetworkHandler &owner) {
 }
 
 bool HopperBlockActor::_pushItems(Level &level, const BlockState &state) {
-    (void) level;
-
     if (mInventory.isEmpty())
         return false;
 
@@ -247,7 +250,7 @@ bool HopperBlockActor::_pushItems(Level &level, const BlockState &state) {
     const Vector3i target(mPosition.x + FACE_OFFSETS[facing][0], mPosition.y + FACE_OFFSETS[facing][1],
                           mPosition.z + FACE_OFFSETS[facing][2]);
 
-    BlockActor *targetActor = BlockActorStore::getInstance().find(target);
+    BlockActor *targetActor = level.getBlockActors().find(target);
     if (targetActor == nullptr)
         return false;
 
@@ -269,7 +272,7 @@ bool HopperBlockActor::_pullItems(ServerNetworkHandler &owner) {
 
     const Vector3i above(mPosition.x, mPosition.y + 1, mPosition.z);
 
-    BlockActor *sourceActor = BlockActorStore::getInstance().find(above);
+    BlockActor *sourceActor = mLevel->getBlockActors().find(above);
     if (sourceActor == nullptr)
         return _pickupItemActors(owner);
 
@@ -296,7 +299,7 @@ bool HopperBlockActor::_pickupItemActors(ServerNetworkHandler &owner) {
             break;
 
         ItemActor &actor = *entry;
-        if (actor.isRemoved())
+        if (actor.isRemoved() || mLevel == nullptr || actor.getDimension() != mLevel->getDimensionType())
             continue;
 
         const Vector3f &position = actor.getPosition();

@@ -66,8 +66,10 @@ public:
         return true;
     }
 
-    virtual void onPlacing(ServerNetworkHandler &owner, const Vector3i &position, BlockState &state) const {
+    virtual void onPlacing(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                           BlockState &state) const {
         (void) owner;
+        (void) level;
         (void) position;
         (void) state;
     }
@@ -100,7 +102,8 @@ public:
         return false;
     }
 
-    virtual void writeDropContents(const Vector3i &position, ItemStack &drop) const {
+    virtual void writeDropContents(Level &level, const Vector3i &position, ItemStack &drop) const {
+        (void) level;
         (void) position;
         (void) drop;
     }

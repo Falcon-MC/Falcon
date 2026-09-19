@@ -7,6 +7,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <unordered_map>
 #include <utility>
 
@@ -18,6 +19,7 @@
 
 namespace {
     const char *WEATHER_KEY = "weather";
+    const size_t LEVEL_DAT_HEADER_SIZE = 8;
     const char *GAME_RULES_KEY = "gameRules";
     const int32_t FINALIZED_STATE_NEEDS_POPULATION = 1;
     const int32_t FINALIZED_STATE_DONE = 2;
@@ -565,7 +567,7 @@ bool LevelStorage::loadGameRules(Tag &rules) {
 }
 
 void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ,
-                                 int32_t gameType, int32_t difficulty, int64_t seed) const {
+                                 int32_t gameType, int32_t difficulty, int64_t seed, int64_t time) const {
     if (mPath.empty())
         return;
 
@@ -579,6 +581,7 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
     data.putInt("GameType", gameType);
     data.putInt("Difficulty", difficulty);
     data.putLong("RandomSeed", seed);
+    data.putLong("Time", time);
     data.putInt("StorageVersion", 10);
     data.putInt("NetworkVersion", 2193);
     data.putByte("commandsEnabled", 1);
@@ -605,4 +608,33 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
 
     const std::string bytes = file.getBuffer();
     out.write(bytes.data(), (std::streamsize) bytes.size());
+}
+
+bool LevelStorage::readLevelDatTime(int64_t &time) const {
+    if (mPath.empty())
+        return false;
+
+    const std::filesystem::path root = std::filesystem::path(mPath).parent_path();
+    std::ifstream in((root / "level.dat").string(), std::ios::binary);
+    if (!in.is_open())
+        return false;
+
+    const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (bytes.size() <= LEVEL_DAT_HEADER_SIZE)
+        return false;
+
+    ReadOnlyBinaryStream stream(bytes.substr(LEVEL_DAT_HEADER_SIZE));
+
+    try {
+        const Tag data = NbtIo::readTag(stream, NbtVariant::LittleEndian);
+        if (!data.contains("Time"))
+            return false;
+
+        time = data.getLong("Time");
+    } catch (const std::exception &exception) {
+        LOG_WARN(LogAreaID::Server, "Malformed level.dat: %s", exception.what());
+        return false;
+    }
+
+    return true;
 }

@@ -15,6 +15,7 @@ public:
     static const double EXPLOSION_Y_OFFSET;
     static const double EXPLOSION_SIZE;
     static const int32_t DEFAULT_FUSE = 80;
+    static const int32_t FUSE_SYNC_INTERVAL = 5;
 
     PrimedTntActor(uint64_t runtimeId, int32_t fuse);
 
@@ -22,6 +23,10 @@ public:
 
     float getBaseOffset() const override {
         return BASE_OFFSET;
+    }
+
+    bool isInvulnerable() const override {
+        return true;
     }
 
     bool isExpired() const override {
@@ -40,6 +45,8 @@ public:
 
 private:
     void _explode(ServerNetworkHandler &owner);
+
+    EntityDataEntry _fuseEntry() const;
 
     int32_t mFuse;
     bool mExpired = false;
