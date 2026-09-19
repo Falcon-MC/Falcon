@@ -1,5 +1,7 @@
 #include "Level/Generator/Feature/FeatureMath.h"
 
+#include "Core/Math/MathConstants.h"
+
 #include <cmath>
 #include <vector>
 
@@ -8,7 +10,7 @@ namespace {
         static const std::vector<float> table = [] {
             std::vector<float> values(65536);
             for (int32_t i = 0; i < 65536; i++)
-                values[i] = (float) std::sin((double) i * 3.141592653589793 * 2.0 / 65536.0);
+                values[i] = (float) std::sin((double) i * MathConstants::PI * 2.0 / 65536.0);
 
             return values;
         }();
@@ -18,8 +20,6 @@ namespace {
 }
 
 namespace FeatureMath {
-    const float PI_FLOAT = 3.14159265358979323846f;
-
     float sinLookup(float value) {
         return sineTable()[(size_t) (((int32_t) (value * 10430.378f)) & 0xFFFF)];
     }

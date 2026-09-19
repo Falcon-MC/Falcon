@@ -1,5 +1,7 @@
 #include "Level/Generator/Random/XoroshiroRandom.h"
 
+#include "Core/Math/MathConstants.h"
+
 #include <cmath>
 
 namespace {
@@ -74,7 +76,7 @@ double XoroshiroRandom::nextDouble() {
 double XoroshiroRandom::nextGaussian() {
     double u1 = nextDouble();
     double u2 = nextDouble();
-    return std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * 3.141592653589793 * u2);
+    return std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * MathConstants::PI * u2);
 }
 
 void XoroshiroRandom::setSeed(int64_t seed) {

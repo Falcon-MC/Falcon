@@ -1,5 +1,7 @@
 #include "Level/Generator/Feature/Tree/TreeMathHelper.h"
 
+#include "Core/Math/MathConstants.h"
+
 #include <array>
 #include <cmath>
 
@@ -9,7 +11,7 @@ namespace {
         static const std::array<float, 65536> table = [] {
             std::array<float, 65536> values{};
             for (int32_t i = 0; i < 65536; i++)
-                values[(size_t) i] = (float) std::sin((double) i * 3.141592653589793 * 2.0 / 65536.0);
+                values[(size_t) i] = (float) std::sin((double) i * MathConstants::PI * 2.0 / 65536.0);
 
             return values;
         }();

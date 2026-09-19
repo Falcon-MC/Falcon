@@ -14,6 +14,4 @@ namespace FeatureMath {
     int32_t floorDouble(double value);
 
     int32_t clampInt(int32_t value, int32_t min, int32_t max);
-
-    extern const float PI_FLOAT;
 }

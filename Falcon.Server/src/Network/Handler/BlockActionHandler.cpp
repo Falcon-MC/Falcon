@@ -15,6 +15,7 @@
 #include "Block/BlockActorStore.h"
 #include "Block/Systems/PistonSystem.h"
 #include "Block/Systems/RedstoneSystem.h"
+#include "Core/Math/MathConstants.h"
 #include "Actor/ServerPlayer.h"
 #include "Actor/ExperienceValues.h"
 #include "Item/ItemData.h"
@@ -332,7 +333,7 @@ bool BlockActionHandler::canInteractWithBlock(ServerPlayer &player, const Vector
     if (distanceSquared > maxDistance * maxDistance)
         return false;
 
-    const float yawRad = player.getRotation().y * 3.14159265f / 180.0f;
+    const float yawRad = player.getRotation().y * MathConstants::PI_F / 180.0f;
     const float halfPi = 1.57079633f;
     float directionX = -std::cos(yawRad - halfPi);
     float directionZ = -std::sin(yawRad - halfPi);

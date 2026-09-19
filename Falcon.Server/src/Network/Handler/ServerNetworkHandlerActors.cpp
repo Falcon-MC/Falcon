@@ -5,6 +5,7 @@
 #include "Actor/MobLootTable.h"
 #include "Actor/ServerActor.h"
 #include "Core/Debug/BedrockLog.h"
+#include "Core/Math/MathConstants.h"
 #include "Protocol/Packets/AddActorPacket.h"
 #include "Protocol/Packets/AnimateEntityPacket.h"
 #include "Protocol/Packets/MoveActorAbsolutePacket.h"
@@ -293,10 +294,9 @@ ServerActor *ServerNetworkHandler::getActor(int64_t uniqueId) {
 
 ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
                                                    float verticalOffset) {
-    const float degreesToRadians = 3.14159265358979323846f / 180.0f;
     const Vector3f &rotation = player.getRotation();
-    const float pitch = rotation.x * degreesToRadians;
-    const float yaw = rotation.y * degreesToRadians;
+    const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
+    const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
 
     const Vector3f direction(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
 

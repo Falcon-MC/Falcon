@@ -1,6 +1,7 @@
 #include "Level/Generator/Feature/Ore/OreFeature.h"
 
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Core/Math/MathConstants.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/Generator/Feature/FeatureMath.h"
 #include "Level/Level.h"
@@ -165,7 +166,7 @@ void OreFeature::apply(ChunkGenerateContext &context) {
 
 void OreFeature::spawn(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z) {
     const int32_t clusterSize = getClusterSize();
-    const float piScaled = random.nextFloat() * FeatureMath::PI_FLOAT;
+    const float piScaled = random.nextFloat() * MathConstants::PI_F;
 
     const float maxXFloat = (float) (x + 8) + FeatureMath::sinLookup(piScaled) * (float) clusterSize / 8.0f;
     const float minXFloat = (float) (x + 8) - FeatureMath::sinLookup(piScaled) * (float) clusterSize / 8.0f;
@@ -185,9 +186,9 @@ void OreFeature::spawn(BlockManager &manager, IRandom &random, int32_t x, int32_
         const double scaleY = scaleMaxY + (scaleMinY - scaleMaxY) * (double) sizeIncr;
         const double scaleZ = scaleMaxZ + (scaleMinZ - scaleMaxZ) * (double) sizeIncr;
         const double randSizeOffset = random.nextDouble() * (double) clusterSize / 16.0;
-        const double randVec1 = (double) (FeatureMath::sinLookup(FeatureMath::PI_FLOAT * sizeIncr) + 1.0f)
+        const double randVec1 = (double) (FeatureMath::sinLookup(MathConstants::PI_F * sizeIncr) + 1.0f)
                                 * randSizeOffset + 1.0;
-        const double randVec2 = (double) (FeatureMath::sinLookup(FeatureMath::PI_FLOAT * sizeIncr) + 1.0f)
+        const double randVec2 = (double) (FeatureMath::sinLookup(MathConstants::PI_F * sizeIncr) + 1.0f)
                                 * randSizeOffset + 1.0;
 
         const int32_t minX = FeatureMath::floorDouble(scaleX - randVec1 / 2.0);

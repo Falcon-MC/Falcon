@@ -2,6 +2,7 @@
 
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockActorStore.h"
+#include "Core/Math/MathConstants.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -14,14 +15,13 @@
 namespace {
     const double MIN_FOV_CHECK_DISTANCE = 4.0;
     const double MIN_FOV_CHECK_DISTANCE_SQUARED = MIN_FOV_CHECK_DISTANCE * MIN_FOV_CHECK_DISTANCE;
-    const double DEGREES_TO_RADIANS = 3.14159265358979323846 / 180.0;
 
     void refreshComparatorContext(ChunkStreamState &state, const ServerPlayer &player) {
         const Vector3f position = player.getPosition();
         state.mComparatorChunkX = (int32_t) std::floor(position.x) >> 4;
         state.mComparatorChunkZ = (int32_t) std::floor(position.z) >> 4;
 
-        const double yaw = (double) player.getRotation().y * DEGREES_TO_RADIANS;
+        const double yaw = (double) player.getRotation().y * MathConstants::DEGREES_TO_RADIANS;
         state.mComparatorDirX = -std::sin(yaw);
         state.mComparatorDirZ = std::cos(yaw);
     }
@@ -35,7 +35,7 @@ namespace {
                            + state.mComparatorDirZ * ((double) dz / length);
 
         static const double cosFov = std::cos((double) ChunkStreamHandler::FIELD_OF_VIEW_DEGREES
-                                              * DEGREES_TO_RADIANS);
+                                              * MathConstants::DEGREES_TO_RADIANS);
         return dot >= cosFov;
     }
 

@@ -1,5 +1,6 @@
 #include "Level/Generator/End/Feature/SpikeFeature.h"
 
+#include "Core/Math/MathConstants.h"
 #include "Level/Generator/End/Object/EndSpikeObject.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/Level.h"
@@ -49,8 +50,6 @@ namespace {
         int64_t mSeed;
     };
 
-    const double PI_VALUE = 3.141592653589793;
-
 }
 
 SpikeFeature::SpikeFeature(int64_t seed)
@@ -83,8 +82,10 @@ std::vector<EndSpikeData> SpikeFeature::createSpikes(int64_t seed) {
     for (int32_t i = 0; i < 10; i++) {
         const int32_t value = values[(size_t) i];
         EndSpikeData spike;
-        spike.mX = (int32_t) std::floor(42.0 * std::cos(2.0 * (-PI_VALUE + PI_VALUE / 10.0 * (double) i)));
-        spike.mZ = (int32_t) std::floor(42.0 * std::sin(2.0 * (-PI_VALUE + PI_VALUE / 10.0 * (double) i)));
+        spike.mX = (int32_t) std::floor(
+                42.0 * std::cos(2.0 * (-MathConstants::PI + MathConstants::PI / 10.0 * (double) i)));
+        spike.mZ = (int32_t) std::floor(
+                42.0 * std::sin(2.0 * (-MathConstants::PI + MathConstants::PI / 10.0 * (double) i)));
         spike.mRadius = 2 + value / 3;
         spike.mHeight = 76 + value * 3;
         spike.mGuarded = value == 1 || value == 2;

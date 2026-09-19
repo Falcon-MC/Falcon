@@ -1,6 +1,7 @@
 #include "Level/Generator/Overworld/Feature/Decoration/SulfurSpikeFeature.h"
 
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Core/Math/MathConstants.h"
 #include "Level/Generator/Biome/BiomeIds.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
@@ -94,7 +95,7 @@ int32_t SulfurSpikeFeature::_clampedNormal(float deviation, int32_t max) {
     const double u1 = std::max(std::numeric_limits<double>::min(), mRandom.nextDouble());
     const double u2 = mRandom.nextDouble();
     const int32_t value = (int32_t) std::lround(
-            (float) (std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * 3.141592653589793 * u2) * (double) deviation));
+            (float) (std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * MathConstants::PI * u2) * (double) deviation));
 
     if (value < -max)
         return -max;

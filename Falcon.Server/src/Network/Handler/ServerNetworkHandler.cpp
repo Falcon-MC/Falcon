@@ -2,6 +2,8 @@
 
 #include "Scripting/Content/CustomContentRegistry.h"
 
+#include "Core/Math/MathConstants.h"
+
 #include "Command/ServerCommandOrigin.h"
 #include "Command/DeopCommand.h"
 #include "Command/EnchantCommand.h"
@@ -1754,8 +1756,8 @@ void ServerNetworkHandler::_throwItem(ServerPlayer &player, const ItemStack &ite
     const Vector3f position = player.getPosition();
     const Vector3f dropPosition(position.x, position.y + ITEM_DROP_HEIGHT, position.z);
 
-    const float yaw = player.getRotation().y * 3.14159265f / 180.0f;
-    const float pitch = player.getRotation().x * 3.14159265f / 180.0f;
+    const float yaw = player.getRotation().y * MathConstants::PI_F / 180.0f;
+    const float pitch = player.getRotation().x * MathConstants::PI_F / 180.0f;
 
     const Vector3f motion(-std::sin(yaw) * std::cos(pitch) * THROW_SPEED,
                           -std::sin(pitch) * THROW_SPEED + 0.1f,

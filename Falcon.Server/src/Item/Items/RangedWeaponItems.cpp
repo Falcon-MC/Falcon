@@ -2,6 +2,7 @@
 
 #include "Actor/ServerActor.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
+#include "Core/Math/MathConstants.h"
 #include "Level/Level.h"
 #include "Actor/ServerPlayer.h"
 #include "Item/EnchantmentData.h"
@@ -35,7 +36,6 @@ namespace {
     const int32_t FLAME_ARROW_FIRE_TICKS = 45 * 60;
     const float RIPTIDE_GROUND_LIFT = 1.2f;
     const int32_t SPIN_ATTACK_TICKS = 20;
-    const float DEGREES_TO_RADIANS = 3.14159265358979323846f / 180.0f;
 
     bool hasFiniteResources(const ServerPlayer &player) {
         const int32_t gameType = player.getGameType();
@@ -274,8 +274,8 @@ bool TridentItem::applyRiptide(ServerNetworkHandler &owner, ServerPlayer &player
         return false;
 
     const Vector3f rotation = player.getRotation();
-    const float pitch = rotation.x * DEGREES_TO_RADIANS;
-    const float yaw = rotation.y * DEGREES_TO_RADIANS;
+    const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
+    const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
 
     float x = -std::sin(yaw) * std::cos(pitch);
     float y = -std::sin(pitch);

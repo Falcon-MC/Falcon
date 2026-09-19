@@ -1,5 +1,6 @@
 #include "Level/Generator/Overworld/Feature/Terrain/CanyonFeature.h"
 
+#include "Core/Math/MathConstants.h"
 #include "Level/Generator/Feature/FeatureMath.h"
 #include "Level/LevelChunk.h"
 
@@ -31,7 +32,7 @@ void CanyonFeature::carveChunk(IRandom &random, int32_t sourceChunkX, int32_t so
                                                     minY + 1, maxY - 1);
     const double z = (double) (sourceChunkZ * CHUNK_SIZE + random.nextInt(CHUNK_SIZE));
 
-    const float horizontalRotation = random.nextFloat() * (FeatureMath::PI_FLOAT * 2.0f);
+    const float horizontalRotation = random.nextFloat() * (MathConstants::PI_F * 2.0f);
     const float verticalRotation = random.nextFloat() * 0.25f - 0.125f;
     const float thickness = 2.0f + random.nextFloat() * 4.0f;
     const int32_t maxDistance = mCarvingRangeChunks * CHUNK_SIZE - CHUNK_SIZE;
@@ -54,7 +55,7 @@ void CanyonFeature::_carveCanyon(IRandom &random, LevelChunk &chunk, double x, d
 
     for (int32_t currentStep = 0; currentStep < distance; currentStep++) {
         double horizontalRadius = 1.5 + (double) (FeatureMath::sinLookup(
-                (float) currentStep * FeatureMath::PI_FLOAT / (float) distance) * thickness);
+                (float) currentStep * MathConstants::PI_F / (float) distance) * thickness);
         const double verticalRadius = _updateVerticalRadius(random, horizontalRadius * (double) Y_SCALE, distance,
                                                             currentStep);
         horizontalRadius *= (double) (0.75f + random.nextFloat() * 0.25f);

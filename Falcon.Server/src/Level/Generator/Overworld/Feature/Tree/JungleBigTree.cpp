@@ -1,14 +1,9 @@
 #include "Level/Generator/Overworld/Feature/Tree/JungleBigTree.h"
 
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Core/Math/MathConstants.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/Generator/Feature/Tree/TreeMathHelper.h"
-
-namespace {
-
-    const float PI_FLOAT = 3.14159265358979323846f;
-
-}
 
 JungleBigTree::JungleBigTree(int32_t baseHeight, int32_t extraRandomHeight)
         : HugeTreeGenerator(baseHeight, extraRandomHeight,
@@ -27,7 +22,7 @@ bool JungleBigTree::generate(BlockManager &manager, IRandom &random, int32_t x, 
     for (int32_t j = y + height - 2 - random.nextInt(4);
          (double) j > (double) y + (double) height / 2;
          j -= 2 + random.nextInt(4)) {
-        const float angle = random.nextFloat() * (PI_FLOAT * 2.0f);
+        const float angle = random.nextFloat() * (MathConstants::PI_F * 2.0f);
         int32_t branchX = 0;
         int32_t branchZ = 0;
 

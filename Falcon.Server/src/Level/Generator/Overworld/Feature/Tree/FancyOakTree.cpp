@@ -1,6 +1,7 @@
 #include "Level/Generator/Overworld/Feature/Tree/FancyOakTree.h"
 
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Core/Math/MathConstants.h"
 #include "Level/Generator/Feature/BlockManager.h"
 
 #include <algorithm>
@@ -15,7 +16,6 @@ namespace {
     const int32_t FOLIAGE_HEIGHT = 4;
     const int32_t FOLIAGE_RADIUS = 2;
     const int32_t FOLIAGE_OFFSET = 4;
-    const double PI_VALUE = 3.14159265358979323846;
 
     int32_t floorToInt(double value) {
         const int32_t truncated = (int32_t) value;
@@ -58,7 +58,7 @@ bool FancyOakTree::generate(BlockManager &manager, IRandom &random, int32_t x, i
 
         for (int32_t i = 0; i < clustersPerY; i++) {
             const double radius = shape * (random.nextFloat() + BRANCH_LENGTH);
-            const double angle = random.nextFloat() * 2.0f * PI_VALUE;
+            const double angle = random.nextFloat() * 2.0f * MathConstants::PI;
             const double offsetX = radius * std::sin(angle) + 0.5;
             const double offsetZ = radius * std::cos(angle) + 0.5;
             const Coordinate checkStart{origin.mX + floorToInt(offsetX), origin.mY + relativeY - 1,

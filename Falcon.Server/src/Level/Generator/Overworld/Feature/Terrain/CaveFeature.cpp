@@ -1,6 +1,7 @@
 #include "Level/Generator/Overworld/Feature/Terrain/CaveFeature.h"
 
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Core/Math/MathConstants.h"
 #include "Level/Generator/Feature/FeatureMath.h"
 #include "Level/Generator/Random/SimpleRandom.h"
 #include "Level/Generator/Overworld/Surface/SurfaceMaterialAttributes.h"
@@ -83,7 +84,7 @@ void CaveFeature::carveChunk(IRandom &random, int32_t sourceChunkX, int32_t sour
         }
 
         for (int32_t i = 0; i < tunnels; i++) {
-            const float horizontalRotation = random.nextFloat() * (FeatureMath::PI_FLOAT * 2.0f);
+            const float horizontalRotation = random.nextFloat() * (MathConstants::PI_F * 2.0f);
             const float verticalRotation = (random.nextFloat() - 0.5f) / 4.0f;
             const float thickness = getThickness(random);
             const int32_t distance = maxDistance - random.nextInt(maxDistance / 4);
@@ -120,7 +121,7 @@ double CaveFeature::getYScale() const {
 
 void CaveFeature::createRoom(LevelChunk &chunk, double x, double y, double z, float thickness, double yScale,
                              double floorLevel, int32_t minY, int32_t maxY, int32_t lavaLevel) {
-    const double horizontalRadius = 1.5 + (double) (FeatureMath::sinLookup((float) (3.141592653589793 / 2.0))
+    const double horizontalRadius = 1.5 + (double) (FeatureMath::sinLookup((float) (MathConstants::PI / 2.0))
                                                     * thickness);
     const double verticalRadius = horizontalRadius * yScale;
     carveEllipsoid(chunk, x + 1.0, y, z, horizontalRadius, verticalRadius, floorLevel, minY, maxY, lavaLevel);
@@ -142,7 +143,7 @@ void CaveFeature::createTunnel(int64_t tunnelSeed, LevelChunk &chunk, double x, 
 
     for (int32_t currentStep = step; currentStep < dist; currentStep++) {
         const double horizontalRadius = 1.5 + (double) (FeatureMath::sinLookup(
-                FeatureMath::PI_FLOAT * (float) currentStep / (float) dist) * thickness);
+                MathConstants::PI_F * (float) currentStep / (float) dist) * thickness);
         const double verticalRadius = horizontalRadius * yScale;
         const float cosX = FeatureMath::cosLookup(verticalRotation);
         x += (double) (FeatureMath::cosLookup(horizontalRotation) * cosX);
@@ -160,12 +161,12 @@ void CaveFeature::createTunnel(int64_t tunnelSeed, LevelChunk &chunk, double x, 
             const int64_t firstSeed = random.nextLong();
             const float firstThickness = random.nextFloat() * 0.5f + 0.5f;
             createTunnel(firstSeed, chunk, x, y, z, horizontalRadiusMultiplier, verticalRadiusMultiplier,
-                         firstThickness, horizontalRotation - (float) (3.141592653589793 / 2.0),
+                         firstThickness, horizontalRotation - (float) (MathConstants::PI / 2.0),
                          verticalRotation / 3.0f, currentStep, dist, 1.0, floorLevel, minY, maxY, lavaLevel);
             const int64_t secondSeed = random.nextLong();
             const float secondThickness = random.nextFloat() * 0.5f + 0.5f;
             createTunnel(secondSeed, chunk, x, y, z, horizontalRadiusMultiplier, verticalRadiusMultiplier,
-                         secondThickness, horizontalRotation + (float) (3.141592653589793 / 2.0),
+                         secondThickness, horizontalRotation + (float) (MathConstants::PI / 2.0),
                          verticalRotation / 3.0f, currentStep, dist, 1.0, floorLevel, minY, maxY, lavaLevel);
             return;
         }

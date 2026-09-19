@@ -2,6 +2,7 @@
 
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
+#include "Core/Math/MathConstants.h"
 #include "Item/EnchantmentData.h"
 #include "Item/ItemEnchantments.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -136,7 +137,7 @@ void MaceItem::applyWindBurst(ServerNetworkHandler &owner, ServerPlayer &attacke
     else if (level >= 3)
         verticalBoost += 1.3f;
 
-    const float yaw = attacker.getRotation().y * 3.14159265f / 180.0f;
+    const float yaw = attacker.getRotation().y * MathConstants::PI_F / 180.0f;
     const float forwardBoost = 0.08f + 0.02f * (float) level;
 
     Vector3f motion(-std::sin(yaw) * forwardBoost, verticalBoost, std::cos(yaw) * forwardBoost);

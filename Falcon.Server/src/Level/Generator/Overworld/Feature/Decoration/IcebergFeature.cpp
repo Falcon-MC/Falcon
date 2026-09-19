@@ -1,6 +1,7 @@
 #include "Level/Generator/Overworld/Feature/Decoration/IcebergFeature.h"
 
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Core/Math/MathConstants.h"
 #include "Level/Generator/Biome/BiomeIds.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
@@ -231,8 +232,8 @@ void IcebergFeature::_generateCutOut(BlockManager &manager, int32_t width, int32
 
     const int32_t localOriginX = randomSignX * xOff;
     const int32_t localOriginZ = randomSignZ * zOff;
-    const double angle = isEllipse ? shapeAngle + (3.141592653589793 / 2.0)
-                                   : mLegacyRandom.nextDouble() * 2.0 * 3.141592653589793;
+    const double angle = isEllipse ? shapeAngle + (MathConstants::PI / 2.0)
+                                   : mLegacyRandom.nextDouble() * 2.0 * MathConstants::PI;
 
     for (int32_t yOff = 0; yOff < height - 3; yOff++) {
         const int32_t radius = _heightDependentRadiusRound(yOff, height, width);
@@ -377,7 +378,7 @@ void IcebergFeature::apply(ChunkGenerateContext &context) {
         return;
 
     const bool snowOnTop = mLegacyRandom.nextDouble() > 0.7;
-    const double shapeAngle = mLegacyRandom.nextDouble() * 2.0 * 3.141592653589793;
+    const double shapeAngle = mLegacyRandom.nextDouble() * 2.0 * MathConstants::PI;
     const int32_t shapeEllipseA = 11 - _nextIntExclusive(5);
     const int32_t shapeEllipseC = 3 + _nextIntExclusive(3);
     const bool isEllipse = mLegacyRandom.nextDouble() > 0.7;

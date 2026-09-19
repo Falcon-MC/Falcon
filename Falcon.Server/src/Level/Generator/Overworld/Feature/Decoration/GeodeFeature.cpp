@@ -1,6 +1,7 @@
 #include "Level/Generator/Overworld/Feature/Decoration/GeodeFeature.h"
 
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Core/Math/MathConstants.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -68,7 +69,7 @@ void GeodeFeature::apply(ChunkGenerateContext &context) {
     const int32_t amethystThickness = 1;
     const double outerRadiusSq = (double) (outerRadius * outerRadius);
     const bool hasCrack = mRandom.nextBoundedInt(100) < 95;
-    const double crackAngle = mRandom.nextBoundedInt(360) * 3.141592653589793 / 180.0;
+    const double crackAngle = mRandom.nextBoundedInt(360) * MathConstants::PI / 180.0;
     const double crackDirX = std::cos(crackAngle);
     const double crackDirZ = std::sin(crackAngle);
     const double crackHalfWidth = 1.5;

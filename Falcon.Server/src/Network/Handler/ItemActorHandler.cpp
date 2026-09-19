@@ -3,6 +3,7 @@
 #include "Actor/ActorFlags.h"
 #include "Actor/ItemActor.h"
 #include "Actor/ServerPlayer.h"
+#include "Core/Math/MathConstants.h"
 #include "Inventory/InventoryManager.h"
 #include "Inventory/PlayerInventory.h"
 #include "Item/ItemData.h"
@@ -37,7 +38,7 @@ Vector3f ItemActorHandler::randomDropMotion() {
 
 Vector3f ItemActorHandler::randomDropAroundMotion() {
     const float radius = randomUnitFloat() * 0.5f;
-    const float angle = randomUnitFloat() * 6.28318530717958647692f;
+    const float angle = randomUnitFloat() * MathConstants::TWO_PI_F;
 
     return Vector3f(-std::sin(angle) * radius, 0.2f, std::cos(angle) * radius);
 }

@@ -1,5 +1,6 @@
 #include "Block/Blocks/DaylightDetectorBlock.h"
 
+#include "Core/Math/MathConstants.h"
 #include "Level/Level.h"
 #include "Level/SkyLightSystem.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -11,8 +12,6 @@ namespace {
     const char *DAYLIGHT_DETECTOR = "minecraft:daylight_detector";
     const char *DAYLIGHT_DETECTOR_INVERTED = "minecraft:daylight_detector_inverted";
     const int SEARCH_RADIUS = 11;
-    const float FULL_CIRCLE = 6.2831855f;
-    const float PI_VALUE = 3.14159265358979323846f;
 }
 
 DaylightDetectorBlock::DaylightDetectorBlock(const Block &base) : Block(base) {
@@ -52,10 +51,10 @@ int DaylightDetectorBlock::effectiveSkyLightAround(Level &level, const Vector3i 
 int DaylightDetectorBlock::computeSignal(Level &level, const Vector3i &position, bool inverted) {
     int signal = effectiveSkyLightAround(level, position) - level.getSkyLightSubtracted();
 
-    float angle = SkyLightSystem::calculateCelestialAngle(level.getTime()) * FULL_CIRCLE;
+    float angle = SkyLightSystem::calculateCelestialAngle(level.getTime()) * MathConstants::TWO_PI_F;
 
     if (signal > 0) {
-        const float target = angle < PI_VALUE ? 0.0f : FULL_CIRCLE;
+        const float target = angle < MathConstants::PI_F ? 0.0f : MathConstants::TWO_PI_F;
         angle = angle + (target - angle) * 0.2f;
         signal = (int) std::lround((float) signal * std::cos(angle));
     }

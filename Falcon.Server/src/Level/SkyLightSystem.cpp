@@ -3,6 +3,7 @@
 #include "Block/Block.h"
 #include "Block/BlockData.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Core/Math/MathConstants.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 
@@ -11,7 +12,6 @@
 #include <deque>
 
 namespace {
-    const float FULL_CIRCLE = 6.2831855f;
     const float SKY_LIGHT_SCALE = 11.0f;
     const float WEATHER_REDUCTION = 5.0f / 16.0f;
 
@@ -118,7 +118,7 @@ float SkyLightSystem::calculateCelestialAngle(int64_t time) {
     if (angle > 1.0f)
         --angle;
 
-    const float smoothed = 1.0f - (float) ((std::cos((double) angle * 3.14159265358979323846) + 1.0) / 2.0);
+    const float smoothed = 1.0f - (float) ((std::cos((double) angle * MathConstants::PI) + 1.0) / 2.0);
     return angle + (smoothed - angle) / 3.0f;
 }
 
@@ -130,7 +130,7 @@ int32_t SkyLightSystem::calculateSkyLightSubtracted(const Level &level) {
     const float thunderFactor = 1.0f - thunder * WEATHER_REDUCTION;
 
     const float angle = calculateCelestialAngle(level.getTime());
-    const float brightness = 0.5f + 2.0f * clampFloat(std::cos(angle * FULL_CIRCLE), -0.25f, 0.25f);
+    const float brightness = 0.5f + 2.0f * clampFloat(std::cos(angle * MathConstants::TWO_PI_F), -0.25f, 0.25f);
 
     return (int32_t) ((1.0f - brightness * rainFactor * thunderFactor) * SKY_LIGHT_SCALE);
 }

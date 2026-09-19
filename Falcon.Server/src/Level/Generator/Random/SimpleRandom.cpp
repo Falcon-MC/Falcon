@@ -1,5 +1,7 @@
 #include "Level/Generator/Random/SimpleRandom.h"
 
+#include "Core/Math/MathConstants.h"
+
 #include <cmath>
 
 namespace {
@@ -341,7 +343,7 @@ double SimpleRandom::nextGaussian() {
         values[0] = 0x1.0p-53;
     }
 
-    const double sample = std::sqrt(-2.0 * std::log(values[0])) * std::cos(2.0 * 3.141592653589793 * values[1]) * 0.33333;
+    const double sample = std::sqrt(-2.0 * std::log(values[0])) * std::cos(2.0 * MathConstants::PI * values[1]) * 0.33333;
 
     if (sample > 1.0) {
         return 1.0;

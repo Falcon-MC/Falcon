@@ -4,6 +4,7 @@
 #include "Block/Systems/LiquidBlocksFetch.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
+#include "Core/Math/MathConstants.h"
 #include "Item/EnchantmentData.h"
 #include "Item/ItemEnchantments.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -29,7 +30,6 @@ namespace {
     const float PLAYER_EYE_HEIGHT = 1.62f;
     const float PLAYER_WIDTH = 0.6f;
     const float PLAYER_HEIGHT = 1.8f;
-    const float DEGREES_TO_RADIANS = 3.14159265358979323846f / 180.0f;
 
     float eyeHeightOf(float height) {
         return std::min(height * 0.5f + 0.1f, height);
@@ -47,8 +47,8 @@ namespace {
 
     Vector3f lookDirectionOf(const ServerPlayer &player) {
         const Vector3f rotation = player.getRotation();
-        const float pitch = rotation.x * DEGREES_TO_RADIANS;
-        const float yaw = rotation.y * DEGREES_TO_RADIANS;
+        const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
+        const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
 
         return Vector3f(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
     }

@@ -2,6 +2,7 @@
 
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
+#include "Core/Math/MathConstants.h"
 #include "Item/Items/ElytraItem.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
@@ -15,7 +16,6 @@
 namespace {
     const char *FIREWORK_ACTOR = "minecraft:fireworks_rocket";
     const float ELYTRA_BOOST_SPEED = 2.0f;
-    const float DEGREES_TO_RADIANS = 3.14159265358979323846f / 180.0f;
     const char *FIREWORKS_TAG = "Fireworks";
     const char *EXPLOSIONS_TAG = "Explosions";
     const char *FLIGHT_TAG = "Flight";
@@ -102,8 +102,8 @@ bool FireworkRocketItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player
         return false;
 
     const Vector3f rotation = player.getRotation();
-    const float pitch = rotation.x * DEGREES_TO_RADIANS;
-    const float yaw = rotation.y * DEGREES_TO_RADIANS;
+    const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
+    const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
 
     player.setMotion(Vector3f(-std::sin(yaw) * std::cos(pitch) * ELYTRA_BOOST_SPEED,
                               -std::sin(pitch) * ELYTRA_BOOST_SPEED,
