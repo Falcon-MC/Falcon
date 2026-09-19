@@ -985,6 +985,7 @@ void ServerNetworkHandler::broadcastActorMove(ServerActor &actor) {
     MoveActorAbsolutePacket move;
     move.mRuntimeActorId = (int64_t) actor.getRuntimeId();
     move.mPosition = actor.getPosition();
+    move.mPosition.y += actor.getBaseOffset();
     move.mRotation = actor.getRotation();
 
     for (auto &entry: mPlayers) {

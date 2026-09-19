@@ -38,6 +38,10 @@ public:
 
     bool isExpired() const override { return mExpired; }
 
+    float getBaseOffset() const override {
+        return BASE_OFFSET;
+    }
+
     bool shouldSave() const override { return !mExpired; }
 
     void fillSpawnMetadata(EntityDataMap &metadata) const override;

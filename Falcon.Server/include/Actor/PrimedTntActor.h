@@ -11,6 +11,7 @@ public:
     static const float GRAVITY;
     static const float DRAG;
     static const float SIZE;
+    static constexpr float BASE_OFFSET = 0.49f;
     static const double EXPLOSION_Y_OFFSET;
     static const double EXPLOSION_SIZE;
     static const int32_t DEFAULT_FUSE = 80;
@@ -18,6 +19,10 @@ public:
     PrimedTntActor(uint64_t runtimeId, int32_t fuse);
 
     void tick(ServerNetworkHandler &owner) override;
+
+    float getBaseOffset() const override {
+        return BASE_OFFSET;
+    }
 
     bool isExpired() const override {
         return mExpired;

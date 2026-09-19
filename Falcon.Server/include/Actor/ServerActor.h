@@ -48,6 +48,10 @@ public:
 
     virtual bool isExpired() const { return false; }
 
+    virtual float getBaseOffset() const {
+        return 0.0f;
+    }
+
     virtual void fillSpawnMetadata(EntityDataMap &metadata) const { (void) metadata; }
 
     /**
