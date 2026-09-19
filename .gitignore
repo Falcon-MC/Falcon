@@ -4,6 +4,8 @@
 !/.github/**
 !/CMakeLists.txt
 !/README.md
+!/LICENSE
+!/COPYING
 !/build.bat
 !/build.sh
 !/Falcon.Network
