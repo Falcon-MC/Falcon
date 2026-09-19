@@ -395,7 +395,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     addToPlayerList(owner, player);
 }
 
-void LoginHandler::sendAbilities(ServerNetworkHandler &owner, ServerPlayer &player) {
+PlayerAbilityData LoginHandler::buildAbilities(ServerNetworkHandler &owner, const ServerPlayer &player) {
     const int32_t gameType = player.getGameType();
     const bool isCreative = gameType == (int32_t) GameType::Creative;
     const bool isSpectator = gameType == (int32_t) GameType::Spectator;
@@ -454,15 +454,24 @@ void LoginHandler::sendAbilities(ServerNetworkHandler &owner, ServerPlayer &play
     layer.mFlySpeed = 0.05f;
     layer.mVerticalFlySpeed = 1.0f;
 
+    PlayerAbilityData data;
+    data.mUniqueActorId = player.getUniqueId();
+    data.mPlayerPermission = (uint8_t) (player.isOp() ? PlayerPermission::Operator
+                                                      : owner.getProperties().getDefaultPlayerPermissionLevel());
+    data.mCommandPermission = (uint8_t) (player.isOp() ? CommandPermission::GameDirectors : CommandPermission::Any);
+    data.mAbilityLayers.push_back(layer);
+    return data;
+}
+
+void LoginHandler::sendAbilities(ServerNetworkHandler &owner, ServerPlayer &player) {
     UpdateAbilitiesPacket abilities;
-    abilities.mAbilities.mUniqueActorId = player.getUniqueId();
-    abilities.mAbilities.mPlayerPermission = (uint8_t) (player.isOp() ? PlayerPermission::Operator
-                                                                     : owner.getProperties().getDefaultPlayerPermissionLevel());
-    abilities.mAbilities.mCommandPermission = (uint8_t) (player.isOp() ? CommandPermission::GameDirectors
-                                                                       : CommandPermission::Any);
-    abilities.mAbilities.mAbilityLayers.push_back(layer);
+    abilities.mAbilities = buildAbilities(owner, player);
 
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), abilities, owner.getCodecContext());
+}
+
+Uuid LoginHandler::playerListUuid(const ServerPlayer &player) {
+    return listUuidFor(player);
 }
 
 void LoginHandler::sendBiomeDefinitions(ServerNetworkHandler &owner, ServerPlayer &player) {

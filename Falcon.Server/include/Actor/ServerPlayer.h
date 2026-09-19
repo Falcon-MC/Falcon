@@ -264,6 +264,16 @@ public:
 
     void markTeleported() { mLastTeleport = std::chrono::steady_clock::now(); }
 
+    /** Whether the player changed skin less than the given number of seconds ago. */
+    bool changedSkinWithin(int seconds) const {
+        return mHasChangedSkin && std::chrono::steady_clock::now() - mLastSkinChange < std::chrono::seconds(seconds);
+    }
+
+    void markSkinChanged() {
+        mHasChangedSkin = true;
+        mLastSkinChange = std::chrono::steady_clock::now();
+    }
+
     /** Whether the player was teleported less than a second ago, when their movement costs no food. */
     bool wasRecentlyTeleported() const {
         return std::chrono::steady_clock::now() - mLastTeleport < POST_TELEPORT_GRACE;
@@ -335,6 +345,18 @@ public:
 
     std::unordered_set<uint64_t> &getVisibleActors() { return mVisibleActors; }
 
+    /** Runtime ids of the other players this player's client currently has spawned. */
+    std::unordered_set<uint64_t> &getVisiblePlayers() { return mVisiblePlayers; }
+
+    bool hasMovedSinceBroadcast() const {
+        return mPosition != mBroadcastPosition || mRotation != mBroadcastRotation;
+    }
+
+    void markMoveBroadcast() {
+        mBroadcastPosition = mPosition;
+        mBroadcastRotation = mRotation;
+    }
+
     size_t getSentChunkCount() const { return mSentChunkCount; }
 
     void addSentChunkCount(size_t count) { mSentChunkCount += count; }
@@ -394,6 +416,8 @@ private:
     int mAirSupply = MAX_AIR_SUPPLY;
     int mTurtleHelmetTicks = 0;
     std::chrono::steady_clock::time_point mLastTeleport{};
+    std::chrono::steady_clock::time_point mLastSkinChange{};
+    bool mHasChangedSkin = false;
     bool mHasPendingMove = false;
     Vector3f mPendingMovePosition;
     Vector3f mPendingMoveRotation;
@@ -409,6 +433,9 @@ private:
     bool mSawNonZeroClientTick = false;
     std::unordered_set<int64_t> mSentChunks;
     std::unordered_set<uint64_t> mVisibleActors;
+    std::unordered_set<uint64_t> mVisiblePlayers;
+    Vector3f mBroadcastPosition;
+    Vector3f mBroadcastRotation;
     size_t mSentChunkCount = 0;
     bool mSpawnChunksReady = false;
     int32_t mLastChunkX = 0;

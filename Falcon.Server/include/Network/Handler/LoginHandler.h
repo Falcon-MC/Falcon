@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Core/Utility/UUID.h"
+#include "Protocol/Types/PlayerAbilityData.h"
+
 class ServerNetworkHandler;
 class ServerPlayer;
 class NetworkIdentifier;
@@ -28,6 +31,12 @@ public:
     static void sendStartGame(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void sendAbilities(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    /** The abilities a player has, as sent to themselves and to the players who see them. */
+    static PlayerAbilityData buildAbilities(ServerNetworkHandler &owner, const ServerPlayer &player);
+
+    /** The UUID that identifies the player in the player list, which AddPlayer must reuse. */
+    static Uuid playerListUuid(const ServerPlayer &player);
 
     static void sendBiomeDefinitions(ServerNetworkHandler &owner, ServerPlayer &player);
 

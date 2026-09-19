@@ -146,6 +146,7 @@ bool PropertiesSettings::_isKnownProperty(const std::string &key) {
             "content-log-file-enabled", "content-log-console-output-enabled", "content-log-level",
             "compression-threshold", "compression-algorithm", "chat-restriction", "disable-player-interaction",
             "client-side-chunk-generation-enabled", "block-network-ids-are-hashes", "disable-custom-skins",
+            "skin-change-cooldown",
             "server-authoritative-movement-strict",
             "server-authoritative-dismount-strict", "server-authoritative-entity-interactions-strict",
             "server-authoritative-block-breaking-pick-range-scalar", "server-build-radius-ratio",

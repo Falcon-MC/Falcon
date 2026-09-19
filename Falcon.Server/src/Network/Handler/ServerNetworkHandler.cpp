@@ -714,6 +714,7 @@ void ServerNetworkHandler::changePlayerDimension(ServerPlayer &player, Dimension
 
     player.setDimension(dimension);
     player.getVisibleActors().clear();
+    player.getVisiblePlayers().clear();
     player.setAwaitingDimensionAck(true);
     player.resetChunkStreaming();
     player.getChunkStreamState() = ChunkStreamState();
@@ -1151,6 +1152,10 @@ void ServerNetworkHandler::tick() {
 
     tickActors();
     updateActorVisibility();
+    updatePlayerVisibility();
+
+    for (auto &entry: mPlayers)
+        broadcastPlayerMove(entry.second);
     mLevel.processChunkUnloads();
 
     if (mNetherLevel != nullptr)
@@ -1245,8 +1250,10 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
         }
     }
 
-    if (player != nullptr)
+    if (player != nullptr) {
+        despawnPlayerForViewers(*player);
         getLevelFor(*player).unregisterAllChunkLoaders(player->getRuntimeId());
+    }
 
     mModalFormCallbacks.erase(id);
     mPlayers.erase(id);
@@ -1585,49 +1592,56 @@ void ServerNetworkHandler::_sendEntityData(ServerPlayer &player) {
     SetActorDataPacket entityData;
     entityData.mRuntimeActorId = (int64_t) player.getRuntimeId();
     entityData.mTick = 0;
+    entityData.mMetadata = _buildPlayerData(player);
+
+    for (const auto &entry: mPlayers) {
+        if (entry.first == player.getNetworkIdentifier() || entry.second.isSpawned())
+            mNetworkHandler->send(entry.first, entityData, mCodecContext);
+    }
+}
+
+EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {
+    EntityDataMap metadata;
 
     EntityDataEntry flags;
     flags.mId = ActorFlags::FLAGS_DATA_ID;
     flags.mFormat = EntityDataFormat::Long;
     flags.mLongValue = player.getFlags().getLowBits();
-    entityData.mMetadata.mEntries.push_back(flags);
+    metadata.mEntries.push_back(flags);
 
     EntityDataEntry flags2;
     flags2.mId = ActorFlags::FLAGS_2_DATA_ID;
     flags2.mFormat = EntityDataFormat::Long;
     flags2.mLongValue = player.getFlags().getHighBits();
-    entityData.mMetadata.mEntries.push_back(flags2);
+    metadata.mEntries.push_back(flags2);
 
     EntityDataEntry playerFlags;
     playerFlags.mId = ActorFlags::PLAYER_FLAGS_DATA_ID;
     playerFlags.mFormat = EntityDataFormat::Byte;
     playerFlags.mByteValue = player.isSleeping() ? ActorFlags::PLAYER_FLAG_SLEEP : 0;
-    entityData.mMetadata.mEntries.push_back(playerFlags);
+    metadata.mEntries.push_back(playerFlags);
 
     EntityDataEntry air;
     air.mId = ActorFlags::AIR_SUPPLY_DATA_ID;
     air.mFormat = EntityDataFormat::Short;
     air.mShortValue = (int16_t) player.getAirSupply();
-    entityData.mMetadata.mEntries.push_back(air);
+    metadata.mEntries.push_back(air);
 
     EntityDataEntry maxAir;
     maxAir.mId = ActorFlags::AIR_SUPPLY_MAX_DATA_ID;
     maxAir.mFormat = EntityDataFormat::Short;
     maxAir.mShortValue = (int16_t) ServerPlayer::MAX_AIR_SUPPLY;
-    entityData.mMetadata.mEntries.push_back(maxAir);
+    metadata.mEntries.push_back(maxAir);
 
     if (player.isSleeping()) {
         EntityDataEntry bedPosition;
         bedPosition.mId = ActorFlags::BED_POSITION_DATA_ID;
         bedPosition.mFormat = EntityDataFormat::Vector3i;
         bedPosition.mVector3iValue = player.getSleepingPosition();
-        entityData.mMetadata.mEntries.push_back(bedPosition);
+        metadata.mEntries.push_back(bedPosition);
     }
 
-    for (const auto &entry: mPlayers) {
-        if (entry.first == player.getNetworkIdentifier() || entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, entityData, mCodecContext);
-    }
+    return metadata;
 }
 
 bool ServerNetworkHandler::isAllowListed(ServerPlayer &player) {
@@ -2236,13 +2250,18 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormRe
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerSkinPacket &packet) {
     ServerPlayer *player = _getPlayer(id);
-    if (player == nullptr || !player->isSpawned() || !isValidSkin(packet.mSkin))
+    if (player == nullptr || !player->isSpawned() || player->isDead() || !isValidSkin(packet.mSkin))
         return;
 
     const Uuid playerUuid = Uuid::fromString(player->getUuid());
     const Uuid emptyUuid;
     if (playerUuid != emptyUuid && packet.mUuid != emptyUuid && packet.mUuid != playerUuid)
         return;
+
+    if (player->changedSkinWithin(mProperties.getSkinChangeCooldown())) {
+        LOG_WARN(LogAreaID::Server, "Player %s changed skin too quickly", player->getName().c_str());
+        return;
+    }
 
     SerializedSkin skin = packet.mSkin;
     normalizeSkin(skin);
@@ -2253,12 +2272,15 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerSkinP
         return;
 
     player->setSkin(skin);
+    player->markSkinChanged();
 
     PlayerSkinPacket update = packet;
-    update.mUuid = playerUuid == emptyUuid ? packet.mUuid : playerUuid;
+    update.mUuid = LoginHandler::playerListUuid(*player);
     update.mSkin = player->getSkin();
+    update.mNewSkinName = skin.mSkinId;
+    update.mOldSkinName.clear();
     for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned() && entry.second.getNetworkIdentifier() != id)
+        if (entry.second.isSpawned())
             mNetworkHandler->send(entry.second.getNetworkIdentifier(), update, mCodecContext);
     }
 }

@@ -187,6 +187,18 @@ public:
 
     void updateActorVisibility();
 
+    /** Whether the viewer's client should have the other player spawned: same dimension, chunk sent. */
+    bool canPlayerSeePlayer(ServerPlayer &viewer, const ServerPlayer &target) const;
+
+    /** Spawns and despawns players for each other as they come in and out of view. */
+    void updatePlayerVisibility();
+
+    /** Sends the player's movement to every client that has them spawned. */
+    void broadcastPlayerMove(ServerPlayer &player);
+
+    /** Despawns the player for every client that has them spawned, as they leave the server. */
+    void despawnPlayerForViewers(ServerPlayer &player);
+
     bool canPlayerSeeActor(ServerPlayer &player, const ServerActor &actor) const;
 
     void broadcastActorMove(ServerActor &actor);
@@ -388,6 +400,12 @@ public:
     bool _equipHeldArmor(ServerPlayer &player, const Item &itemType);
 
     void _sendEntityData(ServerPlayer &player);
+
+    EntityDataMap _buildPlayerData(ServerPlayer &player);
+
+    void _sendPlayerSpawn(ServerPlayer &viewer, ServerPlayer &target);
+
+    void _sendPlayerRemove(ServerPlayer &viewer, const ServerPlayer &target);
 
     void _broadcastEntityEvent(const Actor &entity, uint8_t eventId);
 

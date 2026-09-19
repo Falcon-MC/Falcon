@@ -107,6 +107,9 @@ public:
 
     bool getDisableCustomSkins() const { return getBool("disable-custom-skins", false); }
 
+    /** Minimum number of seconds between two skin changes of the same player. */
+    int getSkinChangeCooldown() const { return getInt("skin-change-cooldown", 30); }
+
     float getPlayerPositionAcceptanceThreshold() const {
         return getFloat("player-position-acceptance-threshold", 0.5f);
     }
