@@ -23,7 +23,7 @@ namespace {
 }
 
 AboutCommand::AboutCommand(ServerNetworkHandler &handler)
-        : Command("about", "commands.about.description", "/about", {"version", "ver"}),
+        : Command("about", "Shows the server version", "/about", {"version", "ver"}),
           mHandler(handler) {}
 
 CommandPermission AboutCommand::getRequiredPermission() const {

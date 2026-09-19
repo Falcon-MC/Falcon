@@ -8,7 +8,7 @@ namespace {
 }
 
 ProfilerCommand::ProfilerCommand(ServerNetworkHandler &handler)
-        : Command("profiler", "commands.profiler.description", "/profiler <on|off|status>"),
+        : Command("profiler", "Records a server performance report", "/profiler <on|off|status>"),
           mHandler(handler) {}
 
 CommandPermission ProfilerCommand::getRequiredPermission() const {

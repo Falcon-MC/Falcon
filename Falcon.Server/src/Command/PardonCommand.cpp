@@ -3,7 +3,7 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 
 PardonCommand::PardonCommand(ServerNetworkHandler &handler)
-        : Command("pardon", "commands.unban.description", "/pardon <player>", {"unban"}), mHandler(handler) {}
+        : Command("pardon", "Removes a player from the ban list", "/pardon <player>", {"unban"}), mHandler(handler) {}
 
 std::vector<CommandOverloadData> PardonCommand::getOverloads() const {
     CommandParamData playerParameter;
