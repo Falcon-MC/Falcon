@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  repository_dispatch:
+    types:
+      - upstream-updated
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-22.04
+          - name: windows-x64
+            os: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report the upstream change
+        if: github.event_name == 'repository_dispatch'
+        run: echo "Rebuilding after ${{ github.event.client_payload.repository }}@${{ github.event.client_payload.sha }}"
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache zlib1g-dev libssl-dev
+
+      - name: Install MSYS2 toolchain
+        if: matrix.os == 'windows-2022'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-lld
+            mingw-w64-x86_64-ccache
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-openssl
+            git
+
+      - name: Cache compiler objects
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ci-ccache-${{ matrix.name }}-${{ github.sha }}
+          restore-keys: ci-ccache-${{ matrix.name }}-
+
+      - name: Configure and build (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build --parallel
+
+      - name: Configure and build (Windows)
+        if: matrix.os == 'windows-2022'
+        shell: msys2 {0}
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build --parallel
