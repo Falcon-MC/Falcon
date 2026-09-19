@@ -170,7 +170,7 @@ void BucketItem::sendArmSwing(ServerNetworkHandler &owner, ServerPlayer &player,
                                            Vector3f((float) position.x + 0.5f,
                                                     (float) position.y + 0.5f,
                                                     (float) position.z + 0.5f),
-                                           swing);
+                                           swing, &player);
 }
 
 bool BucketItem::isWaterloggable(Level &level, const Vector3i &position) {

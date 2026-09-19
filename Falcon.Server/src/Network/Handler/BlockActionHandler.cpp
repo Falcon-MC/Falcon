@@ -273,17 +273,20 @@ namespace {
         swing.mEventId = (uint8_t) EntityEventType::ArmSwing;
         swing.mEventData = 0;
         swing.mHasFirePosition = false;
-        BlockActionHandler::broadcastToViewers(owner, owner.getLevelFor(player), position, swing);
+        BlockActionHandler::broadcastToViewers(owner, owner.getLevelFor(player), position, swing, &player);
     }
 }
 
 void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
-                                            const Packet &packet) {
+                                            const Packet &packet, const ServerPlayer *except) {
     const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
     const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
     const int64_t key = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 
     for (auto &entry: owner.getPlayers()) {
+        if (&entry.second == except)
+            continue;
+
         if (&owner.getLevelFor(entry.second) == &level && entry.second.getSentChunks().count(key) != 0)
             owner.getNetworkHandler().send(entry.first, packet, owner.getCodecContext());
     }
@@ -649,7 +652,7 @@ void BlockActionHandler::sendBreakingFx(ServerNetworkHandler &owner, ServerPlaye
     swing.mEventId = (uint8_t) EntityEventType::ArmSwing;
     swing.mEventData = 0;
     swing.mHasFirePosition = false;
-    broadcastToViewers(owner, level, center, swing);
+    broadcastToViewers(owner, level, center, swing, &player);
 
 }
 

@@ -235,7 +235,15 @@ ServerPlayer::ServerPlayer(const NetworkIdentifier &id, uint64_t runtimeId, Pack
 }
 
 bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId) {
-    broadcastEvent(owner, *this, EntityEventType::ArmSwing);
+    ActorEventPacket swing;
+    swing.mRuntimeActorId = getRuntimeId();
+    swing.mEventId = (uint8_t) EntityEventType::ArmSwing;
+    swing.mEventData = 0;
+    swing.mHasFirePosition = false;
+    for (const auto &entry: owner.getPlayers()) {
+        if (&entry.second != this && entry.second.isSpawned() && entry.second.getDimension() == getDimension())
+            owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), swing, owner.getCodecContext());
+    }
 
     if (!isSpawned() || isDead() || getGameType() == (int32_t) GameType::Spectator)
         return false;

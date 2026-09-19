@@ -14,7 +14,7 @@ class BlockState;
 class BlockActionHandler {
 public:
     static void broadcastToViewers(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
-                                   const Packet &packet);
+                                   const Packet &packet, const ServerPlayer *except = nullptr);
 
     static void broadcastBlockUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                      const BlockState &state);
