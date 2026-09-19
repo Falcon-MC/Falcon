@@ -30,6 +30,7 @@
 #include "Protocol/Packets/CameraPresetsPacket.h"
 #include "Protocol/Types/CameraPresets.h"
 #include "Protocol/Packets/ItemRegistryPacket.h"
+#include "Protocol/Packets/JigsawStructureDataPacket.h"
 #include "Protocol/Packets/LoginPacket.h"
 #include "Protocol/Packets/PlayerListPacket.h"
 #include "Protocol/Packets/PlayStatusPacket.h"
@@ -334,6 +335,13 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mBlockProperties = CustomContentRegistry::getInstance().getBlockProperties();
 
     startGame.mGamerules = owner.getLevel().getGameRules().toNetwork();
+
+    JigsawStructureDataPacket jigsawStructureData;
+    jigsawStructureData.mJigsawStructureData.put("processors", Tag::ofList(Tag::Type::Compound));
+    jigsawStructureData.mJigsawStructureData.put("template_pools", Tag::ofList(Tag::Type::Compound));
+    jigsawStructureData.mJigsawStructureData.put("jigsaws", Tag::ofList(Tag::Type::Compound));
+    jigsawStructureData.mJigsawStructureData.put("structure_sets", Tag::ofList(Tag::Type::Compound));
+    owner.getNetworkHandler().send(id, jigsawStructureData, owner.getCodecContext());
 
     owner.getNetworkHandler().send(id, VoxelShapeRegistry::getPacket(), owner.getCodecContext());
 
