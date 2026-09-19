@@ -88,7 +88,9 @@ void ChestBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, con
     pair(owner.getLevelFor(player), position);
 }
 
-void ChestBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+void ChestBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                          const BlockState &state) const {
+    (void) level;
     (void) state;
 
     ChestBlockActor *chest = BlockActorStore::getInstance().find<ChestBlockActor>(position);

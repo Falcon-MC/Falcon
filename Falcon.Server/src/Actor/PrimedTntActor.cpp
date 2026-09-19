@@ -1,18 +1,19 @@
 #include "Actor/PrimedTntActor.h"
 
 #include "Actor/ActorFlags.h"
-#include "Block/BlockShape.h"
 #include "Level/Explosion.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include <cmath>
+#include <vector>
 
 const char *PrimedTntActor::IDENTIFIER = "minecraft:tnt";
 
 const float PrimedTntActor::GRAVITY = 0.04f;
 const float PrimedTntActor::DRAG = 0.02f;
+const float PrimedTntActor::SIZE = 0.98f;
 const double PrimedTntActor::EXPLOSION_Y_OFFSET = 0.06125;
 const double PrimedTntActor::EXPLOSION_SIZE = 4.0;
 
@@ -51,22 +52,35 @@ void PrimedTntActor::tick(ServerNetworkHandler &owner) {
     Vector3f motion = getMotion();
     motion.y -= GRAVITY;
 
-    position.x += motion.x;
-    position.y += motion.y;
-    position.z += motion.z;
+    const float halfWidth = SIZE * 0.5f;
+    AxisAlignedBB box(position.x - halfWidth, position.y, position.z - halfWidth,
+                      position.x + halfWidth, position.y + SIZE, position.z + halfWidth);
+    const std::vector<AxisAlignedBB> colliders = level.getCollisionBoxes(box.addCoord(motion.x, motion.y, motion.z));
 
-    const int32_t blockX = (int32_t) std::floor(position.x);
-    const int32_t blockY = (int32_t) std::floor(position.y);
-    const int32_t blockZ = (int32_t) std::floor(position.z);
+    float moveY = motion.y;
+    for (const AxisAlignedBB &collider: colliders)
+        moveY = collider.calculateYOffset(box, moveY);
+    box = box.offset(0.0f, moveY, 0.0f);
 
-    bool onGround = false;
-    if (blockY >= LevelChunk::MIN_Y && motion.y < 0.0f) {
-        const BlockState below = level.getBlockState(blockX, blockY, blockZ);
-        if (BlockShape::isPositionInside(below, blockX, blockY, blockZ, position.x, position.y, position.z)) {
-            position.y = BlockShape::getShapeAt(below, blockX, blockY, blockZ).mMaxY;
-            onGround = true;
-        }
-    }
+    float moveX = motion.x;
+    for (const AxisAlignedBB &collider: colliders)
+        moveX = collider.calculateXOffset(box, moveX);
+    box = box.offset(moveX, 0.0f, 0.0f);
+
+    float moveZ = motion.z;
+    for (const AxisAlignedBB &collider: colliders)
+        moveZ = collider.calculateZOffset(box, moveZ);
+    box = box.offset(0.0f, 0.0f, moveZ);
+
+    const bool onGround = motion.y < 0.0f && moveY != motion.y;
+    if (moveX != motion.x)
+        motion.x = 0.0f;
+    if (moveZ != motion.z)
+        motion.z = 0.0f;
+    if (moveY != motion.y && !onGround)
+        motion.y = 0.0f;
+
+    position = Vector3f(box.mMinX + halfWidth, box.mMinY, box.mMinZ + halfWidth);
 
     const float friction = 1.0f - DRAG;
     motion.x *= friction;

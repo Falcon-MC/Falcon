@@ -119,6 +119,7 @@ enum class MinecraftPacketIds : int {
     NetworkChunkPublisherUpdate = 121,
     BiomeDefinitionList = 122,
     LevelSoundEvent = 123,
+    LevelEventGeneric = 124,
     VideoStreamConnect = 125,
     ClientCacheStatus = 129,
     OnScreenTextureAnimation = 130,

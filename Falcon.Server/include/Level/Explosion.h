@@ -44,6 +44,8 @@ private:
 
     void _damageEntities();
 
+    bool _isInsideWater(const Vector3f &position) const;
+
     void _destroyBlocks();
 
     void _ignite();
@@ -60,4 +62,5 @@ private:
     std::vector<Vector3i> mAffectedBlocks;
     std::unordered_set<int64_t> mAffectedKeys;
     std::vector<Vector3i> mFireIgnitions;
+    std::vector<Vector3i> mSmokePositions;
 };

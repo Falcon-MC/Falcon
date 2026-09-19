@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Block/Systems/LiquidPhysicsSystem.h"
+#include "Core/Math/AxisAlignedBB.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "Level/BlockUpdateScheduler.h"
@@ -15,11 +16,15 @@
 
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+class Packet;
+class Particle;
 
 class Level {
 public:
@@ -85,6 +90,14 @@ public:
     void initializeWeather();
 
     void saveWeather();
+
+    using PacketBroadcaster = std::function<void(Level &, const Vector3f &, const Packet &)>;
+
+    void setPacketBroadcaster(PacketBroadcaster broadcaster) {
+        mPacketBroadcaster = std::move(broadcaster);
+    }
+
+    void addParticle(const Particle &particle);
 
     GameRules &getGameRules() { return mGameRules; }
 
@@ -180,6 +193,8 @@ public:
 
     bool isSolidAt(int32_t x, int32_t y, int32_t z);
 
+    std::vector<AxisAlignedBB> getCollisionBoxes(const AxisAlignedBB &area);
+
     void setBlock(int32_t x, int32_t y, int32_t z, int32_t blockHash);
 
     void setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &state);
@@ -268,4 +283,5 @@ private:
     int32_t mThunderTime = 0;
     int32_t mSkyLightSubtracted = 0;
     GameRules mGameRules;
+    PacketBroadcaster mPacketBroadcaster;
 };

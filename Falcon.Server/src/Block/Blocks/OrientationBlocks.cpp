@@ -54,7 +54,10 @@ bool PistonBlock::matches(const std::string &identifier) {
     return PistonSystem::isPiston(identifier);
 }
 
-void PistonBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+void PistonBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                           const BlockState &state) const {
+    (void) level;
+
     PistonSystem::onBlockBroken(owner, position, state);
 }
 
@@ -179,9 +182,9 @@ bool BedOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &
     return BedBlock::use(owner, player, position, state);
 }
 
-void BedOrientationBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position,
+void BedOrientationBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                    const BlockState &state) const {
-    BedBlock::breakOtherHalf(owner, owner.getLevel(), position, state);
+    BedBlock::breakOtherHalf(owner, level, position, state);
 }
 
 bool DoorOrientationBlock::matches(const std::string &identifier) {

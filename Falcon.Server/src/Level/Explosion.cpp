@@ -1,6 +1,7 @@
 #include "Level/Explosion.h"
 
 #include "Actor/ActorSizeTable.h"
+#include "Actor/ItemActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
@@ -11,7 +12,8 @@
 #include "Level/LevelChunk.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
-#include "Protocol/Packets/LevelEventPacket.h"
+#include "Level/Particle/BlockExplodeParticle.h"
+#include "Level/Particle/ExplodeParticle.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemStack.h"
 
@@ -24,6 +26,7 @@ namespace {
     const double STEP_LEN = 0.3;
     const double DEFAULT_FIRE_CHANCE = 1.0 / 3.0;
     const char *DEATH_KEY = "death.attack.explosion";
+    const char *NETHER_STAR = "minecraft:nether_star";
 
     std::mt19937 &explosionRandom() {
         static std::mt19937 random(std::random_device{}());
@@ -241,16 +244,50 @@ void Explosion::_damageEntities() {
         actor->setMotion(Vector3f(current.x + motion.x * (float) impact, current.y + motion.y * (float) impact,
                                   current.z + motion.z * (float) impact));
     }
+
+    for (const std::unique_ptr<ItemActor> &item: mOwner.getItemEntities()) {
+        if (item->isRemoved() || _isInsideWater(item->getPosition()))
+            continue;
+
+        const ItemStack &stack = item->getItem();
+        if (stack.mDefinition != nullptr && stack.mDefinition->getIdentifier() == NETHER_STAR)
+            continue;
+
+        const Vector3f position = item->getPosition();
+        const double distance = distanceBetween(position, mSource) / explosionSize;
+        if (distance > 1.0)
+            continue;
+
+        const float density = getBlockDensity(mLevel, mSource, boundingBoxOf(position, "minecraft:item"));
+        const double impact = (1.0 - distance) * density;
+        if (item->reduceHealth(_calculateEntityDamage(explosionSize, impact)) <= 0.0f)
+            item->setRemoved(true);
+    }
+}
+
+bool Explosion::_isInsideWater(const Vector3f &position) const {
+    const int32_t x = (int32_t) std::floor(position.x);
+    const int32_t y = (int32_t) std::floor(position.y);
+    const int32_t z = (int32_t) std::floor(position.z);
+    if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
+        return false;
+
+    return LiquidView(mLevel.getBlockState(x, y, z)).isWater()
+           || LiquidView(mLevel.getBlockStateAtLayer(x, y, z, 1)).isWater();
 }
 
 void Explosion::_destroyBlocks() {
-    const double yield = mFromTnt ? 100.0 : (1.0 / mSize) * 100.0;
+    const double yield = mFromTnt && !mLevel.getGameRules().getBool("tntexplosiondropdecay")
+                         ? 100.0 : (1.0 / mSize) * 100.0;
     const ItemStack noTool;
 
     for (const Vector3i &position: mAffectedBlocks) {
         const BlockState state = mLevel.getBlockState(position.x, position.y, position.z);
         if (isAir(state))
             continue;
+
+        if (nextInt(0, 7) == 0)
+            mSmokePositions.push_back(position);
 
         if (TntBlock::matches(state.mName)) {
             TntBlock::prime(mOwner, mLevel, position, nextInt(10, 30));
@@ -281,11 +318,8 @@ void Explosion::_ignite() {
 void Explosion::_playEffects() {
     mOwner.playLevelSound(LevelSoundEvent::EXPLODE, mSource);
 
-    LevelEventPacket particle;
-    particle.mEventId = LevelEventPacket::Event::ParticleExplode;
-    particle.mPosition = mSource;
-    particle.mData = (int32_t) std::lround((float) mSize);
-    BlockActionHandler::broadcastToViewers(mOwner, mSource, particle);
+    mLevel.addParticle(ExplodeParticle(mSource, mSize));
+    mLevel.addParticle(BlockExplodeParticle(mSource, mSize, mSmokePositions));
 }
 
 float Explosion::getBlockDensity(Level &level, const Vector3f &source, const AxisAlignedBB &boundingBox) {

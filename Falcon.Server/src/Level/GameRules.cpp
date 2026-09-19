@@ -30,23 +30,62 @@ namespace {
 }
 
 GameRules::GameRules() {
-    Rule fireTick;
-    fireTick.mName = "dofiretick";
-    fireTick.mType = GameRuleData::Type::Bool;
-    fireTick.mBoolValue = true;
-    mRules.push_back(fireTick);
+    _addBool("commandblocksenabled", true);
+    _addBool("commandblockoutput", true);
+    _addBool("dodaylightcycle", true);
+    _addBool("doentitydrops", true);
+    _addBool("dofiretick", true);
+    _addBool("doinsomnia", true);
+    _addBool("doimmediaterespawn", false);
+    _addBool("domobloot", true);
+    _addBool("domobspawning", true);
+    _addBool("dotiledrops", true);
+    _addBool("doweathercycle", true);
+    _addBool("drowningdamage", true);
+    _addBool("falldamage", true);
+    _addBool("firedamage", true);
+    _addBool("freezedamage", true);
+    _addInt("functioncommandlimit", 10000);
+    _addBool("keepinventory", false);
+    _addInt("maxcommandchainlength", 65535);
+    _addBool("mobgriefing", true);
+    _addBool("naturalregeneration", true);
+    _addBool("pvp", true);
+    _addInt("playerwaypoints", 1);
+    _addInt("randomtickspeed", 1);
+    _addBool("sendcommandfeedback", true);
+    _addBool("showcoordinates", true);
+    _addBool("showdeathmessages", true);
+    _addInt("spawnradius", 5);
+    _addBool("tntexplodes", true);
+    _addBool("projectilescanbreakblocks", true);
+    _addBool("tntexplosiondropdecay", true);
+    _addBool("showtags", true);
+    _addBool("experimentalgameplay", true);
+    _addInt("playerssleepingpercentage", 100);
+    _addBool("dolimitedcrafting", false);
+    _addBool("respawnblocksexplode", true);
+    _addBool("showbordereffect", true);
+    _addBool("showdaysplayed", false);
+    _addBool("showrecipemessages", true);
+    _addBool("locatorbar", true);
+    _addBool("recipesunlock", false);
+}
 
-    Rule daylightCycle;
-    daylightCycle.mName = "dodaylightcycle";
-    daylightCycle.mType = GameRuleData::Type::Bool;
-    daylightCycle.mBoolValue = true;
-    mRules.push_back(daylightCycle);
+void GameRules::_addBool(const std::string &name, bool value) {
+    Rule rule;
+    rule.mName = name;
+    rule.mType = GameRuleData::Type::Bool;
+    rule.mBoolValue = value;
+    mRules.push_back(rule);
+}
 
-    Rule showCoordinates;
-    showCoordinates.mName = "showcoordinates";
-    showCoordinates.mType = GameRuleData::Type::Bool;
-    showCoordinates.mBoolValue = true;
-    mRules.push_back(showCoordinates);
+void GameRules::_addInt(const std::string &name, int32_t value) {
+    Rule rule;
+    rule.mName = name;
+    rule.mType = GameRuleData::Type::Int;
+    rule.mIntValue = value;
+    mRules.push_back(rule);
 }
 
 const GameRules::Rule *GameRules::find(const std::string &name) const {

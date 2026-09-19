@@ -23,7 +23,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
-    void onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const override;
+    void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                  const BlockState &state) const override;
 };
 
 class TorchOrientationBlock final : public Block {
@@ -97,7 +98,8 @@ public:
     void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                   const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
 
-    void onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const override;
+    void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                  const BlockState &state) const override;
 };
 
 class DoorOrientationBlock final : public Block {

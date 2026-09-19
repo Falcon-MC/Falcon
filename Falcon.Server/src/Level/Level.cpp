@@ -3,13 +3,16 @@
 #include "Level/BiomeRegistry.h"
 #include "Level/Generator/DimensionFactory.h"
 #include "Level/Generator/Overworld/Biome/ClimateAttributes.h"
+#include "Level/Particle/Particle.h"
 #include "Level/SkyLightSystem.h"
 
 #include "Block/BlockData.h"
+#include "Block/BlockShape.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Core/Debug/BedrockLog.h"
 
 #include <algorithm>
+#include <cmath>
 #include <iterator>
 #include <random>
 #include <utility>
@@ -62,7 +65,17 @@ Level &Level::operator=(Level &&other) noexcept {
     mBlockUpdateScheduler.moveStateFrom(std::move(other.mBlockUpdateScheduler));
     mLiquidPhysics.moveStateFrom(std::move(other.mLiquidPhysics));
     mGameRules = std::move(other.mGameRules);
+    mPacketBroadcaster = std::move(other.mPacketBroadcaster);
     return *this;
+}
+
+void Level::addParticle(const Particle &particle) {
+    if (!mPacketBroadcaster)
+        return;
+
+    const std::unique_ptr<Packet> packet = particle.encode();
+    if (packet != nullptr)
+        mPacketBroadcaster(*this, particle.getPosition(), *packet);
 }
 
 bool Level::openStorage(const std::string &worldsDirectory) {
@@ -586,6 +599,32 @@ bool Level::isSolidAt(int32_t x, int32_t y, int32_t z) {
         return true;
 
     return data->mSolid;
+}
+
+std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area) {
+    std::vector<AxisAlignedBB> boxes;
+    const int32_t minX = (int32_t) std::floor(area.mMinX);
+    const int32_t minY = std::max((int32_t) std::floor(area.mMinY) - 1, LevelChunk::MIN_Y);
+    const int32_t minZ = (int32_t) std::floor(area.mMinZ);
+    const int32_t maxX = (int32_t) std::floor(area.mMaxX);
+    const int32_t maxY = std::min((int32_t) std::floor(area.mMaxY), LevelChunk::MAX_Y);
+    const int32_t maxZ = (int32_t) std::floor(area.mMaxZ);
+
+    for (int32_t x = minX; x <= maxX; ++x) {
+        for (int32_t z = minZ; z <= maxZ; ++z) {
+            for (int32_t y = minY; y <= maxY; ++y) {
+                const BlockState *state = peekBlockPtr(x, y, z);
+                if (state == nullptr || !BlockShape::hasCollision(*state))
+                    continue;
+
+                const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z);
+                if (shape.intersectsWith(area))
+                    boxes.push_back(shape);
+            }
+        }
+    }
+
+    return boxes;
 }
 
 void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &state) {

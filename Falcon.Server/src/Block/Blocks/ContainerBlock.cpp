@@ -227,7 +227,10 @@ void ContainerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
     BlockActorStore::getInstance().insert(std::move(created));
 }
 
-void ContainerBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+void ContainerBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state) const {
+    (void) level;
+
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
     if (definition == nullptr)
         return;

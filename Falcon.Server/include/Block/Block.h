@@ -14,6 +14,7 @@ class Actor;
 class BlockBehavior;
 class ItemStack;
 class Level;
+class ServerActor;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -81,10 +82,22 @@ public:
         (void) blockFace;
     }
 
-    virtual void onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+    virtual void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                          const BlockState &state) const {
         (void) owner;
+        (void) level;
         (void) position;
         (void) state;
+    }
+
+    virtual bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state, ServerActor &projectile) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        (void) projectile;
+        return false;
     }
 
     virtual void writeDropContents(const Vector3i &position, ItemStack &drop) const {

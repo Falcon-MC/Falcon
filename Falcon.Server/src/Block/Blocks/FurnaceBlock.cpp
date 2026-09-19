@@ -54,7 +54,9 @@ void FurnaceBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, c
     furnace.mKind = kind(state);
 }
 
-void FurnaceBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+void FurnaceBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                            const BlockState &state) const {
+    (void) level;
     (void) state;
 
     InventoryManager::onFurnaceBroken(owner, position);

@@ -7,6 +7,7 @@ class ItemActor : public Actor {
 public:
     static const int DEFAULT_PICKUP_DELAY = 10;
     static const int LIFETIME_TICKS = 6000;
+    static const int MAX_HEALTH = 5;
 
     ItemActor(uint64_t runtimeId, const ItemStack &item);
 

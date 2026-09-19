@@ -209,7 +209,9 @@ void ItemFrameBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
     owner.playLevelSound(LevelSoundEvent::ITEM_FRAME_PLACE, centreOf(position));
 }
 
-void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state) const {
+    (void) level;
     (void) state;
 
     ItemFrameBlockActor *frame = BlockActorStore::getInstance().find<ItemFrameBlockActor>(position);

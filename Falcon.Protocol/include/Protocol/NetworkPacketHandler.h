@@ -101,6 +101,7 @@ class JigsawStructureDataPacket;
 class LabTablePacket;
 class LessonProgressPacket;
 class LevelChunkPacket;
+class LevelEventGenericPacket;
 class LevelEventPacket;
 class LevelSoundEventPacket;
 class LocatorBarPacket;
@@ -445,6 +446,8 @@ public:
     virtual void handle(const NetworkIdentifier &, const LessonProgressPacket &) {}
 
     virtual void handle(const NetworkIdentifier &, const LevelChunkPacket &) {}
+
+    virtual void handle(const NetworkIdentifier &, const LevelEventGenericPacket &) {}
 
     virtual void handle(const NetworkIdentifier &, const LevelEventPacket &) {}
 

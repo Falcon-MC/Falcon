@@ -15,6 +15,9 @@ class BlockActionHandler {
 public:
     static void broadcastToViewers(ServerNetworkHandler &owner, const Vector3f &position, const Packet &packet);
 
+    static void broadcastToViewers(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
+                                   const Packet &packet);
+
     static void broadcastBlockUpdate(ServerNetworkHandler &owner, const Vector3i &position,
                                      const BlockState &state);
 

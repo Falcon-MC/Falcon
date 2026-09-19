@@ -17,6 +17,8 @@ namespace {
     const float PRIME_HORIZONTAL_MOTION = 0.02f;
     const float PRIME_VERTICAL_MOTION = 0.2f;
     const char *FUSE_SOUND = "random.fuse";
+    const char *ARROW = "minecraft:arrow";
+    const char *SMALL_FIREBALL = "minecraft:small_fireball";
 
     float nextAngle() {
         static std::mt19937 random(std::random_device{}());
@@ -72,4 +74,18 @@ bool TntBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, con
     }
 
     return false;
+}
+
+bool TntBlock::onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                               const BlockState &state, ServerActor &projectile) const {
+    (void) state;
+
+    const std::string identifier = projectile.getIdentifier();
+    const bool burningArrow = identifier == ARROW
+                              && (projectile.isOnFire() || projectile.getProjectileData().mFlameTicks > 0);
+    if (identifier != SMALL_FIREBALL && !burningArrow)
+        return false;
+
+    prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE);
+    return true;
 }

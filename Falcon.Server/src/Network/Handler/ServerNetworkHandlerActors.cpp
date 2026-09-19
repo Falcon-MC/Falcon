@@ -4,6 +4,7 @@
 #include "Actor/ActorSizeTable.h"
 #include "Actor/MobLootTable.h"
 #include "Actor/ServerActor.h"
+#include "Block/Blocks/VanillaBlocks.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Math/MathConstants.h"
 #include "Protocol/Packets/AddActorPacket.h"
@@ -1391,6 +1392,14 @@ void ServerNetworkHandler::tickActors() {
 
             if (actor.getLifetimeTicks() > 1 && mLevel.isSolidAt(blockX, blockY, blockZ)) {
                 const Vector3f hitPosition((float) blockX + 0.5f, (float) blockY + 0.5f, (float) blockZ + 0.5f);
+                const Vector3i hitBlock(blockX, blockY, blockZ);
+                const BlockState hitState = mLevel.getBlockState(blockX, blockY, blockZ);
+                const Block *block = VanillaBlocks::fromIdentifier(hitState.mName);
+                if (block != nullptr && block->onProjectileHit(*this, mLevel, hitBlock, hitState, actor)) {
+                    expired.push_back(actorId);
+                    continue;
+                }
+
                 if (!onThrownProjectileHit(actor, hitPosition, nullptr))
                     mScriptEngine.onProjectileHitBlock(actor, blockX, blockY, blockZ);
 

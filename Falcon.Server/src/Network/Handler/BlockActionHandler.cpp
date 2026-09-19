@@ -289,6 +289,18 @@ void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, const V
     }
 }
 
+void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
+                                            const Packet &packet) {
+    const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+    const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+    const int64_t key = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
+
+    for (auto &entry: owner.getPlayers()) {
+        if (&owner.getLevelFor(entry.second) == &level && entry.second.getSentChunks().count(key) != 0)
+            owner.getNetworkHandler().send(entry.first, packet, owner.getCodecContext());
+    }
+}
+
 void BlockActionHandler::broadcastBlockUpdate(ServerNetworkHandler &owner, const Vector3i &position,
                                               const BlockState &state) {
     UpdateBlockPacket update;
@@ -475,7 +487,7 @@ void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level,
     broadcastToViewers(owner, destroy.mPosition, destroy);
 
     if (brokenBlock != nullptr)
-        brokenBlock->onBroken(owner, position, brokenState);
+        brokenBlock->onBroken(owner, level, position, brokenState);
 
     RedstoneSystem::onBlockBroken(owner, position, brokenState);
 

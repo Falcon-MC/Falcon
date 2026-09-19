@@ -41,5 +41,9 @@ public:
 private:
     Rule *_find(const std::string &name);
 
+    void _addBool(const std::string &name, bool value);
+
+    void _addInt(const std::string &name, int32_t value);
+
     std::vector<Rule> mRules;
 };

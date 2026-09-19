@@ -99,6 +99,7 @@
 #include "Protocol/Packets/LabTablePacket.h"
 #include "Protocol/Packets/LessonProgressPacket.h"
 #include "Protocol/Packets/LevelChunkPacket.h"
+#include "Protocol/Packets/LevelEventGenericPacket.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/LocatorBarPacket.h"
@@ -371,6 +372,7 @@ void MinecraftPackets::_registerDefaultPackets() {
     registerPacket<LabTablePacket>();
     registerPacket<LessonProgressPacket>();
     registerPacket<LevelChunkPacket>();
+    registerPacket<LevelEventGenericPacket>();
     registerPacket<LevelEventPacket>();
     registerPacket<LevelSoundEventPacket>();
     registerPacket<LocatorBarPacket>();

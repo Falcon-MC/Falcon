@@ -131,15 +131,22 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
                    const BlockState &state) {
     Level &level = owner.getLevelFor(player);
     const bool shouldExplode = player.getDimension() != DimensionType::Overworld;
+    const bool willExplode = shouldExplode && level.getGameRules().getBool("respawnblocksexplode");
 
     Vector3i head;
     const bool valid = findHead(level, position, state, head);
-    if (!valid && !shouldExplode) {
-        player.sendTranslation("§7%tile.bed.notValid", {});
-        return true;
+    if (!valid) {
+        if (!willExplode)
+            player.sendTranslation("§7%tile.bed.notValid", {});
+
+        if (!shouldExplode)
+            return true;
     }
 
     if (shouldExplode) {
+        if (!willExplode)
+            return true;
+
         level.setBlockState(position.x, position.y, position.z, BlockState("minecraft:air"));
         BlockActionHandler::broadcastBlockUpdate(owner, position,
                                                  level.getBlockState(position.x, position.y, position.z));

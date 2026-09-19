@@ -584,6 +584,14 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     mNetherLevel->startWorkers(_getChunkWorkerThreadCount());
     mTheEndLevel->startWorkers(_getChunkWorkerThreadCount());
 
+    const Level::PacketBroadcaster broadcaster = [this](Level &level, const Vector3f &position,
+                                                        const Packet &packet) {
+        BlockActionHandler::broadcastToViewers(*this, level, position, packet);
+    };
+    mLevel.setPacketBroadcaster(broadcaster);
+    mNetherLevel->setPacketBroadcaster(broadcaster);
+    mTheEndLevel->setPacketBroadcaster(broadcaster);
+
     _logPackStack();
 
     switch (properties.getGameType()) {
