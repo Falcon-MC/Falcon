@@ -5,6 +5,7 @@
 #include "Level/Dimension.h"
 
 #include <cstdint>
+#include <string>
 
 class Level;
 class ServerNetworkHandler;
@@ -34,7 +35,12 @@ public:
 
     static bool tryLightPortal(Level &level, const Vector3i &position, ServerNetworkHandler *owner = nullptr);
 
-    static void onFrameBlockBroken(Level &level, const Vector3i &position, ServerNetworkHandler *owner = nullptr);
+    /**
+     * Closes the portal a broken block belonged to: every nether portal block touching it, and, when the broken
+     * block was an end portal or one of its frames, every end portal block touching it.
+     */
+    static void onFrameBlockBroken(Level &level, const Vector3i &position, const std::string &brokenIdentifier,
+                                   ServerNetworkHandler *owner = nullptr);
 
     static bool tryInsertEnderEye(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 

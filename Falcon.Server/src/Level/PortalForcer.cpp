@@ -132,6 +132,42 @@ namespace {
 
         return "north";
     }
+
+    void removeConnected(Level &level, const Vector3i &origin, const char *identifier, ServerNetworkHandler *owner) {
+        std::vector<Vector3i> pending;
+        std::unordered_set<int64_t> visited;
+
+        pending.push_back(origin);
+        visited.insert(packPosition(origin));
+
+        const BlockState air((std::string(AIR_IDENTIFIER)));
+        int32_t removed = 0;
+
+        while (!pending.empty() && removed < PortalForcer::MAX_PORTAL_BLOCKS) {
+            const Vector3i current = pending.back();
+            pending.pop_back();
+
+            if (identifierAt(level, current.x, current.y, current.z) == identifier) {
+                writeBlock(level, current, air, owner);
+                ++removed;
+            } else if (current != origin) {
+                continue;
+            }
+
+            for (const auto &offset: FRAME_OFFSETS) {
+                const Vector3i neighbour(current.x + offset[0], current.y + offset[1], current.z + offset[2]);
+
+                if (!isInsideLevel(level, neighbour))
+                    continue;
+
+                if (identifierAt(level, neighbour.x, neighbour.y, neighbour.z) != identifier)
+                    continue;
+
+                if (visited.insert(packPosition(neighbour)).second)
+                    pending.push_back(neighbour);
+            }
+        }
+    }
 }
 
 bool PortalForcer::isNetherPortalBlock(Level &level, const Vector3i &position) {
@@ -367,52 +403,12 @@ bool PortalForcer::tryLightPortal(Level &level, const Vector3i &position, Server
     return false;
 }
 
-void PortalForcer::onFrameBlockBroken(Level &level, const Vector3i &position, ServerNetworkHandler *owner) {
-    std::vector<Vector3i> pending;
-    std::unordered_set<int64_t> visited;
+void PortalForcer::onFrameBlockBroken(Level &level, const Vector3i &position, const std::string &brokenIdentifier,
+                                      ServerNetworkHandler *owner) {
+    removeConnected(level, position, PORTAL_IDENTIFIER, owner);
 
-    for (const auto &offset: FRAME_OFFSETS) {
-        const Vector3i neighbour(position.x + offset[0], position.y + offset[1], position.z + offset[2]);
-
-        if (!isInsideLevel(level, neighbour))
-            continue;
-
-        if (!isNetherPortalBlock(level, neighbour))
-            continue;
-
-        if (visited.insert(packPosition(neighbour)).second)
-            pending.push_back(neighbour);
-    }
-
-    if (pending.empty())
-        return;
-
-    const BlockState air((std::string(AIR_IDENTIFIER)));
-    int32_t removed = 0;
-
-    while (!pending.empty() && removed < MAX_PORTAL_BLOCKS) {
-        const Vector3i current = pending.back();
-        pending.pop_back();
-
-        if (!isNetherPortalBlock(level, current))
-            continue;
-
-        writeBlock(level, current, air, owner);
-        ++removed;
-
-        for (const auto &offset: FRAME_OFFSETS) {
-            const Vector3i neighbour(current.x + offset[0], current.y + offset[1], current.z + offset[2]);
-
-            if (!isInsideLevel(level, neighbour))
-                continue;
-
-            if (!isNetherPortalBlock(level, neighbour))
-                continue;
-
-            if (visited.insert(packPosition(neighbour)).second)
-                pending.push_back(neighbour);
-        }
-    }
+    if (brokenIdentifier == END_PORTAL_IDENTIFIER || brokenIdentifier == END_PORTAL_FRAME_IDENTIFIER)
+        removeConnected(level, position, END_PORTAL_IDENTIFIER, owner);
 }
 
 void PortalForcer::spawnPortal(Level &level, const Vector3i &position, ServerNetworkHandler *owner) {

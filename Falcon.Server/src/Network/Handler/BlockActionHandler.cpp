@@ -7,6 +7,8 @@
 #include "Block/Blocks/LiquidView.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/BlockActorStore.h"
+#include "Block/BlockIdentifier.h"
+#include "Block/BlockPickItem.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Core/Math/MathConstants.h"
 #include "Actor/ServerPlayer.h"
@@ -226,6 +228,19 @@ namespace {
             return aliased;
 
         return identifier;
+    }
+
+    bool isBreakableInCreative(const ServerPlayer &player, const std::string &identifier) {
+        if (BlockIdentifier::equalsAny(identifier, {
+                "minecraft:end_gateway", "minecraft:fire", "minecraft:soul_fire", "minecraft:invisible_bedrock",
+                "minecraft:jigsaw", "minecraft:moving_block", "minecraft:bubble_column", "minecraft:water",
+                "minecraft:flowing_water", "minecraft:lava", "minecraft:flowing_lava"}))
+            return false;
+
+        if (BlockIdentifier::equalsAny(identifier, {"minecraft:allow", "minecraft:deny", "minecraft:border_block"}))
+            return player.isOp();
+
+        return true;
     }
 
     bool intersectsPlayer(const ServerPlayer &player, const Vector3i &position, const BlockData *blockData) {
@@ -482,7 +497,7 @@ void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level,
 
     RedstoneSystem::onBlockBroken(owner, level, position, brokenState);
 
-    PortalForcer::onFrameBlockBroken(level, position, &owner);
+    PortalForcer::onFrameBlockBroken(level, position, brokenState.mName, &owner);
 }
 
 void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player,
@@ -510,7 +525,7 @@ void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerP
 
     const BlockData *blockData = BlockDataTable::find(state.mName.c_str());
     const bool creative = player.getGameType() == (int32_t) GameType::Creative;
-    if (creative && blockData != nullptr && blockData->mHardness < 0.0f)
+    if (creative && !isBreakableInCreative(player, state.mName))
         return;
 
     const double breakSpeed = creative ? 1.0 : calculateBreakProgressPerTick(player, blockData);
@@ -872,6 +887,8 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
     BlockActor *blockActor = level.getBlockActors().find(target);
     if (blockActor != nullptr) {
+        BlockPickItem::restoreBlockData(*blockActor, placedWithItem, owner.getCodecContext());
+
         BlockActorDataPacket data;
         data.mBlockPosition = target;
         data.mData = blockActor->getSpawnCompound();

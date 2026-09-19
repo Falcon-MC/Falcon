@@ -23,6 +23,7 @@
 #include "Command/LocateCommand.h"
 #include "Command/WeatherCommand.h"
 #include "Block/BlockActorStore.h"
+#include "Block/BlockPickItem.h"
 #include "Level/Generator/Overworld/OverworldGenerator.h"
 #include "Level/PortalForcer.h"
 #include "Block/Systems/PistonSystem.h"
@@ -2303,13 +2304,15 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRe
     if (dx * dx + dy * dy + dz * dz > 10000.0f)
         return;
 
-    const BlockState state = getLevelFor(*player).getBlockState(packet.mBlockPosition.x, packet.mBlockPosition.y,
-                                                                packet.mBlockPosition.z);
-    if (state.mName == "minecraft:air")
+    Level &level = getLevelFor(*player);
+    const BlockState state = level.getBlockState(packet.mBlockPosition.x, packet.mBlockPosition.y,
+                                                 packet.mBlockPosition.z);
+    const std::string pickIdentifier = BlockPickItem::identifierFor(state.mName);
+    if (pickIdentifier.empty())
         return;
 
-    std::shared_ptr<ItemDefinition> itemDefinition = mItemDefinitions.getDefinition(state.mName);
-    std::shared_ptr<BlockDefinition> blockDefinition = mBlockDefinitions.getDefinition(state.mName);
+    std::shared_ptr<ItemDefinition> itemDefinition = mItemDefinitions.getDefinition(pickIdentifier);
+    std::shared_ptr<BlockDefinition> blockDefinition = mBlockDefinitions.getDefinition(pickIdentifier);
     if (itemDefinition == nullptr)
         return;
 
@@ -2317,6 +2320,13 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRe
     picked.mDefinition = std::move(itemDefinition);
     picked.mBlockDefinition = std::move(blockDefinition);
     picked.mCount = 1;
+
+    if (packet.mAddUserData) {
+        const BlockActor *blockActor = level.getBlockActors().find(packet.mBlockPosition);
+        if (blockActor != nullptr)
+            BlockPickItem::attachBlockData(picked, *blockActor);
+    }
+
     putPickedItem(*player, std::move(picked), packet.mHotbarSlot);
 }
 
