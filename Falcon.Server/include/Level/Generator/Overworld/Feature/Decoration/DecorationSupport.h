@@ -51,6 +51,8 @@ namespace DecorationSupport {
 
     bool canBeReplaced(const BlockState &state);
 
+    void setBlockKeepingWater(LevelChunk &chunk, int32_t x, int32_t y, int32_t z, const BlockState &state);
+
     int32_t getBiomeAt(Level &level, int32_t x, int32_t y, int32_t z);
 
     int32_t getHeightAt(Level &level, int32_t x, int32_t z);

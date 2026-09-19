@@ -191,8 +191,8 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
     result.mNetworkData = chunk->encodeNetwork();
 
     const LevelChunk &scanned = *chunk;
-    chunk->forEachBlock([&result, &scanned](int32_t x, int32_t y, int32_t z, const BlockState &state) {
-        const LiquidBlock liquid(state);
+    chunk->forEachBlock([&result, &scanned](int32_t x, int32_t y, int32_t z, const BlockState &) {
+        const LiquidBlock liquid(LiquidPhysicsSystem::fluidStateAt(scanned, x & 15, y, z & 15));
         if (!liquid.isLiquid() && !liquid.isBubbleColumn())
             return;
 

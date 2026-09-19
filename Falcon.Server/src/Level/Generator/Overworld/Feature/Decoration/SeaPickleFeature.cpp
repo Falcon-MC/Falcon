@@ -59,7 +59,7 @@ void SeaPickleFeature::populate(ChunkGenerateContext &context, IRandom &random) 
             continue;
 
         const BlockState state = DecorationSupport::withState(seaPickleState(), "cluster_count", random.nextInt(4));
-        chunk.setBlock(x, y, z, state);
+        DecorationSupport::setBlockKeepingWater(chunk, x, y, z, state);
         placed++;
     }
 
@@ -71,6 +71,6 @@ void SeaPickleFeature::populate(ChunkGenerateContext &context, IRandom &random) 
         && DecorationSupport::isWater(chunk.getBlock(originX, y, originZ))
         && DecorationSupport::isSolid(chunk.getBlock(originX, y - 1, originZ))) {
         const BlockState state = DecorationSupport::withState(seaPickleState(), "cluster_count", random.nextInt(4));
-        chunk.setBlock(originX, y, originZ, state);
+        DecorationSupport::setBlockKeepingWater(chunk, originX, y, originZ, state);
     }
 }

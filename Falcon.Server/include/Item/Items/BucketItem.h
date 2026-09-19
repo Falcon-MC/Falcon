@@ -3,6 +3,8 @@
 #include "Core/Math/Vector3i.h"
 #include "Level/BlockState.h"
 
+#include <cstdint>
+
 class ItemStack;
 class ItemUseTransaction;
 class ServerNetworkHandler;
@@ -38,7 +40,10 @@ private:
 
     static void sendBlockState(ServerNetworkHandler &owner, const Vector3i &position);
 
-    static void sendBlockUpdate(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    static void sendBlockUpdate(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
+                                uint32_t layer = 0);
+
+    static bool isWaterloggable(ServerNetworkHandler &owner, const Vector3i &position);
 
     static void sendSound(ServerNetworkHandler &owner, const Vector3i &position, const char *sound);
 

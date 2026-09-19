@@ -15,11 +15,48 @@ void LiquidPhysicsSystem::moveStateFrom(LiquidPhysicsSystem &&other) {
     mChanges = std::move(other.mChanges);
 }
 
-const BlockState &LiquidPhysicsSystem::_stateAt(int32_t x, int32_t y, int32_t z) {
+const BlockState &LiquidPhysicsSystem::_stateAt(int32_t x, int32_t y, int32_t z, int layer) {
     static const BlockState bedrock("minecraft:bedrock");
+    static const BlockState air;
 
-    const BlockState *state = mLevel.peekBlockPtr(x, y, z);
-    return state == nullptr ? bedrock : *state;
+    const BlockState *state = mLevel.peekBlockPtr(x, y, z, layer);
+    if (state == nullptr)
+        return layer <= 0 ? bedrock : air;
+    return *state;
+}
+
+int LiquidPhysicsSystem::_fluidLayer(int32_t x, int32_t y, int32_t z) {
+    const BlockState &layer0 = _stateAt(x, y, z);
+    if (isFluidState(layer0))
+        return 0;
+
+    if (getWaterloggingLevel(layer0) == 0)
+        return -1;
+
+    return LiquidView(_stateAt(x, y, z, 1)).isWater() ? 1 : -1;
+}
+
+const BlockState &LiquidPhysicsSystem::_fluidAt(int32_t x, int32_t y, int32_t z) {
+    return _fluidLayer(x, y, z) == 1 ? _stateAt(x, y, z, 1) : _stateAt(x, y, z);
+}
+
+const BlockState &LiquidPhysicsSystem::fluidStateAt(const LevelChunk &chunk, int32_t localX, int32_t y,
+                                                    int32_t localZ) {
+    const BlockState &layer0 = chunk.getBlock(localX, y, localZ);
+    const LiquidView liquid(layer0);
+    if (liquid.isLiquid() || liquid.isBubbleColumn() || getWaterloggingLevel(layer0) == 0)
+        return layer0;
+
+    const BlockState &layer1 = chunk.getBlock(localX, y, localZ, 1);
+    return LiquidView(layer1).isWater() ? layer1 : layer0;
+}
+
+uint8_t LiquidPhysicsSystem::getWaterloggingLevel(const BlockState &state) {
+    if (state.mName == "minecraft:air")
+        return 0;
+
+    const BlockData *data = BlockDataTable::find(state.mName.c_str());
+    return data == nullptr ? 0 : data->mWaterloggingLevel;
 }
 
 bool LiquidPhysicsSystem::_isLoaded(int32_t x, int32_t z) const {
@@ -39,7 +76,7 @@ LiquidInfo LiquidPhysicsSystem::getLiquidInfo(int32_t x, int32_t y, int32_t z) {
     if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
         return result;
 
-    const LiquidView block(_stateAt(x, y, z));
+    const LiquidView block(_fluidAt(x, y, z));
     result.water = block.isWater();
     result.lava = block.isLava();
     result.bubble = block.isBubbleColumn();
@@ -52,7 +89,7 @@ LiquidInfo LiquidPhysicsSystem::getLiquidInfo(int32_t x, int32_t y, int32_t z) {
 }
 
 Vector3f LiquidPhysicsSystem::getFlowVector(const Vector3i &position) {
-    const LiquidView liquid(_stateAt(position.x, position.y, position.z));
+    const LiquidView liquid(_fluidAt(position.x, position.y, position.z));
     if (!liquid.isLiquid())
         return Vector3f();
 
@@ -67,15 +104,15 @@ Vector3f LiquidPhysicsSystem::getFlowVector(const Vector3i &position) {
         const int32_t nx = position.x + offset[0];
         const int32_t ny = position.y;
         const int32_t nz = position.z + offset[2];
-        const BlockState &side = _stateAt(nx, ny, nz);
+        const BlockState &side = _fluidAt(nx, ny, nz);
         const LiquidView sideLiquid(side);
         if (sideLiquid.isLiquid() && sideLiquid.isLava() == lava) {
             const int sideDecay = sideLiquid.isSource() || sideLiquid.isFalling() ? 0 : sideLiquid.getDecay();
             const int realDecay = sideDecay - decay;
             x += (float) offset[0] * (float) realDecay;
             z += (float) offset[2] * (float) realDecay;
-        } else if (isFlowable(side)) {
-            const BlockState &below = _stateAt(nx, ny - 1, nz);
+        } else if (isFlowable(side, lava)) {
+            const BlockState &below = _fluidAt(nx, ny - 1, nz);
             const LiquidView belowLiquid(below);
             if (belowLiquid.isLiquid() && belowLiquid.isLava() == lava) {
                 const int belowDecay = belowLiquid.isSource() || belowLiquid.isFalling() ? 0 : belowLiquid.getDecay();
@@ -88,11 +125,9 @@ Vector3f LiquidPhysicsSystem::getFlowVector(const Vector3i &position) {
 
     if (liquid.isFalling()) {
         for (const auto &offset: offsets) {
-            const BlockState side = _stateAt(position.x + offset[0], position.y,
-                                                         position.z + offset[2]);
-            const BlockState above = _stateAt(position.x + offset[0], position.y + 1,
-                                                          position.z + offset[2]);
-            if (!isFlowable(side) || !isFlowable(above)) {
+            const BlockState side = _fluidAt(position.x + offset[0], position.y, position.z + offset[2]);
+            const BlockState above = _fluidAt(position.x + offset[0], position.y + 1, position.z + offset[2]);
+            if (!isFlowable(side, lava) || !isFlowable(above, lava)) {
                 const float length = std::sqrt(x * x + y * y + z * z);
                 if (length > 0.0f) {
                     x /= length;
@@ -140,15 +175,25 @@ bool LiquidPhysicsSystem::isSameFluid(const BlockState &left, const BlockState &
     return (leftWater && rightWater) || (leftLava && rightLava);
 }
 
-bool LiquidPhysicsSystem::isFlowable(const BlockState &state) const {
+bool LiquidPhysicsSystem::isFlowable(const BlockState &state, bool lava) const {
     if (state.mName == "minecraft:air" || isFluidState(state))
         return true;
+
     const BlockData *data = BlockDataTable::find(state.mName.c_str());
-    return data != nullptr && !data->mSolid;
+    if (data == nullptr)
+        return false;
+
+    if (!lava && data->mWaterloggingLevel > 1)
+        return true;
+
+    if (!lava && data->mWaterloggingLevel == 1)
+        return false;
+
+    return !data->mSolid;
 }
 
 bool LiquidPhysicsSystem::needsInitialTick(const LevelChunk &chunk, int32_t localX, int32_t y, int32_t localZ) {
-    const BlockState &state = chunk.getBlock(localX, y, localZ);
+    const BlockState &state = fluidStateAt(chunk, localX, y, localZ);
     const LiquidView liquid(state);
 
     if (liquid.isBubbleColumn())
@@ -199,7 +244,13 @@ bool LiquidPhysicsSystem::_canFlowInto(const BlockState &source, const BlockStat
         return true;
 
     const BlockData *data = BlockDataTable::find(target.mName.c_str());
-    return data != nullptr && !data->mSolid;
+    if (data == nullptr)
+        return false;
+
+    if (sourceWater && data->mWaterloggingLevel > 0)
+        return data->mWaterloggingLevel > 1;
+
+    return !data->mSolid;
 }
 
 int64_t LiquidPhysicsSystem::getTickRate(const BlockState &state) const {
@@ -216,7 +267,7 @@ void LiquidPhysicsSystem::scheduleNeighbors(int32_t x, int32_t y, int32_t z) {
 
     for (const auto &offset: offsets) {
         const Vector3i position(x + offset[0], y + offset[1], z + offset[2]);
-        const BlockState state = _stateAt(position.x, position.y, position.z);
+        const BlockState state = _fluidAt(position.x, position.y, position.z);
         const LiquidView liquid(state);
         if (liquid.isLiquid() || liquid.isBubbleColumn())
             schedule(position, getTickRate(state));
@@ -224,14 +275,15 @@ void LiquidPhysicsSystem::scheduleNeighbors(int32_t x, int32_t y, int32_t z) {
 }
 
 void LiquidPhysicsSystem::scheduleLoaded(LevelChunk &chunk) {
-    chunk.forEachBlock([this, &chunk](int32_t x, int32_t y, int32_t z, const BlockState &state) {
-        if (!isFluidState(state))
+    chunk.forEachBlock([this, &chunk](int32_t x, int32_t y, int32_t z, const BlockState &) {
+        const BlockState &fluid = fluidStateAt(chunk, x & 15, y, z & 15);
+        if (!isFluidState(fluid))
             return;
 
         if (!needsInitialTick(chunk, x & 15, y, z & 15))
             return;
 
-        schedule(Vector3i(x, y, z), getTickRate(state));
+        schedule(Vector3i(x, y, z), getTickRate(fluid));
     });
 }
 
@@ -245,19 +297,68 @@ BlockState LiquidPhysicsSystem::makeState(bool lava, int decay, bool falling) co
     return BlockState(name, states);
 }
 
+void LiquidPhysicsSystem::_writeLayer(const Vector3i &position, int layer, const BlockState &state) {
+    if (_stateAt(position.x, position.y, position.z, layer) == state)
+        return;
+
+    mChanges.push_back(LiquidChange{position, state, layer});
+    if (layer == 0)
+        mLevel.setBlockState(position.x, position.y, position.z, state);
+    else
+        mLevel.setBlockStateAtLayer(position.x, position.y, position.z, layer, state);
+}
+
 void LiquidPhysicsSystem::setFluidState(const Vector3i &position, const BlockState &state) {
     if (!_isLoaded(position.x, position.z))
         return;
 
-    const BlockState current = _stateAt(position.x, position.y, position.z);
-    if (current == state)
+    const BlockState layer0 = _stateAt(position.x, position.y, position.z);
+    const bool waterlogged = _fluidLayer(position.x, position.y, position.z) == 1;
+    const LiquidView liquid(state);
+
+    if (!isFluidState(state) && state.mName != "minecraft:air") {
+        if (waterlogged)
+            _writeLayer(position, 1, BlockState());
+        _writeLayer(position, 0, state);
         return;
-    mLevel.setBlockState(position.x, position.y, position.z, state);
-    mChanges.push_back(LiquidChange{position, state});
+    }
+
+    const uint8_t waterlogging = getWaterloggingLevel(layer0);
+    const bool intoLayer1 = waterlogged
+                            || (liquid.isWater() && !isFluidState(layer0) && waterlogging > 0);
+    if (!intoLayer1) {
+        _writeLayer(position, 0, state);
+        return;
+    }
+
+    if (liquid.isWater() && waterlogging == 1 && !liquid.isSource()) {
+        _writeLayer(position, 1, BlockState());
+        return;
+    }
+
+    _writeLayer(position, 1, state);
+}
+
+void LiquidPhysicsSystem::normalizeWaterlogged(const Vector3i &position) {
+    const BlockState layer1 = _stateAt(position.x, position.y, position.z, 1);
+    const LiquidView liquid(layer1);
+    if (!liquid.isLiquid())
+        return;
+
+    const BlockState layer0 = _stateAt(position.x, position.y, position.z);
+    if (layer0.mName == "minecraft:air") {
+        _writeLayer(position, 1, BlockState());
+        _writeLayer(position, 0, layer1);
+        return;
+    }
+
+    const uint8_t waterlogging = getWaterloggingLevel(layer0);
+    if (waterlogging == 0 || (waterlogging == 1 && !liquid.isSource()))
+        _writeLayer(position, 1, BlockState());
 }
 
 void LiquidPhysicsSystem::harden(const Vector3i &position) {
-    const BlockState current = _stateAt(position.x, position.y, position.z);
+    const BlockState current = _fluidAt(position.x, position.y, position.z);
     const LiquidView liquid(current);
     if (!liquid.isLava() || liquid.isFalling())
         return;
@@ -267,7 +368,7 @@ void LiquidPhysicsSystem::harden(const Vector3i &position) {
     };
     for (const auto &offset: offsets) {
         const Vector3i neighbor(position.x + offset[0], position.y + offset[1], position.z + offset[2]);
-        const BlockState otherState = _stateAt(neighbor.x, neighbor.y, neighbor.z);
+        const BlockState otherState = _fluidAt(neighbor.x, neighbor.y, neighbor.z);
         const LiquidView other(otherState);
         if (!other.isLiquid() || other.isWater() == liquid.isWater())
             continue;
@@ -284,7 +385,7 @@ bool LiquidPhysicsSystem::resolveFluidCollision(const Vector3i &target, const Bl
     if (target.y < LevelChunk::MIN_Y || target.y > LevelChunk::MAX_Y)
         return false;
 
-    const BlockState targetState = _stateAt(target.x, target.y, target.z);
+    const BlockState targetState = _fluidAt(target.x, target.y, target.z);
     if (!isFluidState(targetState) || !isFluidState(sourceState))
         return false;
     if (isSameFluid(targetState, sourceState))
@@ -298,6 +399,8 @@ bool LiquidPhysicsSystem::resolveFluidCollision(const Vector3i &target, const Bl
                : targetLiquid.getDecay() <= 4 ? "minecraft:cobblestone"
                : "minecraft:stone";
     } else {
+        if (_fluidLayer(target.x, target.y, target.z) == 1)
+            return true;
         result = downward ? "minecraft:stone" : "minecraft:cobblestone";
     }
 
@@ -336,7 +439,9 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
     if (!_isLoaded(position.x, position.z))
         return;
 
-    const BlockState state = _stateAt(position.x, position.y, position.z);
+    normalizeWaterlogged(position);
+
+    const BlockState state = _fluidAt(position.x, position.y, position.z);
     const LiquidView liquid(state);
     if (liquid.isBubbleColumn()) {
         processBubbleColumn(position);
@@ -346,12 +451,14 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
         return;
 
     harden(position);
-    const BlockState currentState = _stateAt(position.x, position.y, position.z);
+    const BlockState currentState = _fluidAt(position.x, position.y, position.z);
     const LiquidView current(currentState);
     if (!current.isLiquid())
         return;
 
-    if (current.isWater() && current.isSource()) {
+    const bool waterlogged = _fluidLayer(position.x, position.y, position.z) == 1;
+
+    if (current.isWater() && current.isSource() && !waterlogged) {
         const BlockState below = _stateAt(position.x, position.y - 1, position.z);
         if (below.mName == "minecraft:magma_block" || below.mName == "minecraft:soul_sand") {
             Tag states = Tag::ofCompound();
@@ -363,17 +470,16 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
 
     const bool source = current.isSource();
     const bool lava = current.isLava();
-    const int step = lava ? LiquidView(current).getFlowDecayPerBlock()
-                          : LiquidView(current).getFlowDecayPerBlock();
+    const int step = current.getFlowDecayPerBlock();
     const Vector3i belowPosition(position.x, position.y - 1, position.z);
     resolveFluidCollision(belowPosition, currentState, true);
 
-    const BlockState below = _stateAt(belowPosition.x, belowPosition.y, belowPosition.z);
-    const bool belowFlowable = isFlowable(below) && !isSameFluid(below, currentState);
+    const BlockState below = _fluidAt(belowPosition.x, belowPosition.y, belowPosition.z);
+    const bool belowFlowable = isFlowable(below, lava) && !isSameFluid(below, currentState);
     if (belowFlowable) {
         setFluidState(belowPosition, makeState(lava, 0, true));
         if (!source)
-            schedule(position, lava ? LiquidView(current).getTickRate() : LiquidView(current).getTickRate());
+            schedule(position, current.getTickRate());
         return;
     }
 
@@ -382,28 +488,13 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
     if (nextDecay <= 7) {
         static const int offsets[4][3] = {{-1, 0, 0}, {1, 0, 0}, {0, 0, -1}, {0, 0, 1}};
 
-        bool anyFlowable = false;
-        for (int j = 0; j < 4 && !anyFlowable; ++j) {
-            const BlockState sideState = _stateAt(position.x + offsets[j][0], position.y,
-                                                  position.z + offsets[j][2]);
-            anyFlowable = _canBeFlowedInto(sideState);
-        }
-
-        bool optimal[4] = {true, true, true, true};
-        (void) anyFlowable;
-        // if (anyFlowable)
-        //     _getOptimalFlowDirections(position.x, position.y, position.z, step, optimal);
-
         for (int j = 0; j < 4; ++j) {
-            if (!optimal[j])
-                continue;
-
             const Vector3i side(position.x + offsets[j][0], position.y, position.z + offsets[j][2]);
             if (resolveFluidCollision(side, currentState, false))
                 continue;
 
-            const BlockState sideState = _stateAt(side.x, side.y, side.z);
-            if (!isFlowable(sideState) || (isSameFluid(sideState, currentState) && LiquidView(sideState).isSource()))
+            const BlockState sideState = _fluidAt(side.x, side.y, side.z);
+            if (!isFlowable(sideState, lava) || (isSameFluid(sideState, currentState) && LiquidView(sideState).isSource()))
                 continue;
 
             if (isSameFluid(sideState, currentState)) {
@@ -421,14 +512,14 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
             int sources = 0;
             static const int sourceOffsets[4][3] = {{-1, 0, 0}, {1, 0, 0}, {0, 0, -1}, {0, 0, 1}};
             for (const auto &offset: sourceOffsets) {
-                const LiquidView side(_stateAt(position.x + offset[0], position.y,
-                                                            position.z + offset[2]));
+                const LiquidView side(_fluidAt(position.x + offset[0], position.y, position.z + offset[2]));
                 if (side.isWater() && side.isSource())
                     ++sources;
             }
             const LiquidView belowLiquid(below);
-            const BlockData *belowData = BlockDataTable::find(below.mName.c_str());
-            const int minSources = LiquidView(current).getMinAdjacentSourcesToFormSource();
+            const BlockData *belowData = BlockDataTable::find(
+                    _stateAt(belowPosition.x, belowPosition.y, belowPosition.z).mName.c_str());
+            const int minSources = current.getMinAdjacentSourcesToFormSource();
             if (sources >= minSources && ((belowData != nullptr && belowData->mSolid)
                                  || (belowLiquid.isWater() && belowLiquid.isSource()))) {
                 setFluidState(position, makeState(false, 0, false));
@@ -439,8 +530,7 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
         int smallest = std::numeric_limits<int>::max();
         static const int offsets[4][3] = {{-1, 0, 0}, {1, 0, 0}, {0, 0, -1}, {0, 0, 1}};
         for (const auto &offset: offsets) {
-            const BlockState side = _stateAt(position.x + offset[0], position.y,
-                                                         position.z + offset[2]);
+            const BlockState side = _fluidAt(position.x + offset[0], position.y, position.z + offset[2]);
             if (!isSameFluid(side, currentState))
                 continue;
             const LiquidView sideLiquid(side);
@@ -448,7 +538,7 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
             smallest = std::min(smallest, sideDecay);
         }
 
-        const BlockState above = _stateAt(position.x, position.y + 1, position.z);
+        const BlockState above = _fluidAt(position.x, position.y + 1, position.z);
         if (isSameFluid(above, currentState)) {
             const LiquidView aboveLiquid(above);
             if (aboveLiquid.isSource() || aboveLiquid.isFalling())
@@ -466,14 +556,14 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
     }
 }
 
-bool LiquidPhysicsSystem::_canBeFlowedInto(const BlockState &state) const {
+bool LiquidPhysicsSystem::_canBeFlowedInto(const BlockState &state, bool lava) const {
     if (isFluidState(state) && LiquidView(state).isSource())
         return false;
-    return isFlowable(state);
+    return isFlowable(state, lava);
 }
 
 int LiquidPhysicsSystem::_calculateFlowCost(int32_t x, int32_t y, int32_t z, int accumulatedCost, int maxCost,
-                                            int originOpposite, int lastOpposite) {
+                                            int originOpposite, int lastOpposite, bool lava) {
     std::unordered_map<Position, int8_t, PositionHash> &visited = mFlowCostVisited;
 
     static const int offsets[4][3] = {{-1, 0, 0}, {1, 0, 0}, {0, 0, -1}, {0, 0, 1}};
@@ -492,12 +582,12 @@ int LiquidPhysicsSystem::_calculateFlowCost(int32_t x, int32_t y, int32_t z, int
         if (found != visited.end()) {
             status = found->second;
         } else {
-            const BlockState side = _stateAt(nextX, y, nextZ);
-            if (!_canBeFlowedInto(side)) {
+            const BlockState side = _fluidAt(nextX, y, nextZ);
+            if (!_canBeFlowedInto(side, lava)) {
                 status = FLOW_BLOCKED;
             } else {
-                const BlockState under = _stateAt(nextX, y - 1, nextZ);
-                status = _canBeFlowedInto(under) ? FLOW_CAN_FLOW_DOWN : FLOW_CAN_FLOW;
+                const BlockState under = _fluidAt(nextX, y - 1, nextZ);
+                status = _canBeFlowedInto(under, lava) ? FLOW_CAN_FLOW_DOWN : FLOW_CAN_FLOW;
             }
             visited.emplace(key, status);
         }
@@ -510,7 +600,7 @@ int LiquidPhysicsSystem::_calculateFlowCost(int32_t x, int32_t y, int32_t z, int
             continue;
 
         const int realCost = _calculateFlowCost(nextX, y, nextZ, accumulatedCost + 1, maxCost,
-                                                originOpposite, j ^ 0x01);
+                                                originOpposite, j ^ 0x01, lava);
         if (realCost < cost)
             cost = realCost;
     }
@@ -518,7 +608,8 @@ int LiquidPhysicsSystem::_calculateFlowCost(int32_t x, int32_t y, int32_t z, int
     return cost;
 }
 
-void LiquidPhysicsSystem::_getOptimalFlowDirections(int32_t x, int32_t y, int32_t z, int decayPerBlock, bool out[4]) {
+void LiquidPhysicsSystem::_getOptimalFlowDirections(int32_t x, int32_t y, int32_t z, int decayPerBlock, bool lava,
+                                                    bool out[4]) {
     static const int offsets[4][3] = {{-1, 0, 0}, {1, 0, 0}, {0, 0, -1}, {0, 0, 1}};
 
     int flowCost[4] = {1000, 1000, 1000, 1000};
@@ -530,19 +621,19 @@ void LiquidPhysicsSystem::_getOptimalFlowDirections(int32_t x, int32_t y, int32_
         const int32_t nextX = x + offsets[j][0];
         const int32_t nextZ = z + offsets[j][2];
         const Position key{nextX, y, nextZ};
-        const BlockState side = _stateAt(nextX, y, nextZ);
+        const BlockState side = _fluidAt(nextX, y, nextZ);
 
-        if (!_canBeFlowedInto(side)) {
+        if (!_canBeFlowedInto(side, lava)) {
             visited[key] = FLOW_BLOCKED;
         } else {
-            const BlockState under = _stateAt(nextX, y - 1, nextZ);
-            if (_canBeFlowedInto(under)) {
+            const BlockState under = _fluidAt(nextX, y - 1, nextZ);
+            if (_canBeFlowedInto(under, lava)) {
                 visited[key] = FLOW_CAN_FLOW_DOWN;
                 flowCost[j] = 0;
                 maxCost = 0;
             } else if (maxCost > 0) {
                 visited[key] = FLOW_CAN_FLOW;
-                flowCost[j] = _calculateFlowCost(nextX, y, nextZ, 1, maxCost, j ^ 0x01, j ^ 0x01);
+                flowCost[j] = _calculateFlowCost(nextX, y, nextZ, 1, maxCost, j ^ 0x01, j ^ 0x01, lava);
                 maxCost = std::min(maxCost, flowCost[j]);
             }
         }
@@ -555,4 +646,3 @@ void LiquidPhysicsSystem::_getOptimalFlowDirections(int32_t x, int32_t y, int32_
     for (int j = 0; j < 4; ++j)
         out[j] = flowCost[j] == minCost;
 }
-

@@ -73,10 +73,10 @@ void KelpFeature::placeBlock(int32_t x, int32_t y, int32_t z, LevelChunk &chunk,
         if (h == height || !(chunk.getBlock(x, y + h + 2, z) == DecorationSupport::waterState())) {
             const BlockState state = DecorationSupport::withState(kelpState(), "kelp_age",
                                                                   20 + random.nextBoundedInt(4));
-            chunk.setBlock(x, y + h, z, state);
+            DecorationSupport::setBlockKeepingWater(chunk, x, y + h, z, state);
             return;
         }
 
-        chunk.setBlock(x, y + h, z, kelpMaxAgeState());
+        DecorationSupport::setBlockKeepingWater(chunk, x, y + h, z, kelpMaxAgeState());
     }
 }

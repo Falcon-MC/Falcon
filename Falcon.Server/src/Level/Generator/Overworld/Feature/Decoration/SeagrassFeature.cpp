@@ -61,12 +61,12 @@ void SeagrassFeature::placeBlock(int32_t x, int32_t y, int32_t z, LevelChunk &ch
 
     if (random.nextDouble() < (double) getTallSeagrassProbability()) {
         if (canStay(x, y + 1, z, chunk, true)) {
-            chunk.setBlock(x, y, z, tallSeagrassBottomState());
-            chunk.setBlock(x, y + 1, z, tallSeagrassTopState());
+            DecorationSupport::setBlockKeepingWater(chunk, x, y, z, tallSeagrassBottomState());
+            DecorationSupport::setBlockKeepingWater(chunk, x, y + 1, z, tallSeagrassTopState());
         }
 
         return;
     }
 
-    chunk.setBlock(x, y, z, seagrassState());
+    DecorationSupport::setBlockKeepingWater(chunk, x, y, z, seagrassState());
 }

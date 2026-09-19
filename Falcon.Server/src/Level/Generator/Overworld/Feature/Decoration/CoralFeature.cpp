@@ -104,10 +104,10 @@ bool CoralFeature::placeCoralBlock(LevelChunk &chunk, IRandom &random, int32_t x
 
     if (random.nextFloat() < 0.25f) {
         const BlockState topCoral = coralFans()[(size_t) random.nextInt((int32_t) coralFans().size())];
-        chunk.setBlock(x, y + 1, z, topCoral);
+        DecorationSupport::setBlockKeepingWater(chunk, x, y + 1, z, topCoral);
     } else if (random.nextFloat() < 0.05f) {
         const BlockState seaPickle = DecorationSupport::withState(seaPickleState(), "cluster_count", random.nextInt(4));
-        chunk.setBlock(x, y + 1, z, seaPickle);
+        DecorationSupport::setBlockKeepingWater(chunk, x, y + 1, z, seaPickle);
     }
 
     for (const DecorationSupport::FaceOffset &face: DecorationSupport::HORIZONTAL_PLANE) {
@@ -121,7 +121,7 @@ bool CoralFeature::placeCoralBlock(LevelChunk &chunk, IRandom &random, int32_t x
 
         const BlockState base = coralWallFans()[(size_t) random.nextInt((int32_t) coralWallFans().size())];
         const BlockState wallCoral = DecorationSupport::withState(base, "coral_direction", coralDirectionFor(face));
-        chunk.setBlock(nx, y, nz, wallCoral);
+        DecorationSupport::setBlockKeepingWater(chunk, nx, y, nz, wallCoral);
     }
 
     return true;

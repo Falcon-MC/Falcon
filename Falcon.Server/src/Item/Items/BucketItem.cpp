@@ -7,6 +7,7 @@
 #include "Block/Blocks/LavaBlock.h"
 #include "Block/Blocks/LiquidBlock.h"
 #include "Block/Blocks/WaterBlock.h"
+#include "Block/Systems/LiquidPhysicsSystem.h"
 #include "Inventory/InventoryManager.h"
 #include "Inventory/PlayerInventory.h"
 #include "Level/LevelChunk.h"
@@ -139,12 +140,13 @@ void BucketItem::sendBlockState(ServerNetworkHandler &owner, const Vector3i &pos
     sendBlockUpdate(owner, position, owner.getLevel().getBlockState(position.x, position.y, position.z));
 }
 
-void BucketItem::sendBlockUpdate(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
+void BucketItem::sendBlockUpdate(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
+                                 uint32_t layer) {
     UpdateBlockPacket update;
     update.mBlockPosition = position;
     update.mRuntimeId = (uint32_t) BlockStateHasher::hash(state.mName, state.mStates);
     update.mFlags = UpdateBlockPacket::Flag::All;
-    update.mDataLayer = 0;
+    update.mDataLayer = layer;
     BlockActionHandler::broadcastToViewers(owner,
                                            Vector3f((float) position.x + 0.5f,
                                                     (float) position.y + 0.5f,
@@ -168,6 +170,15 @@ void BucketItem::sendArmSwing(ServerNetworkHandler &owner, ServerPlayer &player,
                                                     (float) position.y + 0.5f,
                                                     (float) position.z + 0.5f),
                                            swing);
+}
+
+bool BucketItem::isWaterloggable(ServerNetworkHandler &owner, const Vector3i &position) {
+    if (position.y < LevelChunk::MIN_Y || position.y > LevelChunk::MAX_Y)
+        return false;
+
+    Level &level = owner.getLevel();
+    const BlockState state = level.getBlockState(position.x, position.y, position.z);
+    return LiquidPhysicsSystem::getWaterloggingLevel(state) > 0;
 }
 
 bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const ItemUseTransaction &transaction) {
@@ -211,6 +222,18 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
             sendBlockState(owner, clickedPosition);
             sendSound(owner, clickedPosition, "bucket_fill_powder_snow");
             applyResult(owner, player, heldItem, "minecraft:powder_snow_bucket");
+            return true;
+        }
+
+        const BlockState clickedOverlay = level.getBlockStateAtLayer(clickedPosition.x, clickedPosition.y,
+                                                                     clickedPosition.z, 1);
+        const LiquidBlock overlayLiquid(clickedOverlay);
+        if (!clickedLiquid.isLiquid() && overlayLiquid.isWater() && overlayLiquid.isSource()) {
+            sendArmSwing(owner, player, clickedPosition);
+            level.setBlockStateAtLayer(clickedPosition.x, clickedPosition.y, clickedPosition.z, 1, BlockState());
+            sendBlockUpdate(owner, clickedPosition, BlockState(), 1);
+            sendSound(owner, clickedPosition, WaterBlock(clickedOverlay).getBucketFillSound());
+            applyResult(owner, player, heldItem, getFilledIdentifier(Content::Water));
             return true;
         }
 
@@ -260,6 +283,30 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
         sendSound(owner, clickedPosition, sound);
         applyResult(owner, player, heldItem, "minecraft:bucket");
         return true;
+    }
+
+    if (content == Content::Water) {
+        const int face = transaction.mBlockFace;
+        const Vector3i adjacent(clickedPosition.x + BLOCK_FACE_OFFSETS[face][0],
+                                clickedPosition.y + BLOCK_FACE_OFFSETS[face][1],
+                                clickedPosition.z + BLOCK_FACE_OFFSETS[face][2]);
+        const Vector3i waterlogged = isWaterloggable(owner, clickedPosition) ? clickedPosition : adjacent;
+
+        if (isWaterloggable(owner, waterlogged)) {
+            const BlockState overlay = level.getBlockStateAtLayer(waterlogged.x, waterlogged.y, waterlogged.z, 1);
+            if (LiquidBlock(overlay).isLiquid()) {
+                sendBlockUpdate(owner, waterlogged, overlay, 1);
+                return false;
+            }
+
+            sendArmSwing(owner, player, clickedPosition);
+            const BlockState water = makeLiquidState(content);
+            level.setBlockStateAtLayer(waterlogged.x, waterlogged.y, waterlogged.z, 1, water);
+            sendBlockUpdate(owner, waterlogged, water, 1);
+            sendSound(owner, waterlogged, WaterBlock(water).getBucketEmptySound());
+            applyResult(owner, player, heldItem, "minecraft:bucket");
+            return true;
+        }
     }
 
     const Vector3i target = getPlacementPosition(transaction, clickedState);

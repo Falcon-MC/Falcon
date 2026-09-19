@@ -172,7 +172,7 @@ public:
 
     bool peekBlockState(int32_t x, int32_t y, int32_t z, BlockState &out);
 
-    const BlockState *peekBlockPtr(int32_t x, int32_t y, int32_t z);
+    const BlockState *peekBlockPtr(int32_t x, int32_t y, int32_t z, int layer = 0);
 
     bool isSolidAt(int32_t x, int32_t y, int32_t z);
 

@@ -2,6 +2,7 @@
 
 #include "Block/BlockData.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/LiquidPhysicsSystem.h"
 #include "Level/Generator/Biome/BiomeIds.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/Generator/Feature/IFeature.h"
@@ -83,6 +84,14 @@ namespace DecorationSupport {
 
     bool canBeReplaced(const BlockState &state) {
         return isAir(state) || isLiquid(state);
+    }
+
+    void setBlockKeepingWater(LevelChunk &chunk, int32_t x, int32_t y, int32_t z, const BlockState &state) {
+        const bool replacedWater = isWater(chunk.getBlock(x, y, z));
+        chunk.setBlock(x, y, z, state);
+
+        if (replacedWater && LiquidPhysicsSystem::getWaterloggingLevel(state) > 0)
+            chunk.setBlock(x, y, z, 1, waterState());
     }
 
     int32_t getBiomeAt(Level &level, int32_t x, int32_t y, int32_t z) {

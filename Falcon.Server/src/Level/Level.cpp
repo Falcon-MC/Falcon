@@ -562,7 +562,7 @@ bool Level::peekBlockState(int32_t x, int32_t y, int32_t z, BlockState &out) {
     return true;
 }
 
-const BlockState *Level::peekBlockPtr(int32_t x, int32_t y, int32_t z) {
+const BlockState *Level::peekBlockPtr(int32_t x, int32_t y, int32_t z, int layer) {
     if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
         return nullptr;
 
@@ -570,7 +570,7 @@ const BlockState *Level::peekBlockPtr(int32_t x, int32_t y, int32_t z) {
     if (it == mChunks.end())
         return nullptr;
 
-    return &it->second.getBlock(x & 15, y, z & 15);
+    return &it->second.getBlock(x & 15, y, z & 15, layer);
 }
 
 bool Level::isSolidAt(int32_t x, int32_t y, int32_t z) {
@@ -599,6 +599,10 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
     chunk.setBlock(x & 15, y, z & 15, state);
     SkyLightSystem::onBlockChanged(*this, x, y, z);
     mChunkNetworkCache.erase(_packChunk(x >> 4, z >> 4));
+
+    if (chunk.getBlock(x & 15, y, z & 15, 1).mName != "minecraft:air")
+        mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
+
     mLiquidPhysics.onBlockChanged(x, y, z);
 }
 
@@ -624,6 +628,8 @@ void Level::setBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer, con
 
     chunk.setBlock(x & 15, y, z & 15, layer, state);
     mChunkNetworkCache.erase(_packChunk(x >> 4, z >> 4));
+    mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
+    mLiquidPhysics.onBlockChanged(x, y, z);
 }
 
 void Level::setBlock(int32_t x, int32_t y, int32_t z, int32_t blockHash) {

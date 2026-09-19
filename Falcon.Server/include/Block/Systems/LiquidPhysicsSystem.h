@@ -28,6 +28,7 @@ struct LiquidInfo {
 struct LiquidChange {
     Vector3i position;
     BlockState state;
+    int layer = 0;
 };
 
 class Level;
@@ -49,6 +50,12 @@ public:
     void onScheduledUpdate(const Vector3i &position);
 
     static bool needsInitialTick(const LevelChunk &chunk, int32_t localX, int32_t y, int32_t localZ);
+
+    static const BlockState &fluidStateAt(const LevelChunk &chunk, int32_t localX, int32_t y, int32_t localZ);
+
+    static uint8_t getWaterloggingLevel(const BlockState &state);
+
+    void normalizeWaterlogged(const Vector3i &position);
 
     std::vector<LiquidChange> consumeChanges();
 
@@ -76,18 +83,19 @@ private:
 
     bool isFluidState(const BlockState &state) const;
     bool isSameFluid(const BlockState &left, const BlockState &right) const;
-    bool isFlowable(const BlockState &state) const;
+    bool isFlowable(const BlockState &state, bool lava) const;
     int64_t getTickRate(const BlockState &state) const;
-    const BlockState &_stateAt(int32_t x, int32_t y, int32_t z);
+    const BlockState &_stateAt(int32_t x, int32_t y, int32_t z, int layer = 0);
+    int _fluidLayer(int32_t x, int32_t y, int32_t z);
+    const BlockState &_fluidAt(int32_t x, int32_t y, int32_t z);
+    void _writeLayer(const Vector3i &position, int layer, const BlockState &state);
 
     bool _isLoaded(int32_t x, int32_t z) const;
 
-
-
-    bool _canBeFlowedInto(const BlockState &state) const;
+    bool _canBeFlowedInto(const BlockState &state, bool lava) const;
     int _calculateFlowCost(int32_t x, int32_t y, int32_t z, int accumulatedCost, int maxCost,
-                           int originOpposite, int lastOpposite);
-    void _getOptimalFlowDirections(int32_t x, int32_t y, int32_t z, int decayPerBlock, bool out[4]);
+                           int originOpposite, int lastOpposite, bool lava);
+    void _getOptimalFlowDirections(int32_t x, int32_t y, int32_t z, int decayPerBlock, bool lava, bool out[4]);
 
     void scheduleNeighbors(int32_t x, int32_t y, int32_t z);
     void scheduleLoaded(LevelChunk &chunk);

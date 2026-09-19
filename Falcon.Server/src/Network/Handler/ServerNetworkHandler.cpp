@@ -641,7 +641,7 @@ void ServerNetworkHandler::_tickDimension(Level &level) {
         update.mBlockPosition = change.position;
         update.mRuntimeId = (uint32_t) BlockStateHasher::hash(change.state.mName, change.state.mStates);
         update.mFlags = UpdateBlockPacket::Flag::All;
-        update.mDataLayer = 0;
+        update.mDataLayer = (uint32_t) change.layer;
         BlockActionHandler::broadcastToViewers(*this,
                                                Vector3f((float) change.position.x + 0.5f,
                                                         (float) change.position.y + 0.5f,
@@ -954,7 +954,7 @@ void ServerNetworkHandler::tick() {
         update.mBlockPosition = change.position;
         update.mRuntimeId = (uint32_t) BlockStateHasher::hash(change.state.mName, change.state.mStates);
         update.mFlags = UpdateBlockPacket::Flag::All;
-        update.mDataLayer = 0;
+        update.mDataLayer = (uint32_t) change.layer;
         BlockActionHandler::broadcastToViewers(*this,
                                                Vector3f((float) change.position.x + 0.5f,
                                                         (float) change.position.y + 0.5f,
