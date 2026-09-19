@@ -1,6 +1,7 @@
 #include "Block/Components/BlockBehaviorRegistry.h"
 
 #include "Block/Components/BlockBehavior.h"
+#include "Block/Blocks/IceBlockBehavior.h"
 #include "Block/Blocks/SlimeBlockBehavior.h"
 
 #include <unordered_map>
@@ -23,9 +24,23 @@ namespace {
         return behavior;
     }
 
+    const IceBlockBehavior &iceBehavior() {
+        static const IceBlockBehavior behavior;
+        return behavior;
+    }
+
+    const BlueIceBlockBehavior &blueIceBehavior() {
+        static const BlueIceBlockBehavior behavior;
+        return behavior;
+    }
+
     void registerVanillaBehaviors() {
         static const bool registered = [] {
             BlockBehaviorRegistry::registerBehavior("minecraft:slime", slimeBehavior());
+            BlockBehaviorRegistry::registerBehavior("minecraft:ice", iceBehavior());
+            BlockBehaviorRegistry::registerBehavior("minecraft:packed_ice", iceBehavior());
+            BlockBehaviorRegistry::registerBehavior("minecraft:frosted_ice", iceBehavior());
+            BlockBehaviorRegistry::registerBehavior("minecraft:blue_ice", blueIceBehavior());
             return true;
         }();
         (void) registered;
