@@ -214,7 +214,6 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
     mPendingChunks.erase(key);
 
     auto result = mChunks.emplace(key, std::move(chunk));
-    mLiquidPhysics.onChunkLoaded(result.first->second);
     _replayPendingChanges(key);
     return result.first->second;
 }
@@ -550,9 +549,6 @@ size_t Level::drainCompletedChunks() {
             }
 
             mChunkNetworkCache[key] = std::move(result.mNetworkData);
-
-            for (const ChunkFluidCell &cell: result.mFluidCells)
-                mLiquidPhysics.schedule(Vector3i(cell.mX, cell.mY, cell.mZ), cell.mTickRate);
 
             added++;
 

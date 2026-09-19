@@ -1,7 +1,5 @@
 #include "Level/ChunkWorker.h"
 
-#include "Block/Blocks/LiquidBlock.h"
-#include "Block/Systems/LiquidPhysicsSystem.h"
 #include "Level/Generator/GeneratorChunkSource.h"
 #include "Level/Generator/ChunkGenerator.h"
 #include "Level/LevelStorage.h"
@@ -192,23 +190,6 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
 
     result.mNetworkSubChunkCount = chunk->getNetworkSubChunkCount();
     result.mNetworkData = chunk->encodeNetwork();
-
-    const LevelChunk &scanned = *chunk;
-    chunk->forEachBlock([&result, &scanned](int32_t x, int32_t y, int32_t z, const BlockState &) {
-        const LiquidBlock liquid(LiquidPhysicsSystem::fluidStateAt(scanned, x & 15, y, z & 15));
-        if (!liquid.isLiquid() && !liquid.isBubbleColumn())
-            return;
-
-        if (!LiquidPhysicsSystem::needsInitialTick(scanned, x & 15, y, z & 15))
-            return;
-
-        ChunkFluidCell cell;
-        cell.mX = x;
-        cell.mY = y;
-        cell.mZ = z;
-        cell.mTickRate = liquid.getTickRate();
-        result.mFluidCells.push_back(cell);
-    });
 
     result.mChunk = std::move(chunk);
 

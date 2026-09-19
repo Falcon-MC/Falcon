@@ -63,10 +63,6 @@ bool LiquidPhysicsSystem::_isLoaded(int32_t x, int32_t z) const {
     return mLevel.isChunkResident(x >> 4, z >> 4);
 }
 
-void LiquidPhysicsSystem::onChunkLoaded(LevelChunk &chunk) {
-    scheduleLoaded(chunk);
-}
-
 void LiquidPhysicsSystem::onBlockChanged(int32_t x, int32_t y, int32_t z) {
     scheduleNeighbors(x, y, z);
 }
@@ -192,67 +188,6 @@ bool LiquidPhysicsSystem::isFlowable(const BlockState &state, bool lava) const {
     return !data->mSolid;
 }
 
-bool LiquidPhysicsSystem::needsInitialTick(const LevelChunk &chunk, int32_t localX, int32_t y, int32_t localZ) {
-    const BlockState &state = fluidStateAt(chunk, localX, y, localZ);
-    const LiquidView liquid(state);
-
-    if (liquid.isBubbleColumn())
-        return true;
-
-    if (!liquid.isLiquid())
-        return false;
-
-    if (y > LevelChunk::MIN_Y) {
-        const BlockState &below = chunk.getBlock(localX, y - 1, localZ);
-        if (below.mName == "minecraft:magma_block" || below.mName == "minecraft:soul_sand")
-            return true;
-
-        if (_canFlowInto(state, below))
-            return true;
-    }
-
-    static const int OFFSETS[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
-
-    for (const auto &offset: OFFSETS) {
-        const int32_t sideX = localX + offset[0];
-        const int32_t sideZ = localZ + offset[1];
-
-        if (sideX < 0 || sideX > 15 || sideZ < 0 || sideZ > 15)
-            return true;
-
-        if (_canFlowInto(state, chunk.getBlock(sideX, y, sideZ)))
-            return true;
-    }
-
-    return false;
-}
-
-bool LiquidPhysicsSystem::_canFlowInto(const BlockState &source, const BlockState &target) {
-    const bool sourceWater = source.mName == "minecraft:water" || source.mName == "minecraft:flowing_water";
-    const bool targetWater = target.mName == "minecraft:water" || target.mName == "minecraft:flowing_water"
-                             || target.mName == "minecraft:bubble_column";
-    const bool sourceLava = source.mName == "minecraft:lava" || source.mName == "minecraft:flowing_lava";
-    const bool targetLava = target.mName == "minecraft:lava" || target.mName == "minecraft:flowing_lava";
-
-    if ((sourceWater && targetWater) || (sourceLava && targetLava))
-        return false;
-
-    if (targetWater || targetLava)
-        return true;
-
-    if (target.mName == "minecraft:air")
-        return true;
-
-    const BlockData *data = BlockDataTable::find(target.mName.c_str());
-    if (data == nullptr)
-        return false;
-
-    if (sourceWater && data->mWaterloggingLevel > 0)
-        return data->mWaterloggingLevel > 1;
-
-    return !data->mSolid;
-}
-
 int64_t LiquidPhysicsSystem::getTickRate(const BlockState &state) const {
     const LiquidView liquid(state);
     if (liquid.isLiquid() || liquid.isBubbleColumn())
@@ -272,19 +207,6 @@ void LiquidPhysicsSystem::scheduleNeighbors(int32_t x, int32_t y, int32_t z) {
         if (liquid.isLiquid() || liquid.isBubbleColumn())
             schedule(position, getTickRate(state));
     }
-}
-
-void LiquidPhysicsSystem::scheduleLoaded(LevelChunk &chunk) {
-    chunk.forEachBlock([this, &chunk](int32_t x, int32_t y, int32_t z, const BlockState &) {
-        const BlockState &fluid = fluidStateAt(chunk, x & 15, y, z & 15);
-        if (!isFluidState(fluid))
-            return;
-
-        if (!needsInitialTick(chunk, x & 15, y, z & 15))
-            return;
-
-        schedule(Vector3i(x, y, z), getTickRate(fluid));
-    });
 }
 
 BlockState LiquidPhysicsSystem::makeState(bool lava, int decay, bool falling) const {

@@ -28,20 +28,12 @@ struct ChunkTask {
     std::unique_ptr<LevelChunk> mChunk;
 };
 
-struct ChunkFluidCell {
-    int32_t mX = 0;
-    int32_t mY = 0;
-    int32_t mZ = 0;
-    int64_t mTickRate = 1;
-};
-
 struct ChunkLoadResult {
     int32_t mX = 0;
     int32_t mZ = 0;
     std::unique_ptr<LevelChunk> mChunk;
     std::string mNetworkData;
     int mNetworkSubChunkCount = 0;
-    std::vector<ChunkFluidCell> mFluidCells;
     std::vector<GeneratedBlockChange> mOverflowChanges;
     bool mReplacesResident = false;
 };

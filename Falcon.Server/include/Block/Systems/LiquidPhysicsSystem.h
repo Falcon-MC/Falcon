@@ -39,7 +39,6 @@ public:
 
     void moveStateFrom(LiquidPhysicsSystem &&other);
 
-    void onChunkLoaded(LevelChunk &chunk);
     void onBlockChanged(int32_t x, int32_t y, int32_t z);
 
     LiquidInfo getLiquidInfo(int32_t x, int32_t y, int32_t z);
@@ -48,8 +47,6 @@ public:
     void schedule(const Vector3i &position, int64_t delay = 1);
 
     void onScheduledUpdate(const Vector3i &position);
-
-    static bool needsInitialTick(const LevelChunk &chunk, int32_t localX, int32_t y, int32_t localZ);
 
     static const BlockState &fluidStateAt(const LevelChunk &chunk, int32_t localX, int32_t y, int32_t localZ);
 
@@ -60,8 +57,6 @@ public:
     std::vector<LiquidChange> consumeChanges();
 
 private:
-    static bool _canFlowInto(const BlockState &source, const BlockState &target);
-
     struct Position {
         int32_t x;
         int32_t y;
@@ -98,7 +93,6 @@ private:
     void _getOptimalFlowDirections(int32_t x, int32_t y, int32_t z, int decayPerBlock, bool lava, bool out[4]);
 
     void scheduleNeighbors(int32_t x, int32_t y, int32_t z);
-    void scheduleLoaded(LevelChunk &chunk);
     void process(const Vector3i &position);
     void processBubbleColumn(const Vector3i &position);
     void setFluidState(const Vector3i &position, const BlockState &state);
