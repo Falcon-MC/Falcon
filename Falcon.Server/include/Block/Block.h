@@ -53,6 +53,11 @@ public:
         return false;
     }
 
+    virtual bool canBeReplaced(const BlockState &state) const {
+        (void) state;
+        return false;
+    }
+
     virtual bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
         (void) level;
         (void) position;

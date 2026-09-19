@@ -1,7 +1,9 @@
 #include "Network/Handler/BlockActionHandler.h"
 
 #include "Block/BlockData.h"
+#include "Block/BlockSupport.h"
 #include "Block/Components/BlockPlacementComponent.h"
+#include "Block/Components/PlacementOrientation.h"
 #include "Block/Blocks/LiquidView.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/BlockActorStore.h"
@@ -209,14 +211,6 @@ namespace {
         player.recordRightClick(transaction.mBlockPosition, transaction.mBlockFace,
                                 transaction.mPlayerPosition, transaction.mClickPosition, now);
         return duplicate;
-    }
-
-    bool isReplaceable(const BlockState &state) {
-        if (state.mName == "minecraft:air")
-            return true;
-
-        const BlockData *data = BlockDataTable::find(state.mName.c_str());
-        return data != nullptr && !data->mSolid;
     }
 
     std::string furnaceDropIdentifier(const std::string &identifier) {
@@ -753,11 +747,13 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
     const int face = transaction.mBlockFace;
     Vector3i target = transaction.mBlockPosition;
-    if (!isReplaceable(clickedState)) {
+    const bool replacesClicked = BlockSupport::isReplaceable(clickedState);
+    if (!replacesClicked) {
         target = Vector3i(transaction.mBlockPosition.x + offsets[face][0],
                           transaction.mBlockPosition.y + offsets[face][1],
                           transaction.mBlockPosition.z + offsets[face][2]);
     }
+    const int placementFace = replacesClicked ? PlacementOrientation::FACE_UP : face;
 
     if (target.y < LevelChunk::MIN_Y || target.y > LevelChunk::MAX_Y) {
         sendCurrentBlockState(owner, target);
@@ -765,7 +761,7 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     }
 
     const BlockState targetState = level.getBlockState(target.x, target.y, target.z);
-    if (!isReplaceable(targetState)) {
+    if (!BlockSupport::isReplaceable(targetState)) {
         sendCurrentBlockState(owner, target);
         return;
     }
@@ -787,11 +783,11 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
     BlockState placedState = BlockPlacementComponent::apply(
             BlockState(definition.getIdentifier(), definition.getState()), &level,
-            player.getRotation().y, player.getRotation().x, transaction.mBlockFace,
+            player.getRotation().y, player.getRotation().x, placementFace,
             transaction.mClickPosition, player.getPosition(), target);
 
     const Block *placedBlock = VanillaBlocks::fromIdentifier(placedState.mName);
-    if (placedBlock != nullptr && !placedBlock->canPlaceAt(level, target, transaction.mBlockFace)) {
+    if (placedBlock != nullptr && !placedBlock->canPlaceAt(level, target, placementFace)) {
         sendCurrentBlockState(owner, target);
         return;
     }
@@ -849,7 +845,7 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     owner.playLevelSound(LevelSoundEvent::PLACE, targetCenter, "", (int32_t) blockHash);
 
     if (placedBlock != nullptr)
-        placedBlock->onPlaced(owner, player, target, placedState, placedWithItem, (int) transaction.mBlockFace);
+        placedBlock->onPlaced(owner, player, target, placedState, placedWithItem, placementFace);
 
     BlockActor *blockActor = BlockActorStore::getInstance().find(target);
     if (blockActor != nullptr) {

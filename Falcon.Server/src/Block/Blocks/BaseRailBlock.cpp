@@ -1,6 +1,7 @@
 #include "Block/Blocks/BaseRailBlock.h"
 
 #include "Block/BlockIdentifier.h"
+#include "Block/BlockSupport.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -255,6 +256,12 @@ namespace {
 }
 
 BaseRailBlock::BaseRailBlock(const Block &base) : Block(base) {
+}
+
+bool BaseRailBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
+    (void) blockFace;
+
+    return BlockSupport::isSolidOrCauldron(level.getBlockState(position.x, position.y - 1, position.z));
 }
 
 bool BaseRailBlock::matches(const std::string &identifier) {

@@ -8,9 +8,18 @@
 class ServerNetworkHandler;
 class ServerPlayer;
 
-class RedstoneRepeaterBlock final : public Block {
+class RedstoneDiodeBlock : public Block {
 public:
-    explicit RedstoneRepeaterBlock(const Block &block) : Block(block)
+    explicit RedstoneDiodeBlock(const Block &block) : Block(block)
+    {
+    }
+
+    bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
+};
+
+class RedstoneRepeaterBlock final : public RedstoneDiodeBlock {
+public:
+    explicit RedstoneRepeaterBlock(const Block &block) : RedstoneDiodeBlock(block)
     {
     }
 
@@ -20,9 +29,9 @@ public:
     static bool matches(const std::string &identifier);
 };
 
-class RedstoneComparatorBlock final : public Block {
+class RedstoneComparatorBlock final : public RedstoneDiodeBlock {
 public:
-    explicit RedstoneComparatorBlock(const Block &block) : Block(block)
+    explicit RedstoneComparatorBlock(const Block &block) : RedstoneDiodeBlock(block)
     {
     }
 

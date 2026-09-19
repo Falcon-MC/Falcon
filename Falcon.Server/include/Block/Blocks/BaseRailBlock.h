@@ -27,5 +27,7 @@ public:
 
     static bool isAbstract(const std::string &identifier);
 
+    bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
+
     void onPlacing(ServerNetworkHandler &owner, const Vector3i &position, BlockState &state) const override;
 };

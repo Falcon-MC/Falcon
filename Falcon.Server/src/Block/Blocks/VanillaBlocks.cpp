@@ -11,6 +11,8 @@
 #include "Block/Blocks/ItemFrameBlock.h"
 #include "Block/Blocks/LeverBlock.h"
 #include "Block/Blocks/OrientationBlocks.h"
+#include "Block/Blocks/PlacementRuleBlocks.h"
+#include "Block/Blocks/PlantBlock.h"
 #include "Block/Blocks/RedstoneDiodeBlock.h"
 #include "Block/BlockPaletteRegistry.h"
 #include "Block/BlockTypeIds.h"
@@ -88,6 +90,9 @@ namespace {
         if (TorchOrientationBlock::matches(identifier))
             return std::make_unique<TorchOrientationBlock>(block);
 
+        if (LadderBlock::matches(identifier))
+            return std::make_unique<LadderBlock>(block);
+
         if (WallAttachedBlock::matches(identifier))
             return std::make_unique<WallAttachedBlock>(block);
 
@@ -102,6 +107,21 @@ namespace {
 
         if (CardinalPlayerBlock::matches(identifier))
             return std::make_unique<CardinalPlayerBlock>(block);
+
+        if (PlantBlock::matches(identifier))
+            return std::make_unique<PlantBlock>(block);
+
+        if (ReplaceableBlock::matches(identifier))
+            return std::make_unique<ReplaceableBlock>(block);
+
+        if (CarpetBlock::matches(identifier))
+            return std::make_unique<CarpetBlock>(block);
+
+        if (PressurePlateBlock::matches(identifier))
+            return std::make_unique<PressurePlateBlock>(block);
+
+        if (RedstoneWireBlock::matches(identifier))
+            return std::make_unique<RedstoneWireBlock>(block);
 
         return std::make_unique<Block>(block);
     }

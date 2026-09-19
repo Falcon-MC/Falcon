@@ -5,6 +5,7 @@
 #include "Block/BlockIdentifier.h"
 #include "Block/Blocks/BedBlock.h"
 #include "Block/Blocks/DoorBlock.h"
+#include "Block/BlockSupport.h"
 #include "Block/Components/BlockPlacementComponent.h"
 #include "Block/Components/PlacementOrientation.h"
 #include "Block/Systems/PistonSystem.h"
@@ -72,6 +73,22 @@ BlockState TorchOrientationBlock::applyPlacementOrientation(const BlockState &st
     const int facing = context.mFace >= FACE_NORTH ? context.mFace : FACE_UP;
     setFacingDirection(states, facing);
     return BlockState(result.mName, states);
+}
+
+bool TorchOrientationBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
+    const int face = blockFace >= PlacementOrientation::FACE_NORTH ? blockFace : PlacementOrientation::FACE_UP;
+    const Vector3i supportPosition = BlockSupport::supportOf(position, face);
+    const BlockState support = level.getBlockState(supportPosition.x, supportPosition.y, supportPosition.z);
+    return BlockSupport::isAttachable(support, face);
+}
+
+bool DoorOrientationBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
+    if (blockFace != PlacementOrientation::FACE_UP)
+        return false;
+
+    const BlockState above = level.getBlockState(position.x, position.y + 1, position.z);
+    const BlockState below = level.getBlockState(position.x, position.y - 1, position.z);
+    return BlockSupport::isReplaceable(above) && BlockSupport::isSolidOrCauldron(below);
 }
 
 bool WallAttachedBlock::matches(const std::string &identifier) {

@@ -35,9 +35,11 @@ public:
     static bool matches(const std::string &identifier);
 
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
+
+    bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
 };
 
-class WallAttachedBlock final : public Block {
+class WallAttachedBlock : public Block {
 public:
     explicit WallAttachedBlock(const Block &block) : Block(block)
     {
@@ -102,6 +104,8 @@ public:
     static bool matches(const std::string &identifier);
 
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
+
+    bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
 
     void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                   const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
