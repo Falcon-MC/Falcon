@@ -3,6 +3,8 @@
 #include <string>
 
 struct ConnectionDefinition {
+    static constexpr int MAX_TRANSPORT_CONNECTIONS = 1024;
+
     unsigned short mPort;
     unsigned short mPortV6;
     int mMaxNumPlayers;
@@ -20,7 +22,7 @@ struct ConnectionDefinition {
         definition.mPort = port;
         definition.mPortV6 = portV6;
         definition.mMaxNumPlayers = maxNumPlayers;
-        definition.mMaxNumConnections = maxNumPlayers;
+        definition.mMaxNumConnections = MAX_TRANSPORT_CONNECTIONS;
         return definition;
     }
 };

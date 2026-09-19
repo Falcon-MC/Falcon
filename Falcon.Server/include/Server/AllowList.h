@@ -17,6 +17,8 @@ public:
 
     bool isAllowed(const std::string &name, const std::string &xuid);
 
+    bool ignoresPlayerLimit(const std::string &name, const std::string &xuid);
+
     bool add(const std::string &name);
 
     bool remove(const std::string &name);
@@ -33,6 +35,8 @@ private:
     static std::string _escape(const std::string &value);
 
     std::vector<AllowListEntry>::iterator _findByName(const std::string &name);
+
+    std::vector<AllowListEntry>::iterator _findPlayer(const std::string &name, const std::string &xuid);
 
     void _save() const;
 

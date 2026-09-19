@@ -86,28 +86,38 @@ std::vector<AllowListEntry>::iterator AllowList::_findByName(const std::string &
     });
 }
 
-bool AllowList::isAllowed(const std::string &name, const std::string &xuid) {
+std::vector<AllowListEntry>::iterator AllowList::_findPlayer(const std::string &name, const std::string &xuid) {
     if (!xuid.empty()) {
         const auto byXuid = std::find_if(mEntries.begin(), mEntries.end(), [&xuid](const AllowListEntry &entry) {
             return entry.mXuid == xuid;
         });
         if (byXuid != mEntries.end())
-            return true;
+            return byXuid;
     }
 
     const auto byName = _findByName(name);
-    if (byName == mEntries.end())
+    if (byName == mEntries.end() || (!byName->mXuid.empty() && !xuid.empty()))
+        return mEntries.end();
+
+    return byName;
+}
+
+bool AllowList::isAllowed(const std::string &name, const std::string &xuid) {
+    const auto found = _findPlayer(name, xuid);
+    if (found == mEntries.end())
         return false;
 
-    if (!byName->mXuid.empty() && !xuid.empty())
-        return false;
-
-    if (byName->mXuid.empty() && !xuid.empty()) {
-        byName->mXuid = xuid;
+    if (found->mXuid.empty() && !xuid.empty()) {
+        found->mXuid = xuid;
         _save();
     }
 
     return true;
+}
+
+bool AllowList::ignoresPlayerLimit(const std::string &name, const std::string &xuid) {
+    const auto found = _findPlayer(name, xuid);
+    return found != mEntries.end() && found->mIgnoresPlayerLimit;
 }
 
 bool AllowList::add(const std::string &name) {

@@ -1137,7 +1137,20 @@ void ServerNetworkHandler::_updateServerAnnouncement() {
 
 bool ServerNetworkHandler::onValidateIncomingConnection(const NetworkIdentifier &id) {
     (void) id;
-    return getActivePlayerCount() < mMaxPlayers;
+    return true;
+}
+
+bool ServerNetworkHandler::isServerFull(const NetworkIdentifier &joining) const {
+    int loggedIn = 0;
+    for (const auto &entry: mPlayers) {
+        if (entry.first == joining)
+            continue;
+
+        if (entry.second.getLoginState() >= ServerPlayer::LoginState::LoggedIn)
+            loggedIn++;
+    }
+
+    return loggedIn >= mMaxPlayers;
 }
 
 void ServerNetworkHandler::onNewIncomingConnection(const NetworkIdentifier &id) {

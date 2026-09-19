@@ -187,6 +187,13 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
+    if (owner.isServerFull(id) && !owner.getAllowList().ignoresPlayerLimit(player.getName(), player.getXuid())) {
+        LOG_INFO(LogAreaID::Server, "Player %s was refused because the server is full", player.getName().c_str());
+        owner._disconnect(id, "disconnectionScreen.serverFull");
+        owner.getPlayers().erase(id);
+        return;
+    }
+
     player.setSkin(request.getSkin());
     player.setBuildPlatform(request.getBuildPlatform());
     player.setLoginState(ServerPlayer::LoginState::LoggedIn);

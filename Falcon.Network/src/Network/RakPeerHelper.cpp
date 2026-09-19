@@ -20,7 +20,7 @@ RakNet::StartupResult RakPeerHelper::peerStartup(RakNet::RakPeerInterface *rakPe
 
     if (result == RakNet::RAKNET_STARTED) {
         rakPeer->SetMaximumIncomingConnections(
-                purpose == PeerPurpose::Server ? (unsigned short) definition.mMaxNumPlayers : 0);
+                purpose == PeerPurpose::Server ? (unsigned short) definition.mMaxNumConnections : 0);
 
         if (mIPSupportInterface != nullptr)
             mIPSupportInterface->onReceiveIPSupport(IPSupport::IPv4);

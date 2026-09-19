@@ -305,6 +305,8 @@ public:
 
     bool isAllowListed(ServerPlayer &player);
 
+    bool isServerFull(const NetworkIdentifier &joining) const;
+
     void setAllowListEnabled(bool enabled);
 
     void kickNotAllowListedPlayers();
