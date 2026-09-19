@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 struct CraftingIngredientData {
     const char *mItemId;
@@ -45,4 +47,6 @@ public:
 
     static const FurnaceRecipeData *getFurnaceRecipes();
     static size_t getFurnaceRecipeCount();
+
+    static const std::vector<std::string> &getItemTags(const std::string &identifier);
 };

@@ -2,6 +2,7 @@
 #include "CraftingRecipeJson.h"
 #include "Core/Json/Json.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
@@ -332,4 +333,26 @@ const FurnaceRecipeData *CraftingRecipeTable::getFurnaceRecipes() {
 
 size_t CraftingRecipeTable::getFurnaceRecipeCount() {
     return getStorage().mFurnaceRecipes.size();
+}
+
+const std::vector<std::string> &CraftingRecipeTable::getItemTags(const std::string &identifier) {
+    static const std::unordered_map<std::string, std::vector<std::string>> TAGS_BY_ITEM = [] {
+        std::unordered_map<std::string, std::vector<std::string>> byItem;
+        for (const auto &entry: loadTags()) {
+            for (const std::string &item: entry.second)
+                byItem[item].push_back(entry.first);
+        }
+
+        for (auto &entry: byItem)
+            std::sort(entry.second.begin(), entry.second.end());
+
+        return byItem;
+    }();
+
+    static const std::vector<std::string> NO_TAGS;
+    const auto found = TAGS_BY_ITEM.find(identifier);
+    if (found == TAGS_BY_ITEM.end())
+        return NO_TAGS;
+
+    return found->second;
 }

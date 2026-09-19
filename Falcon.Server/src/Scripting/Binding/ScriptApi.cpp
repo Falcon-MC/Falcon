@@ -7,8 +7,10 @@
 #include "Command/ServerCommandOrigin.h"
 #include "Command/PlayerCommandOrigin.h"
 #include "Core/Debug/BedrockLog.h"
+#include "Block/BlockPaletteRegistry.h"
 #include "Core/Event/EventBus.h"
 #include "Inventory/InventoryManager.h"
+#include "Item/CraftingRecipeTable.h"
 #include "Item/StringToItemParser.h"
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -1447,7 +1449,7 @@ void ScriptApi::_buildEvents() {
     static const char *afterNamed[] = {
             "projectileHitBlock", "projectileHitEntity", "entityHitBlock", "entityHitEntity",
             "entityItemDrop", "playerHotbarSelectedSlotChange", "playerInventoryItemChange",
-            "playerInteractWithBlock", "entitySpawn", "entityRemove", "entityLoad", "entityDie"
+            "playerInteractWithBlock", "entitySpawn", "entityRemove", "entityLoad", "entityDie", "worldLoad"
     };
     for (const char *name: afterNamed)
         JS_SetPropertyStr(mContext, mAfterEvents, name, makeNamedSignal(mContext, name));
@@ -1601,6 +1603,13 @@ void ScriptApi::emitWorldInitialize() {
     JS_SetPropertyStr(mContext, event, "blockComponentRegistry", blockRegistry);
 
     emitNamed("worldInitialize", event);
+}
+
+void ScriptApi::emitWorldLoad() {
+    if (!hasNamedSubscribers("worldLoad"))
+        return;
+
+    emitNamed("worldLoad", JS_NewObject(mContext));
 }
 
 void ScriptApi::addNamedSubscriber(const std::string &name, JSValue callback) {
@@ -3077,7 +3086,15 @@ namespace {
         if (argc < 1)
             return JS_ThrowTypeError(ctx, "ItemStack requires an item identifier");
 
-        std::string typeId = toStdString(ctx, argv[0]);
+        std::string typeId;
+        if (JS_IsObject(argv[0])) {
+            JSValue idValue = JS_GetPropertyStr(ctx, argv[0], "id");
+            typeId = toStdString(ctx, idValue);
+            JS_FreeValue(ctx, idValue);
+        } else {
+            typeId = toStdString(ctx, argv[0]);
+        }
+
         if (typeId.empty())
             return JS_ThrowTypeError(ctx, "ItemStack requires an item identifier");
         if (typeId.find(':') == std::string::npos)
@@ -3088,6 +3105,35 @@ namespace {
             JS_ToInt32(ctx, &amount, argv[1]);
 
         return api->makeItemStack(typeId, amount < 1 ? 1 : amount);
+    }
+
+    JSValue itemStackGetTags(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
+        ScriptItem *item = (ScriptItem *) JS_GetOpaque(thisVal, api->itemStackClassId());
+        if (item == nullptr)
+            return JS_ThrowTypeError(ctx, "ItemStack is not valid");
+
+        JSValue tags = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const std::string &tag: CraftingRecipeTable::getItemTags(item->mTypeId))
+            JS_SetPropertyUint32(ctx, tags, index++, jsString(ctx, tag));
+        return tags;
+    }
+
+    JSValue itemStackHasTag(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
+        ScriptItem *item = (ScriptItem *) JS_GetOpaque(thisVal, api->itemStackClassId());
+        if (item == nullptr)
+            return JS_ThrowTypeError(ctx, "ItemStack is not valid");
+        if (argc < 1)
+            return JS_FALSE;
+
+        const std::string wanted = toStdString(ctx, argv[0]);
+        for (const std::string &tag: CraftingRecipeTable::getItemTags(item->mTypeId)) {
+            if (tag == wanted)
+                return JS_TRUE;
+        }
+        return JS_FALSE;
     }
 }
 
@@ -3128,6 +3174,10 @@ void ScriptApi::_buildItemStackClass() {
                       JS_NewCFunction(mContext, itemStackGetDynamicPropertyIds, "getDynamicPropertyIds", 0));
     JS_SetPropertyStr(mContext, mItemStackPrototype, "getComponent",
                       JS_NewCFunction(mContext, itemStackGetComponent, "getComponent", 1));
+    JS_SetPropertyStr(mContext, mItemStackPrototype, "getTags",
+                      JS_NewCFunction(mContext, itemStackGetTags, "getTags", 0));
+    JS_SetPropertyStr(mContext, mItemStackPrototype, "hasTag",
+                      JS_NewCFunction(mContext, itemStackHasTag, "hasTag", 1));
 
     JS_SetClassProto(mContext, mItemStackClassId, JS_DupValue(mContext, mItemStackPrototype));
 }
@@ -3866,16 +3916,278 @@ void ScriptApi::_registerUiModule() {
 // ========================= Module + lifecycle =========================
 
 namespace {
-    JSValue blockPermutationResolve(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_ThrowTypeError(ctx, "resolve requires a block identifier");
-
-        std::string identifier = toStdString(ctx, argv[0]);
-        if (identifier.find(':') == std::string::npos)
-            identifier = "minecraft:" + identifier;
-
-        return makeBlockType(ctx, identifier);
+    JSValue stateValueToJs(JSContext *ctx, const Tag &value) {
+        switch (value.getType()) {
+            case Tag::Type::Byte:
+                return JS_NewBool(ctx, value.asByte() != 0);
+            case Tag::Type::Short:
+                return JS_NewInt32(ctx, value.asShort());
+            case Tag::Type::Int:
+                return JS_NewInt32(ctx, value.asInt());
+            case Tag::Type::String:
+                return jsString(ctx, value.asString());
+            default:
+                return JS_UNDEFINED;
+        }
     }
+
+    JSValue paletteBlockNames(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        JSValue names = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const std::string &name: BlockPaletteRegistry::getInstance().getBlockNames())
+            JS_SetPropertyUint32(ctx, names, index++, jsString(ctx, name));
+        return names;
+    }
+
+    JSValue palettePermutations(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 1)
+            return JS_UNDEFINED;
+
+        const std::vector<Tag> *permutations =
+                BlockPaletteRegistry::getInstance().getPermutations(toStdString(ctx, argv[0]));
+        if (permutations == nullptr)
+            return JS_UNDEFINED;
+
+        JSValue list = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const Tag &states: *permutations) {
+            JSValue object = JS_NewObject(ctx);
+            const std::vector<std::string> &keys = states.getKeys();
+            const std::vector<Tag> &values = states.getValues();
+            for (size_t key = 0; key < keys.size(); ++key)
+                JS_SetPropertyStr(ctx, object, keys[key].c_str(), stateValueToJs(ctx, values[key]));
+            JS_SetPropertyUint32(ctx, list, index++, object);
+        }
+        return list;
+    }
+
+    JSValue itemTypeNames(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
+        JSValue names = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const std::shared_ptr<ItemDefinition> &definition: api->host().getItemDefinitions().getAll())
+            JS_SetPropertyUint32(ctx, names, index++, jsString(ctx, definition->getIdentifier()));
+        return names;
+    }
+
+    const char *DATA_BOOTSTRAP = R"JS(
+(() => {
+    const normalizeId = (id) => {
+        const text = String(id);
+        return text.includes(":") ? text : "minecraft:" + text;
+    };
+
+    const permutationCache = new Map();
+    const permutationsOf = (id) => {
+        if (!permutationCache.has(id)) {
+            const list = __falconPalettePermutations(id);
+            permutationCache.set(id, list === undefined ? null : list);
+        }
+        return permutationCache.get(id);
+    };
+
+    class BlockType {
+        constructor(id) {
+            this.id = id;
+        }
+    }
+
+    class BlockPermutation {
+        constructor(id, states) {
+            this.type = new BlockType(id);
+            this._states = states;
+        }
+
+        getAllStates() {
+            return Object.assign({}, this._states);
+        }
+
+        getState(name) {
+            return this._states[name];
+        }
+
+        withState(name, value) {
+            return BlockPermutation.resolve(this.type.id, Object.assign({}, this._states, { [name]: value }));
+        }
+
+        matches(id, states) {
+            if (normalizeId(id) !== this.type.id) {
+                return false;
+            }
+            if (states) {
+                for (const key of Object.keys(states)) {
+                    if (this._states[key] !== states[key]) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        static resolve(id, states) {
+            const blockId = normalizeId(id);
+            const list = permutationsOf(blockId);
+            if (!list || list.length === 0) {
+                throw new Error("Unknown block type " + blockId);
+            }
+
+            const wanted = Object.assign({}, list[0]);
+            if (states) {
+                for (const key of Object.keys(states)) {
+                    if (!(key in wanted)) {
+                        throw new Error("Block " + blockId + " has no state " + key);
+                    }
+                    wanted[key] = states[key];
+                }
+            }
+
+            for (const candidate of list) {
+                let same = true;
+                for (const key of Object.keys(wanted)) {
+                    if (candidate[key] !== wanted[key]) {
+                        same = false;
+                        break;
+                    }
+                }
+                if (same) {
+                    return new BlockPermutation(blockId, candidate);
+                }
+            }
+            throw new Error("Invalid state value for block " + blockId);
+        }
+    }
+
+    let blockTypes = null;
+    const allBlockTypes = () => {
+        if (blockTypes === null) {
+            blockTypes = new Map();
+            for (const name of __falconPaletteBlockNames()) {
+                blockTypes.set(name, new BlockType(name));
+            }
+        }
+        return blockTypes;
+    };
+
+    const BlockTypes = {
+        get(id) {
+            return allBlockTypes().get(normalizeId(id));
+        },
+        getAll() {
+            return Array.from(allBlockTypes().values());
+        }
+    };
+
+    const compareStateValues = (left, right) => {
+        if (typeof left === typeof right && typeof left !== "string") {
+            return Number(left) - Number(right);
+        }
+        return 0;
+    };
+
+    let blockStates = null;
+    const allBlockStates = () => {
+        if (blockStates === null) {
+            const values = new Map();
+            for (const name of __falconPaletteBlockNames()) {
+                for (const states of permutationsOf(name) || []) {
+                    for (const key of Object.keys(states)) {
+                        if (!values.has(key)) {
+                            values.set(key, []);
+                        }
+                        const known = values.get(key);
+                        if (!known.includes(states[key])) {
+                            known.push(states[key]);
+                        }
+                    }
+                }
+            }
+            blockStates = new Map();
+            for (const [key, known] of values) {
+                blockStates.set(key, { id: key, validValues: known.slice().sort(compareStateValues) });
+            }
+        }
+        return blockStates;
+    };
+
+    const BlockStates = {
+        get(name) {
+            return allBlockStates().get(String(name));
+        },
+        getAll() {
+            return Array.from(allBlockStates().values());
+        }
+    };
+
+    class ItemType {
+        constructor(id) {
+            this.id = id;
+        }
+    }
+
+    let itemTypes = null;
+    const allItemTypes = () => {
+        if (itemTypes === null) {
+            itemTypes = new Map();
+            for (const name of __falconItemTypeNames()) {
+                itemTypes.set(name, new ItemType(name));
+            }
+        }
+        return itemTypes;
+    };
+
+    const ItemTypes = {
+        get(id) {
+            return allItemTypes().get(normalizeId(id));
+        },
+        getAll() {
+            return Array.from(allItemTypes().values());
+        }
+    };
+
+    globalThis.__falconServerData = { BlockPermutation, BlockStates, BlockTypes, ItemTypes };
+
+    globalThis.__falconInstallJobs = (system) => {
+        const JOB_BUDGET_MS = 5;
+        const jobs = new Map();
+        let nextJobId = 1;
+
+        system.runJob = (generator) => {
+            const jobId = nextJobId++;
+            const finish = () => {
+                const runId = jobs.get(jobId);
+                if (runId !== undefined) {
+                    system.clearRun(runId);
+                    jobs.delete(jobId);
+                }
+            };
+            const runId = system.runInterval(() => {
+                const deadline = Date.now() + JOB_BUDGET_MS;
+                try {
+                    do {
+                        if (generator.next().done) {
+                            finish();
+                            return;
+                        }
+                    } while (Date.now() < deadline);
+                } catch (error) {
+                    finish();
+                    throw error;
+                }
+            }, 1);
+            jobs.set(jobId, runId);
+            return jobId;
+        };
+
+        system.clearJob = (jobId) => {
+            const runId = jobs.get(jobId);
+            if (runId !== undefined) {
+                system.clearRun(runId);
+                jobs.delete(jobId);
+            }
+        };
+    };
+})();
+)JS";
 
     JSValue blockVolumeConstructor(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         JSValue object = JS_NewObject(ctx);
@@ -3909,10 +4221,14 @@ namespace {
                 JS_NewCFunction2(ctx, itemStackConstructor, "ItemStack", 2, JS_CFUNC_constructor, 0);
         JS_SetModuleExport(ctx, module, "ItemStack", itemStackConstructorValue);
 
-        JSValue blockPermutation = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, blockPermutation, "resolve",
-                          JS_NewCFunction(ctx, blockPermutationResolve, "resolve", 1));
-        JS_SetModuleExport(ctx, module, "BlockPermutation", blockPermutation);
+        JSValue global = JS_GetGlobalObject(ctx);
+        JSValue serverData = JS_GetPropertyStr(ctx, global, "__falconServerData");
+        JS_SetModuleExport(ctx, module, "BlockPermutation", JS_GetPropertyStr(ctx, serverData, "BlockPermutation"));
+        JS_SetModuleExport(ctx, module, "BlockStates", JS_GetPropertyStr(ctx, serverData, "BlockStates"));
+        JS_SetModuleExport(ctx, module, "BlockTypes", JS_GetPropertyStr(ctx, serverData, "BlockTypes"));
+        JS_SetModuleExport(ctx, module, "ItemTypes", JS_GetPropertyStr(ctx, serverData, "ItemTypes"));
+        JS_FreeValue(ctx, serverData);
+        JS_FreeValue(ctx, global);
 
         JSValue equipmentSlot = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, equipmentSlot, "Head", JS_NewString(ctx, "Head"));
@@ -3967,7 +4283,40 @@ namespace {
     }
 }
 
+void ScriptApi::_installDataBootstrap() {
+    JSValue global = JS_GetGlobalObject(mContext);
+    JS_SetPropertyStr(mContext, global, "__falconPaletteBlockNames",
+                      JS_NewCFunction(mContext, paletteBlockNames, "__falconPaletteBlockNames", 0));
+    JS_SetPropertyStr(mContext, global, "__falconPalettePermutations",
+                      JS_NewCFunction(mContext, palettePermutations, "__falconPalettePermutations", 1));
+    JS_SetPropertyStr(mContext, global, "__falconItemTypeNames",
+                      JS_NewCFunction(mContext, itemTypeNames, "__falconItemTypeNames", 0));
+
+    JSValue result = JS_Eval(mContext, DATA_BOOTSTRAP, strlen(DATA_BOOTSTRAP), "<falcon-data>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(result)) {
+        JSValue exception = JS_GetException(mContext);
+        const char *message = JS_ToCString(mContext, exception);
+        LOG_ERROR(LogAreaID::Server, "Data bootstrap error: %s", message == nullptr ? "?" : message);
+        if (message != nullptr)
+            JS_FreeCString(mContext, message);
+        JS_FreeValue(mContext, exception);
+    }
+    JS_FreeValue(mContext, result);
+
+    JSValue installJobs = JS_GetPropertyStr(mContext, global, "__falconInstallJobs");
+    if (JS_IsFunction(mContext, installJobs)) {
+        JSValue systemValue = JS_DupValue(mContext, mSystem);
+        JSValue installed = JS_Call(mContext, installJobs, JS_UNDEFINED, 1, &systemValue);
+        JS_FreeValue(mContext, installed);
+        JS_FreeValue(mContext, systemValue);
+    }
+    JS_FreeValue(mContext, installJobs);
+    JS_FreeValue(mContext, global);
+}
+
 void ScriptApi::_registerModule() {
+    _installDataBootstrap();
+
     JSModuleDef *module = JS_NewCModule(mContext, "@minecraft/server", moduleInit);
     if (module == nullptr)
         return;
@@ -3976,6 +4325,9 @@ void ScriptApi::_registerModule() {
     JS_AddModuleExport(mContext, module, "system");
     JS_AddModuleExport(mContext, module, "ItemStack");
     JS_AddModuleExport(mContext, module, "BlockPermutation");
+    JS_AddModuleExport(mContext, module, "BlockStates");
+    JS_AddModuleExport(mContext, module, "BlockTypes");
+    JS_AddModuleExport(mContext, module, "ItemTypes");
     JS_AddModuleExport(mContext, module, "EquipmentSlot");
     JS_AddModuleExport(mContext, module, "GameMode");
     JS_AddModuleExport(mContext, module, "Player");

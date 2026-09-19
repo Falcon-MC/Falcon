@@ -285,6 +285,7 @@ void ScriptEngine::onWorldInitialize() {
 
     mExecutionDeadlineMs = nowMs() + mWatchdogMs;
     mApi->emitWorldInitialize();
+    mApi->emitWorldLoad();
     _pumpJobs();
 }
 

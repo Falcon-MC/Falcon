@@ -105,6 +105,8 @@ public:
 
     void emitWorldInitialize();
 
+    void emitWorldLoad();
+
     void fireHeldItemComponents(ServerPlayer &player, const char *hook, JSValue event);
 
     JSValue moduleWorld() const { return mWorld; }
@@ -123,6 +125,8 @@ private:
     void _registerUiModule();
 
     void _installUiBootstrap();
+
+    void _installDataBootstrap();
 
     void _resolveForm(uint32_t formId, const std::string &response, bool cancelled);
 

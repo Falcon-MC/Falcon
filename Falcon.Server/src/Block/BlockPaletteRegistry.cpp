@@ -96,9 +96,12 @@ void BlockPaletteRegistry::initialize() {
             continue;
 
         const std::string &name = nameTag->asString();
+        std::vector<Tag> &permutations = mPermutations[name];
+        permutations.push_back(*statesTag);
         if (mDefaultStates.find(name) != mDefaultStates.end())
             continue;
 
+        mBlockNames.push_back(name);
         mDefaultStates.emplace(name, *statesTag);
 
         const Tag *networkIdTag = entry.get("network_id");
@@ -113,6 +116,18 @@ void BlockPaletteRegistry::initialize() {
 const Tag *BlockPaletteRegistry::getDefaultStates(const std::string &identifier) const {
     const std::unordered_map<std::string, Tag>::const_iterator found = mDefaultStates.find(identifier);
     if (found == mDefaultStates.end())
+        return nullptr;
+
+    return &found->second;
+}
+
+const std::vector<std::string> &BlockPaletteRegistry::getBlockNames() const {
+    return mBlockNames;
+}
+
+const std::vector<Tag> *BlockPaletteRegistry::getPermutations(const std::string &identifier) const {
+    const auto found = mPermutations.find(identifier);
+    if (found == mPermutations.end())
         return nullptr;
 
     return &found->second;
