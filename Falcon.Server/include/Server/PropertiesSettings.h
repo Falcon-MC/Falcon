@@ -61,8 +61,6 @@ public:
 
     bool getOnlineMode() const { return getBool("online-mode", true); }
 
-    bool getXboxAuthRequired() const { return getBool("xbox-auth-required", true); }
-
     bool getAllowList() const { return getBool("allow-list", false); }
 
     unsigned short getServerPort() const { return (unsigned short) getInt("server-port", 19132); }
@@ -103,8 +101,6 @@ public:
 
     bool getClientSideChunkGenerationEnabled() const { return getBool("client-side-chunk-generation-enabled", false); }
 
-    bool getSubChunkRequestsEnabled() const { return getBool("sub-chunk-requests-enabled", false); }
-
     bool getBlockNetworkIdsAreHashes() const { return getBool("block-network-ids-are-hashes", true); }
 
     bool getDisableCustomSkins() const { return getBool("disable-custom-skins", false); }
@@ -127,10 +123,6 @@ public:
     }
 
     TransportLayer getTransportLayer() const;
-
-    std::string getNetherNetTlsCertificate() const { return getString("nethernet-tls-certificate"); }
-
-    std::string getNetherNetTlsPrivateKey() const { return getString("nethernet-tls-private-key"); }
 
     // Renders the properties this build does not know about, the way BDS reports them at startup.
     std::string getUnknownContents() const;

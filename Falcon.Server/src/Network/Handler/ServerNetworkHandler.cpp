@@ -530,9 +530,6 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     mProperties = properties;
 
     if (mNetherNetInstance != nullptr) {
-        mNetherNetInstance->setTlsCertificate(properties.getNetherNetTlsCertificate(),
-                                              properties.getNetherNetTlsPrivateKey());
-
         mNetherNetInstance->setServerDataProvider([this]() {
             nethernet::ServerData data;
             data.mServerName = mProperties.getServerName();
@@ -2672,9 +2669,6 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestChun
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SubChunkRequestPacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr)
-        return;
-
-    if (!mProperties.getSubChunkRequestsEnabled())
         return;
 
     SubChunkRequestHandler::handleRequest(*this, *player, packet);

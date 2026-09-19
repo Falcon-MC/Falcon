@@ -159,7 +159,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
-    if (owner.getProperties().getXboxAuthRequired() && !verifier.isSigned()) {
+    if (owner.getProperties().getOnlineMode() && !verifier.isSigned()) {
         LOG_WARN(LogAreaID::Network, "%s failed Xbox Live authentication", id.getAddress().c_str());
         owner._disconnect(id, "You must be authenticated with Xbox Live to join");
         owner.getPlayers().erase(id);

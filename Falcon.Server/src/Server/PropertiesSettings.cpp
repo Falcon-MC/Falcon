@@ -34,14 +34,13 @@ void PropertiesSettings::_writeDefault(const std::string &path) {
     file << "force-gamemode=false\n";
     file << "difficulty=easy\n";
     file << "allow-cheats=true\n";
-    file << "max-players=20\n";
+    file << "max-players=10\n";
     file << "online-mode=true\n";
-    file << "xbox-auth-required=true\n";
     file << "allow-list=false\n";
     file << "server-port=19132\n";
     file << "server-portv6=19133\n";
     file << "enable-lan-visibility=true\n";
-    file << "view-distance=10\n";
+    file << "view-distance=32\n";
     file << "tick-distance=4\n";
     file << "player-idle-timeout=30\n";
     file << "level-name=Bedrock level\n";
@@ -50,14 +49,10 @@ void PropertiesSettings::_writeDefault(const std::string &path) {
     file << "texturepack-required=false\n";
     file << "content-log-file-enabled=false\n";
     file << "compression-algorithm=zlib\n";
-    file << "server-authoritative-movement=server-auth\n";
     file << "client-side-chunk-generation-enabled=false\n";
-    file << "sub-chunk-requests-enabled=false\n";
     file << "block-network-ids-are-hashes=true\n";
     file << "disable-custom-skins=false\n";
     file << "transport=raknet\n";
-    file << "nethernet-tls-certificate=\n";
-    file << "nethernet-tls-private-key=\n";
 }
 
 TransportLayer PropertiesSettings::getTransportLayer() const {
@@ -109,20 +104,18 @@ bool PropertiesSettings::load(const std::string &path) {
 bool PropertiesSettings::_isKnownProperty(const std::string &key) {
     static const std::set<std::string> known = {
             "server-name", "gamemode", "force-gamemode", "difficulty", "allow-cheats", "max-players",
-            "online-mode", "xbox-auth-required", "allow-list", "server-port", "server-portv6",
+            "online-mode", "allow-list", "server-port", "server-portv6",
             "enable-lan-visibility", "view-distance", "tick-distance", "player-idle-timeout", "max-threads",
             "level-name", "level-seed", "default-player-permission-level", "texturepack-required",
             "content-log-file-enabled", "content-log-console-output-enabled", "content-log-level",
             "compression-threshold", "compression-algorithm", "chat-restriction", "disable-player-interaction",
-            "client-side-chunk-generation-enabled", "sub-chunk-requests-enabled",
-            "block-network-ids-are-hashes", "disable-custom-skins",
-            "server-authoritative-movement", "server-authoritative-movement-strict",
+            "client-side-chunk-generation-enabled", "block-network-ids-are-hashes", "disable-custom-skins",
+            "server-authoritative-movement-strict",
             "server-authoritative-dismount-strict", "server-authoritative-entity-interactions-strict",
             "server-authoritative-block-breaking-pick-range-scalar", "server-build-radius-ratio",
             "player-position-acceptance-threshold", "player-movement-action-direction-threshold",
             "allow-inbound-script-debugging", "allow-outbound-script-debugging", "script-debugger-auto-attach",
-            "disable-persona", "transport", "emit-server-telemetry",
-            "nethernet-tls-certificate", "nethernet-tls-private-key"
+            "disable-persona", "transport"
     };
 
     return known.find(key) != known.end();

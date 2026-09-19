@@ -199,7 +199,6 @@ namespace {
         owner.getNetworkHandler().send(id, publisher, owner.getCodecContext());
 
         std::unordered_set<int64_t> &sent = player.getSentChunks();
-        const bool requestMode = owner.getProperties().getSubChunkRequestsEnabled();
         unsigned added = 0;
 
         while (!state.mReadyToSend.empty()) {
@@ -219,30 +218,15 @@ namespace {
             chunk.mDimension = level.getDimensionId();
             chunk.mCachingEnabled = false;
 
-            if (requestMode) {
-                LevelChunk *column = level.peekChunkPtr(chunkX, chunkZ);
-                if (column == nullptr) {
-                    pushQueue(state, state.mSendQueue, hash);
-                    continue;
-                }
+            chunk.mSubChunksLength = (uint32_t) level.getChunkSubChunkCount(chunkX, chunkZ);
+            chunk.mRequestSubChunks = false;
+            chunk.mData = level.getChunkData(chunkX, chunkZ);
 
-                chunk.mSubChunksLength = 0;
-                chunk.mRequestSubChunks = true;
-                chunk.mSubChunkLimit = column->getNetworkSubChunkCount();
-                chunk.mData = column->encodeNetworkAnchor();
-            } else {
-                chunk.mSubChunksLength = (uint32_t) level.getChunkSubChunkCount(chunkX, chunkZ);
-                chunk.mRequestSubChunks = false;
-                chunk.mData = level.getChunkData(chunkX, chunkZ);
-            }
-
-            if (!requestMode) {
-                BlockActorStore &blockActors = BlockActorStore::getInstance();
-                if (blockActors.isChunkLoaded(chunkX, chunkZ))
-                    chunk.mData += blockActors.encodeChunkNetwork(chunkX, chunkZ);
-                else
-                    chunk.mData += BlockActorStore::encodeNetwork(level.loadBlockEntities(chunkX, chunkZ));
-            }
+            BlockActorStore &blockActors = BlockActorStore::getInstance();
+            if (blockActors.isChunkLoaded(chunkX, chunkZ))
+                chunk.mData += blockActors.encodeChunkNetwork(chunkX, chunkZ);
+            else
+                chunk.mData += BlockActorStore::encodeNetwork(level.loadBlockEntities(chunkX, chunkZ));
 
             owner.getNetworkHandler().send(id, chunk, owner.getCodecContext());
             level.registerChunkLoader(player.getRuntimeId(), chunkX, chunkZ);
