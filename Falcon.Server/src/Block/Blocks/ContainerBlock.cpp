@@ -194,9 +194,11 @@ bool ContainerBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
     return model.open(owner, player, position);
 }
 
-void ContainerBlock::onPlaced(ServerNetworkHandler &owner, const Vector3i &position, const std::string &identifier,
-                              const ItemStack &usedItem, int blockFace) {
-    const ContainerBlockDefinition *definition = findDefinition(identifier);
+void ContainerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                              const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+    (void) player;
+
+    const ContainerBlockDefinition *definition = findDefinition(state.mName);
     if (definition == nullptr)
         return;
 
@@ -225,8 +227,8 @@ void ContainerBlock::onPlaced(ServerNetworkHandler &owner, const Vector3i &posit
     BlockActorStore::getInstance().insert(std::move(created));
 }
 
-void ContainerBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position, const std::string &identifier) {
-    const ContainerBlockDefinition *definition = findDefinition(identifier);
+void ContainerBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+    const ContainerBlockDefinition *definition = findDefinition(state.mName);
     if (definition == nullptr)
         return;
 
@@ -252,12 +254,11 @@ void ContainerBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &posit
     BlockActorStore::getInstance().remove(position);
 }
 
-bool ContainerBlock::keepsContentsInItem(const std::string &identifier) {
-    const ContainerBlockDefinition *definition = findDefinition(identifier);
-    return definition != nullptr && definition->mKind == ContainerBlockKind::ShulkerBox;
-}
+void ContainerBlock::writeDropContents(const Vector3i &position, ItemStack &item) const {
+    const ContainerBlockDefinition *definition = findDefinition(getIdentifier());
+    if (definition == nullptr || definition->mKind != ContainerBlockKind::ShulkerBox)
+        return;
 
-void ContainerBlock::writeContentsToItem(const Vector3i &position, ItemStack &item) {
     ContainerBlockActor *actor = BlockActorStore::getInstance().find<ContainerBlockActor>(position);
     if (actor == nullptr || actor->getInventory().isEmpty())
         return;

@@ -4,7 +4,7 @@
 
 #include <string>
 
-class FacingMachineBlock final : public Block {
+class FacingMachineBlock : public Block {
 public:
     explicit FacingMachineBlock(const Block &block) : Block(block)
     {
@@ -13,6 +13,17 @@ public:
     static bool matches(const std::string &identifier);
 
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
+};
+
+class PistonBlock final : public FacingMachineBlock {
+public:
+    explicit PistonBlock(const Block &block) : FacingMachineBlock(block)
+    {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    void onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const override;
 };
 
 class TorchOrientationBlock final : public Block {
@@ -59,7 +70,7 @@ public:
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
 };
 
-class CardinalPlayerBlock final : public Block {
+class CardinalPlayerBlock : public Block {
 public:
     explicit CardinalPlayerBlock(const Block &block) : Block(block)
     {
@@ -68,6 +79,18 @@ public:
     static bool matches(const std::string &identifier);
 
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
+};
+
+class BedOrientationBlock final : public CardinalPlayerBlock {
+public:
+    explicit BedOrientationBlock(const Block &block) : CardinalPlayerBlock(block)
+    {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
 };
 
 class DoorOrientationBlock final : public Block {
@@ -79,6 +102,9 @@ public:
     static bool matches(const std::string &identifier);
 
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
+
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
 };
 
 class TrapdoorOrientationBlock final : public Block {

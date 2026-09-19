@@ -254,6 +254,9 @@ namespace {
     }
 }
 
+BaseRailBlock::BaseRailBlock(const Block &base) : Block(base) {
+}
+
 bool BaseRailBlock::matches(const std::string &identifier) {
     return BlockIdentifier::equalsAny(identifier, {"minecraft:rail", "minecraft:golden_rail",
                                                    "minecraft:activator_rail", "minecraft:detector_rail"});
@@ -263,7 +266,7 @@ bool BaseRailBlock::isAbstract(const std::string &identifier) {
     return identifier == "minecraft:rail";
 }
 
-void BaseRailBlock::onPlace(ServerNetworkHandler &owner, const Vector3i &position, BlockState &state) {
+void BaseRailBlock::onPlacing(ServerNetworkHandler &owner, const Vector3i &position, BlockState &state) const {
     if (!state.mStates.contains("rail_direction"))
         return;
 

@@ -20,17 +20,18 @@ public:
 
     static std::unique_ptr<BlockActor> createBlockActor(const std::string &identifier);
 
-    static bool canPlaceOn(Level &level, const Vector3i &position, int blockFace);
+    bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
 
-    static bool onPunch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                        const BlockState &state);
+    bool onPunch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                 const BlockState &state) const override;
 
-    static void onPlaced(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
 
-    static void onBroken(ServerNetworkHandler &owner, const Vector3i &position);
+    void onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const override;
 };

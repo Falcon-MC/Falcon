@@ -54,7 +54,7 @@ bool DoorBlock::canPlaceUpperHalf(Level &level, const Vector3i &position) {
     return data != nullptr && !data->mSolid;
 }
 
-void DoorBlock::onPlaced(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
+void DoorBlock::placeUpperHalf(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
     if (!state.mStates.contains("upper_block_bit"))
         return;
 

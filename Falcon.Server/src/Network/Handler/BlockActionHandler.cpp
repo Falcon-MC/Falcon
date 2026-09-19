@@ -1,19 +1,10 @@
 #include "Network/Handler/BlockActionHandler.h"
 
 #include "Block/BlockData.h"
-#include "Block/Actor/FurnaceBlockActor.h"
 #include "Block/Components/BlockPlacementComponent.h"
-#include "Block/Blocks/BaseRailBlock.h"
-#include "Block/Blocks/BedBlock.h"
-#include "Block/Blocks/ChestBlock.h"
-#include "Block/Blocks/ContainerBlock.h"
-#include "Block/Blocks/DoorBlock.h"
-#include "Block/Blocks/CraftingTableBlock.h"
-#include "Block/Blocks/FurnaceBlock.h"
-#include "Block/Blocks/ItemFrameBlock.h"
+#include "Block/Blocks/LiquidView.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/BlockActorStore.h"
-#include "Block/Systems/PistonSystem.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Core/Math/MathConstants.h"
 #include "Actor/ServerPlayer.h"
@@ -369,23 +360,12 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     const std::string brokenIdentifier = brokenState.mName;
     const int32_t brokenHash = BlockStateHasher::hash(brokenState.mName, brokenState.mStates);
     const BlockData *brokenData = BlockDataTable::find(brokenState.mName.c_str());
+    const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
 
-    if (FurnaceBlock::matches(brokenState))
-        InventoryManager::onFurnaceBroken(owner, position);
+    level.setBlockState(position.x, position.y, position.z, BlockState("minecraft:air"));
 
-    const int32_t airHash = level.getAirHash();
-
-    const BlockState overlay = level.getBlockStateAtLayer(position.x, position.y, position.z, 1);
-    const bool collapseWater = overlay.mName == "minecraft:water" || overlay.mName == "minecraft:flowing_water";
-
-    int32_t replacementHash = airHash;
-    if (collapseWater) {
-        level.setBlockState(position.x, position.y, position.z, overlay);
-        level.setBlockStateAtLayer(position.x, position.y, position.z, 1, BlockState("minecraft:air"));
-        replacementHash = BlockStateHasher::hash(overlay.mName, overlay.mStates);
-    } else {
-        level.setBlockState(position.x, position.y, position.z, BlockState("minecraft:air"));
-    }
+    const BlockState replacement = level.getBlockState(position.x, position.y, position.z);
+    const int32_t replacementHash = BlockStateHasher::hash(replacement.mName, replacement.mStates);
 
     PlayerBreakBlockAfterEvent brokenEvent(player, position, brokenIdentifier);
     owner.getEventBus().after().mPlayerBreakBlock.emit(brokenEvent);
@@ -411,8 +391,8 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
             drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsedItem.getIdentifier());
             drop.mCount = count;
 
-            if (ContainerBlock::keepsContentsInItem(brokenIdentifier))
-                ContainerBlock::writeContentsToItem(position, drop);
+            if (brokenBlock != nullptr)
+                brokenBlock->writeDropContents(position, drop);
 
             const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
                                         (float) position.z + 0.5f);
@@ -480,26 +460,8 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     broadcastToViewers(owner, destroy.mPosition, update);
     broadcastToViewers(owner, destroy.mPosition, destroy);
 
-    if (collapseWater) {
-        UpdateBlockPacket overlayUpdate;
-        overlayUpdate.mBlockPosition = position;
-        overlayUpdate.mRuntimeId = (uint32_t) airHash;
-        overlayUpdate.mFlags = UpdateBlockPacket::Flag::All;
-        overlayUpdate.mDataLayer = 1;
-        broadcastToViewers(owner, destroy.mPosition, overlayUpdate);
-    }
-
-    if (ChestBlock::matches(brokenState.mName))
-        ChestBlock::onBroken(owner, position);
-
-    if (ContainerBlock::matches(brokenIdentifier))
-        ContainerBlock::onBroken(owner, position, brokenIdentifier);
-
-    if (ItemFrameBlock::matches(brokenIdentifier))
-        ItemFrameBlock::onBroken(owner, position);
-
-    if (PistonSystem::isPiston(brokenState.mName))
-        PistonSystem::onBlockBroken(owner, position, brokenState);
+    if (brokenBlock != nullptr)
+        brokenBlock->onBroken(owner, position, brokenState);
 
     RedstoneSystem::onBlockBroken(owner, position, brokenState);
 
@@ -528,7 +490,8 @@ void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerP
         return;
     }
 
-    if (ItemFrameBlock::matches(state.mName) && ItemFrameBlock::onPunch(owner, player, position, state))
+    const Block *punchedBlock = VanillaBlocks::fromIdentifier(state.mName);
+    if (punchedBlock != nullptr && punchedBlock->onPunch(owner, player, position, state))
         return;
 
     const BlockData *blockData = BlockDataTable::find(state.mName.c_str());
@@ -809,6 +772,14 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
     const BlockDefinition &definition = *heldItem.mBlockDefinition;
     const BlockData *placedData = BlockDataTable::find(definition.getIdentifier().c_str());
+
+    const BlockState targetOverlay = level.getBlockStateAtLayer(target.x, target.y, target.z, 1);
+    const bool targetHasLiquid = LiquidView(targetState).isLiquid() || LiquidView(targetOverlay).isLiquid();
+    if (targetHasLiquid && placedData != nullptr && placedData->mWaterloggingLevel == 0 && !placedData->mSolid) {
+        sendCurrentBlockState(owner, target);
+        return;
+    }
+
     if (intersectsPlayer(player, target, placedData)) {
         sendCurrentBlockState(owner, target);
         return;
@@ -819,29 +790,23 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
             player.getRotation().y, player.getRotation().x, transaction.mBlockFace,
             transaction.mClickPosition, player.getPosition(), target);
 
-    if (ItemFrameBlock::matches(placedState.mName)
-        && !ItemFrameBlock::canPlaceOn(level, target, transaction.mBlockFace)) {
+    const Block *placedBlock = VanillaBlocks::fromIdentifier(placedState.mName);
+    if (placedBlock != nullptr && !placedBlock->canPlaceAt(level, target, transaction.mBlockFace)) {
         sendCurrentBlockState(owner, target);
         return;
     }
 
-    if (BaseRailBlock::matches(placedState.mName))
-        BaseRailBlock::onPlace(owner, target, placedState);
+    if (placedBlock != nullptr)
+        placedBlock->onPlacing(owner, target, placedState);
 
-    const bool replacedWater = targetState.mName == "minecraft:water"
-                               || targetState.mName == "minecraft:flowing_water";
-    const bool waterlogsTarget = replacedWater && placedData != nullptr
+    const bool waterlogsTarget = LiquidView(targetState).isWater() && placedData != nullptr
                                  && placedData->mWaterloggingLevel > 0;
 
     const int32_t blockHash = BlockStateHasher::hash(placedState.mName, placedState.mStates);
     level.setBlockState(target.x, target.y, target.z, placedState);
 
-    if (waterlogsTarget) {
-        Tag waterStates = Tag::ofCompound();
-        waterStates.putInt("liquid_depth", 0);
-        level.setBlockStateAtLayer(target.x, target.y, target.z, 1,
-                                   BlockState("minecraft:water", waterStates));
-    }
+    if (waterlogsTarget)
+        level.setBlockStateAtLayer(target.x, target.y, target.z, 1, targetState);
 
     PlayerPlaceBlockAfterEvent placeEvent(player, target, placedState.mName);
     owner.getEventBus().after().mPlayerPlaceBlock.emit(placeEvent);
@@ -871,13 +836,11 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     broadcastToViewers(owner, targetCenter, update);
 
     if (waterlogsTarget) {
-        Tag waterStates = Tag::ofCompound();
-        waterStates.putInt("liquid_depth", 0);
-        const int32_t waterHash = BlockStateHasher::hash("minecraft:water", waterStates);
+        const BlockState overlay = level.getBlockStateAtLayer(target.x, target.y, target.z, 1);
 
         UpdateBlockPacket waterUpdate;
         waterUpdate.mBlockPosition = target;
-        waterUpdate.mRuntimeId = (uint32_t) waterHash;
+        waterUpdate.mRuntimeId = (uint32_t) BlockStateHasher::hash(overlay.mName, overlay.mStates);
         waterUpdate.mFlags = UpdateBlockPacket::Flag::All;
         waterUpdate.mDataLayer = 1;
         broadcastToViewers(owner, targetCenter, waterUpdate);
@@ -885,19 +848,8 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
     owner.playLevelSound(LevelSoundEvent::PLACE, targetCenter, "", (int32_t) blockHash);
 
-    if (ChestBlock::matches(placedState.mName))
-        ChestBlock::onPlaced(level, target);
-
-    if (ContainerBlock::matches(placedState.mName))
-        ContainerBlock::onPlaced(owner, target, placedState.mName, placedWithItem, (int) transaction.mBlockFace);
-
-    if (ItemFrameBlock::matches(placedState.mName))
-        ItemFrameBlock::onPlaced(owner, target, placedState);
-
-    if (FurnaceBlock::matches(placedState)) {
-        FurnaceBlockActor &furnace = BlockActorStore::getInstance().getOrCreate<FurnaceBlockActor>(target);
-        furnace.mKind = FurnaceBlock::kind(placedState);
-    }
+    if (placedBlock != nullptr)
+        placedBlock->onPlaced(owner, player, target, placedState, placedWithItem, (int) transaction.mBlockFace);
 
     BlockActor *blockActor = BlockActorStore::getInstance().find(target);
     if (blockActor != nullptr) {
@@ -905,14 +857,6 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
         data.mBlockPosition = target;
         data.mData = blockActor->getSpawnCompound();
         broadcastToViewers(owner, targetCenter, data);
-    }
-
-    if (DoorBlock::matches(placedState.mName))
-        DoorBlock::onPlaced(owner, target, placedState);
-
-    if (BedBlock::matches(placedState.mName)) {
-        BedBlock::onPlaced(owner, target, placedState,
-                           BlockPlacementComponent::getHorizontalFacing(player.getRotation().y));
     }
 
     RedstoneSystem::onBlockPlaced(owner, target, placedState);

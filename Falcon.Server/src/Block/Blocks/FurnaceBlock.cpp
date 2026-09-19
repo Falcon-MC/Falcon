@@ -1,7 +1,10 @@
 #include "Block/Blocks/FurnaceBlock.h"
 
 #include "Inventory/Container/FurnaceContainerManagerModel.h"
+#include "Inventory/InventoryManager.h"
 #include "Actor/ServerPlayer.h"
+#include "Block/Actor/FurnaceBlockActor.h"
+#include "Block/BlockActorStore.h"
 
 bool FurnaceBlock::matches(const BlockState &state) {
     return matches(state.mName);
@@ -38,4 +41,21 @@ bool FurnaceBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
                               const BlockState &state) const {
     FurnaceContainerManagerModel model(state);
     return model.open(owner, player, position);
+}
+
+void FurnaceBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                            const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+    (void) owner;
+    (void) player;
+    (void) usedItem;
+    (void) blockFace;
+
+    FurnaceBlockActor &furnace = BlockActorStore::getInstance().getOrCreate<FurnaceBlockActor>(position);
+    furnace.mKind = kind(state);
+}
+
+void FurnaceBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+    (void) state;
+
+    InventoryManager::onFurnaceBroken(owner, position);
 }

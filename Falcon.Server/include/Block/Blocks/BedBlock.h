@@ -12,6 +12,6 @@ class BedBlock {
 public:
     static bool matches(const std::string &identifier);
 
-    static void onPlaced(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
-                         int playerFacing);
+    static void placeHeadPiece(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
+                               int playerFacing);
 };

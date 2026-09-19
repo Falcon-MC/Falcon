@@ -1,5 +1,6 @@
 #include "Block/Blocks/VanillaBlocks.h"
 
+#include "Block/Blocks/BaseRailBlock.h"
 #include "Block/Blocks/ButtonBlock.h"
 #include "Block/Blocks/CommandBlock.h"
 #include "Block/Blocks/FurnaceBlock.h"
@@ -75,6 +76,12 @@ namespace {
         if (TrapdoorOrientationBlock::matches(identifier))
             return std::make_unique<TrapdoorOrientationBlock>(block);
 
+        if (BaseRailBlock::matches(identifier))
+            return std::make_unique<BaseRailBlock>(block);
+
+        if (PistonBlock::matches(identifier))
+            return std::make_unique<PistonBlock>(block);
+
         if (FacingMachineBlock::matches(identifier))
             return std::make_unique<FacingMachineBlock>(block);
 
@@ -89,6 +96,9 @@ namespace {
 
         if (FaceAttachedBlock::matches(identifier))
             return std::make_unique<FaceAttachedBlock>(block);
+
+        if (BedOrientationBlock::matches(identifier))
+            return std::make_unique<BedOrientationBlock>(block);
 
         if (CardinalPlayerBlock::matches(identifier))
             return std::make_unique<CardinalPlayerBlock>(block);

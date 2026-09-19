@@ -53,12 +53,10 @@ public:
 
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
 
-    static void onPlaced(ServerNetworkHandler &owner, const Vector3i &position, const std::string &identifier,
-                         const ItemStack &usedItem, int blockFace);
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
 
-    static void onBroken(ServerNetworkHandler &owner, const Vector3i &position, const std::string &identifier);
+    void onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const override;
 
-    static bool keepsContentsInItem(const std::string &identifier);
-
-    static void writeContentsToItem(const Vector3i &position, ItemStack &item);
+    void writeDropContents(const Vector3i &position, ItemStack &item) const override;
 };

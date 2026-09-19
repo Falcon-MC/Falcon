@@ -12,6 +12,7 @@
 struct BlockData;
 class Actor;
 class BlockBehavior;
+class ItemStack;
 class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -41,6 +42,49 @@ public:
         (void) position;
         (void) state;
         return false;
+    }
+
+    virtual bool onPunch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                         const BlockState &state) const {
+        (void) owner;
+        (void) player;
+        (void) position;
+        (void) state;
+        return false;
+    }
+
+    virtual bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
+        (void) level;
+        (void) position;
+        (void) blockFace;
+        return true;
+    }
+
+    virtual void onPlacing(ServerNetworkHandler &owner, const Vector3i &position, BlockState &state) const {
+        (void) owner;
+        (void) position;
+        (void) state;
+    }
+
+    virtual void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                          const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+        (void) owner;
+        (void) player;
+        (void) position;
+        (void) state;
+        (void) usedItem;
+        (void) blockFace;
+    }
+
+    virtual void onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+        (void) owner;
+        (void) position;
+        (void) state;
+    }
+
+    virtual void writeDropContents(const Vector3i &position, ItemStack &drop) const {
+        (void) position;
+        (void) drop;
     }
 
     virtual BlockState applyPlacementOrientation(const BlockState &state,

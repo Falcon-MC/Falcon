@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Block/Block.h"
 #include "Block/BlockState.h"
 #include "Core/Math/Vector3i.h"
 
@@ -7,8 +8,10 @@
 
 class ServerNetworkHandler;
 
-class BaseRailBlock {
+class BaseRailBlock final : public Block {
 public:
+    explicit BaseRailBlock(const Block &base);
+
     static constexpr int STRAIGHT_NORTH_SOUTH = 0;
     static constexpr int STRAIGHT_EAST_WEST = 1;
     static constexpr int ASCENDING_EAST = 2;
@@ -24,5 +27,5 @@ public:
 
     static bool isAbstract(const std::string &identifier);
 
-    static void onPlace(ServerNetworkHandler &owner, const Vector3i &position, BlockState &state);
+    void onPlacing(ServerNetworkHandler &owner, const Vector3i &position, BlockState &state) const override;
 };

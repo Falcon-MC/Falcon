@@ -25,5 +25,10 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
+
+    void onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const override;
+
     int getFuelTime() const { return 0; }
 };

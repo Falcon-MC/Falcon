@@ -5,7 +5,6 @@
 #include "Block/BlockActorStore.h"
 #include "Block/BlockData.h"
 #include "Block/Components/PlacementOrientation.h"
-#include "Core/Debug/BedrockLog.h"
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
@@ -112,11 +111,9 @@ std::unique_ptr<BlockActor> ItemFrameBlock::createBlockActor(const std::string &
     return std::unique_ptr<BlockActor>(new ItemFrameBlockActor());
 }
 
-bool ItemFrameBlock::canPlaceOn(Level &level, const Vector3i &position, int blockFace) {
-    if (blockFace < 0 || blockFace >= 6) {
-        LOG_WARN(LogAreaID::Server, "frame: bad face %d", blockFace);
+bool ItemFrameBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
+    if (blockFace < 0 || blockFace >= 6)
         return false;
-    }
 
     const Vector3i support(position.x - FACE_OFFSETS[blockFace][0],
                            position.y - FACE_OFFSETS[blockFace][1],
@@ -125,9 +122,6 @@ bool ItemFrameBlock::canPlaceOn(Level &level, const Vector3i &position, int bloc
     const BlockState state = level.getBlockState(support.x, support.y, support.z);
     const BlockData *data = BlockDataTable::find(state.mName.c_str());
     const bool solid = data != nullptr && data->mSolid;
-
-    LOG_WARN(LogAreaID::Server, "frame: face=%d support=%s solid=%d selfMatch=%d",
-             blockFace, state.mName.c_str(), solid ? 1 : 0, matches(state.mName) ? 1 : 0);
 
     if (matches(state.mName))
         return false;
@@ -179,7 +173,7 @@ bool ItemFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
 }
 
 bool ItemFrameBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                             const BlockState &state) {
+                             const BlockState &state) const {
     ItemFrameBlockActor *frame = BlockActorStore::getInstance().find<ItemFrameBlockActor>(position);
     if (frame == nullptr || frame->isEmpty())
         return false;
@@ -199,7 +193,12 @@ bool ItemFrameBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, 
     return true;
 }
 
-void ItemFrameBlock::onPlaced(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
+void ItemFrameBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                              const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+    (void) player;
+    (void) usedItem;
+    (void) blockFace;
+
     BlockActorStore::getInstance().remove(position);
 
     std::unique_ptr<BlockActor> created = createBlockActor(state.mName);
@@ -210,7 +209,9 @@ void ItemFrameBlock::onPlaced(ServerNetworkHandler &owner, const Vector3i &posit
     owner.playLevelSound(LevelSoundEvent::ITEM_FRAME_PLACE, centreOf(position));
 }
 
-void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position) {
+void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+    (void) state;
+
     ItemFrameBlockActor *frame = BlockActorStore::getInstance().find<ItemFrameBlockActor>(position);
     if (frame == nullptr)
         return;

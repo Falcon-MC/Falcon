@@ -11,8 +11,8 @@ bool BedBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:bed" || BlockIdentifier::endsWith(identifier, "_bed");
 }
 
-void BedBlock::onPlaced(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
-                        int playerFacing) {
+void BedBlock::placeHeadPiece(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state,
+                              int playerFacing) {
     if (!state.mStates.contains("head_piece_bit") || !RedstoneFace::isHorizontal(playerFacing))
         return;
 

@@ -53,7 +53,7 @@ ChestBlockActor &ChestBlock::getOrCreate(Level &level, const Vector3i &position)
     return BlockActorStore::getInstance().getOrCreate<ChestBlockActor>(position);
 }
 
-void ChestBlock::onPlaced(Level &level, const Vector3i &position) {
+void ChestBlock::pair(Level &level, const Vector3i &position) {
     ChestBlockActor &placed = getOrCreate(level, position);
     if (placed.isPaired())
         return;
@@ -79,7 +79,18 @@ void ChestBlock::onPlaced(Level &level, const Vector3i &position) {
     }
 }
 
-void ChestBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position) {
+void ChestBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                          const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+    (void) state;
+    (void) usedItem;
+    (void) blockFace;
+
+    pair(owner.getLevelFor(player), position);
+}
+
+void ChestBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+    (void) state;
+
     ChestBlockActor *chest = BlockActorStore::getInstance().find<ChestBlockActor>(position);
     if (chest == nullptr)
         return;
@@ -104,7 +115,7 @@ bool ChestBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, c
     (void) state;
 
     if (BlockActorStore::getInstance().find<ChestBlockActor>(position) == nullptr)
-        onPlaced(owner.getLevel(), position);
+        pair(owner.getLevel(), position);
 
     ChestContainerManagerModel model;
     return model.open(owner, player, position);

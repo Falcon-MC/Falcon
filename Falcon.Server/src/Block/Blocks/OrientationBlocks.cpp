@@ -1,9 +1,13 @@
 #include "Block/Blocks/OrientationBlocks.h"
 
+#include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
 #include "Block/BlockIdentifier.h"
+#include "Block/Blocks/BedBlock.h"
 #include "Block/Blocks/DoorBlock.h"
+#include "Block/Components/BlockPlacementComponent.h"
 #include "Block/Components/PlacementOrientation.h"
+#include "Block/Systems/PistonSystem.h"
 #include "Level/Level.h"
 
 namespace {
@@ -43,6 +47,14 @@ BlockState FacingMachineBlock::applyPlacementOrientation(const BlockState &state
     Tag states = result.mStates;
     setFacingDirection(states, context.mPistonFacing);
     return BlockState(result.mName, states);
+}
+
+bool PistonBlock::matches(const std::string &identifier) {
+    return PistonSystem::isPiston(identifier);
+}
+
+void PistonBlock::onBroken(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) const {
+    PistonSystem::onBlockBroken(owner, position, state);
 }
 
 bool TorchOrientationBlock::matches(const std::string &identifier) {
@@ -132,8 +144,30 @@ BlockState CardinalPlayerBlock::applyPlacementOrientation(const BlockState &stat
     return BlockState(result.mName, states);
 }
 
+bool BedOrientationBlock::matches(const std::string &identifier) {
+    return BedBlock::matches(identifier);
+}
+
+void BedOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                                   const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+    (void) usedItem;
+    (void) blockFace;
+
+    BedBlock::placeHeadPiece(owner, position, state,
+                             BlockPlacementComponent::getHorizontalFacing(player.getRotation().y));
+}
+
 bool DoorOrientationBlock::matches(const std::string &identifier) {
     return DoorBlock::matches(identifier);
+}
+
+void DoorOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                                    const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+    (void) player;
+    (void) usedItem;
+    (void) blockFace;
+
+    DoorBlock::placeUpperHalf(owner, position, state);
 }
 
 BlockState DoorOrientationBlock::applyPlacementOrientation(const BlockState &state,
