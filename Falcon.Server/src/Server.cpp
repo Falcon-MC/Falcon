@@ -207,6 +207,16 @@ void startServer(const ServerSettings &settings) {
     networkHandler.setProtocolVersion(settings.protocolVersion, settings.gameVersion);
     networkHandler.setProperties(properties);
 
+    if (properties.getAllowList() && networkHandler.getAllowList().isEmpty()) {
+        LOG_WARN(LogAreaID::Server, "================ ALLOW LIST WARNING ===================");
+        LOG_WARN(LogAreaID::Server, "Allow list is enabled but contains no entries. ");
+        LOG_WARN(LogAreaID::Server, "Use allowlist add <playername> for you and your friends so that they can access "
+                                    "the server, or modify allowlist.json manually.");
+        LOG_WARN(LogAreaID::Server, "\nAlternatively, the allow list can be turned off by typing allowlist off or "
+                                    "manually toggled in the server.properties file.");
+        LOG_WARN(LogAreaID::Server, "=======================================================");
+    }
+
     unsigned short port = properties.isLoaded() ? properties.getServerPort() : settings.port;
     unsigned short portV6 = properties.isLoaded() ? properties.getServerPortV6() : settings.portV6;
 

@@ -13,6 +13,7 @@
 #include "Network/PacketSender.h"
 #include "Protocol/Types/CommandOriginData.h"
 #include "Player/PlayerDataProvider.h"
+#include "Server/AllowList.h"
 #include "Server/OpList.h"
 #include "Core/Event/EventBus.h"
 #include "Scripting/BehaviorPackManager.h"
@@ -296,6 +297,18 @@ public:
 
     OpList &getOpList() { return mOps; }
 
+    static constexpr const char *NOT_ALLOW_LISTED_MESSAGE = "disconnectionScreen.notAllowed";
+
+    AllowList &getAllowList() {
+        return mAllowList;
+    }
+
+    bool isAllowListed(ServerPlayer &player);
+
+    void setAllowListEnabled(bool enabled);
+
+    void kickNotAllowListedPlayers();
+
     void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &message);
 
     void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &key,
@@ -546,6 +559,7 @@ private:
     std::vector<uint32_t> mRecipeSourceIndices;
     PlayerDataProvider mPlayerData;
     OpList mOps;
+    AllowList mAllowList;
     ResourcePackManager mResourcePacks;
     CommandMap mCommands;
     PingedCompatibleServer mAnnouncement;

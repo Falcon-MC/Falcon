@@ -4,6 +4,7 @@
 #include <fstream>
 #include <map>
 #include <set>
+#include <vector>
 
 PropertiesSettings::PropertiesSettings() : mLoaded(false) {}
 
@@ -98,6 +99,41 @@ bool PropertiesSettings::load(const std::string &path) {
     }
 
     mLoaded = true;
+    return true;
+}
+
+bool PropertiesSettings::setProperty(const std::string &key, const std::string &value) {
+    mProperties[key] = value;
+
+    std::vector<std::string> lines;
+    bool replaced = false;
+
+    std::ifstream input(mPath);
+    std::string line;
+    while (std::getline(input, line)) {
+        const std::string trimmed = _trim(line);
+        const size_t separator = trimmed.find('=');
+        if (!replaced && !trimmed.empty() && trimmed[0] != '#' && separator != std::string::npos
+            && _trim(trimmed.substr(0, separator)) == key) {
+            lines.push_back(key + "=" + value);
+            replaced = true;
+            continue;
+        }
+
+        lines.push_back(line);
+    }
+    input.close();
+
+    if (!replaced)
+        lines.push_back(key + "=" + value);
+
+    std::ofstream output(mPath, std::ios::trunc);
+    if (!output.is_open())
+        return false;
+
+    for (const std::string &entry: lines)
+        output << entry << "\n";
+
     return true;
 }
 

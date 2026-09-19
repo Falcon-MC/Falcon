@@ -124,6 +124,8 @@ public:
 
     TransportLayer getTransportLayer() const;
 
+    bool setProperty(const std::string &key, const std::string &value);
+
     // Renders the properties this build does not know about, the way BDS reports them at startup.
     std::string getUnknownContents() const;
 

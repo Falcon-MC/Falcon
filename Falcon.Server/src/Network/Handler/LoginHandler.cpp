@@ -180,6 +180,13 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         player.setXuid("");
     }
 
+    if (!owner.isAllowListed(player)) {
+        LOG_INFO(LogAreaID::Server, "Player %s is not in the allow list", player.getName().c_str());
+        owner._disconnect(id, ServerNetworkHandler::NOT_ALLOW_LISTED_MESSAGE);
+        owner.getPlayers().erase(id);
+        return;
+    }
+
     player.setSkin(request.getSkin());
     player.setBuildPlatform(request.getBuildPlatform());
     player.setLoginState(ServerPlayer::LoginState::LoggedIn);

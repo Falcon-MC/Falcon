@@ -14,6 +14,7 @@
 #include "Command/TimeCommand.h"
 #include "Command/ProfilerCommand.h"
 #include "Command/AboutCommand.h"
+#include "Command/AllowListCommand.h"
 #include "Command/GameRuleCommand.h"
 #include "Command/LocateCommand.h"
 #include "Command/WeatherCommand.h"
@@ -426,7 +427,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
         : mRakNetInstance(nullptr), mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers),
           mIsListening(false), mKeepInventory(false), mNextRuntimeId(1),
           mLevel("Bedrock level", DEFAULT_VIEW_DISTANCE),
-          mPlayerData("players"), mOps("ops.txt") {
+          mPlayerData("players"), mOps("ops.txt"), mAllowList("allowlist.json") {
     std::unique_ptr<Connector> rakNet = TransportFactory::createConnector(TransportLayer::RakNet, *this, true);
 
     if (rakNet != nullptr) {
@@ -468,6 +469,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mCommands.registerCommand(std::make_shared<ClearCommand>(*this));
     mCommands.registerCommand(std::make_shared<LocateCommand>(*this));
     mCommands.registerCommand(std::make_shared<AboutCommand>(*this));
+    mCommands.registerCommand(std::make_shared<AllowListCommand>(*this));
 
     mResourcePacks.loadFromDirectory("resource_packs");
     mResourcePacks.loadBundledAddonsFrom("behavior_packs");
@@ -1486,6 +1488,30 @@ void ServerNetworkHandler::_sendEntityData(ServerPlayer &player) {
     for (const auto &entry: mPlayers) {
         if (entry.first == player.getNetworkIdentifier() || entry.second.isSpawned())
             mNetworkHandler->send(entry.first, entityData, mCodecContext);
+    }
+}
+
+bool ServerNetworkHandler::isAllowListed(ServerPlayer &player) {
+    if (!mProperties.getAllowList())
+        return true;
+
+    return mAllowList.isAllowed(player.getName(), player.getXuid());
+}
+
+void ServerNetworkHandler::setAllowListEnabled(bool enabled) {
+    mProperties.setProperty("allow-list", enabled ? "true" : "false");
+
+    if (enabled)
+        kickNotAllowListedPlayers();
+}
+
+void ServerNetworkHandler::kickNotAllowListedPlayers() {
+    for (auto &entry: mPlayers) {
+        if (entry.second.getLoginState() < ServerPlayer::LoginState::LoggedIn)
+            continue;
+
+        if (!isAllowListed(entry.second))
+            _disconnect(entry.first, NOT_ALLOW_LISTED_MESSAGE);
     }
 }
 
