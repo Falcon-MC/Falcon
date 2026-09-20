@@ -10,7 +10,20 @@
 #include "Command/EffectCommand.h"
 #include "Command/GameModeCommand.h"
 #include "Command/GiveCommand.h"
+#include "Command/DifficultyCommand.h"
+#include "Command/FillCommand.h"
 #include "Command/KillCommand.h"
+#include "Command/ListCommand.h"
+#include "Command/MeCommand.h"
+#include "Command/SayCommand.h"
+#include "Command/SetBlockCommand.h"
+#include "Command/SetWorldSpawnCommand.h"
+#include "Command/SpawnPointCommand.h"
+#include "Command/SummonCommand.h"
+#include "Command/TellCommand.h"
+#include "Command/TellRawCommand.h"
+#include "Command/TitleCommand.h"
+#include "Command/XpCommand.h"
 #include "Command/TimeCommand.h"
 #include "Command/ProfilerCommand.h"
 #include "Command/AboutCommand.h"
@@ -490,6 +503,21 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mCommands.registerCommand(std::make_shared<EnchantCommand>(*this));
     mCommands.registerCommand(std::make_shared<EffectCommand>(*this));
     mCommands.registerCommand(std::make_shared<KillCommand>(*this));
+    mCommands.registerCommand(std::make_shared<SetBlockCommand>(*this));
+    mCommands.registerCommand(std::make_shared<FillCommand>(*this));
+    mCommands.registerCommand(std::make_shared<SummonCommand>(*this));
+    mCommands.registerCommand(std::make_shared<XpCommand>(*this));
+    mCommands.registerCommand(std::make_shared<DifficultyCommand>(*this));
+    mCommands.registerCommand(std::make_shared<ListCommand>(*this));
+    mCommands.registerCommand(std::make_shared<TitleCommand>(*this, false));
+    mCommands.registerCommand(std::make_shared<TitleCommand>(*this, true));
+    mCommands.registerCommand(std::make_shared<SpawnPointCommand>(*this, false));
+    mCommands.registerCommand(std::make_shared<SpawnPointCommand>(*this, true));
+    mCommands.registerCommand(std::make_shared<SetWorldSpawnCommand>(*this));
+    mCommands.registerCommand(std::make_shared<SayCommand>(*this));
+    mCommands.registerCommand(std::make_shared<TellCommand>(*this));
+    mCommands.registerCommand(std::make_shared<MeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<TellRawCommand>(*this));
     mCommands.registerCommand(std::make_shared<TimeCommand>(*this));
     mCommands.registerCommand(std::make_shared<WeatherCommand>(*this));
     mCommands.registerCommand(std::make_shared<GameRuleCommand>(*this));

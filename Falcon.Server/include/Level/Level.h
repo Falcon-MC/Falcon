@@ -138,6 +138,8 @@ public:
 
     Vector3i getSpawnPosition() const;
 
+    void setSpawnPosition(const Vector3i &position);
+
     Vector3f getSpawnPositionForPlayer() const;
 
     std::vector<ChunkPosition> getChunksAround(int32_t centerChunkX, int32_t centerChunkZ) const;
@@ -298,6 +300,8 @@ private:
     void _flushPendingBlockChanges(bool includeInFlight);
 
     ServerNetworkHandler *mOwner = nullptr;
+    Vector3i mSpawnPosition;
+    bool mHasSpawnPosition = false;
     BlockUpdateScheduler mBlockUpdates;
     int mUpdateDepth = 0;
     std::string mName;

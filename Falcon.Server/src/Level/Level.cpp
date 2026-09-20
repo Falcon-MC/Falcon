@@ -52,6 +52,8 @@ Level &Level::operator=(Level &&other) noexcept {
     mTime = other.mTime;
     mSeed = other.mSeed;
     mDimension = other.mDimension;
+    mSpawnPosition = other.mSpawnPosition;
+    mHasSpawnPosition = other.mHasSpawnPosition;
     mGenerator = std::move(other.mGenerator);
     mStorage = std::move(other.mStorage);
     mChunks = std::move(other.mChunks);
@@ -63,6 +65,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mIncomingChanges = std::move(other.mIncomingChanges);
     mPendingBlockChanges = std::move(other.mPendingBlockChanges);
     mBlockUpdateScheduler.moveStateFrom(std::move(other.mBlockUpdateScheduler));
+    mBlockUpdates.moveStateFrom(std::move(other.mBlockUpdates));
     mLiquidPhysics.moveStateFrom(std::move(other.mLiquidPhysics));
     mGameRules = std::move(other.mGameRules);
     mPacketBroadcaster = std::move(other.mPacketBroadcaster);
@@ -183,11 +186,20 @@ void Level::closeStorage() {
 }
 
 Vector3i Level::getSpawnPosition() const {
+    if (mHasSpawnPosition)
+        return mSpawnPosition;
+
     return Vector3i(0, mGenerator->getSpawnY(), 0);
 }
 
+void Level::setSpawnPosition(const Vector3i &position) {
+    mSpawnPosition = position;
+    mHasSpawnPosition = true;
+}
+
 Vector3f Level::getSpawnPositionForPlayer() const {
-    return Vector3f(0.0f, (float) mGenerator->getSpawnY(), 0.0f);
+    const Vector3i spawn = getSpawnPosition();
+    return Vector3f((float) spawn.x + 0.5f, (float) spawn.y, (float) spawn.z + 0.5f);
 }
 
 int64_t Level::_packChunk(int32_t x, int32_t z) {
