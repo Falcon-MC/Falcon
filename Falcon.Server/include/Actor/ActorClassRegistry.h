@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+class MobActor;
 class ServerActor;
 
 class ActorClassRegistry {
@@ -15,6 +16,9 @@ public:
     };
 
     static std::unique_ptr<ServerActor> create(uint64_t runtimeId, const std::string &identifier);
+
+    // Instance kept alive to answer the static data of a mob without spawning it.
+    static const MobActor *getPrototype(const std::string &identifier);
 };
 
 #define FALCON_REGISTER_ACTOR(type, identifier)                                          \

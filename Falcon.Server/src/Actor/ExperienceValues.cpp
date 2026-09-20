@@ -2,7 +2,6 @@
 
 #include <random>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace {
 
@@ -25,81 +24,6 @@ namespace {
         }
 
         return 1;
-    }
-
-    const std::unordered_set<std::string> &breedingAnimals() {
-        static const std::unordered_set<std::string> animals = {
-                "minecraft:chicken",
-                "minecraft:cow",
-                "minecraft:pig",
-                "minecraft:sheep",
-                "minecraft:wolf",
-                "minecraft:mooshroom",
-                "minecraft:rabbit",
-                "minecraft:ocelot",
-                "minecraft:horse",
-                "minecraft:donkey",
-                "minecraft:mule",
-                "minecraft:skeleton_horse",
-                "minecraft:zombie_horse",
-                "minecraft:polar_bear",
-                "minecraft:llama",
-                "minecraft:trader_llama",
-                "minecraft:parrot",
-                "minecraft:turtle",
-                "minecraft:cat",
-                "minecraft:panda",
-                "minecraft:fox",
-                "minecraft:bee",
-                "minecraft:goat",
-                "minecraft:camel",
-                "minecraft:sniffer",
-                "minecraft:armadillo",
-                "minecraft:frog",
-                "minecraft:tadpole",
-                "minecraft:squid",
-                "minecraft:glow_squid",
-                "minecraft:nautilus",
-                "minecraft:pufferfish",
-                "minecraft:salmon",
-                "minecraft:cod",
-                "minecraft:tropicalfish"
-        };
-
-        return animals;
-    }
-
-    const std::unordered_set<std::string> &hostileMobs() {
-        static const std::unordered_set<std::string> mobs = {
-                "minecraft:zombie",
-                "minecraft:husk",
-                "minecraft:zombie_villager",
-                "minecraft:zombie_villager_v2",
-                "minecraft:drowned",
-                "minecraft:zombie_pigman",
-                "minecraft:skeleton",
-                "minecraft:stray",
-                "minecraft:bogged",
-                "minecraft:wither_skeleton",
-                "minecraft:parched",
-                "minecraft:creeper",
-                "minecraft:spider",
-                "minecraft:cave_spider",
-                "minecraft:silverfish",
-                "minecraft:enderman",
-                "minecraft:witch",
-                "minecraft:ghast",
-                "minecraft:phantom",
-                "minecraft:vex",
-                "minecraft:shulker",
-                "minecraft:warden",
-                "minecraft:pillager",
-                "minecraft:vindicator",
-                "minecraft:piglin",
-                "minecraft:piglin_brute"
-        };
-
-        return mobs;
     }
 
     const std::unordered_map<std::string, int> &oreExperienceRanges() {
@@ -136,46 +60,6 @@ namespace ExperienceValues {
         }
 
         return result;
-    }
-
-    int getMobDropExperience(const std::string &identifier) {
-        if (identifier == "minecraft:blaze" || identifier == "minecraft:breeze" ||
-            identifier == "minecraft:guardian" || identifier == "minecraft:elder_guardian" ||
-            identifier == "minecraft:evocation_illager")
-            return 10;
-
-        if (identifier == "minecraft:endermite")
-            return 3;
-
-        if (identifier == "minecraft:ravager")
-            return 20;
-
-        if (identifier == "minecraft:wither")
-            return 50;
-
-        if (identifier == "minecraft:ender_dragon")
-            return 12000;
-
-        if (identifier == "minecraft:axolotl")
-            return 1;
-
-        if (identifier == "minecraft:strider")
-            return randomRange(1, 2);
-
-        if (identifier == "minecraft:sulfur_cube")
-            return randomRange(1, 2);
-
-        if (identifier == "minecraft:hoglin" || identifier == "minecraft:zoglin" ||
-            identifier == "minecraft:happy_ghast")
-            return randomRange(1, 3);
-
-        if (hostileMobs().count(identifier) != 0)
-            return 5;
-
-        if (breedingAnimals().count(identifier) != 0)
-            return randomRange(1, 3);
-
-        return 0;
     }
 
     int getOreDropExperience(const std::string &blockName) {

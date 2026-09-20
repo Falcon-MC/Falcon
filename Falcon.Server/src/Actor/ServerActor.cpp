@@ -1,8 +1,7 @@
 #include "Actor/ServerActor.h"
 
 #include "Actor/DynamicPropertyStore.h"
-#include "Actor/ExperienceValues.h"
-#include "Actor/MobLootTable.h"
+#include "Actor/Mob/MobActor.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
 #include "Item/EnchantmentData.h"
 #include "Item/ItemEnchantments.h"
@@ -233,12 +232,14 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *
                       ? ItemEnchantments::getLevel(source->getInventory().getItemInHand(), EnchantmentIds::LOOTING)
                       : 0;
         }
-        if (owner.getLevel().getGameRules().getBool("domobloot")) {
+        const MobActor *mob = dynamic_cast<const MobActor *>(this);
+
+        if (mob != nullptr && owner.getLevel().getGameRules().getBool("domobloot")) {
             Level &level = owner.getLevelFor(*this);
-            for (const MobDrop &drop: MobLootTable::getMobDrops(mIdentifier, isOnFire(), looting))
+            for (const MobDrop &drop: mob->rollDrops(isOnFire(), looting))
                 owner.spawnItemActor(level, drop.mItemIdentifier, drop.mCount, dropPosition);
 
-            const int experience = ExperienceValues::getMobDropExperience(mIdentifier);
+            const int experience = mob->getExperienceDrop();
             if (experience > 0)
                 owner.spawnExperienceOrbs(level, dropPosition, experience);
         }

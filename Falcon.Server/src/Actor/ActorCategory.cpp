@@ -1,5 +1,8 @@
 #include "Actor/ActorCategory.h"
 
+#include "Actor/ActorClassRegistry.h"
+#include "Actor/Mob/MobActor.h"
+
 #include "Actor/ActorFlags.h"
 #include "Actor/ServerActor.h"
 
@@ -66,6 +69,10 @@ namespace {
 }
 
 ActorCategory ActorCategories::of(const std::string &identifier) {
+    const MobActor *mob = ActorClassRegistry::getPrototype(identifier);
+    if (mob != nullptr)
+        return mob->getCategory();
+
     const auto it = categories().find(identifier);
     return it == categories().end() ? ActorCategory::Other : it->second;
 }

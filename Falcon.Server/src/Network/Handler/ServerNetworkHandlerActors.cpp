@@ -3,7 +3,8 @@
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/DynamicPropertyStore.h"
 #include "Actor/ActorSizeTable.h"
-#include "Actor/MobLootTable.h"
+#include "Actor/Mob/MobActor.h"
+#include "Actor/Mob/MobLoot.h"
 #include "Actor/ServerActor.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Core/Debug/BedrockLog.h"
@@ -139,6 +140,10 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     actor->setDimension(level.getDimensionType());
     actor->setPosition(position);
     actor->resetFallDistance();
+
+    MobActor *mob = dynamic_cast<MobActor *>(actor.get());
+    if (mob != nullptr)
+        mob->applyDefaults(mProperties.getDifficulty());
 
     const CustomActorDefinition *definition = CustomContentRegistry::getInstance().getActorDefinition(identifier);
     if (definition != nullptr) {
