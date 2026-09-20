@@ -1,0 +1,18 @@
+#pragma once
+
+#include "Actor/Mob/Neutral/NeutralActor.h"
+
+class EndermanActor : public NeutralActor {
+public:
+    static constexpr const char *IDENTIFIER = "minecraft:enderman";
+
+    using NeutralActor::NeutralActor;
+
+    ActorSize getSize() const override { return ActorSize{0.6f, 2.9f}; }
+
+    float getDefaultMaxHealth() const override { return 40.0f; }
+
+    int getExperienceDrop() const override { return 5; }
+
+    const std::vector<LootEntry> &getLootEntries() const override;
+};
