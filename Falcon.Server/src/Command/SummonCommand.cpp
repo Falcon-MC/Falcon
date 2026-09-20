@@ -54,8 +54,8 @@ bool SummonCommand::execute(CommandOrigin &sender, const std::vector<std::string
         return false;
     }
 
-    ServerPlayer *self = sender.asPlayer();
-    if (self == nullptr) {
+    Level *level = sender.getLevel();
+    if (level == nullptr) {
         sender.sendTranslation("commands.generic.targetNotPlayer", {});
         return false;
     }
@@ -69,7 +69,7 @@ bool SummonCommand::execute(CommandOrigin &sender, const std::vector<std::string
         return false;
     }
 
-    Vector3f position = self->getPosition();
+    Vector3f position = sender.getPosition();
     if (arguments.size() == 4) {
         const Vector3f origin = position;
 
@@ -81,14 +81,12 @@ bool SummonCommand::execute(CommandOrigin &sender, const std::vector<std::string
         }
     }
 
-    Level &level = mHandler.getLevelFor(*self);
-
-    if (position.y < (float) level.getMinY() || position.y > (float) level.getMaxY()) {
+    if (position.y < (float) level->getMinY() || position.y > (float) level->getMaxY()) {
         sender.sendTranslation("commands.summon.outOfWorld", {});
         return false;
     }
 
-    if (mHandler.spawnActor(level, identifier, position) == nullptr) {
+    if (mHandler.spawnActor(*level, identifier, position) == nullptr) {
         sender.sendTranslation("commands.summon.failed", {});
         return false;
     }

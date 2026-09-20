@@ -1,10 +1,12 @@
 #pragma once
 
+#include "Core/Math/Vector3f.h"
 #include "Protocol/Types/AdventureSettingData.h"
 
 #include <string>
 #include <vector>
 
+class Level;
 class ServerPlayer;
 
 class CommandOrigin {
@@ -22,4 +24,10 @@ public:
     virtual void sendTranslation(const std::string &key, const std::vector<std::string> &parameters) = 0;
 
     virtual CommandPermission getCommandPermission() const = 0;
+
+    virtual Vector3f getPosition();
+
+    virtual Vector3f getRotation();
+
+    virtual Level *getLevel();
 };

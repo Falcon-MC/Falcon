@@ -93,13 +93,13 @@ bool SetBlockCommand::execute(CommandOrigin &sender, const std::vector<std::stri
         return false;
     }
 
-    ServerPlayer *self = sender.asPlayer();
-    if (self == nullptr) {
+    Level *level = sender.getLevel();
+    if (level == nullptr) {
         sender.sendTranslation("commands.generic.targetNotPlayer", {});
         return false;
     }
 
-    const Vector3f origin = self->getPosition();
+    const Vector3f origin = sender.getPosition();
     const Vector3i originBlock((int32_t) std::floor(origin.x), (int32_t) std::floor(origin.y),
                                (int32_t) std::floor(origin.z));
 
@@ -121,14 +121,12 @@ bool SetBlockCommand::execute(CommandOrigin &sender, const std::vector<std::stri
         return false;
     }
 
-    Level &level = mHandler.getLevelFor(*self);
-
-    if (position.y < level.getMinY() || position.y > level.getMaxY()) {
+    if (position.y < level->getMinY() || position.y > level->getMaxY()) {
         sender.sendTranslation("commands.setblock.outOfWorld", {});
         return false;
     }
 
-    if (!placeBlock(mHandler, level, position, state, mode)) {
+    if (!placeBlock(mHandler, *level, position, state, mode)) {
         sender.sendTranslation("commands.setblock.noChange", {});
         return false;
     }

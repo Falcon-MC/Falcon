@@ -22,6 +22,8 @@ public:
 
     CommandPermission getCommandPermission() const override;
 
+    Level *getLevel() override;
+
 private:
     ServerNetworkHandler &mHandler;
     ServerPlayer &mPlayer;

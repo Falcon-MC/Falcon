@@ -22,3 +22,7 @@ void PlayerCommandOrigin::sendTranslation(const std::string &key, const std::vec
 CommandPermission PlayerCommandOrigin::getCommandPermission() const {
     return mPlayer.getCommandPermission();
 }
+
+Level *PlayerCommandOrigin::getLevel() {
+    return &mHandler.getLevelFor(mPlayer);
+}

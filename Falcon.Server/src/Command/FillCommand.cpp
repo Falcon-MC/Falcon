@@ -62,13 +62,13 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
         return false;
     }
 
-    ServerPlayer *self = sender.asPlayer();
-    if (self == nullptr) {
+    Level *level = sender.getLevel();
+    if (level == nullptr) {
         sender.sendTranslation("commands.generic.targetNotPlayer", {});
         return false;
     }
 
-    const Vector3f origin = self->getPosition();
+    const Vector3f origin = sender.getPosition();
     const Vector3i originBlock((int32_t) std::floor(origin.x), (int32_t) std::floor(origin.y),
                                (int32_t) std::floor(origin.z));
 
@@ -91,12 +91,10 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
         return false;
     }
 
-    Level &level = mHandler.getLevelFor(*self);
-
     const Vector3i minimum(std::min(from.x, to.x), std::min(from.y, to.y), std::min(from.z, to.z));
     const Vector3i maximum(std::max(from.x, to.x), std::max(from.y, to.y), std::max(from.z, to.z));
 
-    if (minimum.y < level.getMinY() || maximum.y > level.getMaxY()) {
+    if (minimum.y < level->getMinY() || maximum.y > level->getMaxY()) {
         sender.sendTranslation("commands.fill.outOfWorld", {});
         return false;
     }
@@ -127,7 +125,7 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
 
                 const BlockState &target = mode == "hollow" && !shell ? air : state;
 
-                if (SetBlockCommand::placeBlock(mHandler, level, position, target, placementMode))
+                if (SetBlockCommand::placeBlock(mHandler, *level, position, target, placementMode))
                     ++placed;
             }
         }
