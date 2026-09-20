@@ -5,6 +5,7 @@
 #include "Block/BlockData.h"
 #include "Actor/PrimedTntActor.h"
 #include "Block/Blocks/CommandBlock.h"
+#include "Block/Blocks/GrowthBlocks.h"
 #include "Block/Blocks/TntBlock.h"
 #include "Block/Systems/CommandBlockSystem.h"
 #include "Block/Systems/FallingBlockSystem.h"
@@ -1357,6 +1358,13 @@ void RedstoneSystem::onUpdate(ServerNetworkHandler &owner, Level &level, const V
         if ((type == RedstoneUpdateType::Normal || type == RedstoneUpdateType::Redstone)
             && isGettingPower(owner, level, position))
             TntBlock::prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE);
+    } else if (LeavesBlock::matches(identifier)) {
+        if (type == RedstoneUpdateType::Normal && state.mStates.getByte("update_bit") == 0
+            && state.mStates.getByte("persistent_bit") == 0) {
+            Tag states = state.mStates;
+            states.putByte("update_bit", 1);
+            setBlockState(owner, level, position, BlockState(identifier, states));
+        }
     }
 
     --gDepth;

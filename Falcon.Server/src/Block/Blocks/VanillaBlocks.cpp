@@ -4,6 +4,7 @@
 #include "Block/Blocks/ButtonBlock.h"
 #include "Block/Blocks/CommandBlock.h"
 #include "Block/Blocks/FurnaceBlock.h"
+#include "Block/Blocks/GrowthBlocks.h"
 #include "Block/Blocks/CraftingTableBlock.h"
 #include "Block/Blocks/ChestBlock.h"
 #include "Block/Blocks/ContainerBlock.h"
@@ -108,6 +109,27 @@ namespace {
 
         if (CardinalPlayerBlock::matches(identifier))
             return std::make_unique<CardinalPlayerBlock>(block);
+
+        if (StemBlock::matches(identifier))
+            return std::make_unique<StemBlock>(block);
+
+        if (NetherWartBlock::matches(identifier))
+            return std::make_unique<NetherWartBlock>(block);
+
+        if (CropBlock::matches(identifier))
+            return std::make_unique<CropBlock>(block);
+
+        if (SaplingBlock::matches(identifier))
+            return std::make_unique<SaplingBlock>(block);
+
+        if (LeavesBlock::matches(identifier))
+            return std::make_unique<LeavesBlock>(block);
+
+        if (SpreadingBlock::matches(identifier))
+            return std::make_unique<SpreadingBlock>(block);
+
+        if (NyliumBlock::matches(identifier))
+            return std::make_unique<NyliumBlock>(block);
 
         if (PlantBlock::matches(identifier))
             return std::make_unique<PlantBlock>(block);
