@@ -3,7 +3,9 @@
 #include "Block/Actor/ChestBlockActor.h"
 #include "Block/Actor/CommandBlockActor.h"
 #include "Block/Actor/ContainerBlockActor.h"
+#include "Block/Actor/BedBlockActor.h"
 #include "Block/Actor/EnderChestBlockActor.h"
+#include "Block/BlockActorClassRegistry.h"
 #include "Block/Actor/FurnaceBlockActor.h"
 #include "Block/Actor/HopperBlockActor.h"
 #include "Block/Actor/ItemFrameBlockActor.h"
@@ -159,51 +161,30 @@ void BlockActorStore::loadChunk(int32_t chunkX, int32_t chunkZ, const std::vecto
     }
 }
 
-std::unique_ptr<BlockActor> BlockActorStore::create(const std::string &blockActorId) {
-    if (blockActorId == ChestBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new ChestBlockActor());
-    if (blockActorId == FurnaceBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new FurnaceBlockActor());
-    if (blockActorId == PistonArmBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new PistonArmBlockActor());
-    if (blockActorId == CommandBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new CommandBlockActor());
-    if (blockActorId == BarrelBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new BarrelBlockActor());
-    if (blockActorId == ShulkerBoxBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new ShulkerBoxBlockActor());
-    if (blockActorId == EnderChestBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new EnderChestBlockActor());
-    if (blockActorId == HopperBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new HopperBlockActor());
-    if (blockActorId == DispenserBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new DispenserBlockActor());
-    if (blockActorId == DropperBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new DropperBlockActor());
-    if (blockActorId == BrewingStandBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new BrewingStandBlockActor());
-    if (blockActorId == BeaconBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new BeaconBlockActor());
-    if (blockActorId == EnchantTableBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new EnchantTableBlockActor());
-    if (blockActorId == CrafterBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new CrafterBlockActor());
-    if (blockActorId == CampfireBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new CampfireBlockActor());
-    if (blockActorId == LecternBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new LecternBlockActor());
-    if (blockActorId == ChiseledBookshelfBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new ChiseledBookshelfBlockActor());
-    if (blockActorId == DecoratedPotBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new DecoratedPotBlockActor());
-    if (blockActorId == JukeboxBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new JukeboxBlockActor());
-    if (blockActorId == ShelfBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new ShelfBlockActor());
-    if (blockActorId == ItemFrameBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new ItemFrameBlockActor());
-    if (blockActorId == GlowItemFrameBlockActor::BLOCK_ACTOR_ID)
-        return std::unique_ptr<BlockActor>(new GlowItemFrameBlockActor());
+FALCON_REGISTER_BLOCK_ACTOR(ChestBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(FurnaceBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(PistonArmBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(CommandBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(BarrelBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(ShulkerBoxBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(EnderChestBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(BedBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(HopperBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(DispenserBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(DropperBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(BrewingStandBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(BeaconBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(EnchantTableBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(CrafterBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(CampfireBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(LecternBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(ChiseledBookshelfBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(DecoratedPotBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(JukeboxBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(ShelfBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(ItemFrameBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(GlowItemFrameBlockActor);
 
-    return nullptr;
+std::unique_ptr<BlockActor> BlockActorStore::create(const std::string &blockActorId) {
+    return BlockActorClassRegistry::create(blockActorId);
 }
