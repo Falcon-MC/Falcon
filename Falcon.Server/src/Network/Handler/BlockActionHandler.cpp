@@ -945,8 +945,9 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
             return true;
     }
 
-    if (transaction.mClientInteractPrediction != ItemUsePredictedResult::Success)
+    if (transaction.mClientInteractPrediction != ItemUsePredictedResult::Success) {
         return true;
+    }
 
     const ItemStack &heldItem = inventory.getItemInHand();
 

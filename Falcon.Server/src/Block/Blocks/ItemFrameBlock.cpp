@@ -134,6 +134,16 @@ bool ItemFrameBlock::canPlaceAt(Level &level, const Vector3i &position, int bloc
     return solid;
 }
 
+bool ItemFrameBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    int facing = state.mStates.getInt("facing_direction", -1);
+    if (facing < 0) {
+        const std::string name = state.mStates.getString("minecraft:facing_direction", std::string());
+        facing = PlacementOrientation::faceFromName(name);
+    }
+
+    return canPlaceAt(level, position, facing);
+}
+
 bool ItemFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                 const BlockState &state) const {
     Level &level = owner.getLevelFor(player);
