@@ -6,6 +6,7 @@
 #include "Item/Items/FireworkRocketItem.h"
 #include "Item/Items/RangedWeaponItems.h"
 #include "Item/Items/SpearItem.h"
+#include "Item/Items/BoneMealItem.h"
 #include "Item/Items/ThrowableItems.h"
 
 #include "Item/ItemData.h"
@@ -2483,6 +2484,9 @@ namespace {
 
         if (identifier.size() > 10 && identifier.compare(identifier.size() - 10, 10, "_spawn_egg") == 0)
             return std::make_unique<SpawnEggItem>(base);
+
+        if (BoneMealItem::matches(identifier))
+            return std::make_unique<BoneMealItem>(base);
 
         return std::make_unique<Item>(base);
     }
