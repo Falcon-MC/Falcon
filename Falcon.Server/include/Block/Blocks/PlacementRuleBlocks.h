@@ -71,6 +71,9 @@ public:
 
     void onPlacing(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                    BlockState &state) const override;
+
+    void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                            const BlockState &state) const override;
 };
 
 class CarpetBlock final : public Block {
