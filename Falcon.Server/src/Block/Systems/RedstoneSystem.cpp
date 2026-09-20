@@ -5,6 +5,8 @@
 #include "Block/BlockData.h"
 #include "Actor/PrimedTntActor.h"
 #include "Block/Blocks/CommandBlock.h"
+#include "Block/Blocks/DoorBlock.h"
+#include "Block/Blocks/OpenableBlock.h"
 #include "Block/Blocks/TntBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/CommandBlockSystem.h"
@@ -153,7 +155,6 @@ namespace {
 
     struct RedstoneState {
         std::unordered_map<int64_t, int32_t> mComparatorOutputs;
-        std::unordered_set<int64_t> mManualOverrides;
         std::vector<Vector3i> mPendingNotifications;
     };
 
@@ -833,74 +834,6 @@ namespace {
             level.scheduleUpdate(position, PRESSURE_PLATE_RECHECK_TICKS);
     }
 
-    bool doorIsOpen(const BlockState &state)
-    {
-        return stateBool(state, "open_bit", false);
-    }
-
-    Vector3i doorLowerPosition(Level &level, const Vector3i &position, const BlockState &state)
-    {
-        if (!isDoor(state.mName))
-            return position;
-
-        if (!stateBool(state, "upper_block_bit", false))
-            return position;
-
-        const Vector3i below = RedstoneFace::relative(position, RedstoneFace::DOWN);
-        return stateAt(level, below).mName == state.mName ? below : position;
-    }
-
-    bool doorIsGettingPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                            const BlockState &state)
-    {
-        if (!isDoor(state.mName))
-            return RedstoneSystem::isGettingPower(owner, level, position);
-
-        const Vector3i lower = doorLowerPosition(level, position, state);
-        const Vector3i upper = RedstoneFace::relative(lower, RedstoneFace::UP);
-
-        return RedstoneSystem::isGettingPower(owner, level, lower)
-               || RedstoneSystem::isGettingPower(owner, level, upper);
-    }
-
-    void setOpenState(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
-                      bool open)
-    {
-        Tag states = state.mStates;
-        states.putByte("open_bit", open ? 1 : 0);
-        level.setBlock(position, BlockState(state.mName, states), false);
-
-        const Vector3f center = centerOf(position);
-        owner.playLevelSound(level, open ? SOUND_POWER_ON : SOUND_POWER_OFF, center, "", state.getHash());
-    }
-
-    void openableOnRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                  const BlockState &state)
-    {
-        std::unordered_set<int64_t> &manualOverrides = stateOf(level).mManualOverrides;
-        const int64_t key = RedstoneSystem::packPosition(position);
-        const bool manualOverride = manualOverrides.count(key) != 0;
-        const bool gettingPower = doorIsGettingPower(owner, level, position, state);
-        const bool open = doorIsOpen(state);
-
-        if (open != gettingPower && !manualOverride) {
-            setOpenState(owner, level, position, state, gettingPower);
-
-            if (isDoor(state.mName)) {
-                const Vector3i lower = doorLowerPosition(level, position, state);
-                const Vector3i upper = RedstoneFace::relative(lower, RedstoneFace::UP);
-                const Vector3i other = lower == position ? upper : lower;
-                const BlockState otherState = stateAt(level, other);
-                if (otherState.mName == state.mName && doorIsOpen(otherState) != gettingPower)
-                    setOpenState(owner, level, other, otherState, gettingPower);
-            }
-            return;
-        }
-
-        if (manualOverride && gettingPower == open)
-            manualOverrides.erase(key);
-    }
-
     void observerOnScheduled(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                              const BlockState &state)
     {
@@ -1309,9 +1242,12 @@ void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
             if (power > 0)
                 pressurePlateUpdateState(owner, level, position, power);
         }
-    } else if (isDoor(identifier) || isTrapdoor(identifier) || isFenceGate(identifier)) {
+    } else if (isDoor(identifier)) {
         if (type == BlockUpdateType::Redstone)
-            openableOnRedstoneUpdate(owner, level, position, state);
+            DoorBlock::onRedstoneUpdate(owner, level, position, state);
+    } else if (isTrapdoor(identifier) || isFenceGate(identifier)) {
+        if (type == BlockUpdateType::Redstone)
+            OpenableBlock::onRedstoneUpdate(owner, level, position, state);
     } else if (TntBlock::matches(identifier)) {
         if ((type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
             && isGettingPower(owner, level, position))
@@ -1392,7 +1328,7 @@ void RedstoneSystem::onRedstoneBroken(ServerNetworkHandler &owner, Level &level,
 
     RedstoneState &redstone = stateOf(level);
     redstone.mComparatorOutputs.erase(packPosition(position));
-    redstone.mManualOverrides.erase(packPosition(position));
+    OpenableBlock::setManualOverride(level, position, false);
 
     if (isWire(identifier)) {
         for (int face = 0; face < RedstoneFace::COUNT; ++face) {

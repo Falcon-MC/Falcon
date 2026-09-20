@@ -120,6 +120,9 @@ public:
 
     bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
 
+    bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                    const BlockState &state) const override;
+
     std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position,
                                                         const BlockState &state,
                                                         int playerFacing) const override;
@@ -137,4 +140,19 @@ public:
     static bool matches(const std::string &identifier);
 
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
+
+    bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                    const BlockState &state) const override;
+};
+
+class FenceGateOrientationBlock final : public CardinalPlayerBlock {
+public:
+    explicit FenceGateOrientationBlock(const Block &block) : CardinalPlayerBlock(block)
+    {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                    const BlockState &state) const override;
 };

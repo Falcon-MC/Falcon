@@ -43,6 +43,19 @@ namespace PlacementOrientation {
         }
     }
 
+    inline int ewsnOrdinal(int facing) {
+        switch (facing) {
+            case FACE_EAST:
+                return 0;
+            case FACE_WEST:
+                return 1;
+            case FACE_SOUTH:
+                return 2;
+            default:
+                return 3;
+        }
+    }
+
     inline const char *cardinalName(int facing) {
         switch (facing) {
             case FACE_NORTH:
@@ -62,6 +75,22 @@ namespace PlacementOrientation {
         if (face == FACE_WEST || face == FACE_EAST)
             return "x";
         return "y";
+    }
+
+    inline int faceFromName(const std::string &name) {
+        if (name == "down")
+            return FACE_DOWN;
+        if (name == "up")
+            return FACE_UP;
+        if (name == "north")
+            return FACE_NORTH;
+        if (name == "south")
+            return FACE_SOUTH;
+        if (name == "west")
+            return FACE_WEST;
+        if (name == "east")
+            return FACE_EAST;
+        return -1;
     }
 
     inline const char *faceName(int face) {

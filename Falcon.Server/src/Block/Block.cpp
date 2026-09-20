@@ -101,6 +101,9 @@ BlockState Block::applyPlacementOrientation(const BlockState &state, const Block
     if (states.contains("upper_block_bit"))
         states.putByte("upper_block_bit", 0);
 
+    if (states.contains("open_bit"))
+        states.putByte("open_bit", 0);
+
     if (states.contains("head_piece_bit"))
         states.putByte("head_piece_bit", 0);
 

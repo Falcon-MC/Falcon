@@ -1,6 +1,12 @@
 #include "Block/Blocks/OrientationBlocks.h"
 
 #include "Block/BlockClassRegistry.h"
+#include "Block/Blocks/DoorBlock.h"
+#include "Block/Blocks/OpenableBlock.h"
+#include "Block/Systems/RedstoneSystem.h"
+#include "Network/Handler/ServerNetworkHandler.h"
+
+#include <cmath>
 
 FALCON_REGISTER_BLOCK(DoorOrientationBlock, 120);
 FALCON_REGISTER_BLOCK(TrapdoorOrientationBlock, 130);
@@ -11,6 +17,7 @@ FALCON_REGISTER_BLOCK(WallAttachedBlock, 190);
 FALCON_REGISTER_BLOCK(BellOrientationBlock, 200);
 FALCON_REGISTER_BLOCK(FaceAttachedBlock, 210);
 FALCON_REGISTER_BLOCK(BedOrientationBlock, 220);
+FALCON_REGISTER_BLOCK(FenceGateOrientationBlock, 225);
 FALCON_REGISTER_BLOCK(CardinalPlayerBlock, 230);
 
 #include "Actor/ServerPlayer.h"
@@ -242,6 +249,11 @@ std::vector<BlockPlacementEntry> DoorOrientationBlock::getPlacementBlocks(Level 
                                 BlockState(state.mName, states)}};
 }
 
+bool DoorOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                                      const BlockState &state) const {
+    return DoorBlock::toggle(owner, owner.getLevelFor(player), position, state);
+}
+
 std::vector<Vector3i> DoorOrientationBlock::getAffectedBlocks(Level &level, const Vector3i &position,
                                                               const BlockState &state) const {
     return DoubleBlock::otherHalf(level, position, state);
@@ -255,7 +267,8 @@ BlockState DoorOrientationBlock::applyPlacementOrientation(const BlockState &sta
     Tag states = result.mStates;
 
     if (states.contains("minecraft:cardinal_direction"))
-        states.putString("minecraft:cardinal_direction", cardinalName(context.mPlayerFacing));
+        states.putString("minecraft:cardinal_direction",
+                         cardinalName(RedstoneFace::rotateY(context.mPlayerFacing)));
 
     if (states.contains("door_hinge_bit")) {
         const bool rightHinged = DoorBlock::isRightHinged(context.mLevel, result.mName, context.mBlockPosition,
@@ -277,6 +290,38 @@ BlockState TrapdoorOrientationBlock::applyPlacementOrientation(const BlockState 
     BlockState result = Block::applyPlacementOrientation(state, context);
     Tag states = result.mStates;
     if (states.contains("direction"))
-        states.putInt("direction", horizontalOrdinal(context.mOppositeFacing));
+        states.putInt("direction", ewsnOrdinal(context.mOppositeFacing));
     return BlockState(result.mName, states);
+}
+
+bool TrapdoorOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
+                                          const Vector3i &position, const BlockState &state) const {
+    return OpenableBlock::toggle(owner, owner.getLevelFor(player), position, state);
+}
+
+bool FenceGateOrientationBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:fence_gate" || endsWith(identifier, "_fence_gate");
+}
+
+bool FenceGateOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
+                                           const Vector3i &position, const BlockState &state) const {
+    using namespace PlacementOrientation;
+
+    Level &level = owner.getLevelFor(player);
+
+    const std::string facing = state.mStates.getString("minecraft:cardinal_direction", "south");
+    const bool alongZ = facing == "north" || facing == "south";
+
+    float rotation = std::fmod(player.getRotation().y - 90.0f, 360.0f);
+    if (rotation < 0.0f)
+        rotation += 360.0f;
+
+    const int swing = alongZ
+                      ? (rotation < 180.0f ? FACE_NORTH : FACE_SOUTH)
+                      : (rotation >= 90.0f && rotation < 270.0f ? FACE_EAST : FACE_WEST);
+
+    Tag states = state.mStates;
+    states.putString("minecraft:cardinal_direction", cardinalName(swing));
+
+    return OpenableBlock::toggle(owner, level, position, BlockState(state.mName, states));
 }

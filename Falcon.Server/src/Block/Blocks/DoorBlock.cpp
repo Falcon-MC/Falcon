@@ -2,10 +2,9 @@
 
 #include "Block/BlockData.h"
 #include "Block/BlockIdentifier.h"
+#include "Block/Blocks/OpenableBlock.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Level.h"
-#include "Level/LevelChunk.h"
-#include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
 namespace {
@@ -16,6 +15,10 @@ namespace {
 
         const BlockData *data = BlockDataTable::find(state.mName.c_str());
         return data == nullptr || data->mTransparent;
+    }
+
+    BlockState stateAt(Level &level, const Vector3i &position) {
+        return level.getBlockState(position.x, position.y, position.z);
     }
 }
 
@@ -42,3 +45,69 @@ bool DoorBlock::isRightHinged(Level *level, const std::string &identifier, const
     return !isTransparentAt(*level, right) && isTransparentAt(*level, left);
 }
 
+Vector3i DoorBlock::lowerPosition(Level &level, const Vector3i &position, const BlockState &state) {
+    if (!matches(state.mName))
+        return position;
+
+    const Tag *upper = state.mStates.get("upper_block_bit");
+    const bool isUpper = upper != nullptr && upper->getType() == Tag::Type::Byte && upper->asByte() != 0;
+    if (!isUpper)
+        return position;
+
+    const Vector3i below = RedstoneFace::relative(position, RedstoneFace::DOWN);
+    return stateAt(level, below).mName == state.mName ? below : position;
+}
+
+bool DoorBlock::isGettingPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                               const BlockState &state) {
+    const Vector3i lower = lowerPosition(level, position, state);
+    const Vector3i upper = RedstoneFace::relative(lower, RedstoneFace::UP);
+
+    return RedstoneSystem::isGettingPower(owner, level, lower)
+           || RedstoneSystem::isGettingPower(owner, level, upper);
+}
+
+bool DoorBlock::toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                       const BlockState &state) {
+    const Vector3i lower = lowerPosition(level, position, state);
+    const Vector3i upper = RedstoneFace::relative(lower, RedstoneFace::UP);
+
+    const BlockState lowerState = stateAt(level, lower);
+    const BlockState upperState = stateAt(level, upper);
+    if (lowerState.mName != upperState.mName)
+        return false;
+
+    const bool open = !OpenableBlock::isOpen(lowerState);
+
+    OpenableBlock::setOpen(owner, level, lower, lowerState, open);
+    OpenableBlock::setOpen(owner, level, upper, upperState, open);
+
+    const bool manual = open || isGettingPower(owner, level, lower, lowerState);
+    OpenableBlock::setManualOverride(level, lower, manual);
+    OpenableBlock::setManualOverride(level, upper, manual);
+
+    return true;
+}
+
+void DoorBlock::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state) {
+    const bool manualOverride = OpenableBlock::hasManualOverride(level, position);
+    const bool gettingPower = isGettingPower(owner, level, position, state);
+    const bool open = OpenableBlock::isOpen(state);
+
+    if (open != gettingPower && !manualOverride) {
+        OpenableBlock::setOpen(owner, level, position, state, gettingPower);
+
+        const Vector3i lower = lowerPosition(level, position, state);
+        const Vector3i upper = RedstoneFace::relative(lower, RedstoneFace::UP);
+        const Vector3i other = lower == position ? upper : lower;
+        const BlockState otherState = stateAt(level, other);
+        if (otherState.mName == state.mName && OpenableBlock::isOpen(otherState) != gettingPower)
+            OpenableBlock::setOpen(owner, level, other, otherState, gettingPower);
+
+        return;
+    }
+
+    if (manualOverride && gettingPower == open)
+        OpenableBlock::setManualOverride(level, position, false);
+}
