@@ -150,6 +150,14 @@ bool PortalBlock::canSurvive(Level &level, const Vector3i &position, const Block
     return true;
 }
 
+void PortalBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                     const BlockState &state) const {
+    if (canSurvive(level, position, state))
+        return;
+
+    BlockActionHandler::destroyBlock(owner, level, position, state, false, ItemStack::air());
+}
+
 void PortalBlock::onActorInside(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                       const BlockState &state) const {
     (void) position;
@@ -196,7 +204,7 @@ void PortalBlock::onActorInside(ServerNetworkHandler &owner, ServerPlayer &playe
         arrival = Vector3f((float) existing.x + 0.5f, (float) existing.y, (float) existing.z + 0.5f);
     } else {
         spawnPortal(destination, landing, &owner);
-        arrival = Vector3f((float) landing.x + 1.5f, (float) landing.y + 1.0f, (float) landing.z + 1.5f);
+        arrival = Vector3f((float) landing.x + 1.0f, (float) landing.y + 1.0f, (float) landing.z + 0.5f);
     }
 
     player.setPortalCooldown(PORTAL_COOLDOWN_TICKS);
@@ -399,6 +407,14 @@ bool EndPortalBlock::canSurvive(Level &level, const Vector3i &position, const Bl
     }
 
     return true;
+}
+
+void EndPortalBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                        const BlockState &state) const {
+    if (canSurvive(level, position, state))
+        return;
+
+    BlockActionHandler::destroyBlock(owner, level, position, state, false, ItemStack::air());
 }
 
 void EndPortalBlock::onActorInside(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
