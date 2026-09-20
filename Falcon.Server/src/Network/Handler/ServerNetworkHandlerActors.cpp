@@ -1082,17 +1082,11 @@ void ServerNetworkHandler::spawnItemActor(Level &level, const std::string &typeI
 }
 
 void ServerNetworkHandler::sendActionBar(ServerPlayer &player, const std::string &text, bool json) {
-    SetTitlePacket packet;
-    packet.mType = json ? SetTitlePacket::Type::ActionbarJson : SetTitlePacket::Type::Actionbar;
-    packet.mText = text;
-    mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
+    player.sendActionBar(text, json);
 }
 
 void ServerNetworkHandler::sendTitle(ServerPlayer &player, const std::string &text, bool json) {
-    SetTitlePacket packet;
-    packet.mType = json ? SetTitlePacket::Type::TitleJson : SetTitlePacket::Type::Title;
-    packet.mText = text;
-    mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
+    player.sendTitleText(text, json);
 }
 
 void ServerNetworkHandler::applyActorEffect(ServerActor &actor, int32_t effectId, int32_t amplifier,

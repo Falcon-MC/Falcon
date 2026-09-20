@@ -645,6 +645,66 @@ void ServerPlayer::sendTitle(const std::string &title, const std::string &subtit
     mSender->sendPacketTo(mId, titlePacket);
 }
 
+void ServerPlayer::sendTitleText(const std::string &text, bool json) {
+    if (mSender == nullptr)
+        return;
+
+    SetTitlePacket packet;
+    packet.mType = json ? SetTitlePacket::Type::TitleJson : SetTitlePacket::Type::Title;
+    packet.mText = text;
+    mSender->sendPacketTo(mId, packet);
+}
+
+void ServerPlayer::sendSubtitle(const std::string &text, bool json) {
+    if (mSender == nullptr)
+        return;
+
+    SetTitlePacket packet;
+    packet.mType = json ? SetTitlePacket::Type::SubtitleJson : SetTitlePacket::Type::Subtitle;
+    packet.mText = text;
+    mSender->sendPacketTo(mId, packet);
+}
+
+void ServerPlayer::sendActionBar(const std::string &text, bool json) {
+    if (mSender == nullptr)
+        return;
+
+    SetTitlePacket packet;
+    packet.mType = json ? SetTitlePacket::Type::ActionbarJson : SetTitlePacket::Type::Actionbar;
+    packet.mText = text;
+    mSender->sendPacketTo(mId, packet);
+}
+
+void ServerPlayer::setTitleTimes(int32_t fadeInTime, int32_t stayTime, int32_t fadeOutTime) {
+    if (mSender == nullptr)
+        return;
+
+    SetTitlePacket packet;
+    packet.mType = SetTitlePacket::Type::Times;
+    packet.mFadeInTime = fadeInTime;
+    packet.mStayTime = stayTime;
+    packet.mFadeOutTime = fadeOutTime;
+    mSender->sendPacketTo(mId, packet);
+}
+
+void ServerPlayer::clearTitle() {
+    if (mSender == nullptr)
+        return;
+
+    SetTitlePacket packet;
+    packet.mType = SetTitlePacket::Type::Clear;
+    mSender->sendPacketTo(mId, packet);
+}
+
+void ServerPlayer::resetTitle() {
+    if (mSender == nullptr)
+        return;
+
+    SetTitlePacket packet;
+    packet.mType = SetTitlePacket::Type::Reset;
+    mSender->sendPacketTo(mId, packet);
+}
+
 Tag ServerPlayer::saveNbt(const std::string &levelName) const {
     Tag data = Tag::ofCompound();
 

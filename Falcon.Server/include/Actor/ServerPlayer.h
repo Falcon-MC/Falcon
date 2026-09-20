@@ -135,6 +135,18 @@ public:
     void sendTitle(const std::string &title, const std::string &subtitle = "", int32_t fadeInTime = 10,
                    int32_t stayTime = 70, int32_t fadeOutTime = 20);
 
+    void sendTitleText(const std::string &text, bool json = false);
+
+    void sendSubtitle(const std::string &text, bool json = false);
+
+    void sendActionBar(const std::string &text, bool json = false);
+
+    void setTitleTimes(int32_t fadeInTime, int32_t stayTime, int32_t fadeOutTime);
+
+    void clearTitle();
+
+    void resetTitle();
+
     bool hasPendingMove() const { return mHasPendingMove; }
 
     const Vector3f &getPendingMovePosition() const { return mPendingMovePosition; }
