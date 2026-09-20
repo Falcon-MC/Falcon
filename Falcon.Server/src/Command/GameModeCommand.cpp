@@ -21,7 +21,7 @@ GameModeCommand::GameModeCommand(ServerNetworkHandler &handler)
           mHandler(handler) {}
 
 std::vector<CommandOverloadData> GameModeCommand::getOverloads() const {
-    CommandParamData playerParameter = makePlayerParameter("player", mHandler.getPlayerNames());
+    CommandParamData playerParameter = makePlayerParameter("player");
     playerParameter.mOptional = true;
 
     CommandParamData namedMode;

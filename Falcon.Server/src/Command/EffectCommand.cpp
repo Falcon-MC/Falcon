@@ -69,7 +69,7 @@ std::vector<CommandOverloadData> EffectCommand::getOverloads() const {
     hideParticles.mType = CommandParamType::String;
 
     CommandOverloadData overload;
-    overload.mParameters.push_back(makePlayerParameter("player", mHandler.getPlayerNames()));
+    overload.mParameters.push_back(makePlayerParameter("player"));
     overload.mParameters.push_back(effect);
     overload.mParameters.push_back(seconds);
     overload.mParameters.push_back(amplifier);

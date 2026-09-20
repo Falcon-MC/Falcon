@@ -14,7 +14,7 @@ std::vector<CommandOverloadData> KickCommand::getOverloads() const {
     reasonParameter.mType = CommandParamType::Message;
 
     CommandOverloadData overload;
-    overload.mParameters.push_back(makePlayerParameter("player", mHandler.getPlayerNames()));
+    overload.mParameters.push_back(makePlayerParameter("player"));
     overload.mParameters.push_back(reasonParameter);
     return {overload};
 }

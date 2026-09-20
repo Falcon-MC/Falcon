@@ -16,7 +16,7 @@ std::vector<CommandOverloadData> XpCommand::getOverloads() const {
     amount.mHasType = true;
     amount.mType = CommandParamType::String;
 
-    CommandParamData player = makePlayerParameter("player", mHandler.getPlayerNames());
+    CommandParamData player = makePlayerParameter("player");
     player.mOptional = true;
 
     CommandOverloadData overload;

@@ -107,7 +107,7 @@ std::vector<CommandOverloadData> TellRawCommand::getOverloads() const {
     jsonParameter.mType = CommandParamType::Json;
 
     CommandOverloadData overload;
-    overload.mParameters.push_back(makePlayerParameter("target", mHandler.getPlayerNames()));
+    overload.mParameters.push_back(makePlayerParameter("target"));
     overload.mParameters.push_back(jsonParameter);
 
     return {overload};

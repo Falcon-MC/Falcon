@@ -16,7 +16,7 @@ GiveCommand::GiveCommand(ServerNetworkHandler &handler)
           mHandler(handler) {}
 
 std::vector<CommandOverloadData> GiveCommand::getOverloads() const {
-    const CommandParamData playerParameter = makePlayerParameter("player", mHandler.getPlayerNames());
+    const CommandParamData playerParameter = makePlayerParameter("player");
 
     CommandParamData itemParameter;
     itemParameter.mName = "itemName";

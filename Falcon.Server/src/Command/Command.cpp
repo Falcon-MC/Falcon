@@ -21,17 +21,11 @@ std::vector<CommandOverloadData> Command::getOverloads() const {
     return {overload};
 }
 
-CommandParamData Command::makePlayerParameter(const std::string &name,
-                                              const std::vector<std::string> &playerNames) {
+CommandParamData Command::makePlayerParameter(const std::string &name) {
     CommandParamData parameter;
     parameter.mName = name;
-    parameter.mHasEnumData = true;
-    parameter.mEnumData.mName = "PlayerTarget";
-    parameter.mEnumData.mIsSoft = true;
-    parameter.mEnumData.mValues = {"@a", "@s", "@p", "@r"};
-
-    for (const std::string &playerName: playerNames)
-        parameter.mEnumData.mValues.push_back(playerName);
+    parameter.mHasType = true;
+    parameter.mType = CommandParamType::Target;
 
     return parameter;
 }

@@ -7,7 +7,7 @@ KillCommand::KillCommand(ServerNetworkHandler &handler)
         : Command("kill", "commands.kill.description", "/kill [player]"), mHandler(handler) {}
 
 std::vector<CommandOverloadData> KillCommand::getOverloads() const {
-    CommandParamData playerParameter = makePlayerParameter("player", mHandler.getPlayerNames());
+    CommandParamData playerParameter = makePlayerParameter("player");
     playerParameter.mOptional = true;
 
     CommandOverloadData overload;

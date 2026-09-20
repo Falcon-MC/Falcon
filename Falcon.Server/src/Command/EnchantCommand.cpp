@@ -124,7 +124,7 @@ std::vector<CommandOverloadData> EnchantCommand::getOverloads() const {
     levelParameter.mType = CommandParamType::Int;
 
     CommandOverloadData overload;
-    overload.mParameters.push_back(makePlayerParameter("player", mHandler.getPlayerNames()));
+    overload.mParameters.push_back(makePlayerParameter("player"));
     overload.mParameters.push_back(enchantmentParameter);
     overload.mParameters.push_back(levelParameter);
 

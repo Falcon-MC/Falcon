@@ -18,7 +18,7 @@ std::vector<CommandOverloadData> TellCommand::getOverloads() const {
     messageParameter.mType = CommandParamType::Message;
 
     CommandOverloadData overload;
-    overload.mParameters.push_back(makePlayerParameter("target", mHandler.getPlayerNames()));
+    overload.mParameters.push_back(makePlayerParameter("target"));
     overload.mParameters.push_back(messageParameter);
 
     return {overload};

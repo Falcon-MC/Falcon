@@ -29,20 +29,18 @@ TeleportCommand::TeleportCommand(ServerNetworkHandler &handler)
           mHandler(handler) {}
 
 std::vector<CommandOverloadData> TeleportCommand::getOverloads() const {
-    const std::vector<std::string> names = mHandler.getPlayerNames();
-
     CommandOverloadData toPlayer;
-    toPlayer.mParameters.push_back(makePlayerParameter("destination", names));
+    toPlayer.mParameters.push_back(makePlayerParameter("destination"));
 
     CommandOverloadData toPosition;
     toPosition.mParameters.push_back(makePositionParameter());
 
     CommandOverloadData victimToPlayer;
-    victimToPlayer.mParameters.push_back(makePlayerParameter("victim", names));
-    victimToPlayer.mParameters.push_back(makePlayerParameter("destination", names));
+    victimToPlayer.mParameters.push_back(makePlayerParameter("victim"));
+    victimToPlayer.mParameters.push_back(makePlayerParameter("destination"));
 
     CommandOverloadData victimToPosition;
-    victimToPosition.mParameters.push_back(makePlayerParameter("victim", names));
+    victimToPosition.mParameters.push_back(makePlayerParameter("victim"));
     victimToPosition.mParameters.push_back(makePositionParameter());
 
     return {toPlayer, toPosition, victimToPlayer, victimToPosition};

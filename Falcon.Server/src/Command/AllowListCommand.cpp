@@ -26,7 +26,7 @@ std::vector<CommandOverloadData> AllowListCommand::getOverloads() const {
 
     CommandOverloadData edit;
     edit.mParameters.push_back(makeActionParameter("AllowListEditAction", {"add", "remove"}));
-    edit.mParameters.push_back(makePlayerParameter("player", mHandler.getPlayerNames()));
+    edit.mParameters.push_back(makePlayerParameter("player"));
 
     return {toggle, edit};
 }

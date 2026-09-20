@@ -23,11 +23,9 @@ public:
 
     virtual std::vector<CommandOverloadData> getOverloads() const;
 
-    // Index from which the arguments keep the exact text typed by the player, quotes included.
     virtual size_t getRawArgumentIndex() const { return (size_t) -1; }
 
-    static CommandParamData makePlayerParameter(const std::string &name,
-                                                const std::vector<std::string> &playerNames);
+    static CommandParamData makePlayerParameter(const std::string &name);
 
     static std::string joinArguments(const std::vector<std::string> &arguments, size_t first);
 

@@ -44,7 +44,7 @@ ClearCommand::ClearCommand(ServerNetworkHandler &handler)
           mHandler(handler) {}
 
 std::vector<CommandOverloadData> ClearCommand::getOverloads() const {
-    CommandParamData playerParameter = makePlayerParameter("player", mHandler.getPlayerNames());
+    CommandParamData playerParameter = makePlayerParameter("player");
     playerParameter.mOptional = true;
 
     CommandParamData itemParameter;

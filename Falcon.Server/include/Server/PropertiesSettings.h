@@ -70,7 +70,6 @@ public:
 
     bool getBool(const std::string &key, bool defaultValue) const;
 
-    // access using the default from the definition table
     std::string getString(const char *key) const;
 
     int getInt(const char *key) const;

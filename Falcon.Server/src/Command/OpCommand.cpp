@@ -23,6 +23,6 @@ bool OpCommand::execute(CommandOrigin &sender, const std::vector<std::string> &a
 
 std::vector<CommandOverloadData> OpCommand::getOverloads() const {
     CommandOverloadData overload;
-    overload.mParameters.push_back(makePlayerParameter("player", mHandler.getPlayerNames()));
+    overload.mParameters.push_back(makePlayerParameter("player"));
     return {overload};
 }

@@ -183,7 +183,7 @@ std::vector<CommandOverloadData> CameraCommand::getOverloads() const {
     rest.mType = CommandParamType::String;
 
     CommandOverloadData overload;
-    overload.mParameters.push_back(makePlayerParameter("target", mHandler.getPlayerNames()));
+    overload.mParameters.push_back(makePlayerParameter("target"));
     overload.mParameters.push_back(mode);
     overload.mParameters.push_back(rest);
     return {overload};

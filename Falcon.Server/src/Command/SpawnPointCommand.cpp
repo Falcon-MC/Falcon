@@ -14,7 +14,7 @@ SpawnPointCommand::SpawnPointCommand(ServerNetworkHandler &handler, bool clear)
           mHandler(handler), mClear(clear) {}
 
 std::vector<CommandOverloadData> SpawnPointCommand::getOverloads() const {
-    CommandParamData player = makePlayerParameter("player", mHandler.getPlayerNames());
+    CommandParamData player = makePlayerParameter("player");
     player.mOptional = true;
 
     CommandOverloadData overload;
