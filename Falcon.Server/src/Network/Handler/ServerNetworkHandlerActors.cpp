@@ -936,6 +936,20 @@ void ServerNetworkHandler::_hatchEggChicks(Level &level, const Vector3f &hitPosi
     }
 }
 
+void ServerNetworkHandler::sendActorNameTag(ServerActor &actor) {
+    const int32_t ENTITY_DATA_NAME = 4;
+
+    EntityDataEntry name;
+    name.mId = ENTITY_DATA_NAME;
+    name.mFormat = EntityDataFormat::String;
+    name.mStringValue = actor.getNameTag();
+
+    EntityDataMap metadata;
+    metadata.mEntries.push_back(name);
+
+    sendActorMetadata(actor, metadata);
+}
+
 void ServerNetworkHandler::sendActorMetadata(ServerActor &actor, const EntityDataMap &metadata) {
     SetActorDataPacket packet;
     packet.mRuntimeActorId = (int64_t) actor.getRuntimeId();

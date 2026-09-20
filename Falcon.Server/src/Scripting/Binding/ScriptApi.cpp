@@ -360,7 +360,7 @@ int32_t ScriptApi::runCommandAsPlayer(ServerPlayer &player, const std::string &c
 }
 
 int32_t ScriptApi::runCommandAsConsole(const std::string &commandLine) {
-    ServerCommandOrigin sender;
+    ServerCommandOrigin sender(&mHost);
     std::string line = commandLine;
     if (!line.empty() && line[0] == '/')
         line.erase(0, 1);
@@ -2241,8 +2241,10 @@ namespace {
 
     JSValue actorSetNameTag(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ServerActor *actor = resolveActorThis(ctx, thisVal);
-        if (actor != nullptr && argc >= 1)
+        if (actor != nullptr && argc >= 1) {
             actor->setNameTag(toStdString(ctx, argv[0]));
+            ScriptApi::fromRuntime(JS_GetRuntime(ctx))->host().sendActorNameTag(*actor);
+        }
         return JS_UNDEFINED;
     }
 

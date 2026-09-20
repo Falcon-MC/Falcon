@@ -211,6 +211,8 @@ public:
 
     void sendActorMetadata(ServerActor &actor, const EntityDataMap &metadata);
 
+    void sendActorNameTag(ServerActor &actor);
+
     void broadcastActorEvent(ServerActor &actor, EntityEventType eventType);
 
     bool damageActor(ServerActor &actor, float amount, ServerPlayer *source, int32_t lootingLevel = -1);
