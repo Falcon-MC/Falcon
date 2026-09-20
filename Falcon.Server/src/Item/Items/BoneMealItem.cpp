@@ -1,10 +1,13 @@
 #include "Item/Items/BoneMealItem.h"
 
+#include "Item/ItemClassRegistry.h"
+
+FALCON_REGISTER_ITEM(BoneMealItem, 100);
+
 #include "Block/BlockIdentifier.h"
 #include "Block/Blocks/GrowthBlocks.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/RandomTickSystem.h"
-#include "Block/Systems/RedstoneSystem.h"
 #include "Inventory/InventoryManager.h"
 #include "Inventory/PlayerInventory.h"
 #include "Level/Generator/Feature/BlockManager.h"
@@ -96,7 +99,7 @@ bool BoneMealItem::applyToCrop(ServerNetworkHandler &owner, Level &level, const 
 
     Tag states = state.mStates;
     states.putInt(growthState, grown);
-    RedstoneSystem::setBlockState(owner, level, position, BlockState(state.mName, states));
+    level.setBlock(position, BlockState(state.mName, states), false);
     return true;
 }
 
@@ -105,7 +108,7 @@ bool BoneMealItem::applyToSapling(ServerNetworkHandler &owner, Level &level, con
     if (state.mStates.getByte("age_bit") == 0) {
         Tag states = state.mStates;
         states.putByte("age_bit", 1);
-        RedstoneSystem::setBlockState(owner, level, position, BlockState(state.mName, states));
+        level.setBlock(position, BlockState(state.mName, states), false);
         return true;
     }
 
@@ -143,7 +146,7 @@ bool BoneMealItem::applyToNylium(ServerNetworkHandler &owner, Level &level, cons
     else
         grown = crimson ? "minecraft:crimson_roots" : "minecraft:warped_roots";
 
-    RedstoneSystem::setBlockState(owner, level, above, BlockState(grown));
+    level.setBlock(above, BlockState(grown), false);
     return true;
 }
 
@@ -171,6 +174,8 @@ bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
 
     if (!applied)
         return false;
+
+    player.startItemCooldown(item, owner.getCurrentTick(), USE_COOLDOWN_TICKS);
 
     LevelEventPacket effect;
     effect.mEventId = (LevelEventPacket::Event) BONE_MEAL_USE_EVENT;

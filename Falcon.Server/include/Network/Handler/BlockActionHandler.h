@@ -44,6 +44,17 @@ public:
     static void placeBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemUseTransaction &transaction);
 
 private:
-    static void interactBlock(ServerNetworkHandler &owner, ServerPlayer &player,
-                              const ItemUseTransaction &transaction);
+    static constexpr int32_t NETHER_PLACEMENT_LIMIT = 127;
+
+    static constexpr float MAX_SYNC_DISTANCE_SQUARED = 10000.0f;
+
+    static bool interactBlock(ServerNetworkHandler &owner, ServerPlayer &player,
+                              const ItemUseTransaction &transaction, bool selectedSlotChanged);
+
+    static bool matchesTransactionItem(const ItemStack &held, const ItemStack &sent);
+
+    static bool isBlockChangeAllowed(Level &level, const Vector3i &position, const ServerPlayer &player);
+
+    static bool isBlockedByActor(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state, const ServerPlayer &placer);
 };

@@ -12,6 +12,8 @@ public:
                       const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const override;
 
 private:
+    static constexpr int USE_COOLDOWN_TICKS = 4;
+
     static bool applyToCrop(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                             const BlockState &state);
 
