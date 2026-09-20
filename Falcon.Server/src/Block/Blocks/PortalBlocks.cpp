@@ -20,7 +20,7 @@
 #include <cmath>
 #include <string>
 
-FALCON_REGISTER_BLOCK(NetherPortalBlock, 5);
+FALCON_REGISTER_BLOCK(PortalBlock, 5);
 FALCON_REGISTER_BLOCK(EndPortalBlock, 6);
 FALCON_REGISTER_BLOCK(EndPortalFrameBlock, 7);
 FALCON_REGISTER_BLOCK(ObsidianBlock, 8);
@@ -125,11 +125,11 @@ namespace {
     }
 }
 
-bool NetherPortalBlock::matches(const std::string &identifier) {
+bool PortalBlock::matches(const std::string &identifier) {
     return identifier == PORTAL_IDENTIFIER;
 }
 
-bool NetherPortalBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+bool PortalBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
     const bool alongX = stateText(state, "portal_axis") != "z";
 
     const Vector3i sides[4] = {
@@ -150,7 +150,7 @@ bool NetherPortalBlock::canSurvive(Level &level, const Vector3i &position, const
     return true;
 }
 
-void NetherPortalBlock::onActorInside(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+void PortalBlock::onActorInside(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                       const BlockState &state) const {
     (void) position;
     (void) state;
@@ -203,7 +203,7 @@ void NetherPortalBlock::onActorInside(ServerNetworkHandler &owner, ServerPlayer 
     owner.changePlayerDimension(player, target, arrival);
 }
 
-void NetherPortalBlock::spawnPortal(Level &level, const Vector3i &position, ServerNetworkHandler *owner) {
+void PortalBlock::spawnPortal(Level &level, const Vector3i &position, ServerNetworkHandler *owner) {
     int32_t x = position.x;
     int32_t y = position.y;
     int32_t z = position.z;
@@ -261,7 +261,7 @@ void NetherPortalBlock::spawnPortal(Level &level, const Vector3i &position, Serv
     writeBlock(level, Vector3i(x + 3, y, z), obsidian, owner);
 }
 
-bool NetherPortalBlock::findNearestPortal(Level &level, const Vector3i &origin, Vector3i &out) {
+bool PortalBlock::findNearestPortal(Level &level, const Vector3i &origin, Vector3i &out) {
     const int32_t minChunkX = (origin.x - PORTAL_SEARCH_RADIUS) >> 4;
     const int32_t maxChunkX = (origin.x + PORTAL_SEARCH_RADIUS) >> 4;
     const int32_t minChunkZ = (origin.z - PORTAL_SEARCH_RADIUS) >> 4;
@@ -326,7 +326,7 @@ bool NetherPortalBlock::findNearestPortal(Level &level, const Vector3i &origin, 
     return found;
 }
 
-bool NetherPortalBlock::findDestination(Level &destination, const Vector3i &source, Vector3i &out) {
+bool PortalBlock::findDestination(Level &destination, const Vector3i &source, Vector3i &out) {
     const int32_t scale = (int32_t) Dimension::NETHER_COORDINATE_SCALE;
     const bool toNether = destination.getDimensionType() == DimensionType::Nether;
 
@@ -419,7 +419,7 @@ void EndPortalBlock::onActorInside(ServerNetworkHandler &owner, ServerPlayer &pl
         Level &end = owner.getDimension(DimensionType::TheEnd);
         spawnObsidianPlatform(end, Vector3i(END_PLATFORM_X, END_PLATFORM_Y, END_PLATFORM_Z), &owner);
 
-        player.setPortalCooldown(NetherPortalBlock::PORTAL_COOLDOWN_TICKS);
+        player.setPortalCooldown(PortalBlock::PORTAL_COOLDOWN_TICKS);
         owner.changePlayerDimension(player, DimensionType::TheEnd,
                                     Vector3f((float) END_PLATFORM_X + 0.5f,
                                              (float) END_PLATFORM_Y + 1.0f,
@@ -429,7 +429,7 @@ void EndPortalBlock::onActorInside(ServerNetworkHandler &owner, ServerPlayer &pl
 
     Level &overworld = owner.getDimension(DimensionType::Overworld);
 
-    player.setPortalCooldown(NetherPortalBlock::PORTAL_COOLDOWN_TICKS);
+    player.setPortalCooldown(PortalBlock::PORTAL_COOLDOWN_TICKS);
     owner.changePlayerDimension(player, DimensionType::Overworld, overworld.getSpawnPositionForPlayer());
 }
 
@@ -573,7 +573,7 @@ bool ObsidianBlock::tryLightPortal(Level &level, const Vector3i &firePosition, S
     if (lightPortalAtBase(level, firePosition, owner))
         return true;
 
-    for (int32_t offset = 0; offset < NetherPortalBlock::MAX_PORTAL_SIZE; ++offset) {
+    for (int32_t offset = 0; offset < PortalBlock::MAX_PORTAL_SIZE; ++offset) {
         const Vector3i below(firePosition.x, firePosition.y - offset, firePosition.z);
         const std::string identifier = identifierAt(level, below.x, below.y, below.z);
 
@@ -600,7 +600,7 @@ bool ObsidianBlock::lightPortalAtBase(Level &level, const Vector3i &position, Se
             return false;
     }
 
-    const int32_t maxSize = NetherPortalBlock::MAX_PORTAL_SIZE;
+    const int32_t maxSize = PortalBlock::MAX_PORTAL_SIZE;
 
     int32_t sizePosX = 0;
     int32_t sizeNegX = 0;

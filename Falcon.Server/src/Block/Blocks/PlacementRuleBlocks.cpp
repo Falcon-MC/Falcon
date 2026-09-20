@@ -10,7 +10,7 @@ FALCON_REGISTER_BLOCK(CandleBlock, 360);
 FALCON_REGISTER_BLOCK(ScaffoldingBlock, 370);
 FALCON_REGISTER_BLOCK(CarpetBlock, 380);
 FALCON_REGISTER_BLOCK(PressurePlateBlock, 390);
-FALCON_REGISTER_BLOCK(RedstoneWireBlock, 400);
+FALCON_REGISTER_BLOCK(RedStoneWireBlock, 400);
 
 #include "Block/BlockIdentifier.h"
 #include "Block/BlockSupport.h"
@@ -282,17 +282,17 @@ bool PressurePlateBlock::canSurvive(Level &level, const Vector3i &position, cons
     return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
 }
 
-bool RedstoneWireBlock::matches(const std::string &identifier) {
+bool RedStoneWireBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:redstone_wire";
 }
 
-bool RedstoneWireBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
+bool RedStoneWireBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
     (void) blockFace;
 
     return DecorationSupport::isSolid(belowOf(level, position));
 }
 
-bool RedstoneWireBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+bool RedStoneWireBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
     (void) state;
     return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
 }

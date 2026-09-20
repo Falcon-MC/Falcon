@@ -99,9 +99,9 @@ public:
     bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
 };
 
-class RedstoneWireBlock final : public Block {
+class RedStoneWireBlock final : public Block {
 public:
-    explicit RedstoneWireBlock(const Block &block) : Block(block)
+    explicit RedStoneWireBlock(const Block &block) : Block(block)
     {
     }
 

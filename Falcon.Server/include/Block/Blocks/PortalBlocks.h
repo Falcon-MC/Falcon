@@ -4,7 +4,7 @@
 
 #include <string>
 
-class NetherPortalBlock final : public Block {
+class PortalBlock final : public Block {
 public:
     static constexpr int32_t PORTAL_DELAY_TICKS = 80;
 
@@ -16,7 +16,7 @@ public:
 
     static constexpr int32_t NETHER_ROOF_LIMIT = 115;
 
-    explicit NetherPortalBlock(const Block &block) : Block(block)
+    explicit PortalBlock(const Block &block) : Block(block)
     {
     }
 
