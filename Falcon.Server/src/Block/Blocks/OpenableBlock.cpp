@@ -54,6 +54,14 @@ bool OpenableBlock::toggle(ServerNetworkHandler &owner, Level &level, const Vect
     return true;
 }
 
+void OpenableBlock::openOnPlace(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                const BlockState &state) {
+    if (isOpen(state) || !RedstoneSystem::isGettingPower(owner, level, position))
+        return;
+
+    setOpen(owner, level, position, state, true);
+}
+
 void OpenableBlock::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                      const BlockState &state) {
     const bool manualOverride = hasManualOverride(level, position);

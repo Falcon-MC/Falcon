@@ -67,8 +67,8 @@ bool DoorBlock::isGettingPower(ServerNetworkHandler &owner, Level &level, const 
            || RedstoneSystem::isGettingPower(owner, level, upper);
 }
 
-bool DoorBlock::toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                       const BlockState &state) {
+bool DoorBlock::setOpen(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                        const BlockState &state, bool open) {
     const Vector3i lower = lowerPosition(level, position, state);
     const Vector3i upper = RedstoneFace::relative(lower, RedstoneFace::UP);
 
@@ -77,11 +77,22 @@ bool DoorBlock::toggle(ServerNetworkHandler &owner, Level &level, const Vector3i
     if (lowerState.mName != upperState.mName)
         return false;
 
-    const bool open = !OpenableBlock::isOpen(lowerState);
-
     OpenableBlock::setOpen(owner, level, lower, lowerState, open);
     OpenableBlock::setOpen(owner, level, upper, upperState, open);
 
+    return true;
+}
+
+bool DoorBlock::toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                       const BlockState &state) {
+    const Vector3i lower = lowerPosition(level, position, state);
+    const BlockState lowerState = stateAt(level, lower);
+    const bool open = !OpenableBlock::isOpen(lowerState);
+
+    if (!setOpen(owner, level, position, state, open))
+        return false;
+
+    const Vector3i upper = RedstoneFace::relative(lower, RedstoneFace::UP);
     const bool manual = open || isGettingPower(owner, level, lower, lowerState);
     OpenableBlock::setManualOverride(level, lower, manual);
     OpenableBlock::setManualOverride(level, upper, manual);

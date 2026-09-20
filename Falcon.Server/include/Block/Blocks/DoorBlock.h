@@ -20,6 +20,9 @@ public:
     static bool isGettingPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                const BlockState &state);
 
+    static bool setOpen(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                        const BlockState &state, bool open);
+
     static bool toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                        const BlockState &state);
 

@@ -20,6 +20,9 @@ public:
     static bool toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                        const BlockState &state);
 
+    static void openOnPlace(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                            const BlockState &state);
+
     static void onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state);
 };
