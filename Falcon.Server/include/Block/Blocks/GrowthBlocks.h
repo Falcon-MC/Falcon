@@ -74,6 +74,9 @@ public:
 
     void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
+
+    void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                            const BlockState &state) const override;
 };
 
 class SpreadingBlock : public Block {

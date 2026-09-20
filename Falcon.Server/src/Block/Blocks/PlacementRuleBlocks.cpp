@@ -1,5 +1,17 @@
 #include "Block/Blocks/PlacementRuleBlocks.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(LadderBlock, 180);
+FALCON_REGISTER_BLOCK(ReplaceableBlock, 330);
+FALCON_REGISTER_BLOCK(SnowLayerBlock, 340);
+FALCON_REGISTER_BLOCK(SlabBlock, 350);
+FALCON_REGISTER_BLOCK(CandleBlock, 360);
+FALCON_REGISTER_BLOCK(ScaffoldingBlock, 370);
+FALCON_REGISTER_BLOCK(CarpetBlock, 380);
+FALCON_REGISTER_BLOCK(PressurePlateBlock, 390);
+FALCON_REGISTER_BLOCK(RedstoneWireBlock, 400);
+
 #include "Block/BlockIdentifier.h"
 #include "Block/BlockSupport.h"
 #include "Block/Blocks/LiquidView.h"
@@ -248,6 +260,11 @@ bool CarpetBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFa
     return !DecorationSupport::isAir(belowOf(level, position));
 }
 
+bool CarpetBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) state;
+    return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
+}
+
 bool PressurePlateBlock::matches(const std::string &identifier) {
     return BlockIdentifier::endsWith(identifier, "_pressure_plate");
 }
@@ -260,6 +277,11 @@ bool PressurePlateBlock::canPlaceAt(Level &level, const Vector3i &position, int 
            || BlockIdentifier::endsWith(below.mName, "_fence");
 }
 
+bool PressurePlateBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) state;
+    return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
+}
+
 bool RedstoneWireBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:redstone_wire";
 }
@@ -268,6 +290,11 @@ bool RedstoneWireBlock::canPlaceAt(Level &level, const Vector3i &position, int b
     (void) blockFace;
 
     return DecorationSupport::isSolid(belowOf(level, position));
+}
+
+bool RedstoneWireBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) state;
+    return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
 }
 
 bool LadderBlock::matches(const std::string &identifier) {
@@ -287,4 +314,11 @@ bool LadderBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFa
         return false;
 
     return BlockSupport::isAttachable(support, blockFace);
+}
+
+bool LadderBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    if (!state.mStates.contains("facing_direction"))
+        return true;
+
+    return canPlaceAt(level, position, state.mStates.getInt("facing_direction"));
 }

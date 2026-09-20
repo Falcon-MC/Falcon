@@ -95,11 +95,15 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
-    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
+    std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position,
+                                                        const BlockState &state,
+                                                        int playerFacing) const override;
 
     void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                   const BlockState &state) const override;
+
+    std::vector<Vector3i> getAffectedBlocks(Level &level, const Vector3i &position,
+                                            const BlockState &state) const override;
 };
 
 class DoorOrientationBlock final : public Block {
@@ -114,8 +118,14 @@ public:
 
     bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
 
-    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
+    bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
+
+    std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position,
+                                                        const BlockState &state,
+                                                        int playerFacing) const override;
+
+    std::vector<Vector3i> getAffectedBlocks(Level &level, const Vector3i &position,
+                                            const BlockState &state) const override;
 };
 
 class TrapdoorOrientationBlock final : public Block {

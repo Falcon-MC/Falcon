@@ -42,31 +42,3 @@ bool DoorBlock::isRightHinged(Level *level, const std::string &identifier, const
     return !isTransparentAt(*level, right) && isTransparentAt(*level, left);
 }
 
-bool DoorBlock::canPlaceUpperHalf(Level &level, const Vector3i &position) {
-    if (position.y + 1 > level.getMaxY())
-        return false;
-
-    const BlockState above = level.getBlockState(position.x, position.y + 1, position.z);
-    if (above.mName == "minecraft:air")
-        return true;
-
-    const BlockData *data = BlockDataTable::find(above.mName.c_str());
-    return data != nullptr && !data->mSolid;
-}
-
-void DoorBlock::placeUpperHalf(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                               const BlockState &state) {
-    if (!state.mStates.contains("upper_block_bit"))
-        return;
-
-    if (!canPlaceUpperHalf(level, position))
-        return;
-
-    Tag states = state.mStates;
-    states.putByte("upper_block_bit", 1);
-
-    const Vector3i upper(position.x, position.y + 1, position.z);
-    const BlockState upperState(state.mName, states);
-    level.setBlockState(upper.x, upper.y, upper.z, upperState);
-    BlockActionHandler::broadcastBlockUpdate(owner, level, upper, upperState);
-}

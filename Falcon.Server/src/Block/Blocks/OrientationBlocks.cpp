@@ -1,10 +1,24 @@
 #include "Block/Blocks/OrientationBlocks.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(DoorOrientationBlock, 120);
+FALCON_REGISTER_BLOCK(TrapdoorOrientationBlock, 130);
+FALCON_REGISTER_BLOCK(PistonBlock, 150);
+FALCON_REGISTER_BLOCK(FacingMachineBlock, 160);
+FALCON_REGISTER_BLOCK(TorchOrientationBlock, 170);
+FALCON_REGISTER_BLOCK(WallAttachedBlock, 190);
+FALCON_REGISTER_BLOCK(BellOrientationBlock, 200);
+FALCON_REGISTER_BLOCK(FaceAttachedBlock, 210);
+FALCON_REGISTER_BLOCK(BedOrientationBlock, 220);
+FALCON_REGISTER_BLOCK(CardinalPlayerBlock, 230);
+
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
 #include "Block/BlockIdentifier.h"
 #include "Block/Blocks/BedBlock.h"
 #include "Block/Blocks/DoorBlock.h"
+#include "Block/Blocks/DoubleBlock.h"
 #include "Block/BlockSupport.h"
 #include "Block/Components/BlockPlacementComponent.h"
 #include "Block/Components/PlacementOrientation.h"
@@ -167,13 +181,19 @@ bool BedOrientationBlock::matches(const std::string &identifier) {
     return BedBlock::matches(identifier);
 }
 
-void BedOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                                   const BlockState &state, const ItemStack &usedItem, int blockFace) const {
-    (void) usedItem;
-    (void) blockFace;
+std::vector<BlockPlacementEntry> BedOrientationBlock::getPlacementBlocks(Level &level, const Vector3i &position,
+                                                                        const BlockState &state,
+                                                                        int playerFacing) const {
+    (void) level;
 
-    BedBlock::placeHeadPiece(owner, owner.getLevelFor(player), position, state,
-                             BlockPlacementComponent::getHorizontalFacing(player.getRotation().y));
+    if (!state.mStates.contains("head_piece_bit") || playerFacing < PlacementOrientation::FACE_NORTH)
+        return {};
+
+    Tag states = state.mStates;
+    states.putByte("head_piece_bit", 1);
+
+    return {BlockPlacementEntry{PlacementOrientation::relativePosition(position, playerFacing),
+                                BlockState(state.mName, states)}};
 }
 
 bool BedOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
@@ -186,16 +206,45 @@ void BedOrientationBlock::onBroken(ServerNetworkHandler &owner, Level &level, co
     BedBlock::breakOtherHalf(owner, level, position, state);
 }
 
+std::vector<Vector3i> BedOrientationBlock::getAffectedBlocks(Level &level, const Vector3i &position,
+                                                             const BlockState &state) const {
+    return BedBlock::otherPiece(level, position, state);
+}
+
 bool DoorOrientationBlock::matches(const std::string &identifier) {
     return DoorBlock::matches(identifier);
 }
 
-void DoorOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                                    const BlockState &state, const ItemStack &usedItem, int blockFace) const {
-    (void) usedItem;
-    (void) blockFace;
+bool DoorOrientationBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    if (!DoubleBlock::isComplete(level, position, state))
+        return false;
 
-    DoorBlock::placeUpperHalf(owner, owner.getLevelFor(player), position, state);
+    if (DoubleBlock::isUpperHalf(state))
+        return true;
+
+    const BlockState below = level.getBlockState(position.x, position.y - 1, position.z);
+    return BlockSupport::isSolidOrCauldron(below);
+}
+
+std::vector<BlockPlacementEntry> DoorOrientationBlock::getPlacementBlocks(Level &level, const Vector3i &position,
+                                                                         const BlockState &state,
+                                                                         int playerFacing) const {
+    (void) level;
+    (void) playerFacing;
+
+    if (!state.mStates.contains("upper_block_bit"))
+        return {};
+
+    Tag states = state.mStates;
+    states.putByte("upper_block_bit", 1);
+
+    return {BlockPlacementEntry{Vector3i(position.x, position.y + 1, position.z),
+                                BlockState(state.mName, states)}};
+}
+
+std::vector<Vector3i> DoorOrientationBlock::getAffectedBlocks(Level &level, const Vector3i &position,
+                                                              const BlockState &state) const {
+    return DoubleBlock::otherHalf(level, position, state);
 }
 
 BlockState DoorOrientationBlock::applyPlacementOrientation(const BlockState &state,

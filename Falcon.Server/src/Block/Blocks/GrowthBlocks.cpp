@@ -1,9 +1,18 @@
 #include "Block/Blocks/GrowthBlocks.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(StemBlock, 250);
+FALCON_REGISTER_BLOCK(NetherWartBlock, 260);
+FALCON_REGISTER_BLOCK(CropBlock, 270);
+FALCON_REGISTER_BLOCK(SaplingBlock, 280);
+FALCON_REGISTER_BLOCK(LeavesBlock, 290);
+FALCON_REGISTER_BLOCK(SpreadingBlock, 300);
+FALCON_REGISTER_BLOCK(NyliumBlock, 310);
+
 #include "Block/BlockIdentifier.h"
 #include "Block/BlockLightProperties.h"
 #include "Block/Systems/RandomTickSystem.h"
-#include "Block/Systems/RedstoneSystem.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/Generator/Feature/Tree/LegacyTreeObject.h"
 #include "Level/Generator/Random/SimpleRandom.h"
@@ -138,7 +147,7 @@ void CropBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
     if (growth >= getMaxGrowth())
         return;
 
-    RedstoneSystem::setBlockState(owner, level, position, withState(state, getGrowthState(), growth + 1));
+    level.setBlock(position, withState(state, getGrowthState(), growth + 1), false);
 }
 
 std::string StemBlock::getFruitIdentifier() const {
@@ -155,7 +164,7 @@ void StemBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
 
     const int32_t growth = state.mStates.getInt("growth");
     if (growth < 7) {
-        RedstoneSystem::setBlockState(owner, level, position, withState(state, "growth", growth + 1));
+        level.setBlock(position, withState(state, "growth", growth + 1), false);
         return;
     }
 
@@ -179,7 +188,7 @@ void StemBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
         && below.mName != "minecraft:dirt")
         return;
 
-    RedstoneSystem::setBlockState(owner, level, target, BlockState(fruit));
+    level.setBlock(target, BlockState(fruit), false);
 }
 
 TreeWoodType SaplingBlock::getWoodType() const {
@@ -236,11 +245,21 @@ void SaplingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const
     if (state.mStates.getByte("age_bit") == 0) {
         Tag states = state.mStates;
         states.putByte("age_bit", 1);
-        RedstoneSystem::setBlockState(owner, level, position, BlockState(state.mName, states));
+        level.setBlock(position, BlockState(state.mName, states), false);
         return;
     }
 
     growTree(owner, level, position);
+}
+
+void LeavesBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                     const BlockState &state) const {
+    if (state.mStates.getByte("update_bit") != 0 || state.mStates.getByte("persistent_bit") != 0)
+        return;
+
+    Tag states = state.mStates;
+    states.putByte("update_bit", 1);
+    level.setBlock(position, BlockState(state.mName, states), false);
 }
 
 void LeavesBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -252,7 +271,7 @@ void LeavesBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const 
     if (findLog(level, position, LEAVES_SEARCH_DISTANCE, visited)) {
         Tag states = state.mStates;
         states.putByte("update_bit", 0);
-        RedstoneSystem::setBlockState(owner, level, position, BlockState(state.mName, states));
+        level.setBlock(position, BlockState(state.mName, states), false);
         return;
     }
 
@@ -264,7 +283,7 @@ void SpreadingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
     const Vector3i above(position.x, position.y + 1, position.z);
 
     if (lightFilterAt(level, above) > 1) {
-        RedstoneSystem::setBlockState(owner, level, position, BlockState("minecraft:dirt"));
+        level.setBlock(position, BlockState("minecraft:dirt"), false);
         return;
     }
 
@@ -283,7 +302,7 @@ void SpreadingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
         || lightFilterAt(level, targetAbove) >= MAXIMUM_SPREAD_LIGHT_FILTER)
         return;
 
-    RedstoneSystem::setBlockState(owner, level, target, BlockState(state.mName));
+    level.setBlock(target, BlockState(state.mName), false);
 }
 
 void NyliumBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -293,5 +312,5 @@ void NyliumBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const 
     if (isTransparentAt(level, Vector3i(position.x, position.y + 1, position.z)))
         return;
 
-    RedstoneSystem::setBlockState(owner, level, position, BlockState("minecraft:netherrack"));
+    level.setBlock(position, BlockState("minecraft:netherrack"), false);
 }

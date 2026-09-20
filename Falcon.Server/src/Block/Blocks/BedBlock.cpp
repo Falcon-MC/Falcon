@@ -86,28 +86,6 @@ int BedBlock::headFace(const BlockState &state) {
     }
 }
 
-void BedBlock::placeHeadPiece(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                              const BlockState &state, int playerFacing) {
-    if (!state.mStates.contains(HEAD_PIECE_BIT) || !RedstoneFace::isHorizontal(playerFacing))
-        return;
-
-    const Vector3i head = RedstoneFace::relative(position, playerFacing);
-
-    const BlockState existing = level.getBlockState(head.x, head.y, head.z);
-    if (existing.mName != "minecraft:air") {
-        const BlockData *data = BlockDataTable::find(existing.mName.c_str());
-        if (data == nullptr || data->mSolid)
-            return;
-    }
-
-    Tag states = state.mStates;
-    states.putByte(HEAD_PIECE_BIT, 1);
-
-    const BlockState headState(state.mName, states);
-    level.setBlockState(head.x, head.y, head.z, headState);
-    BlockActionHandler::broadcastBlockUpdate(owner, level, head, headState);
-}
-
 bool BedBlock::findHead(Level &level, const Vector3i &position, const BlockState &state, Vector3i &head) {
     if (isHeadPiece(state)) {
         head = position;
@@ -213,21 +191,28 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
     return true;
 }
 
-void BedBlock::breakOtherHalf(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                              const BlockState &state) {
+std::vector<Vector3i> BedBlock::otherPiece(Level &level, const Vector3i &position, const BlockState &state) {
     const int face = headFace(state);
     const Vector3i other = isHeadPiece(state) ? RedstoneFace::relative(position, RedstoneFace::opposite(face))
                                               : RedstoneFace::relative(position, face);
 
-    const Vector3i head = isHeadPiece(state) ? position : other;
-    owner.wakeSleepersAt(head);
-
     const BlockState otherState = level.getBlockState(other.x, other.y, other.z);
     if (otherState.mName != state.mName || isHeadPiece(otherState) == isHeadPiece(state)
         || otherState.mStates.getInt(DIRECTION, 0) != state.mStates.getInt(DIRECTION, 0))
-        return;
+        return {};
 
-    const BlockState air("minecraft:air");
-    level.setBlockState(other.x, other.y, other.z, air);
-    BlockActionHandler::broadcastBlockUpdate(owner, level, other, level.getBlockState(other.x, other.y, other.z));
+    return {other};
+}
+
+void BedBlock::breakOtherHalf(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state) {
+    const int face = headFace(state);
+    const Vector3i head = isHeadPiece(state) ? position : RedstoneFace::relative(position, face);
+    owner.wakeSleepersAt(head);
+
+    for (const Vector3i &other: otherPiece(level, position, state)) {
+        const BlockState air("minecraft:air");
+        level.setBlockState(other.x, other.y, other.z, air);
+        BlockActionHandler::broadcastBlockUpdate(owner, level, other, level.getBlockState(other.x, other.y, other.z));
+    }
 }

@@ -5,6 +5,8 @@
 #include "Block/Components/PlacementOrientation.h"
 #include "Block/BlockData.h"
 #include "Level/Level.h"
+#include "Network/Handler/BlockActionHandler.h"
+#include "Protocol/Types/ItemStack.h"
 
 namespace {
     bool isSolidNeighbour(Level *level, const Vector3i &position) {
@@ -109,6 +111,38 @@ BlockState Block::applyPlacementOrientation(const BlockState &state, const Block
         states.putString("orientation", crafterOrientation(context.mPitch, oppositeFacing));
 
     return BlockState(state.mName, states);
+}
+
+std::vector<BlockPlacementEntry> Block::getPlacementBlocks(Level &level, const Vector3i &position,
+                                                           const BlockState &state, int playerFacing) const {
+    (void) level;
+    (void) position;
+    (void) state;
+    (void) playerFacing;
+    return {};
+}
+
+std::vector<Vector3i> Block::getAffectedBlocks(Level &level, const Vector3i &position,
+                                               const BlockState &state) const {
+    (void) level;
+    (void) position;
+    (void) state;
+    return {};
+}
+
+bool Block::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) level;
+    (void) position;
+    (void) state;
+    return true;
+}
+
+void Block::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                               const BlockState &state) const {
+    if (canSurvive(level, position, state))
+        return;
+
+    BlockActionHandler::destroyBlock(owner, level, position, state, true, ItemStack::air());
 }
 
 const BlockBehavior &Block::getBehavior() const {

@@ -14,9 +14,4 @@ public:
 
     static bool isRightHinged(Level *level, const std::string &identifier, const Vector3i &position,
                               int playerFacing);
-
-    static bool canPlaceUpperHalf(Level &level, const Vector3i &position);
-
-    static void placeUpperHalf(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                               const BlockState &state);
 };

@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 struct BlockData;
 class Actor;
@@ -32,6 +33,11 @@ struct BlockPlacementContext {
     int mPistonFacing;
 };
 
+struct BlockPlacementEntry {
+    Vector3i mPosition;
+    BlockState mState;
+};
+
 enum class PlacementMergeResult {
     None,
     Merged,
@@ -49,6 +55,14 @@ public:
         (void) position;
         (void) state;
         return false;
+    }
+
+    virtual void onTouch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                         const BlockState &state) const {
+        (void) owner;
+        (void) player;
+        (void) position;
+        (void) state;
     }
 
     virtual bool onPunch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
@@ -116,6 +130,14 @@ public:
         (void) state;
     }
 
+    virtual void onActorInside(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                               const BlockState &state) const {
+        (void) owner;
+        (void) player;
+        (void) position;
+        (void) state;
+    }
+
     virtual void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                               const BlockState &state) const {
         (void) owner;
@@ -123,6 +145,17 @@ public:
         (void) position;
         (void) state;
     }
+
+    virtual std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position,
+                                                                const BlockState &state, int playerFacing) const;
+
+    virtual std::vector<Vector3i> getAffectedBlocks(Level &level, const Vector3i &position,
+                                                    const BlockState &state) const;
+
+    virtual bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const;
+
+    virtual void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                    const BlockState &state) const;
 
     virtual bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state, ServerActor &projectile) const {

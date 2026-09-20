@@ -1,7 +1,12 @@
 #include "Block/Blocks/PlantBlock.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(PlantBlock, 320);
+
 #include "Block/BlockIdentifier.h"
 #include "Block/Blocks/LiquidView.h"
+#include "Block/Components/PlacementOrientation.h"
 #include "Level/Generator/Feature/IFeature.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -133,4 +138,9 @@ bool PlantBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFac
     }
 
     return true;
+}
+
+bool PlantBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) state;
+    return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
 }

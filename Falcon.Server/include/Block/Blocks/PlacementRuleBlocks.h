@@ -82,6 +82,8 @@ public:
     static bool matches(const std::string &identifier);
 
     bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
+
+    bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
 };
 
 class PressurePlateBlock final : public Block {
@@ -93,6 +95,8 @@ public:
     static bool matches(const std::string &identifier);
 
     bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
+
+    bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
 };
 
 class RedstoneWireBlock final : public Block {
@@ -104,6 +108,8 @@ public:
     static bool matches(const std::string &identifier);
 
     bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
+
+    bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
 };
 
 class LadderBlock final : public WallAttachedBlock {
@@ -115,4 +121,6 @@ public:
     static bool matches(const std::string &identifier);
 
     bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
+
+    bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
 };
