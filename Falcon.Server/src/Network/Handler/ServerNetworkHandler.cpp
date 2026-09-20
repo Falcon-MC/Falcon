@@ -126,6 +126,7 @@
 #include "Block/Systems/FurnaceSystem.h"
 #include "Block/Systems/CommandBlockSystem.h"
 #include "Block/Systems/FireSystem.h"
+#include "Block/Systems/RandomTickSystem.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Protocol/Packets/CommandBlockUpdatePacket.h"
 #include "Block/Blocks/BedBlock.h"
@@ -1175,8 +1176,10 @@ void ServerNetworkHandler::tick() {
     mProfiler.endSection(ProfilerSection::Redstone);
 
     mProfiler.beginSection(ProfilerSection::Fire);
-    for (Level *level: levels)
+    for (Level *level: levels) {
         FireSystem::tick(*this, *level);
+        RandomTickSystem::tick(*this, *level);
+    }
     mProfiler.endSection(ProfilerSection::Fire);
 
     mProfiler.beginSection(ProfilerSection::Announcement);

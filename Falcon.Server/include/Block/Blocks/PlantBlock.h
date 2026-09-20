@@ -16,7 +16,7 @@ enum class PlantSupport {
     Cactus
 };
 
-class PlantBlock final : public Block {
+class PlantBlock : public Block {
 public:
     explicit PlantBlock(const Block &block);
 

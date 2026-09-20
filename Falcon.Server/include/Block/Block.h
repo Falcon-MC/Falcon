@@ -116,6 +116,14 @@ public:
         (void) state;
     }
 
+    virtual void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+    }
+
     virtual bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state, ServerActor &projectile) const {
         (void) owner;

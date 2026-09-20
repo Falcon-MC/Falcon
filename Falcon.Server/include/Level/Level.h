@@ -232,6 +232,8 @@ public:
 
     bool isColumnActive(int32_t chunkX, int32_t chunkZ) const;
 
+    const std::unordered_set<int64_t> &getActiveColumns() const { return mActiveColumns; }
+
     size_t getScheduledFluidCount() const { return mBlockUpdateScheduler.getScheduledCount(); }
 
     size_t getLastFluidProcessedCount() const { return mBlockUpdateScheduler.getLastProcessedCount(); }
