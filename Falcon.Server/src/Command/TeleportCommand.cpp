@@ -48,25 +48,6 @@ std::vector<CommandOverloadData> TeleportCommand::getOverloads() const {
     return {toPlayer, toPosition, victimToPlayer, victimToPosition};
 }
 
-bool TeleportCommand::parseCoordinate(const std::string &value, float origin, float &out) {
-    const bool relative = !value.empty() && value[0] == '~';
-    const std::string number = relative ? value.substr(1) : value;
-
-    float parsed = 0.0f;
-    if (!number.empty()) {
-        char *end = nullptr;
-        errno = 0;
-        parsed = std::strtof(number.c_str(), &end);
-        if (end == number.c_str() || *end != '\0' || errno == ERANGE || !std::isfinite(parsed))
-            return false;
-    } else if (!relative) {
-        return false;
-    }
-
-    out = relative ? origin + parsed : parsed;
-    return true;
-}
-
 bool TeleportCommand::parsePosition(const std::vector<std::string> &arguments, size_t first,
                                     const Vector3f &origin, Vector3f &out) {
     if (arguments.size() != first + 3)

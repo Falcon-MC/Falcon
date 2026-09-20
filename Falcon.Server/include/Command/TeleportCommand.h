@@ -15,8 +15,6 @@ public:
     std::vector<CommandOverloadData> getOverloads() const override;
 
 private:
-    static bool parseCoordinate(const std::string &value, float origin, float &out);
-
     static bool parsePosition(const std::vector<std::string> &arguments, size_t first, const Vector3f &origin,
                               Vector3f &out);
 

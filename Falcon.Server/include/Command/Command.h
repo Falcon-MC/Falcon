@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Command/CommandOrigin.h"
+#include "Core/Math/Vector3i.h"
 #include "Protocol/Types/AdventureSettingData.h"
 #include "Protocol/Types/CommandData.h"
 
@@ -26,6 +27,13 @@ public:
                                                 const std::vector<std::string> &playerNames);
 
     static std::string joinArguments(const std::vector<std::string> &arguments, size_t first);
+
+    static bool parseCoordinate(const std::string &value, float origin, float &out);
+
+    static bool parseBlockCoordinate(const std::string &value, int32_t origin, int32_t &out);
+
+    static bool parseBlockPosition(const std::vector<std::string> &arguments, size_t first,
+                                   const Vector3i &origin, Vector3i &out);
 
     const std::string &getName() const { return mName; }
 
