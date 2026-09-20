@@ -12,6 +12,8 @@ public:
 
     std::vector<CommandOverloadData> getOverloads() const override;
 
+    size_t getRawArgumentIndex() const override { return 1; }
+
 private:
     ServerNetworkHandler &mHandler;
 };

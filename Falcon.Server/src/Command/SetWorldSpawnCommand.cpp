@@ -54,7 +54,7 @@ bool SetWorldSpawnCommand::execute(CommandOrigin &sender, const std::vector<std:
     }
 
     if (spawn.y < level.getMinY() || spawn.y > level.getMaxY()) {
-        sender.sendTranslation("commands.setworldspawn.wrongDimension", {});
+        sender.sendTranslation("commands.setblock.outOfWorld", {});
         return false;
     }
 

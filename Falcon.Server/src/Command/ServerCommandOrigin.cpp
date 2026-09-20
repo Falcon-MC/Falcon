@@ -1,6 +1,13 @@
 #include "Command/ServerCommandOrigin.h"
 
 #include "Core/Debug/BedrockLog.h"
+#include "Network/Handler/ServerNetworkHandler.h"
+
+ServerCommandOrigin::ServerCommandOrigin(ServerNetworkHandler *handler) : mHandler(handler) {}
+
+Level *ServerCommandOrigin::getLevel() {
+    return mHandler == nullptr ? nullptr : &mHandler->getLevel();
+}
 
 const std::string &ServerCommandOrigin::getSenderName() const {
     static const std::string name = "Console";

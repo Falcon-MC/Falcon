@@ -2,6 +2,8 @@
 
 #include "Command/Command.h"
 
+#include <vector>
+
 class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -24,6 +26,13 @@ private:
 
     static constexpr int64_t MAX_COMPARED_BLOCKS = 16 * 16 * 256 * 8;
 
+    static constexpr int MAX_DEPTH = 8;
+
+    static constexpr int32_t MAX_COMMANDS = 10000;
+
+    std::vector<ServerPlayer *> resolveTargets(CommandOrigin &sender, const Context &context,
+                                               const std::string &selector);
+
     bool run(CommandOrigin &sender, Context context, const std::vector<std::string> &arguments, size_t index,
              int32_t &successes);
 
@@ -39,4 +48,6 @@ private:
     Level &resolveLevel(const Context &context) const;
 
     ServerNetworkHandler &mHandler;
+    int mDepth = 0;
+    int32_t mExecuted = 0;
 };

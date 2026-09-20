@@ -34,9 +34,10 @@ std::vector<CommandOverloadData> SpawnPointCommand::getOverloads() const {
 }
 
 bool SpawnPointCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
+    const bool positionOnly = !mClear && arguments.size() == 3;
     std::vector<ServerPlayer *> targets;
 
-    if (arguments.empty()) {
+    if (arguments.empty() || positionOnly) {
         ServerPlayer *self = sender.asPlayer();
         if (self == nullptr) {
             sender.sendTranslation("commands.generic.targetNotPlayer", {});
@@ -72,25 +73,27 @@ bool SpawnPointCommand::execute(CommandOrigin &sender, const std::vector<std::st
         return true;
     }
 
-    const bool explicitPosition = arguments.size() == 4;
+    const bool explicitPosition = arguments.size() == 4 || positionOnly;
     if (!arguments.empty() && arguments.size() != 1 && !explicitPosition) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
     }
+
+    const size_t positionIndex = positionOnly ? 0 : 1;
 
     for (ServerPlayer *target: targets) {
         const Vector3f position = target->getPosition();
         Vector3i spawn((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                        (int32_t) std::floor(position.z));
 
-        if (explicitPosition && !parseBlockPosition(arguments, 1, spawn, spawn)) {
+        if (explicitPosition && !parseBlockPosition(arguments, positionIndex, spawn, spawn)) {
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
         }
 
         Level &level = mHandler.getLevelFor(*target);
         if (spawn.y < level.getMinY() || spawn.y > level.getMaxY()) {
-            sender.sendTranslation("commands.spawnpoint.wrongDimension", {});
+            sender.sendTranslation("commands.setblock.outOfWorld", {});
             return false;
         }
 

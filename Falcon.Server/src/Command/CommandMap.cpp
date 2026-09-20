@@ -72,6 +72,29 @@ std::vector<std::string> CommandMap::_tokenize(const std::string &commandLine) {
     return tokens;
 }
 
+std::string CommandMap::_skipFields(const std::string &commandLine, size_t count) {
+    size_t index = 0;
+    size_t skipped = 0;
+
+    while (index < commandLine.size() && skipped < count) {
+        while (index < commandLine.size() && std::isspace((unsigned char) commandLine[index]) != 0)
+            ++index;
+
+        if (index >= commandLine.size())
+            break;
+
+        while (index < commandLine.size() && std::isspace((unsigned char) commandLine[index]) == 0)
+            ++index;
+
+        ++skipped;
+    }
+
+    while (index < commandLine.size() && std::isspace((unsigned char) commandLine[index]) != 0)
+        ++index;
+
+    return commandLine.substr(index);
+}
+
 bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine) {
     std::string line = commandLine;
     if (!line.empty() && line[0] == '/')
@@ -92,7 +115,17 @@ bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine)
         return false;
     }
 
-    const std::vector<std::string> arguments(tokens.begin() + 1, tokens.end());
+    std::vector<std::string> arguments(tokens.begin() + 1, tokens.end());
+
+    const size_t rawIndex = command->getRawArgumentIndex();
+    if (rawIndex != (size_t) -1 && arguments.size() > rawIndex) {
+        const std::string raw = _skipFields(line, rawIndex + 1);
+        if (!raw.empty()) {
+            arguments.resize(rawIndex);
+            arguments.push_back(raw);
+        }
+    }
+
     return command->execute(sender, arguments);
 }
 

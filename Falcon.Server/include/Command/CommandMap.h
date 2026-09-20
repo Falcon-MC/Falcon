@@ -20,6 +20,8 @@ public:
 private:
     static std::vector<std::string> _tokenize(const std::string &commandLine);
 
+    static std::string _skipFields(const std::string &commandLine, size_t count);
+
     std::vector<std::shared_ptr<Command>> mCommands;
     std::unordered_map<std::string, Command *> mByName;
 };

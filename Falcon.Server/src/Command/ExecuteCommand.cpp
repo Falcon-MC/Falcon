@@ -88,6 +88,12 @@ std::vector<CommandOverloadData> ExecuteCommand::getOverloads() const {
     return {overload};
 }
 
+std::vector<ServerPlayer *> ExecuteCommand::resolveTargets(CommandOrigin &sender, const Context &context,
+                                                           const std::string &selector) {
+    ExecuteCommandOrigin origin(sender, context.mExecutor, context.mPosition, context.mRotation, context.mLevel);
+    return mHandler.resolveTargets(origin, selector);
+}
+
 Level &ExecuteCommand::resolveLevel(const Context &context) const {
     return context.mLevel == nullptr ? mHandler.getLevel() : *context.mLevel;
 }
@@ -199,14 +205,10 @@ bool ExecuteCommand::testBlocks(CommandOrigin &sender, const Context &context,
                 if (masked && source.mName == "minecraft:air")
                     continue;
 
-                sender.sendTranslation("commands.compare.failed", {});
                 matched = false;
             }
         }
     }
-
-    if (matched)
-        sender.sendTranslation("commands.compare.success", {std::to_string(count)});
 
     return true;
 }
@@ -226,12 +228,18 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
             return false;
         }
 
+        if (mExecuted >= MAX_COMMANDS)
+            return false;
+
+        ++mExecuted;
+
         ExecuteCommandOrigin origin(sender, context.mExecutor, context.mPosition, context.mRotation,
                                     context.mLevel);
 
-        if (!mHandler.getCommands().dispatch(origin, joinArguments(arguments, index + 1))) {
-            sender.sendTranslation("commands.execute.failed",
-                                   {arguments[index + 1], origin.getSenderName()});
+        const std::string chained = joinArguments(arguments, index + 1);
+
+        if (!mHandler.getCommands().dispatch(origin, chained)) {
+            sender.sendTranslation("commands.execute.failed", {chained, origin.getSenderName()});
             return false;
         }
 
@@ -245,7 +253,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
             return false;
         }
 
-        const std::vector<ServerPlayer *> targets = mHandler.resolveTargets(sender, arguments[index + 1]);
+        const std::vector<ServerPlayer *> targets = resolveTargets(sender, context, arguments[index + 1]);
         if (targets.empty()) {
             sender.sendTranslation("commands.generic.noTargetMatch", {});
             return false;
@@ -301,7 +309,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
                 return false;
             }
 
-            const std::vector<ServerPlayer *> targets = mHandler.resolveTargets(sender, arguments[index + 2]);
+            const std::vector<ServerPlayer *> targets = resolveTargets(sender, context, arguments[index + 2]);
             if (targets.empty()) {
                 sender.sendTranslation("commands.generic.noTargetMatch", {});
                 return false;
@@ -339,7 +347,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
                 return false;
             }
 
-            const std::vector<ServerPlayer *> targets = mHandler.resolveTargets(sender, arguments[index + 2]);
+            const std::vector<ServerPlayer *> targets = resolveTargets(sender, context, arguments[index + 2]);
             if (targets.empty()) {
                 sender.sendTranslation("commands.generic.noTargetMatch", {});
                 return false;
@@ -376,7 +384,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
                 return false;
             }
 
-            const std::vector<ServerPlayer *> targets = mHandler.resolveTargets(sender, arguments[index + 2]);
+            const std::vector<ServerPlayer *> targets = resolveTargets(sender, context, arguments[index + 2]);
             if (targets.empty()) {
                 sender.sendTranslation("commands.generic.noTargetMatch", {});
                 return false;
@@ -425,17 +433,21 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
             return false;
         }
 
+        std::string seen;
         for (char axis: axes) {
+            if ((axis != 'x' && axis != 'y' && axis != 'z') || seen.find(axis) != std::string::npos) {
+                sender.sendTranslation("commands.execute.align.invalidInput", {});
+                return false;
+            }
+
+            seen.push_back(axis);
+
             if (axis == 'x')
                 context.mPosition.x = std::floor(context.mPosition.x);
             else if (axis == 'y')
                 context.mPosition.y = std::floor(context.mPosition.y);
-            else if (axis == 'z')
+            else
                 context.mPosition.z = std::floor(context.mPosition.z);
-            else {
-                sender.sendTranslation("commands.execute.align.invalidInput", {});
-                return false;
-            }
         }
 
         return runChain(sender, context, arguments, index + 2, successes);
@@ -485,7 +497,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
                 return false;
             }
 
-            matched = !mHandler.resolveTargets(sender, arguments[index + 2]).empty();
+            matched = !resolveTargets(sender, context, arguments[index + 2]).empty();
             next = index + 3;
         } else {
             //TODO: the score condition needs a scoreboard, which does not exist yet
@@ -522,6 +534,14 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
 }
 
 bool ExecuteCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
+    if (mDepth >= MAX_DEPTH) {
+        sender.sendTranslation("commands.execute.allInvocationsFailed", {joinArguments(arguments, 0)});
+        return false;
+    }
+
+    if (mDepth == 0)
+        mExecuted = 0;
+
     Context context;
     context.mExecutor = sender.asPlayer();
     context.mPosition = sender.getPosition();
@@ -532,5 +552,10 @@ bool ExecuteCommand::execute(CommandOrigin &sender, const std::vector<std::strin
         context.mLevel = &mHandler.getLevelFor(*context.mExecutor);
 
     int32_t successes = 0;
-    return run(sender, context, arguments, 0, successes);
+
+    ++mDepth;
+    const bool result = run(sender, context, arguments, 0, successes);
+    --mDepth;
+
+    return result;
 }

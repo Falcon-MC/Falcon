@@ -22,7 +22,8 @@ namespace {
 }
 
 SummonCommand::SummonCommand(ServerNetworkHandler &handler)
-        : Command("summon", "commands.summon.description", "/summon <entityType> [x] [y] [z]"), mHandler(handler) {}
+        : Command("summon", "commands.summon.description", "/summon <entityType> [x y z] [nameTag]"),
+          mHandler(handler) {}
 
 std::vector<CommandOverloadData> SummonCommand::getOverloads() const {
     CommandParamData entityType;
@@ -49,7 +50,7 @@ std::vector<CommandOverloadData> SummonCommand::getOverloads() const {
 }
 
 bool SummonCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
-    if (arguments.empty() || arguments.size() == 2 || arguments.size() == 3 || arguments.size() > 4) {
+    if (arguments.empty() || arguments.size() == 3 || arguments.size() > 5) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
     }
@@ -70,7 +71,11 @@ bool SummonCommand::execute(CommandOrigin &sender, const std::vector<std::string
     }
 
     Vector3f position = sender.getPosition();
-    if (arguments.size() == 4) {
+    std::string nameTag;
+
+    if (arguments.size() == 2) {
+        nameTag = arguments[1];
+    } else if (arguments.size() >= 4) {
         const Vector3f origin = position;
 
         if (!parseCoordinate(arguments[1], origin.x, position.x)
@@ -79,6 +84,9 @@ bool SummonCommand::execute(CommandOrigin &sender, const std::vector<std::string
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
         }
+
+        if (arguments.size() == 5)
+            nameTag = arguments[4];
     }
 
     if (position.y < (float) level->getMinY() || position.y > (float) level->getMaxY()) {
@@ -86,9 +94,15 @@ bool SummonCommand::execute(CommandOrigin &sender, const std::vector<std::string
         return false;
     }
 
-    if (mHandler.spawnActor(*level, identifier, position) == nullptr) {
+    ServerActor *actor = mHandler.spawnActor(*level, identifier, position);
+    if (actor == nullptr) {
         sender.sendTranslation("commands.summon.failed", {});
         return false;
+    }
+
+    if (!nameTag.empty()) {
+        actor->setNameTag(nameTag);
+        mHandler.sendActorNameTag(*actor);
     }
 
     sender.sendTranslation("commands.summon.success", {});
