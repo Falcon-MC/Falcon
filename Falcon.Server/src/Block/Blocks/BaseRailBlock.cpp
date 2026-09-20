@@ -6,6 +6,7 @@ FALCON_REGISTER_BLOCK(BaseRailBlock, 140);
 
 #include "Block/BlockIdentifier.h"
 #include "Block/BlockSupport.h"
+#include "Block/Components/PlacementOrientation.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -264,6 +265,12 @@ bool BaseRailBlock::canPlaceAt(Level &level, const Vector3i &position, int block
     (void) blockFace;
 
     return BlockSupport::isSolidOrCauldron(level.getBlockState(position.x, position.y - 1, position.z));
+}
+
+bool BaseRailBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) state;
+
+    return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
 }
 
 bool BaseRailBlock::matches(const std::string &identifier) {

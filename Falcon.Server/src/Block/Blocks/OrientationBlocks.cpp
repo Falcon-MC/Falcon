@@ -105,6 +105,18 @@ bool TorchOrientationBlock::canPlaceAt(Level &level, const Vector3i &position, i
     return BlockSupport::isAttachable(support, face);
 }
 
+bool TorchOrientationBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    using namespace PlacementOrientation;
+
+    int face = FACE_UP;
+    if (state.mStates.contains("torch_facing_direction"))
+        face = faceFromTorchFacing(state.mStates.getString("torch_facing_direction", "top"));
+    else if (state.mStates.contains("facing_direction"))
+        face = state.mStates.getInt("facing_direction", FACE_UP);
+
+    return canPlaceAt(level, position, face);
+}
+
 bool DoorOrientationBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
     if (blockFace != PlacementOrientation::FACE_UP)
         return false;

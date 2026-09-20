@@ -19,6 +19,13 @@ bool RedstoneDiodeBlock::canPlaceAt(Level &level, const Vector3i &position, int 
     return BlockSupport::isAttachable(below, PlacementOrientation::FACE_UP) || below.mName == "minecraft:cauldron";
 }
 
+bool RedstoneDiodeBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const
+{
+    (void) state;
+
+    return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
+}
+
 bool RedstoneRepeaterBlock::matches(const std::string &identifier)
 {
     return identifier == "minecraft:unpowered_repeater" || identifier == "minecraft:powered_repeater";

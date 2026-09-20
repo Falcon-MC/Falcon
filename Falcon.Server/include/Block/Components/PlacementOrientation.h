@@ -150,6 +150,18 @@ namespace PlacementOrientation {
         return faceName(face);
     }
 
+    inline int faceFromTorchFacing(const std::string &attachment) {
+        if (attachment == "south")
+            return FACE_NORTH;
+        if (attachment == "north")
+            return FACE_SOUTH;
+        if (attachment == "east")
+            return FACE_WEST;
+        if (attachment == "west")
+            return FACE_EAST;
+        return FACE_UP;
+    }
+
     inline const char *torchFacingDirection(int face) {
         switch (face) {
             case FACE_NORTH:
