@@ -9,10 +9,11 @@
 
 namespace {
     const int MAX_GIVE_COUNT = 32767;
+    const int MAX_DATA_VALUE = 32767;
 }
 
 GiveCommand::GiveCommand(ServerNetworkHandler &handler)
-        : Command("give", "commands.give.description", "/give <player> <item> [amount]"),
+        : Command("give", "commands.give.description", "/give <player> <item> [amount] [data]"),
           mHandler(handler) {}
 
 std::vector<CommandOverloadData> GiveCommand::getOverloads() const {
@@ -30,10 +31,17 @@ std::vector<CommandOverloadData> GiveCommand::getOverloads() const {
     amountParameter.mHasType = true;
     amountParameter.mType = CommandParamType::Int;
 
+    CommandParamData dataParameter;
+    dataParameter.mName = "data";
+    dataParameter.mOptional = true;
+    dataParameter.mHasType = true;
+    dataParameter.mType = CommandParamType::Int;
+
     CommandOverloadData overload;
     overload.mParameters.push_back(playerParameter);
     overload.mParameters.push_back(itemParameter);
     overload.mParameters.push_back(amountParameter);
+    overload.mParameters.push_back(dataParameter);
 
     return {overload};
 }
@@ -49,6 +57,23 @@ bool GiveCommand::_parseCount(const std::string &value, int &out) {
 
     const long parsed = strtol(value.c_str(), nullptr, 10);
     if (parsed < 1 || parsed > MAX_GIVE_COUNT)
+        return false;
+
+    out = (int) parsed;
+    return true;
+}
+
+bool GiveCommand::_parseData(const std::string &value, int &out) {
+    if (value.empty())
+        return false;
+
+    for (char character: value) {
+        if (character < '0' || character > '9')
+            return false;
+    }
+
+    const long parsed = strtol(value.c_str(), nullptr, 10);
+    if (parsed < 0 || parsed > MAX_DATA_VALUE)
         return false;
 
     out = (int) parsed;
@@ -87,11 +112,18 @@ bool GiveCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
         return false;
     }
 
+    int data = 0;
+    if (arguments.size() > 3 && !_parseData(arguments[3], data)) {
+        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        return false;
+    }
+
     for (ServerPlayer *target: targets) {
         ItemStack stack;
         stack.mDefinition = definition;
         stack.mBlockDefinition = mHandler.getBlockDefinitions().getDefinition(item.getIdentifier());
         stack.mCount = count;
+        stack.mDamage = data;
 
         std::vector<int> touchedSlots;
         const int remaining = target->getInventory().addItemPartial(stack, touchedSlots);

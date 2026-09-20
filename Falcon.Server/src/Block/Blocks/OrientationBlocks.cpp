@@ -1,12 +1,19 @@
 #include "Block/Blocks/OrientationBlocks.h"
 
 #include "Block/BlockClassRegistry.h"
+#include "Block/Actor/BedBlockActor.h"
+#include "Block/BlockActorStore.h"
 #include "Block/Blocks/DoorBlock.h"
 #include "Block/Blocks/OpenableBlock.h"
 #include "Block/Systems/RedstoneSystem.h"
+#include "Level/Level.h"
+#include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/BlockActorDataPacket.h"
 
+#include <algorithm>
 #include <cmath>
+#include <memory>
 
 FALCON_REGISTER_BLOCK(DoorOrientationBlock, 120);
 FALCON_REGISTER_BLOCK(TrapdoorOrientationBlock, 130);
@@ -220,6 +227,38 @@ bool BedOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &
     return BedBlock::use(owner, player, position, state);
 }
 
+void BedOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                                   const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+    (void) blockFace;
+
+    Level &level = owner.getLevelFor(player);
+    const int8_t color = (int8_t) std::clamp(usedItem.mDamage, 0, 15);
+
+    const int facing = PlacementOrientation::horizontalFacing(player.getRotation().y);
+    const Vector3i head = PlacementOrientation::relativePosition(position, facing);
+
+    for (const Vector3i &half: {position, head}) {
+        if (level.getBlockState(half.x, half.y, half.z).mName != state.mName)
+            continue;
+
+        level.getBlockActors().remove(half);
+
+        std::unique_ptr<BlockActor> created(new BedBlockActor());
+        created->setPosition(half);
+        created->setState(state);
+        static_cast<BedBlockActor *>(created.get())->setColor(color);
+
+        BlockActorDataPacket data;
+        data.mBlockPosition = half;
+        data.mData = created->getSpawnCompound();
+
+        level.getBlockActors().insert(std::move(created));
+
+        const Vector3f centre((float) half.x + 0.5f, (float) half.y + 0.5f, (float) half.z + 0.5f);
+        BlockActionHandler::broadcastToViewers(owner, level, centre, data);
+    }
+}
+
 void BedOrientationBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                    const BlockState &state) const {
     BedBlock::breakOtherHalf(owner, level, position, state);
@@ -264,6 +303,18 @@ std::vector<BlockPlacementEntry> DoorOrientationBlock::getPlacementBlocks(Level 
 bool DoorOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                       const BlockState &state) const {
     return DoorBlock::toggle(owner, owner.getLevelFor(player), position, state);
+}
+
+void DoorOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                                    const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+    (void) usedItem;
+    (void) blockFace;
+
+    Level &level = owner.getLevelFor(player);
+    if (OpenableBlock::isOpen(state) || !DoorBlock::isGettingPower(owner, level, position, state))
+        return;
+
+    DoorBlock::setOpen(owner, level, position, state, true);
 }
 
 std::vector<Vector3i> DoorOrientationBlock::getAffectedBlocks(Level &level, const Vector3i &position,
@@ -311,6 +362,15 @@ bool TrapdoorOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPla
     return OpenableBlock::toggle(owner, owner.getLevelFor(player), position, state);
 }
 
+void TrapdoorOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
+                                        const Vector3i &position, const BlockState &state,
+                                        const ItemStack &usedItem, int blockFace) const {
+    (void) usedItem;
+    (void) blockFace;
+
+    OpenableBlock::openOnPlace(owner, owner.getLevelFor(player), position, state);
+}
+
 bool FenceGateOrientationBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:fence_gate" || endsWith(identifier, "_fence_gate");
 }
@@ -336,4 +396,13 @@ bool FenceGateOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPl
     states.putString("minecraft:cardinal_direction", cardinalName(swing));
 
     return OpenableBlock::toggle(owner, level, position, BlockState(state.mName, states));
+}
+
+void FenceGateOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
+                                         const Vector3i &position, const BlockState &state,
+                                         const ItemStack &usedItem, int blockFace) const {
+    (void) usedItem;
+    (void) blockFace;
+
+    OpenableBlock::openOnPlace(owner, owner.getLevelFor(player), position, state);
 }

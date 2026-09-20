@@ -15,5 +15,7 @@ public:
 private:
     static bool _parseCount(const std::string &value, int &out);
 
+    static bool _parseData(const std::string &value, int &out);
+
     ServerNetworkHandler &mHandler;
 };
