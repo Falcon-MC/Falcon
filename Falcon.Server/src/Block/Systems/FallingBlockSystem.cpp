@@ -2,7 +2,6 @@
 
 #include "Actor/FallingBlockActor.h"
 #include "Block/BlockData.h"
-#include "Block/Systems/RedstoneSystem.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -196,7 +195,7 @@ void FallingBlockSystem::spawnFallingBlock(ServerNetworkHandler &owner, Level &l
     actor->setBreakOnLava(breaksOnLava(state.mName));
     actor->setBreakOnGround(breaksOnGround(state.mName));
 
-    RedstoneSystem::onBlockBroken(owner, level, position, state);
+    level.onBlockBroken(position, state);
 }
 
 void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

@@ -25,7 +25,7 @@
 #include "Block/BlockActorStore.h"
 #include "Block/BlockPickItem.h"
 #include "Level/Generator/Overworld/OverworldGenerator.h"
-#include "Level/PortalForcer.h"
+#include "Block/Systems/BlockContactSystem.h"
 #include "Block/Systems/PistonSystem.h"
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Item/Items/ElytraItem.h"
@@ -611,6 +611,10 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     mNetherLevel->setPacketBroadcaster(broadcaster);
     mTheEndLevel->setPacketBroadcaster(broadcaster);
 
+    mLevel.setOwner(this);
+    mNetherLevel->setOwner(this);
+    mTheEndLevel->setOwner(this);
+
     _logPackStack();
 
     switch (properties.getGameType()) {
@@ -1059,7 +1063,7 @@ void ServerNetworkHandler::tick() {
         _handleVoidDamage(player);
         _handleSuffocationDamage(player);
         MovementHandler::tickFluidEffects(*this, player);
-        PortalForcer::tickPlayer(*this, player);
+        BlockContactSystem::tick(*this, player);
 
         const bool fireTickDamage = !player.isDead() && player.tickFire();
 
@@ -1169,6 +1173,7 @@ void ServerNetworkHandler::tick() {
 
     mProfiler.beginSection(ProfilerSection::Redstone);
     for (Level *level: levels) {
+        level->tickBlockUpdates();
         RedstoneSystem::tick(*this, *level);
         PistonSystem::tick(*this, *level);
         CommandBlockSystem::tickCommandBlocks(*this, *level);

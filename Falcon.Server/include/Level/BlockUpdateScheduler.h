@@ -19,6 +19,8 @@ public:
 
     void cancel(const Vector3i &position);
 
+    bool isScheduled(const Vector3i &position) const;
+
     void park(int32_t chunkX, int32_t chunkZ, const Vector3i &position);
 
     void activateColumn(int32_t chunkX, int32_t chunkZ);

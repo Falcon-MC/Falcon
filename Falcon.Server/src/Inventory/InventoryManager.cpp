@@ -13,6 +13,7 @@
 #include "Inventory/BundleInventory.h"
 #include "Item/CraftingRecipeTable.h"
 #include "Inventory/CraftingManager.h"
+#include "Level/Level.h"
 #include "Block/Inventory/CraftingTableInventory.h"
 #include "Network/PacketSender.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -1086,7 +1087,7 @@ void InventoryManager::_animateBarrel(const Vector3i &position, bool open) {
 
     Tag states = state.mStates;
     states.putByte("open_bit", open ? 1 : 0);
-    RedstoneSystem::setBlockState(*mOwner, level, position, BlockState(state.mName, states));
+    level.setBlock(position, BlockState(state.mName, states), false);
 
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
     mOwner->playLevelSound(level, open ? LevelSoundEvent::BARREL_OPEN : LevelSoundEvent::BARREL_CLOSED, center);

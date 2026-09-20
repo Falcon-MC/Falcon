@@ -6,6 +6,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "Level/BlockUpdateScheduler.h"
+#include "Level/BlockUpdateType.h"
 #include "Level/GeneratedBlockChange.h"
 #include "Level/LevelChunk.h"
 #include "Level/ChunkWorker.h"
@@ -26,6 +27,7 @@
 
 class Packet;
 class Particle;
+class ServerNetworkHandler;
 
 class Level {
 public:
@@ -226,6 +228,30 @@ public:
 
     void scheduleBlockUpdate(const Vector3i &position, int64_t delay = 1);
 
+    void setOwner(ServerNetworkHandler *owner) { mOwner = owner; }
+
+    ServerNetworkHandler *getOwner() const { return mOwner; }
+
+    void setBlock(const Vector3i &position, const BlockState &state, bool update);
+
+    void updateAround(const Vector3i &position);
+
+    void updateAt(const Vector3i &position, BlockUpdateType type);
+
+    void scheduleUpdate(const Vector3i &position, int64_t delay);
+
+    bool isUpdateScheduled(const Vector3i &position) const;
+
+    void cancelUpdate(const Vector3i &position);
+
+    void tickBlockUpdates();
+
+    size_t getScheduledUpdateCount() const { return mBlockUpdates.getScheduledCount(); }
+
+    void onBlockPlaced(const Vector3i &position, const BlockState &state);
+
+    void onBlockBroken(const Vector3i &position, const BlockState &previous);
+
     BlockUpdateScheduler &getBlockUpdateScheduler() { return mBlockUpdateScheduler; }
 
     void setActiveColumns(std::vector<int64_t> columns);
@@ -257,6 +283,8 @@ public:
     size_t getPendingChangeChunkCount() const { return mPendingBlockChanges.size(); }
 
 private:
+    static constexpr int MAX_UPDATE_DEPTH = 512;
+
     static int64_t _packChunk(int32_t x, int32_t z);
 
     void _generate(LevelChunk &chunk);
@@ -269,6 +297,9 @@ private:
 
     void _flushPendingBlockChanges(bool includeInFlight);
 
+    ServerNetworkHandler *mOwner = nullptr;
+    BlockUpdateScheduler mBlockUpdates;
+    int mUpdateDepth = 0;
     std::string mName;
     int mViewDistance;
     int64_t mSeed;

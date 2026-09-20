@@ -3,6 +3,7 @@
 #include "Block/BlockState.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
+#include "Level/BlockUpdateType.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -11,12 +12,6 @@
 
 class Level;
 class ServerNetworkHandler;
-
-enum class RedstoneUpdateType {
-    Normal = 0,
-    Redstone = 1,
-    Scheduled = 2
-};
 
 namespace RedstoneFace {
     const int NONE = -1;
@@ -77,28 +72,17 @@ public:
     static void updateAllAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                         int ignoredFace = RedstoneFace::NONE);
 
-    static void updateAroundNormal(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
-
     static void updateComparatorOutputLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                             bool observer);
 
-    static void onUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                         RedstoneUpdateType type);
+    static void onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state, BlockUpdateType type);
 
-    static void scheduleUpdate(Level &level, const Vector3i &position, int64_t delay);
+    static void onRedstonePlaced(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state);
 
-    static bool isUpdateScheduled(Level &level, const Vector3i &position);
-
-    static void cancelScheduledUpdate(Level &level, const Vector3i &position);
-
-    static void setBlockState(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                              const BlockState &state);
-
-    static void onBlockPlaced(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                              const BlockState &state);
-
-    static void onBlockBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                              const BlockState &previous);
+    static void onRedstoneBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &previous);
 
     static void onLeverActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state);
@@ -119,8 +103,6 @@ public:
     static void queueRedstoneNotification(Level &level, const Vector3i &position);
 
     static void tick(ServerNetworkHandler &owner, Level &level);
-
-    static size_t getScheduledCount();
 
 private:
     static void _touchPressurePlate(ServerNetworkHandler &owner, Level &level, const Vector3f &feet,

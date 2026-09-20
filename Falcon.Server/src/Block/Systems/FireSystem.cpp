@@ -8,7 +8,7 @@
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
-#include "Level/PortalForcer.h"
+#include "Block/Blocks/PortalBlocks.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Types/StartGameTypes.h"
 
@@ -183,8 +183,8 @@ namespace {
 
     void extinguish(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
         const BlockState previous = stateAt(level, position);
-        RedstoneSystem::setBlockState(owner, level, position, BlockState("minecraft:air"));
-        RedstoneSystem::onBlockBroken(owner, level, position, previous);
+        level.setBlock(position, BlockState("minecraft:air"), false);
+        level.onBlockBroken(position, previous);
     }
 
     void setFire(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const std::string &identifier,
@@ -193,8 +193,8 @@ namespace {
         states.putInt("age", std::clamp(age, 0, FireSystem::MAX_AGE));
 
         const BlockState placed(identifier, states);
-        RedstoneSystem::setBlockState(owner, level, position, placed);
-        RedstoneSystem::onBlockPlaced(owner, level, position, placed);
+        level.setBlock(position, placed, false);
+        level.onBlockPlaced(position, placed);
     }
 
     bool checkRain(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
@@ -329,9 +329,7 @@ bool FireSystem::ignite(ServerNetworkHandler &owner, Level &level, const Vector3
     if (stateAt(level, position).mName != "minecraft:air")
         return false;
 
-    const Vector3i frameBase = relative(position, 0, -1, 0);
-    if (canLightPortal && stateAt(level, frameBase).mName == "minecraft:obsidian"
-        && PortalForcer::tryLightPortal(level, frameBase, &owner))
+    if (canLightPortal && ObsidianBlock::tryLightPortal(level, position, &owner))
         return true;
 
     if (!canSurviveAt(level, position))

@@ -249,7 +249,7 @@ void PistonSystem::onBlockBroken(ServerNetworkHandler &owner, Level &level, cons
     const BlockState arm = stateAt(level, armPosition);
 
     if (isArmCollision(arm.mName) && getPistonFace(arm) == face)
-        RedstoneSystem::setBlockState(owner, level, armPosition, BlockState(AIR));
+        level.setBlock(armPosition, BlockState(AIR), false);
 }
 
 bool PistonSystem::_checkState(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -326,7 +326,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
 
     for (size_t index = toDestroy.size(); index > 0; --index) {
         const Vector3i &destroyed = toDestroy[index - 1];
-        RedstoneSystem::setBlockState(owner, level, destroyed, BlockState(AIR));
+        level.setBlock(destroyed, BlockState(AIR), false);
     }
 
     std::vector<BlockState> moved;
@@ -340,7 +340,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     arm.beginMove(extending, toMove);
 
     for (size_t index = toMove.size(); index > 0; --index)
-        RedstoneSystem::setBlockState(owner, level, toMove[index - 1], BlockState(AIR));
+        level.setBlock(toMove[index - 1], BlockState(AIR), false);
 
     gPendingMoves[level.getDimensionId()].push_back(PendingMove{position, moved, moveDirection});
     broadcastArmData(owner, level, arm);
@@ -349,9 +349,9 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
         BlockState arm(sticky ? STICKY_PISTON_ARM_COLLISION : PISTON_ARM_COLLISION);
         arm.mStates = Tag::ofCompound();
         arm.mStates.putInt("facing_direction", getStoredFacing(state));
-        RedstoneSystem::setBlockState(owner, level, armPosition, arm);
+        level.setBlock(armPosition, arm, false);
     } else if (isArmCollision(stateAt(level, armPosition).mName)) {
-        RedstoneSystem::setBlockState(owner, level, armPosition, BlockState(AIR));
+        level.setBlock(armPosition, BlockState(AIR), false);
     }
 
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
@@ -385,8 +385,7 @@ void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
 
         const std::vector<Vector3i> attached = arm->getAttachedBlocks();
         for (size_t index = 0; index < attached.size() && index < move.mMoved.size(); ++index)
-            RedstoneSystem::setBlockState(owner, level, relative(attached[index], move.mDirection),
-                                          move.mMoved[index]);
+            level.setBlock(relative(attached[index], move.mDirection), move.mMoved[index], false);
 
         arm->finish();
         broadcastArmData(owner, level, *arm);

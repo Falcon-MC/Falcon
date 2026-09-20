@@ -35,6 +35,10 @@ void BlockUpdateScheduler::cancel(const Vector3i &position) {
     mSchedule.erase(Position{position.x, position.y, position.z});
 }
 
+bool BlockUpdateScheduler::isScheduled(const Vector3i &position) const {
+    return mSchedule.find(Position{position.x, position.y, position.z}) != mSchedule.end();
+}
+
 void BlockUpdateScheduler::park(int32_t chunkX, int32_t chunkZ, const Vector3i &position) {
     const int64_t column = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
     mParked[column].push_back(Position{position.x, position.y, position.z});
