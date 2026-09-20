@@ -53,8 +53,8 @@ namespace {
         const float deltaZ = to.z - from.z;
 
         const float horizontal = std::sqrt(deltaX * deltaX + deltaZ * deltaZ);
-        const float yaw = (float) (std::atan2(deltaZ, deltaX) * 180.0 / PI) - 90.0f;
-        const float pitch = (float) (-std::atan2(deltaY, horizontal) * 180.0 / PI);
+        const float yaw = (float) (std::atan2(deltaZ, deltaX) * 180.0 / MathConstants::PI) - 90.0f;
+        const float pitch = (float) (-std::atan2(deltaY, horizontal) * 180.0 / MathConstants::PI);
 
         return Vector3f(pitch, yaw, 0.0f);
     }
