@@ -956,7 +956,7 @@ void ServerNetworkHandler::tick() {
     {
         std::lock_guard<std::mutex> lock(mConsoleQueueMutex);
         while (!mConsoleQueue.empty()) {
-            ServerCommandOrigin sender;
+            ServerCommandOrigin sender(this);
             mCommands.dispatch(sender, mConsoleQueue.front());
             mConsoleQueue.pop();
         }

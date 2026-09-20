@@ -11,6 +11,7 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Network/TransportFactory.h"
 #include "Server/PropertiesSettings.h"
+#include "Server/SetupWizard.h"
 
 #include <atomic>
 #include <chrono>
@@ -28,6 +29,7 @@
 #endif
 
 static const char *PROPERTIES_FILE = "server.properties";
+static const char *OPS_FILE = "ops.txt";
 static const char *PROFILER_CONFIG_FILE = "bootstrap.json";
 static const char *CDN_CONFIG_FILE = "cdn_config.json";
 
@@ -136,6 +138,9 @@ static void logStartupBanner(const PropertiesSettings &properties) {
     LOG_INFO(LogAreaID::Server, "Commit ID: %s", FalconBuildInfo::kCommitId);
     LOG_INFO(LogAreaID::Server, "Configuration: %s", FalconBuildInfo::kConfiguration);
     LOG_INFO(LogAreaID::Server, "Contents of %s: %s", PROPERTIES_FILE, properties.getUnknownContents().c_str());
+
+    for (const std::string &invalid: properties.getInvalidProperties())
+        LOG_WARN(LogAreaID::Server, "Invalid value in %s (%s), using the default", PROPERTIES_FILE, invalid.c_str());
     LOG_INFO(LogAreaID::Server, "Level Name: %s", properties.getLevelName().c_str());
     LOG_INFO(LogAreaID::Server, "Profiler config ('%s') load result: success=%d, errorMessage=(null)",
              PROFILER_CONFIG_FILE, fileExists(PROFILER_CONFIG_FILE) ? 1 : 0);
@@ -181,6 +186,11 @@ void startServer(const ServerSettings &settings) {
 
     BiomeChunkGenDataRegistry::initialize();
     BlockPaletteRegistry::getInstance().initialize();
+
+    if (settings.runSetupWizard && SetupWizard::isInteractive() && SetupWizard::isNeeded(PROPERTIES_FILE)) {
+        SetupWizard wizard(PROPERTIES_FILE, OPS_FILE);
+        wizard.run();
+    }
 
     PropertiesSettings properties(PROPERTIES_FILE);
     logStartupBanner(properties);
@@ -278,7 +288,16 @@ void startServer(const ServerSettings &settings) {
     BedrockLog::shutdown();
 }
 
-int main() {
-    startServer();
+int main(int argc, char **argv) {
+    ServerSettings settings;
+
+    for (int index = 1; index < argc; ++index) {
+        const std::string argument = argv[index];
+
+        if (argument == "--no-wizard")
+            settings.runSetupWizard = false;
+    }
+
+    startServer(settings);
     return 0;
 }
