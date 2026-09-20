@@ -11,6 +11,7 @@
 #include "Command/GameModeCommand.h"
 #include "Command/GiveCommand.h"
 #include "Command/DifficultyCommand.h"
+#include "Command/ExecuteCommand.h"
 #include "Command/FillCommand.h"
 #include "Command/KillCommand.h"
 #include "Command/ListCommand.h"
@@ -506,6 +507,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mCommands.registerCommand(std::make_shared<SetBlockCommand>(*this));
     mCommands.registerCommand(std::make_shared<FillCommand>(*this));
     mCommands.registerCommand(std::make_shared<SummonCommand>(*this));
+    mCommands.registerCommand(std::make_shared<ExecuteCommand>(*this));
     mCommands.registerCommand(std::make_shared<XpCommand>(*this));
     mCommands.registerCommand(std::make_shared<DifficultyCommand>(*this));
     mCommands.registerCommand(std::make_shared<ListCommand>(*this));
