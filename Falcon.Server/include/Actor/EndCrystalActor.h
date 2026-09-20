@@ -10,6 +10,8 @@ public:
 
     EndCrystalActor(uint64_t runtimeId, const std::string &identifier);
 
+    ActorSize getSize() const override { return ActorSize{0.98f, 0.98f}; }
+
     void tick(ServerNetworkHandler &owner) override;
 
     bool isExpired() const override { return mExpired; }

@@ -16,22 +16,34 @@ ActorClassRegistry::Registration::Registration(const char *identifier, Factory f
     entries()[identifier] = factory;
 }
 
-const MobActor *ActorClassRegistry::getPrototype(const std::string &identifier) {
+const ServerActor *ActorClassRegistry::getPrototype(const std::string &identifier) {
     static std::unordered_map<std::string, std::unique_ptr<ServerActor>> prototypes;
 
     const auto known = prototypes.find(identifier);
     if (known != prototypes.end())
-        return dynamic_cast<const MobActor *>(known->second.get());
+        return known->second.get();
 
     const auto entry = entries().find(identifier);
     if (entry == entries().end())
         return nullptr;
 
     std::unique_ptr<ServerActor> prototype = entry->second(0, identifier);
-    const MobActor *mob = dynamic_cast<const MobActor *>(prototype.get());
+    const ServerActor *result = prototype.get();
     prototypes[identifier] = std::move(prototype);
 
-    return mob;
+    return result;
+}
+
+const MobActor *ActorClassRegistry::getMobPrototype(const std::string &identifier) {
+    return dynamic_cast<const MobActor *>(getPrototype(identifier));
+}
+
+ActorSize ActorClassRegistry::getSize(const std::string &identifier) {
+    const ServerActor *prototype = getPrototype(identifier);
+    if (prototype == nullptr)
+        return ActorSize{ServerActor::DEFAULT_WIDTH, ServerActor::DEFAULT_HEIGHT};
+
+    return prototype->getSize();
 }
 
 std::unique_ptr<ServerActor> ActorClassRegistry::create(uint64_t runtimeId, const std::string &identifier) {

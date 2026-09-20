@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Actor/ActorCategory.h"
-#include "Actor/ActorSizeTable.h"
+#include "Actor/ActorSize.h"
 #include "Actor/Mob/MobLoot.h"
 #include "Actor/ServerActor.h"
 #include "Server/PropertiesSettings.h"
@@ -23,7 +23,6 @@ public:
 
     virtual const std::vector<LootEntry> &getLootEntries() const;
 
-    // Health of the mob once the difficulty and the instance variations are taken into account.
     virtual float resolveMaxHealth(Difficulty difficulty) const;
 
     void applyDefaults(Difficulty difficulty);

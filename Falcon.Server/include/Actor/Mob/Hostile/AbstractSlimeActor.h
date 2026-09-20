@@ -27,7 +27,7 @@ public:
         return (float) (mSizeVariant * mSizeVariant);
     }
 
-    int getExperienceDrop() const override { return 0; }
+    int getExperienceDrop() const override { return mSizeVariant; }
 
 private:
     int mSizeVariant = LARGE_SIZE;

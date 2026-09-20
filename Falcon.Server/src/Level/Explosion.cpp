@@ -1,6 +1,6 @@
 #include "Level/Explosion.h"
 
-#include "Actor/ActorSizeTable.h"
+#include "Actor/ActorClassRegistry.h"
 #include "Actor/ItemActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
@@ -51,7 +51,7 @@ namespace {
     }
 
     AxisAlignedBB boundingBoxOf(const Vector3f &position, const std::string &identifier) {
-        const ActorSize size = ActorSizeTable::getSize(identifier);
+        const ActorSize size = ActorClassRegistry::getSize(identifier);
         const float halfWidth = size.mWidth * 0.5f;
         return AxisAlignedBB(position.x - halfWidth, position.y, position.z - halfWidth,
                              position.x + halfWidth, position.y + size.mHeight, position.z + halfWidth);

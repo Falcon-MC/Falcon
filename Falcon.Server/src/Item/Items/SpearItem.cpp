@@ -4,7 +4,7 @@
 
 FALCON_REGISTER_ITEM(SpearItem, 80);
 
-#include "Actor/ActorSizeTable.h"
+#include "Actor/ActorClassRegistry.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
@@ -117,7 +117,7 @@ Actor *SpearItem::findTarget(ServerNetworkHandler &owner, ServerPlayer &player, 
         if (!candidate.isAlive() || candidate.isDead() || candidate.isProjectile())
             continue;
 
-        const ActorSize size = ActorSizeTable::getSize(candidate.getTypeId());
+        const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
         consider(candidate, size.mWidth, size.mHeight);
     }
 
@@ -178,7 +178,7 @@ Actor *SpearItem::findSweepTarget(ServerNetworkHandler &owner, ServerPlayer &pla
         if (!candidate.isAlive() || candidate.isDead() || candidate.isProjectile())
             continue;
 
-        const ActorSize size = ActorSizeTable::getSize(candidate.getTypeId());
+        const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
         consider(candidate, size.mWidth, size.mHeight);
     }
 

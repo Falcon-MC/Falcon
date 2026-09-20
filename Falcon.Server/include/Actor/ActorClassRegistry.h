@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Actor/ActorSize.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -17,9 +19,21 @@ public:
 
     static std::unique_ptr<ServerActor> create(uint64_t runtimeId, const std::string &identifier);
 
-    // Instance kept alive to answer the static data of a mob without spawning it.
-    static const MobActor *getPrototype(const std::string &identifier);
+    static const ServerActor *getPrototype(const std::string &identifier);
+
+    static const MobActor *getMobPrototype(const std::string &identifier);
+
+    static ActorSize getSize(const std::string &identifier);
 };
+
+#define FALCON_REGISTER_SIZED_ACTOR(tag, identifier, width, height, projectile)          \
+    static const ActorClassRegistry::Registration gActorRegistration##tag(               \
+            (identifier),                                                                \
+            [](uint64_t runtimeId, const std::string &actorIdentifier)                   \
+                    -> std::unique_ptr<ServerActor> {                                    \
+                return std::make_unique<SizedActor>(runtimeId, actorIdentifier,          \
+                                                    ActorSize{width, height}, projectile); \
+            })
 
 #define FALCON_REGISTER_ACTOR(type, identifier)                                          \
     static const ActorClassRegistry::Registration gActorRegistration##type(              \

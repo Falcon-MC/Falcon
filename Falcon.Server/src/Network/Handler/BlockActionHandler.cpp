@@ -10,7 +10,7 @@
 #include "Block/BlockIdentifier.h"
 #include "Block/BlockPickItem.h"
 #include "Core/Math/MathConstants.h"
-#include "Actor/ActorSizeTable.h"
+#include "Actor/ActorClassRegistry.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Actor/ExperienceValues.h"
@@ -803,7 +803,7 @@ bool BlockActionHandler::isBlockedByActor(ServerNetworkHandler &owner, Level &le
         if (&owner.getLevelFor(other) != &level)
             continue;
 
-        const ActorSize size = ActorSizeTable::getSize("minecraft:player");
+        const ActorSize size = ActorClassRegistry::getSize("minecraft:player");
         if (shape.intersectsWith(actorBox(other.getPosition(), size)))
             return true;
     }
@@ -817,7 +817,7 @@ bool BlockActionHandler::isBlockedByActor(ServerNetworkHandler &owner, Level &le
         if (&owner.getLevelFor(actor) != &level)
             continue;
 
-        const ActorSize size = ActorSizeTable::getSize(actor.getIdentifier());
+        const ActorSize size = ActorClassRegistry::getSize(actor.getIdentifier());
         if (shape.intersectsWith(actorBox(actor.getPosition(), size)))
             return true;
     }

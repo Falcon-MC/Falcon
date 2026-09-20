@@ -2,7 +2,7 @@
 
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/DynamicPropertyStore.h"
-#include "Actor/ActorSizeTable.h"
+#include "Actor/ActorClassRegistry.h"
 #include "Actor/Mob/MobActor.h"
 #include "Actor/Mob/MobLoot.h"
 #include "Actor/ServerActor.h"
@@ -1301,7 +1301,7 @@ void ServerNetworkHandler::tickActors() {
         }
 
         if (!actor.isProjectile()) {
-            const ActorSize size = ActorSizeTable::getSize(actor.getIdentifier());
+            const ActorSize size = ActorClassRegistry::getSize(actor.getIdentifier());
             if (_isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
                 actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE, nullptr);
         }
@@ -1492,7 +1492,7 @@ void ServerNetworkHandler::tickActors() {
                             candidate.getLifetimeTicks() < 8)
                             continue;
 
-                        const ActorSize size = ActorSizeTable::getSize(candidate.getTypeId());
+                        const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
                         if (intersectsActorBox(candidate.getPosition(), size.mWidth, size.mHeight,
                                                samplePosition)) {
                             hitActor = &candidate;

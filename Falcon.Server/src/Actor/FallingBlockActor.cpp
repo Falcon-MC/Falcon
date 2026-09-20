@@ -1,6 +1,6 @@
 #include "Actor/FallingBlockActor.h"
 
-#include "Actor/ActorSizeTable.h"
+#include "Actor/ActorClassRegistry.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
 #include "Block/BlockSupport.h"
@@ -266,7 +266,7 @@ void FallingBlockActor::_damageEntitiesAt(ServerNetworkHandler &owner, const Vec
         if (!player.isSpawned() || player.isDead() || player.getDimension() != getDimension())
             continue;
 
-        const ActorSize size = ActorSizeTable::getSize("minecraft:player");
+        const ActorSize size = ActorClassRegistry::getSize("minecraft:player");
         const Vector3f playerPosition = player.getPosition();
         const float halfWidth = size.mWidth * 0.5f;
 
@@ -286,7 +286,7 @@ void FallingBlockActor::_damageEntitiesAt(ServerNetworkHandler &owner, const Vec
             actor->getDimension() != getDimension())
             continue;
 
-        const ActorSize size = ActorSizeTable::getSize(actor->getTypeId());
+        const ActorSize size = ActorClassRegistry::getSize(actor->getTypeId());
         const Vector3f actorPosition = actor->getPosition();
         const float halfWidth = size.mWidth * 0.5f;
 

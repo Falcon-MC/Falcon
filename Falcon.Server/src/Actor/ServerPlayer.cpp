@@ -1,7 +1,7 @@
 #include "Actor/ServerPlayer.h"
 
 #include "Actor/DynamicPropertyStore.h"
-#include "Actor/ActorSizeTable.h"
+#include "Actor/ActorClassRegistry.h"
 #include "Actor/ServerActor.h"
 #include "Block/Inventory/EnderChestInventoryStore.h"
 #include "Inventory/ItemStackNbt.h"
@@ -445,7 +445,7 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
             target.getDimension() != getDimension())
             continue;
 
-        const ActorSize size = ActorSizeTable::getSize(target.getTypeId());
+        const ActorSize size = ActorClassRegistry::getSize(target.getTypeId());
         if (reaches(target.getPosition(), size.mWidth, size.mHeight))
             owner.damageActor(target, SPIN_ATTACK_DAMAGE, this);
     }

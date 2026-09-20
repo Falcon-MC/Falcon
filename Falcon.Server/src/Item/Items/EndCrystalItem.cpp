@@ -1,6 +1,6 @@
 #include "Item/Items/EndCrystalItem.h"
 
-#include "Actor/ActorSizeTable.h"
+#include "Actor/ActorClassRegistry.h"
 #include "Core/Math/AxisAlignedBB.h"
 #include "Actor/EndCrystalActor.h"
 #include "Actor/ServerActor.h"
@@ -39,7 +39,7 @@ namespace {
             if (!player.isSpawned() || &owner.getLevelFor(player) != &level)
                 continue;
 
-            if (area.intersectsWith(actorBox(player.getPosition(), ActorSizeTable::getSize("minecraft:player"))))
+            if (area.intersectsWith(actorBox(player.getPosition(), ActorClassRegistry::getSize("minecraft:player"))))
                 return false;
         }
 
@@ -49,7 +49,7 @@ namespace {
             if (actor.isDead() || &owner.getLevelFor(actor) != &level)
                 continue;
 
-            if (area.intersectsWith(actorBox(actor.getPosition(), ActorSizeTable::getSize(actor.getIdentifier()))))
+            if (area.intersectsWith(actorBox(actor.getPosition(), ActorClassRegistry::getSize(actor.getIdentifier()))))
                 return false;
         }
 

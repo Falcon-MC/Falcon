@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Actor/Actor.h"
+#include "Actor/ActorSize.h"
 #include "Actor/DynamicPropertyValue.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/NBT/Tag.h"
@@ -40,11 +41,17 @@ struct ProjectileData {
 
 class ServerActor : public Actor {
 public:
+    static constexpr float DEFAULT_WIDTH = 0.6f;
+
+    static constexpr float DEFAULT_HEIGHT = 1.8f;
+
     ServerActor(uint64_t runtimeId, const std::string &identifier);
 
     ~ServerActor() override = default;
 
     virtual void tick(ServerNetworkHandler &owner);
+
+    virtual ActorSize getSize() const { return ActorSize{DEFAULT_WIDTH, DEFAULT_HEIGHT}; }
 
     virtual bool isExpired() const { return false; }
 

@@ -69,7 +69,7 @@ namespace {
 }
 
 ActorCategory ActorCategories::of(const std::string &identifier) {
-    const MobActor *mob = ActorClassRegistry::getPrototype(identifier);
+    const MobActor *mob = ActorClassRegistry::getMobPrototype(identifier);
     if (mob != nullptr)
         return mob->getCategory();
 
