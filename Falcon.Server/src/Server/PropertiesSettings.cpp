@@ -1,10 +1,130 @@
 #include "Server/PropertiesSettings.h"
 
+#include <cctype>
 #include <cstdlib>
 #include <fstream>
 #include <map>
 #include <set>
+#include <sstream>
 #include <vector>
+
+namespace {
+    const int UNBOUNDED = 0x7FFFFFFF;
+
+    bool isInteger(const std::string &value) {
+        if (value.empty())
+            return false;
+
+        size_t index = value[0] == '-' ? 1 : 0;
+        if (index >= value.size())
+            return false;
+
+        for (; index < value.size(); ++index) {
+            if (std::isdigit((unsigned char) value[index]) == 0)
+                return false;
+        }
+
+        return true;
+    }
+
+    bool isFloating(const std::string &value) {
+        if (value.empty())
+            return false;
+
+        char *end = nullptr;
+        std::strtod(value.c_str(), &end);
+        return end != value.c_str() && *end == '\0';
+    }
+
+    bool isListed(const std::string &value, const char *values) {
+        if (values == nullptr)
+            return true;
+
+        std::stringstream stream(values);
+        std::string candidate;
+
+        while (std::getline(stream, candidate, ',')) {
+            if (candidate == value)
+                return true;
+        }
+
+        return false;
+    }
+}
+
+const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
+    static const std::vector<PropertyDefinition> definitions = {
+            {"server-name", "Falcon Server", PropertyKind::String, 0, 0, nullptr},
+            {"gamemode", "survival", PropertyKind::Enum, 0, 0, "survival,creative,adventure,spectator"},
+            {"force-gamemode", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"difficulty", "easy", PropertyKind::Enum, 0, 0, "peaceful,easy,normal,hard"},
+            {"allow-cheats", "true", PropertyKind::Bool, 0, 0, nullptr},
+            {"max-players", "10", PropertyKind::Int, 1, UNBOUNDED, nullptr},
+            {"online-mode", "true", PropertyKind::Bool, 0, 0, nullptr},
+            {"allow-list", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"server-port", "19132", PropertyKind::Int, 1, 65535, nullptr},
+            {"server-portv6", "19133", PropertyKind::Int, 1, 65535, nullptr},
+            {"enable-lan-visibility", "true", PropertyKind::Bool, 0, 0, nullptr},
+            {"view-distance", "32", PropertyKind::Int, 4, 96, nullptr},
+            {"tick-distance", "4", PropertyKind::Int, 4, 12, nullptr},
+            {"player-idle-timeout", "30", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"max-threads", "8", PropertyKind::Int, 0, 256, nullptr},
+            {"autosave-interval", "6000", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"level-name", "Bedrock level", PropertyKind::String, 0, 0, nullptr},
+            {"level-seed", "", PropertyKind::String, 0, 0, nullptr},
+            {"default-player-permission-level", "member", PropertyKind::Enum, 0, 0, "visitor,member,operator"},
+            {"texturepack-required", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"content-log-file-enabled", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"content-log-console-output-enabled", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"content-log-level", "info", PropertyKind::Enum, 0, 0, "error,warning,info,verbose"},
+            {"compression-threshold", "1", PropertyKind::Int, 0, 65535, nullptr},
+            {"compression-algorithm", "zlib", PropertyKind::Enum, 0, 0, "zlib,snappy"},
+            {"chat-restriction", "None", PropertyKind::Enum, 0, 0, "None,Dropped,Disabled"},
+            {"disable-player-interaction", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"client-side-chunk-generation-enabled", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"block-network-ids-are-hashes", "true", PropertyKind::Bool, 0, 0, nullptr},
+            {"disable-custom-skins", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"skin-change-cooldown", "30", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"spawn-protection", "16", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"server-authoritative-movement-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"server-authoritative-dismount-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"server-authoritative-entity-interactions-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"server-authoritative-block-breaking-pick-range-scalar", "1.5", PropertyKind::Float, 0, 0, nullptr},
+            {"server-build-radius-ratio", "Disabled", PropertyKind::String, 0, 0, nullptr},
+            {"player-position-acceptance-threshold", "0.5", PropertyKind::Float, 0, 0, nullptr},
+            {"player-movement-action-direction-threshold", "0.85", PropertyKind::Float, 0, 0, nullptr},
+            {"allow-inbound-script-debugging", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"allow-outbound-script-debugging", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"script-debugger-auto-attach", "disabled", PropertyKind::String, 0, 0, nullptr},
+            {"disable-persona", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"fluid-budget-ms", "20", PropertyKind::Int, -1, UNBOUNDED, nullptr},
+            {"transport", "raknet", PropertyKind::Enum, 0, 0, "raknet,nethernet"}
+    };
+
+    return definitions;
+}
+
+const PropertyDefinition *PropertiesSettings::findDefinition(const std::string &key) {
+    for (const PropertyDefinition &definition: getDefinitions()) {
+        if (key == definition.mKey)
+            return &definition;
+    }
+
+    return nullptr;
+}
+
+std::string PropertiesSettings::getDefaultContents() {
+    std::string contents;
+
+    for (const PropertyDefinition &definition: getDefinitions()) {
+        contents += definition.mKey;
+        contents += "=";
+        contents += definition.mDefault;
+        contents += "\n";
+    }
+
+    return contents;
+}
 
 PropertiesSettings::PropertiesSettings() : mLoaded(false) {}
 
@@ -30,34 +150,54 @@ void PropertiesSettings::_writeDefault(const std::string &path) {
     if (!file.is_open())
         return;
 
-    file << "server-name=Falcon Server\n";
-    file << "gamemode=survival\n";
-    file << "force-gamemode=false\n";
-    file << "difficulty=easy\n";
-    file << "allow-cheats=true\n";
-    file << "max-players=10\n";
-    file << "online-mode=true\n";
-    file << "allow-list=false\n";
-    file << "server-port=19132\n";
-    file << "server-portv6=19133\n";
-    file << "enable-lan-visibility=true\n";
-    file << "view-distance=32\n";
-    file << "tick-distance=4\n";
-    file << "player-idle-timeout=30\n";
-    file << "level-name=Bedrock level\n";
-    file << "level-seed=\n";
-    file << "default-player-permission-level=member\n";
-    file << "texturepack-required=false\n";
-    file << "content-log-file-enabled=false\n";
-    file << "compression-algorithm=zlib\n";
-    file << "client-side-chunk-generation-enabled=false\n";
-    file << "block-network-ids-are-hashes=true\n";
-    file << "disable-custom-skins=false\n";
-    file << "transport=raknet\n";
+    file << getDefaultContents();
+}
+
+bool PropertiesSettings::_isValidValue(const PropertyDefinition &definition, const std::string &value) {
+    switch (definition.mKind) {
+        case PropertyKind::String:
+            return true;
+        case PropertyKind::Bool:
+            return value == "true" || value == "false" || value == "1" || value == "0";
+        case PropertyKind::Int: {
+            if (!isInteger(value))
+                return false;
+
+            const long parsed = std::strtol(value.c_str(), nullptr, 10);
+            return parsed >= definition.mMinimum && parsed <= definition.mMaximum;
+        }
+        case PropertyKind::Float:
+            return isFloating(value);
+        case PropertyKind::Enum:
+            return isListed(value, definition.mValues);
+    }
+
+    return true;
+}
+
+void PropertiesSettings::_validate() {
+    mInvalid.clear();
+
+    for (const PropertyDefinition &definition: getDefinitions()) {
+        const auto it = mProperties.find(definition.mKey);
+        if (it == mProperties.end())
+            continue;
+
+        if (it->second.empty() && definition.mKind != PropertyKind::String) {
+            it->second = definition.mDefault;
+            continue;
+        }
+
+        if (_isValidValue(definition, it->second))
+            continue;
+
+        mInvalid.push_back(std::string(definition.mKey) + "=" + it->second);
+        it->second = definition.mDefault;
+    }
 }
 
 TransportLayer PropertiesSettings::getTransportLayer() const {
-    const std::string value = getString("transport", "raknet");
+    const std::string value = getString("transport");
 
     if (value.empty() || value == "raknet")
         return TransportLayer::RakNet;
@@ -97,6 +237,8 @@ bool PropertiesSettings::load(const std::string &path) {
 
         mProperties[key] = _trim(trimmed.substr(separator + 1));
     }
+
+    _validate();
 
     mLoaded = true;
     return true;
@@ -138,24 +280,7 @@ bool PropertiesSettings::setProperty(const std::string &key, const std::string &
 }
 
 bool PropertiesSettings::_isKnownProperty(const std::string &key) {
-    static const std::set<std::string> known = {
-            "server-name", "gamemode", "force-gamemode", "difficulty", "allow-cheats", "max-players",
-            "online-mode", "allow-list", "server-port", "server-portv6",
-            "enable-lan-visibility", "view-distance", "tick-distance", "player-idle-timeout", "max-threads", "autosave-interval",
-            "level-name", "level-seed", "default-player-permission-level", "texturepack-required",
-            "content-log-file-enabled", "content-log-console-output-enabled", "content-log-level",
-            "compression-threshold", "compression-algorithm", "chat-restriction", "disable-player-interaction",
-            "client-side-chunk-generation-enabled", "block-network-ids-are-hashes", "disable-custom-skins",
-            "skin-change-cooldown", "spawn-protection",
-            "server-authoritative-movement-strict",
-            "server-authoritative-dismount-strict", "server-authoritative-entity-interactions-strict",
-            "server-authoritative-block-breaking-pick-range-scalar", "server-build-radius-ratio",
-            "player-position-acceptance-threshold", "player-movement-action-direction-threshold",
-            "allow-inbound-script-debugging", "allow-outbound-script-debugging", "script-debugger-auto-attach",
-            "disable-persona", "transport"
-    };
-
-    return known.find(key) != known.end();
+    return findDefinition(key) != nullptr;
 }
 
 std::string PropertiesSettings::getUnknownContents() const {
@@ -213,8 +338,32 @@ bool PropertiesSettings::getBool(const std::string &key, bool defaultValue) cons
     return it->second == "true" || it->second == "1";
 }
 
+std::string PropertiesSettings::getString(const char *key) const {
+    const PropertyDefinition *definition = findDefinition(key);
+    return getString(key, definition == nullptr ? std::string() : definition->mDefault);
+}
+
+int PropertiesSettings::getInt(const char *key) const {
+    const PropertyDefinition *definition = findDefinition(key);
+    const int fallback = definition == nullptr ? 0 : atoi(definition->mDefault);
+    return getInt(key, fallback);
+}
+
+float PropertiesSettings::getFloat(const char *key) const {
+    const PropertyDefinition *definition = findDefinition(key);
+    const float fallback = definition == nullptr ? 0.0f : (float) atof(definition->mDefault);
+    return getFloat(key, fallback);
+}
+
+bool PropertiesSettings::getBool(const char *key) const {
+    const PropertyDefinition *definition = findDefinition(key);
+    const bool fallback = definition != nullptr
+                          && (std::string(definition->mDefault) == "true" || std::string(definition->mDefault) == "1");
+    return getBool(key, fallback);
+}
+
 GameType PropertiesSettings::getGameType() const {
-    const std::string value = getString("gamemode", "survival");
+    const std::string value = getString("gamemode");
 
     if (value == "creative" || value == "1")
         return GameType::Creative;
@@ -227,7 +376,7 @@ GameType PropertiesSettings::getGameType() const {
 }
 
 Difficulty PropertiesSettings::getDifficulty() const {
-    const std::string value = getString("difficulty", "easy");
+    const std::string value = getString("difficulty");
 
     if (value == "peaceful" || value == "0")
         return Difficulty::Peaceful;
@@ -240,7 +389,7 @@ Difficulty PropertiesSettings::getDifficulty() const {
 }
 
 PlayerPermission PropertiesSettings::getDefaultPlayerPermissionLevel() const {
-    const std::string value = getString("default-player-permission-level", "member");
+    const std::string value = getString("default-player-permission-level");
 
     if (value == "visitor")
         return PlayerPermission::Visitor;
@@ -251,7 +400,7 @@ PlayerPermission PropertiesSettings::getDefaultPlayerPermissionLevel() const {
 }
 
 ContentLogLevel PropertiesSettings::getContentLogLevel() const {
-    const std::string value = getString("content-log-level", "info");
+    const std::string value = getString("content-log-level");
 
     if (value == "error")
         return ContentLogLevel::Error;
@@ -264,14 +413,14 @@ ContentLogLevel PropertiesSettings::getContentLogLevel() const {
 }
 
 NetworkSettingsPacket::CompressionAlgorithm PropertiesSettings::getCompressionAlgorithm() const {
-    if (getString("compression-algorithm", "zlib") == "snappy")
+    if (getString("compression-algorithm") == "snappy")
         return NetworkSettingsPacket::CompressionAlgorithm::Snappy;
 
     return NetworkSettingsPacket::CompressionAlgorithm::ZLib;
 }
 
 ChatRestrictionLevel PropertiesSettings::getChatRestrictionLevel() const {
-    const std::string value = getString("chat-restriction", "None");
+    const std::string value = getString("chat-restriction");
 
     if (value == "Dropped")
         return ChatRestrictionLevel::Dropped;
