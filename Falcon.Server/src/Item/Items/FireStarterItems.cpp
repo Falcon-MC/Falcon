@@ -1,5 +1,23 @@
 #include "Item/Items/FireStarterItems.h"
 
+#include "Item/ItemClassRegistry.h"
+
+FALCON_REGISTER_ITEM_CUSTOM(FlintAndSteelItem, 40,
+                            [](const std::string &identifier) {
+                                return identifier == "minecraft:flint_and_steel";
+                            },
+                            [](const Item &item) -> std::unique_ptr<Item> {
+                                return std::make_unique<FlintAndSteelItem>(item);
+                            });
+
+FALCON_REGISTER_ITEM_CUSTOM(FireChargeItem, 41,
+                            [](const std::string &identifier) {
+                                return identifier == "minecraft:fire_charge";
+                            },
+                            [](const Item &item) -> std::unique_ptr<Item> {
+                                return std::make_unique<FireChargeItem>(item);
+                            });
+
 #include "Block/BlockData.h"
 #include "Block/Systems/FireSystem.h"
 #include "Inventory/InventoryManager.h"
@@ -36,6 +54,10 @@ namespace {
         return data != nullptr && data->mSolid;
     }
 
+    bool isObsidian(Level &level, const Vector3i &position) {
+        return level.getBlockState(position.x, position.y, position.z).mName == "minecraft:obsidian";
+    }
+
     bool canIgniteAgainst(Level &level, const Vector3i &target, const Vector3i &placement) {
         if (level.getBlockState(placement.x, placement.y, placement.z).mName != "minecraft:air")
             return false;
@@ -65,7 +87,7 @@ bool FlintAndSteelItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &
     const bool ignitable = canIgniteAgainst(level, blockPosition, placement);
 
     if (ignitable)
-        FireSystem::ignite(owner, level, placement, true);
+        FireSystem::ignite(owner, level, placement, isObsidian(level, blockPosition));
 
     owner.damagePlayerHeldItem(player, 1);
     owner.playLevelSound(level, LevelSoundEvent::FIRE_IGNITE, centerOf(placement));
@@ -88,7 +110,7 @@ bool FireChargeItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
     if (!canIgniteAgainst(level, blockPosition, placement))
         return false;
 
-    if (!FireSystem::ignite(owner, level, placement))
+    if (!FireSystem::ignite(owner, level, placement, isObsidian(level, blockPosition)))
         return false;
 
     owner.playLevelSound(level, LevelSoundEvent::GHAST_FIREBALL, centerOf(placement));

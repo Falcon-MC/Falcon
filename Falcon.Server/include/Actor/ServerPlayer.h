@@ -208,6 +208,10 @@ public:
             mTicksSinceInAir = 0;
     }
 
+    int64_t getLastPortalTick() const { return mLastPortalTick; }
+
+    void setLastPortalTick(int64_t tick) { mLastPortalTick = tick; }
+
     int32_t getPortalTicks() const { return mPortalTicks; }
 
     void setPortalTicks(int32_t ticks) { mPortalTicks = ticks; }
@@ -404,6 +408,8 @@ private:
     bool mHasSpawnPoint = false;
     Vector3i mSpawnPoint;
     int32_t mPortalTicks = 0;
+
+    int64_t mLastPortalTick = -1;
     int32_t mTicksSinceInAir = 0;
     bool mAwaitingConsumableRelease = false;
     int64_t mLastEarlyConsumableReleaseTick = 0;
