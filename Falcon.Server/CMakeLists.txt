@@ -12,6 +12,7 @@ falcon_bedrock_data_file(item_tags.json FALCON_ITEM_TAGS_JSON)
 falcon_bedrock_data_file(biome_definitions.nbt FALCON_BIOME_DEFINITIONS_NBT)
 falcon_bedrock_data_file(block_palette.nbt FALCON_BLOCK_PALETTE_NBT)
 falcon_bedrock_data_file(voxel_shapes.json FALCON_VOXEL_SHAPES_JSON)
+falcon_bedrock_data_file(creative_items.json FALCON_CREATIVE_ITEMS_JSON)
 
 file(READ "${FALCON_RECIPES_JSON}" FALCON_RECIPES_JSON_CONTENT)
 file(READ "${FALCON_ITEM_TAGS_JSON}" FALCON_ITEM_TAGS_JSON_CONTENT)
@@ -21,6 +22,9 @@ configure_file(cmake/CraftingRecipeJson.h.in "${FALCON_GENERATED_DIR}/CraftingRe
 
 file(READ "${FALCON_VOXEL_SHAPES_JSON}" FALCON_VOXEL_SHAPES_JSON_CONTENT)
 configure_file(cmake/VoxelShapesJson.h.in "${FALCON_GENERATED_DIR}/VoxelShapesJson.h" @ONLY)
+
+file(READ "${FALCON_CREATIVE_ITEMS_JSON}" FALCON_CREATIVE_ITEMS_JSON_CONTENT)
+configure_file(cmake/CreativeItemsJson.h.in "${FALCON_GENERATED_DIR}/CreativeItemsJson.h" @ONLY)
 
 file(READ "${FALCON_BIOME_DEFINITIONS_NBT}" FALCON_BIOME_DEFINITIONS_HEX HEX)
 string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_BIOME_DEFINITIONS_BYTES "${FALCON_BIOME_DEFINITIONS_HEX}")

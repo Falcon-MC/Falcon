@@ -1,0 +1,7 @@
+#pragma once
+
+namespace FalconCreativeItemData {
+    inline constexpr const char kCreativeItemsJson[] = R"FCI(
+@FALCON_CREATIVE_ITEMS_JSON_CONTENT@
+)FCI";
+}
