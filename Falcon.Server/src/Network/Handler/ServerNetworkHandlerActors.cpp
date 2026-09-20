@@ -5,6 +5,7 @@
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/Mob/MobActor.h"
 #include "Actor/Mob/MobLoot.h"
+#include "Actor/RideSystem.h"
 #include "Actor/ServerActor.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Core/Debug/BedrockLog.h"
@@ -733,11 +734,15 @@ void ServerNetworkHandler::removeActor(int64_t uniqueId) {
     if (it == mActors.end())
         return;
 
+    RideSystem::ejectAll(*this, *it->second);
+    if (it->second->isRiding())
+        RideSystem::dismount(*this, *it->second, false);
+
     broadcastActorRemove(*it->second);
     mActors.erase(it);
 }
 
-bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const ServerActor &actor) const {
+bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &actor) const {
     if (!player.isSpawned() || player.getDimension() != actor.getDimension())
         return false;
 
@@ -758,6 +763,7 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
     packet.mMotion = actor.getMotion();
     packet.mRotation = Vector2f(actor.getRotation().x, actor.getRotation().y);
     packet.mProperties = buildActorProperties(actor);
+    RideSystem::appendLinks(actor, packet.mActorLinks);
     actor.fillSpawnMetadata(packet.mMetadata);
 
     mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);

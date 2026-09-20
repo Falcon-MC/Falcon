@@ -199,7 +199,7 @@ public:
     /** Despawns the player for every client that has them spawned, as they leave the server. */
     void despawnPlayerForViewers(ServerPlayer &player);
 
-    bool canPlayerSeeActor(ServerPlayer &player, const ServerActor &actor) const;
+    bool canPlayerSeeActor(ServerPlayer &player, const Actor &actor) const;
 
     void broadcastActorMove(ServerActor &actor);
 

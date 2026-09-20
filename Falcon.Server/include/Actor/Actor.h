@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <string>
+#include <vector>
 
 class Actor {
 public:
@@ -40,6 +41,25 @@ public:
     const Vector3f &getMotion() const { return mMotion; }
 
     void setMotion(const Vector3f &motion) { mMotion = motion; }
+
+    int64_t getVehicleId() const { return mVehicleId; }
+
+    bool isRiding() const { return mVehicleId != 0; }
+
+    const std::vector<int64_t> &getPassengers() const { return mPassengers; }
+
+    bool hasPassengers() const { return !mPassengers.empty(); }
+
+    void _setVehicleId(int64_t vehicleId) { mVehicleId = vehicleId; }
+
+    void _addPassenger(int64_t passengerId) { mPassengers.push_back(passengerId); }
+
+    void _removePassenger(int64_t passengerId) {
+        mPassengers.erase(std::remove(mPassengers.begin(), mPassengers.end(), passengerId),
+                          mPassengers.end());
+    }
+
+    void _clearPassengers() { mPassengers.clear(); }
 
     ActorFlags &getFlags() { return mFlags; }
 
@@ -198,6 +218,8 @@ protected:
     static const int FOOD_TICK_PERIOD = 80;
 
     uint64_t mRuntimeId;
+    int64_t mVehicleId = 0;
+    std::vector<int64_t> mPassengers;
     Vector3f mPosition;
     DimensionType mDimension = DimensionType::Overworld;
     Vector3f mRotation;

@@ -1,6 +1,7 @@
 #include "Network/Handler/MovementHandler.h"
 
 #include "Actor/ActorFlags.h"
+#include "Actor/RideSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
 #include "Block/Systems/LavaResetFallDistanceSystem.h"
@@ -121,6 +122,14 @@ bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPositio
 
 void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &feetPosition,
                                      const Vector3f &rotation) {
+    if (player.isRiding()) {
+        player.setRotation(rotation);
+        Actor *vehicle = RideSystem::resolve(owner, player.getVehicleId());
+        if (vehicle != nullptr)
+            RideSystem::syncPassengerPositions(owner, *vehicle);
+        return;
+    }
+
     const Vector3f previous = player.getPosition();
     player.setRotation(rotation);
     const float requestedX = feetPosition.x - previous.x;

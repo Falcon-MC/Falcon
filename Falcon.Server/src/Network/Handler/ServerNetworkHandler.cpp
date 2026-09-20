@@ -2,6 +2,7 @@
 
 #include "Scripting/Content/CustomContentRegistry.h"
 
+#include "Actor/RideSystem.h"
 #include "Core/Math/MathConstants.h"
 
 #include "Command/ServerCommandOrigin.h"
@@ -1276,6 +1277,9 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
                                    : id.toString();
     if (player != nullptr && !player->getName().empty()) {
         stopSleep(*player);
+        if (player->isRiding())
+            RideSystem::dismount(*this, *player, false);
+        RideSystem::ejectAll(*this, *player);
         _savePlayerData(*player);
         EnderChestInventoryStore::getInstance().remove(player->getUniqueId());
 
@@ -1929,6 +1933,9 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
         return;
 
     stopSleep(player);
+    if (player.isRiding())
+        RideSystem::dismount(*this, player, false);
+    RideSystem::ejectAll(*this, player);
     player.kill();
     player.setOnFire(false);
     _sendEntityData(player);
@@ -3083,6 +3090,12 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const InteractPac
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr || !player->isSpawned())
         return;
+
+    if (packet.mAction == InteractPacket::Action::LeaveVehicle) {
+        if (player->isRiding())
+            RideSystem::dismount(*this, *player, true);
+        return;
+    }
 
     if (packet.mAction != InteractPacket::Action::OpenInventory)
         return;

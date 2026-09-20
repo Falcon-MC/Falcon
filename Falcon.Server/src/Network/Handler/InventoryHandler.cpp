@@ -1,6 +1,7 @@
 #include "Network/Handler/InventoryHandler.h"
 
 #include "Core/Debug/BedrockLog.h"
+#include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Inventory/InventoryManager.h"
 #include "Item/VanillaItems.h"
@@ -311,8 +312,16 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
             return;
         }
 
-        if (packet.mActionType == 1 || packet.mActionType == 2)
+        if (packet.mActionType == 1 || packet.mActionType == 2) {
             player.attackActor(owner, (uint64_t) packet.mRuntimeActorId);
+            return;
+        }
+
+        if (packet.mActionType == 0) {
+            ServerActor *target = owner.getActor((int64_t) packet.mRuntimeActorId);
+            if (target != nullptr)
+                target->onInteract(owner, player);
+        }
         return;
     }
 

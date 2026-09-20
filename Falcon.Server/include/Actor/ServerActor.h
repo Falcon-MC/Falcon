@@ -66,6 +66,16 @@ public:
         return 0.0f;
     }
 
+    virtual Vector3f getSeatOffset() const {
+        return Vector3f(0.0f, 0.0f, 0.0f);
+    }
+
+    virtual bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
+        (void) owner;
+        (void) player;
+        return false;
+    }
+
     virtual bool isInvulnerable() const {
         return false;
     }
