@@ -207,6 +207,9 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *
     if (getNoDamageTicks() > 0 && amount <= getLastDamageAmount())
         return false;
 
+    if (onHurt(owner, amount, source))
+        return true;
+
     setHealth(getHealth() - amount);
     setNoDamageTicks(INVULNERABILITY_TICKS);
     setLastDamageAmount(amount);

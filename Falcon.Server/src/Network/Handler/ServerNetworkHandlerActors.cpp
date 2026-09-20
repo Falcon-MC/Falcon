@@ -1,5 +1,6 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 
+#include "Actor/ActorClassRegistry.h"
 #include "Actor/DynamicPropertyStore.h"
 #include "Actor/ActorSizeTable.h"
 #include "Actor/MobLootTable.h"
@@ -133,7 +134,7 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     const uint64_t runtimeId = allocateRuntimeId();
     const int64_t uniqueId = (int64_t) runtimeId;
 
-    std::unique_ptr<ServerActor> actor(new ServerActor(runtimeId, identifier));
+    std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(runtimeId, identifier);
     actor->getAttributes() = ActorAttributes::createActorDefaults();
     actor->setDimension(level.getDimensionType());
     actor->setPosition(position);

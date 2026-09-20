@@ -48,6 +48,13 @@ public:
 
     virtual bool isExpired() const { return false; }
 
+    virtual bool onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) {
+        (void) owner;
+        (void) amount;
+        (void) source;
+        return false;
+    }
+
     virtual float getBaseOffset() const {
         return 0.0f;
     }
