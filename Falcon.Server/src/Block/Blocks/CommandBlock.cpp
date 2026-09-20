@@ -1,5 +1,9 @@
 #include "Block/Blocks/CommandBlock.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(CommandBlock, 30);
+
 #include "Inventory/Container/CommandBlockContainerManagerModel.h"
 
 bool CommandBlock::matches(const std::string &identifier) {

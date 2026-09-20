@@ -1,5 +1,15 @@
 #include "Item/Items/MaceItem.h"
 
+#include "Item/ItemClassRegistry.h"
+
+FALCON_REGISTER_ITEM_CUSTOM(MaceItem, 30,
+                            [](const std::string &identifier) {
+                                return identifier == "minecraft:mace";
+                            },
+                            [](const Item &item) -> std::unique_ptr<Item> {
+                                return std::make_unique<MaceItem>(item);
+                            });
+
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Core/Math/MathConstants.h"

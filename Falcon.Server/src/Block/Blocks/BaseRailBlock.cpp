@@ -1,5 +1,9 @@
 #include "Block/Blocks/BaseRailBlock.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(BaseRailBlock, 140);
+
 #include "Block/BlockIdentifier.h"
 #include "Block/BlockSupport.h"
 #include "Block/Systems/RedstoneSystem.h"

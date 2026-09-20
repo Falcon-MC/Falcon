@@ -1,5 +1,9 @@
 #include "Block/Blocks/LeverBlock.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(LeverBlock, 80);
+
 #include "Block/BlockSupport.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Level.h"

@@ -1,5 +1,9 @@
 #include "Block/Blocks/FurnaceBlock.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(FurnaceBlock, 20);
+
 #include "Level/Level.h"
 
 #include "Inventory/Container/FurnaceContainerManagerModel.h"

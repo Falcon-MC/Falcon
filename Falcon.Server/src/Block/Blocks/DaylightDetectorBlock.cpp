@@ -1,5 +1,9 @@
 #include "Block/Blocks/DaylightDetectorBlock.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(DaylightDetectorBlock, 70);
+
 #include "Core/Math/MathConstants.h"
 #include "Level/Level.h"
 #include "Level/LightSystem.h"

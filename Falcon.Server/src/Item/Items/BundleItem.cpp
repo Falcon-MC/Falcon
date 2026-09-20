@@ -1,5 +1,9 @@
 #include "Item/Items/BundleItem.h"
 
+#include "Item/ItemClassRegistry.h"
+
+FALCON_REGISTER_ITEM(BundleItem, 20);
+
 #include "Actor/ServerPlayer.h"
 #include "Inventory/BundleInventory.h"
 #include "Inventory/InventoryManager.h"

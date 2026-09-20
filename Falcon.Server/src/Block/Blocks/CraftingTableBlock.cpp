@@ -1,5 +1,9 @@
 #include "Block/Blocks/CraftingTableBlock.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(CraftingTableBlock, 10);
+
 #include "Inventory/Container/CraftingContainerManagerModel.h"
 #include "Actor/ServerPlayer.h"
 #include "Network/Handler/ServerNetworkHandler.h"

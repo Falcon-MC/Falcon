@@ -1,5 +1,9 @@
 #include "Item/Items/SpearItem.h"
 
+#include "Item/ItemClassRegistry.h"
+
+FALCON_REGISTER_ITEM(SpearItem, 80);
+
 #include "Actor/ActorSizeTable.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
 #include "Actor/ServerActor.h"

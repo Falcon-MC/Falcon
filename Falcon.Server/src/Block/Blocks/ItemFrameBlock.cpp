@@ -1,5 +1,9 @@
 #include "Block/Blocks/ItemFrameBlock.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(ItemFrameBlock, 60);
+
 #include "Actor/ServerPlayer.h"
 #include "Block/Actor/ItemFrameBlockActor.h"
 #include "Block/BlockActorStore.h"

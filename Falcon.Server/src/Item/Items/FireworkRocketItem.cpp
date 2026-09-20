@@ -1,5 +1,15 @@
 #include "Item/Items/FireworkRocketItem.h"
 
+#include "Item/ItemClassRegistry.h"
+
+FALCON_REGISTER_ITEM_CUSTOM(FireworkRocketItem, 50,
+                            [](const std::string &identifier) {
+                                return identifier == "minecraft:firework_rocket";
+                            },
+                            [](const Item &item) -> std::unique_ptr<Item> {
+                                return std::make_unique<FireworkRocketItem>(item);
+                            });
+
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Core/Math/MathConstants.h"

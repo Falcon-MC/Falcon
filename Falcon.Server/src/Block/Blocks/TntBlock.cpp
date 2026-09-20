@@ -1,5 +1,9 @@
 #include "Block/Blocks/TntBlock.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(TntBlock, 410);
+
 #include "Actor/PrimedTntActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Core/Math/MathConstants.h"

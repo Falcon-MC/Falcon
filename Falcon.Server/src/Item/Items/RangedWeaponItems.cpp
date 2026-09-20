@@ -1,5 +1,31 @@
 #include "Item/Items/RangedWeaponItems.h"
 
+#include "Item/ItemClassRegistry.h"
+
+FALCON_REGISTER_ITEM_CUSTOM(BowItem, 60,
+                            [](const std::string &identifier) {
+                                return identifier == "minecraft:bow";
+                            },
+                            [](const Item &item) -> std::unique_ptr<Item> {
+                                return std::make_unique<BowItem>(item);
+                            });
+
+FALCON_REGISTER_ITEM_CUSTOM(CrossbowItem, 61,
+                            [](const std::string &identifier) {
+                                return identifier == "minecraft:crossbow";
+                            },
+                            [](const Item &item) -> std::unique_ptr<Item> {
+                                return std::make_unique<CrossbowItem>(item);
+                            });
+
+FALCON_REGISTER_ITEM_CUSTOM(TridentItem, 62,
+                            [](const std::string &identifier) {
+                                return identifier == "minecraft:trident";
+                            },
+                            [](const Item &item) -> std::unique_ptr<Item> {
+                                return std::make_unique<TridentItem>(item);
+                            });
+
 #include "Actor/ServerActor.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
 #include "Core/Math/MathConstants.h"

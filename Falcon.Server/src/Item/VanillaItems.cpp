@@ -1,14 +1,6 @@
 #include "Item/VanillaItems.h"
 
-#include "Item/Items/BundleItem.h"
-#include "Item/Items/FireStarterItems.h"
-#include "Item/Items/MaceItem.h"
-#include "Item/Items/FireworkRocketItem.h"
-#include "Item/Items/RangedWeaponItems.h"
-#include "Item/Items/SpearItem.h"
-#include "Item/Items/BoneMealItem.h"
-#include "Item/Items/ThrowableItems.h"
-
+#include "Item/ItemClassRegistry.h"
 #include "Item/ItemData.h"
 #include "Item/ItemTypeIds.h"
 
@@ -2438,57 +2430,7 @@ Item VanillaItems::ZOMBIE_VILLAGER_SPAWN_EGG() {
 
 namespace {
     std::unique_ptr<Item> makeItem(const Item &base) {
-        const std::string &identifier = base.getIdentifier();
-
-        if (identifier == "minecraft:snowball")
-            return std::make_unique<ThrowableItem>(base, "minecraft:snowball", 1.5f, 0);
-        if (identifier == "minecraft:egg")
-            return std::make_unique<ThrowableItem>(base, "minecraft:egg", 1.5f, 0);
-        if (identifier == "minecraft:ender_pearl")
-            return std::make_unique<ThrowableItem>(base, "minecraft:ender_pearl", 1.5f, 20);
-        if (identifier == "minecraft:experience_bottle")
-            return std::make_unique<ThrowableItem>(base, "minecraft:xp_bottle", 1.0f, 0);
-        if (identifier == "minecraft:wind_charge")
-            return std::make_unique<ThrowableItem>(base, "minecraft:wind_charge_projectile", 1.5f, 10);
-        if (identifier == "minecraft:ender_eye")
-            return std::make_unique<ThrowableItem>(base, "minecraft:eye_of_ender_signal", 1.2f, 0);
-
-        if (BundleItem::matches(identifier))
-            return std::make_unique<BundleItem>(base);
-
-        if (identifier == "minecraft:mace")
-            return std::make_unique<MaceItem>(base);
-
-        if (identifier == "minecraft:flint_and_steel")
-            return std::make_unique<FlintAndSteelItem>(base);
-        if (identifier == "minecraft:fire_charge")
-            return std::make_unique<FireChargeItem>(base);
-
-        if (identifier == "minecraft:firework_rocket")
-            return std::make_unique<FireworkRocketItem>(base);
-
-        if (identifier == "minecraft:bow")
-            return std::make_unique<BowItem>(base);
-        if (identifier == "minecraft:crossbow")
-            return std::make_unique<CrossbowItem>(base);
-        if (identifier == "minecraft:trident")
-            return std::make_unique<TridentItem>(base);
-
-        if (identifier == "minecraft:splash_potion")
-            return std::make_unique<ThrownPotionItem>(base, "minecraft:splash_potion");
-        if (identifier == "minecraft:lingering_potion")
-            return std::make_unique<ThrownPotionItem>(base, "minecraft:lingering_potion");
-
-        if (SpearItem::matches(identifier))
-            return std::make_unique<SpearItem>(base);
-
-        if (identifier.size() > 10 && identifier.compare(identifier.size() - 10, 10, "_spawn_egg") == 0)
-            return std::make_unique<SpawnEggItem>(base);
-
-        if (BoneMealItem::matches(identifier))
-            return std::make_unique<BoneMealItem>(base);
-
-        return std::make_unique<Item>(base);
+        return ItemClassRegistry::create(base);
     }
 }
 

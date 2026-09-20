@@ -1,5 +1,10 @@
 #include "Block/Blocks/RedstoneDiodeBlock.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(RedstoneRepeaterBlock, 100);
+FALCON_REGISTER_BLOCK(RedstoneComparatorBlock, 110);
+
 #include "Block/BlockSupport.h"
 #include "Block/Components/PlacementOrientation.h"
 #include "Block/Systems/RedstoneSystem.h"

@@ -1,5 +1,9 @@
 #include "Block/Blocks/ContainerBlock.h"
 
+#include "Block/BlockClassRegistry.h"
+
+FALCON_REGISTER_BLOCK(ContainerBlock, 50);
+
 #include "Actor/ServerPlayer.h"
 #include "Block/Actor/ContainerBlockActor.h"
 #include "Block/Actor/EnderChestBlockActor.h"
