@@ -178,31 +178,29 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *
     }
 
     if (getHealth() <= 0.0f) {
-        owner.broadcastActorEvent(*this, EntityEventType::DeathAnimation);
-
-        const Vector3f dropPosition = getPosition();
         int32_t looting = lootingLevel;
         if (looting < 0) {
             looting = source != nullptr
                       ? ItemEnchantments::getLevel(source->getInventory().getItemInHand(), EnchantmentIds::LOOTING)
                       : 0;
         }
-        const MobActor *mob = dynamic_cast<const MobActor *>(this);
-
-        if (mob != nullptr && owner.getLevel().getGameRules().getBool("domobloot")) {
-            Level &level = owner.getLevelFor(*this);
-            mob->dropLoot(owner, level, source, looting);
-
-            const int experience = mob->getExperienceDrop();
-            if (experience > 0)
-                owner.spawnExperienceOrbs(level, dropPosition, experience);
-        }
-
-        setDead(true);
-        setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+        kill(owner, source, looting);
     }
 
     return true;
+}
+
+void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t lootingLevel) {
+    (void) source;
+    (void) lootingLevel;
+
+    if (isDead())
+        return;
+
+    setHealth(0.0f);
+    owner.broadcastActorEvent(*this, EntityEventType::DeathAnimation);
+    setDead(true);
+    setMotion(Vector3f(0.0f, 0.0f, 0.0f));
 }
 
 int32_t ServerActor::getIntProperty(const std::string &name, int32_t fallback) const {

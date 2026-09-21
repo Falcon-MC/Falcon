@@ -47,6 +47,22 @@ int MobActor::randomRange(int minimum, int maximum) {
     return distribution(experienceRandom());
 }
 
+void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t lootingLevel) {
+    if (isDead())
+        return;
+
+    if (owner.getLevel().getGameRules().getBool("domobloot")) {
+        Level &level = owner.getLevelFor(*this);
+        dropLoot(owner, level, source, lootingLevel);
+
+        const int experience = getExperienceDrop();
+        if (experience > 0 && source != nullptr)
+            owner.spawnExperienceOrbs(level, getPosition(), experience);
+    }
+
+    ServerActor::kill(owner, source, lootingLevel);
+}
+
 void MobActor::dropLoot(ServerNetworkHandler &owner, Level &level, const ServerPlayer *killer,
                         int32_t lootingLevel) const {
     const LootTable *table = getLootTable();

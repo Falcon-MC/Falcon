@@ -28,6 +28,11 @@ public:
 
     virtual float resolveMaxHealth(Difficulty difficulty) const;
 
+    virtual void finalizeSpawn() {
+    }
+
+    void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0) override;
+
     void applyDefaults(Difficulty difficulty);
 
     static int randomRange(int minimum, int maximum);

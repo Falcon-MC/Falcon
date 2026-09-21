@@ -90,6 +90,8 @@ public:
      */
     bool hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source, int32_t lootingLevel = -1);
 
+    virtual void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0);
+
     void tickFire(ServerNetworkHandler &owner);
 
     void tickSunlightBurn(ServerNetworkHandler &owner);
