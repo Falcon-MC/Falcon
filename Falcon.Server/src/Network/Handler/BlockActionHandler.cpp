@@ -934,16 +934,24 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     const bool useBlock = !player.getFlags().get(ActorFlag::Sneaking) || inventory.getItemInHand().isAir();
 
+    const Item *itemType = !onCooldown && !interactItem.isAir() && interactItem.mDefinition != nullptr
+                           ? VanillaItems::fromIdentifier(interactItem.mDefinition->getIdentifier())
+                           : nullptr;
+    const bool itemFirst = itemType != nullptr && itemType->takesPriorityOverBlockInteraction();
+
+    if (itemFirst && itemType->onUseOnBlock(owner, player, interactItem, transaction.mBlockPosition,
+                                            transaction.mBlockFace, transaction.mClickPosition))
+        return true;
+
     if (!onCooldown && useBlock && clickedBlock != nullptr &&
         clickedBlock->onInteract(owner, player, transaction.mBlockPosition, clickedState))
         return true;
 
-    if (!onCooldown && !interactItem.isAir() && interactItem.mDefinition != nullptr) {
-        const Item *itemType = VanillaItems::fromIdentifier(interactItem.mDefinition->getIdentifier());
-        if (itemType != nullptr && itemType->onUseOnBlock(owner, player, interactItem, transaction.mBlockPosition,
-                                                          transaction.mBlockFace, transaction.mClickPosition))
-            return true;
-    }
+    if (!itemFirst && itemType != nullptr && itemType->onUseOnBlock(owner, player, interactItem,
+                                                                    transaction.mBlockPosition,
+                                                                    transaction.mBlockFace,
+                                                                    transaction.mClickPosition))
+        return true;
 
     if (transaction.mClientInteractPrediction != ItemUsePredictedResult::Success) {
         return true;

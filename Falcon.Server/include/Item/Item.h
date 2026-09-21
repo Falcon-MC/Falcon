@@ -60,6 +60,10 @@ public:
         return false;
     }
 
+    virtual bool takesPriorityOverBlockInteraction() const {
+        return false;
+    }
+
     virtual bool onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
         (void) owner;
         (void) player;
