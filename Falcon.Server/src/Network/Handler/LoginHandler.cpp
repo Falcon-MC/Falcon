@@ -1042,6 +1042,7 @@ void LoginHandler::removeFromPlayerList(ServerNetworkHandler &owner, ServerPlaye
 
 void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner, ServerPlayer &player) {
     player.setLoginState(ServerPlayer::LoginState::Spawned);
+    player.grantSpawnInvulnerability();
     LOG_INFO(LogAreaID::Server, "Player %s spawned", player.getName().c_str());
 
     player.setEffectsNetworkReady(true);

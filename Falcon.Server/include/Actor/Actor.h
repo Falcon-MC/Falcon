@@ -138,6 +138,17 @@ public:
 
     void setNoDamageTicks(int ticks) { mNoDamageTicks = std::max(0, ticks); }
 
+    static constexpr int SPAWN_INVULNERABILITY_TICKS = 60;
+
+    bool isSpawnInvulnerable() const { return mSpawnInvulnerabilityTicks > 0; }
+
+    void grantSpawnInvulnerability() { mSpawnInvulnerabilityTicks = SPAWN_INVULNERABILITY_TICKS; }
+
+    void tickSpawnInvulnerability() {
+        if (mSpawnInvulnerabilityTicks > 0)
+            --mSpawnInvulnerabilityTicks;
+    }
+
     float getLastDamageAmount() const { return mLastDamageAmount; }
 
     void setLastDamageAmount(float amount) { mLastDamageAmount = std::max(0.0f, amount); }
@@ -283,6 +294,7 @@ protected:
     bool mPendingStarveDamage = false;
     bool mIsDead = false;
     int mNoDamageTicks = 0;
+    int mSpawnInvulnerabilityTicks = 0;
     int mAttackTime = 0;
     float mLastDamageAmount = 0.0f;
 };

@@ -1224,6 +1224,8 @@ void ServerNetworkHandler::tick() {
             }
         }
 
+        player.tickSpawnInvulnerability();
+
         const bool wasSprinting = player.getFlags().get(ActorFlag::Sprinting);
         const bool naturalRegeneration = getLevelFor(player).getGameRules().getBool("naturalregeneration");
         const bool hungerChanged = player.isSpawned()
@@ -1993,6 +1995,9 @@ void ServerNetworkHandler::applyDamage(ServerPlayer &player, float amount, const
     if (gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator)
         return;
 
+    if (player.isSpawnInvulnerable() && deathMessageKey != "death.attack.suicide")
+        return;
+
     if (isDamageDisabledByGameRule(getLevelFor(player).getGameRules(), deathMessageKey))
         return;
 
@@ -2260,6 +2265,7 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
         changePlayerDimension(player, DimensionType::Overworld, spawn);
 
     player.setDead(false);
+    player.grantSpawnInvulnerability();
     player.getAttributes().set(HEALTH_ATTRIBUTE, maxHealthOf(player));
     player.teleport(spawn);
     player.markTeleported();
