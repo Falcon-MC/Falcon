@@ -21,8 +21,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 namespace {
+    bool consumesAir(const ServerPlayer &player) {
+        const int32_t respiration = ItemEnchantments::getLevel(
+                player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD), EnchantmentIds::RESPIRATION);
+        return respiration <= 0 || std::rand() % (respiration + 1) == 0;
+    }
+
     const float PLAYER_BASE_OFFSET = 1.62f;
     const float PLAYER_HALF_WIDTH = 0.3f;
     const float PLAYER_HEIGHT = 1.8f;
@@ -232,7 +239,8 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
     if (!protectedFromWater && eyeInWater) {
         if (invulnerable) {
             player.resetAirSupply();
-        } else if (player.getTurtleHelmetTicks() == 0 || player.getTurtleHelmetTicks() == TURTLE_HELMET_TICKS) {
+        } else if ((player.getTurtleHelmetTicks() == 0 || player.getTurtleHelmetTicks() == TURTLE_HELMET_TICKS)
+                   && consumesAir(player)) {
             int air = player.getAirSupply() - 1;
             if (air <= DROWNING_AIR) {
                 air = 0;
