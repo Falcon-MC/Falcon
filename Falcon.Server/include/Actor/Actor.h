@@ -35,6 +35,18 @@ public:
 
     void setDimension(DimensionType dimension) { mDimension = dimension; }
 
+    int32_t getPortalCooldown() const { return mPortalCooldown; }
+
+    void setPortalCooldown(int32_t ticks) { mPortalCooldown = ticks; }
+
+    int64_t getLastPortalTick() const { return mLastPortalTick; }
+
+    void setLastPortalTick(int64_t tick) { mLastPortalTick = tick; }
+
+    int32_t getPortalTicks() const { return mPortalTicks; }
+
+    void setPortalTicks(int32_t ticks) { mPortalTicks = ticks; }
+
     const Vector3f &getRotation() const { return mRotation; }
 
     void setRotation(const Vector3f &rotation) { mRotation = rotation; }
@@ -233,6 +245,9 @@ protected:
     std::vector<int64_t> mPassengers;
     Vector3f mPosition;
     DimensionType mDimension = DimensionType::Overworld;
+    int32_t mPortalCooldown = 0;
+    int32_t mPortalTicks = 0;
+    int64_t mLastPortalTick = -1;
     Vector3f mRotation;
     Vector3f mMotion;
     ActorFlags mFlags;

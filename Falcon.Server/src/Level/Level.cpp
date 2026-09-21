@@ -392,6 +392,12 @@ void Level::unregisterAllChunkLoaders(uint64_t loaderId) {
     }
 }
 
+void Level::releaseChunkIfUnused(int32_t chunkX, int32_t chunkZ) {
+    const int64_t key = _packChunk(chunkX, chunkZ);
+    if (mChunkLoaders.find(key) == mChunkLoaders.end() && mChunks.find(key) != mChunks.end())
+        mUnloadQueue.insert(key);
+}
+
 size_t Level::processChunkUnloads() {
     if (mUnloadQueue.empty())
         return 0;

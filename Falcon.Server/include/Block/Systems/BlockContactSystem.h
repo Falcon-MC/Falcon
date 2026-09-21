@@ -15,4 +15,6 @@ public:
 
 private:
     static bool touchBlocks(ServerNetworkHandler &owner, Actor &actor, const ActorSize &size);
+
+    static bool touchInsideBlocks(ServerNetworkHandler &owner, Actor &actor, const ActorSize &size);
 };

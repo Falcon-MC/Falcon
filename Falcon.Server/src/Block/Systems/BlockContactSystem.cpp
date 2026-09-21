@@ -19,14 +19,7 @@ void BlockContactSystem::tick(ServerNetworkHandler &owner, ServerPlayer &player)
     if (!player.isSpawned() || player.isDead() || player.isAwaitingDimensionAck())
         return;
 
-    if (player.getPortalCooldown() > 0)
-        player.setPortalCooldown(player.getPortalCooldown() - 1);
-
-    if (!touchBlocks(owner, player, ActorSize{PLAYER_CONTACT_WIDTH, PLAYER_CONTACT_HEIGHT}))
-        return;
-
-    if (player.getLastPortalTick() != owner.getCurrentTick())
-        player.setPortalTicks(0);
+    touchBlocks(owner, player, ActorSize{PLAYER_CONTACT_WIDTH, PLAYER_CONTACT_HEIGHT});
 }
 
 void BlockContactSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) {
@@ -37,6 +30,19 @@ void BlockContactSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) {
 }
 
 bool BlockContactSystem::touchBlocks(ServerNetworkHandler &owner, Actor &actor, const ActorSize &size) {
+    if (actor.getPortalCooldown() > 0)
+        actor.setPortalCooldown(actor.getPortalCooldown() - 1);
+
+    if (!touchInsideBlocks(owner, actor, size))
+        return false;
+
+    if (actor.getLastPortalTick() != owner.getCurrentTick())
+        actor.setPortalTicks(0);
+
+    return true;
+}
+
+bool BlockContactSystem::touchInsideBlocks(ServerNetworkHandler &owner, Actor &actor, const ActorSize &size) {
     Level &level = owner.getLevelFor(actor);
     const Vector3f position = actor.getPosition();
     const float inset = size.mWidth * 0.5f;

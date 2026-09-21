@@ -124,6 +124,8 @@ public:
 
     void changePlayerDimension(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
 
+    void changeActorDimension(Actor &actor, DimensionType dimension, const Vector3f &position);
+
     void onPlayerDimensionChangeAck(ServerPlayer &player);
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> &getPlayers() { return mPlayers; }
@@ -642,6 +644,7 @@ private:
 
     std::unordered_map<int64_t, LingeringCloud> mLingeringClouds;
     std::array<std::unordered_set<int64_t>, Dimension::DIMENSION_COUNT> mActorLoadedChunks;
+    std::vector<int64_t> mDetachedActors;
     std::vector<int64_t> mActiveCenters;
     int mActiveTickDistance = -1;
     bool mActorPersistencePending = true;

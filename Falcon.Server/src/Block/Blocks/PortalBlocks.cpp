@@ -163,26 +163,22 @@ void PortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const
     (void) position;
     (void) state;
 
-    ServerPlayer *traveller = dynamic_cast<ServerPlayer *>(&actor);
-    if (traveller == nullptr)
+    if (actor.getPortalCooldown() > 0)
         return;
 
-    ServerPlayer &player = *traveller;
-    if (player.getPortalCooldown() > 0)
+    actor.setLastPortalTick(owner.getCurrentTick());
+
+    const int32_t ticks = actor.getPortalTicks() + 1;
+    actor.setPortalTicks(ticks);
+
+    const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(&actor);
+    const bool instant = player != nullptr && player->getGameType() == (int32_t) GameType::Creative;
+    if (ticks < (instant ? 1 : PORTAL_DELAY_TICKS))
         return;
 
-    player.setLastPortalTick(owner.getCurrentTick());
+    actor.setPortalTicks(0);
 
-    const int32_t ticks = player.getPortalTicks() + 1;
-    player.setPortalTicks(ticks);
-
-    const int32_t requiredTicks = player.getGameType() == (int32_t) GameType::Creative ? 1 : PORTAL_DELAY_TICKS;
-    if (ticks < requiredTicks)
-        return;
-
-    player.setPortalTicks(0);
-
-    Level &level = owner.getLevelFor(player);
+    Level &level = owner.getLevelFor(actor);
     const DimensionType current = level.getDimensionType();
     if (current != DimensionType::Overworld && current != DimensionType::Nether)
         return;
@@ -193,10 +189,10 @@ void PortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const
 
     Level &destination = owner.getDimension(target);
 
-    const Vector3f playerPosition = player.getPosition();
-    const Vector3i source((int32_t) std::floor(playerPosition.x),
-                          (int32_t) std::floor(playerPosition.y),
-                          (int32_t) std::floor(playerPosition.z));
+    const Vector3f actorPosition = actor.getPosition();
+    const Vector3i source((int32_t) std::floor(actorPosition.x),
+                          (int32_t) std::floor(actorPosition.y),
+                          (int32_t) std::floor(actorPosition.z));
 
     Vector3i landing(0, 0, 0);
     if (!findDestination(destination, source, landing))
@@ -212,8 +208,8 @@ void PortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const
         arrival = Vector3f((float) landing.x + 1.0f, (float) landing.y + 1.0f, (float) landing.z + 0.5f);
     }
 
-    player.setPortalCooldown(PORTAL_COOLDOWN_TICKS);
-    owner.changePlayerDimension(player, target, arrival);
+    actor.setPortalCooldown(PORTAL_COOLDOWN_TICKS);
+    owner.changeActorDimension(actor, target, arrival);
 }
 
 void PortalBlock::spawnPortal(Level &level, const Vector3i &position, ServerNetworkHandler *owner) {
@@ -427,26 +423,21 @@ void EndPortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, co
     (void) position;
     (void) state;
 
-    ServerPlayer *traveller = dynamic_cast<ServerPlayer *>(&actor);
-    if (traveller == nullptr)
+    if (actor.getPortalCooldown() > 0)
         return;
 
-    ServerPlayer &player = *traveller;
-    if (player.getPortalCooldown() > 0)
-        return;
+    actor.setLastPortalTick(owner.getCurrentTick());
+    actor.setPortalTicks(0);
 
-    player.setLastPortalTick(owner.getCurrentTick());
-    player.setPortalTicks(0);
-
-    Level &level = owner.getLevelFor(player);
+    Level &level = owner.getLevelFor(actor);
     const DimensionType current = level.getDimensionType();
 
     if (current != DimensionType::TheEnd) {
         Level &end = owner.getDimension(DimensionType::TheEnd);
         spawnObsidianPlatform(end, Vector3i(END_PLATFORM_X, END_PLATFORM_Y, END_PLATFORM_Z), &owner);
 
-        player.setPortalCooldown(PortalBlock::PORTAL_COOLDOWN_TICKS);
-        owner.changePlayerDimension(player, DimensionType::TheEnd,
+        actor.setPortalCooldown(PortalBlock::PORTAL_COOLDOWN_TICKS);
+        owner.changeActorDimension(actor, DimensionType::TheEnd,
                                     Vector3f((float) END_PLATFORM_X + 0.5f,
                                              (float) END_PLATFORM_Y + 1.0f,
                                              (float) END_PLATFORM_Z + 0.5f));
@@ -455,8 +446,8 @@ void EndPortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, co
 
     Level &overworld = owner.getDimension(DimensionType::Overworld);
 
-    player.setPortalCooldown(PortalBlock::PORTAL_COOLDOWN_TICKS);
-    owner.changePlayerDimension(player, DimensionType::Overworld, overworld.getSpawnPositionForPlayer());
+    actor.setPortalCooldown(PortalBlock::PORTAL_COOLDOWN_TICKS);
+    owner.changeActorDimension(actor, DimensionType::Overworld, overworld.getSpawnPositionForPlayer());
 }
 
 void EndPortalBlock::spawnObsidianPlatform(Level &level, const Vector3i &position, ServerNetworkHandler *owner) {

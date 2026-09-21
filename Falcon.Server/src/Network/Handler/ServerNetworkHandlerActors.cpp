@@ -851,6 +851,39 @@ void ServerNetworkHandler::broadcastActorRemove(ServerActor &actor) {
     }
 }
 
+void ServerNetworkHandler::changeActorDimension(Actor &actor, DimensionType dimension, const Vector3f &position) {
+    if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor)) {
+        changePlayerDimension(*player, dimension, position);
+        return;
+    }
+
+    ServerActor *traveller = dynamic_cast<ServerActor *>(&actor);
+    if (traveller == nullptr)
+        return;
+
+    broadcastActorRemove(*traveller);
+    traveller->setDimension(dimension);
+    traveller->setPosition(position);
+    traveller->setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+    traveller->resetFallDistance();
+
+    Level &destination = getDimension(dimension);
+    const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+    const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+    const int64_t column = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
+    if (mActorLoadedChunks[destination.getDimensionId()].count(column) != 0)
+        return;
+
+    if (traveller->shouldSave() && destination.isStorageOpen()) {
+        std::vector<Tag> entities = destination.loadEntities(chunkX, chunkZ);
+        entities.push_back(traveller->saveNbt());
+        destination.saveEntities(chunkX, chunkZ, entities);
+    }
+
+    mDetachedActors.push_back((int64_t) traveller->getRuntimeId());
+    destination.releaseChunkIfUnused(chunkX, chunkZ);
+}
+
 void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {
     SetActorDataPacket packet;
     packet.mRuntimeActorId = (int64_t) actor.getRuntimeId();
@@ -1323,7 +1356,7 @@ void ServerNetworkHandler::tickActors() {
                 actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE, nullptr);
 
             BlockContactSystem::tick(*this, actor);
-            if (!actor.isAlive())
+            if (!actor.isAlive() || &getLevelFor(actor) != &level)
                 continue;
         }
 
@@ -1651,4 +1684,8 @@ void ServerNetworkHandler::tickActors() {
 
     for (const int64_t uniqueId: expired)
         removeActor(uniqueId);
+
+    for (const int64_t uniqueId: mDetachedActors)
+        mActors.erase(uniqueId);
+    mDetachedActors.clear();
 }

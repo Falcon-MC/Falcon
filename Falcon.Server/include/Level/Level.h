@@ -160,6 +160,8 @@ public:
 
     size_t processChunkUnloads();
 
+    void releaseChunkIfUnused(int32_t chunkX, int32_t chunkZ);
+
     size_t getUnloadQueueSize() const { return mUnloadQueue.size(); }
 
     LevelChunk *peekChunkPtr(int32_t chunkX, int32_t chunkZ);
