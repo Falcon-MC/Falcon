@@ -286,7 +286,7 @@ void FallingBlockActor::_damageEntitiesAt(ServerNetworkHandler &owner, const Vec
             actor->getDimension() != getDimension())
             continue;
 
-        const ActorSize size = ActorClassRegistry::getSize(actor->getTypeId());
+        const ActorSize size = actor->getSize();
         const Vector3f actorPosition = actor->getPosition();
         const float halfWidth = size.mWidth * 0.5f;
 

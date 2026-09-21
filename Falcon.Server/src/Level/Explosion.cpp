@@ -50,11 +50,14 @@ namespace {
         return state.mName == "minecraft:air";
     }
 
-    AxisAlignedBB boundingBoxOf(const Vector3f &position, const std::string &identifier) {
-        const ActorSize size = ActorClassRegistry::getSize(identifier);
+    AxisAlignedBB boundingBoxOf(const Vector3f &position, const ActorSize &size) {
         const float halfWidth = size.mWidth * 0.5f;
         return AxisAlignedBB(position.x - halfWidth, position.y, position.z - halfWidth,
                              position.x + halfWidth, position.y + size.mHeight, position.z + halfWidth);
+    }
+
+    AxisAlignedBB boundingBoxOf(const Vector3f &position, const std::string &identifier) {
+        return boundingBoxOf(position, ActorClassRegistry::getSize(identifier));
     }
 
     Vector3f normalized(const Vector3f &vector) {
@@ -234,7 +237,7 @@ void Explosion::_damageEntities() {
         const Vector3f position = actor->getPosition();
         const Vector3f motion = normalized(Vector3f(position.x - mSource.x, position.y - mSource.y,
                                                     position.z - mSource.z));
-        const float density = getBlockDensity(mLevel, mSource, boundingBoxOf(position, actor->getTypeId()));
+        const float density = getBlockDensity(mLevel, mSource, boundingBoxOf(position, actor->getSize()));
         const double impact = (1.0 - distance) * density;
 
         mOwner.damageActor(*actor, _calculateEntityDamage(explosionSize, impact), nullptr);

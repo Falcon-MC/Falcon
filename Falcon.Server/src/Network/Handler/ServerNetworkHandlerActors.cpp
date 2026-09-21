@@ -1365,7 +1365,7 @@ void ServerNetworkHandler::tickActors() {
         }
 
         if (!actor.isProjectile()) {
-            const ActorSize size = ActorClassRegistry::getSize(actor.getIdentifier());
+            const ActorSize size = actor.getSize();
             if (_isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
                 actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE, nullptr);
 

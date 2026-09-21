@@ -465,7 +465,7 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
             target.getDimension() != getDimension())
             continue;
 
-        const ActorSize size = ActorClassRegistry::getSize(target.getTypeId());
+        const ActorSize size = target.getSize();
         if (reaches(target.getPosition(), size.mWidth, size.mHeight))
             owner.damageActor(target, SPIN_ATTACK_DAMAGE, this);
     }

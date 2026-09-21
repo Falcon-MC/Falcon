@@ -117,7 +117,7 @@ Actor *SpearItem::findTarget(ServerNetworkHandler &owner, ServerPlayer &player, 
         if (!candidate.isAlive() || candidate.isDead() || candidate.isProjectile())
             continue;
 
-        const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
+        const ActorSize size = candidate.getSize();
         consider(candidate, size.mWidth, size.mHeight);
     }
 
@@ -178,7 +178,7 @@ Actor *SpearItem::findSweepTarget(ServerNetworkHandler &owner, ServerPlayer &pla
         if (!candidate.isAlive() || candidate.isDead() || candidate.isProjectile())
             continue;
 
-        const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
+        const ActorSize size = candidate.getSize();
         consider(candidate, size.mWidth, size.mHeight);
     }
 

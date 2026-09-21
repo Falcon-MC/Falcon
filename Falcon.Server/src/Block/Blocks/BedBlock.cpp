@@ -59,7 +59,7 @@ namespace {
                 continue;
 
             const Vector3f position = actor->getPosition();
-            const ActorSize size = ActorClassRegistry::getSize(actor->getIdentifier());
+            const ActorSize size = actor->getSize();
             const float halfWidth = size.mWidth * 0.5f;
             const AxisAlignedBB box(position.x - halfWidth, position.y, position.z - halfWidth,
                                     position.x + halfWidth, position.y + size.mHeight, position.z + halfWidth);

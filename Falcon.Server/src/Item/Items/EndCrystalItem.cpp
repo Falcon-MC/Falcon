@@ -49,7 +49,7 @@ namespace {
             if (actor.isDead() || &owner.getLevelFor(actor) != &level)
                 continue;
 
-            if (area.intersectsWith(actorBox(actor.getPosition(), ActorClassRegistry::getSize(actor.getIdentifier()))))
+            if (area.intersectsWith(actorBox(actor.getPosition(), actor.getSize())))
                 return false;
         }
 
