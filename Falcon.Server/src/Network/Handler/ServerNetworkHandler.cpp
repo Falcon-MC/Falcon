@@ -1281,6 +1281,8 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
                                               const std::string &message) {
     (void) message;
 
+    mRateLimiters.erase(id);
+
     ServerPlayer *player = _getPlayer(id);
     const std::string playerName = player != nullptr && !player->getName().empty()
                                    ? player->getName()
@@ -1557,6 +1559,9 @@ bool ServerNetworkHandler::syncActorPersistence(Level &level, const std::vector<
 }
 
 void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std::string &data) {
+    if (!_allowPacket(id, RateLimitedPacket::Inbound))
+        return;
+
     try {
         ReadOnlyBinaryStream stream(data);
 
@@ -1593,6 +1598,29 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
         LOG_ERROR(LogAreaID::Network, "Unknown exception while processing a packet from %s", id.getAddress().c_str());
         _disconnect(id, "disconnectionScreen.internalError.cantConnect");
     }
+}
+
+bool ServerNetworkHandler::_allowPacket(const NetworkIdentifier &id, RateLimitedPacket category) {
+    auto limiter = mRateLimiters.find(id);
+    if (limiter == mRateLimiters.end()) {
+        PacketRateLimiter::Rates rates{};
+        rates[(size_t) RateLimitedPacket::Inbound] = mProperties.getMaxInboundPacketsPerSecond();
+        rates[(size_t) RateLimitedPacket::Command] = mProperties.getMaxCommandsPerSecond();
+        rates[(size_t) RateLimitedPacket::Chat] = mProperties.getMaxChatMessagesPerSecond();
+        rates[(size_t) RateLimitedPacket::FormResponse] = mProperties.getMaxFormResponsesPerSecond();
+        rates[(size_t) RateLimitedPacket::Movement] = mProperties.getMaxMovementPacketsPerSecond();
+        limiter = mRateLimiters.emplace(id, PacketRateLimiter(rates)).first;
+    }
+
+    if (limiter->second.tryAcquire(category))
+        return true;
+
+    if (category == RateLimitedPacket::Inbound && limiter->second.markFlooded()) {
+        LOG_WARN(LogAreaID::Network, "Disconnecting %s for packet flooding", id.getAddress().c_str());
+        _disconnect(id, "disconnectionScreen.unexpectedPacket");
+    }
+
+    return false;
 }
 
 ServerPlayer *ServerNetworkHandler::_getPlayer(const NetworkIdentifier &id) {
@@ -2283,6 +2311,9 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormRe
     if (player == nullptr || !player->isSpawned() || packet.mHasFormData == packet.mHasCancelReason)
         return;
 
+    if (!_allowPacket(id, RateLimitedPacket::FormResponse))
+        return;
+
     const bool cancelled = packet.mHasCancelReason;
     if (cancelled && (int) packet.mCancelReason < (int) ModalFormResponsePacket::CancelReason::UserClosed)
         return;
@@ -2513,6 +2544,9 @@ void ServerNetworkHandler::sendPacketTo(const NetworkIdentifier &id, const Packe
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerAuthInputPacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr || player->isDead())
+        return;
+
+    if (!_allowPacket(id, RateLimitedPacket::Movement))
         return;
 
     if (!std::isfinite(packet.mPosition.x) || !std::isfinite(packet.mPosition.y) ||
@@ -3002,10 +3036,18 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const TextPacket 
     if (player == nullptr || !player->isSpawned())
         return;
 
-    if (packet.mType != TextPacket::Type::Chat)
+    if (packet.mType != TextPacket::Type::Chat || !_allowPacket(id, RateLimitedPacket::Chat))
         return;
 
-    ChatHandler::broadcastChat(*this, *player, packet.mMessage);
+    const std::string message = packet.mMessage.substr(0, packet.mMessage.find('\n'));
+    if (message.find_first_not_of(" \t\r") == std::string::npos)
+        return;
+
+    const int maxLength = mProperties.getMaxChatMessageLength();
+    if (maxLength > 0 && message.size() > (size_t) maxLength)
+        return;
+
+    ChatHandler::broadcastChat(*this, *player, message);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestChunkRadiusPacket &packet) {
@@ -3170,7 +3212,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PacketViola
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequestPacket &packet) {
     ServerPlayer *player = _getPlayer(id);
-    if (player == nullptr)
+    if (player == nullptr || !_allowPacket(id, RateLimitedPacket::Command))
         return;
 
     LOG_INFO(LogAreaID::Server, "%s issued command: %s", player->getName().c_str(), packet.mCommand.c_str());

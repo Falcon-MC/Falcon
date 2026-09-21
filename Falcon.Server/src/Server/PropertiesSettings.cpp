@@ -99,6 +99,12 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"disable-persona", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"fluid-budget-ms", "20", PropertyKind::Int, -1, UNBOUNDED, nullptr},
             {"auto-compaction-interval", "360", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"max-inbound-packets-per-second", "2500", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"max-commands-per-second", "10", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"max-chat-messages-per-second", "2", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"max-form-responses-per-second", "20", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"max-movement-packets-per-second", "40", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"max-chat-message-length", "512", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"transport", "raknet", PropertyKind::Enum, 0, 0, "raknet,nethernet"}
     };
 

@@ -3,6 +3,7 @@
 #include "Level/BiomeRegistry.h"
 #include "Level/Level.h"
 #include "Network/Handler/NetworkHandler.h"
+#include "Network/PacketRateLimiter.h"
 #include "Network/PingedCompatibleServer.h"
 #include "Network/RakNetInstance.h"
 #include "Protocol/NetworkPacketHandler.h"
@@ -419,6 +420,8 @@ public:
 
     void _disconnect(const NetworkIdentifier &id, const std::string &reason);
 
+    bool _allowPacket(const NetworkIdentifier &id, RateLimitedPacket category);
+
     void _rejectBadPacket(const NetworkIdentifier &id, const std::string &reason);
 
     ResourcePackManager &getResourcePacks() { return mResourcePacks; }
@@ -615,6 +618,7 @@ private:
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
+    std::unordered_map<NetworkIdentifier, PacketRateLimiter, NetworkIdentifier::Hasher> mRateLimiters;
 
     std::unordered_map<int64_t, int32_t> mProjectilePotionId;
 

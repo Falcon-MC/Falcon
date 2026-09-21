@@ -148,6 +148,18 @@ public:
 
     int getAutoCompactionInterval() const { return getInt("auto-compaction-interval"); }
 
+    int getMaxInboundPacketsPerSecond() const { return getInt("max-inbound-packets-per-second"); }
+
+    int getMaxCommandsPerSecond() const { return getInt("max-commands-per-second"); }
+
+    int getMaxChatMessagesPerSecond() const { return getInt("max-chat-messages-per-second"); }
+
+    int getMaxFormResponsesPerSecond() const { return getInt("max-form-responses-per-second"); }
+
+    int getMaxMovementPacketsPerSecond() const { return getInt("max-movement-packets-per-second"); }
+
+    int getMaxChatMessageLength() const { return getInt("max-chat-message-length"); }
+
     float getPlayerPositionAcceptanceThreshold() const {
         return getFloat("player-position-acceptance-threshold");
     }
