@@ -35,6 +35,7 @@
 #include "Protocol/Packets/CreativeContentPacket.h"
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <cstdint>
@@ -132,7 +133,8 @@ public:
 
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> &getActors() { return mActors; }
 
-    ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position);
+    ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
+                            const std::function<void(ServerActor &)> &configure = nullptr);
 
     FallingBlockActor *spawnFallingBlock(Level &level, const BlockState &state, const Vector3f &position);
 

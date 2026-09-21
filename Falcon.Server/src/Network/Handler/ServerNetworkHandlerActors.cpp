@@ -132,7 +132,8 @@ namespace {
     }
 }
 
-ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position) {
+ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
+                                              const std::function<void(ServerActor &)> &configure) {
     const uint64_t runtimeId = allocateRuntimeId();
     const int64_t uniqueId = (int64_t) runtimeId;
 
@@ -143,6 +144,12 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     actor->resetFallDistance();
 
     MobActor *mob = dynamic_cast<MobActor *>(actor.get());
+    if (mob != nullptr)
+        mob->finalizeSpawn();
+
+    if (configure)
+        configure(*actor);
+
     if (mob != nullptr)
         mob->applyDefaults(mProperties.getDifficulty());
 

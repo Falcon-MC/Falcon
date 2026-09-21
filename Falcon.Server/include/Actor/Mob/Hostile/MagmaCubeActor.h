@@ -7,4 +7,8 @@ public:
     static constexpr const char *IDENTIFIER = "minecraft:magma_cube";
 
     using AbstractSlimeActor::AbstractSlimeActor;
+
+    float getContactDamage() const override;
+
+    const LootTable *getLootTable() const override;
 };

@@ -7,4 +7,8 @@ public:
     static constexpr const char *IDENTIFIER = "minecraft:slime";
 
     using AbstractSlimeActor::AbstractSlimeActor;
+
+    float getContactDamage() const override;
+
+    const LootTable *getLootTable() const override;
 };

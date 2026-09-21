@@ -10,25 +10,39 @@ public:
 
     static constexpr int SMALL_SIZE = 1;
 
-    static constexpr float SIZE_SCALE = 0.51f;
+    static constexpr float SIZE_SCALE = 0.52f;
 
     using HostileActor::HostileActor;
 
     int getSizeVariant() const { return mSizeVariant; }
 
-    void setSizeVariant(int variant) { mSizeVariant = variant; }
+    void setSizeVariant(int variant);
 
-    ActorSize getSize() const override {
-        const float extent = SIZE_SCALE * (float) mSizeVariant;
-        return ActorSize{extent, extent};
-    }
+    ActorSize getSize() const override;
 
-    float getDefaultMaxHealth() const override {
-        return (float) (mSizeVariant * mSizeVariant);
-    }
+    float getDefaultMaxHealth() const override;
 
     int getExperienceDrop() const override { return mSizeVariant; }
 
+    virtual float getContactDamage() const = 0;
+
+    void finalizeSpawn() override;
+
+    void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0) override;
+
+    void tick(ServerNetworkHandler &owner) override;
+
+    void fillSpawnMetadata(EntityDataMap &metadata) const override;
+
+    Tag saveNbt() const override;
+
+    void loadNbt(const Tag &data) override;
+
 private:
+    void _split(ServerNetworkHandler &owner, Level &level);
+
+    void _attackTouchingPlayers(ServerNetworkHandler &owner);
+
     int mSizeVariant = LARGE_SIZE;
+    int32_t mAttackCooldown = 0;
 };
