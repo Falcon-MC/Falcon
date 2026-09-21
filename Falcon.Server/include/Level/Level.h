@@ -142,7 +142,13 @@ public:
 
     void setSpawnPosition(const Vector3i &position);
 
-    Vector3f getSpawnPositionForPlayer() const;
+    Vector3f getSpawnPositionForPlayer();
+
+    static constexpr int32_t UNSET_SPAWN_Y = 32767;
+
+    bool isStandable(int32_t x, int32_t y, int32_t z);
+
+    Vector3i findSafeSpawn(const Vector3i &around);
 
     std::vector<ChunkPosition> getChunksAround(int32_t centerChunkX, int32_t centerChunkZ) const;
 
@@ -295,6 +301,10 @@ private:
 
     void _generate(LevelChunk &chunk);
 
+    Vector3i _findLandSpawn();
+
+    int32_t _topSolidOrLiquidY(int32_t x, int32_t z);
+
     void _applyGeneratedChanges(const std::vector<GeneratedBlockChange> &changes);
 
     void _queueGeneratedChanges(std::vector<GeneratedBlockChange> changes);
@@ -305,6 +315,8 @@ private:
 
     ServerNetworkHandler *mOwner = nullptr;
     Vector3i mSpawnPosition;
+    Vector3i mDefaultSpawnPosition;
+    bool mHasDefaultSpawnPosition = false;
     bool mHasSpawnPosition = false;
     BlockUpdateScheduler mBlockUpdates;
     int mUpdateDepth = 0;

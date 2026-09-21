@@ -617,7 +617,7 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
     out.write(bytes.data(), (std::streamsize) bytes.size());
 }
 
-bool LevelStorage::readLevelDatLong(const std::string &key, int64_t &value) const {
+bool LevelStorage::readLevelDat(Tag &out) const {
     if (mPath.empty())
         return false;
 
@@ -633,15 +633,11 @@ bool LevelStorage::readLevelDatLong(const std::string &key, int64_t &value) cons
     ReadOnlyBinaryStream stream(bytes.substr(LEVEL_DAT_HEADER_SIZE));
 
     try {
-        const Tag data = NbtIo::readTag(stream, NbtVariant::LittleEndian);
-        if (!data.contains(key))
-            return false;
-
-        value = data.getLong(key);
+        out = NbtIo::readTag(stream, NbtVariant::LittleEndian);
     } catch (const std::exception &exception) {
         LOG_WARN(LogAreaID::Server, "Malformed level.dat: %s", exception.what());
         return false;
     }
 
-    return true;
+    return out.isCompound();
 }

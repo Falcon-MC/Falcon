@@ -1,6 +1,7 @@
 #include "Level/Level.h"
 
 #include "Level/BiomeRegistry.h"
+#include "Level/Generator/Biome/BiomeIds.h"
 #include "Level/Generator/DimensionFactory.h"
 #include "Level/Generator/Overworld/Biome/ClimateAttributes.h"
 #include "Level/Particle/Particle.h"
@@ -13,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <iterator>
 #include <random>
 #include <utility>
@@ -88,15 +90,23 @@ bool Level::openStorage(const std::string &worldsDirectory) {
         return false;
 
     if (mDimension == DimensionType::Overworld) {
-        int64_t storedTime = 0;
-        if (mStorage.readLevelDatLong("Time", storedTime))
-            setTime(storedTime);
+        Tag levelDat;
+        if (mStorage.readLevelDat(levelDat)) {
+            if (levelDat.contains("Time"))
+                setTime(levelDat.getLong("Time"));
 
-        int64_t storedSeed = 0;
-        if (mStorage.readLevelDatLong("RandomSeed", storedSeed) && storedSeed != mSeed) {
-            mSeed = storedSeed;
-            mGenerator = DimensionFactory::createGenerator(mDimension, mSeed);
+            if (levelDat.contains("RandomSeed") && levelDat.getLong("RandomSeed") != mSeed) {
+                mSeed = levelDat.getLong("RandomSeed");
+                mGenerator = DimensionFactory::createGenerator(mDimension, mSeed);
+            }
+
+            if (levelDat.contains("SpawnY") && levelDat.getInt("SpawnY") != UNSET_SPAWN_Y)
+                setSpawnPosition(Vector3i(levelDat.getInt("SpawnX"), levelDat.getInt("SpawnY"),
+                                          levelDat.getInt("SpawnZ")));
         }
+
+        mDefaultSpawnPosition = _findLandSpawn();
+        mHasDefaultSpawnPosition = true;
 
         saveLevelDat();
     }
@@ -105,7 +115,7 @@ bool Level::openStorage(const std::string &worldsDirectory) {
 }
 
 void Level::saveLevelDat() {
-    const Vector3i spawn = getSpawnPosition();
+    const Vector3i spawn = mHasSpawnPosition ? mSpawnPosition : Vector3i(0, UNSET_SPAWN_Y, 0);
     mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime);
 }
 
@@ -195,6 +205,9 @@ Vector3i Level::getSpawnPosition() const {
     if (mHasSpawnPosition)
         return mSpawnPosition;
 
+    if (mHasDefaultSpawnPosition)
+        return mDefaultSpawnPosition;
+
     return Vector3i(0, mGenerator->getSpawnY(), 0);
 }
 
@@ -203,9 +216,74 @@ void Level::setSpawnPosition(const Vector3i &position) {
     mHasSpawnPosition = true;
 }
 
-Vector3f Level::getSpawnPositionForPlayer() const {
-    const Vector3i spawn = getSpawnPosition();
+Vector3f Level::getSpawnPositionForPlayer() {
+    const Vector3i spawn = findSafeSpawn(getSpawnPosition());
     return Vector3f((float) spawn.x + 0.5f, (float) spawn.y, (float) spawn.z + 0.5f);
+}
+
+bool Level::isStandable(int32_t x, int32_t y, int32_t z) {
+    const auto isLiquid = [](const std::string &name) {
+        return name == "minecraft:water" || name == "minecraft:flowing_water" || name == "minecraft:lava"
+               || name == "minecraft:flowing_lava";
+    };
+
+    const std::string below = getBlockState(x, y - 1, z).mName;
+    const bool supported = isSolidAt(x, y - 1, z) || below == "minecraft:water" || below == "minecraft:flowing_water";
+
+    return supported && !isSolidAt(x, y, z) && !isLiquid(getBlockState(x, y, z).mName)
+           && !isSolidAt(x, y + 1, z) && !isLiquid(getBlockState(x, y + 1, z).mName);
+}
+
+Vector3i Level::findSafeSpawn(const Vector3i &around) {
+    if (around.y > LevelChunk::MIN_Y && around.y < LevelChunk::MAX_Y && isStandable(around.x, around.y, around.z))
+        return around;
+
+    const int32_t top = _topSolidOrLiquidY(around.x, around.z);
+    for (int32_t y = std::max(top + 1, LevelChunk::MIN_Y + 1); y < LevelChunk::MAX_Y; ++y) {
+        if (isStandable(around.x, y, around.z))
+            return Vector3i(around.x, y, around.z);
+    }
+
+    return Vector3i(around.x, top + 1, around.z);
+}
+
+int32_t Level::_topSolidOrLiquidY(int32_t x, int32_t z) {
+    for (int32_t y = LevelChunk::MAX_Y; y > LevelChunk::MIN_Y; --y) {
+        if (getBlockState(x, y, z).mName != "minecraft:air")
+            return y;
+    }
+
+    return LevelChunk::MIN_Y;
+}
+
+Vector3i Level::_findLandSpawn() {
+    static const int32_t WATER_BIOMES[] = {
+            BiomeIds::OCEAN, BiomeIds::DEEP_OCEAN, BiomeIds::WARM_OCEAN, BiomeIds::LUKEWARM_OCEAN,
+            BiomeIds::DEEP_LUKEWARM_OCEAN, BiomeIds::COLD_OCEAN, BiomeIds::DEEP_COLD_OCEAN, BiomeIds::FROZEN_OCEAN,
+            BiomeIds::DEEP_FROZEN_OCEAN, BiomeIds::LEGACY_FROZEN_OCEAN, BiomeIds::RIVER, BiomeIds::FROZEN_RIVER
+    };
+    const int32_t SEARCH_STEP = 16;
+    const int32_t SEARCH_RADIUS = 1024;
+    const int32_t SAMPLE_Y = 64;
+
+    const auto isLand = [&](int32_t x, int32_t z) {
+        const int32_t biome = pickBiome(x, SAMPLE_Y, z);
+        return std::find(std::begin(WATER_BIOMES), std::end(WATER_BIOMES), biome) == std::end(WATER_BIOMES);
+    };
+
+    for (int32_t radius = 0; radius <= SEARCH_RADIUS; radius += SEARCH_STEP) {
+        for (int32_t x = -radius; x <= radius; x += SEARCH_STEP) {
+            for (int32_t z = -radius; z <= radius; z += SEARCH_STEP) {
+                if (std::abs(x) != radius && std::abs(z) != radius)
+                    continue;
+
+                if (isLand(x, z))
+                    return Vector3i(x, _topSolidOrLiquidY(x, z) + 1, z);
+            }
+        }
+    }
+
+    return Vector3i(0, mGenerator->getSpawnY(), 0);
 }
 
 int64_t Level::_packChunk(int32_t x, int32_t z) {
