@@ -1,16 +1,17 @@
 #pragma once
 
+#include "Core/NBT/Tag.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
 
 struct ItemNetworkIdEntry {
-    const char *mIdentifier;
-    int32_t mNetworkId;
-    bool mComponentBased;
-    int32_t mVersion;
-    const unsigned char *mComponentNbt;
-    size_t mComponentNbtSize;
+    std::string mIdentifier;
+    int32_t mNetworkId = 0;
+    bool mComponentBased = false;
+    int32_t mVersion = 0;
+    Tag mComponents = Tag::ofCompound();
 };
 
 class ItemNetworkIdTable {

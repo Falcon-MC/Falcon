@@ -94,14 +94,8 @@ void LoginHandler::registerVanillaDefinitions(ServerNetworkHandler &owner) {
     for (size_t index = 0; index < ItemNetworkIdTable::getCount(); ++index) {
         const ItemNetworkIdEntry &entry = ItemNetworkIdTable::getEntries()[index];
 
-        Tag components = Tag::ofCompound();
-        if (entry.mComponentNbt != nullptr) {
-            ReadOnlyBinaryStream stream(std::string((const char *) entry.mComponentNbt, entry.mComponentNbtSize));
-            components = NbtIo::readTag(stream, NbtVariant::LittleEndian);
-        }
-
         owner.getItemDefinitions().registerDefinition(std::make_shared<ItemDefinition>(
-                entry.mIdentifier, entry.mNetworkId, entry.mComponentBased, components));
+                entry.mIdentifier, entry.mNetworkId, entry.mComponentBased, entry.mComponents));
     }
 
     LOG_TRACE(LogAreaID::Server, "Registered %zu block(s) and %zu item definition(s)",
