@@ -13,6 +13,4 @@ public:
     float getDefaultMaxHealth() const override { return 20.0f; }
 
     int getExperienceDrop() const override { return 5; }
-
-    const std::vector<LootEntry> &getLootEntries() const override;
 };

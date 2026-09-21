@@ -7,6 +7,4 @@ public:
     static constexpr const char *IDENTIFIER = "minecraft:magma_cube";
 
     using AbstractSlimeActor::AbstractSlimeActor;
-
-    const std::vector<LootEntry> &getLootEntries() const override;
 };

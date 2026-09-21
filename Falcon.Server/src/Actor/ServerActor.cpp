@@ -191,8 +191,7 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *
 
         if (mob != nullptr && owner.getLevel().getGameRules().getBool("domobloot")) {
             Level &level = owner.getLevelFor(*this);
-            for (const MobDrop &drop: mob->rollDrops(isOnFire(), looting))
-                owner.spawnItemActor(level, drop.mItemIdentifier, drop.mCount, dropPosition);
+            mob->dropLoot(owner, level, source, looting);
 
             const int experience = mob->getExperienceDrop();
             if (experience > 0)

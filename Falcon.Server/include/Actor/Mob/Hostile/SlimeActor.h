@@ -7,6 +7,4 @@ public:
     static constexpr const char *IDENTIFIER = "minecraft:slime";
 
     using AbstractSlimeActor::AbstractSlimeActor;
-
-    const std::vector<LootEntry> &getLootEntries() const override;
 };

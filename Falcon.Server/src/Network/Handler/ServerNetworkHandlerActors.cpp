@@ -4,7 +4,6 @@
 #include "Actor/DynamicPropertyStore.h"
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/Mob/MobActor.h"
-#include "Actor/Mob/MobLoot.h"
 #include "Actor/RideSystem.h"
 #include "Actor/ServerActor.h"
 #include "Block/Blocks/VanillaBlocks.h"

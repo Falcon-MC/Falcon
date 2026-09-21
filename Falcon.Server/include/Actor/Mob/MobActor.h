@@ -2,12 +2,15 @@
 
 #include "Actor/ActorCategory.h"
 #include "Actor/ActorSize.h"
-#include "Actor/Mob/MobLoot.h"
 #include "Actor/ServerActor.h"
 #include "Server/PropertiesSettings.h"
 
 #include <string>
-#include <vector>
+
+class Level;
+class LootTable;
+class ServerNetworkHandler;
+class ServerPlayer;
 
 class MobActor : public ServerActor {
 public:
@@ -21,7 +24,7 @@ public:
 
     virtual int getExperienceDrop() const { return 0; }
 
-    virtual const std::vector<LootEntry> &getLootEntries() const;
+    virtual const LootTable *getLootTable() const;
 
     virtual float resolveMaxHealth(Difficulty difficulty) const;
 
@@ -29,5 +32,5 @@ public:
 
     static int randomRange(int minimum, int maximum);
 
-    std::vector<MobDrop> rollDrops(bool onFire, int32_t lootingLevel) const;
+    void dropLoot(ServerNetworkHandler &owner, Level &level, const ServerPlayer *killer, int32_t lootingLevel) const;
 };

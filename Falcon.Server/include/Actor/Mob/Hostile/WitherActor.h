@@ -21,6 +21,4 @@ public:
     float resolveMaxHealth(Difficulty difficulty) const override;
 
     int getExperienceDrop() const override { return 50; }
-
-    const std::vector<LootEntry> &getLootEntries() const override;
 };

@@ -1,10 +1,22 @@
 #include "Actor/Mob/MobActor.h"
 
+#include "Actor/ServerPlayer.h"
+#include "Level/Level.h"
+#include "Loot/LootItems.h"
+#include "Loot/LootTableRegistry.h"
+#include "Network/Handler/ItemActorHandler.h"
+#include "Network/Handler/ServerNetworkHandler.h"
+
 #include <random>
 
 namespace {
     std::mt19937 &experienceRandom() {
         static std::mt19937 generator(0x9E3779B9u);
+        return generator;
+    }
+
+    std::mt19937 &lootRandom() {
+        static std::mt19937 generator(std::random_device{}());
         return generator;
     }
 }
@@ -23,9 +35,8 @@ void MobActor::applyDefaults(Difficulty difficulty) {
     setHealth(health);
 }
 
-const std::vector<LootEntry> &MobActor::getLootEntries() const {
-    static const std::vector<LootEntry> none;
-    return none;
+const LootTable *MobActor::getLootTable() const {
+    return LootTableRegistry::getInstance().getForEntity(mIdentifier);
 }
 
 int MobActor::randomRange(int minimum, int maximum) {
@@ -36,6 +47,26 @@ int MobActor::randomRange(int minimum, int maximum) {
     return distribution(experienceRandom());
 }
 
-std::vector<MobDrop> MobActor::rollDrops(bool onFire, int32_t lootingLevel) const {
-    return MobLoot::roll(getLootEntries(), onFire, lootingLevel);
+void MobActor::dropLoot(ServerNetworkHandler &owner, Level &level, const ServerPlayer *killer,
+                        int32_t lootingLevel) const {
+    const LootTable *table = getLootTable();
+    if (table == nullptr)
+        return;
+
+    LootContext context(lootRandom());
+    context.mLootingLevel = lootingLevel;
+    context.mDifficulty = (int32_t) owner.getProperties().getDifficulty();
+    context.mRegionalDifficulty = level.getRegionalDifficulty(context.mDifficulty);
+    context.mKilledByPlayer = killer != nullptr;
+    context.mOnFire = isOnFire();
+    if (killer != nullptr)
+        context.mKillerIdentifier = killer->getIdentifier();
+
+    const Vector3f position = getPosition();
+    for (const LootDrop &drop: table->roll(context)) {
+        const ItemStack stack = LootItems::toItemStack(owner, drop);
+        if (!stack.isAir())
+            owner.dropItem(level, position, stack, ItemActorHandler::randomDropMotion(),
+                           ItemActorHandler::DROP_PICKUP_DELAY);
+    }
 }

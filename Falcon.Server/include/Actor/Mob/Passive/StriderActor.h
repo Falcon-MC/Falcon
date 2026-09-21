@@ -13,6 +13,4 @@ public:
     ActorSize getSize() const override { return ActorSize{0.9f, 1.7f}; }
 
     float getDefaultMaxHealth() const override { return 20.0f; }
-
-    const std::vector<LootEntry> &getLootEntries() const override;
 };

@@ -20,6 +20,4 @@ public:
         (void) difficulty;
         return (float) randomRange(MINIMUM_HEALTH, MAXIMUM_HEALTH);
     }
-
-    const std::vector<LootEntry> &getLootEntries() const override;
 };

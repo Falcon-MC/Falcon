@@ -14,11 +14,3 @@ float WitherActor::resolveMaxHealth(Difficulty difficulty) const {
             return EASY_HEALTH;
     }
 }
-
-const std::vector<LootEntry> &WitherActor::getLootEntries() const {
-    static const std::vector<LootEntry> entries = {
-            {"minecraft:nether_star", nullptr, 1, 1, 1.0f}
-    };
-
-    return entries;
-}
