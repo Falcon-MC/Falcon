@@ -235,6 +235,8 @@ namespace {
                                 || deathMessageKey == "death.attack.onFire"
                                 || deathMessageKey == "death.attack.inFire";
         const bool fallDamage = deathMessageKey == "death.fell.accident.generic";
+        const bool explosionDamage = deathMessageKey == "death.attack.explosion";
+        const bool projectileDamage = deathMessageKey == "death.attack.arrow";
         const bool armorDamage = deathMessageKey != "death.attack.inFire"                                  
                                  && deathMessageKey != "death.attack.drown"
                                  && !fallDamage
@@ -261,6 +263,12 @@ namespace {
             if (fallDamage)
                 enchantmentProtectionFactor += protectionFactor(
                         ItemEnchantments::getLevel(armor, EnchantmentIds::FEATHER_FALLING), 2.5f);
+            if (explosionDamage)
+                enchantmentProtectionFactor += protectionFactor(
+                        ItemEnchantments::getLevel(armor, EnchantmentIds::BLAST_PROTECTION), 1.5f);
+            if (projectileDamage)
+                enchantmentProtectionFactor += protectionFactor(
+                        ItemEnchantments::getLevel(armor, EnchantmentIds::PROJECTILE_PROTECTION), 1.5f);
         }
 
         if (armorDamage)
