@@ -10,6 +10,8 @@
 </p>
 
 <p align="center">
+	<a href="https://falcon-mc.github.io"><img src="https://img.shields.io/badge/website-falcon--mc.github.io-2ea44f" alt="Website"></a>
+	<a href="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml"><img src="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 	<img src="https://img.shields.io/badge/minecraft-v1.26.51%20(Bedrock)-56383E" alt="Minecraft">
 	<img src="https://img.shields.io/badge/protocol-2193-blue" alt="Protocol">
 	<img src="https://img.shields.io/badge/language-C%2B%2B17-00599C" alt="C++17">
@@ -20,25 +22,32 @@
 
 Falcon is a Minecraft: Bedrock Edition server built from the ground up in C++17. It does not derive
 from any existing server: the protocol, world storage, inventory, movement and gameplay systems are
-all reimplemented by hand.
+all reimplemented by hand, with vanilla behavior as the reference.
 
-- **Native C++17** - no runtime to install, the server ships as a single self-contained executable
-- **Own RakNet implementation** - sockets, reliability layer and connection handshake written here
-- **NetherNet transport** - WebRTC signaling and transport, running alongside RakNet
-- **Vanilla-like world generation** - noise, density functions, aquifers, caves, biomes and features
-- **Behavior pack support** - custom items, blocks, actors and recipes loaded from packs, with a
-  QuickJS scripting engine running pack scripts
-- **Layered architecture** - network, protocol and server concerns stay separate
+- **Native** - no runtime to install, the server ships as a single self-contained executable
+- **Vanilla worlds** - Bedrock world format, so worlds move between Falcon and the game unchanged
+- **Behavior packs** - custom content and a JavaScript scripting API loaded from packs
 
-## Features
+## Getting started
 
-**World**
+Download the latest Windows or Linux build from the [releases](https://github.com/Falcon-MC/Falcon/releases),
+check it against its `.sha256` file and run it. On the first start, a setup wizard in the console writes
+`server.properties`.
 
-- LevelDB persistence using the Bedrock key layout, including block entities and pending changes
-- Overworld generation with 3D biomes, aquifers, ore veins, caves and surface materials
-- Chunk generation *and* population run on worker threads, never on the tick thread
-- Chunk streaming ordered by field of view then distance, with reference counted unloading
-- Sky light, daylight detector, weather with persistence, and a `dofiretick` game rule
+## Supported versions
+
+| Minecraft | Protocol |
+|-----------|----------|
+| 1.26.51   | 2193     |
+
+## Related repositories
+
+- [Protocol](https://github.com/Falcon-MC/Protocol) - packets and network types
+- [Network](https://github.com/Falcon-MC/Network) - RakNet and NetherNet transport
+- [NBT](https://github.com/Falcon-MC/NBT) - NBT tags and binary streams
+- [BedrockData](https://github.com/Falcon-MC/BedrockData) - game data files, versioned by protocol
+- [BlockStateUpdater](https://github.com/Falcon-MC/BlockStateUpdater) - block state upgrade schemas
+- [DataGen](https://github.com/Falcon-MC/DataGen) - generates the game data from a dedicated server
 
 ## Building
 
@@ -49,6 +58,10 @@ MSYS2 UCRT64.
 cmake -B build -G Ninja
 cmake --build build
 ```
+
+## Give a star if this project helped you
+
+[![Contributors](https://contrib.rocks/image?repo=Falcon-MC/Falcon)](https://github.com/Falcon-MC/Falcon/graphs/contributors)
 
 ## Licensing information
 
