@@ -46,8 +46,7 @@ bool TestForBlockCommand::execute(CommandOrigin &sender, const std::vector<std::
                                                   std::to_string(position.z)};
 
     if (actual != expected) {
-        sender.sendTranslation("commands.testforblock.failed.tile",
-                               {coordinates[0], coordinates[1], coordinates[2], actual, expected});
+        sender.sendTranslation("commands.testforblock.failed.data", coordinates);
         return false;
     }
 
