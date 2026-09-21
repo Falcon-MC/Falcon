@@ -259,11 +259,13 @@ int PlayerInventory::getMaxStackSize(const ItemStack &item) {
 
     const ItemData *data = ItemDataTable::find(identifier);
     if (data == nullptr) {
-        if (item.mBlockDefinition != nullptr) {
-            const BlockData *blockData = BlockDataTable::find(item.mBlockDefinition->getIdentifier().c_str());
-            if (blockData != nullptr && blockData->mMaxStackSize > 0)
-                return blockData->mMaxStackSize;
-        }
+        const char *blockIdentifier = item.mBlockDefinition != nullptr
+                                      ? item.mBlockDefinition->getIdentifier().c_str()
+                                      : identifier.c_str();
+
+        const BlockData *blockData = BlockDataTable::find(blockIdentifier);
+        if (blockData != nullptr && blockData->mMaxStackSize > 0)
+            return blockData->mMaxStackSize;
 
         const int32_t customMax = CustomContentRegistry::getInstance().getItemMaxStackSize(
                 identifier);
