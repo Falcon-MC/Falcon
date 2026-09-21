@@ -998,7 +998,7 @@ void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &pl
     PlayerListPacket existing;
 
     for (auto &entry: owner.getPlayers()) {
-        if (!entry.second.isSpawned())
+        if (!entry.second.isSpawned() && &entry.second != &player)
             continue;
 
         owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), announce, owner.getCodecContext());
