@@ -20,6 +20,12 @@ namespace {
             "minecraft:spider", "minecraft:cave_spider", "minecraft:silverfish", "minecraft:endermite"
     };
 
+    const char *const FIRE_IMMUNE_ACTORS[] = {
+            "minecraft:blaze", "minecraft:ender_dragon", "minecraft:ghast", "minecraft:magma_cube",
+            "minecraft:strider", "minecraft:wither", "minecraft:wither_skeleton", "minecraft:zoglin",
+            "minecraft:zombie_pigman"
+    };
+
     template<size_t N>
     bool containsIdentifier(const char *const (&identifiers)[N], const char *identifier) {
         for (const char *candidate: identifiers) {
@@ -210,6 +216,10 @@ bool Actor::isUndead() const {
 
 bool Actor::isArthropod() const {
     return containsIdentifier(ARTHROPOD_ACTORS, getIdentifier());
+}
+
+bool Actor::isFireImmune() const {
+    return containsIdentifier(FIRE_IMMUNE_ACTORS, getIdentifier());
 }
 
 float Actor::getMeleeEnchantmentBonus(const ItemStack &weapon) const {

@@ -34,6 +34,7 @@
 #include "Item/ItemData.h"
 #include "Item/ItemEnchantments.h"
 #include "Item/EnchantmentData.h"
+#include "Block/Systems/BlockContactSystem.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
 #include "Item/Items/FireworkRocketItem.h"
 #include "Item/Items/RangedWeaponItems.h"
@@ -1019,6 +1020,16 @@ bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, ServerP
     return actor.hurt(*this, amount, source, lootingLevel);
 }
 
+void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::string &deathMessageKey) {
+    if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor)) {
+        applyDamage(*player, amount, deathMessageKey, {player->getName()});
+        return;
+    }
+
+    if (ServerActor *target = dynamic_cast<ServerActor *>(&actor))
+        target->hurt(*this, amount, nullptr);
+}
+
 void ServerNetworkHandler::broadcastActorMove(ServerActor &actor) {
     MoveActorAbsolutePacket move;
     move.mRuntimeActorId = (int64_t) actor.getRuntimeId();
@@ -1310,6 +1321,10 @@ void ServerNetworkHandler::tickActors() {
             const ActorSize size = ActorClassRegistry::getSize(actor.getIdentifier());
             if (_isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
                 actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE, nullptr);
+
+            BlockContactSystem::tick(*this, actor);
+            if (!actor.isAlive())
+                continue;
         }
 
         ProfilerScopedSection projectileSection(mProfiler, ProfilerSection::ActorProjectiles,

@@ -27,7 +27,7 @@ public:
     void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                             const BlockState &state) const override;
 
-    void onActorInside(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+    void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                        const BlockState &state) const override;
 
     static void spawnPortal(Level &level, const Vector3i &position, ServerNetworkHandler *owner);
@@ -56,7 +56,7 @@ public:
     void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                             const BlockState &state) const override;
 
-    void onActorInside(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+    void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                        const BlockState &state) const override;
 
     static void spawnObsidianPlatform(Level &level, const Vector3i &position, ServerNetworkHandler *owner);

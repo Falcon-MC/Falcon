@@ -16,17 +16,20 @@ bool MagmaBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:magma";
 }
 
-void MagmaBlock::onStepOn(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+void MagmaBlock::onStepOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                           const BlockState &state) const {
     (void) position;
     (void) state;
 
-    if (player.hasEffect(MobEffectId::FireResistance) || player.getFlags().get(ActorFlag::Sneaking))
+    if (actor.isFireImmune() || actor.hasEffect(MobEffectId::FireResistance)
+        || actor.getFlags().get(ActorFlag::Sneaking))
         return;
 
-    const ItemStack &boots = player.getInventory().getArmor(PlayerInventory::ARMOR_FEET);
-    if (ItemEnchantments::getLevel(boots, EnchantmentIds::FROST_WALKER) > 0)
-        return;
+    if (const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(&actor)) {
+        const ItemStack &boots = player->getInventory().getArmor(PlayerInventory::ARMOR_FEET);
+        if (ItemEnchantments::getLevel(boots, EnchantmentIds::FROST_WALKER) > 0)
+            return;
+    }
 
-    owner.applyDamage(player, HOT_FLOOR_DAMAGE, "death.attack.hotFloor", {player.getName()});
+    owner.hurtActor(actor, HOT_FLOOR_DAMAGE, "death.attack.hotFloor");
 }

@@ -65,10 +65,10 @@ public:
         (void) state;
     }
 
-    virtual void onStepOn(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+    virtual void onStepOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                           const BlockState &state) const {
         (void) owner;
-        (void) player;
+        (void) actor;
         (void) position;
         (void) state;
     }
@@ -138,10 +138,10 @@ public:
         (void) state;
     }
 
-    virtual void onActorInside(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+    virtual void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                                const BlockState &state) const {
         (void) owner;
-        (void) player;
+        (void) actor;
         (void) position;
         (void) state;
     }

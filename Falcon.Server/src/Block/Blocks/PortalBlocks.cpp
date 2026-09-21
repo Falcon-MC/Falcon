@@ -158,11 +158,16 @@ void PortalBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, 
     BlockActionHandler::destroyBlock(owner, level, position, state, false, ItemStack::air());
 }
 
-void PortalBlock::onActorInside(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                                      const BlockState &state) const {
+void PortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                                const BlockState &state) const {
     (void) position;
     (void) state;
 
+    ServerPlayer *traveller = dynamic_cast<ServerPlayer *>(&actor);
+    if (traveller == nullptr)
+        return;
+
+    ServerPlayer &player = *traveller;
     if (player.getPortalCooldown() > 0)
         return;
 
@@ -417,11 +422,16 @@ void EndPortalBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &leve
     BlockActionHandler::destroyBlock(owner, level, position, state, false, ItemStack::air());
 }
 
-void EndPortalBlock::onActorInside(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+void EndPortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                                    const BlockState &state) const {
     (void) position;
     (void) state;
 
+    ServerPlayer *traveller = dynamic_cast<ServerPlayer *>(&actor);
+    if (traveller == nullptr)
+        return;
+
+    ServerPlayer &player = *traveller;
     if (player.getPortalCooldown() > 0)
         return;
 

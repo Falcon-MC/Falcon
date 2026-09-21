@@ -209,6 +209,8 @@ public:
 
     bool isArthropod() const;
 
+    bool isFireImmune() const;
+
     float getMeleeEnchantmentBonus(const ItemStack &weapon) const;
 
     void onMeleeEnchantmentHit(const ItemStack &weapon);

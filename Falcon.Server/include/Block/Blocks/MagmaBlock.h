@@ -11,6 +11,6 @@ public:
 
     static bool matches(const std::string &identifier);
 
-    void onStepOn(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+    void onStepOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                   const BlockState &state) const override;
 };

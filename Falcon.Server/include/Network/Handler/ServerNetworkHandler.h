@@ -218,6 +218,8 @@ public:
 
     bool damageActor(ServerActor &actor, float amount, ServerPlayer *source, int32_t lootingLevel = -1);
 
+    void hurtActor(Actor &actor, float amount, const std::string &deathMessageKey);
+
     void sendActorMotion(Actor &actor);
 
     void knockBack(Actor &actor, float deltaX, float deltaZ, float force, float verticalLimit = 0.4f);
