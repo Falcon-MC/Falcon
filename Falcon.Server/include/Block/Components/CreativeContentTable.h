@@ -12,7 +12,6 @@ struct CreativeGroupEntry {
 struct CreativeEntry {
     const char *mIdentifier;
     int32_t mGroupIndex;
-    bool mIsBlock;
     int32_t mDamage;
     const unsigned char *mNbt;
     size_t mNbtSize;

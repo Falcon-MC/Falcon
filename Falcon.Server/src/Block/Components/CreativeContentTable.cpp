@@ -110,7 +110,6 @@ namespace {
             CreativeEntry entry;
             entry.mIdentifier = keep(storage, identifier->string());
             entry.mGroupIndex = groupIndex == nullptr ? -1 : groupIndex->integer(-1);
-            entry.mIsBlock = blockState != nullptr && blockState->isString();
             entry.mDamage = damage == nullptr ? 0 : damage->integer();
             entry.mNbt = nullptr;
             entry.mNbtSize = 0;

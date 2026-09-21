@@ -42,6 +42,7 @@ namespace {
         bool mCraftingActive = false;
         bool mCraftRecipeSeen = false;
         bool mCreatedOutputActive = false;
+        bool mCreatedOutputCreative = false;
         const PacketCodecContext *mCodecContext = nullptr;
         std::vector<std::unique_ptr<BundleView>> mBundles;
         int32_t mPlayerXpLevel = 0;
@@ -308,7 +309,9 @@ namespace {
             return false;
         }
 
-        if (source->isAir() || action.mCount <= 0 || action.mCount > source->mCount) {
+        const bool creativeSource = context.mCreatedOutputCreative && source == &context.mCreatedOutput;
+
+        if (source->isAir() || action.mCount <= 0 || (!creativeSource && action.mCount > source->mCount)) {
             return false;
         }
 
@@ -334,9 +337,13 @@ namespace {
             destination->mCount += action.mCount;
         }
 
-        source->mCount -= action.mCount;
-        if (source->mCount <= 0) {
+        if (creativeSource) {
             *source = ItemStack::air();
+        } else {
+            source->mCount -= action.mCount;
+            if (source->mCount <= 0) {
+                *source = ItemStack::air();
+            }
         }
 
         inventory.assignNetId(*source);
@@ -430,11 +437,9 @@ namespace {
                 continue;
             }
 
-            const int repetitions = action.mNumberOfRequestedCrafts <= 0 ? 1 : action.mNumberOfRequestedCrafts;
-
             context.mCreatedOutput = entry.mItem;
-            context.mCreatedOutput.mCount = PlayerInventory::getMaxStackSize(entry.mItem) * repetitions;
             context.mCreatedOutputActive = true;
+            context.mCreatedOutputCreative = true;
             return true;
         }
 

@@ -50,7 +50,9 @@
 #include "Server/PropertiesSettings.h"
 #include "Server/ResourcePackManager.h"
 
+#include <cstring>
 #include <unordered_map>
+#include <vector>
 
 namespace {
     const int64_t RESOURCE_PACK_CHUNK_SIZE = 1024 * 1024;
@@ -102,6 +104,7 @@ void LoginHandler::registerVanillaDefinitions(ServerNetworkHandler &owner) {
 
     LOG_TRACE(LogAreaID::Server, "Registered %zu block(s) and %zu item definition(s)",
              VanillaBlocks::getAll().size(), owner.getItemDefinitions().size());
+
 }
 
 void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, const NetworkIdentifier &id,
@@ -783,12 +786,40 @@ void LoginHandler::sendCraftingData(ServerNetworkHandler &owner, ServerPlayer &p
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), cached);
 }
 
+namespace {
+    bool isEducationGroup(const char *name) {
+        if (name == nullptr)
+            return false;
+
+        static const char *const EDUCATION_GROUPS[] = {
+                "itemGroup.name.element",
+                "itemGroup.name.chemistrytable",
+                "itemGroup.name.compounds",
+                "itemGroup.name.products",
+        };
+
+        for (const char *group: EDUCATION_GROUPS) {
+            if (std::strcmp(name, group) == 0)
+                return true;
+        }
+
+        return false;
+    }
+}
+
 void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
     if (!owner.getCreativeItemsMutable().empty())
         return;
 
+    std::vector<int32_t> groupRemap(CreativeContentTable::getGroupCount(), -1);
+
     for (size_t index = 0; index < CreativeContentTable::getGroupCount(); ++index) {
         const CreativeGroupEntry &source = CreativeContentTable::getGroups()[index];
+
+        if (isEducationGroup(source.mName))
+            continue;
+
+        groupRemap[index] = (int32_t) owner.getCreativeGroups().size();
 
         CreativeItemGroup group;
         group.mCategory = source.mCategory;
@@ -814,9 +845,17 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
         if (definition == nullptr)
             continue;
 
+        int32_t groupIndex = source.mGroupIndex;
+        if (groupIndex >= 0) {
+            if (groupIndex >= (int32_t) groupRemap.size() || groupRemap[groupIndex] < 0)
+                continue;
+
+            groupIndex = groupRemap[groupIndex];
+        }
+
         CreativeItemData entry;
         entry.mNetId = netId++;
-        entry.mGroupIndex = source.mGroupIndex;
+        entry.mGroupIndex = groupIndex;
         entry.mItem.mDefinition = definition;
         entry.mItem.mCount = 1;
         entry.mItem.mDamage = source.mDamage;
@@ -826,8 +865,7 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
             entry.mItem.mTag = NbtIo::readTag(stream, NbtVariant::LittleEndian);
         }
 
-        if (source.mIsBlock)
-            entry.mItem.mBlockDefinition = owner.getBlockDefinitions().getDefinition(source.mIdentifier);
+        entry.mItem.mBlockDefinition = owner.getBlockDefinitions().getDefinition(source.mIdentifier);
 
         owner.getCreativeItemsMutable().push_back(entry);
     }
