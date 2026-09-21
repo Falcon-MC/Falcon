@@ -302,8 +302,15 @@ namespace {
                 return false;
 
             switch (mValue[mPosition]) {
-                case '{': return parseObject();
-                case '[': return parseArray();
+                case '{':
+                case '[': {
+                    if (mDepth >= MAX_DEPTH)
+                        return false;
+                    ++mDepth;
+                    const bool valid = mValue[mPosition] == '{' ? parseObject() : parseArray();
+                    --mDepth;
+                    return valid;
+                }
                 case '"': return parseString();
                 case 't': return parseLiteral("true");
                 case 'f': return parseLiteral("false");
@@ -439,8 +446,11 @@ namespace {
             return start != mPosition;
         }
 
+        static constexpr int MAX_DEPTH = 64;
+
         const std::string &mValue;
         size_t mPosition = 0;
+        int mDepth = 0;
     };
 
     bool isValidSkin(const SerializedSkin &skin) {
