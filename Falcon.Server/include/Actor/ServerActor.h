@@ -103,14 +103,6 @@ public:
 
     const CustomActorDefinition *getDefinition() const { return mDefinition; }
 
-    void addTag(const std::string &tag) { mTags.insert(tag); }
-
-    bool removeTag(const std::string &tag) { return mTags.erase(tag) != 0; }
-
-    bool hasTag(const std::string &tag) const { return mTags.count(tag) != 0; }
-
-    const std::unordered_set<std::string> &getTags() const { return mTags; }
-
     void setIntProperty(const std::string &name, int32_t value) { mIntProperties[name] = value; }
 
     void setFloatProperty(const std::string &name, float value) { mFloatProperties[name] = value; }
@@ -191,7 +183,6 @@ private:
     ProjectileData mProjectileData;
     std::string mNameTag;
 
-    std::unordered_set<std::string> mTags;
     std::unordered_map<std::string, int32_t> mIntProperties;
     std::unordered_map<std::string, float> mFloatProperties;
     std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;

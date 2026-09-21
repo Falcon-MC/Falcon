@@ -501,7 +501,7 @@ namespace {
         ServerPlayer *player = api->resolvePlayer(thisVal);
         if (player == nullptr || argc < 1)
             return JS_NewBool(ctx, false);
-        player->getTags().insert(toStdString(ctx, argv[0]));
+        player->addTag(toStdString(ctx, argv[0]));
         return JS_NewBool(ctx, true);
     }
 
@@ -510,7 +510,7 @@ namespace {
         ServerPlayer *player = api->resolvePlayer(thisVal);
         if (player == nullptr || argc < 1)
             return JS_NewBool(ctx, false);
-        return JS_NewBool(ctx, player->getTags().erase(toStdString(ctx, argv[0])) != 0);
+        return JS_NewBool(ctx, player->removeTag(toStdString(ctx, argv[0])));
     }
 
     JSValue playerHasTag(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -518,7 +518,7 @@ namespace {
         ServerPlayer *player = api->resolvePlayer(thisVal);
         if (player == nullptr || argc < 1)
             return JS_NewBool(ctx, false);
-        return JS_NewBool(ctx, player->getTags().count(toStdString(ctx, argv[0])) != 0);
+        return JS_NewBool(ctx, player->hasTag(toStdString(ctx, argv[0])));
     }
 
     JSValue playerGetTags(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -3455,7 +3455,7 @@ namespace {
                         JSValue element = JS_GetPropertyUint32(ctx, requiredTags, i);
                         const std::string tag = toStdString(ctx, element);
                         JS_FreeValue(ctx, element);
-                        if (player.getTags().count(tag) == 0) {
+                        if (!player.hasTag(tag)) {
                             hasAllTags = false;
                             break;
                         }

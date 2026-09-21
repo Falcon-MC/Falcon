@@ -273,11 +273,7 @@ Tag ServerActor::saveNbt() const {
     data.putFloat("MaxHealth", getMaxHealth());
     data.putString("NameTag", mNameTag);
     data.putLong("OwnerUniqueId", mOwnerUniqueId);
-
-    Tag tags = Tag::ofList(Tag::Type::String);
-    for (const std::string &tag: mTags)
-        tags.addToList(Tag::ofString(tag));
-    data.put("Tags", tags);
+    saveTags(data);
 
     Tag intProperties = Tag::ofCompound();
     for (const auto &entry: mIntProperties)
@@ -290,7 +286,6 @@ Tag ServerActor::saveNbt() const {
     data.put("FloatProperties", floatProperties);
 
     data.put("DynamicProperties", serializeDynamicProperties(mDynamicProperties));
-    saveTags(data);
 
     return data;
 }
@@ -298,8 +293,6 @@ Tag ServerActor::saveNbt() const {
 void ServerActor::loadNbt(const Tag &data) {
     if (!data.isCompound())
         return;
-
-    loadTags(data);
 
     mPosition = Vector3f(listValue(data, "Pos", 0, mPosition.x),
                          listValue(data, "Pos", 1, mPosition.y),
@@ -318,11 +311,7 @@ void ServerActor::loadNbt(const Tag &data) {
     mNameTag = data.getString("NameTag", mNameTag);
     mOwnerUniqueId = data.getLong("OwnerUniqueId", mOwnerUniqueId);
 
-    const Tag *tags = data.get("Tags");
-    if (tags != nullptr && tags->isList()) {
-        for (const Tag &entry: tags->getList())
-            mTags.insert(entry.asString());
-    }
+    loadTags(data);
 
     const Tag *intProperties = data.get("IntProperties");
     if (intProperties != nullptr && intProperties->isCompound()) {

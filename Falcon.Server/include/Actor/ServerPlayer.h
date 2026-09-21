@@ -112,8 +112,6 @@ public:
 
     std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() { return mDynamicProperties; }
 
-    std::unordered_set<std::string> &getTags() { return mTags; }
-
     int64_t getLastItemUseTick() const { return mLastItemUseTick; }
 
     void setLastItemUseTick(int64_t tick) { mLastItemUseTick = tick; }
@@ -404,7 +402,6 @@ private:
     std::string mName;
     std::string mUuid;
     std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;
-    std::unordered_set<std::string> mTags;
     int64_t mLastItemUseTick = -1000;
     std::string mXuid;
     int mBuildPlatform = -1;
