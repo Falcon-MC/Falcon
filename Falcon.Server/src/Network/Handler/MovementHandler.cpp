@@ -4,6 +4,7 @@
 #include "Actor/RideSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
+#include "Block/Blocks/FrostedIceBlock.h"
 #include "Block/Systems/LavaResetFallDistanceSystem.h"
 #include "Block/Systems/FireBlocksFetch.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
@@ -28,6 +29,41 @@ namespace {
         const int32_t respiration = ItemEnchantments::getLevel(
                 player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD), EnchantmentIds::RESPIRATION);
         return respiration <= 0 || std::rand() % (respiration + 1) == 0;
+    }
+
+    void freezeWaterUnderfoot(Level &level, const ServerPlayer &player, const Vector3f &feetPosition) {
+        if (player.getGameType() == (int32_t) GameType::Spectator)
+            return;
+
+        const int32_t frostWalker = ItemEnchantments::getLevel(
+                player.getInventory().getArmor(PlayerInventory::ARMOR_FEET), EnchantmentIds::FROST_WALKER);
+        if (frostWalker <= 0)
+            return;
+
+        const int32_t radius = 2 + frostWalker;
+        const int32_t centerX = (int32_t) std::floor(feetPosition.x);
+        const int32_t y = (int32_t) std::floor(feetPosition.y) - 1;
+        const int32_t centerZ = (int32_t) std::floor(feetPosition.z);
+        if (y < level.getMinY() || y >= level.getMaxY())
+            return;
+
+        for (int32_t x = centerX - radius; x <= centerX + radius; ++x) {
+            for (int32_t z = centerZ - radius; z <= centerZ + radius; ++z) {
+                const BlockState water = level.getBlockState(x, y, z);
+                if (water.mName != "minecraft:water" || water.mStates.getInt("liquid_depth", 0) != 0)
+                    continue;
+
+                if (level.getBlockState(x, y + 1, z).mName != "minecraft:air")
+                    continue;
+
+                Tag states = Tag::ofCompound();
+                states.putInt("age", 0);
+
+                const Vector3i position(x, y, z);
+                level.setBlock(position, BlockState(FrostedIceBlock::IDENTIFIER, states), false);
+                level.scheduleUpdate(position, FrostedIceBlock::nextMeltDelay());
+            }
+        }
     }
 
     const float PLAYER_BASE_OFFSET = 1.62f;
@@ -161,6 +197,9 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
         else if (onGround && player.getFlags().get(ActorFlag::Sprinting))
             player.exhaust(horizontalDistance * SPRINT_EXHAUSTION_PER_BLOCK);
     }
+
+    if (onGround)
+        freezeWaterUnderfoot(level, player, feetPosition);
 
     if (onGround) {
         BlockState support;

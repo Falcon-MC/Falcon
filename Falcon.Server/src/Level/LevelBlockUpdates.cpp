@@ -74,11 +74,13 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type) {
         RedstoneSystem::onRedstoneUpdate(owner, *this, position, state, type);
     }
 
-    if (type == BlockUpdateType::Normal) {
+    if (type == BlockUpdateType::Normal || type == BlockUpdateType::Scheduled) {
         const BlockState current = getBlockState(position.x, position.y, position.z);
         const Block *block = VanillaBlocks::fromIdentifier(current.mName);
-        if (block != nullptr)
+        if (block != nullptr && type == BlockUpdateType::Normal)
             block->onNeighbourChanged(owner, *this, position, current);
+        else if (block != nullptr)
+            block->onScheduledUpdate(owner, *this, position, current);
     }
 
     --mUpdateDepth;

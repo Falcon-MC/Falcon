@@ -146,6 +146,14 @@ public:
         (void) state;
     }
 
+    virtual void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                   const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+    }
+
     virtual std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position,
                                                                 const BlockState &state, int playerFacing) const;
 
