@@ -65,6 +65,14 @@ public:
         (void) state;
     }
 
+    virtual void onStepOn(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                          const BlockState &state) const {
+        (void) owner;
+        (void) player;
+        (void) position;
+        (void) state;
+    }
+
     virtual bool onPunch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                          const BlockState &state) const {
         (void) owner;

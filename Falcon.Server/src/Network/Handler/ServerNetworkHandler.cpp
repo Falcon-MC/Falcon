@@ -183,7 +183,7 @@ static bool isDamageDisabledByGameRule(const GameRules &rules, const std::string
         return !rules.getBool("falldamage");
 
     if (deathMessageKey == "death.attack.lava" || deathMessageKey == "death.attack.onFire"
-        || deathMessageKey == "death.attack.inFire")
+        || deathMessageKey == "death.attack.inFire" || deathMessageKey == "death.attack.hotFloor")
         return !rules.getBool("firedamage");
 
     if (deathMessageKey == "death.attack.drown")

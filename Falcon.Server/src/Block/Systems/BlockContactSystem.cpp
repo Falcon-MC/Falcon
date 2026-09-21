@@ -11,6 +11,7 @@
 namespace {
     const float CONTACT_INSET = 0.3f;
     const float PLAYER_CONTACT_HEIGHT = 1.8f;
+    const float STEP_PROBE_DEPTH = 0.01f;
 }
 
 void BlockContactSystem::tick(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -53,6 +54,17 @@ void BlockContactSystem::tick(ServerNetworkHandler &owner, ServerPlayer &player)
                     return;
             }
         }
+    }
+
+    if (player.isOnGround()) {
+        const Vector3i below((int32_t) std::floor(position.x), (int32_t) std::floor(position.y - STEP_PROBE_DEPTH),
+                             (int32_t) std::floor(position.z));
+        const BlockState *state = level.isChunkResident(below.x >> 4, below.z >> 4)
+                                  ? level.peekBlockPtr(below.x, below.y, below.z)
+                                  : nullptr;
+        const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+        if (block != nullptr)
+            block->onStepOn(owner, player, below, *state);
     }
 
     if (player.getLastPortalTick() != owner.getCurrentTick())
