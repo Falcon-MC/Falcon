@@ -21,6 +21,7 @@ FetchContent_Declare(
     GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(leveldb)
+set_property(TARGET leveldb PROPERTY INTERFACE_COMPILE_OPTIONS "")
 
 set(QJS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(QJS_BUILD_LIBC OFF CACHE BOOL "" FORCE)

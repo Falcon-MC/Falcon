@@ -18,7 +18,7 @@ public:
 
     virtual ActorCategory getCategory() const = 0;
 
-    virtual ActorSize getSize() const = 0;
+    ActorSize getSize() const override = 0;
 
     virtual float getDefaultMaxHealth() const = 0;
 
