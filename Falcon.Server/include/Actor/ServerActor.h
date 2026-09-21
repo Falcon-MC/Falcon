@@ -3,6 +3,7 @@
 #include "Actor/Actor.h"
 #include "Actor/ActorSize.h"
 #include "Actor/DynamicPropertyValue.h"
+#include "Actor/Movement/PhysicsComponent.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/NBT/Tag.h"
 #include "Protocol/Types/EntityDataMap.h"
@@ -93,7 +94,11 @@ public:
 
     void tickSunlightBurn(ServerNetworkHandler &owner);
 
-    void _tickPhysics(ServerNetworkHandler &owner);
+    virtual PhysicsComponent getPhysics() const;
+
+    bool needsMovementSync() const;
+
+    void markMovementSynced();
 
     const char *getIdentifier() const override { return mIdentifier.c_str(); }
 
@@ -172,6 +177,9 @@ public:
 
 private:
     std::string mIdentifier;
+    Vector3f mSyncedPosition;
+    Vector3f mSyncedRotation;
+    bool mMovementSynced = false;
     const CustomActorDefinition *mDefinition = nullptr;
     bool mIsProjectile = false;
     int64_t mOwnerUniqueId = -1;

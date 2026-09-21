@@ -12,7 +12,15 @@ public:
 
     ActorCategory getCategory() const override { return ActorCategory::Passive; }
 
+    static constexpr float ANIMAL_STEP_HEIGHT = 0.5f;
+
     int getExperienceDrop() const override {
         return randomRange(MINIMUM_EXPERIENCE, MAXIMUM_EXPERIENCE);
+    }
+
+    PhysicsComponent getPhysics() const override {
+        PhysicsComponent physics = MobActor::getPhysics();
+        physics.mStepHeight = ANIMAL_STEP_HEIGHT;
+        return physics;
     }
 };

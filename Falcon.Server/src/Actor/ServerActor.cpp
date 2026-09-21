@@ -2,6 +2,7 @@
 
 #include "Actor/DynamicPropertyStore.h"
 #include "Actor/Mob/MobActor.h"
+#include "Actor/Movement/ActorMovementSystem.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
 #include "Item/EnchantmentData.h"
 #include "Item/ItemEnchantments.h"
@@ -15,11 +16,7 @@
 #include <cmath>
 
 namespace {
-    const float LIVING_GRAVITY = 0.08f;
-    const float LIVING_DRAG = 0.98f;
-    const float GROUND_FRICTION = 0.6f;
-    const float AIR_FRICTION = 0.91f;
-    const float MOTION_EPSILON = 0.003f;
+    const float SYNC_POSITION_EPSILON = 0.0001f;
     const int32_t INVULNERABILITY_TICKS = 10;
     const float ATTACK_KNOCKBACK = 0.4f;
     const float FIRE_TICK_DAMAGE = 1.0f;
@@ -82,75 +79,33 @@ void ServerActor::tick(ServerNetworkHandler &owner) {
     owner.getProfiler().endSection(ProfilerSection::ActorEnvironment);
 
     owner.getProfiler().beginSection(ProfilerSection::ActorPhysics);
-    _tickPhysics(owner);
+    ActorMovementSystem::tick(owner, *this);
     owner.getProfiler().endSection(ProfilerSection::ActorPhysics);
 }
 
-void ServerActor::_tickPhysics(ServerNetworkHandler &owner) {
-    Vector3f motion = getMotion();
-    if (std::fabs(motion.x) < MOTION_EPSILON && std::fabs(motion.y) < MOTION_EPSILON &&
-        std::fabs(motion.z) < MOTION_EPSILON)
-        return;
+PhysicsComponent ServerActor::getPhysics() const {
+    PhysicsComponent physics;
+    physics.mHasGravity = !isFlyingActor(mIdentifier);
+    physics.mPushable = mIdentifier != "minecraft:xp_orb";
+    return physics;
+}
 
-    Level &level = owner.getLevelFor(*this);
+bool ServerActor::needsMovementSync() const {
+    if (!mMovementSynced)
+        return true;
+
     const Vector3f position = getPosition();
-    const int32_t footX = (int32_t) std::floor(position.x);
-    const int32_t footZ = (int32_t) std::floor(position.z);
-    const bool onGround = level.isSolidAt(footX, (int32_t) std::floor(position.y - 0.1f), footZ);
+    const Vector3f rotation = getRotation();
+    return std::fabs(position.x - mSyncedPosition.x) > SYNC_POSITION_EPSILON
+           || std::fabs(position.y - mSyncedPosition.y) > SYNC_POSITION_EPSILON
+           || std::fabs(position.z - mSyncedPosition.z) > SYNC_POSITION_EPSILON
+           || rotation.x != mSyncedRotation.x || rotation.y != mSyncedRotation.y || rotation.z != mSyncedRotation.z;
+}
 
-    if (!onGround || motion.y > 0.0f) {
-        motion.y -= LIVING_GRAVITY;
-        motion.y *= LIVING_DRAG;
-    }
-
-    Vector3f target = position;
-    target.x += motion.x;
-    target.y += motion.y;
-    target.z += motion.z;
-
-    if (level.isSolidAt((int32_t) std::floor(target.x), (int32_t) std::floor(position.y), footZ)) {
-        target.x = position.x;
-        motion.x = 0.0f;
-    }
-
-    if (level.isSolidAt(footX, (int32_t) std::floor(position.y), (int32_t) std::floor(target.z))) {
-        target.z = position.z;
-        motion.z = 0.0f;
-    }
-
-    bool landed = false;
-    if (motion.y < 0.0f && level.isSolidAt((int32_t) std::floor(target.x), (int32_t) std::floor(target.y),
-                                           (int32_t) std::floor(target.z))) {
-        target.y = std::floor(target.y) + 1.0f;
-        motion.y = 0.0f;
-        landed = true;
-    }
-
-    const float friction = onGround ? GROUND_FRICTION : AIR_FRICTION;
-    motion.x *= friction;
-    motion.z *= friction;
-
-    setMotion(motion);
-    setPosition(target);
-    setOnGround(onGround || landed);
-
-    float pendingFallDamage = 0.0f;
-    if (!isFlyingActor(mIdentifier)) {
-        if (target.y > getHighestPosition())
-            setHighestPosition(target.y);
-
-        updateFallDistance();
-
-        if (landed || onGround) {
-            pendingFallDamage = computeFallDamage();
-            resetFallDistance();
-        }
-    }
-
-    owner.broadcastActorMove(*this);
-
-    if (pendingFallDamage > 0.0f)
-        hurt(owner, pendingFallDamage, nullptr);
+void ServerActor::markMovementSynced() {
+    mSyncedPosition = getPosition();
+    mSyncedRotation = getRotation();
+    mMovementSynced = true;
 }
 
 void ServerActor::tickSunlightBurn(ServerNetworkHandler &owner) {

@@ -8,7 +8,15 @@ public:
 
     using PassiveActor::PassiveActor;
 
+    static constexpr float CAMEL_STEP_HEIGHT = 1.5625f;
+
     ActorSize getSize() const override { return ActorSize{1.7f, 2.375f}; }
+
+    PhysicsComponent getPhysics() const override {
+        PhysicsComponent physics = PassiveActor::getPhysics();
+        physics.mStepHeight = CAMEL_STEP_HEIGHT;
+        return physics;
+    }
 
     float getDefaultMaxHealth() const override { return 32.0f; }
 };
