@@ -7,8 +7,8 @@
 #include <cmath>
 
 namespace {
-    const float DEFAULT_VOLUME = 1.0f;
-    const float DEFAULT_PITCH = 1.0f;
+    const float DEFAULT_SOUND_VOLUME = 1.0f;
+    const float DEFAULT_SOUND_PITCH = 1.0f;
     const float HEARING_DISTANCE_PER_VOLUME = 16.0f;
 
     bool parseFloat(const std::string &value, float &out) {
@@ -52,8 +52,8 @@ bool PlaySoundCommand::execute(CommandOrigin &sender, const std::vector<std::str
         return false;
     }
 
-    float volume = DEFAULT_VOLUME;
-    float pitch = DEFAULT_PITCH;
+    float volume = DEFAULT_SOUND_VOLUME;
+    float pitch = DEFAULT_SOUND_PITCH;
     float minimumVolume = 0.0f;
     if ((arguments.size() > 5 && !parseFloat(arguments[5], volume))
         || (arguments.size() > 6 && !parseFloat(arguments[6], pitch))
