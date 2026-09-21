@@ -403,6 +403,8 @@ public:
 private:
     float _applyAttackerModifiers(float baseDamage, float damage) const;
 
+    bool _isCriticalHit() const;
+
     NetworkIdentifier mId;
     LoginState mLoginState;
     std::string mName;

@@ -241,12 +241,15 @@ float ServerPlayer::_applyAttackerModifiers(float baseDamage, float damage) cons
         damage -= baseDamage * 0.2f * (float) weakness->level();
     damage = std::max(0.0f, damage);
 
-    const bool critical = !isFlying() && getFallDistance() > 0.0f &&
-                          !hasEffect(MobEffectId::Blindness) && !getFlags().get(ActorFlag::Swimming);
-    if (critical)
+    if (_isCriticalHit())
         damage += damage * 0.5f;
 
     return damage;
+}
+
+bool ServerPlayer::_isCriticalHit() const {
+    return !isFlying() && getFallDistance() > 0.0f && !hasEffect(MobEffectId::Blindness)
+           && !getFlags().get(ActorFlag::Swimming);
 }
 
 bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId) {
@@ -415,9 +418,9 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     exhaust(0.1f);
     owner._sendAttributes(*this);
 
-    if (critical)
+    if (_isCriticalHit())
         broadcastAnimation(owner, *victim, AnimatePacket::Action::CriticalHit);
-    if (sharpness > 0)
+    if (victim->getMeleeEnchantmentBonus(held) > 0.0f)
         broadcastAnimation(owner, *victim, AnimatePacket::Action::MagicCriticalHit);
     return true;
 }
