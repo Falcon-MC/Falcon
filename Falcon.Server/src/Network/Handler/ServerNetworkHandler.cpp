@@ -2057,25 +2057,31 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     const Vector3f position = player.getPosition();
     const Vector3f dropPosition(position.x, position.y + ITEM_DROP_HEIGHT, position.z);
 
-    for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; slot++) {
-        dropItem(level, dropPosition, inventory.getItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
-    }
+    const auto dropOnDeath = [&](const ItemStack &item) {
+        if (ItemEnchantments::getLevel(item, EnchantmentIds::VANISHING) > 0)
+            return;
 
-    for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; slot++) {
-        dropItem(level, dropPosition, inventory.getArmor(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
-    }
+        dropItem(level, dropPosition, item, ItemActorHandler::randomDropAroundMotion(),
+                 ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+    };
 
-    dropItem(level, dropPosition, inventory.getOffhand(), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
-    dropItem(level, dropPosition, inventory.getCursor(), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+    for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; slot++)
+        dropOnDeath(inventory.getItem(slot));
+
+    for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; slot++)
+        dropOnDeath(inventory.getArmor(slot));
+
+    dropOnDeath(inventory.getOffhand());
+    dropOnDeath(inventory.getCursor());
 
     for (int slot = 0; slot < PlayerInventory::CRAFTING_SIZE; ++slot)
-        dropItem(level, dropPosition, inventory.getCraftingItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+        dropOnDeath(inventory.getCraftingItem(slot));
 
     for (int slot = 0; slot < PlayerInventory::CRAFTING_TABLE_SIZE; ++slot)
-        dropItem(level, dropPosition, inventory.getCraftingTableItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+        dropOnDeath(inventory.getCraftingTableItem(slot));
 
     for (int slot = 0; slot < PlayerInventory::FURNACE_SIZE; ++slot)
-        dropItem(level, dropPosition, inventory.getFurnaceItem(slot), ItemActorHandler::randomDropAroundMotion(), ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+        dropOnDeath(inventory.getFurnaceItem(slot));
 
     inventory.clear();
     inventory.setSelectedSlot(0);
