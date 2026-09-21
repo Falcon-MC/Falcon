@@ -6,6 +6,7 @@
 #include "Actor/ExperienceManager.h"
 #include "Core/Math/Vector3f.h"
 #include "Level/Dimension.h"
+#include "Protocol/Types/ItemStack.h"
 
 #include <cstdint>
 #include <algorithm>
@@ -203,6 +204,14 @@ public:
     bool hasEffect(MobEffectId id) const { return mEffects.has(id); }
 
     const MobEffectInstance *getEffect(MobEffectId id) const { return mEffects.get(id); }
+
+    bool isUndead() const;
+
+    bool isArthropod() const;
+
+    float getMeleeEnchantmentBonus(const ItemStack &weapon) const;
+
+    void onMeleeEnchantmentHit(const ItemStack &weapon);
 
     bool tickEffects(int32_t tickDiff = 1) { return mEffects.tick(tickDiff); }
 

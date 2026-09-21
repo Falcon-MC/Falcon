@@ -401,6 +401,8 @@ public:
     }
 
 private:
+    float _applyAttackerModifiers(float baseDamage, float damage) const;
+
     NetworkIdentifier mId;
     LoginState mLoginState;
     std::string mName;

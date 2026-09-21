@@ -1,10 +1,35 @@
 #include "Actor/Actor.h"
 
+#include "Item/EnchantmentData.h"
+#include "Item/ItemEnchantments.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 
 namespace {
+    const char *const UNDEAD_ACTORS[] = {
+            "minecraft:bogged", "minecraft:drowned", "minecraft:husk", "minecraft:parched",
+            "minecraft:phantom", "minecraft:skeleton", "minecraft:stray", "minecraft:wither",
+            "minecraft:wither_skeleton", "minecraft:zombie", "minecraft:zombie_horse",
+            "minecraft:zombie_pigman", "minecraft:zombie_villager", "minecraft:zombie_villager_v2"
+    };
+
+    const char *const ARTHROPOD_ACTORS[] = {
+            "minecraft:spider", "minecraft:cave_spider", "minecraft:silverfish", "minecraft:endermite"
+    };
+
+    template<size_t N>
+    bool containsIdentifier(const char *const (&identifiers)[N], const char *identifier) {
+        for (const char *candidate: identifiers) {
+            if (std::strcmp(candidate, identifier) == 0)
+                return true;
+        }
+
+        return false;
+    }
+
     const char *ATTRIBUTE_HEALTH = "minecraft:health";
     const char *ATTRIBUTE_HUNGER = "minecraft:player.hunger";
     const char *ATTRIBUTE_SATURATION = "minecraft:player.saturation";
@@ -177,6 +202,38 @@ float Actor::getExhaustion() const {
 
 void Actor::setExhaustion(float exhaustion) {
     mAttributes.setClamped(ATTRIBUTE_EXHAUSTION, exhaustion);
+}
+
+bool Actor::isUndead() const {
+    return containsIdentifier(UNDEAD_ACTORS, getIdentifier());
+}
+
+bool Actor::isArthropod() const {
+    return containsIdentifier(ARTHROPOD_ACTORS, getIdentifier());
+}
+
+float Actor::getMeleeEnchantmentBonus(const ItemStack &weapon) const {
+    float bonus = 1.25f * (float) ItemEnchantments::getLevel(weapon, EnchantmentIds::SHARPNESS);
+
+    if (isUndead())
+        bonus += 2.5f * (float) ItemEnchantments::getLevel(weapon, EnchantmentIds::SMITE);
+
+    if (isArthropod())
+        bonus += 2.5f * (float) ItemEnchantments::getLevel(weapon, EnchantmentIds::BANE_OF_ARTHROPODS);
+
+    return bonus;
+}
+
+void Actor::onMeleeEnchantmentHit(const ItemStack &weapon) {
+    const int32_t baneOfArthropods = ItemEnchantments::getLevel(weapon, EnchantmentIds::BANE_OF_ARTHROPODS);
+    if (baneOfArthropods <= 0 || !isArthropod())
+        return;
+
+    MobEffectInstance slowness;
+    slowness.mId = MobEffectId::Slowness;
+    slowness.mDuration = 20 + std::rand() % (10 * baneOfArthropods);
+    slowness.mAmplifier = 3;
+    addEffect(slowness);
 }
 
 void Actor::exhaust(float amount) {

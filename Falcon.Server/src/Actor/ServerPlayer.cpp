@@ -234,6 +234,21 @@ ServerPlayer::ServerPlayer(const NetworkIdentifier &id, uint64_t runtimeId, Pack
     });
 }
 
+float ServerPlayer::_applyAttackerModifiers(float baseDamage, float damage) const {
+    if (const MobEffectInstance *strength = getEffect(MobEffectId::Strength))
+        damage += baseDamage * 0.3f * (float) strength->level();
+    if (const MobEffectInstance *weakness = getEffect(MobEffectId::Weakness))
+        damage -= baseDamage * 0.2f * (float) weakness->level();
+    damage = std::max(0.0f, damage);
+
+    const bool critical = !isFlying() && getFallDistance() > 0.0f &&
+                          !hasEffect(MobEffectId::Blindness) && !getFlags().get(ActorFlag::Swimming);
+    if (critical)
+        damage += damage * 0.5f;
+
+    return damage;
+}
+
 bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId) {
     ActorEventPacket swing;
     swing.mRuntimeActorId = getRuntimeId();
@@ -277,13 +292,21 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             const Item *weaponType = weapon.isAir() || weapon.mDefinition == nullptr
                                              ? nullptr
                                              : VanillaItems::fromIdentifier(weapon.mDefinition->getIdentifier());
-            float attackDamage = weaponData == nullptr || weaponData->mAttackDamage <= 0
-                                         ? 1.0f
-                                         : (float) weaponData->mAttackDamage;
+            const float weaponBaseDamage = weaponData == nullptr || weaponData->mAttackDamage <= 0
+                                                   ? 1.0f
+                                                   : (float) weaponData->mAttackDamage;
+            float attackDamage = weaponBaseDamage;
             if (weaponType != nullptr)
                 attackDamage = std::max(0.0f, attackDamage + weaponType->getAttackDamageBonus(weapon, *this));
 
+            attackDamage = _applyAttackerModifiers(weaponBaseDamage,
+                                                   attackDamage + target.getMeleeEnchantmentBonus(weapon));
+            if (attackDamage <= 0.0f)
+                return false;
+
             owner.damageActor(target, attackDamage, this);
+            if (target.isAlive())
+                target.onMeleeEnchantmentHit(weapon);
             if (weaponType != nullptr)
                 weaponType->onPostAttack(owner, *this, target, attackDamage, weapon);
 
@@ -318,18 +341,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (heldType != nullptr)
         damage = std::max(0.0f, damage + heldType->getAttackDamageBonus(held, *this));
 
-    const int sharpness = ItemEnchantments::getLevel(held, EnchantmentIds::SHARPNESS);
-    damage += sharpness > 0 ? 0.5f * (float) (sharpness + 1) : 0.0f;
-    if (const MobEffectInstance *strength = getEffect(MobEffectId::Strength))
-        damage += baseDamage * 0.3f * (float) strength->level();
-    if (const MobEffectInstance *weakness = getEffect(MobEffectId::Weakness))
-        damage -= baseDamage * 0.2f * (float) weakness->level();
-    damage = std::max(0.0f, damage);
-
-    const bool critical = !getFlags().get(ActorFlag::Sprinting) && !isFlying() && getFallDistance() > 0.0f &&
-                          !hasEffect(MobEffectId::Blindness) && !getFlags().get(ActorFlag::Swimming);
-    if (critical)
-        damage += damage * 0.5f;
+    damage = _applyAttackerModifiers(baseDamage, damage + victim->getMeleeEnchantmentBonus(held));
     if (damage <= 0.0f)
         return false;
 
