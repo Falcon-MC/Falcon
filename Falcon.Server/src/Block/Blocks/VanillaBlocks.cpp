@@ -5555,6 +5555,198 @@ Block VanillaBlocks::DANDELION() {
     return buildFromTypeId(BlockTypeIds::DANDELION);
 }
 
+Block VanillaBlocks::WHITE_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::WHITE_WOOL_SLAB);
+}
+
+Block VanillaBlocks::WHITE_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::WHITE_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::WHITE_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::WHITE_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::ORANGE_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::ORANGE_WOOL_SLAB);
+}
+
+Block VanillaBlocks::ORANGE_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::ORANGE_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::ORANGE_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::ORANGE_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::MAGENTA_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::MAGENTA_WOOL_SLAB);
+}
+
+Block VanillaBlocks::MAGENTA_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::MAGENTA_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::MAGENTA_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::MAGENTA_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::LIGHT_BLUE_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::LIGHT_BLUE_WOOL_SLAB);
+}
+
+Block VanillaBlocks::LIGHT_BLUE_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::LIGHT_BLUE_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::LIGHT_BLUE_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::LIGHT_BLUE_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::YELLOW_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::YELLOW_WOOL_SLAB);
+}
+
+Block VanillaBlocks::YELLOW_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::YELLOW_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::YELLOW_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::YELLOW_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::LIME_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::LIME_WOOL_SLAB);
+}
+
+Block VanillaBlocks::LIME_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::LIME_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::LIME_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::LIME_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::PINK_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::PINK_WOOL_SLAB);
+}
+
+Block VanillaBlocks::PINK_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::PINK_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::PINK_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::PINK_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::GRAY_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::GRAY_WOOL_SLAB);
+}
+
+Block VanillaBlocks::GRAY_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::GRAY_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::GRAY_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::GRAY_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::LIGHT_GRAY_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::LIGHT_GRAY_WOOL_SLAB);
+}
+
+Block VanillaBlocks::LIGHT_GRAY_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::LIGHT_GRAY_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::LIGHT_GRAY_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::LIGHT_GRAY_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::CYAN_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::CYAN_WOOL_SLAB);
+}
+
+Block VanillaBlocks::CYAN_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::CYAN_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::CYAN_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::CYAN_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::PURPLE_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::PURPLE_WOOL_SLAB);
+}
+
+Block VanillaBlocks::PURPLE_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::PURPLE_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::PURPLE_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::PURPLE_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::BLUE_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::BLUE_WOOL_SLAB);
+}
+
+Block VanillaBlocks::BLUE_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::BLUE_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::BLUE_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::BLUE_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::BROWN_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::BROWN_WOOL_SLAB);
+}
+
+Block VanillaBlocks::BROWN_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::BROWN_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::BROWN_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::BROWN_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::GREEN_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::GREEN_WOOL_SLAB);
+}
+
+Block VanillaBlocks::GREEN_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::GREEN_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::GREEN_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::GREEN_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::RED_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::RED_WOOL_SLAB);
+}
+
+Block VanillaBlocks::RED_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::RED_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::RED_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::RED_WOOL_STAIRS);
+}
+
+Block VanillaBlocks::BLACK_WOOL_SLAB() {
+    return buildFromTypeId(BlockTypeIds::BLACK_WOOL_SLAB);
+}
+
+Block VanillaBlocks::BLACK_WOOL_DOUBLE_SLAB() {
+    return buildFromTypeId(BlockTypeIds::BLACK_WOOL_DOUBLE_SLAB);
+}
+
+Block VanillaBlocks::BLACK_WOOL_STAIRS() {
+    return buildFromTypeId(BlockTypeIds::BLACK_WOOL_STAIRS);
+}
+
 Block VanillaBlocks::GRASS() {
     return buildFromTypeId(BlockTypeIds::GRASS_BLOCK);
 }

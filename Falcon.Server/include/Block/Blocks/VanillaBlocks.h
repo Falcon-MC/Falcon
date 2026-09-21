@@ -2765,6 +2765,102 @@ public:
 
     static Block DANDELION();
 
+    static Block WHITE_WOOL_SLAB();
+
+    static Block WHITE_WOOL_DOUBLE_SLAB();
+
+    static Block WHITE_WOOL_STAIRS();
+
+    static Block ORANGE_WOOL_SLAB();
+
+    static Block ORANGE_WOOL_DOUBLE_SLAB();
+
+    static Block ORANGE_WOOL_STAIRS();
+
+    static Block MAGENTA_WOOL_SLAB();
+
+    static Block MAGENTA_WOOL_DOUBLE_SLAB();
+
+    static Block MAGENTA_WOOL_STAIRS();
+
+    static Block LIGHT_BLUE_WOOL_SLAB();
+
+    static Block LIGHT_BLUE_WOOL_DOUBLE_SLAB();
+
+    static Block LIGHT_BLUE_WOOL_STAIRS();
+
+    static Block YELLOW_WOOL_SLAB();
+
+    static Block YELLOW_WOOL_DOUBLE_SLAB();
+
+    static Block YELLOW_WOOL_STAIRS();
+
+    static Block LIME_WOOL_SLAB();
+
+    static Block LIME_WOOL_DOUBLE_SLAB();
+
+    static Block LIME_WOOL_STAIRS();
+
+    static Block PINK_WOOL_SLAB();
+
+    static Block PINK_WOOL_DOUBLE_SLAB();
+
+    static Block PINK_WOOL_STAIRS();
+
+    static Block GRAY_WOOL_SLAB();
+
+    static Block GRAY_WOOL_DOUBLE_SLAB();
+
+    static Block GRAY_WOOL_STAIRS();
+
+    static Block LIGHT_GRAY_WOOL_SLAB();
+
+    static Block LIGHT_GRAY_WOOL_DOUBLE_SLAB();
+
+    static Block LIGHT_GRAY_WOOL_STAIRS();
+
+    static Block CYAN_WOOL_SLAB();
+
+    static Block CYAN_WOOL_DOUBLE_SLAB();
+
+    static Block CYAN_WOOL_STAIRS();
+
+    static Block PURPLE_WOOL_SLAB();
+
+    static Block PURPLE_WOOL_DOUBLE_SLAB();
+
+    static Block PURPLE_WOOL_STAIRS();
+
+    static Block BLUE_WOOL_SLAB();
+
+    static Block BLUE_WOOL_DOUBLE_SLAB();
+
+    static Block BLUE_WOOL_STAIRS();
+
+    static Block BROWN_WOOL_SLAB();
+
+    static Block BROWN_WOOL_DOUBLE_SLAB();
+
+    static Block BROWN_WOOL_STAIRS();
+
+    static Block GREEN_WOOL_SLAB();
+
+    static Block GREEN_WOOL_DOUBLE_SLAB();
+
+    static Block GREEN_WOOL_STAIRS();
+
+    static Block RED_WOOL_SLAB();
+
+    static Block RED_WOOL_DOUBLE_SLAB();
+
+    static Block RED_WOOL_STAIRS();
+
+    static Block BLACK_WOOL_SLAB();
+
+    static Block BLACK_WOOL_DOUBLE_SLAB();
+
+    static Block BLACK_WOOL_STAIRS();
+
     static Block GRASS();
 
     static Block fromData(const BlockData &data);
