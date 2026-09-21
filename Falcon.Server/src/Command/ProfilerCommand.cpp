@@ -40,40 +40,40 @@ bool ProfilerCommand::execute(CommandOrigin &sender, const std::vector<std::stri
 
     if (action == "status") {
         if (!profiler.isActive()) {
-            sender.sendMessage("Profiler is not running");
+            sender.sendLocalized("falcon.commands.profiler.notRunning");
             return true;
         }
 
-        sender.sendMessage("Profiler is running, " + std::to_string(profiler.getSampleCount())
-                           + " tick(s) recorded since tick " + std::to_string(profiler.getStartTick()));
+        sender.sendLocalized("falcon.commands.profiler.status",
+                             {std::to_string(profiler.getSampleCount()), std::to_string(profiler.getStartTick())});
         return true;
     }
 
     if (action == "on") {
         if (profiler.isActive()) {
-            sender.sendMessage("Profiler is already running");
+            sender.sendLocalized("falcon.commands.profiler.alreadyRunning");
             return false;
         }
 
         profiler.start(mHandler.getCurrentTick());
-        sender.sendMessage("Profiler started");
+        sender.sendLocalized("falcon.commands.profiler.started");
         return true;
     }
 
     if (action == "off") {
         if (!profiler.isActive()) {
-            sender.sendMessage("Profiler is not running");
+            sender.sendLocalized("falcon.commands.profiler.notRunning");
             return false;
         }
 
         std::string path;
         std::string error;
         if (!profiler.stop(PROFILER_DIRECTORY, path, error)) {
-            sender.sendMessage("Could not write the profiler report: " + error);
+            sender.sendLocalized("falcon.commands.profiler.writeFailed", {error});
             return false;
         }
 
-        sender.sendMessage("Profiler stopped, report written to " + path);
+        sender.sendLocalized("falcon.commands.profiler.stopped", {path});
         return true;
     }
 

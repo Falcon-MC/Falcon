@@ -1,0 +1,24 @@
+falcon.commands.about.version=このサーバーは Falcon バージョン %1$s (%2$s、%3$s) で動作しています
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (プロトコル %2$s)
+falcon.commands.about.build=ビルド %1$s、%2$s 構成
+
+falcon.commands.allowlist.enabled=許可リストを有効にしました
+falcon.commands.allowlist.disabled=許可リストを無効にしました
+falcon.commands.allowlist.list=許可リスト (%1$s): %2$s
+falcon.commands.allowlist.reloaded=ファイルから許可リストをリロードしました。
+falcon.commands.allowlist.add.success=%1$s を許可リストに追加しました
+falcon.commands.allowlist.add.failed=%1$s を許可リストに追加できませんでした
+falcon.commands.allowlist.remove.success=%1$s を許可リストから削除しました
+falcon.commands.allowlist.remove.failed=許可リストから %1$s を削除できませんでした
+
+falcon.commands.profiler.notRunning=プロファイラーは実行されていません
+falcon.commands.profiler.alreadyRunning=プロファイラーはすでに実行中です
+falcon.commands.profiler.status=プロファイラーは実行中です。ティック %2$s から %1$s ティックを記録しました
+falcon.commands.profiler.started=プロファイラーを開始しました
+falcon.commands.profiler.stopped=プロファイラーを停止しました。レポートを %1$s に保存しました
+falcon.commands.profiler.writeFailed=プロファイラーのレポートを書き込めませんでした: %1$s
+
+falcon.disconnect.kicked=ワールドから追放されました。
+falcon.disconnect.banned=ホストにより、接続を禁止されました。
+falcon.disconnect.bannedReason=ホストにより、接続を禁止されました。理由: %1$s
+falcon.disconnect.flyingDisabled=このサーバーでは飛行が許可されていません

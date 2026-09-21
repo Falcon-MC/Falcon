@@ -1,0 +1,24 @@
+falcon.commands.about.version=Server ini menjalankan Falcon versi %1$s (%2$s di %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
+falcon.commands.about.build=Build %1$s, konfigurasi %2$s
+
+falcon.commands.allowlist.enabled=Mengaktifkan daftar izin
+falcon.commands.allowlist.disabled=Menonaktifkan daftar izin
+falcon.commands.allowlist.list=Daftar izin (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Daftar izin dimuat ulang dari file.
+falcon.commands.allowlist.add.success=Menambahkan %1$s ke daftar izin
+falcon.commands.allowlist.add.failed=Tidak bisa menambahkan %1$s ke daftar izin
+falcon.commands.allowlist.remove.success=Menghapus %1$s dari daftar izin
+falcon.commands.allowlist.remove.failed=Tidak bisa menghapus %1$s dari daftar izin
+
+falcon.commands.profiler.notRunning=Profiler tidak berjalan
+falcon.commands.profiler.alreadyRunning=Profiler sudah berjalan
+falcon.commands.profiler.status=Profiler berjalan, %1$s tick tercatat sejak tick %2$s
+falcon.commands.profiler.started=Profiler dimulai
+falcon.commands.profiler.stopped=Profiler dihentikan, laporan disimpan di %1$s
+falcon.commands.profiler.writeFailed=Tidak bisa menyimpan laporan profiler: %1$s
+
+falcon.disconnect.kicked=Kamu telah dikeluarkan dari dunia.
+falcon.disconnect.banned=Kamu di-ban oleh host.
+falcon.disconnect.bannedReason=Kamu di-ban oleh host. Alasan: %1$s
+falcon.disconnect.flyingDisabled=Terbang tidak diizinkan di server ini

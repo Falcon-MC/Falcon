@@ -19,6 +19,10 @@ void PlayerCommandOrigin::sendTranslation(const std::string &key, const std::vec
     mPlayer.sendTranslation(key, parameters);
 }
 
+std::string PlayerCommandOrigin::getLocale() const {
+    return mPlayer.getLocale();
+}
+
 CommandPermission PlayerCommandOrigin::getCommandPermission() const {
     return mPlayer.getCommandPermission();
 }

@@ -3125,7 +3125,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestAbil
     const bool mayFly = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator;
 
     if (packet.mBoolValue && !mayFly) {
-        _disconnect(id, "Flying is not enabled on this server");
+        _disconnect(id, player->localize("falcon.disconnect.flyingDisabled"));
         mPlayers.erase(id);
         return;
     }

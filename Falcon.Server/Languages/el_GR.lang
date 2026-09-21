@@ -1,0 +1,24 @@
+falcon.commands.about.version=Αυτός ο διακομιστής εκτελεί το Falcon έκδοση %1$s (%2$s στο %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (πρωτόκολλο %2$s)
+falcon.commands.about.build=Έκδοση κατασκευής %1$s, διαμόρφωση %2$s
+
+falcon.commands.allowlist.enabled=Ενεργοποιήθηκε η λίστα επιτρεπόμενων
+falcon.commands.allowlist.disabled=Απενεργοποιήθηκε η λίστα επιτρεπόμενων
+falcon.commands.allowlist.list=Λίστα επιτρεπόμενων (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Επαναφόρτωση της λίστας επιτρεπόμενων από αρχείο.
+falcon.commands.allowlist.add.success=Προστέθηκε ο παίκτης %1$s στη λίστα επιτρεπόμενων
+falcon.commands.allowlist.add.failed=Δεν ήταν δυνατή η προσθήκη του παίκτη %1$s στη λίστα επιτρεπόμενων
+falcon.commands.allowlist.remove.success=Καταργήθηκε ο παίκτης %1$s από τη λίστα επιτρεπόμενων
+falcon.commands.allowlist.remove.failed=Δεν ήταν δυνατή η κατάργηση του παίκτη %1$s από τη λίστα επιτρεπόμενων
+
+falcon.commands.profiler.notRunning=Το εργαλείο προφίλ δεν εκτελείται
+falcon.commands.profiler.alreadyRunning=Το εργαλείο προφίλ εκτελείται ήδη
+falcon.commands.profiler.status=Το εργαλείο προφίλ εκτελείται, καταγράφηκαν %1$s tick από το tick %2$s
+falcon.commands.profiler.started=Το εργαλείο προφίλ ξεκίνησε
+falcon.commands.profiler.stopped=Το εργαλείο προφίλ σταμάτησε, η αναφορά γράφτηκε στο %1$s
+falcon.commands.profiler.writeFailed=Δεν ήταν δυνατή η εγγραφή της αναφοράς: %1$s
+
+falcon.disconnect.kicked=Αποβλήθηκες από τον κόσμο.
+falcon.disconnect.banned=Έχεις αποκλειστεί από τον φρουρό.
+falcon.disconnect.bannedReason=Έχεις αποκλειστεί από τον φρουρό. Αιτία: %1$s
+falcon.disconnect.flyingDisabled=Η πτήση δεν επιτρέπεται σε αυτόν τον διακομιστή

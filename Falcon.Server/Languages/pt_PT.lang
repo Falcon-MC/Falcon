@@ -1,0 +1,24 @@
+falcon.commands.about.version=Este servidor utiliza o Falcon versão %1$s (%2$s em %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protocolo %2$s)
+falcon.commands.about.build=Build %1$s, configuração %2$s
+
+falcon.commands.allowlist.enabled=Lista de autorizações ativada
+falcon.commands.allowlist.disabled=Lista de autorizações desativada
+falcon.commands.allowlist.list=Lista de autorizações (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Autorizações recarregadas do ficheiro.
+falcon.commands.allowlist.add.success=%1$s adicionado à lista de autorizações
+falcon.commands.allowlist.add.failed=Não foi possível adicionar %1$s à lista de autorizações
+falcon.commands.allowlist.remove.success=%1$s removido(a) da lista de permissões
+falcon.commands.allowlist.remove.failed=Não foi possível remover %1$s da lista de autorizações
+
+falcon.commands.profiler.notRunning=O profiler não está em execução
+falcon.commands.profiler.alreadyRunning=O profiler já está em execução
+falcon.commands.profiler.status=O profiler está em execução, %1$s tick(s) registados desde o tick %2$s
+falcon.commands.profiler.started=Profiler iniciado
+falcon.commands.profiler.stopped=Profiler parado, relatório guardado em %1$s
+falcon.commands.profiler.writeFailed=Não foi possível gravar o relatório do profiler: %1$s
+
+falcon.disconnect.kicked=Foste expulso do mundo.
+falcon.disconnect.banned=Foste banido pelo anfitrião.
+falcon.disconnect.bannedReason=Foste banido pelo anfitrião. Motivo: %1$s
+falcon.disconnect.flyingDisabled=Não é permitido voar neste servidor

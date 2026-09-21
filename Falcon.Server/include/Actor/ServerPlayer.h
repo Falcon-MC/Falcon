@@ -72,6 +72,12 @@ public:
 
     void setBuildPlatform(int platform) { mBuildPlatform = platform; }
 
+    const std::string &getLocale() const { return mLocale; }
+
+    void setLocale(const std::string &locale) { mLocale = locale; }
+
+    std::string localize(const std::string &key, const std::vector<std::string> &parameters = {}) const;
+
     int32_t getGameType() const { return mGameType; }
 
     void setGameType(int32_t gameType) { mGameType = gameType; }
@@ -402,6 +408,7 @@ private:
     int64_t mLastItemUseTick = -1000;
     std::string mXuid;
     int mBuildPlatform = -1;
+    std::string mLocale;
     int64_t mItemUseStartTick = 0;
     int32_t mSpinAttackTicks = 0;
     ChunkStreamState mChunkStreamState;

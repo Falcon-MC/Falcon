@@ -1,0 +1,24 @@
+falcon.commands.about.version=Den här servern kör Falcon version %1$s (%2$s på %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokoll %2$s)
+falcon.commands.about.build=Build %1$s, %2$s-konfiguration
+
+falcon.commands.allowlist.enabled=Listan över tillåtna har aktiverats
+falcon.commands.allowlist.disabled=Listan över tillåtna har inaktiverats
+falcon.commands.allowlist.list=Listan över tillåtna (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Listan över tillåtna har uppdaterats från fil.
+falcon.commands.allowlist.add.success=%1$s har lagts till på listan över tillåtna
+falcon.commands.allowlist.add.failed=Kunde inte lägga till %1$s på listan över tillåtna
+falcon.commands.allowlist.remove.success=Tog bort %1$s från listan över tillåtna
+falcon.commands.allowlist.remove.failed=Kunde inte ta bort %1$s från listan över tillåtna
+
+falcon.commands.profiler.notRunning=Profileraren körs inte
+falcon.commands.profiler.alreadyRunning=Profileraren körs redan
+falcon.commands.profiler.status=Profileraren körs, %1$s tick registrerade sedan tick %2$s
+falcon.commands.profiler.started=Profileraren har startats
+falcon.commands.profiler.stopped=Profileraren har stoppats, rapporten sparades i %1$s
+falcon.commands.profiler.writeFailed=Kunde inte spara profileringsrapporten: %1$s
+
+falcon.disconnect.kicked=Du har blivit utsparkad från världen.
+falcon.disconnect.banned=Du är blockerad av värden.
+falcon.disconnect.bannedReason=Du är blockerad av värden. Orsak: %1$s
+falcon.disconnect.flyingDisabled=Det är inte tillåtet att flyga på den här servern

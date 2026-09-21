@@ -1,0 +1,24 @@
+falcon.commands.about.version=此服务器正在运行 Falcon 版本 %1$s（%3$s 上的 %2$s）
+falcon.commands.about.game=Minecraft：基岩版 %1$s（协议 %2$s）
+falcon.commands.about.build=构建 %1$s，%2$s 配置
+
+falcon.commands.allowlist.enabled=允许列表已启用
+falcon.commands.allowlist.disabled=允许列表已关闭
+falcon.commands.allowlist.list=允许列表（%1$s）：%2$s
+falcon.commands.allowlist.reloaded=已从文件重新读取允许列表。
+falcon.commands.allowlist.add.success=已将 %1$s 加入允许列表
+falcon.commands.allowlist.add.failed=无法将 %1$s 添加到允许列表中
+falcon.commands.allowlist.remove.success=已将 %1$s 移出允许列表
+falcon.commands.allowlist.remove.failed=无法从允许列表中移除 %1$s
+
+falcon.commands.profiler.notRunning=性能分析器未运行
+falcon.commands.profiler.alreadyRunning=性能分析器已在运行
+falcon.commands.profiler.status=性能分析器正在运行，自刻 %2$s 起已记录 %1$s 刻
+falcon.commands.profiler.started=性能分析器已启动
+falcon.commands.profiler.stopped=性能分析器已停止，报告已写入 %1$s
+falcon.commands.profiler.writeFailed=无法写入性能分析报告：%1$s
+
+falcon.disconnect.kicked=你已被从世界中踢出。
+falcon.disconnect.banned=你被主机封禁了。
+falcon.disconnect.bannedReason=你被主机封禁了。原因：%1$s
+falcon.disconnect.flyingDisabled=此服务器不允许飞行

@@ -1,0 +1,24 @@
+falcon.commands.about.version=Tento server používá Falcon verze %1$s (%2$s na %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
+falcon.commands.about.build=Sestavení %1$s, konfigurace %2$s
+
+falcon.commands.allowlist.enabled=Seznam povolených zapnutý
+falcon.commands.allowlist.disabled=Seznam povolených vypnutý
+falcon.commands.allowlist.list=Seznam povolených (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Seznam povolených byl znovu načten ze souboru.
+falcon.commands.allowlist.add.success=Položka %1$s byla přidána na seznam povolených
+falcon.commands.allowlist.add.failed=%1$s nelze přidat na seznam povolených
+falcon.commands.allowlist.remove.success=Položka %1$s byla odebrána ze seznamu povolených
+falcon.commands.allowlist.remove.failed=%1$s nelze odebrat ze seznamu povolených
+
+falcon.commands.profiler.notRunning=Profiler není spuštěný
+falcon.commands.profiler.alreadyRunning=Profiler už je spuštěný
+falcon.commands.profiler.status=Profiler je spuštěný, zaznamenáno %1$s tiků od tiku %2$s
+falcon.commands.profiler.started=Profiler spuštěn
+falcon.commands.profiler.stopped=Profiler zastaven, zpráva uložena do %1$s
+falcon.commands.profiler.writeFailed=Zprávu profileru nelze uložit: %1$s
+
+falcon.disconnect.kicked=Byli jste vyhozeni ze světa.
+falcon.disconnect.banned=Byl vám zamezen přístup hostitelem.
+falcon.disconnect.bannedReason=Byl vám zamezen přístup hostitelem. Důvod: %1$s
+falcon.disconnect.flyingDisabled=Létání není na tomto serveru povoleno

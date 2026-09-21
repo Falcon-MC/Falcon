@@ -1,0 +1,24 @@
+falcon.commands.about.version=Deze server draait Falcon versie %1$s (%2$s op %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protocol %2$s)
+falcon.commands.about.build=Build %1$s, configuratie %2$s
+
+falcon.commands.allowlist.enabled=De goedgekeurde lijst is ingeschakeld
+falcon.commands.allowlist.disabled=De goedgekeurde lijst is uitgeschakeld
+falcon.commands.allowlist.list=Goedgekeurde lijst (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Goedgekeurde lijst is opnieuw geladen uit bestand.
+falcon.commands.allowlist.add.success=%1$s is toegevoegd aan de goedgekeurde lijst
+falcon.commands.allowlist.add.failed=Kan %1$s niet toevoegen aan de goedgekeurde lijst
+falcon.commands.allowlist.remove.success=%1$s is verwijderd uit de goedgekeurde lijst
+falcon.commands.allowlist.remove.failed=Kan %1$s niet verwijderen uit de goedgekeurde lijst
+
+falcon.commands.profiler.notRunning=De profiler is niet actief
+falcon.commands.profiler.alreadyRunning=De profiler is al actief
+falcon.commands.profiler.status=De profiler is actief, %1$s tick(s) vastgelegd sinds tick %2$s
+falcon.commands.profiler.started=Profiler gestart
+falcon.commands.profiler.stopped=Profiler gestopt, rapport opgeslagen in %1$s
+falcon.commands.profiler.writeFailed=Kan het profilerrapport niet opslaan: %1$s
+
+falcon.disconnect.kicked=Je bent uit de wereld verwijderd.
+falcon.disconnect.banned=Je bent door de host gebanned.
+falcon.disconnect.bannedReason=Je bent door de host gebanned. Reden: %1$s
+falcon.disconnect.flyingDisabled=Vliegen is niet toegestaan op deze server

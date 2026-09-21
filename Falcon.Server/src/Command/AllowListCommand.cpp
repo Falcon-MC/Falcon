@@ -42,13 +42,13 @@ bool AllowListCommand::execute(CommandOrigin &sender, const std::vector<std::str
 
     if (action == "on") {
         mHandler.setAllowListEnabled(true);
-        sender.sendMessage("Allowlist is now on");
+        sender.sendLocalized("falcon.commands.allowlist.enabled");
         return true;
     }
 
     if (action == "off") {
         mHandler.setAllowListEnabled(false);
-        sender.sendMessage("Allowlist is now off");
+        sender.sendLocalized("falcon.commands.allowlist.disabled");
         return true;
     }
 
@@ -60,14 +60,15 @@ bool AllowListCommand::execute(CommandOrigin &sender, const std::vector<std::str
             names += name;
         }
 
-        sender.sendMessage("Allowlist (" + std::to_string(allowList.getNames().size()) + "): " + names);
+        sender.sendLocalized("falcon.commands.allowlist.list",
+                             {std::to_string(allowList.getNames().size()), names});
         return true;
     }
 
     if (action == "reload") {
         allowList.reload();
         mHandler.kickNotAllowListedPlayers();
-        sender.sendMessage("Allowlist reloaded");
+        sender.sendLocalized("falcon.commands.allowlist.reloaded");
         return true;
     }
 
@@ -78,22 +79,22 @@ bool AllowListCommand::execute(CommandOrigin &sender, const std::vector<std::str
 
     if (action == "add") {
         if (!allowList.add(arguments[1])) {
-            sender.sendMessage(arguments[1] + " is already in the allowlist");
+            sender.sendLocalized("falcon.commands.allowlist.add.failed", {arguments[1]});
             return false;
         }
 
-        sender.sendMessage("Added " + arguments[1] + " to the allowlist");
+        sender.sendLocalized("falcon.commands.allowlist.add.success", {arguments[1]});
         return true;
     }
 
     if (action == "remove") {
         if (!allowList.remove(arguments[1])) {
-            sender.sendMessage(arguments[1] + " is not in the allowlist");
+            sender.sendLocalized("falcon.commands.allowlist.remove.failed", {arguments[1]});
             return false;
         }
 
         mHandler.kickNotAllowListedPlayers();
-        sender.sendMessage("Removed " + arguments[1] + " from the allowlist");
+        sender.sendLocalized("falcon.commands.allowlist.remove.success", {arguments[1]});
         return true;
     }
 

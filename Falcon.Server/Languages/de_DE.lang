@@ -1,0 +1,24 @@
+falcon.commands.about.version=Dieser Server läuft mit Falcon Version %1$s (%2$s auf %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (Protokoll %2$s)
+falcon.commands.about.build=Build %1$s, Konfiguration %2$s
+
+falcon.commands.allowlist.enabled=Liste der zugelassenen Spieler aktiviert
+falcon.commands.allowlist.disabled=Liste der zugelassenen Spieler deaktiviert
+falcon.commands.allowlist.list=Liste der zugelassenen Spieler (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Liste der zugelassenen Spieler aus Datei neu geladen.
+falcon.commands.allowlist.add.success=%1$s zur Liste der zugelassenen Spieler hinzugefügt.
+falcon.commands.allowlist.add.failed=%1$s konnte nicht zur Liste der zugelassenen Spieler hinzugefügt werden.
+falcon.commands.allowlist.remove.success=%1$s wurde von der Liste der zugelassenen Spieler entfernt.
+falcon.commands.allowlist.remove.failed=%1$s konnte nicht von der Liste der zugelassenen Spieler entfernt werden.
+
+falcon.commands.profiler.notRunning=Der Profiler läuft nicht
+falcon.commands.profiler.alreadyRunning=Der Profiler läuft bereits
+falcon.commands.profiler.status=Der Profiler läuft, %1$s Tick(s) seit Tick %2$s aufgezeichnet
+falcon.commands.profiler.started=Profiler gestartet
+falcon.commands.profiler.stopped=Profiler gestoppt, Bericht gespeichert unter %1$s
+falcon.commands.profiler.writeFailed=Der Profiler-Bericht konnte nicht geschrieben werden: %1$s
+
+falcon.disconnect.kicked=Du wurdest aus der Welt entfernt.
+falcon.disconnect.banned=Du wurdest durch den Host gesperrt.
+falcon.disconnect.bannedReason=Du wurdest durch den Host gesperrt. Grund: %1$s
+falcon.disconnect.flyingDisabled=Fliegen ist auf diesem Server nicht erlaubt

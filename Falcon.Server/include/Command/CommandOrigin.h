@@ -23,6 +23,10 @@ public:
 
     virtual void sendTranslation(const std::string &key, const std::vector<std::string> &parameters) = 0;
 
+    virtual std::string getLocale() const;
+
+    void sendLocalized(const std::string &key, const std::vector<std::string> &parameters = {});
+
     virtual CommandPermission getCommandPermission() const = 0;
 
     virtual Vector3f getPosition();

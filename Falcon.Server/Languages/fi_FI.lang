@@ -1,0 +1,24 @@
+falcon.commands.about.version=Tällä palvelimella on käytössä Falcon-versio %1$s (%2$s haarassa %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokolla %2$s)
+falcon.commands.about.build=Koontiversio %1$s, %2$s-määritys
+
+falcon.commands.allowlist.enabled=Sallitut-luettelo otettu käyttöön
+falcon.commands.allowlist.disabled=Sallitut-luettelo poistettu käytöstä
+falcon.commands.allowlist.list=Sallitut-luettelo (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Sallitut-luettelo ladattu uudelleen tiedostosta.
+falcon.commands.allowlist.add.success=Lisätty pelaaja %1$s sallitut-luetteloon
+falcon.commands.allowlist.add.failed=Pelaajaa %1$s ei voitu lisätä sallitut-luetteloon
+falcon.commands.allowlist.remove.success=Pelaaja %1$s poistettiin sallitut-luettelosta
+falcon.commands.allowlist.remove.failed=Pelaajaa %1$s ei voitu poistaa sallitut-luettelosta
+
+falcon.commands.profiler.notRunning=Profilointityökalu ei ole käynnissä
+falcon.commands.profiler.alreadyRunning=Profilointityökalu on jo käynnissä
+falcon.commands.profiler.status=Profilointityökalu on käynnissä, tallennettu %1$s tickiä tickistä %2$s alkaen
+falcon.commands.profiler.started=Profilointityökalu käynnistetty
+falcon.commands.profiler.stopped=Profilointityökalu pysäytetty, raportti tallennettu kohteeseen %1$s
+falcon.commands.profiler.writeFailed=Profilointiraporttia ei voitu tallentaa: %1$s
+
+falcon.disconnect.kicked=Sinut on potkittu maailmasta.
+falcon.disconnect.banned=Isäntä on estänyt sinut.
+falcon.disconnect.bannedReason=Isäntä on estänyt sinut. Syy: %1$s
+falcon.disconnect.flyingDisabled=Lentäminen ei ole sallittua tällä palvelimella

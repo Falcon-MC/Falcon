@@ -1,0 +1,24 @@
+falcon.commands.about.version=Ce serveur utilise Falcon version %1$s (%2$s sur %3$s)
+falcon.commands.about.game=Minecraft : Bedrock Edition %1$s (protocole %2$s)
+falcon.commands.about.build=Build %1$s, configuration %2$s
+
+falcon.commands.allowlist.enabled=Liste d'autorisation activée
+falcon.commands.allowlist.disabled=Liste d'autorisation désactivée
+falcon.commands.allowlist.list=Liste d'autorisation (%1$s) : %2$s
+falcon.commands.allowlist.reloaded=Liste d'autorisation rechargée à partir du fichier.
+falcon.commands.allowlist.add.success=%1$s a été ajouté(e) à la liste d'autorisation
+falcon.commands.allowlist.add.failed=Impossible d'ajouter %1$s à la liste d'autorisation
+falcon.commands.allowlist.remove.success=%1$s a été retiré(e) de la liste d'autorisation
+falcon.commands.allowlist.remove.failed=Impossible de retirer %1$s de la liste d'autorisation
+
+falcon.commands.profiler.notRunning=Le profileur n'est pas lancé
+falcon.commands.profiler.alreadyRunning=Le profileur est déjà lancé
+falcon.commands.profiler.status=Le profileur est lancé, %1$s tick(s) enregistré(s) depuis le tick %2$s
+falcon.commands.profiler.started=Profileur lancé
+falcon.commands.profiler.stopped=Profileur arrêté, rapport écrit dans %1$s
+falcon.commands.profiler.writeFailed=Impossible d'écrire le rapport du profileur : %1$s
+
+falcon.disconnect.kicked=Vous avez été éjecté(e) du monde.
+falcon.disconnect.banned=Vous êtes banni(e) par l'hôte.
+falcon.disconnect.bannedReason=Vous êtes banni(e) par l'hôte. Raison : %1$s
+falcon.disconnect.flyingDisabled=Le vol n'est pas autorisé sur ce serveur

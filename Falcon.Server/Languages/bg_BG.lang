@@ -1,0 +1,24 @@
+falcon.commands.about.version=Този сървър използва Falcon версия %1$s (%2$s в %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (протокол %2$s)
+falcon.commands.about.build=Компилация %1$s, конфигурация %2$s
+
+falcon.commands.allowlist.enabled=Списъкът с разрешени е включен
+falcon.commands.allowlist.disabled=Списъкът с разрешени е изключен
+falcon.commands.allowlist.list=Списък с разрешени (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Списъкът с разрешени е зареден отново от файл.
+falcon.commands.allowlist.add.success=Успешно добавяне на %1$s в списъка с разрешени
+falcon.commands.allowlist.add.failed=Неуспешно добавяне на %1$s в списъка с разрешени
+falcon.commands.allowlist.remove.success=Успешно премахване на %1$s от списъка с разрешени
+falcon.commands.allowlist.remove.failed=Неуспешно премахване на %1$s от списъка с разрешени
+
+falcon.commands.profiler.notRunning=Профилаторът не работи
+falcon.commands.profiler.alreadyRunning=Профилаторът вече работи
+falcon.commands.profiler.status=Профилаторът работи, записани тикове: %1$s от тик %2$s
+falcon.commands.profiler.started=Профилаторът е стартиран
+falcon.commands.profiler.stopped=Профилаторът е спрян, отчетът е записан в %1$s
+falcon.commands.profiler.writeFailed=Отчетът на профилатора не можа да бъде записан: %1$s
+
+falcon.disconnect.kicked=Бяхте изгонени от света.
+falcon.disconnect.banned=Домакинът ви блокира.
+falcon.disconnect.bannedReason=Домакинът ви блокира. Причина: %1$s
+falcon.disconnect.flyingDisabled=Летенето не е разрешено на този сървър

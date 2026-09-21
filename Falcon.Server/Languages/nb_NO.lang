@@ -1,0 +1,24 @@
+falcon.commands.about.version=Denne serveren kjører Falcon versjon %1$s (%2$s på %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokoll %2$s)
+falcon.commands.about.build=Build %1$s, %2$s-konfigurasjon
+
+falcon.commands.allowlist.enabled=Hvitelisten er slått på
+falcon.commands.allowlist.disabled=Hvitelisten er slått av
+falcon.commands.allowlist.list=Hvitelisten (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Hvitelisten er lastet inn på nytt fra en fil.
+falcon.commands.allowlist.add.success=%1$s har blitt lagt til i hvitelisten
+falcon.commands.allowlist.add.failed=Kunne ikke legge til %1$s i hvitelisten
+falcon.commands.allowlist.remove.success=%1$s har blitt fjernet fra hvitelisten
+falcon.commands.allowlist.remove.failed=Kunne ikke fjerne %1$s fra hvitelisten
+
+falcon.commands.profiler.notRunning=Profileringen kjører ikke
+falcon.commands.profiler.alreadyRunning=Profileringen kjører allerede
+falcon.commands.profiler.status=Profileringen kjører, %1$s tick registrert siden tick %2$s
+falcon.commands.profiler.started=Profileringen er startet
+falcon.commands.profiler.stopped=Profileringen er stoppet, rapporten er lagret i %1$s
+falcon.commands.profiler.writeFailed=Kunne ikke lagre profileringsrapporten: %1$s
+
+falcon.disconnect.kicked=Du har blitt kastet ut av verdenen.
+falcon.disconnect.banned=Du er utestengt av verten.
+falcon.disconnect.bannedReason=Du er utestengt av verten. Årsak: %1$s
+falcon.disconnect.flyingDisabled=Det er ikke tillatt å fly på denne serveren

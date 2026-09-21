@@ -35,7 +35,8 @@ bool KickCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
 
     for (ServerPlayer *target: targets) {
         const std::string name = target->getName();
-        mHandler._disconnect(target->getNetworkIdentifier(), reason.empty() ? "Kicked by admin" : reason);
+        mHandler._disconnect(target->getNetworkIdentifier(),
+                             reason.empty() ? target->localize("falcon.disconnect.kicked") : reason);
 
         if (reason.empty())
             sender.sendTranslation("commands.kick.success", {name});

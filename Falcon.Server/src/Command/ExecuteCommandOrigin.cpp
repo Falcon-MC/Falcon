@@ -21,6 +21,10 @@ void ExecuteCommandOrigin::sendTranslation(const std::string &key, const std::ve
     mBase.sendTranslation(key, parameters);
 }
 
+std::string ExecuteCommandOrigin::getLocale() const {
+    return mBase.getLocale();
+}
+
 CommandPermission ExecuteCommandOrigin::getCommandPermission() const {
     return mBase.getCommandPermission();
 }

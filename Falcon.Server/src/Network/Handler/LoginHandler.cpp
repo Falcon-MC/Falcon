@@ -47,6 +47,7 @@
 #include "Protocol/Packets/SetTimePacket.h"
 #include "Protocol/Packets/UpdateAbilitiesPacket.h"
 #include "Protocol/Packets/UpdateAttributesPacket.h"
+#include "Server/Localization.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ResourcePackManager.h"
 
@@ -186,7 +187,11 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     const BanEntry *ban = owner.getBanList().find(player.getName());
     if (ban != nullptr) {
         LOG_INFO(LogAreaID::Server, "Player %s is banned", player.getName().c_str());
-        owner._disconnect(id, ban->mReason.empty() ? "You are banned" : "You are banned. Reason: " + ban->mReason);
+        const Localization &localization = Localization::getInstance();
+        owner._disconnect(id, ban->mReason.empty()
+                              ? localization.translate(request.getLanguageCode(), "falcon.disconnect.banned")
+                              : localization.translate(request.getLanguageCode(), "falcon.disconnect.bannedReason",
+                                                       {ban->mReason}));
         owner.getPlayers().erase(id);
         return;
     }
@@ -207,6 +212,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
 
     player.setSkin(request.getSkin());
     player.setBuildPlatform(request.getBuildPlatform());
+    player.setLocale(request.getLanguageCode());
     player.setLoginState(ServerPlayer::LoginState::LoggedIn);
 
     LOG_INFO(LogAreaID::Server, "Player %s logged in, uuid %s, xuid %s", player.getName().c_str(),

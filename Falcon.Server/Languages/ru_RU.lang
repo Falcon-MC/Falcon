@@ -1,0 +1,24 @@
+falcon.commands.about.version=На этом сервере работает Falcon версии %1$s (%2$s в %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (протокол %2$s)
+falcon.commands.about.build=Сборка %1$s, конфигурация %2$s
+
+falcon.commands.allowlist.enabled=Список разрешений включен
+falcon.commands.allowlist.disabled=Список разрешений отключен
+falcon.commands.allowlist.list=Список разрешений (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Список разрешений перезагружен из файла.
+falcon.commands.allowlist.add.success=Игрок %1$s добавлен в список разрешений
+falcon.commands.allowlist.add.failed=Не удается добавить игрока %1$s в список разрешений
+falcon.commands.allowlist.remove.success=Игрок %1$s удален из списка разрешений
+falcon.commands.allowlist.remove.failed=Не удается удалить игрока %1$s из списка разрешений
+
+falcon.commands.profiler.notRunning=Профилировщик не запущен
+falcon.commands.profiler.alreadyRunning=Профилировщик уже запущен
+falcon.commands.profiler.status=Профилировщик запущен, записано тиков: %1$s с тика %2$s
+falcon.commands.profiler.started=Профилировщик запущен
+falcon.commands.profiler.stopped=Профилировщик остановлен, отчет сохранен в %1$s
+falcon.commands.profiler.writeFailed=Не удалось записать отчет профилировщика: %1$s
+
+falcon.disconnect.kicked=Вас выгнали из мира.
+falcon.disconnect.banned=Вас заблокировал организатор.
+falcon.disconnect.bannedReason=Вас заблокировал организатор. Причина: %1$s
+falcon.disconnect.flyingDisabled=Полеты на этом сервере запрещены

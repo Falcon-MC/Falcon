@@ -1,0 +1,24 @@
+falcon.commands.about.version=Bu sunucu Falcon %1$s sürümünü çalıştırıyor (%3$s üzerinde %2$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
+falcon.commands.about.build=Derleme %1$s, %2$s yapılandırması
+
+falcon.commands.allowlist.enabled=İzin verilenler listesi açıldı
+falcon.commands.allowlist.disabled=İzin verilenler listesi kapatıldı
+falcon.commands.allowlist.list=İzin verilenler listesi (%1$s): %2$s
+falcon.commands.allowlist.reloaded=İzin verilenler listesi dosyadan yeniden yüklendi.
+falcon.commands.allowlist.add.success=%1$s izin verilenler listesine eklendi
+falcon.commands.allowlist.add.failed=%1$s izin verilenler listesine eklenemedi
+falcon.commands.allowlist.remove.success=%1$s izin verilenler listesinden kaldırıldı
+falcon.commands.allowlist.remove.failed=%1$s izin verilenler listesinden kaldırılamadı
+
+falcon.commands.profiler.notRunning=Profil oluşturucu çalışmıyor
+falcon.commands.profiler.alreadyRunning=Profil oluşturucu zaten çalışıyor
+falcon.commands.profiler.status=Profil oluşturucu çalışıyor, %2$s. tikten beri %1$s tik kaydedildi
+falcon.commands.profiler.started=Profil oluşturucu başlatıldı
+falcon.commands.profiler.stopped=Profil oluşturucu durduruldu, rapor %1$s konumuna yazıldı
+falcon.commands.profiler.writeFailed=Profil raporu yazılamadı: %1$s
+
+falcon.disconnect.kicked=Bu dünyadan atıldınız.
+falcon.disconnect.banned=Sunucu tarafından yasaklandınız.
+falcon.disconnect.bannedReason=Sunucu tarafından yasaklandınız. Sebep: %1$s
+falcon.disconnect.flyingDisabled=Bu sunucuda uçmaya izin verilmiyor

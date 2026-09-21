@@ -1,6 +1,15 @@
 #include "Command/CommandOrigin.h"
 
 #include "Actor/ServerPlayer.h"
+#include "Server/Localization.h"
+
+std::string CommandOrigin::getLocale() const {
+    return Localization::DEFAULT_LOCALE;
+}
+
+void CommandOrigin::sendLocalized(const std::string &key, const std::vector<std::string> &parameters) {
+    sendMessage(Localization::getInstance().translate(getLocale(), key, parameters));
+}
 
 Vector3f CommandOrigin::getPosition() {
     const ServerPlayer *player = asPlayer();

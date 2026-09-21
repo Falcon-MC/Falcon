@@ -20,6 +20,8 @@ public:
 
     void sendTranslation(const std::string &key, const std::vector<std::string> &parameters) override;
 
+    std::string getLocale() const override;
+
     CommandPermission getCommandPermission() const override;
 
     Level *getLevel() override;

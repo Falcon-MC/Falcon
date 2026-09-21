@@ -21,6 +21,7 @@
 #include "Protocol/Packets/MobEffectPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Server/Localization.h"
 
 #include <algorithm>
 #include <chrono>
@@ -232,6 +233,10 @@ ServerPlayer::ServerPlayer(const NetworkIdentifier &id, uint64_t runtimeId, Pack
         packet.mAmbient = event == MobEffectEvent::Remove ? false : effect.mAmbient;
         mSender->sendPacketTo(mId, packet);
     });
+}
+
+std::string ServerPlayer::localize(const std::string &key, const std::vector<std::string> &parameters) const {
+    return Localization::getInstance().translate(mLocale, key, parameters);
 }
 
 float ServerPlayer::_applyAttackerModifiers(float baseDamage, float damage) const {

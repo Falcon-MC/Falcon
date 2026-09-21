@@ -1,0 +1,12 @@
+#pragma once
+
+namespace FalconLanguageData {
+    struct EmbeddedLanguage {
+        const char *mLocale;
+        const char *mContent;
+    };
+
+    inline constexpr EmbeddedLanguage kLanguages[] = {
+@FALCON_LANGUAGE_FILES@
+    };
+}

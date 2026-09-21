@@ -1,0 +1,24 @@
+falcon.commands.about.version=Ez a szerver a Falcon %1$s verzióját futtatja (%2$s, %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokoll: %2$s)
+falcon.commands.about.build=%1$s build, %2$s konfiguráció
+
+falcon.commands.allowlist.enabled=Bekapcsoltad az engedélyezési listát
+falcon.commands.allowlist.disabled=Kikapcsoltad az engedélyezési listát
+falcon.commands.allowlist.list=Engedélyezési lista (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Engedélyezési lista fájlból betöltve.
+falcon.commands.allowlist.add.success=%1$s játékost hozzáadtad az engedélyezési listához
+falcon.commands.allowlist.add.failed=Nem sikerült %1$s játékost hozzáadni az engedélyezési listához
+falcon.commands.allowlist.remove.success=Eltávolítottad %1$s játékost az engedélyezési listáról
+falcon.commands.allowlist.remove.failed=Nem sikerült eltávolítani %1$s játékost az engedélyezési listáról
+
+falcon.commands.profiler.notRunning=A profilozó nem fut
+falcon.commands.profiler.alreadyRunning=A profilozó már fut
+falcon.commands.profiler.status=A profilozó fut, %1$s tick rögzítve a(z) %2$s. tick óta
+falcon.commands.profiler.started=Profilozó elindítva
+falcon.commands.profiler.stopped=Profilozó leállítva, a jelentés helye: %1$s
+falcon.commands.profiler.writeFailed=Nem sikerült menteni a profilozó jelentését: %1$s
+
+falcon.disconnect.kicked=Ki lettél rúgva a világból.
+falcon.disconnect.banned=A házigazda kitiltott téged.
+falcon.disconnect.bannedReason=A házigazda kitiltott téged. Indok: %1$s
+falcon.disconnect.flyingDisabled=Ezen a szerveren nem engedélyezett a repülés

@@ -39,12 +39,12 @@ bool AboutCommand::execute(CommandOrigin &sender, const std::vector<std::string>
 
     const PingedCompatibleServer &announcement = mHandler.getAnnouncement();
 
-    sender.sendMessage("This server is running Falcon version " + std::string(FalconBuildInfo::kVersion)
-                       + " (" + shortCommit() + " on " + FalconBuildInfo::kBranch + ")");
-    sender.sendMessage("Minecraft: Bedrock Edition " + announcement.mGameVersion
-                       + " (protocol " + std::to_string(announcement.mProtocolVersion) + ")");
-    sender.sendMessage("Build " + std::string(FalconBuildInfo::kBuildId) + ", "
-                       + FalconBuildInfo::kConfiguration + " configuration");
+    sender.sendLocalized("falcon.commands.about.version",
+                         {FalconBuildInfo::kVersion, shortCommit(), FalconBuildInfo::kBranch});
+    sender.sendLocalized("falcon.commands.about.game",
+                         {announcement.mGameVersion, std::to_string(announcement.mProtocolVersion)});
+    sender.sendLocalized("falcon.commands.about.build",
+                         {FalconBuildInfo::kBuildId, FalconBuildInfo::kConfiguration});
 
     return true;
 }

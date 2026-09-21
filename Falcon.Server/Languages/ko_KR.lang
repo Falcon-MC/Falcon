@@ -1,0 +1,24 @@
+falcon.commands.about.version=이 서버는 Falcon 버전 %1$s(%2$s, %3$s)으로 실행 중입니다
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s(프로토콜 %2$s)
+falcon.commands.about.build=빌드 %1$s, %2$s 구성
+
+falcon.commands.allowlist.enabled=허용 목록을 켰습니다
+falcon.commands.allowlist.disabled=허용 목록을 껐습니다
+falcon.commands.allowlist.list=허용 목록(%1$s): %2$s
+falcon.commands.allowlist.reloaded=파일에서 허용 목록을 다시 불러왔습니다.
+falcon.commands.allowlist.add.success=%1$s님을 허용 목록에 추가했습니다
+falcon.commands.allowlist.add.failed=%1$s님을 허용 목록에 추가하지 못했습니다
+falcon.commands.allowlist.remove.success=%1$s님을 허용 목록에서 제거했습니다
+falcon.commands.allowlist.remove.failed=%1$s님을 허용 목록에서 제거하지 못했습니다
+
+falcon.commands.profiler.notRunning=프로파일러가 실행 중이 아닙니다
+falcon.commands.profiler.alreadyRunning=프로파일러가 이미 실행 중입니다
+falcon.commands.profiler.status=프로파일러 실행 중, 틱 %2$s 이후 %1$s틱 기록됨
+falcon.commands.profiler.started=프로파일러를 시작했습니다
+falcon.commands.profiler.stopped=프로파일러를 중지했습니다. 보고서 저장 위치: %1$s
+falcon.commands.profiler.writeFailed=프로파일러 보고서를 작성하지 못했습니다: %1$s
+
+falcon.disconnect.kicked=세계에서 추방됐습니다.
+falcon.disconnect.banned=호스트에 의해 차단되었습니다.
+falcon.disconnect.bannedReason=호스트에 의해 차단되었습니다. 사유: %1$s
+falcon.disconnect.flyingDisabled=이 서버에서는 비행이 허용되지 않습니다

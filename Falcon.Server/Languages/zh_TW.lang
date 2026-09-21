@@ -1,0 +1,24 @@
+falcon.commands.about.version=此伺服器正在執行 Falcon 版本 %1$s（%3$s 上的 %2$s）
+falcon.commands.about.game=Minecraft：基岩版 %1$s（通訊協定 %2$s）
+falcon.commands.about.build=組建 %1$s，%2$s 組態
+
+falcon.commands.allowlist.enabled=開啟允許清單
+falcon.commands.allowlist.disabled=關閉允許清單
+falcon.commands.allowlist.list=允許清單（%1$s）：%2$s
+falcon.commands.allowlist.reloaded=允許清單已自檔案重新載入。
+falcon.commands.allowlist.add.success=將 %1$s 加入允許清單
+falcon.commands.allowlist.add.failed=無法將 %1$s 加到允許清單
+falcon.commands.allowlist.remove.success=將 %1$s 從允許清單中移除
+falcon.commands.allowlist.remove.failed=無法從允許清單移除 %1$s
+
+falcon.commands.profiler.notRunning=效能分析工具未執行
+falcon.commands.profiler.alreadyRunning=效能分析工具已在執行
+falcon.commands.profiler.status=效能分析工具執行中，自刻 %2$s 起已記錄 %1$s 刻
+falcon.commands.profiler.started=效能分析工具已啟動
+falcon.commands.profiler.stopped=效能分析工具已停止，報告已寫入 %1$s
+falcon.commands.profiler.writeFailed=無法寫入效能分析報告：%1$s
+
+falcon.disconnect.kicked=你已被踢出世界。
+falcon.disconnect.banned=你已被主持人封鎖。
+falcon.disconnect.bannedReason=你已被主持人封鎖。原因：%1$s
+falcon.disconnect.flyingDisabled=此伺服器不允許飛行

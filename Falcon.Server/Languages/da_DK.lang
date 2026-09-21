@@ -1,0 +1,24 @@
+falcon.commands.about.version=Denne server kører Falcon version %1$s (%2$s på %3$s)
+falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
+falcon.commands.about.build=Build %1$s, %2$s-konfiguration
+
+falcon.commands.allowlist.enabled=Tilladlisten er aktiveret
+falcon.commands.allowlist.disabled=Tilladlisten er deaktiveret
+falcon.commands.allowlist.list=Tilladlisten (%1$s): %2$s
+falcon.commands.allowlist.reloaded=Tilladlisten er genindlæst fra filen.
+falcon.commands.allowlist.add.success=%1$s står nu på tilladlisten
+falcon.commands.allowlist.add.failed=%1$s kunne ikke tilføjes på tilladlisten
+falcon.commands.allowlist.remove.success=%1$s er fjernet fra tilladlisten
+falcon.commands.allowlist.remove.failed=%1$s kunne ikke fjernes fra tilladlisten
+
+falcon.commands.profiler.notRunning=Profileren kører ikke
+falcon.commands.profiler.alreadyRunning=Profileren kører allerede
+falcon.commands.profiler.status=Profileren kører, %1$s tick(s) registreret siden tick %2$s
+falcon.commands.profiler.started=Profileren er startet
+falcon.commands.profiler.stopped=Profileren er stoppet, rapporten er gemt i %1$s
+falcon.commands.profiler.writeFailed=Profilerrapporten kunne ikke gemmes: %1$s
+
+falcon.disconnect.kicked=Du er blevet smidt ud af verden.
+falcon.disconnect.banned=Du er udelukket af værten.
+falcon.disconnect.bannedReason=Du er udelukket af værten. Årsag: %1$s
+falcon.disconnect.flyingDisabled=Det er ikke tilladt at flyve på denne server
