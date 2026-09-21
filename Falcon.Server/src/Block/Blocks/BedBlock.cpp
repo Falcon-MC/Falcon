@@ -7,6 +7,7 @@
 #include "Block/BlockData.h"
 #include "Block/BlockIdentifier.h"
 #include "Block/Blocks/LiquidView.h"
+#include "Block/Components/PlacementOrientation.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Explosion.h"
 #include "Level/Level.h"
@@ -17,6 +18,7 @@ namespace {
     const char *HEAD_PIECE_BIT = "head_piece_bit";
     const char *OCCUPIED_BIT = "occupied_bit";
     const char *DIRECTION = "direction";
+    const char *CARDINAL_DIRECTION = "cardinal_direction";
     const double BED_EXPLOSION_SIZE = 5.0;
 
     bool isHeadPiece(const BlockState &state) {
@@ -74,6 +76,9 @@ bool BedBlock::matches(const std::string &identifier) {
 }
 
 int BedBlock::headFace(const BlockState &state) {
+    if (state.mStates.contains(CARDINAL_DIRECTION))
+        return PlacementOrientation::faceFromName(state.mStates.getString(CARDINAL_DIRECTION, "south"));
+
     switch (state.mStates.getInt(DIRECTION, 0)) {
         case 1:
             return RedstoneFace::WEST;
@@ -95,7 +100,7 @@ bool BedBlock::findHead(Level &level, const Vector3i &position, const BlockState
     head = RedstoneFace::relative(position, headFace(state));
     const BlockState headState = level.getBlockState(head.x, head.y, head.z);
     return headState.mName == state.mName && isHeadPiece(headState)
-           && headState.mStates.getInt(DIRECTION, 0) == state.mStates.getInt(DIRECTION, 0);
+           && headFace(headState) == headFace(state);
 }
 
 bool BedBlock::isValidAt(Level &level, const Vector3i &head) {
@@ -106,7 +111,7 @@ bool BedBlock::isValidAt(Level &level, const Vector3i &head) {
     const Vector3i foot = RedstoneFace::relative(head, RedstoneFace::opposite(headFace(headState)));
     const BlockState footState = level.getBlockState(foot.x, foot.y, foot.z);
     return footState.mName == headState.mName && !isHeadPiece(footState)
-           && footState.mStates.getInt(DIRECTION, 0) == headState.mStates.getInt(DIRECTION, 0);
+           && headFace(footState) == headFace(headState);
 }
 
 void BedBlock::setOccupied(ServerNetworkHandler &owner, Level &level, const Vector3i &head, bool occupied) {
@@ -198,7 +203,7 @@ std::vector<Vector3i> BedBlock::otherPiece(Level &level, const Vector3i &positio
 
     const BlockState otherState = level.getBlockState(other.x, other.y, other.z);
     if (otherState.mName != state.mName || isHeadPiece(otherState) == isHeadPiece(state)
-        || otherState.mStates.getInt(DIRECTION, 0) != state.mStates.getInt(DIRECTION, 0))
+        || headFace(otherState) != headFace(state))
         return {};
 
     return {other};

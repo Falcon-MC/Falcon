@@ -12,6 +12,8 @@ public:
 
     Tag saveNbt() const override;
 
+    Tag getSpawnCompound() const override;
+
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
     Container *getContainer() override { return nullptr; }
