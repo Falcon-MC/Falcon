@@ -261,7 +261,7 @@ bool ServerNetworkHandler::tickExperienceOrb(ServerActor &orb) {
         if (dx <= EXPERIENCE_ORB_PICKUP_REACH && dz <= EXPERIENCE_ORB_PICKUP_REACH &&
             position.y >= playerPosition.y - EXPERIENCE_ORB_PICKUP_REACH &&
             position.y <= playerPosition.y + PLAYER_HEIGHT) {
-            closest->getExperience().addXp(orb.getExperienceValue());
+            closest->getExperience().addXp(repairWithMending(*closest, orb.getExperienceValue()));
             closest->syncExperience();
             _sendAttributes(*closest);
             playNamedSound(getLevelFor(orb), "random.orb", position, 0.1f, 1.0f);
