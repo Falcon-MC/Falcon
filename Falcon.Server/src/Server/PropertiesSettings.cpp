@@ -98,6 +98,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"script-debugger-auto-attach", "disabled", PropertyKind::String, 0, 0, nullptr},
             {"disable-persona", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"fluid-budget-ms", "20", PropertyKind::Int, -1, UNBOUNDED, nullptr},
+            {"auto-compaction-interval", "360", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"transport", "raknet", PropertyKind::Enum, 0, 0, "raknet,nethernet"}
     };
 

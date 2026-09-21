@@ -15,11 +15,11 @@ namespace {
     std::condition_variable gSignal;
     std::atomic<bool> gRunning{false};
 
-    void run(Level *level) {
+    void run(Level *level, int intervalSeconds) {
         std::unique_lock<std::mutex> lock(gMutex);
 
         while (gRunning.load()) {
-            if (gSignal.wait_for(lock, std::chrono::seconds(AutoCompaction::INTERVAL_SECONDS),
+            if (gSignal.wait_for(lock, std::chrono::seconds(intervalSeconds),
                                  []() { return !gRunning.load(); }))
                 return;
 
@@ -34,11 +34,11 @@ namespace {
     }
 }
 
-void AutoCompaction::start(Level &level) {
-    if (gRunning.exchange(true))
+void AutoCompaction::start(Level &level, int intervalSeconds) {
+    if (intervalSeconds <= 0 || gRunning.exchange(true))
         return;
 
-    gThread = std::thread(run, &level);
+    gThread = std::thread(run, &level, intervalSeconds);
 }
 
 void AutoCompaction::stop() {

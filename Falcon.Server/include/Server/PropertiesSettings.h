@@ -146,6 +146,8 @@ public:
 
     int getSpawnProtection() const { return getInt("spawn-protection"); }
 
+    int getAutoCompactionInterval() const { return getInt("auto-compaction-interval"); }
+
     float getPlayerPositionAcceptanceThreshold() const {
         return getFloat("player-position-acceptance-threshold");
     }

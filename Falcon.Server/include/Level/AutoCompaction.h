@@ -4,9 +4,7 @@ class Level;
 
 class AutoCompaction {
 public:
-    static constexpr int INTERVAL_SECONDS = 360;
-
-    static void start(Level &level);
+    static void start(Level &level, int intervalSeconds);
 
     static void stop();
 };

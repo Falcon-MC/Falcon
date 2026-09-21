@@ -268,7 +268,7 @@ void startServer(const ServerSettings &settings) {
     std::signal(SIGINT, requestShutdown);
     std::signal(SIGTERM, requestShutdown);
 
-    AutoCompaction::start(networkHandler.getLevel());
+    AutoCompaction::start(networkHandler.getLevel(), properties.getAutoCompactionInterval());
 
     const std::chrono::nanoseconds tickInterval(50000000);
     const std::chrono::nanoseconds catchupResetInterval(1000000000);
