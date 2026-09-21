@@ -17,6 +17,7 @@
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/RemoveActorPacket.h"
 #include "Protocol/Packets/SetActorDataPacket.h"
+#include "Protocol/Packets/UpdateAttributesPacket.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/SpawnParticleEffectPacket.h"
@@ -770,6 +771,7 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
     packet.mMotion = actor.getMotion();
     packet.mRotation = Vector2f(actor.getRotation().x, actor.getRotation().y);
     packet.mProperties = buildActorProperties(actor);
+    packet.mAttributes = actor.getAttributes().getAll();
     RideSystem::appendLinks(actor, packet.mActorLinks);
     actor.fillSpawnMetadata(packet.mMetadata);
 
@@ -897,6 +899,18 @@ void ServerNetworkHandler::changeActorDimension(Actor &actor, DimensionType dime
 
     mDetachedActors.push_back((int64_t) traveller->getRuntimeId());
     destination.releaseChunkIfUnused(chunkX, chunkZ);
+}
+
+void ServerNetworkHandler::syncActorAttributes(ServerActor &actor) {
+    UpdateAttributesPacket packet;
+    packet.mRuntimeActorId = (int64_t) actor.getRuntimeId();
+    packet.mTick = 0;
+    packet.mAttributes = actor.getAttributes().getAll();
+
+    for (auto &entry: mPlayers) {
+        if (entry.second.isSpawned())
+            mNetworkHandler->send(entry.first, packet, mCodecContext);
+    }
 }
 
 void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {

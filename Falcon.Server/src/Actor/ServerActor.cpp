@@ -168,6 +168,9 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *
     setNoDamageTicks(INVULNERABILITY_TICKS);
     setLastDamageAmount(amount);
 
+    if (getHealth() > 0.0f)
+        owner.syncActorAttributes(*this);
+
     owner.broadcastActorEvent(*this, EntityEventType::HurtAnimation);
     owner.playLevelSound(owner.getLevelFor(*this), LevelSoundEvent::HIT, getPosition(), mIdentifier);
 
@@ -198,6 +201,7 @@ void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_
         return;
 
     setHealth(0.0f);
+    owner.syncActorAttributes(*this);
     owner.broadcastActorEvent(*this, EntityEventType::DeathAnimation);
     setDead(true);
     setMotion(Vector3f(0.0f, 0.0f, 0.0f));

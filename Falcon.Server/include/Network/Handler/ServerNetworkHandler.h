@@ -212,6 +212,8 @@ public:
 
     void syncActorFlags(ServerActor &actor);
 
+    void syncActorAttributes(ServerActor &actor);
+
     void syncActorFirework(ServerActor &actor);
 
     void sendActorMetadata(ServerActor &actor, const EntityDataMap &metadata);
