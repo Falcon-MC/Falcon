@@ -7,6 +7,7 @@
 #include "Block/Blocks/CommandBlock.h"
 #include "Block/Blocks/DoorBlock.h"
 #include "Block/Blocks/OpenableBlock.h"
+#include "Block/Blocks/PlacementRuleBlocks.h"
 #include "Block/Blocks/TntBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/CommandBlockSystem.h"
@@ -512,10 +513,7 @@ namespace {
 
     bool isTopSlab(const BlockState &state)
     {
-        if (!endsWith(state.mName, "_slab"))
-            return false;
-
-        return stateString(state, "minecraft:vertical_half", "bottom") == "top";
+        return VanillaBlocks::getAs<SlabBlock>(state.mName) != nullptr && SlabBlock::isTopSlab(state);
     }
 
     int maxCurrentStrength(Level &level, const Vector3i &position, int maxStrength)

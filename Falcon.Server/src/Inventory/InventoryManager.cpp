@@ -9,6 +9,8 @@
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
 #include "Block/Blocks/FurnaceBlock.h"
+#include "Block/Blocks/PlacementRuleBlocks.h"
+#include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Inventory/FurnaceInventory.h"
 #include "Inventory/BundleInventory.h"
 #include "Item/CraftingRecipeTable.h"
@@ -430,7 +432,7 @@ namespace {
         if (id == "minecraft:wooden_sword" || id == "minecraft:wooden_pickaxe"
             || id == "minecraft:wooden_axe" || id == "minecraft:wooden_shovel"
             || id == "minecraft:wooden_hoe") return 200;
-        if (isWoodLike(id) && id.find("_slab") != std::string::npos) return 300;
+        if (isWoodLike(id) && VanillaBlocks::getAs<SlabBlock>(id) != nullptr) return 300;
         if (isWoodLike(id) && (id.find("_planks") != std::string::npos || id.find("_log") != std::string::npos
             || id.find("_wood") != std::string::npos || id.find("_stem") != std::string::npos
             || id.find("_hyphae") != std::string::npos || id.find("_mosaic") != std::string::npos

@@ -2,6 +2,8 @@
 
 #include "Block/BlockActor.h"
 #include "Block/BlockIdentifier.h"
+#include "Block/Blocks/PlacementRuleBlocks.h"
+#include "Block/Blocks/VanillaBlocks.h"
 #include "Protocol/Types/ItemStack.h"
 
 #include <string_view>
@@ -86,8 +88,8 @@ std::string BlockPickItem::identifierFor(const std::string &blockIdentifier) {
     if (BlockIdentifier::endsWith(blockIdentifier, "_wall_sign"))
         return replaceSuffix(blockIdentifier, "_wall_sign", "_sign");
 
-    if (BlockIdentifier::endsWith(blockIdentifier, "_double_slab"))
-        return replaceSuffix(blockIdentifier, "_double_slab", "_slab");
+    if (const DoubleSlabBlock *doubleSlab = VanillaBlocks::getAs<DoubleSlabBlock>(blockIdentifier))
+        return doubleSlab->getSlabIdentifier();
 
     if (BlockIdentifier::endsWith(blockIdentifier, "_wall_fan"))
         return replaceSuffix(blockIdentifier, "_wall_fan", "_fan");

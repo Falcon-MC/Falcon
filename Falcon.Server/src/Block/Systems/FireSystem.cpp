@@ -5,6 +5,8 @@
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
 #include "Block/BlockState.h"
+#include "Block/Blocks/PlacementRuleBlocks.h"
+#include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
@@ -117,14 +119,6 @@ namespace {
         return tag->asInt();
     }
 
-    std::string stateString(const BlockState &state, const std::string &key) {
-        const Tag *tag = state.mStates.get(key);
-        if (tag == nullptr || tag->getType() != Tag::Type::String)
-            return std::string();
-
-        return tag->asString();
-    }
-
     Vector3i relative(const Vector3i &position, int dx, int dy, int dz) {
         return Vector3i(position.x + dx, position.y + dy, position.z + dz);
     }
@@ -140,8 +134,8 @@ namespace {
         if (endsWith(identifier, "_stairs"))
             return false;
 
-        if (endsWith(identifier, "_slab") || endsWith(identifier, "_double_slab"))
-            return stateString(state, "minecraft:vertical_half") == "top";
+        if (VanillaBlocks::getAs<SlabBlock>(identifier) != nullptr)
+            return SlabBlock::isTopSlab(state);
 
         if (identifier == "minecraft:snow_layer")
             return false;

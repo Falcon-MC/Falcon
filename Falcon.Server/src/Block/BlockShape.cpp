@@ -1,6 +1,7 @@
 #include "Block/BlockShape.h"
 
 #include "Block/BlockData.h"
+#include "Block/Blocks/VanillaBlocks.h"
 
 #include <algorithm>
 #include <string>
@@ -22,18 +23,6 @@ namespace {
             return false;
 
         return value.compare(value.size() - tail.size(), tail.size(), tail) == 0;
-    }
-
-    bool contains(const std::string &value, const char *needle) {
-        return value.find(needle) != std::string::npos;
-    }
-
-    bool isSlabIdentifier(const std::string &name) {
-        return endsWith(name, "_slab") && !contains(name, "double_slab");
-    }
-
-    bool isTopHalf(const BlockState &state) {
-        return state.mStates.getString("minecraft:vertical_half", "bottom") == "top";
     }
 
     bool isUpsideDown(const BlockState &state) {
@@ -67,12 +56,10 @@ AxisAlignedBB BlockShape::getRelativeShape(const BlockState &state) {
 
     const std::string &name = state.mName;
 
-    if (isSlabIdentifier(name)) {
-        if (isTopHalf(state))
-            return AxisAlignedBB(0.0f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f);
-
-        return AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, 0.5f, 1.0f);
-    }
+    const Block *block = VanillaBlocks::fromIdentifier(name);
+    AxisAlignedBB shape = FULL_CUBE;
+    if (block != nullptr && block->getCollisionShape(state, shape))
+        return shape;
 
     if (endsWith(name, "_stairs")) {
         if (isUpsideDown(state))

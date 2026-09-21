@@ -6,6 +6,7 @@ FALCON_REGISTER_BLOCK(LadderBlock, 180);
 FALCON_REGISTER_BLOCK(ReplaceableBlock, 330);
 FALCON_REGISTER_BLOCK(SnowLayerBlock, 340);
 FALCON_REGISTER_BLOCK(SlabBlock, 350);
+FALCON_REGISTER_BLOCK(DoubleSlabBlock, 355);
 FALCON_REGISTER_BLOCK(CandleBlock, 360);
 FALCON_REGISTER_BLOCK(ScaffoldingBlock, 370);
 FALCON_REGISTER_BLOCK(CarpetBlock, 380);
@@ -53,17 +54,16 @@ namespace {
         return level.getBlockState(position.x, position.y, position.z);
     }
 
-    bool isTopSlab(const BlockState &state) {
-        return state.mStates.getString(VERTICAL_HALF, "bottom") == "top";
-    }
+    const std::string SLAB_SUFFIX = "_slab";
+    const std::string DOUBLE_SLAB_SUFFIX = "_double_slab";
+    const std::string COPPER_SLAB_SUFFIX = "cut_copper_slab";
+    const std::string DOUBLE_COPPER_SLAB_SUFFIX = "double_cut_copper_slab";
+    const int32_t DOUBLE_SLAB_RESOURCE_COUNT = 2;
+    const float SLAB_HEIGHT = 0.5f;
 
-    std::string doubleSlabOf(const std::string &identifier) {
-        const std::string copperSuffix = "cut_copper_slab";
-        if (BlockIdentifier::endsWith(identifier, copperSuffix))
-            return identifier.substr(0, identifier.size() - copperSuffix.size()) + "double_" + copperSuffix;
-
-        const std::string slabSuffix = "_slab";
-        return identifier.substr(0, identifier.size() - slabSuffix.size()) + "_double_slab";
+    std::string replaceSuffix(const std::string &identifier, const std::string &suffix,
+                              const std::string &replacement) {
+        return identifier.substr(0, identifier.size() - suffix.size()) + replacement;
     }
 }
 
@@ -113,7 +113,24 @@ PlacementMergeResult SnowLayerBlock::mergePlacement(Level &level, const Vector3i
 }
 
 bool SlabBlock::matches(const std::string &identifier) {
-    return BlockIdentifier::endsWith(identifier, "_slab") && identifier.find("double_") == std::string::npos;
+    return BlockIdentifier::endsWith(identifier, SLAB_SUFFIX) && identifier.find("double_") == std::string::npos;
+}
+
+bool SlabBlock::isTopSlab(const BlockState &state) {
+    return state.mStates.getString(VERTICAL_HALF, "bottom") == "top";
+}
+
+std::string SlabBlock::getDoubleSlabIdentifier() const {
+    if (BlockIdentifier::endsWith(getIdentifier(), COPPER_SLAB_SUFFIX))
+        return replaceSuffix(getIdentifier(), COPPER_SLAB_SUFFIX, DOUBLE_COPPER_SLAB_SUFFIX);
+
+    return replaceSuffix(getIdentifier(), SLAB_SUFFIX, DOUBLE_SLAB_SUFFIX);
+}
+
+bool SlabBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+    shape = isTopSlab(state) ? AxisAlignedBB(0.0f, SLAB_HEIGHT, 0.0f, 1.0f, 1.0f, 1.0f)
+                             : AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, SLAB_HEIGHT, 1.0f);
+    return true;
 }
 
 PlacementMergeResult SlabBlock::mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
@@ -121,7 +138,7 @@ PlacementMergeResult SlabBlock::mergePlacement(Level &level, const Vector3i &cli
                                                BlockState &state) const {
     using namespace PlacementOrientation;
 
-    const Block *doubleSlab = VanillaBlocks::fromIdentifier(doubleSlabOf(getIdentifier()));
+    const Block *doubleSlab = VanillaBlocks::fromIdentifier(getDoubleSlabIdentifier());
     const BlockState clicked = stateAt(level, clickedPosition);
     const bool clickedSameSlab = clicked.mName == getIdentifier();
 
@@ -157,6 +174,28 @@ PlacementMergeResult SlabBlock::mergePlacement(Level &level, const Vector3i &cli
 
     state = doubleSlab->toBlockState();
     return PlacementMergeResult::Merged;
+}
+
+bool DoubleSlabBlock::matches(const std::string &identifier) {
+    return BlockIdentifier::endsWith(identifier, DOUBLE_SLAB_SUFFIX)
+           || BlockIdentifier::endsWith(identifier, DOUBLE_COPPER_SLAB_SUFFIX);
+}
+
+std::string DoubleSlabBlock::getSlabIdentifier() const {
+    if (BlockIdentifier::endsWith(getIdentifier(), DOUBLE_COPPER_SLAB_SUFFIX))
+        return replaceSuffix(getIdentifier(), DOUBLE_COPPER_SLAB_SUFFIX, COPPER_SLAB_SUFFIX);
+
+    return replaceSuffix(getIdentifier(), DOUBLE_SLAB_SUFFIX, SLAB_SUFFIX);
+}
+
+std::string DoubleSlabBlock::getResourceItem(const BlockState &state) const {
+    (void) state;
+    return getSlabIdentifier();
+}
+
+int32_t DoubleSlabBlock::getResourceCount(const BlockState &state) const {
+    (void) state;
+    return DOUBLE_SLAB_RESOURCE_COUNT;
 }
 
 bool CandleBlock::matches(const std::string &identifier) {

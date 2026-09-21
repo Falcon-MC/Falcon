@@ -506,14 +506,16 @@ void BlockActionHandler::spawnBlockDrops(ServerNetworkHandler &owner, Level &lev
 
     std::string dropIdentifier;
     int32_t dropCount = 0;
-    const std::string normalizedDropIdentifier = furnaceDropIdentifier(brokenState.mName);
+    const std::string normalizedDropIdentifier = furnaceDropIdentifier(
+            brokenBlock != nullptr ? brokenBlock->getResourceItem(brokenState) : brokenState.mName);
+    const int32_t resourceCount = brokenBlock != nullptr ? brokenBlock->getResourceCount(brokenState) : 1;
 
     if (silkTouch && brokenData->mSilkTouch) {
         dropIdentifier = normalizedDropIdentifier;
-        dropCount = 1;
+        dropCount = resourceCount;
     } else if (brokenData->mDropKind == BlockDropKind::Self) {
         dropIdentifier = normalizedDropIdentifier;
-        dropCount = brokenData->mDropMin;
+        dropCount = resourceCount;
     } else if (brokenData->mDropKind == BlockDropKind::Other && brokenData->mDropIdentifier != nullptr) {
         dropIdentifier = brokenData->mDropIdentifier;
         const int32_t range = (int32_t) brokenData->mDropMax - (int32_t) brokenData->mDropMin + 1;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/NBT/Tag.h"
+#include "Core/Math/AxisAlignedBB.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "Block/BlockState.h"
@@ -187,6 +188,21 @@ public:
         (void) level;
         (void) position;
         (void) drop;
+    }
+
+    virtual bool getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+        (void) state;
+        (void) shape;
+        return false;
+    }
+
+    virtual std::string getResourceItem(const BlockState &state) const {
+        return state.mName;
+    }
+
+    virtual int32_t getResourceCount(const BlockState &state) const {
+        (void) state;
+        return 1;
     }
 
     virtual BlockState applyPlacementOrientation(const BlockState &state,
