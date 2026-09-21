@@ -121,7 +121,7 @@ float Actor::getMaxHealth() const {
 }
 
 void Actor::setMaxHealth(float maxHealth) {
-    mAttributes.addMaximum(ATTRIBUTE_HEALTH, maxHealth - mAttributes.getMaximum(ATTRIBUTE_HEALTH));
+    mAttributes.setBaseMaximum(ATTRIBUTE_HEALTH, maxHealth);
 }
 
 bool Actor::isAlive() const {

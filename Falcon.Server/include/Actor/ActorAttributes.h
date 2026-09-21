@@ -16,6 +16,8 @@ public:
 
     void addMaximum(const std::string &name, float amount);
 
+    void setBaseMaximum(const std::string &name, float maximum);
+
     float get(const std::string &name) const;
 
     float getMinimum(const std::string &name) const;

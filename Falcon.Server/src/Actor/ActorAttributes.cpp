@@ -67,6 +67,20 @@ void ActorAttributes::addMaximum(const std::string &name, float amount) {
     }
 }
 
+void ActorAttributes::setBaseMaximum(const std::string &name, float maximum) {
+    for (AttributeData &attribute: mAttributes) {
+        if (attribute.mName != name)
+            continue;
+
+        attribute.mMaximum = std::max(attribute.mMinimum, maximum);
+        attribute.mDefaultMaximum = attribute.mMaximum;
+        attribute.mDefaultValue = attribute.mMaximum;
+        if (attribute.mValue > attribute.mMaximum)
+            attribute.mValue = attribute.mMaximum;
+        return;
+    }
+}
+
 float ActorAttributes::get(const std::string &name) const {
     for (const AttributeData &attribute: mAttributes) {
         if (attribute.mName == name)
