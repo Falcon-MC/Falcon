@@ -77,7 +77,7 @@ public:
     void writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ,
                        int32_t gameType, int32_t difficulty, int64_t seed, int64_t time) const;
 
-    bool readLevelDatTime(int64_t &time) const;
+    bool readLevelDatLong(const std::string &key, int64_t &value) const;
 
 private:
     std::string _makeKey(int32_t chunkX, int32_t chunkZ, LevelDbTag tag) const;

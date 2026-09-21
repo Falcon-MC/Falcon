@@ -182,6 +182,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <optional>
+#include <random>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -232,6 +233,11 @@ static const float DEFAULT_MAX_HEALTH = 20.0f;
 static const float ITEM_DROP_HEIGHT = 1.3f;
 
 namespace {
+    int64_t randomLevelSeed() {
+        std::random_device device;
+        return (int64_t) (((uint64_t) device() << 32) | (uint64_t) device());
+    }
+
     const float EYE_HEIGHT_FACTOR = 0.9f;
     const float PLAYER_COLLISION_HEIGHT = 1.8f;
     const float SUFFOCATION_DAMAGE = 1.0f;
@@ -675,7 +681,9 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
         });
     }
 
-    const int64_t levelSeed = OverworldGenerator::parseSeed(properties.getLevelSeed());
+    const int64_t levelSeed = properties.getLevelSeed().empty()
+                              ? randomLevelSeed()
+                              : OverworldGenerator::parseSeed(properties.getLevelSeed());
 
     mLevel = Level(properties.getLevelName(), _getServerViewDistance(), levelSeed, DimensionType::Overworld);
     mLevel.openStorage("worlds");
@@ -683,9 +691,9 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     mLevel.initializeGameRules();
     mLevel.startWorkers(_getChunkWorkerThreadCount());
 
-    mNetherLevel.reset(new Level(properties.getLevelName(), _getServerViewDistance(), levelSeed,
+    mNetherLevel.reset(new Level(properties.getLevelName(), _getServerViewDistance(), mLevel.getSeed(),
                                  DimensionType::Nether));
-    mTheEndLevel.reset(new Level(properties.getLevelName(), _getServerViewDistance(), levelSeed,
+    mTheEndLevel.reset(new Level(properties.getLevelName(), _getServerViewDistance(), mLevel.getSeed(),
                                  DimensionType::TheEnd));
 
     if (mLevel.isStorageOpen()) {

@@ -617,7 +617,7 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
     out.write(bytes.data(), (std::streamsize) bytes.size());
 }
 
-bool LevelStorage::readLevelDatTime(int64_t &time) const {
+bool LevelStorage::readLevelDatLong(const std::string &key, int64_t &value) const {
     if (mPath.empty())
         return false;
 
@@ -634,10 +634,10 @@ bool LevelStorage::readLevelDatTime(int64_t &time) const {
 
     try {
         const Tag data = NbtIo::readTag(stream, NbtVariant::LittleEndian);
-        if (!data.contains("Time"))
+        if (!data.contains(key))
             return false;
 
-        time = data.getLong("Time");
+        value = data.getLong(key);
     } catch (const std::exception &exception) {
         LOG_WARN(LogAreaID::Server, "Malformed level.dat: %s", exception.what());
         return false;

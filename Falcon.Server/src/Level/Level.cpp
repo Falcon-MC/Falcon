@@ -89,8 +89,14 @@ bool Level::openStorage(const std::string &worldsDirectory) {
 
     if (mDimension == DimensionType::Overworld) {
         int64_t storedTime = 0;
-        if (mStorage.readLevelDatTime(storedTime))
+        if (mStorage.readLevelDatLong("Time", storedTime))
             setTime(storedTime);
+
+        int64_t storedSeed = 0;
+        if (mStorage.readLevelDatLong("RandomSeed", storedSeed) && storedSeed != mSeed) {
+            mSeed = storedSeed;
+            mGenerator = DimensionFactory::createGenerator(mDimension, mSeed);
+        }
 
         saveLevelDat();
     }
