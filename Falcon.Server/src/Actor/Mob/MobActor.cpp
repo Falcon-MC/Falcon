@@ -36,7 +36,7 @@ void MobActor::applyDefaults(Difficulty difficulty) {
 }
 
 const LootTable *MobActor::getLootTable() const {
-    return LootTableRegistry::getInstance().getForEntity(mIdentifier);
+    return LootTableRegistry::getInstance().getForEntity(getTypeId());
 }
 
 int MobActor::randomRange(int minimum, int maximum) {

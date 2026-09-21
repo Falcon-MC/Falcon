@@ -84,7 +84,7 @@ void AbstractSlimeActor::_split(ServerNetworkHandler &owner, Level &level) {
     for (int index = 0; index < count; ++index) {
         const float dx = ((float) (index % 2) - 0.5f) * offset;
         const float dz = ((float) (index / 2) - 0.5f) * offset;
-        owner.spawnActor(level, mIdentifier, Vector3f(position.x + dx, position.y + 0.5f, position.z + dz),
+        owner.spawnActor(level, getTypeId(),Vector3f(position.x + dx, position.y + 0.5f, position.z + dz),
                          [childSize](ServerActor &actor) {
                              static_cast<AbstractSlimeActor &>(actor).setSizeVariant(childSize);
                          });
@@ -122,7 +122,7 @@ void AbstractSlimeActor::_attackTouchingPlayers(ServerNetworkHandler &owner) {
             continue;
 
         owner.applyDamage(player, getContactDamage(), "death.attack.mob",
-                          {player.getName(), "%entity." + mIdentifier.substr(mIdentifier.find(':') + 1) + ".name"});
+                          {player.getName(), "%entity." + getTypeId().substr(getTypeId().find(':') + 1) + ".name"});
         mAttackCooldown = ATTACK_COOLDOWN_TICKS;
     }
 }
