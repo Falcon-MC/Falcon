@@ -2,6 +2,7 @@
 
 #include "Core/Debug/BedrockLog.h"
 #include "Inventory/BundleInventory.h"
+#include "Item/EnchantmentData.h"
 #include "Item/EnchantmentHelper.h"
 #include "Item/ItemEnchantments.h"
 
@@ -555,8 +556,35 @@ namespace {
         return true;
     }
 
+    bool isBoundArmor(PlayerInventory &inventory, RequestContext &context, const FullContainerName &name, int slot) {
+        if (context.mCreativeMode || name.mContainer != ContainerSlotType::Armor)
+            return false;
+
+        const ItemStack *item = resolveSlot(inventory, context, name, slot);
+        return item != nullptr && ItemEnchantments::getLevel(*item, EnchantmentIds::BINDING) > 0;
+    }
+
     bool applyAction(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched) {
+        switch (action.mType) {
+            case ItemStackRequestActionType::Take:
+            case ItemStackRequestActionType::Place:
+            case ItemStackRequestActionType::Drop:
+            case ItemStackRequestActionType::Destroy:
+                if (isBoundArmor(inventory, context, action.mSource.mContainerName, action.mSource.mSlot))
+                    return false;
+                break;
+
+            case ItemStackRequestActionType::Swap:
+                if (isBoundArmor(inventory, context, action.mSource.mContainerName, action.mSource.mSlot)
+                    || isBoundArmor(inventory, context, action.mDestination.mContainerName, action.mDestination.mSlot))
+                    return false;
+                break;
+
+            default:
+                break;
+        }
+
         switch (action.mType) {
             case ItemStackRequestActionType::Take:
             case ItemStackRequestActionType::Place:
