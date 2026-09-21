@@ -217,6 +217,10 @@ public:
 
     const MobEffectInstance *getEffect(MobEffectId id) const { return mEffects.get(id); }
 
+    int64_t getVisibleEffectsData() const;
+
+    bool refreshVisibleEffects();
+
     bool isUndead() const;
 
     bool isArthropod() const;
@@ -248,6 +252,7 @@ protected:
     int32_t mPortalCooldown = 0;
     int32_t mPortalTicks = 0;
     int64_t mLastPortalTick = -1;
+    int64_t mSentVisibleEffects = 0;
     Vector3f mRotation;
     Vector3f mMotion;
     ActorFlags mFlags;

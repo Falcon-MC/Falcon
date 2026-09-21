@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 
 namespace {
     const char *const UNDEAD_ACTORS[] = {
@@ -208,6 +209,34 @@ float Actor::getExhaustion() const {
 
 void Actor::setExhaustion(float exhaustion) {
     mAttributes.setClamped(ATTRIBUTE_EXHAUSTION, exhaustion);
+}
+
+int64_t Actor::getVisibleEffectsData() const {
+    std::map<int32_t, bool> visible;
+    for (const auto &entry: mEffects.getAll()) {
+        const MobEffectInstance &effect = entry.second;
+        if (effect.mParticles)
+            visible[(int32_t) effect.mId] = effect.mAmbient;
+    }
+
+    int64_t packed = 0;
+    int packedCount = 0;
+    for (const auto &entry: visible) {
+        packed = (packed << 7) | ((int64_t) (entry.first & 0x3f) << 1) | (entry.second ? 1 : 0);
+        if (++packedCount >= 8)
+            break;
+    }
+
+    return packed;
+}
+
+bool Actor::refreshVisibleEffects() {
+    const int64_t packed = getVisibleEffectsData();
+    if (packed == mSentVisibleEffects)
+        return false;
+
+    mSentVisibleEffects = packed;
+    return true;
 }
 
 bool Actor::isUndead() const {

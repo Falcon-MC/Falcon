@@ -767,6 +767,15 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
     RideSystem::appendLinks(actor, packet.mActorLinks);
     actor.fillSpawnMetadata(packet.mMetadata);
 
+    const int64_t visibleEffects = actor.getVisibleEffectsData();
+    if (visibleEffects != 0) {
+        EntityDataEntry effects;
+        effects.mId = ActorFlags::VISIBLE_MOB_EFFECTS_DATA_ID;
+        effects.mFormat = EntityDataFormat::Long;
+        effects.mLongValue = visibleEffects;
+        packet.mMetadata.mEntries.push_back(effects);
+    }
+
     mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
 }
 
@@ -900,6 +909,12 @@ void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {
     flags2.mFormat = EntityDataFormat::Long;
     flags2.mLongValue = actor.getFlags().getHighBits();
     packet.mMetadata.mEntries.push_back(flags2);
+
+    EntityDataEntry visibleEffects;
+    visibleEffects.mId = ActorFlags::VISIBLE_MOB_EFFECTS_DATA_ID;
+    visibleEffects.mFormat = EntityDataFormat::Long;
+    visibleEffects.mLongValue = actor.getVisibleEffectsData();
+    packet.mMetadata.mEntries.push_back(visibleEffects);
 
     packet.mProperties = buildActorProperties(actor);
 
@@ -1358,6 +1373,10 @@ void ServerNetworkHandler::tickActors() {
             BlockContactSystem::tick(*this, actor);
             if (!actor.isAlive() || &getLevelFor(actor) != &level)
                 continue;
+
+            actor.tickEffects(1);
+            if (actor.refreshVisibleEffects())
+                syncActorFlags(actor);
         }
 
         ProfilerScopedSection projectileSection(mProfiler, ProfilerSection::ActorProjectiles,

@@ -33,6 +33,7 @@ public:
     static const int32_t FUSE_LENGTH_DATA_ID = 55;
     static const int32_t AIR_SUPPLY_DATA_ID = 7;
     static const int32_t AIR_SUPPLY_MAX_DATA_ID = 42;
+    static const int32_t VISIBLE_MOB_EFFECTS_DATA_ID = 131;
     static const int8_t PLAYER_FLAG_SLEEP = 0x2;
 
     void set(ActorFlag flag, bool value);

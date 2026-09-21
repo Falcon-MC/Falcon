@@ -1178,6 +1178,8 @@ void ServerNetworkHandler::tick() {
                                    && player.tickHunger(1, (int) mProperties.getDifficulty(), naturalRegeneration);
         if (hungerChanged)
             _sendAttributes(player);
+        if (player.isSpawned() && player.refreshVisibleEffects())
+            _sendEntityData(player);
 
         if (player.consumeStarveDamage())
             applyDamage(player, 1.0f, "death.attack.starve", {player.getName()}, false, false);
@@ -1725,6 +1727,12 @@ EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {
     maxAir.mFormat = EntityDataFormat::Short;
     maxAir.mShortValue = (int16_t) ServerPlayer::MAX_AIR_SUPPLY;
     metadata.mEntries.push_back(maxAir);
+
+    EntityDataEntry visibleEffects;
+    visibleEffects.mId = ActorFlags::VISIBLE_MOB_EFFECTS_DATA_ID;
+    visibleEffects.mFormat = EntityDataFormat::Long;
+    visibleEffects.mLongValue = player.getVisibleEffectsData();
+    metadata.mEntries.push_back(visibleEffects);
 
     if (player.isSleeping()) {
         EntityDataEntry bedPosition;
