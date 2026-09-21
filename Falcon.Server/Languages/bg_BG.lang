@@ -22,3 +22,6 @@ falcon.disconnect.kicked=Бяхте изгонени от света.
 falcon.disconnect.banned=Домакинът ви блокира.
 falcon.disconnect.bannedReason=Домакинът ви блокира. Причина: %1$s
 falcon.disconnect.flyingDisabled=Летенето не е разрешено на този сървър
+
+falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (пик %3$s)
+falcon.commands.status.players=Играчи онлайн: %1$s/%2$s

@@ -22,3 +22,6 @@ falcon.disconnect.kicked=你已被从世界中踢出。
 falcon.disconnect.banned=你被主机封禁了。
 falcon.disconnect.bannedReason=你被主机封禁了。原因：%1$s
 falcon.disconnect.flyingDisabled=此服务器不允许飞行
+
+falcon.commands.status.performance=TPS：%1$s，MSPT：%2$s（峰值 %3$s）
+falcon.commands.status.players=在线玩家：%1$s/%2$s

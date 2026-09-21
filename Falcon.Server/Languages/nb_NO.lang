@@ -22,3 +22,6 @@ falcon.disconnect.kicked=Du har blitt kastet ut av verdenen.
 falcon.disconnect.banned=Du er utestengt av verten.
 falcon.disconnect.bannedReason=Du er utestengt av verten. Årsak: %1$s
 falcon.disconnect.flyingDisabled=Det er ikke tillatt å fly på denne serveren
+
+falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (topp %3$s)
+falcon.commands.status.players=Spillere pålogget: %1$s/%2$s

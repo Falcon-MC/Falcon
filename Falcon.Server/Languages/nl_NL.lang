@@ -22,3 +22,6 @@ falcon.disconnect.kicked=Je bent uit de wereld verwijderd.
 falcon.disconnect.banned=Je bent door de host gebanned.
 falcon.disconnect.bannedReason=Je bent door de host gebanned. Reden: %1$s
 falcon.disconnect.flyingDisabled=Vliegen is niet toegestaan op deze server
+
+falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (piek %3$s)
+falcon.commands.status.players=Spelers online: %1$s/%2$s

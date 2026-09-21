@@ -290,6 +290,7 @@ Tag ServerActor::saveNbt() const {
     data.put("FloatProperties", floatProperties);
 
     data.put("DynamicProperties", serializeDynamicProperties(mDynamicProperties));
+    saveTags(data);
 
     return data;
 }
@@ -297,6 +298,8 @@ Tag ServerActor::saveNbt() const {
 void ServerActor::loadNbt(const Tag &data) {
     if (!data.isCompound())
         return;
+
+    loadTags(data);
 
     mPosition = Vector3f(listValue(data, "Pos", 0, mPosition.x),
                          listValue(data, "Pos", 1, mPosition.y),

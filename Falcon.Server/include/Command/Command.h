@@ -27,6 +27,11 @@ public:
 
     static CommandParamData makePlayerParameter(const std::string &name);
 
+    static CommandParamData makeTypedParameter(const std::string &name, CommandParamType type, bool optional = false);
+
+    static CommandParamData makeEnumParameter(const std::string &name, const std::string &enumName,
+                                              const std::vector<std::string> &values, bool optional = false);
+
     static std::string joinArguments(const std::vector<std::string> &arguments, size_t first);
 
     static bool parseCoordinate(const std::string &value, float origin, float &out);

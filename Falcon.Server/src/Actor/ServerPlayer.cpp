@@ -796,6 +796,7 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
     data.put(TAG_ACTIVE_EFFECTS, activeEffects);
 
     data.put("DynamicProperties", serializeDynamicProperties(mDynamicProperties));
+    saveTags(data);
 
     return data;
 }
@@ -807,6 +808,8 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
 
     if (data.getType() != Tag::Type::Compound)
         return;
+
+    loadTags(data);
 
     mPosition = Vector3f(listValue(data, TAG_POS, 0, mPosition.x),
                          listValue(data, TAG_POS, 1, mPosition.y),

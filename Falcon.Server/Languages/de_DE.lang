@@ -22,3 +22,6 @@ falcon.disconnect.kicked=Du wurdest aus der Welt entfernt.
 falcon.disconnect.banned=Du wurdest durch den Host gesperrt.
 falcon.disconnect.bannedReason=Du wurdest durch den Host gesperrt. Grund: %1$s
 falcon.disconnect.flyingDisabled=Fliegen ist auf diesem Server nicht erlaubt
+
+falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (Spitze %3$s)
+falcon.commands.status.players=Spieler online: %1$s/%2$s

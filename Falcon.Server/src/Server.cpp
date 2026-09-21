@@ -274,7 +274,7 @@ void startServer(const ServerSettings &settings) {
     const std::chrono::nanoseconds catchupResetInterval(1000000000);
     std::chrono::steady_clock::time_point nextTick = std::chrono::steady_clock::now();
 
-    while (gRunning.load()) {
+    while (gRunning.load() && !networkHandler.isStopRequested()) {
         networkHandler.tick();
 
         nextTick += tickInterval;

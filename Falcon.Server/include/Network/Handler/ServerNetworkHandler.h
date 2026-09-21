@@ -339,6 +339,20 @@ public:
         return mBanList;
     }
 
+    BanList &getIpBanList() {
+        return mIpBanList;
+    }
+
+    bool isAutoSaveEnabled() const { return mAutoSaveEnabled; }
+
+    void setAutoSaveEnabled(bool enabled) { mAutoSaveEnabled = enabled; }
+
+    bool isStopRequested() const { return mStopRequested; }
+
+    void requestStop() { mStopRequested = true; }
+
+    void setMaxPlayers(int maxPlayers);
+
     bool isAllowListed(ServerPlayer &player);
 
     bool isServerFull(const NetworkIdentifier &joining) const;
@@ -363,6 +377,10 @@ public:
     void broadcastTranslation(const std::string &key, const std::vector<std::string> &parameters = {});
 
     void broadcastWorldTime();
+
+    bool changeGameRule(const std::string &name, const std::string &value);
+
+    void setDefaultGameType(GameType gameType);
 
     ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
                         int pickupDelay);
@@ -616,6 +634,9 @@ private:
     OpList mOps;
     AllowList mAllowList;
     BanList mBanList;
+    BanList mIpBanList;
+    bool mAutoSaveEnabled = true;
+    bool mStopRequested = false;
     ResourcePackManager mResourcePacks;
     CommandMap mCommands;
     PingedCompatibleServer mAnnouncement;

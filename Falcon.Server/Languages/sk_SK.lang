@@ -22,3 +22,6 @@ falcon.disconnect.kicked=Boli ste vyhodení zo sveta.
 falcon.disconnect.banned=Hostiteľ vám zakázal prístup.
 falcon.disconnect.bannedReason=Hostiteľ vám zakázal prístup. Dôvod: %1$s
 falcon.disconnect.flyingDisabled=Lietanie nie je na tomto serveri povolené
+
+falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (špička %3$s)
+falcon.commands.status.players=Hráči online: %1$s/%2$s

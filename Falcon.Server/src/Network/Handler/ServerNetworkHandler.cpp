@@ -37,6 +37,26 @@
 #include "Command/GameRuleCommand.h"
 #include "Command/LocateCommand.h"
 #include "Command/WeatherCommand.h"
+#include "Command/BanIpCommand.h"
+#include "Command/BanListCommand.h"
+#include "Command/DamageCommand.h"
+#include "Command/DayLockCommand.h"
+#include "Command/DefaultGameModeCommand.h"
+#include "Command/HelpCommand.h"
+#include "Command/PardonIpCommand.h"
+#include "Command/ParticleCommand.h"
+#include "Command/PlaySoundCommand.h"
+#include "Command/SaveCommand.h"
+#include "Command/SeedCommand.h"
+#include "Command/SetMaxPlayersCommand.h"
+#include "Command/StatusCommand.h"
+#include "Command/StopCommand.h"
+#include "Command/StopSoundCommand.h"
+#include "Command/TagCommand.h"
+#include "Command/TestForBlockCommand.h"
+#include "Command/TestForBlocksCommand.h"
+#include "Command/TestForCommand.h"
+#include "Command/TransferCommand.h"
 #include "Block/BlockActorStore.h"
 #include "Block/BlockPickItem.h"
 #include "Level/Generator/Overworld/OverworldGenerator.h"
@@ -72,6 +92,7 @@
 #include "Block/Inventory/EnderChestInventoryStore.h"
 #include "Protocol/MinecraftPackets.h"
 #include "Protocol/Packets/DisconnectPacket.h"
+#include "Protocol/Packets/GameRulesChangedPacket.h"
 #include "Protocol/Packets/LevelChunkPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/LoginPacket.h"
@@ -489,7 +510,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
           mIsListening(false), mNextRuntimeId(1),
           mLevel("Bedrock level", DEFAULT_VIEW_DISTANCE),
           mPlayerData("players"), mOps("ops.txt"), mAllowList("allowlist.json"),
-          mBanList("banned-players.json") {
+          mBanList("banned-players.json"), mIpBanList("banned-ips.json") {
     std::unique_ptr<Connector> rakNet = TransportFactory::createConnector(TransportLayer::RakNet, *this, true);
 
     if (rakNet != nullptr) {
@@ -552,6 +573,28 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mCommands.registerCommand(std::make_shared<KickCommand>(*this));
     mCommands.registerCommand(std::make_shared<BanCommand>(*this));
     mCommands.registerCommand(std::make_shared<PardonCommand>(*this));
+    mCommands.registerCommand(std::make_shared<BanIpCommand>(*this));
+    mCommands.registerCommand(std::make_shared<PardonIpCommand>(*this));
+    mCommands.registerCommand(std::make_shared<BanListCommand>(*this));
+    mCommands.registerCommand(std::make_shared<SeedCommand>(*this));
+    mCommands.registerCommand(std::make_shared<DefaultGameModeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<SetMaxPlayersCommand>(*this));
+    mCommands.registerCommand(std::make_shared<StopCommand>(*this));
+    mCommands.registerCommand(std::make_shared<SaveCommand>(*this, SaveCommand::Mode::Save));
+    mCommands.registerCommand(std::make_shared<SaveCommand>(*this, SaveCommand::Mode::On));
+    mCommands.registerCommand(std::make_shared<SaveCommand>(*this, SaveCommand::Mode::Off));
+    mCommands.registerCommand(std::make_shared<HelpCommand>(*this));
+    mCommands.registerCommand(std::make_shared<StatusCommand>(*this));
+    mCommands.registerCommand(std::make_shared<TransferCommand>(*this));
+    mCommands.registerCommand(std::make_shared<PlaySoundCommand>(*this));
+    mCommands.registerCommand(std::make_shared<StopSoundCommand>(*this));
+    mCommands.registerCommand(std::make_shared<ParticleCommand>(*this));
+    mCommands.registerCommand(std::make_shared<DamageCommand>(*this));
+    mCommands.registerCommand(std::make_shared<DayLockCommand>(*this));
+    mCommands.registerCommand(std::make_shared<TestForCommand>(*this));
+    mCommands.registerCommand(std::make_shared<TestForBlockCommand>());
+    mCommands.registerCommand(std::make_shared<TestForBlocksCommand>());
+    mCommands.registerCommand(std::make_shared<TagCommand>(*this));
 
     mResourcePacks.loadFromDirectory("resource_packs");
     mResourcePacks.loadBundledAddonsFrom("behavior_packs");
@@ -963,7 +1006,7 @@ void ServerNetworkHandler::tick() {
     _tickSleep();
 
     const int autoSaveInterval = mProperties.getAutoSaveInterval();
-    if (autoSaveInterval > 0 && mCurrentTick % autoSaveInterval == 0)
+    if (mAutoSaveEnabled && autoSaveInterval > 0 && mCurrentTick % autoSaveInterval == 0)
         autoSave();
     mProfiler.beginTick(mCurrentTick);
 
@@ -1500,6 +1543,11 @@ void ServerNetworkHandler::saveAllActors() {
             saveBlockActorsForChunk(*level, chunkX, chunkZ, false);
         }
     }
+}
+
+void ServerNetworkHandler::setMaxPlayers(int maxPlayers) {
+    mMaxPlayers = maxPlayers;
+    mAnnouncement.mMaxPlayers = maxPlayers;
 }
 
 void ServerNetworkHandler::autoSave() {
@@ -2558,6 +2606,26 @@ void ServerNetworkHandler::broadcastWorldTime() {
         if (entry.second.isSpawned())
             mNetworkHandler->send(entry.first, packet, mCodecContext);
     }
+}
+
+bool ServerNetworkHandler::changeGameRule(const std::string &name, const std::string &value) {
+    GameRules &rules = mLevel.getGameRules();
+    if (!rules.setFromString(name, value))
+        return false;
+
+    const GameRules::Rule *rule = rules.find(name);
+    GameRulesChangedPacket changed;
+    changed.mGameRules.push_back(rules.toChangedNetwork(*rule));
+    mNetworkHandler->sendToAll(changed, mCodecContext);
+
+    mLevel.saveGameRules();
+    return true;
+}
+
+void ServerNetworkHandler::setDefaultGameType(GameType gameType) {
+    static const char *const NAMES[] = {"survival", "creative", "adventure"};
+    const int index = (int) gameType;
+    mProperties.setProperty("gamemode", index >= 0 && index < 3 ? NAMES[index] : "spectator");
 }
 
 void ServerNetworkHandler::sendPacketTo(const NetworkIdentifier &id, const Packet &packet) {

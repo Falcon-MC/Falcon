@@ -22,3 +22,6 @@ falcon.disconnect.kicked=Te han expulsado del mundo.
 falcon.disconnect.banned=El anfitrión te ha prohibido la entrada.
 falcon.disconnect.bannedReason=El anfitrión te ha prohibido la entrada. Motivo: %1$s
 falcon.disconnect.flyingDisabled=No se permite volar en este servidor
+
+falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (máximo %3$s)
+falcon.commands.status.players=Jugadores conectados: %1$s/%2$s

@@ -22,3 +22,6 @@ falcon.disconnect.kicked=Вас выгнали из мира.
 falcon.disconnect.banned=Вас заблокировал организатор.
 falcon.disconnect.bannedReason=Вас заблокировал организатор. Причина: %1$s
 falcon.disconnect.flyingDisabled=Полеты на этом сервере запрещены
+
+falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (пик %3$s)
+falcon.commands.status.players=Игроков в сети: %1$s/%2$s

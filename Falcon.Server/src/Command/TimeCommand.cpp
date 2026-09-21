@@ -104,8 +104,7 @@ bool TimeCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
 
     if (operation == "start" || operation == "stop") {
         const bool running = operation == "start";
-        mHandler.getLevel().getGameRules().setFromString("dodaylightcycle", running ? "true" : "false");
-        mHandler.getLevel().saveGameRules();
+        mHandler.changeGameRule("dodaylightcycle", running ? "true" : "false");
         sender.sendTranslation("commands.gamerule.success", {"dodaylightcycle", running ? "true" : "false"});
         return true;
     }

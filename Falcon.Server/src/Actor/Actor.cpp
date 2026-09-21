@@ -211,6 +211,47 @@ void Actor::setExhaustion(float exhaustion) {
     mAttributes.setClamped(ATTRIBUTE_EXHAUSTION, exhaustion);
 }
 
+bool Actor::hasTag(const std::string &tag) const {
+    return std::find(mTags.begin(), mTags.end(), tag) != mTags.end();
+}
+
+bool Actor::addTag(const std::string &tag) {
+    if (tag.empty() || hasTag(tag))
+        return false;
+
+    mTags.push_back(tag);
+    return true;
+}
+
+bool Actor::removeTag(const std::string &tag) {
+    const auto found = std::find(mTags.begin(), mTags.end(), tag);
+    if (found == mTags.end())
+        return false;
+
+    mTags.erase(found);
+    return true;
+}
+
+void Actor::saveTags(Tag &data) const {
+    Tag tags = Tag::ofList(Tag::Type::String);
+    for (const std::string &tag: mTags)
+        tags.addToList(Tag::ofString(tag));
+    data.put("Tags", tags);
+}
+
+void Actor::loadTags(const Tag &data) {
+    mTags.clear();
+
+    const Tag *tags = data.get("Tags");
+    if (tags == nullptr || tags->getType() != Tag::Type::List)
+        return;
+
+    for (const Tag &tag: tags->getList()) {
+        if (tag.getType() == Tag::Type::String)
+            addTag(tag.asString());
+    }
+}
+
 int64_t Actor::getVisibleEffectsData() const {
     std::map<int32_t, bool> visible;
     for (const auto &entry: mEffects.getAll()) {

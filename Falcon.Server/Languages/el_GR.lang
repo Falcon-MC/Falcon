@@ -22,3 +22,6 @@ falcon.disconnect.kicked=Αποβλήθηκες από τον κόσμο.
 falcon.disconnect.banned=Έχεις αποκλειστεί από τον φρουρό.
 falcon.disconnect.bannedReason=Έχεις αποκλειστεί από τον φρουρό. Αιτία: %1$s
 falcon.disconnect.flyingDisabled=Η πτήση δεν επιτρέπεται σε αυτόν τον διακομιστή
+
+falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (μέγιστο %3$s)
+falcon.commands.status.players=Συνδεδεμένοι παίκτες: %1$s/%2$s

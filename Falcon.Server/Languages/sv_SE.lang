@@ -22,3 +22,6 @@ falcon.disconnect.kicked=Du har blivit utsparkad från världen.
 falcon.disconnect.banned=Du är blockerad av värden.
 falcon.disconnect.bannedReason=Du är blockerad av värden. Orsak: %1$s
 falcon.disconnect.flyingDisabled=Det är inte tillåtet att flyga på den här servern
+
+falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (topp %3$s)
+falcon.commands.status.players=Spelare online: %1$s/%2$s

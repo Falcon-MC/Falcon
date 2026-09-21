@@ -22,3 +22,6 @@ falcon.disconnect.kicked=세계에서 추방됐습니다.
 falcon.disconnect.banned=호스트에 의해 차단되었습니다.
 falcon.disconnect.bannedReason=호스트에 의해 차단되었습니다. 사유: %1$s
 falcon.disconnect.flyingDisabled=이 서버에서는 비행이 허용되지 않습니다
+
+falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s(최대 %3$s)
+falcon.commands.status.players=접속 중인 플레이어: %1$s/%2$s

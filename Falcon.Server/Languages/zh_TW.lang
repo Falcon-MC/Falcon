@@ -22,3 +22,6 @@ falcon.disconnect.kicked=你已被踢出世界。
 falcon.disconnect.banned=你已被主持人封鎖。
 falcon.disconnect.bannedReason=你已被主持人封鎖。原因：%1$s
 falcon.disconnect.flyingDisabled=此伺服器不允許飛行
+
+falcon.commands.status.performance=TPS：%1$s，MSPT：%2$s（峰值 %3$s）
+falcon.commands.status.players=線上玩家：%1$s/%2$s

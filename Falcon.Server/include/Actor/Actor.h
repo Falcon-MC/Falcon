@@ -5,6 +5,7 @@
 #include "Actor/MobEffect.h"
 #include "Actor/ExperienceManager.h"
 #include "Core/Math/Vector3f.h"
+#include "Core/NBT/Tag.h"
 #include "Level/Dimension.h"
 #include "Protocol/Types/ItemStack.h"
 
@@ -217,6 +218,18 @@ public:
 
     const MobEffectInstance *getEffect(MobEffectId id) const { return mEffects.get(id); }
 
+    const std::vector<std::string> &getTags() const { return mTags; }
+
+    bool hasTag(const std::string &tag) const;
+
+    bool addTag(const std::string &tag);
+
+    bool removeTag(const std::string &tag);
+
+    void saveTags(Tag &data) const;
+
+    void loadTags(const Tag &data);
+
     int64_t getVisibleEffectsData() const;
 
     bool refreshVisibleEffects();
@@ -253,6 +266,7 @@ protected:
     int32_t mPortalTicks = 0;
     int64_t mLastPortalTick = -1;
     int64_t mSentVisibleEffects = 0;
+    std::vector<std::string> mTags;
     Vector3f mRotation;
     Vector3f mMotion;
     ActorFlags mFlags;

@@ -30,6 +30,28 @@ CommandParamData Command::makePlayerParameter(const std::string &name) {
     return parameter;
 }
 
+CommandParamData Command::makeTypedParameter(const std::string &name, CommandParamType type, bool optional) {
+    CommandParamData parameter;
+    parameter.mName = name;
+    parameter.mHasType = true;
+    parameter.mType = type;
+    parameter.mOptional = optional;
+
+    return parameter;
+}
+
+CommandParamData Command::makeEnumParameter(const std::string &name, const std::string &enumName,
+                                            const std::vector<std::string> &values, bool optional) {
+    CommandParamData parameter;
+    parameter.mName = name;
+    parameter.mHasEnumData = true;
+    parameter.mEnumData.mName = enumName;
+    parameter.mEnumData.mValues = values;
+    parameter.mOptional = optional;
+
+    return parameter;
+}
+
 bool Command::parseCoordinate(const std::string &value, float origin, float &out) {
     const bool relative = !value.empty() && value[0] == '~';
     const std::string number = relative ? value.substr(1) : value;

@@ -185,6 +185,8 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     }
 
     const BanEntry *ban = owner.getBanList().find(player.getName());
+    if (ban == nullptr)
+        ban = owner.getIpBanList().find(id.getAddress());
     if (ban != nullptr) {
         LOG_INFO(LogAreaID::Server, "Player %s is banned", player.getName().c_str());
         const Localization &localization = Localization::getInstance();

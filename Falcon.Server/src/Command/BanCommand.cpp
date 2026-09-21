@@ -32,7 +32,8 @@ bool BanCommand::execute(CommandOrigin &sender, const std::vector<std::string> &
     ServerPlayer *target = mHandler.getPlayerByName(name);
     if (target != nullptr) {
         mHandler._disconnect(target->getNetworkIdentifier(),
-                             reason.empty() ? "Banned by admin" : "Banned by admin. Reason: " + reason);
+                             reason.empty() ? target->localize("falcon.disconnect.banned")
+                                            : target->localize("falcon.disconnect.bannedReason", {reason}));
     }
 
     sender.sendTranslation("commands.ban.success", {target != nullptr ? target->getName() : name});

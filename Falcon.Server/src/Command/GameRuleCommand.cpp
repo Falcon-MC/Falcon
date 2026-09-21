@@ -2,7 +2,6 @@
 
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
-#include "Protocol/Packets/GameRulesChangedPacket.h"
 
 namespace {
     std::string valueOf(const GameRules::Rule &rule) {
@@ -65,18 +64,12 @@ bool GameRuleCommand::execute(CommandOrigin &sender, const std::vector<std::stri
         return true;
     }
 
-    if (!rules.setFromString(arguments[0], arguments[1])) {
+    if (!mHandler.changeGameRule(arguments[0], arguments[1])) {
         sender.sendTranslation("commands.generic.parameter.invalid", {arguments[1]});
         return false;
     }
 
     rule = rules.find(arguments[0]);
-
-    GameRulesChangedPacket changed;
-    changed.mGameRules.push_back(rules.toChangedNetwork(*rule));
-    mHandler.getNetworkHandler().sendToAll(changed, mHandler.getCodecContext());
-
-    mHandler.getLevel().saveGameRules();
     sender.sendTranslation("commands.gamerule.success", {rule->mName, valueOf(*rule)});
     return true;
 }

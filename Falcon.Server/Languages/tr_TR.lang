@@ -22,3 +22,6 @@ falcon.disconnect.kicked=Bu dünyadan atıldınız.
 falcon.disconnect.banned=Sunucu tarafından yasaklandınız.
 falcon.disconnect.bannedReason=Sunucu tarafından yasaklandınız. Sebep: %1$s
 falcon.disconnect.flyingDisabled=Bu sunucuda uçmaya izin verilmiyor
+
+falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (en yüksek %3$s)
+falcon.commands.status.players=Çevrim içi oyuncular: %1$s/%2$s

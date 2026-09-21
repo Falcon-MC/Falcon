@@ -22,3 +22,6 @@ falcon.disconnect.kicked=ワールドから追放されました。
 falcon.disconnect.banned=ホストにより、接続を禁止されました。
 falcon.disconnect.bannedReason=ホストにより、接続を禁止されました。理由: %1$s
 falcon.disconnect.flyingDisabled=このサーバーでは飛行が許可されていません
+
+falcon.commands.status.performance=TPS: %1$s、MSPT: %2$s (ピーク %3$s)
+falcon.commands.status.players=オンラインのプレイヤー: %1$s/%2$s
