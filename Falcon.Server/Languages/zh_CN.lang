@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=性能分析器已停止，报告已写入 %1$s
 falcon.commands.profiler.writeFailed=无法写入性能分析报告：%1$s
 
 falcon.disconnect.kicked=你已被从世界中踢出。
+falcon.disconnect.disconnected=正在从服务器断开连接
 falcon.disconnect.banned=你被主机封禁了。
 falcon.disconnect.bannedReason=你被主机封禁了。原因：%1$s
 falcon.disconnect.flyingDisabled=此服务器不允许飞行

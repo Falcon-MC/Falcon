@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=プロファイラーを停止しました。�
 falcon.commands.profiler.writeFailed=プロファイラーのレポートを書き込めませんでした: %1$s
 
 falcon.disconnect.kicked=ワールドから追放されました。
+falcon.disconnect.disconnected=サーバーとの接続が切断されました
 falcon.disconnect.banned=ホストにより、接続を禁止されました。
 falcon.disconnect.bannedReason=ホストにより、接続を禁止されました。理由: %1$s
 falcon.disconnect.flyingDisabled=このサーバーでは飛行が許可されていません

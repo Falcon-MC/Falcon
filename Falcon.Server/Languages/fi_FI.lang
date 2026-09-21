@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=Profilointityökalu pysäytetty, raportti talle
 falcon.commands.profiler.writeFailed=Profilointiraporttia ei voitu tallentaa: %1$s
 
 falcon.disconnect.kicked=Sinut on potkittu maailmasta.
+falcon.disconnect.disconnected=Yhteys palvelimeen katkaistu
 falcon.disconnect.banned=Isäntä on estänyt sinut.
 falcon.disconnect.bannedReason=Isäntä on estänyt sinut. Syy: %1$s
 falcon.disconnect.flyingDisabled=Lentäminen ei ole sallittua tällä palvelimella

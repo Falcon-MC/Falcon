@@ -944,7 +944,7 @@ void ServerNetworkHandler::stopServerListening() {
             if (!player.getName().empty())
                 _savePlayerData(player);
 
-            _disconnect(entry.first, "disconnectionScreen.disconnected");
+            _disconnect(entry.first, player.localize("falcon.disconnect.disconnected"));
         }
 
         mPlayers.clear();

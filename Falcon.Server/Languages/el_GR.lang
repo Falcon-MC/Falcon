@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=Το εργαλείο προφίλ σταμάτ
 falcon.commands.profiler.writeFailed=Δεν ήταν δυνατή η εγγραφή της αναφοράς: %1$s
 
 falcon.disconnect.kicked=Αποβλήθηκες από τον κόσμο.
+falcon.disconnect.disconnected=Αποσύνδεση από το διακομιστή
 falcon.disconnect.banned=Έχεις αποκλειστεί από τον φρουρό.
 falcon.disconnect.bannedReason=Έχεις αποκλειστεί από τον φρουρό. Αιτία: %1$s
 falcon.disconnect.flyingDisabled=Η πτήση δεν επιτρέπεται σε αυτόν τον διακομιστή

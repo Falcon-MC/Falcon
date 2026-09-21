@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=프로파일러를 중지했습니다. 보고�
 falcon.commands.profiler.writeFailed=프로파일러 보고서를 작성하지 못했습니다: %1$s
 
 falcon.disconnect.kicked=세계에서 추방됐습니다.
+falcon.disconnect.disconnected=서버와의 연결이 끊겼습니다
 falcon.disconnect.banned=호스트에 의해 차단되었습니다.
 falcon.disconnect.bannedReason=호스트에 의해 차단되었습니다. 사유: %1$s
 falcon.disconnect.flyingDisabled=이 서버에서는 비행이 허용되지 않습니다

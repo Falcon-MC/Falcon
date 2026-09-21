@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=Профилаторът е спрян, отч�
 falcon.commands.profiler.writeFailed=Отчетът на профилатора не можа да бъде записан: %1$s
 
 falcon.disconnect.kicked=Бяхте изгонени от света.
+falcon.disconnect.disconnected=Прекъсната връзка със сървъра
 falcon.disconnect.banned=Домакинът ви блокира.
 falcon.disconnect.bannedReason=Домакинът ви блокира. Причина: %1$s
 falcon.disconnect.flyingDisabled=Летенето не е разрешено на този сървър

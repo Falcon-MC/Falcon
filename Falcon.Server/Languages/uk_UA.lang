@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=Профілювальник зупинено, 
 falcon.commands.profiler.writeFailed=Не вдалося записати звіт профілювальника: %1$s
 
 falcon.disconnect.kicked=Хост виключив вас із цього світу.
+falcon.disconnect.disconnected=Відключено від сервера
 falcon.disconnect.banned=Хост вас забанив.
 falcon.disconnect.bannedReason=Хост вас забанив. Причина: %1$s
 falcon.disconnect.flyingDisabled=Польоти на цьому сервері заборонено

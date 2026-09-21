@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=Профилировщик остановлен
 falcon.commands.profiler.writeFailed=Не удалось записать отчет профилировщика: %1$s
 
 falcon.disconnect.kicked=Вас выгнали из мира.
+falcon.disconnect.disconnected=Разорвано соединение с сервером
 falcon.disconnect.banned=Вас заблокировал организатор.
 falcon.disconnect.bannedReason=Вас заблокировал организатор. Причина: %1$s
 falcon.disconnect.flyingDisabled=Полеты на этом сервере запрещены

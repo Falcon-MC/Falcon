@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=Profiler arrestato, rapporto salvato in %1$s
 falcon.commands.profiler.writeFailed=Impossibile scrivere il rapporto del profiler: %1$s
 
 falcon.disconnect.kicked=Hai subito un'espulsione dal mondo.
+falcon.disconnect.disconnected=Disconnesso dal server
 falcon.disconnect.banned=Hai ricevuto un ban dall'host.
 falcon.disconnect.bannedReason=Hai ricevuto un ban dall'host. Motivo: %1$s
 falcon.disconnect.flyingDisabled=Il volo non è consentito su questo server

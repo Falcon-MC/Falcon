@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=Profiler zastaven, zpráva uložena do %1$s
 falcon.commands.profiler.writeFailed=Zprávu profileru nelze uložit: %1$s
 
 falcon.disconnect.kicked=Byli jste vyhozeni ze světa.
+falcon.disconnect.disconnected=Odpojeno od serveru
 falcon.disconnect.banned=Byl vám zamezen přístup hostitelem.
 falcon.disconnect.bannedReason=Byl vám zamezen přístup hostitelem. Důvod: %1$s
 falcon.disconnect.flyingDisabled=Létání není na tomto serveru povoleno

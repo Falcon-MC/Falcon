@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=Profileraren har stoppats, rapporten sparades i
 falcon.commands.profiler.writeFailed=Kunde inte spara profileringsrapporten: %1$s
 
 falcon.disconnect.kicked=Du har blivit utsparkad från världen.
+falcon.disconnect.disconnected=Nedkopplad från servern
 falcon.disconnect.banned=Du är blockerad av värden.
 falcon.disconnect.bannedReason=Du är blockerad av värden. Orsak: %1$s
 falcon.disconnect.flyingDisabled=Det är inte tillåtet att flyga på den här servern

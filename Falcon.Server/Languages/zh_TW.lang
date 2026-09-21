@@ -19,6 +19,7 @@ falcon.commands.profiler.stopped=效能分析工具已停止，報告已寫入 %
 falcon.commands.profiler.writeFailed=無法寫入效能分析報告：%1$s
 
 falcon.disconnect.kicked=你已被踢出世界。
+falcon.disconnect.disconnected=與伺服器失去連線
 falcon.disconnect.banned=你已被主持人封鎖。
 falcon.disconnect.bannedReason=你已被主持人封鎖。原因：%1$s
 falcon.disconnect.flyingDisabled=此伺服器不允許飛行
