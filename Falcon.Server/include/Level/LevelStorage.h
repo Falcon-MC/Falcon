@@ -44,6 +44,8 @@ public:
 
     void close();
 
+    void compact();
+
     bool isOpen() const { return mDb != nullptr; }
 
     bool saveChunk(const LevelChunk &chunk);

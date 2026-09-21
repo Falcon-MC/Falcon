@@ -156,6 +156,13 @@ void LevelStorage::close() {
     mDb.reset();
 }
 
+void LevelStorage::compact() {
+    if (mDb == nullptr)
+        return;
+
+    mDb->CompactRange(nullptr, nullptr);
+}
+
 bool LevelStorage::saveChunk(const LevelChunk &chunk) {
     if (mDb == nullptr)
         return false;

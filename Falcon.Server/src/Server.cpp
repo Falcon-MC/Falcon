@@ -7,6 +7,7 @@
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Core/Debug/FileLogEndPoint.h"
 #include "Block/BlockPaletteRegistry.h"
+#include "Level/AutoCompaction.h"
 #include "Level/Generator/Biome/BiomeChunkGenDataRegistry.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Network/TransportFactory.h"
@@ -267,6 +268,8 @@ void startServer(const ServerSettings &settings) {
     std::signal(SIGINT, requestShutdown);
     std::signal(SIGTERM, requestShutdown);
 
+    AutoCompaction::start(networkHandler.getLevel());
+
     const std::chrono::nanoseconds tickInterval(50000000);
     const std::chrono::nanoseconds catchupResetInterval(1000000000);
     std::chrono::steady_clock::time_point nextTick = std::chrono::steady_clock::now();
@@ -284,6 +287,7 @@ void startServer(const ServerSettings &settings) {
     }
 
     LOG_INFO(LogAreaID::Server, "Shutting down...");
+    AutoCompaction::stop();
     networkHandler.stopServerListening();
     BedrockLog::shutdown();
 }

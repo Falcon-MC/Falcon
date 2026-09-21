@@ -126,6 +126,8 @@ public:
 
     void closeStorage();
 
+    void compactStorage() { mStorage.compact(); }
+
     bool isStorageOpen() const { return mStorage.isOpen(); }
 
     void saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
