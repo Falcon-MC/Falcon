@@ -259,6 +259,8 @@ public:
 
     void damagePlayerHeldItem(ServerPlayer &player, int32_t amount);
 
+    ItemStack createItemStack(const std::string &identifier, int32_t count);
+
     int32_t repairWithMending(ServerPlayer &player, int32_t xp);
 
     void setContainerSlot(ServerPlayer &player, int32_t slot, const std::string &typeId, int32_t amount,

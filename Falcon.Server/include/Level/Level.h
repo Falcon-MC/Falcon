@@ -146,6 +146,14 @@ public:
 
     static constexpr int32_t UNSET_SPAWN_Y = 32767;
 
+    int32_t getMoonPhase() const;
+
+    float getRegionalDifficulty(int32_t difficulty) const;
+
+    bool isBonusChestPending() const { return mBonusChestEnabled && !mBonusChestSpawned; }
+
+    void markBonusChestSpawned() { mBonusChestSpawned = true; }
+
     bool isStandable(int32_t x, int32_t y, int32_t z);
 
     Vector3i findSafeSpawn(const Vector3i &around);
@@ -317,6 +325,8 @@ private:
     Vector3i mSpawnPosition;
     Vector3i mDefaultSpawnPosition;
     bool mHasDefaultSpawnPosition = false;
+    bool mBonusChestEnabled = false;
+    bool mBonusChestSpawned = false;
     bool mHasSpawnPosition = false;
     BlockUpdateScheduler mBlockUpdates;
     int mUpdateDepth = 0;

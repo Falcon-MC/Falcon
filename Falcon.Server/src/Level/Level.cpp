@@ -100,6 +100,9 @@ bool Level::openStorage(const std::string &worldsDirectory) {
                 mGenerator = DimensionFactory::createGenerator(mDimension, mSeed);
             }
 
+            mBonusChestEnabled = levelDat.getByte("bonusChestEnabled", 0) != 0;
+            mBonusChestSpawned = levelDat.getByte("bonusChestSpawned", 0) != 0;
+
             if (levelDat.contains("SpawnY") && levelDat.getInt("SpawnY") != UNSET_SPAWN_Y)
                 setSpawnPosition(Vector3i(levelDat.getInt("SpawnX"), levelDat.getInt("SpawnY"),
                                           levelDat.getInt("SpawnZ")));
@@ -116,7 +119,8 @@ bool Level::openStorage(const std::string &worldsDirectory) {
 
 void Level::saveLevelDat() {
     const Vector3i spawn = mHasSpawnPosition ? mSpawnPosition : Vector3i(0, UNSET_SPAWN_Y, 0);
-    mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime);
+    mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime, mBonusChestEnabled,
+                           mBonusChestSpawned);
 }
 
 bool Level::attachStorage(Level &overworld) {
@@ -219,6 +223,30 @@ void Level::setSpawnPosition(const Vector3i &position) {
 Vector3f Level::getSpawnPositionForPlayer() {
     const Vector3i spawn = findSafeSpawn(getSpawnPosition());
     return Vector3f((float) spawn.x + 0.5f, (float) spawn.y, (float) spawn.z + 0.5f);
+}
+
+int32_t Level::getMoonPhase() const {
+    return (int32_t) (((mTime / 24000) % 8 + 8) % 8);
+}
+
+float Level::getRegionalDifficulty(int32_t difficulty) const {
+    static const float MOON_BRIGHTNESS[] = {1.0f, 0.75f, 0.5f, 0.25f, 0.0f, 0.25f, 0.5f, 0.75f};
+
+    if (difficulty <= 0)
+        return 0.0f;
+
+    const float timeFactor = std::min(std::max((float) mTime - 0.5f, 0.0f) * 0.25f, 0.25f);
+    const float moonFactor = std::min(MOON_BRIGHTNESS[getMoonPhase()] * 0.25f, timeFactor);
+
+    float bonus = moonFactor + (difficulty == 3 ? 0.5f : 0.375f);
+    if (difficulty == 1)
+        bonus *= 0.5f;
+
+    const float total = (timeFactor + 0.75f + bonus) * (float) difficulty;
+    if (total < 2.0f)
+        return 0.0f;
+
+    return total <= 4.0f ? (total - 2.0f) * 0.5f : 1.0f;
 }
 
 bool Level::isStandable(int32_t x, int32_t y, int32_t z) {

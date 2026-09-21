@@ -574,7 +574,8 @@ bool LevelStorage::loadGameRules(Tag &rules) {
 }
 
 void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ,
-                                 int32_t gameType, int32_t difficulty, int64_t seed, int64_t time) const {
+                                 int32_t gameType, int32_t difficulty, int64_t seed, int64_t time,
+                                 bool bonusChestEnabled, bool bonusChestSpawned) const {
     if (mPath.empty())
         return;
 
@@ -592,6 +593,8 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
     data.putInt("StorageVersion", 10);
     data.putInt("NetworkVersion", 2193);
     data.putByte("commandsEnabled", 1);
+    data.putByte("bonusChestEnabled", bonusChestEnabled ? 1 : 0);
+    data.putByte("bonusChestSpawned", bonusChestSpawned ? 1 : 0);
     data.putInt("limitedWorldOriginX", spawnX);
     data.putInt("limitedWorldOriginY", spawnY);
     data.putInt("limitedWorldOriginZ", spawnZ);

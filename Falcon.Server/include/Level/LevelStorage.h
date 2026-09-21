@@ -75,7 +75,8 @@ public:
     bool loadGameRules(Tag &rules);
 
     void writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ,
-                       int32_t gameType, int32_t difficulty, int64_t seed, int64_t time) const;
+                       int32_t gameType, int32_t difficulty, int64_t seed, int64_t time, bool bonusChestEnabled,
+                       bool bonusChestSpawned) const;
 
     bool readLevelDat(Tag &out) const;
 

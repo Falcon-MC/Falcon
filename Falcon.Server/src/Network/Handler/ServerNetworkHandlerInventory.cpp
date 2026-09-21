@@ -23,23 +23,32 @@ void ServerNetworkHandler::startPlayerItemCooldown(ServerPlayer &player, const s
     mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
 }
 
+ItemStack ServerNetworkHandler::createItemStack(const std::string &identifier, int32_t count) {
+    ItemStack stack;
+    if (identifier.empty())
+        return stack;
+
+    Item item;
+    if (!StringToItemParser::getInstance().parse(identifier, item))
+        return stack;
+
+    stack.mDefinition = mItemDefinitions.getDefinition(item.getIdentifier());
+    stack.mBlockDefinition = mBlockDefinitions.getDefinition(item.getIdentifier());
+    stack.mCount = count < 1 ? 1 : count;
+    return stack;
+}
+
 void ServerNetworkHandler::setPlayerEquipment(ServerPlayer &player, const std::string &slot,
                                               const std::string &typeId, int32_t amount, int32_t damage,
                                               const Tag &dynamicProperties) {
-    ItemStack stack;
-    if (!typeId.empty()) {
-        Item item;
-        if (StringToItemParser::getInstance().parse(typeId, item)) {
-            stack.mDefinition = mItemDefinitions.getDefinition(item.getIdentifier());
-            stack.mBlockDefinition = mBlockDefinitions.getDefinition(item.getIdentifier());
-            stack.mCount = amount < 1 ? 1 : amount;
-            stack.mDamage = damage < 0 ? 0 : damage;
+    ItemStack stack = createItemStack(typeId, amount);
+    if (!stack.isAir()) {
+        stack.mDamage = damage < 0 ? 0 : damage;
 
-            if (!dynamicProperties.isEmpty()) {
-                if (!stack.mTag.isCompound())
-                    stack.mTag = Tag::ofCompound();
-                stack.mTag.put("DynamicProperties", dynamicProperties);
-            }
+        if (!dynamicProperties.isEmpty()) {
+            if (!stack.mTag.isCompound())
+                stack.mTag = Tag::ofCompound();
+            stack.mTag.put("DynamicProperties", dynamicProperties);
         }
     }
 
@@ -153,19 +162,11 @@ int32_t ServerNetworkHandler::repairWithMending(ServerPlayer &player, int32_t xp
 
 void ServerNetworkHandler::setContainerSlot(ServerPlayer &player, int32_t slot, const std::string &typeId,
                                             int32_t amount, const Tag &dynamicProperties) {
-    ItemStack stack;
-    if (!typeId.empty()) {
-        Item item;
-        if (StringToItemParser::getInstance().parse(typeId, item)) {
-            stack.mDefinition = mItemDefinitions.getDefinition(item.getIdentifier());
-            stack.mBlockDefinition = mBlockDefinitions.getDefinition(item.getIdentifier());
-            stack.mCount = amount < 1 ? 1 : amount;
-            if (!dynamicProperties.isEmpty()) {
-                if (!stack.mTag.isCompound())
-                    stack.mTag = Tag::ofCompound();
-                stack.mTag.put("DynamicProperties", dynamicProperties);
-            }
-        }
+    ItemStack stack = createItemStack(typeId, amount);
+    if (!stack.isAir() && !dynamicProperties.isEmpty()) {
+        if (!stack.mTag.isCompound())
+            stack.mTag = Tag::ofCompound();
+        stack.mTag.put("DynamicProperties", dynamicProperties);
     }
 
     PlayerInventory &inventory = player.getInventory();

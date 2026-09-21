@@ -47,6 +47,7 @@
 #include "Protocol/Packets/SetTimePacket.h"
 #include "Protocol/Packets/UpdateAbilitiesPacket.h"
 #include "Protocol/Packets/UpdateAttributesPacket.h"
+#include "Level/BonusChest.h"
 #include "Server/Localization.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ResourcePackManager.h"
@@ -1043,6 +1044,7 @@ void LoginHandler::removeFromPlayerList(ServerNetworkHandler &owner, ServerPlaye
 void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner, ServerPlayer &player) {
     player.setLoginState(ServerPlayer::LoginState::Spawned);
     player.grantSpawnInvulnerability();
+    BonusChest::placeIfPending(owner, owner.getLevel());
     LOG_INFO(LogAreaID::Server, "Player %s spawned", player.getName().c_str());
 
     player.setEffectsNetworkReady(true);

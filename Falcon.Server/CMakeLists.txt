@@ -13,6 +13,11 @@ falcon_bedrock_data_file(biome_definitions.nbt FALCON_BIOME_DEFINITIONS_NBT)
 falcon_bedrock_data_file(block_palette.nbt FALCON_BLOCK_PALETTE_NBT)
 falcon_bedrock_data_file(voxel_shapes.json FALCON_VOXEL_SHAPES_JSON)
 falcon_bedrock_data_file(creative_items.json FALCON_CREATIVE_ITEMS_JSON)
+falcon_bedrock_data_embed_text(FILE loot_tables.json NAMESPACE FalconLootData SYMBOL kLootTablesJson
+        DELIMITER falconloot OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/LootTablesJson.h")
+falcon_bedrock_data_embed_text(FILE r16_to_current_item_map.json NAMESPACE FalconLegacyItemData
+        SYMBOL kLegacyItemMapJson DELIMITER falconlegacy
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/LegacyItemMapJson.h")
 
 file(READ "${FALCON_RECIPES_JSON}" FALCON_RECIPES_JSON_CONTENT)
 file(READ "${FALCON_ITEM_TAGS_JSON}" FALCON_ITEM_TAGS_JSON_CONTENT)

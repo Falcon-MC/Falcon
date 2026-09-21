@@ -97,12 +97,13 @@ namespace {
         return (left.mIncompatibleGroups & right.mIncompatibleGroups) == 0u;
     }
 
-    std::vector<EnchantmentData> availableEnchantments(int32_t power, const std::string &identifier) {
+    std::vector<EnchantmentData> availableEnchantments(int32_t power, const std::string &identifier,
+                                                       bool allowTreasure) {
         std::vector<EnchantmentData> list;
 
         for (size_t index = 0; index < EnchantmentTable::getCount(); index++) {
             const EnchantmentData &enchantment = EnchantmentTable::at(index);
-            if (EnchantmentHelper::isTreasure(enchantment.mId))
+            if (!allowTreasure && EnchantmentHelper::isTreasure(enchantment.mId))
                 continue;
 
             if (!ItemEnchantments::canApply(identifier, enchantment))
@@ -153,7 +154,7 @@ namespace {
     }
 
     std::vector<EnchantmentInstance> rollEnchantments(SeededRandom &random, const std::string &identifier,
-                                                      int32_t requiredLevel) {
+                                                      int32_t requiredLevel, bool allowTreasure) {
         int32_t power = requiredLevel;
         const int32_t enchantability = EnchantmentHelper::getEnchantability(identifier);
         const int32_t quarter = enchantability >> 2;
@@ -164,7 +165,7 @@ namespace {
         if (power < 1)
             power = 1;
 
-        std::vector<EnchantmentData> pool = availableEnchantments(power, identifier);
+        std::vector<EnchantmentData> pool = availableEnchantments(power, identifier, allowTreasure);
         std::vector<EnchantmentInstance> result;
 
         if (!pool.empty()) {
@@ -443,7 +444,7 @@ std::vector<EnchantOptionData> EnchantmentHelper::getEnchantOptions(Level &level
 
     for (int32_t entry = 0; entry < 3; entry++) {
         const int32_t requiredLevel = levels[entry];
-        const std::vector<EnchantmentInstance> rolled = rollEnchantments(random, identifier, requiredLevel);
+        const std::vector<EnchantmentInstance> rolled = rollEnchantments(random, identifier, requiredLevel, false);
 
         EnchantOptionData option;
         option.mCost = requiredLevel;
@@ -468,6 +469,32 @@ std::vector<EnchantOptionData> EnchantmentHelper::getEnchantOptions(Level &level
     }
 
     return options;
+}
+
+std::vector<EnchantmentInstance> EnchantmentHelper::enchantWithLevels(const std::string &identifier, int32_t levels,
+                                                                      bool allowTreasure, uint64_t seed) {
+    SeededRandom random(seed);
+    return rollEnchantments(random, identifier, std::max(1, levels), allowTreasure);
+}
+
+std::vector<EnchantmentInstance> EnchantmentHelper::enchantRandomly(const std::string &identifier, bool allowTreasure,
+                                                                    uint64_t seed) {
+    std::vector<const EnchantmentData *> candidates;
+    for (size_t index = 0; index < EnchantmentTable::getCount(); index++) {
+        const EnchantmentData &enchantment = EnchantmentTable::at(index);
+        if (!allowTreasure && isTreasure(enchantment.mId))
+            continue;
+
+        if (identifier == BOOK || ItemEnchantments::canApply(identifier, enchantment))
+            candidates.push_back(&enchantment);
+    }
+
+    if (candidates.empty())
+        return {};
+
+    SeededRandom random(seed);
+    const EnchantmentData *chosen = candidates[(size_t) random.belowExclusive((int32_t) candidates.size())];
+    return {{chosen->mId, random.rangeInclusive(1, std::max(1, chosen->mMaxLevel))}};
 }
 
 bool EnchantmentHelper::takeOption(int32_t enchantNetId, std::vector<EnchantmentInstance> &outEnchantments,
