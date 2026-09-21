@@ -236,6 +236,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         entry.mPackSize = pack.mSize;
         entry.mContentKey = pack.mContentKey;
         entry.mContentId = pack.mUuidString;
+        entry.mCdnUrl = pack.mCdnUrl;
         packs.mResourcePackInfos.push_back(entry);
     }
 

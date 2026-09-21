@@ -555,6 +555,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
 
     mResourcePacks.loadFromDirectory("resource_packs");
     mResourcePacks.loadBundledAddonsFrom("behavior_packs");
+    mResourcePacks.loadCdnConfig("cdn_config.json");
     _registerVanillaDefinitions();
 
     AuthKeyProvider::getInstance().start();

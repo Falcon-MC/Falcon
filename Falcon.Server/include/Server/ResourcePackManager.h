@@ -15,6 +15,7 @@ public:
     std::string mContentKey;
     std::string mData;
     std::string mSha256;
+    std::string mCdnUrl;
     uint64_t mSize = 0;
     std::vector<std::string> mDependencyUuids;
 };
@@ -24,6 +25,8 @@ public:
     void loadFromDirectory(const std::string &directory);
 
     void loadBundledAddonsFrom(const std::string &directory);
+
+    bool loadCdnConfig(const std::string &path);
 
     const std::vector<ResourcePack> &getPacks() const { return mPacks; }
 

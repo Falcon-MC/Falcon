@@ -2,6 +2,7 @@
 
 #include "Core/Archive/ZipArchive.h"
 #include "Core/Debug/BedrockLog.h"
+#include "Core/Json/Json.h"
 #include "Core/Pack/PackDependencies.h"
 
 #include <algorithm>
@@ -398,6 +399,49 @@ void ResourcePackManager::loadFromDirectory(const std::string &directory) {
     }
 
     LOG_TRACE(LogAreaID::Server, "Resource pack manager loaded %zu pack(s)", mPacks.size());
+}
+
+bool ResourcePackManager::loadCdnConfig(const std::string &path) {
+    std::string source;
+    if (!_readWholeFile(path, source))
+        return false;
+
+    const std::unique_ptr<json::Value> root = json::parse(source);
+    const json::Value *entries = root == nullptr ? nullptr : root->get("resource_packs");
+    if (entries == nullptr || !entries->isArray()) {
+        LOG_ERROR(LogAreaID::Server, "Failed to parse CDN config");
+        return false;
+    }
+
+    for (const std::unique_ptr<json::Value> &entry: entries->mArray) {
+        if (!entry->isObject())
+            continue;
+
+        const json::Value *packId = entry->get("pack_id");
+        const json::Value *url = entry->get("url");
+        if (packId == nullptr || url == nullptr || !packId->isString() || !url->isString())
+            continue;
+
+        const json::Value *version = entry->get("version");
+        const std::string wantedVersion = version == nullptr ? std::string() : version->string();
+
+        auto pack = std::find_if(mPacks.begin(), mPacks.end(), [&](const ResourcePack &candidate) {
+            return candidate.mUuidString == packId->mString
+                   && (wantedVersion.empty() || candidate.mVersion == wantedVersion);
+        });
+
+        if (pack == mPacks.end()) {
+            LOG_WARN(LogAreaID::Server, "Mismatch detected between CDN config and required resource packs: %s",
+                     packId->mString.c_str());
+            continue;
+        }
+
+        pack->mCdnUrl = url->mString;
+        LOG_INFO(LogAreaID::Server, "CDN URL for resource pack %s: %s", pack->mName.c_str(),
+                 pack->mCdnUrl.c_str());
+    }
+
+    return true;
 }
 
 const ResourcePack *ResourcePackManager::findById(const std::string &uuid) const {
