@@ -12,6 +12,8 @@ public:
 
     std::vector<CommandOverloadData> getOverloads() const override;
 
+    CommandPermission getRequiredPermission() const override { return CommandPermission::Owner; }
+
 private:
     ServerNetworkHandler &mHandler;
 };

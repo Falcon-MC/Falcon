@@ -18,6 +18,8 @@ public:
 
     std::vector<CommandOverloadData> getOverloads() const override;
 
+    CommandPermission getRequiredPermission() const override { return CommandPermission::Owner; }
+
 private:
     void setAutoSave(CommandOrigin &sender, bool enabled);
 
