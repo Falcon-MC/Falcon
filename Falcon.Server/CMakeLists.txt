@@ -54,7 +54,7 @@ endforeach()
 configure_file(cmake/BlockUpgradeSchemas.h.in "${FALCON_GENERATED_DIR}/BlockUpgradeSchemas.h" @ONLY)
 
 if(NOT FALCON_BUILD_VERSION)
-    set(FALCON_BUILD_VERSION "1.26.50.01")
+    set(FALCON_BUILD_VERSION "1.26.51.01")
 endif()
 if(NOT FALCON_BUILD_ID)
     set(FALCON_BUILD_ID "0")
