@@ -4,7 +4,7 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 
 SeedCommand::SeedCommand(ServerNetworkHandler &handler)
-        : Command("seed", "commands.seed.description", "/seed"), mHandler(handler) {}
+        : Command("seed", "Shows the world seed", "/seed"), mHandler(handler) {}
 
 bool SeedCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     (void) arguments;
