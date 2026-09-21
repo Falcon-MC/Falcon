@@ -4,7 +4,8 @@
 
 class FrostedIceBlock : public Block {
 public:
-    using Block::Block;
+    explicit FrostedIceBlock(const Block &block) : Block(block) {
+    }
 
     static constexpr const char *IDENTIFIER = "minecraft:frosted_ice";
 
