@@ -31,14 +31,32 @@ bool KillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
         targets = mHandler.resolveTargets(sender, arguments[0]);
     }
 
-    if (targets.empty()) {
+    std::vector<ServerActor *> actors;
+    if (!arguments.empty() && arguments[0] == "@e") {
+        for (auto &entry: mHandler.getActors()) {
+            if (!entry.second->isDead())
+                actors.push_back(entry.second.get());
+        }
+    }
+
+    if (targets.empty() && actors.empty()) {
         sender.sendTranslation("commands.generic.noTargetMatch", {});
         return false;
+    }
+
+    for (ServerActor *actor: actors) {
+        actor->kill(mHandler, nullptr, 0);
+        sender.sendTranslation("commands.kill.successful", {actor->getIdentifier()});
     }
 
     for (ServerPlayer *target: targets) {
         if (target->isDead())
             continue;
+
+        if (target->getGameType() == (int32_t) GameType::Creative) {
+            sender.sendTranslation("commands.kill.attemptKillPlayerCreative", {});
+            continue;
+        }
 
         mHandler.killPlayer(*target, "death.attack.generic", {target->getName()});
         sender.sendTranslation("commands.kill.successful", {target->getName()});
