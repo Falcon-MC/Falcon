@@ -538,6 +538,8 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
     packet.mPosition.y += actor.getBaseOffset();
     packet.mMotion = actor.getMotion();
     packet.mRotation = Vector2f(actor.getRotation().x, actor.getRotation().y);
+    packet.mHeadRotation = actor.getRotation().z;
+    packet.mBodyRotation = actor.getRotation().y;
     packet.mProperties = buildActorProperties(actor);
     packet.mAttributes = actor.getAttributes().getAll();
     RideSystem::appendLinks(actor, packet.mActorLinks);

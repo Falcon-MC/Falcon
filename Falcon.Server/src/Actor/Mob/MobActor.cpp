@@ -24,6 +24,23 @@ namespace {
 MobActor::MobActor(uint64_t runtimeId, const std::string &identifier) : ServerActor(runtimeId, identifier) {
 }
 
+void MobActor::tick(ServerNetworkHandler &owner) {
+    tickControls(owner);
+    ServerActor::tick(owner);
+}
+
+void MobActor::tickControls(ServerNetworkHandler &owner) {
+    mBodyControl.tick(*this, mMoveControl, mLookControl);
+    mMoveControl.tick(owner, *this, mJumpControl);
+    mJumpControl.tick(owner, *this);
+    mLookControl.tick(*this);
+
+    if (getFlags().get(ActorFlag::Moving) != mMoveControl.isMoving()) {
+        getFlags().set(ActorFlag::Moving, mMoveControl.isMoving());
+        owner.syncActorFlags(*this);
+    }
+}
+
 float MobActor::resolveMaxHealth(Difficulty difficulty) const {
     (void) difficulty;
     return getDefaultMaxHealth();

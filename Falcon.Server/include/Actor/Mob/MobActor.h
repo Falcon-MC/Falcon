@@ -1,5 +1,9 @@
 #pragma once
 
+#include "Actor/AI/Control/BodyControl.h"
+#include "Actor/AI/Control/JumpControl.h"
+#include "Actor/AI/Control/LookControl.h"
+#include "Actor/AI/Control/MoveControl.h"
 #include "Actor/ActorCategory.h"
 #include "Actor/ActorSize.h"
 #include "Actor/ServerActor.h"
@@ -38,4 +42,27 @@ public:
     static int randomRange(int minimum, int maximum);
 
     void dropLoot(ServerNetworkHandler &owner, Level &level, const ServerPlayer *killer, int32_t lootingLevel) const;
+
+    void tick(ServerNetworkHandler &owner) override;
+
+    MoveControl &getMoveControl() {
+        return mMoveControl;
+    }
+
+    LookControl &getLookControl() {
+        return mLookControl;
+    }
+
+    JumpControl &getJumpControl() {
+        return mJumpControl;
+    }
+
+protected:
+    void tickControls(ServerNetworkHandler &owner);
+
+private:
+    MoveControl mMoveControl;
+    LookControl mLookControl;
+    JumpControl mJumpControl;
+    BodyControl mBodyControl;
 };
