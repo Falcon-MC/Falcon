@@ -8,10 +8,7 @@ PardonCommand::PardonCommand(ServerNetworkHandler &handler)
 std::vector<CommandOverloadData> PardonCommand::getOverloads() const {
     CommandParamData playerParameter;
     playerParameter.mName = "player";
-    playerParameter.mHasEnumData = true;
-    playerParameter.mEnumData.mName = "BannedPlayer";
-    playerParameter.mEnumData.mIsSoft = true;
-    playerParameter.mEnumData.mValues = mHandler.getBanList().getNames();
+    playerParameter.mType = CommandParamType::Target;
 
     CommandOverloadData overload;
     overload.mParameters.push_back(playerParameter);
