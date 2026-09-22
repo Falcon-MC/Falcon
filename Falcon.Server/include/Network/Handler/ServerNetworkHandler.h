@@ -174,7 +174,9 @@ public:
 
     void applyPotionEffects(ServerPlayer &player, int32_t potionId, float durationScale);
 
-    void setProjectilePotionData(int64_t uniqueId, int32_t potionId);
+    void spawnLingeringCloud(Level &level, const Vector3f &position, int32_t potionId);
+
+    void broadcastLevelEvent(Level &level, int32_t eventId, const Vector3f &position, int32_t data);
 
     ServerActor *getActor(int64_t uniqueId);
 
@@ -648,8 +650,6 @@ private:
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
     std::unordered_map<NetworkIdentifier, PacketRateLimiter, NetworkIdentifier::Hasher> mRateLimiters;
-
-    std::unordered_map<int64_t, int32_t> mProjectilePotionId;
 
     struct LingeringCloud {
         int32_t mPotionId;

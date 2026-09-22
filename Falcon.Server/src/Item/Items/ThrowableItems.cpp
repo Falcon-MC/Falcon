@@ -1,5 +1,6 @@
 #include "Item/Items/ThrowableItems.h"
 
+#include "Actor/Projectile/ProjectileActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -111,7 +112,8 @@ bool ThrownPotionItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, 
     if (projectile == nullptr)
         return false;
 
-    owner.setProjectilePotionData(projectile->getUniqueId(), item.mDamage);
+    if (PotionActor *potion = dynamic_cast<PotionActor *>(projectile))
+        potion->setPotionId(item.mDamage);
     owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::THROW, player.getPosition(),
                          "minecraft:player");
 

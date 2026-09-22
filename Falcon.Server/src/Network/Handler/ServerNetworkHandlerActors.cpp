@@ -66,8 +66,6 @@ namespace {
     const float FIREWORK_VERTICAL_ACCELERATION = 0.04f;
     const int32_t FIREWORK_ITEM_DATA_ID = 16;
     const int32_t PROJECTILE_MAX_LIFETIME = 1200;
-    const float WIND_CHARGE_KNOCKBACK_STRENGTH = 0.2f;
-    const float WIND_CHARGE_LIFT = 0.6f;
     const int32_t ACTOR_MAX_DEATH_TICKS = 25;
     const float ACTOR_SUFFOCATION_DAMAGE = 1.0f;
     const int32_t LINGERING_CLOUD_WAIT_TIME = 10;
@@ -248,7 +246,6 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
 
 bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const Vector3f &hitPosition,
                                                  ServerPlayer *hitPlayer) {
-    const std::string identifier = projectile.getIdentifier();
     Level &level = getLevelFor(projectile);
 
     if (dynamic_cast<const ArrowActor *>(&projectile) != nullptr) {
@@ -256,7 +253,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
             return onArrowProjectileHitTarget(projectile, hitPosition, *hitPlayer);
 
         ProjectileData &data = projectile.getProjectileData();
-        const bool isTrident = identifier == "minecraft:thrown_trident";
+        const bool isTrident = dynamic_cast<const ThrownTridentActor *>(&projectile) != nullptr;
         playLevelSound(level, isTrident ? LevelSoundEvent::TRIDENT_HIT_GROUND : LevelSoundEvent::BOW_HIT,
                        hitPosition);
 
@@ -274,176 +271,82 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
     if (thrown != nullptr && thrown->onHit(*this, hitPosition, hitPlayer))
         return true;
 
-    if (identifier == "minecraft:ender_pearl") {
-        const int64_t ownerId = projectile.getOwnerUniqueId();
-        for (auto &entry: mPlayers) {
-            ServerPlayer &shooter = entry.second;
-            if ((int64_t) shooter.getRuntimeId() != ownerId)
-                continue;
+    return thrown != nullptr;
+}
 
-            shooter.teleport(*this, hitPosition, MovePlayerTeleportationCause::Behavior);
-            applyDamage(shooter, 5.0f, "death.fell.accident.generic", {shooter.getName()}, false, false);
-            break;
-        }
-        spawnParticleEffect(level, "minecraft:endermanpop_emitter", hitPosition);
-        return true;
+void ServerNetworkHandler::spawnLingeringCloud(Level &level, const Vector3f &position, int32_t potionId) {
+    ServerActor *cloud = spawnActor(level, "minecraft:area_effect_cloud", position);
+    if (cloud == nullptr)
+        return;
+
+    const float cloudRadius = 3.0f;
+
+    EntityDataMap metadata;
+
+    EntityDataEntry radius;
+    radius.mId = ACTOR_DATA_AREA_EFFECT_CLOUD_RADIUS;
+    radius.mFormat = EntityDataFormat::Float;
+    radius.mFloatValue = cloudRadius;
+    metadata.mEntries.push_back(radius);
+
+    EntityDataEntry particle;
+    particle.mId = ACTOR_DATA_AREA_EFFECT_CLOUD_PARTICLE_ID;
+    particle.mFormat = EntityDataFormat::Int;
+    particle.mIntValue = AREA_EFFECT_CLOUD_POTION_PARTICLE;
+    metadata.mEntries.push_back(particle);
+
+    EntityDataEntry auxValue;
+    auxValue.mId = ACTOR_DATA_POTION_AUX_VALUE;
+    auxValue.mFormat = EntityDataFormat::Short;
+    auxValue.mShortValue = (int16_t) potionId;
+    metadata.mEntries.push_back(auxValue);
+
+    EntityDataEntry color;
+    color.mId = ACTOR_DATA_POTION_COLOR;
+    color.mFormat = EntityDataFormat::Int;
+    color.mIntValue = getPotionColor(potionId);
+    metadata.mEntries.push_back(color);
+
+    EntityDataEntry width;
+    width.mId = ACTOR_DATA_WIDTH;
+    width.mFormat = EntityDataFormat::Float;
+    width.mFloatValue = cloudRadius;
+    metadata.mEntries.push_back(width);
+
+    EntityDataEntry height;
+    height.mId = ACTOR_DATA_HEIGHT;
+    height.mFormat = EntityDataFormat::Float;
+    height.mFloatValue = 0.5f;
+    metadata.mEntries.push_back(height);
+
+    sendActorMetadata(*cloud, metadata);
+
+    LingeringCloud state;
+    state.mPotionId = potionId;
+    state.mAge = 0;
+    state.mWaitTime = LINGERING_CLOUD_WAIT_TIME;
+    state.mDuration = LINGERING_CLOUD_DURATION;
+    state.mNextApply = 0;
+    state.mReapplicationDelay = 0;
+    state.mRadius = cloudRadius;
+    state.mRadiusPerTick = LINGERING_CLOUD_RADIUS_PER_TICK;
+    state.mRadiusOnUse = LINGERING_CLOUD_RADIUS_ON_USE;
+    state.mPosition = position;
+    state.mDimension = cloud->getDimension();
+    mLingeringClouds[cloud->getUniqueId()] = state;
+}
+
+void ServerNetworkHandler::broadcastLevelEvent(Level &level, int32_t eventId, const Vector3f &position,
+                                               int32_t data) {
+    LevelEventPacket event;
+    event.mEventId = eventId;
+    event.mPosition = position;
+    event.mData = data;
+
+    for (auto &entry: mPlayers) {
+        if (entry.second.isSpawned() && entry.second.getDimension() == level.getDimensionType())
+            mNetworkHandler->send(entry.first, event, mCodecContext);
     }
-
-    if (identifier == "minecraft:wind_charge_projectile") {
-        const float burstRadius = 3.5f;
-        for (auto &entry: mPlayers) {
-            ServerPlayer &nearby = entry.second;
-            if (!nearby.isSpawned() || nearby.getDimension() != projectile.getDimension())
-                continue;
-
-            const Vector3f position = nearby.getPosition();
-            const float dx = position.x - hitPosition.x;
-            const float dy = position.y - hitPosition.y;
-            const float dz = position.z - hitPosition.z;
-            const float distanceSquared = dx * dx + dy * dy + dz * dz;
-            if (distanceSquared > burstRadius * burstRadius)
-                continue;
-
-            pushFrom(nearby, hitPosition, WIND_CHARGE_KNOCKBACK_STRENGTH, WIND_CHARGE_LIFT);
-        }
-
-        for (auto &entry: mActors) {
-            ServerActor &nearby = *entry.second;
-            if (!nearby.isAlive() || nearby.isProjectile() || nearby.getDimension() != projectile.getDimension())
-                continue;
-
-            const Vector3f position = nearby.getPosition();
-            const float dx = position.x - hitPosition.x;
-            const float dy = position.y - hitPosition.y;
-            const float dz = position.z - hitPosition.z;
-            const float distanceSquared = dx * dx + dy * dy + dz * dz;
-            if (distanceSquared > burstRadius * burstRadius)
-                continue;
-
-            pushFrom(nearby, hitPosition, WIND_CHARGE_KNOCKBACK_STRENGTH, WIND_CHARGE_LIFT);
-        }
-
-        const Vector3f burstPosition(hitPosition.x, hitPosition.y + 1.0f, hitPosition.z);
-        spawnParticleEffect(level, "minecraft:wind_explosion_emitter", burstPosition);
-        playLevelSound(level, LevelSoundEvent::WIND_CHARGE_BURST, burstPosition);
-        return true;
-    }
-
-    if (identifier == "minecraft:xp_bottle") {
-        static std::mt19937 bottleRandom(0x3A5F19C7u);
-        std::uniform_int_distribution<int> amount(3, 11);
-
-        spawnExperienceOrbs(level, hitPosition, amount(bottleRandom));
-
-        LevelEventPacket splash;
-        splash.mEventId = LevelEventPacket::ParticleSplash;
-        splash.mPosition = hitPosition;
-        splash.mData = 0x00385dc6;
-
-        for (auto &entry: mPlayers) {
-            if (entry.second.isSpawned() && entry.second.getDimension() == level.getDimensionType())
-                mNetworkHandler->send(entry.first, splash, mCodecContext);
-        }
-
-        playLevelSound(level, LevelSoundEvent::GLASS, hitPosition);
-        return true;
-    }
-
-    if (identifier == "minecraft:splash_potion") {
-        const auto it = mProjectilePotionId.find(projectile.getUniqueId());
-        const int32_t potionId = it != mProjectilePotionId.end() ? it->second : 0;
-        if (it != mProjectilePotionId.end())
-            mProjectilePotionId.erase(it);
-
-        for (auto &entry: mPlayers) {
-            ServerPlayer &nearby = entry.second;
-            if (!nearby.isSpawned() || nearby.getDimension() != projectile.getDimension())
-                continue;
-
-            const Vector3f position = nearby.getPosition();
-            const float dx = position.x - hitPosition.x;
-            const float dy = position.y - hitPosition.y;
-            const float dz = position.z - hitPosition.z;
-            const float distanceSquared = dx * dx + dy * dy + dz * dz;
-            if (distanceSquared > 16.0f)
-                continue;
-
-            const float scale = std::max(0.25f, 1.0f - std::sqrt(distanceSquared) / 4.0f);
-            applyPotionEffects(nearby, potionId, scale);
-        }
-
-        spawnParticleEffect(level, "minecraft:splash_spell_emitter", hitPosition);
-        return true;
-    }
-
-    if (identifier == "minecraft:lingering_potion") {
-        const auto it = mProjectilePotionId.find(projectile.getUniqueId());
-        const int32_t potionId = it != mProjectilePotionId.end() ? it->second : 0;
-        if (it != mProjectilePotionId.end())
-            mProjectilePotionId.erase(it);
-
-        ServerActor *cloud = spawnActor(level, "minecraft:area_effect_cloud", hitPosition);
-        if (cloud != nullptr) {
-            const float cloudRadius = 3.0f;
-
-            EntityDataMap metadata;
-
-            EntityDataEntry radius;
-            radius.mId = ACTOR_DATA_AREA_EFFECT_CLOUD_RADIUS;
-            radius.mFormat = EntityDataFormat::Float;
-            radius.mFloatValue = cloudRadius;
-            metadata.mEntries.push_back(radius);
-
-            EntityDataEntry particle;
-            particle.mId = ACTOR_DATA_AREA_EFFECT_CLOUD_PARTICLE_ID;
-            particle.mFormat = EntityDataFormat::Int;
-            particle.mIntValue = AREA_EFFECT_CLOUD_POTION_PARTICLE;
-            metadata.mEntries.push_back(particle);
-
-            EntityDataEntry auxValue;
-            auxValue.mId = ACTOR_DATA_POTION_AUX_VALUE;
-            auxValue.mFormat = EntityDataFormat::Short;
-            auxValue.mShortValue = (int16_t) potionId;
-            metadata.mEntries.push_back(auxValue);
-
-            EntityDataEntry color;
-            color.mId = ACTOR_DATA_POTION_COLOR;
-            color.mFormat = EntityDataFormat::Int;
-            color.mIntValue = getPotionColor(potionId);
-            metadata.mEntries.push_back(color);
-
-            EntityDataEntry width;
-            width.mId = ACTOR_DATA_WIDTH;
-            width.mFormat = EntityDataFormat::Float;
-            width.mFloatValue = cloudRadius;
-            metadata.mEntries.push_back(width);
-
-            EntityDataEntry height;
-            height.mId = ACTOR_DATA_HEIGHT;
-            height.mFormat = EntityDataFormat::Float;
-            height.mFloatValue = 0.5f;
-            metadata.mEntries.push_back(height);
-
-            sendActorMetadata(*cloud, metadata);
-
-            LingeringCloud state;
-            state.mPotionId = potionId;
-            state.mAge = 0;
-            state.mWaitTime = LINGERING_CLOUD_WAIT_TIME;
-            state.mDuration = LINGERING_CLOUD_DURATION;
-            state.mNextApply = 0;
-            state.mReapplicationDelay = 0;
-            state.mRadius = cloudRadius;
-            state.mRadiusPerTick = LINGERING_CLOUD_RADIUS_PER_TICK;
-            state.mRadiusOnUse = LINGERING_CLOUD_RADIUS_ON_USE;
-            state.mPosition = hitPosition;
-            state.mDimension = cloud->getDimension();
-            mLingeringClouds[cloud->getUniqueId()] = state;
-        }
-        return true;
-    }
-
-    return dynamic_cast<const ThrownProjectileActor *>(&projectile) != nullptr;
 }
 
 void ServerNetworkHandler::dropProjectileItem(ServerActor &projectile, const Vector3f &position) {
@@ -496,7 +399,7 @@ float ServerNetworkHandler::computeProjectileDamage(ServerActor &projectile) {
 bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, const Vector3f &hitPosition,
                                                       Actor &target) {
     ProjectileData &data = projectile.getProjectileData();
-    const bool isTrident = std::string(projectile.getIdentifier()) == "minecraft:thrown_trident";
+    const bool isTrident = dynamic_cast<const ThrownTridentActor *>(&projectile) != nullptr;
 
     float damage = computeProjectileDamage(projectile);
     if (isTrident && data.mImpalingLevel > 0 && LiquidBlocksFetch::at(getLevelFor(target), target.getPosition()).water)
@@ -578,10 +481,6 @@ bool ServerNetworkHandler::onThrownProjectileHitActor(ServerActor &projectile, c
         return true;
 
     return onThrownProjectileHit(projectile, hitPosition, nullptr);
-}
-
-void ServerNetworkHandler::setProjectilePotionData(int64_t uniqueId, int32_t potionId) {
-    mProjectilePotionId[uniqueId] = potionId;
 }
 
 void ServerNetworkHandler::applyPotionEffects(ServerPlayer &player, int32_t potionId, float durationScale) {

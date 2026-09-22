@@ -68,6 +68,57 @@ private:
     void _hatchChicks(ServerNetworkHandler &owner, const Vector3f &hitPosition) const;
 };
 
+class EnderPearlActor final : public ThrownProjectileActor {
+public:
+    using ThrownProjectileActor::ThrownProjectileActor;
+
+    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+};
+
+class WindChargeActor final : public ThrownProjectileActor {
+public:
+    using ThrownProjectileActor::ThrownProjectileActor;
+
+    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+};
+
+class ExperienceBottleActor final : public ThrownProjectileActor {
+public:
+    using ThrownProjectileActor::ThrownProjectileActor;
+
+    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+};
+
+class PotionActor : public ThrownProjectileActor {
+public:
+    using ThrownProjectileActor::ThrownProjectileActor;
+
+    int32_t getPotionId() const {
+        return mPotionId;
+    }
+
+    void setPotionId(int32_t potionId) {
+        mPotionId = potionId;
+    }
+
+private:
+    int32_t mPotionId = 0;
+};
+
+class SplashPotionActor final : public PotionActor {
+public:
+    using PotionActor::PotionActor;
+
+    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+};
+
+class LingeringPotionActor final : public PotionActor {
+public:
+    using PotionActor::PotionActor;
+
+    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+};
+
 class ArrowActor : public ProjectileActor {
 public:
     using ProjectileActor::ProjectileActor;
@@ -75,6 +126,11 @@ public:
     float getInertia() const override {
         return 0.99f;
     }
+};
+
+class ThrownTridentActor final : public ArrowActor {
+public:
+    using ArrowActor::ArrowActor;
 };
 
 class FireworksRocketActor : public ProjectileActor {
