@@ -11,6 +11,19 @@ FALCON_REGISTER_BLOCK(DoublePlantBlock, 240);
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemStack.h"
 
+namespace {
+    const int32_t TALL_GRASS_SEED_CHANCE = 10;
+}
+
+bool DoublePlantBlock::getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                                std::vector<BlockDrop> &drops) const {
+    if (state.mName != "minecraft:tall_grass" && state.mName != "minecraft:large_fern")
+        return false;
+
+    drops = grassDrops(state, tool, fortuneLevel, TALL_GRASS_SEED_CHANCE);
+    return true;
+}
+
 bool DoubleBlock::isUpperHalf(const BlockState &state) {
     return state.mStates.getByte("upper_block_bit") != 0;
 }

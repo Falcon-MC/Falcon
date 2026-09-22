@@ -39,6 +39,11 @@ struct BlockPlacementEntry {
     BlockState mState;
 };
 
+struct BlockDrop {
+    std::string mIdentifier;
+    int32_t mCount;
+};
+
 enum class PlacementMergeResult {
     None,
     Merged,
@@ -210,6 +215,20 @@ public:
         (void) state;
         return 1;
     }
+
+    virtual bool getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                          std::vector<BlockDrop> &drops) const {
+        (void) state;
+        (void) tool;
+        (void) fortuneLevel;
+        (void) drops;
+        return false;
+    }
+
+    static bool isShears(const ItemStack &tool);
+
+    static std::vector<BlockDrop> grassDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                                             int32_t seedChance);
 
     virtual bool isSignalSource() const {
         return false;

@@ -14,6 +14,9 @@ public:
     static bool matches(const std::string &identifier);
 
     bool canBeReplaced(const BlockState &state) const override;
+
+    bool getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                  std::vector<BlockDrop> &drops) const override;
 };
 
 class SnowLayerBlock final : public Block {

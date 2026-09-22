@@ -150,6 +150,19 @@ namespace PlacementOrientation {
         return faceName(face);
     }
 
+    inline int weirdoDirection(int facing) {
+        switch (facing) {
+            case FACE_WEST:
+                return 1;
+            case FACE_SOUTH:
+                return 2;
+            case FACE_NORTH:
+                return 3;
+            default:
+                return 0;
+        }
+    }
+
     inline int faceFromTorchFacing(const std::string &attachment) {
         if (attachment == "south")
             return FACE_NORTH;

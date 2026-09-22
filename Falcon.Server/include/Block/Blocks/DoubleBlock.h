@@ -27,4 +27,7 @@ public:
 
     std::vector<Vector3i> getAffectedBlocks(Level &level, const Vector3i &position,
                                             const BlockState &state) const override;
+
+    bool getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                  std::vector<BlockDrop> &drops) const override;
 };

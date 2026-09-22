@@ -8,6 +8,8 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Types/ItemStack.h"
 
+#include <cstdlib>
+
 namespace {
     bool isSolidNeighbour(Level *level, const Vector3i &position) {
         if (level == nullptr)
@@ -65,7 +67,7 @@ BlockState Block::applyPlacementOrientation(const BlockState &state, const Block
     }
 
     if (states.contains("weirdo_direction"))
-        states.putInt("weirdo_direction", ordinal * 2);
+        states.putInt("weirdo_direction", weirdoDirection(context.mPlayerFacing));
 
     if (states.contains("ground_sign_direction"))
         states.putInt("ground_sign_direction", signRotation(context.mYaw));
@@ -131,6 +133,24 @@ std::vector<Vector3i> Block::getAffectedBlocks(Level &level, const Vector3i &pos
     (void) position;
     (void) state;
     return {};
+}
+
+bool Block::isShears(const ItemStack &tool) {
+    return tool.mDefinition != nullptr && tool.mDefinition->getIdentifier() == "minecraft:shears";
+}
+
+std::vector<BlockDrop> Block::grassDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                                         int32_t seedChance) {
+    std::vector<BlockDrop> drops;
+    if (isShears(tool))
+        drops.push_back({state.mName, 1});
+
+    if (rand() % seedChance == 0) {
+        const int32_t seedCount = fortuneLevel == 0 ? 1 : 1 + rand() % (fortuneLevel * 2);
+        drops.push_back({"minecraft:wheat_seeds", seedCount});
+    }
+
+    return drops;
 }
 
 bool Block::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {

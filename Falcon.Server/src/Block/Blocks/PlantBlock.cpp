@@ -11,9 +11,12 @@ FALCON_REGISTER_BLOCK(PlantBlock, 320);
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
 
+#include <cstdlib>
 #include <unordered_map>
 
 namespace {
+    const int32_t SHORT_GRASS_SEED_CHANCE = 8;
+
     struct PlantRule {
         PlantSupport mSupport;
         bool mReplaceable;
@@ -144,4 +147,28 @@ bool PlantBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFac
 bool PlantBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
     (void) state;
     return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
+}
+
+bool PlantBlock::getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                          std::vector<BlockDrop> &drops) const {
+    if (state.mName == "minecraft:short_grass" || state.mName == "minecraft:fern") {
+        drops = grassDrops(state, tool, fortuneLevel, SHORT_GRASS_SEED_CHANCE);
+        return true;
+    }
+
+    if (state.mName == "minecraft:deadbush") {
+        if (isShears(tool))
+            drops.push_back({state.mName, 1});
+        else
+            drops.push_back({"minecraft:stick", rand() % 3});
+        return true;
+    }
+
+    if (state.mName == "minecraft:red_shrub") {
+        if (isShears(tool))
+            drops.push_back({state.mName, 1});
+        return true;
+    }
+
+    return false;
 }

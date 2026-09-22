@@ -488,19 +488,10 @@ void BlockActionHandler::spawnBlockDrops(ServerNetworkHandler &owner, Level &lev
                        ItemActorHandler::DROP_PICKUP_DELAY);
     };
 
-    const bool grassLike = brokenState.mName == "minecraft:short_grass"
-                           || brokenState.mName == "minecraft:tall_grass";
-
-    if (grassLike) {
-        const bool usedShears = tool.mDefinition != nullptr
-                                && tool.mDefinition->getIdentifier() == "minecraft:shears";
-        if (usedShears)
-            spawnDrop(furnaceDropIdentifier(brokenState.mName), 1);
-
-        if (rand() % 8 == 0) {
-            const int32_t seedCount = fortuneLevel == 0 ? 1 : 1 + rand() % (fortuneLevel * 2);
-            spawnDrop("minecraft:wheat_seeds", seedCount);
-        }
+    std::vector<BlockDrop> classDrops;
+    if (brokenBlock != nullptr && brokenBlock->getDrops(brokenState, tool, fortuneLevel, classDrops)) {
+        for (const BlockDrop &drop: classDrops)
+            spawnDrop(furnaceDropIdentifier(drop.mIdentifier), drop.mCount);
         return;
     }
 
