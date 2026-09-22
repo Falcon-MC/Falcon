@@ -179,7 +179,7 @@ void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_
 
     setHealth(0.0f);
     owner.syncActorAttributes(*this);
-    owner.broadcastActorEvent(*this, EntityEventType::DeathAnimation);
+    owner.broadcastActorEvent(*this, getDeathEvent());
     setDead(true);
     setMotion(Vector3f(0.0f, 0.0f, 0.0f));
 }

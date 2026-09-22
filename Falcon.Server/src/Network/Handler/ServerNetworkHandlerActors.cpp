@@ -66,7 +66,6 @@ namespace {
     const float FIREWORK_VERTICAL_ACCELERATION = 0.04f;
     const int32_t FIREWORK_ITEM_DATA_ID = 16;
     const int32_t PROJECTILE_MAX_LIFETIME = 1200;
-    const int32_t ACTOR_MAX_DEATH_TICKS = 25;
     const float ACTOR_SUFFOCATION_DAMAGE = 1.0f;
     const int32_t LINGERING_CLOUD_WAIT_TIME = 10;
     const int32_t LINGERING_CLOUD_DURATION = 600;
@@ -597,8 +596,8 @@ void ServerNetworkHandler::updateActorVisibility() {
 
         for (auto &actorEntry: mActors) {
             ServerActor &actor = *actorEntry.second;
-            const bool shouldSee = actor.isAlive() && canPlayerSeeActor(player, actor);
             const bool seen = visible.find(actor.getRuntimeId()) != visible.end();
+            const bool shouldSee = (actor.isAlive() || (actor.isDead() && seen)) && canPlayerSeeActor(player, actor);
 
             if (shouldSee == seen)
                 continue;
@@ -1100,7 +1099,7 @@ void ServerNetworkHandler::tickActors() {
 
         if (actor.isDead()) {
             actor.addDeathTick();
-            if (actor.getDeathTicks() >= ACTOR_MAX_DEATH_TICKS)
+            if (actor.getDeathTicks() >= actor.getDeathDuration())
                 expired.push_back(actorId);
             continue;
         }

@@ -6,6 +6,7 @@
 #include "Actor/Movement/PhysicsComponent.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/NBT/Tag.h"
+#include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Types/EntityDataMap.h"
 #include "Protocol/Types/ItemStack.h"
 
@@ -82,6 +83,14 @@ public:
     }
 
     virtual void fillSpawnMetadata(EntityDataMap &metadata) const { (void) metadata; }
+
+    virtual int32_t getDeathDuration() const {
+        return 25;
+    }
+
+    virtual EntityEventType getDeathEvent() const {
+        return EntityEventType::DeathAnimation;
+    }
 
     /**
      * Damages the actor. On death the drops use lootingLevel; a negative level reads it from the

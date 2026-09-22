@@ -17,4 +17,12 @@ public:
     bool hasGravity() const override {
         return false;
     }
+
+    int32_t getDeathDuration() const override {
+        return 200;
+    }
+
+    EntityEventType getDeathEvent() const override {
+        return EntityEventType::EnderDragonDeath;
+    }
 };
