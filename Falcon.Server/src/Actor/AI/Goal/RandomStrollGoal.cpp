@@ -18,6 +18,7 @@ namespace {
 RandomStrollGoal::RandomStrollGoal(float speed, int32_t range, int32_t interval, bool avoidWater,
                                    int32_t maxRetries)
         : mSpeed(speed), mRange(range), mInterval(interval), mAvoidWater(avoidWater), mMaxRetries(maxRetries) {
+    setRequiredControlFlags((uint8_t) GoalControlFlag::Move);
 }
 
 bool RandomStrollGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
@@ -35,7 +36,6 @@ void RandomStrollGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
 void RandomStrollGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
     (void) owner;
     mob.getMoveControl().stop();
-    mob.getLookControl().clear();
     mTicksSinceTarget = 0;
 }
 
@@ -52,7 +52,6 @@ void RandomStrollGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     }
 
     mob.getMoveControl().setWantedPosition(target, mSpeed);
-    mob.getLookControl().setLookAt(target);
     mTicksSinceTarget = 0;
 }
 

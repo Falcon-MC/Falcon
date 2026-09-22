@@ -1,7 +1,15 @@
 #pragma once
 
+#include <cstdint>
+
 class MobActor;
 class ServerNetworkHandler;
+
+enum class GoalControlFlag : uint8_t {
+    Move = 1 << 0,
+    Look = 1 << 1,
+    Jump = 1 << 2
+};
 
 class Goal {
 public:
@@ -27,4 +35,16 @@ public:
         (void) owner;
         (void) mob;
     }
+
+    uint8_t getRequiredControlFlags() const {
+        return mRequiredControlFlags;
+    }
+
+protected:
+    void setRequiredControlFlags(uint8_t flags) {
+        mRequiredControlFlags = flags;
+    }
+
+private:
+    uint8_t mRequiredControlFlags = 0;
 };

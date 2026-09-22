@@ -22,8 +22,12 @@ private:
     struct PrioritizedGoal {
         int32_t mPriority;
         std::unique_ptr<Goal> mGoal;
+        bool mRunning = false;
     };
 
+    bool _canReplaceConflicts(const PrioritizedGoal &candidate) const;
+
+    void _stopConflicts(ServerNetworkHandler &owner, MobActor &mob, const PrioritizedGoal &candidate);
+
     std::vector<PrioritizedGoal> mGoals;
-    PrioritizedGoal *mRunning = nullptr;
 };
