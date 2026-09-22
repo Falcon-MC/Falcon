@@ -1,6 +1,8 @@
 #include "Item/EnchantmentHelper.h"
 
 #include "Item/EnchantmentData.h"
+#include "Item/ItemData.h"
+#include "Item/ItemTypes.h"
 #include "Level/Level.h"
 
 #include <algorithm>
@@ -79,15 +81,40 @@ namespace {
         uint64_t mState;
     };
 
-    bool endsWith(const std::string &value, const std::string &suffix) {
-        if (value.size() < suffix.size())
-            return false;
-
-        return value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+    int32_t armorEnchantability(ArmorTier tier) {
+        switch (tier) {
+            case ArmorTier::Leather:
+            case ArmorTier::Netherite:
+                return 15;
+            case ArmorTier::Chain:
+                return 12;
+            case ArmorTier::Iron:
+                return 9;
+            case ArmorTier::Gold:
+                return 25;
+            case ArmorTier::Diamond:
+                return 10;
+            default:
+                return 0;
+        }
     }
 
-    bool contains(const std::string &value, const char *needle) {
-        return value.find(needle) != std::string::npos;
+    int32_t toolEnchantability(ToolTier tier) {
+        switch (tier) {
+            case ToolTier::Wooden:
+            case ToolTier::Netherite:
+                return 15;
+            case ToolTier::Stone:
+                return 5;
+            case ToolTier::Iron:
+                return 14;
+            case ToolTier::Gold:
+                return 22;
+            case ToolTier::Diamond:
+                return 10;
+            default:
+                return 0;
+        }
     }
 
     bool compatible(const EnchantmentData &left, const EnchantmentData &right) {
@@ -203,49 +230,22 @@ namespace {
 }
 
 int32_t EnchantmentHelper::getEnchantability(const std::string &identifier) {
-    if (identifier == BOOK || endsWith(identifier, "bow") || identifier == "minecraft:crossbow"
+    if (identifier == BOOK || identifier == "minecraft:bow" || identifier == "minecraft:crossbow"
         || identifier == "minecraft:fishing_rod")
         return 1;
 
     if (identifier == "minecraft:turtle_helmet")
         return 9;
 
-    const bool wood = contains(identifier, "wooden_");
-    const bool stone = contains(identifier, "stone_");
-    const bool iron = contains(identifier, "iron_");
-    const bool golden = contains(identifier, "golden_") || contains(identifier, "gold_");
-    const bool diamond = contains(identifier, "diamond_");
-    const bool netherite = contains(identifier, "netherite_");
-    const bool leather = contains(identifier, "leather_");
-    const bool chain = contains(identifier, "chainmail_");
-
-    const bool armor = contains(identifier, "_helmet") || contains(identifier, "_chestplate")
-                       || contains(identifier, "_leggings") || contains(identifier, "_boots");
-
-    if (armor) {
-        if (leather || netherite)
-            return 15;
-        if (chain)
-            return 12;
-        if (iron)
-            return 9;
-        if (golden)
-            return 25;
-        if (diamond)
-            return 10;
+    const ItemData *data = ItemDataTable::find(identifier);
+    if (data == nullptr)
         return 0;
-    }
 
-    if (wood || netherite)
-        return 15;
-    if (stone)
-        return 5;
-    if (iron)
-        return 14;
-    if (golden)
-        return 22;
-    if (diamond)
-        return 10;
+    if (data->mArmorSlot != ArmorSlot::None)
+        return armorEnchantability((ArmorTier) data->mArmorTier);
+
+    if (data->mToolType != ToolType::None)
+        return toolEnchantability((ToolTier) data->mToolTier);
 
     return 0;
 }
