@@ -25,6 +25,10 @@ bool DaylightDetectorBlock::matches(const std::string &identifier) {
     return identifier == DAYLIGHT_DETECTOR || identifier == DAYLIGHT_DETECTOR_INVERTED;
 }
 
+bool DaylightDetectorBlock::isSignalSource() const {
+    return true;
+}
+
 int DaylightDetectorBlock::effectiveSkyLightAround(Level &level, const Vector3i &position) {
     const int32_t skyReduction = level.getSkyLightSubtracted();
 

@@ -27,7 +27,7 @@ public:
                   const BlockState &state) const override;
 };
 
-class TorchOrientationBlock final : public Block {
+class TorchOrientationBlock : public Block {
 public:
     explicit TorchOrientationBlock(const Block &block) : Block(block)
     {

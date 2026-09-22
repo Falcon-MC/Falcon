@@ -205,6 +205,10 @@ public:
         return 1;
     }
 
+    virtual bool isSignalSource() const {
+        return false;
+    }
+
     virtual BlockState applyPlacementOrientation(const BlockState &state,
                                                  const BlockPlacementContext &context) const;
 

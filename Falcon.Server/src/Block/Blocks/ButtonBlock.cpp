@@ -38,6 +38,11 @@ bool ButtonBlock::matches(const std::string &identifier)
                               BUTTON_SUFFIX) == 0;
 }
 
+bool ButtonBlock::isSignalSource() const
+{
+    return true;
+}
+
 bool ButtonBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                              const BlockState &state) const
 {

@@ -40,6 +40,11 @@ bool LeverBlock::canSurvive(Level &level, const Vector3i &position, const BlockS
     return canPlaceAt(level, position, facing);
 }
 
+bool LeverBlock::isSignalSource() const
+{
+    return true;
+}
+
 bool LeverBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                             const BlockState &state) const
 {

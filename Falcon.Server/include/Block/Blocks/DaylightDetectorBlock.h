@@ -15,6 +15,8 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
+    bool isSignalSource() const override;
+
     static int computeSignal(Level &level, const Vector3i &position, bool inverted);
 
     static int effectiveSkyLightAround(Level &level, const Vector3i &position);
