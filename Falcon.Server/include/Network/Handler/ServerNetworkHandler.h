@@ -142,8 +142,6 @@ public:
 
     void spawnExperienceOrbs(Level &level, const Vector3f &position, int amount);
 
-    bool tickExperienceOrb(ServerActor &orb);
-
     // Bows fire from eye level while thrown items leave the hand slightly lower.
     static constexpr float THROWN_PROJECTILE_DROP = -0.3f;
 
@@ -427,8 +425,6 @@ public:
     void _sendActorSpawn(ServerPlayer &player, ServerActor &actor);
 
     void _sendActorRemove(ServerPlayer &player, const ServerActor &actor);
-
-    void _hatchEggChicks(Level &level, const Vector3f &hitPosition);
 
     bool _equipHeldArmor(ServerPlayer &player, const Item &itemType);
 

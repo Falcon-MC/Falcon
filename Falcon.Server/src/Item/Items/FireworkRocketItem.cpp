@@ -79,10 +79,6 @@ namespace {
     }
 }
 
-bool isFireworkRocketActor(const std::string &identifier) {
-    return identifier == FIREWORK_ACTOR;
-}
-
 FireworkRocketItem::FireworkRocketItem(const Item &base) : Item(base) {
 }
 

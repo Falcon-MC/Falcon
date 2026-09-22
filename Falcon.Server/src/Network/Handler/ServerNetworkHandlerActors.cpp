@@ -36,6 +36,8 @@
 #include "Item/EnchantmentData.h"
 #include "Block/Systems/BlockContactSystem.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
+#include "Actor/Misc/ExperienceOrbActor.h"
+#include "Actor/Projectile/ProjectileActor.h"
 #include "Item/Items/FireworkRocketItem.h"
 #include "Item/Items/RangedWeaponItems.h"
 #include "Item/Items/ThrowableItems.h"
@@ -55,8 +57,6 @@
 #include <cmath>
 
 namespace {
-    const float ACTOR_GRAVITY = 0.05f;
-    const float ARROW_GRAVITY = 0.05f;
     const float ARROW_KNOCKBACK = 0.3f;
     const float PUNCH_KNOCKBACK_PER_LEVEL = 0.5f;
     const float IMPALING_DAMAGE_PER_LEVEL = 2.5f;
@@ -81,18 +81,6 @@ namespace {
     const float PLAYER_EYE_HEIGHT = 1.62f;
     const float PROJECTILE_HIT_GROW = 0.3f;
     const int32_t EXPERIENCE_ORB_PICKUP_DELAY = 10;
-    const int32_t EXPERIENCE_ORB_MAX_AGE = 6000;
-    const float EXPERIENCE_ORB_ATTRACT_RANGE_SQUARED = 64.0f;
-    const float EXPERIENCE_ORB_GRAVITY = 0.04f;
-    const float EXPERIENCE_ORB_DRAG = 0.02f;
-    const float EXPERIENCE_ORB_GROUND_FRICTION = 0.6f;
-    const float EXPERIENCE_ORB_PICKUP_REACH = 1.0f;
-    const int32_t ACTOR_DATA_SCALE = 38;
-    const int32_t EGG_HATCH_CHANCE = 8;
-    const int32_t EGG_QUADRUPLE_HATCH_CHANCE = 32;
-    const int32_t EGG_QUADRUPLE_HATCH_COUNT = 4;
-    const float EGG_HATCH_HEIGHT = 0.5f;
-    const float BABY_SCALE = 0.5f;
 
     bool intersectsActorBox(const Vector3f &actorPosition, float width, float height, const Vector3f &point) {
         const float halfWidth = width * 0.5f + PROJECTILE_HIT_GROW;
@@ -230,102 +218,6 @@ void ServerNetworkHandler::spawnExperienceOrbs(Level &level, const Vector3f &pos
     }
 }
 
-bool ServerNetworkHandler::tickExperienceOrb(ServerActor &orb) {
-    orb.decrementPickupDelay();
-
-    if (orb.getLifetimeTicks() > EXPERIENCE_ORB_MAX_AGE)
-        return true;
-
-    Vector3f motion = orb.getMotion();
-    Vector3f position = orb.getPosition();
-
-    ServerPlayer *closest = nullptr;
-    float closestDistanceSquared = EXPERIENCE_ORB_ATTRACT_RANGE_SQUARED;
-    for (auto &entry: mPlayers) {
-        ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead())
-            continue;
-        if (player.getGameType() == (int32_t) GameType::Spectator)
-            continue;
-        if (player.getDimension() != orb.getDimension())
-            continue;
-
-        const Vector3f playerPosition = player.getPosition();
-        const float dx = playerPosition.x - position.x;
-        const float dy = playerPosition.y - position.y;
-        const float dz = playerPosition.z - position.z;
-        const float distanceSquared = dx * dx + dy * dy + dz * dz;
-        if (distanceSquared < closestDistanceSquared) {
-            closest = &player;
-            closestDistanceSquared = distanceSquared;
-        }
-    }
-
-    if (closest != nullptr && orb.getPickupDelay() <= 0) {
-        const Vector3f playerPosition = closest->getPosition();
-        const float dx = std::fabs(playerPosition.x - position.x);
-        const float dz = std::fabs(playerPosition.z - position.z);
-
-        if (dx <= EXPERIENCE_ORB_PICKUP_REACH && dz <= EXPERIENCE_ORB_PICKUP_REACH &&
-            position.y >= playerPosition.y - EXPERIENCE_ORB_PICKUP_REACH &&
-            position.y <= playerPosition.y + PLAYER_HEIGHT) {
-            closest->getExperience().addXp(repairWithMending(*closest, orb.getExperienceValue()));
-            closest->syncExperience();
-            _sendAttributes(*closest);
-            playNamedSound(getLevelFor(orb), "random.orb", position, 0.1f, 1.0f);
-            return true;
-        }
-    }
-
-    if (closest != nullptr) {
-        const Vector3f playerPosition = closest->getPosition();
-        const float dX = (playerPosition.x - position.x) / 8.0f;
-        const float dY = (playerPosition.y + PLAYER_EYE_HEIGHT * 0.5f - position.y) / 8.0f;
-        const float dZ = (playerPosition.z - position.z) / 8.0f;
-        const float distance = std::sqrt(dX * dX + dY * dY + dZ * dZ);
-        float diff = 1.0f - distance;
-
-        if (diff > 0.0f && distance > 0.0f) {
-            diff = diff * diff;
-            motion.x += dX / distance * diff * 0.1f;
-            motion.y += dY / distance * diff * 0.1f;
-            motion.z += dZ / distance * diff * 0.1f;
-        }
-    }
-
-    motion.y -= EXPERIENCE_ORB_GRAVITY;
-
-    Vector3f next(position.x + motion.x, position.y + motion.y, position.z + motion.z);
-
-    const int32_t blockX = (int32_t) std::floor(next.x);
-    const int32_t blockZ = (int32_t) std::floor(next.z);
-    const int32_t blockY = (int32_t) std::floor(next.y);
-
-    bool onGround = false;
-    if (motion.y < 0.0f && getLevelFor(orb).isSolidAt(blockX, blockY, blockZ)) {
-        next.y = (float) (blockY + 1);
-        onGround = true;
-    }
-
-    float friction = 1.0f - EXPERIENCE_ORB_DRAG;
-    if (onGround)
-        friction *= EXPERIENCE_ORB_GROUND_FRICTION;
-
-    motion.x *= friction;
-    motion.y *= 1.0f - EXPERIENCE_ORB_DRAG;
-    motion.z *= friction;
-
-    if (onGround)
-        motion.y *= -0.5f;
-
-    orb.setMotion(motion);
-    orb.setPosition(next);
-    orb.setOnGround(onGround);
-
-    broadcastActorMove(orb);
-    return false;
-}
-
 ServerActor *ServerNetworkHandler::getActor(int64_t uniqueId) {
     auto it = mActors.find(uniqueId);
     return it == mActors.end() ? nullptr : it->second.get();
@@ -359,7 +251,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
     const std::string identifier = projectile.getIdentifier();
     Level &level = getLevelFor(projectile);
 
-    if (isArrowProjectile(identifier)) {
+    if (dynamic_cast<const ArrowActor *>(&projectile) != nullptr) {
         if (hitPlayer != nullptr)
             return onArrowProjectileHitTarget(projectile, hitPosition, *hitPlayer);
 
@@ -378,6 +270,10 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
         return true;
     }
 
+    ThrownProjectileActor *thrown = dynamic_cast<ThrownProjectileActor *>(&projectile);
+    if (thrown != nullptr && thrown->onHit(*this, hitPosition, hitPlayer))
+        return true;
+
     if (identifier == "minecraft:ender_pearl") {
         const int64_t ownerId = projectile.getOwnerUniqueId();
         for (auto &entry: mPlayers) {
@@ -390,20 +286,6 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
             break;
         }
         spawnParticleEffect(level, "minecraft:endermanpop_emitter", hitPosition);
-        return true;
-    }
-
-    if (identifier == "minecraft:snowball") {
-        if (hitPlayer != nullptr) {
-            const Vector3f target = hitPlayer->getPosition();
-            knockBack(*hitPlayer, target.x - hitPosition.x, target.z - hitPosition.z, 0.3f);
-        }
-        spawnParticleEffect(level, "minecraft:snowballpoof", hitPosition);
-        return true;
-    }
-
-    if (identifier == "minecraft:egg") {
-        _hatchEggChicks(level, hitPosition);
         return true;
     }
 
@@ -561,7 +443,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
         return true;
     }
 
-    return isThrownProjectile(identifier);
+    return dynamic_cast<const ThrownProjectileActor *>(&projectile) != nullptr;
 }
 
 void ServerNetworkHandler::dropProjectileItem(ServerActor &projectile, const Vector3f &position) {
@@ -681,9 +563,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
 
 bool ServerNetworkHandler::onThrownProjectileHitActor(ServerActor &projectile, const Vector3f &hitPosition,
                                                       ServerActor &hitActor) {
-    const std::string identifier = projectile.getIdentifier();
-
-    if (isArrowProjectile(identifier))
+    if (dynamic_cast<const ArrowActor *>(&projectile) != nullptr)
         return onArrowProjectileHitTarget(projectile, hitPosition, hitActor);
 
     if (hitActor.isProjectile()) {
@@ -693,19 +573,9 @@ bool ServerNetworkHandler::onThrownProjectileHitActor(ServerActor &projectile, c
         return handled || otherHandled;
     }
 
-    if (identifier == "minecraft:snowball") {
-        const float snowballDamage = std::string(hitActor.getIdentifier()) == "minecraft:blaze" ? 3.0f : 0.0f;
-        damageActor(hitActor, snowballDamage, nullptr);
-        knockBack(hitActor, hitActor.getPosition().x - hitPosition.x, hitActor.getPosition().z - hitPosition.z, 0.3f);
-        spawnParticleEffect(getLevelFor(projectile), "minecraft:snowballpoof", hitPosition);
+    ThrownProjectileActor *thrown = dynamic_cast<ThrownProjectileActor *>(&projectile);
+    if (thrown != nullptr && thrown->onHitActor(*this, hitPosition, hitActor))
         return true;
-    }
-
-    if (identifier == "minecraft:egg") {
-        damageActor(hitActor, 0.0f, nullptr);
-        knockBack(hitActor, hitActor.getPosition().x - hitPosition.x, hitActor.getPosition().z - hitPosition.z, 0.2f);
-        return true;
-    }
 
     return onThrownProjectileHit(projectile, hitPosition, nullptr);
 }
@@ -970,49 +840,6 @@ void ServerNetworkHandler::syncActorProperties(ServerActor &actor) {
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned())
             mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::_hatchEggChicks(Level &level, const Vector3f &hitPosition) {
-    static std::mt19937 hatchRandom(std::random_device{}());
-
-    if (std::uniform_int_distribution<int32_t>(0, EGG_HATCH_CHANCE - 1)(hatchRandom) != 0)
-        return;
-
-    int32_t chicks = 1;
-    if (std::uniform_int_distribution<int32_t>(0, EGG_QUADRUPLE_HATCH_CHANCE - 1)(hatchRandom) == 0)
-        chicks = EGG_QUADRUPLE_HATCH_COUNT;
-
-    const Vector3f spawnPosition(hitPosition.x, hitPosition.y + EGG_HATCH_HEIGHT, hitPosition.z);
-
-    for (int32_t chick = 0; chick < chicks; ++chick) {
-        ServerActor *hatched = spawnActor(level, "minecraft:chicken", spawnPosition);
-        if (hatched == nullptr)
-            continue;
-
-        hatched->getFlags().set(ActorFlag::Baby, true);
-
-        EntityDataMap metadata;
-
-        EntityDataEntry flags;
-        flags.mId = ActorFlags::FLAGS_DATA_ID;
-        flags.mFormat = EntityDataFormat::Long;
-        flags.mLongValue = hatched->getFlags().getLowBits();
-        metadata.mEntries.push_back(flags);
-
-        EntityDataEntry flags2;
-        flags2.mId = ActorFlags::FLAGS_2_DATA_ID;
-        flags2.mFormat = EntityDataFormat::Long;
-        flags2.mLongValue = hatched->getFlags().getHighBits();
-        metadata.mEntries.push_back(flags2);
-
-        EntityDataEntry scale;
-        scale.mId = ACTOR_DATA_SCALE;
-        scale.mFormat = EntityDataFormat::Float;
-        scale.mFloatValue = BABY_SCALE;
-        metadata.mEntries.push_back(scale);
-
-        sendActorMetadata(*hatched, metadata);
     }
 }
 
@@ -1379,8 +1206,9 @@ void ServerNetworkHandler::tickActors() {
             continue;
         }
 
-        if (std::string(actor.getIdentifier()) == "minecraft:xp_orb") {
-            if (tickExperienceOrb(actor))
+        if (ExperienceOrbActor *orb = dynamic_cast<ExperienceOrbActor *>(&actor)) {
+            orb->tick(*this);
+            if (orb->isExpired())
                 expired.push_back(actorId);
             continue;
         }
@@ -1402,7 +1230,7 @@ void ServerNetworkHandler::tickActors() {
         ProfilerScopedSection projectileSection(mProfiler, ProfilerSection::ActorProjectiles,
                                                 actor.isProjectile());
 
-        if (actor.isProjectile() && isFireworkRocketActor(actor.getIdentifier())) {
+        if (dynamic_cast<FireworksRocketActor *>(&actor) != nullptr) {
             ProjectileData &firework = actor.getProjectileData();
 
             ServerPlayer *rider = nullptr;
@@ -1450,8 +1278,10 @@ void ServerNetworkHandler::tickActors() {
 
         if (actor.isProjectile()) {
             Vector3f motion = actor.getMotion();
-            const bool thrown = isThrownProjectile(actor.getIdentifier());
-            const bool arrowLike = isArrowProjectile(actor.getIdentifier());
+            const ProjectileActor *projectile = dynamic_cast<const ProjectileActor *>(&actor);
+            const float gravity = projectile != nullptr ? projectile->getGravity() : ProjectileActor::DEFAULT_GRAVITY;
+            const float inertia = projectile != nullptr ? projectile->getInertia() : 1.0f;
+            const bool arrowLike = dynamic_cast<const ArrowActor *>(&actor) != nullptr;
 
             if (arrowLike && actor.getProjectileData().mReturning) {
                 ServerPlayer *shooter = nullptr;
@@ -1485,12 +1315,10 @@ void ServerNetworkHandler::tickActors() {
                 motion.y = toY / toLength * speed;
                 motion.z = toZ / toLength * speed;
             } else {
-                motion.y -= thrown ? 0.03f : (arrowLike ? ARROW_GRAVITY : ACTOR_GRAVITY);
-                if (thrown || arrowLike) {
-                    motion.x *= 0.99f;
-                    motion.y *= 0.99f;
-                    motion.z *= 0.99f;
-                }
+                motion.y -= gravity;
+                motion.x *= inertia;
+                motion.y *= inertia;
+                motion.z *= inertia;
             }
 
             const Vector3f previousPosition = actor.getPosition();

@@ -43,5 +43,3 @@ public:
 private:
     bool applyRiptide(ServerNetworkHandler &owner, ServerPlayer &player, int32_t level) const;
 };
-
-bool isArrowProjectile(const std::string &identifier);

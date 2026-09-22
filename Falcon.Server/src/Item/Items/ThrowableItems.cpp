@@ -170,10 +170,3 @@ bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
     player.consumeOneHeldItem();
     return true;
 }
-
-bool isThrownProjectile(const std::string &identifier) {
-    return identifier == "minecraft:snowball" || identifier == "minecraft:egg" ||
-           identifier == "minecraft:ender_pearl" || identifier == "minecraft:xp_bottle" ||
-           identifier == "minecraft:splash_potion" || identifier == "minecraft:lingering_potion" ||
-           identifier == "minecraft:wind_charge_projectile" || identifier == "minecraft:eye_of_ender_signal";
-}

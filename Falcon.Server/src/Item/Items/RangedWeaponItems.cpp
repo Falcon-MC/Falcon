@@ -129,10 +129,6 @@ namespace {
     }
 }
 
-bool isArrowProjectile(const std::string &identifier) {
-    return identifier == ARROW_ACTOR || identifier == TRIDENT_ACTOR;
-}
-
 BowItem::BowItem(const Item &base) : Item(base) {
 }
 
