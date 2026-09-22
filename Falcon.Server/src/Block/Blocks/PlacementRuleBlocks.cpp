@@ -15,6 +15,7 @@ FALCON_REGISTER_BLOCK(RedStoneWireBlock, 400);
 
 #include "Block/BlockIdentifier.h"
 #include "Block/BlockSupport.h"
+#include "Block/Blocks/FenceBlocks.h"
 #include "Block/Blocks/LiquidView.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Components/PlacementOrientation.h"
@@ -364,7 +365,7 @@ bool PressurePlateBlock::canPlaceAt(Level &level, const Vector3i &position, int 
 
     const BlockState below = belowOf(level, position);
     return BlockSupport::isAttachable(below, PlacementOrientation::FACE_UP)
-           || BlockIdentifier::endsWith(below.mName, "_fence");
+           || VanillaBlocks::getAs<FenceBlock>(below.mName) != nullptr;
 }
 
 bool PressurePlateBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
@@ -399,7 +400,7 @@ bool LadderBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFa
     const BlockState support = level.getBlockState(supportPosition.x, supportPosition.y, supportPosition.z);
 
     if (BlockIdentifier::endsWith(support.mName, "_stained_glass")
-        || BlockIdentifier::endsWith(support.mName, "_stained_glass_pane")
+        || VanillaBlocks::getAs<ThinFenceBlock>(support.mName) != nullptr
         || BlockIdentifier::endsWith(support.mName, "_leaves") || support.mName == "minecraft:beacon")
         return false;
 

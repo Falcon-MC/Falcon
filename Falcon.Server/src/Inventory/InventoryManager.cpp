@@ -8,7 +8,9 @@
 #include "Block/Systems/RedstoneSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
+#include "Block/Blocks/FenceBlocks.h"
 #include "Block/Blocks/FurnaceBlock.h"
+#include "Block/Blocks/OrientationBlocks.h"
 #include "Block/Blocks/PlacementRuleBlocks.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Inventory/FurnaceInventory.h"
@@ -441,7 +443,9 @@ namespace {
         if (isWoodLike(id) && id.find("_door") != std::string::npos) return 200;
         if (isWoodLike(id) && id.find("_button") != std::string::npos) return 100;
         if (isWoodLike(id) && (id.find("_trapdoor") != std::string::npos
-            || id.find("_fence") != std::string::npos || id.find("_pressure_plate") != std::string::npos
+            || VanillaBlocks::getAs<FenceBlock>(id) != nullptr
+            || VanillaBlocks::getAs<FenceGateOrientationBlock>(id) != nullptr
+            || id.find("_pressure_plate") != std::string::npos
             || id.find("_stairs") != std::string::npos)) return 300;
         if (id.find("wooden_") != std::string::npos) return 200;
         if (id.find("_sapling") != std::string::npos) return 100;

@@ -14,8 +14,6 @@ namespace {
     const float FENCE_MIN = 0.375f;
     const float FENCE_MAX = 0.625f;
     const float FENCE_HEIGHT = 1.5f;
-    const float THIN_MIN = 7.0f / 16.0f;
-    const float THIN_MAX = 9.0f / 16.0f;
 
     bool endsWith(const std::string &value, const char *suffix) {
         const std::string tail(suffix);
@@ -36,6 +34,11 @@ namespace {
 }
 
 bool BlockShape::hasCollision(const BlockState &state) {
+    const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+    AxisAlignedBB shape = FULL_CUBE;
+    if (block != nullptr && block->getCollisionShape(state, shape))
+        return true;
+
     const BlockData *data = BlockDataTable::find(state.mName.c_str());
     if (data == nullptr)
         return false;
@@ -68,11 +71,8 @@ AxisAlignedBB BlockShape::getRelativeShape(const BlockState &state) {
         return AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, 0.5f, 1.0f);
     }
 
-    if (endsWith(name, "_fence") || endsWith(name, "_wall") || endsWith(name, "_fence_gate"))
+    if (endsWith(name, "_fence_gate"))
         return AxisAlignedBB(FENCE_MIN, 0.0f, FENCE_MIN, FENCE_MAX, FENCE_HEIGHT, FENCE_MAX);
-
-    if (endsWith(name, "_pane") || name == "minecraft:iron_bars" || name == "minecraft:glass_pane")
-        return AxisAlignedBB(THIN_MIN, 0.0f, THIN_MIN, THIN_MAX, 1.0f, THIN_MAX);
 
     if (endsWith(name, "_carpet") || name == "minecraft:carpet" || name == "minecraft:moss_carpet")
         return AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, 0.0625f, 1.0f);

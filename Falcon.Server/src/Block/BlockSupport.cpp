@@ -1,7 +1,7 @@
 #include "Block/BlockSupport.h"
 
 #include "Block/Block.h"
-#include "Block/BlockIdentifier.h"
+#include "Block/Blocks/FenceBlocks.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Components/PlacementOrientation.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
@@ -43,7 +43,8 @@ namespace BlockSupport {
         if (DecorationSupport::isSolid(support))
             return true;
 
-        if (BlockIdentifier::endsWith(support.mName, "_wall") || BlockIdentifier::endsWith(support.mName, "_fence"))
+        if (VanillaBlocks::getAs<WallBlock>(support.mName) != nullptr
+            || VanillaBlocks::getAs<FenceBlock>(support.mName) != nullptr)
             return blockFace == FACE_UP;
 
         return false;
