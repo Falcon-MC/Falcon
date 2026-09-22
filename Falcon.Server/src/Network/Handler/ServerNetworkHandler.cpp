@@ -1724,6 +1724,23 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const LoginPacket
     LoginHandler::handleLogin(*this, id, *player, packet);
 }
 
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ClientToServerHandshakePacket &packet) {
+    (void) packet;
+
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr) {
+        _disconnect(id, "disconnectionScreen.unexpectedPacket");
+        return;
+    }
+
+    LoginHandler::handleClientToServerHandshake(*this, id, *player);
+}
+
+void ServerNetworkHandler::onConnectionFailed(const NetworkIdentifier &id) {
+    LOG_WARN(LogAreaID::Network, "%s sent a batch with an invalid encryption checksum", id.getAddress().c_str());
+    _disconnect(id, "disconnectionScreen.unexpectedPacket");
+}
+
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ResourcePackClientResponsePacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr)

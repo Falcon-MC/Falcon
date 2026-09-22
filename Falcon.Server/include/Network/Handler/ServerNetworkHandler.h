@@ -513,9 +513,13 @@ private:
 
     void onDataReceived(const NetworkIdentifier &id, const std::string &data) override;
 
+    void onConnectionFailed(const NetworkIdentifier &id) override;
+
     void handle(const NetworkIdentifier &id, const RequestNetworkSettingsPacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const LoginPacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const ClientToServerHandshakePacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const ResourcePackClientResponsePacket &packet) override;
 

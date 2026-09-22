@@ -4,6 +4,7 @@
 #include "Network/BatchedNetworkPeer.h"
 #include "Network/CompressedNetworkPeer.h"
 #include "Network/Connector.h"
+#include "Network/EncryptedNetworkPeer.h"
 #include "Server/Profiler.h"
 
 #include <atomic>
@@ -27,15 +28,29 @@ public:
 
         NetworkPeer *getPeer() const { return mPeer.get(); }
 
+        EncryptedNetworkPeer *getEncryptedPeer() const {
+            return mEncryptedPeer.get();
+        }
+
         CompressedNetworkPeer *getCompressedPeer() const { return mCompressedPeer.get(); }
 
         BatchedNetworkPeer *getBatchedPeer() const { return mBatchedPeer.get(); }
 
+        bool isFailureReported() const {
+            return mFailureReported;
+        }
+
+        void markFailureReported() {
+            mFailureReported = true;
+        }
+
     private:
         NetworkIdentifier mId;
         std::shared_ptr<NetworkPeer> mPeer;
+        std::shared_ptr<EncryptedNetworkPeer> mEncryptedPeer;
         std::shared_ptr<CompressedNetworkPeer> mCompressedPeer;
         std::shared_ptr<BatchedNetworkPeer> mBatchedPeer;
+        bool mFailureReported = false;
     };
 
     class Listener {
@@ -49,13 +64,16 @@ public:
         virtual void onConnectionClosed(const NetworkIdentifier &, DisconnectFailReason, const std::string &) {}
 
         virtual void onDataReceived(const NetworkIdentifier &, const std::string &) {}
+
+        virtual void onConnectionFailed(const NetworkIdentifier &) {}
     };
 
     struct InboundEvent {
         enum class Kind : int {
             Data = 0,
             Opened = 1,
-            Closed = 2
+            Closed = 2,
+            Failed = 3
         };
 
         Kind mKind = Kind::Data;
@@ -68,7 +86,8 @@ public:
         enum class Kind : int {
             Data = 0,
             Flush = 1,
-            EnableCompression = 2
+            EnableCompression = 2,
+            EnableEncryption = 3
         };
 
         Kind mKind = Kind::Data;
@@ -79,6 +98,7 @@ public:
         Compressibility mCompressibility = Compressibility::Compressible;
         CompressedNetworkPeer::CompressionAlgorithm mAlgorithm = CompressedNetworkPeer::CompressionAlgorithm::ZLib;
         unsigned short mThreshold = 0;
+        EncryptionKey mEncryptionKey{};
     };
 
     explicit NetworkHandler(std::unique_ptr<Connector> connector);
@@ -118,6 +138,8 @@ public:
 
     void enableCompression(const NetworkIdentifier &id, CompressedNetworkPeer::CompressionAlgorithm algorithm,
                            unsigned short threshold);
+
+    void enableEncryption(const NetworkIdentifier &id, const EncryptionKey &key);
 
     size_t getConnectionCount() const { return mConnectionCount.load(); }
 

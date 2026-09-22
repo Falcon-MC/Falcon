@@ -95,6 +95,10 @@ public:
 
     bool getOnlineMode() const { return getBool("online-mode"); }
 
+    bool getNetworkEncryption() const {
+        return getBool("network-encryption");
+    }
+
     bool getAllowList() const { return getBool("allow-list"); }
 
     unsigned short getServerPort() const { return (unsigned short) getInt("server-port"); }

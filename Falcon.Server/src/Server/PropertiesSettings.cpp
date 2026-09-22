@@ -61,6 +61,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"allow-cheats", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"max-players", "10", PropertyKind::Int, 1, UNBOUNDED, nullptr},
             {"online-mode", "true", PropertyKind::Bool, 0, 0, nullptr},
+            {"network-encryption", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"allow-list", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"server-port", "19132", PropertyKind::Int, 1, 65535, nullptr},
             {"server-portv6", "19133", PropertyKind::Int, 1, 65535, nullptr},

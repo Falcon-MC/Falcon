@@ -9,7 +9,8 @@
 
 NetworkHandler::Connection::Connection(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer)
         : mId(id), mPeer(std::move(peer)) {
-    mCompressedPeer = std::make_shared<CompressedNetworkPeer>(mPeer);
+    mEncryptedPeer = std::make_shared<EncryptedNetworkPeer>(mPeer);
+    mCompressedPeer = std::make_shared<CompressedNetworkPeer>(mEncryptedPeer);
     mBatchedPeer = std::make_shared<BatchedNetworkPeer>(mCompressedPeer);
 }
 
@@ -116,6 +117,14 @@ void NetworkHandler::enableCompression(const NetworkIdentifier &id,
     mOutbound.push(std::move(command));
 }
 
+void NetworkHandler::enableEncryption(const NetworkIdentifier &id, const EncryptionKey &key) {
+    OutboundCommand command;
+    command.mKind = OutboundCommand::Kind::EnableEncryption;
+    command.mId = id;
+    command.mEncryptionKey = key;
+    mOutbound.push(std::move(command));
+}
+
 NetworkPeer::Reliability NetworkHandler::_toPeerReliability(const Packet &packet) {
     switch (packet.mReliability) {
         case Packet::Reliability::Reliable:
@@ -192,6 +201,8 @@ void NetworkHandler::_applyOutbound(OutboundCommand &command) {
 
     if (command.mKind == OutboundCommand::Kind::Flush)
         connection->getBatchedPeer()->flush();
+    else if (command.mKind == OutboundCommand::Kind::EnableEncryption)
+        connection->getEncryptedPeer()->enableEncryption(command.mEncryptionKey);
     else
         connection->getCompressedPeer()->enableCompression(command.mAlgorithm, command.mThreshold);
 }
@@ -214,6 +225,15 @@ void NetworkHandler::_pumpIo() {
             event.mKind = InboundEvent::Kind::Data;
             event.mId = entry.first;
             event.mData = data;
+            mInbound.push(std::move(event));
+        }
+
+        if (entry.second->getEncryptedPeer()->hasFailed() && !entry.second->isFailureReported()) {
+            entry.second->markFailureReported();
+
+            InboundEvent event;
+            event.mKind = InboundEvent::Kind::Failed;
+            event.mId = entry.first;
             mInbound.push(std::move(event));
         }
 
@@ -249,6 +269,13 @@ void NetworkHandler::runEvents() {
                 ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
                 for (Listener *listener: mListeners)
                     listener->onConnectionClosed(event.mId, event.mReason, event.mData);
+                break;
+            }
+
+            case InboundEvent::Kind::Failed: {
+                ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
+                for (Listener *listener: mListeners)
+                    listener->onConnectionFailed(event.mId);
                 break;
             }
 

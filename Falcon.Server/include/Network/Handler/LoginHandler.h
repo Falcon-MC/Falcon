@@ -3,6 +3,8 @@
 #include "Core/Utility/UUID.h"
 #include "Protocol/Types/PlayerAbilityData.h"
 
+#include <string>
+
 class ServerNetworkHandler;
 class ServerPlayer;
 class NetworkIdentifier;
@@ -18,6 +20,14 @@ public:
 
     static void handleLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                             const LoginPacket &packet);
+
+    static void handleClientToServerHandshake(ServerNetworkHandler &owner, const NetworkIdentifier &id,
+                                              ServerPlayer &player);
+
+    static void startEncryption(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
+                                const std::string &clientPublicKey);
+
+    static void completeLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player);
 
     static void handleResourcePackClientResponse(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                  ServerPlayer &player,

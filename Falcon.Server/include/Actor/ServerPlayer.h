@@ -29,10 +29,11 @@ public:
     enum class LoginState : int {
         Connecting = 0,
         NetworkSettingsSent = 1,
-        LoggedIn = 2,
-        ResourcePacksSent = 3,
-        StartGameSent = 4,
-        Spawned = 5
+        EncryptionHandshake = 2,
+        LoggedIn = 3,
+        ResourcePacksSent = 4,
+        StartGameSent = 5,
+        Spawned = 6
     };
 
     ServerPlayer(const NetworkIdentifier &id, uint64_t runtimeId, PacketSender *sender = nullptr);

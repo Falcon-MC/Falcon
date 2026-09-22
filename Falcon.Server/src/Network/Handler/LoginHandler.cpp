@@ -19,6 +19,8 @@
 #include "Item/ItemNetworkIdTable.h"
 #include "Level/Level.h"
 #include "Network/ConnectionRequest.h"
+#include "Network/Crypto/EncryptionHandshake.h"
+#include "Network/Crypto/KeyPair.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/LoginChainVerifier.h"
@@ -43,6 +45,7 @@
 #include "Protocol/Packets/ResourcePackDataInfoPacket.h"
 #include "Protocol/Packets/ResourcePackStackPacket.h"
 #include "Protocol/Packets/ResourcePacksInfoPacket.h"
+#include "Protocol/Packets/ServerToClientHandshakePacket.h"
 #include "Protocol/Packets/SyncActorPropertyPacket.h"
 #include "Protocol/Packets/StartGamePacket.h"
 #include "Protocol/Packets/SetTimePacket.h"
@@ -211,6 +214,45 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     player.setSkin(request.getSkin());
     player.setBuildPlatform(request.getBuildPlatform());
     player.setLocale(request.getLanguageCode());
+
+    if (owner.getProperties().getNetworkEncryption()) {
+        startEncryption(owner, id, player, verifier.getIdentityPublicKey());
+        return;
+    }
+
+    completeLogin(owner, id, player);
+}
+
+void LoginHandler::startEncryption(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
+                                   const std::string &clientPublicKey) {
+    const std::shared_ptr<KeyPair> serverKey = KeyPair::generate();
+    ServerToClientHandshakePacket handshake;
+    EncryptionKey key{};
+    if (serverKey == nullptr
+        || !EncryptionHandshake::createServerToken(*serverKey, clientPublicKey, handshake.mJwt, key)) {
+        LOG_WARN(LogAreaID::Network, "Could not prepare the encryption handshake for %s", id.getAddress().c_str());
+        owner._disconnect(id, "disconnectionScreen.notAuthenticated");
+        owner.getPlayers().erase(id);
+        return;
+    }
+
+    owner.getNetworkHandler().send(id, handshake, owner.getCodecContext());
+    owner.getNetworkHandler().flush(id);
+    owner.getNetworkHandler().enableEncryption(id, key);
+    player.setLoginState(ServerPlayer::LoginState::EncryptionHandshake);
+}
+
+void LoginHandler::handleClientToServerHandshake(ServerNetworkHandler &owner, const NetworkIdentifier &id,
+                                                 ServerPlayer &player) {
+    if (player.getLoginState() != ServerPlayer::LoginState::EncryptionHandshake) {
+        owner._disconnect(id, "disconnectionScreen.unexpectedPacket");
+        return;
+    }
+
+    completeLogin(owner, id, player);
+}
+
+void LoginHandler::completeLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player) {
     player.setLoginState(ServerPlayer::LoginState::LoggedIn);
 
     LOG_INFO(LogAreaID::Server, "Player %s logged in, uuid %s, xuid %s", player.getName().c_str(),
