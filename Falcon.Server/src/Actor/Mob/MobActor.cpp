@@ -31,6 +31,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     }
 
     mGoalSelector.tick(owner, *this);
+    mNavigation.tick(owner, *this);
     tickControls(owner);
     ServerActor::tick(owner);
 }

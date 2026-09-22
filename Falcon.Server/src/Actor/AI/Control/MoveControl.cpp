@@ -3,10 +3,13 @@
 #include "Actor/AI/Control/JumpControl.h"
 #include "Actor/Mob/MobActor.h"
 #include "Actor/Movement/ActorPushSystem.h"
+#include "Block/BlockShape.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
 #include "Level/Level.h"
+#include "Level/LevelChunk.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -68,24 +71,40 @@ void MoveControl::tick(ServerNetworkHandler &owner, MobActor &mob, JumpControl &
 
 void MoveControl::_tryJump(ServerNetworkHandler &owner, MobActor &mob, JumpControl &jumpControl, float dx,
                            float dz) const {
-    const AxisAlignedBB movementBox = ActorPushSystem::boundingBoxOf(mob).offset(dx, 0.0f, dz);
-    const std::vector<AxisAlignedBB> obstacles = owner.getLevelFor(mob).getCollisionBoxes(movementBox);
+    const AxisAlignedBB box = ActorPushSystem::boundingBoxOf(mob).offset(dx, 0.0f, dz);
+    Level &level = owner.getLevelFor(mob);
 
-    float maxY = 0.0f;
+    const int32_t minX = (int32_t) std::floor(box.mMinX);
+    const int32_t minY = std::max((int32_t) std::floor(box.mMinY) - 1, LevelChunk::MIN_Y);
+    const int32_t minZ = (int32_t) std::floor(box.mMinZ);
+    const int32_t maxX = (int32_t) std::floor(box.mMaxX);
+    const int32_t maxY = std::min((int32_t) std::floor(box.mMaxY), LevelChunk::MAX_Y);
+    const int32_t maxZ = (int32_t) std::floor(box.mMaxZ);
+
+    float top = 0.0f;
     bool blocked = false;
-    for (const AxisAlignedBB &obstacle: obstacles) {
-        if (!movementBox.intersectsWith(obstacle))
-            continue;
+    for (int32_t x = minX; x <= maxX; ++x) {
+        for (int32_t z = minZ; z <= maxZ; ++z) {
+            for (int32_t y = minY; y <= maxY; ++y) {
+                const BlockState *state = level.peekBlockPtr(x, y, z);
+                if (state == nullptr || !BlockShape::hasCollision(*state))
+                    continue;
 
-        blocked = true;
-        if (obstacle.mMaxY > maxY)
-            maxY = obstacle.mMaxY;
+                const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z);
+                if (!shape.intersectsWith(box))
+                    continue;
+
+                blocked = true;
+                if (shape.mMaxY > top)
+                    top = shape.mMaxY;
+            }
+        }
     }
 
     if (!blocked)
         return;
 
-    const float height = maxY - mob.getPosition().y;
+    const float height = top - mob.getPosition().y;
     if (height > MIN_JUMP_HEIGHT && height <= MAX_JUMP_HEIGHT)
         jumpControl.jump(height);
 }

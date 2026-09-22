@@ -35,7 +35,7 @@ void RandomStrollGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
 
 void RandomStrollGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
     (void) owner;
-    mob.getMoveControl().stop();
+    mob.getNavigation().stop(mob);
     mTicksSinceTarget = 0;
 }
 
@@ -51,7 +51,7 @@ void RandomStrollGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
             target = _randomTarget(mob);
     }
 
-    mob.getMoveControl().setWantedPosition(target, mSpeed);
+    mob.getNavigation().moveTo(target, mSpeed);
     mTicksSinceTarget = 0;
 }
 

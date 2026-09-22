@@ -5,6 +5,7 @@
 #include "Actor/AI/Control/LookControl.h"
 #include "Actor/AI/Control/MoveControl.h"
 #include "Actor/AI/Goal/GoalSelector.h"
+#include "Actor/AI/Navigation/PathNavigation.h"
 #include "Actor/ActorCategory.h"
 #include "Actor/ActorSize.h"
 #include "Actor/ServerActor.h"
@@ -58,6 +59,10 @@ public:
         return mJumpControl;
     }
 
+    PathNavigation &getNavigation() {
+        return mNavigation;
+    }
+
 protected:
     virtual void registerGoals(GoalSelector &goalSelector) {
         (void) goalSelector;
@@ -68,6 +73,7 @@ protected:
 private:
     GoalSelector mGoalSelector;
     bool mGoalsRegistered = false;
+    PathNavigation mNavigation;
     MoveControl mMoveControl;
     LookControl mLookControl;
     JumpControl mJumpControl;
