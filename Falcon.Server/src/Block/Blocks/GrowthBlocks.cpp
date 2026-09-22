@@ -7,6 +7,7 @@ FALCON_REGISTER_BLOCK(NetherWartBlock, 260);
 FALCON_REGISTER_BLOCK(CropBlock, 270);
 FALCON_REGISTER_BLOCK(SaplingBlock, 280);
 FALCON_REGISTER_BLOCK(LeavesBlock, 290);
+FALCON_REGISTER_BLOCK(FloweredAzaleaLeavesBlock, 295);
 FALCON_REGISTER_BLOCK(SpreadingBlock, 300);
 FALCON_REGISTER_BLOCK(NyliumBlock, 310);
 
@@ -125,6 +126,18 @@ bool SaplingBlock::matches(const std::string &identifier) {
 
 bool LeavesBlock::matches(const std::string &identifier) {
     return BlockIdentifier::endsWith(identifier, "_leaves");
+}
+
+PistonMoveReaction LeavesBlock::getPistonMoveReaction() const {
+    return PistonMoveReaction::Break;
+}
+
+bool FloweredAzaleaLeavesBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:azalea_leaves_flowered";
+}
+
+PistonMoveReaction FloweredAzaleaLeavesBlock::getPistonMoveReaction() const {
+    return PistonMoveReaction::Break;
 }
 
 bool SpreadingBlock::matches(const std::string &identifier) {

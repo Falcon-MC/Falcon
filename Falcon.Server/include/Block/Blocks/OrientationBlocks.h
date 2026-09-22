@@ -53,6 +53,28 @@ public:
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
 };
 
+class WallSignBlock final : public WallAttachedBlock {
+public:
+    explicit WallSignBlock(const Block &block) : WallAttachedBlock(block)
+    {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    PistonMoveReaction getPistonMoveReaction() const override;
+};
+
+class SignBlock final : public Block {
+public:
+    explicit SignBlock(const Block &block) : Block(block)
+    {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    PistonMoveReaction getPistonMoveReaction() const override;
+};
+
 class BellOrientationBlock final : public Block {
 public:
     explicit BellOrientationBlock(const Block &block) : Block(block)
@@ -64,7 +86,7 @@ public:
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
 };
 
-class FaceAttachedBlock final : public Block {
+class FaceAttachedBlock : public Block {
 public:
     explicit FaceAttachedBlock(const Block &block) : Block(block)
     {
@@ -73,6 +95,28 @@ public:
     static bool matches(const std::string &identifier);
 
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
+};
+
+class SkullBlock final : public FaceAttachedBlock {
+public:
+    explicit SkullBlock(const Block &block) : FaceAttachedBlock(block)
+    {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    PistonMoveReaction getPistonMoveReaction() const override;
+};
+
+class GlazedTerracottaBlock final : public Block {
+public:
+    explicit GlazedTerracottaBlock(const Block &block) : Block(block)
+    {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    PistonMoveReaction getPistonMoveReaction() const override;
 };
 
 class CardinalPlayerBlock : public Block {
@@ -137,6 +181,8 @@ public:
 
     std::vector<Vector3i> getAffectedBlocks(Level &level, const Vector3i &position,
                                             const BlockState &state) const override;
+
+    PistonMoveReaction getPistonMoveReaction() const override;
 };
 
 class TrapdoorOrientationBlock final : public Block {

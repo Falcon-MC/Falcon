@@ -20,12 +20,16 @@ FALCON_REGISTER_BLOCK(TrapdoorOrientationBlock, 130);
 FALCON_REGISTER_BLOCK(PistonBlock, 150);
 FALCON_REGISTER_BLOCK(FacingMachineBlock, 160);
 FALCON_REGISTER_BLOCK(TorchOrientationBlock, 170);
+FALCON_REGISTER_BLOCK(WallSignBlock, 185);
+FALCON_REGISTER_BLOCK(SignBlock, 186);
 FALCON_REGISTER_BLOCK(WallAttachedBlock, 190);
 FALCON_REGISTER_BLOCK(BellOrientationBlock, 200);
+FALCON_REGISTER_BLOCK(SkullBlock, 205);
 FALCON_REGISTER_BLOCK(FaceAttachedBlock, 210);
 FALCON_REGISTER_BLOCK(BedOrientationBlock, 220);
 FALCON_REGISTER_BLOCK(FenceGateOrientationBlock, 225);
 FALCON_REGISTER_BLOCK(CardinalPlayerBlock, 230);
+FALCON_REGISTER_BLOCK(GlazedTerracottaBlock, 480);
 
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
@@ -135,9 +139,26 @@ bool DoorOrientationBlock::canPlaceAt(Level &level, const Vector3i &position, in
 
 bool WallAttachedBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:ladder"
-           || equalsAny(identifier, {"minecraft:wall_sign", "minecraft:wall_banner"})
-           || endsWithAny(identifier, {"_wall_sign", "_coral_fan", "_coral_wall_fan"})
+           || identifier == "minecraft:wall_banner"
+           || endsWithAny(identifier, {"_coral_fan", "_coral_wall_fan"})
            || identifier == "minecraft:coral_fan";
+}
+
+bool WallSignBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:wall_sign" || endsWith(identifier, "_wall_sign");
+}
+
+PistonMoveReaction WallSignBlock::getPistonMoveReaction() const {
+    return PistonMoveReaction::Break;
+}
+
+bool SignBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:standing_sign"
+           || endsWithAny(identifier, {"_standing_sign", "_hanging_sign"});
+}
+
+PistonMoveReaction SignBlock::getPistonMoveReaction() const {
+    return PistonMoveReaction::Break;
 }
 
 BlockState WallAttachedBlock::applyPlacementOrientation(const BlockState &state,
@@ -172,11 +193,26 @@ BlockState BellOrientationBlock::applyPlacementOrientation(const BlockState &sta
 }
 
 bool FaceAttachedBlock::matches(const std::string &identifier) {
-    return endsWithAny(identifier, {"_amethyst_bud", "_cluster"})
-           || equalsAny(identifier, {"minecraft:creeper_head", "minecraft:dragon_head",
-                                     "minecraft:piglin_head", "minecraft:player_head",
-                                     "minecraft:skeleton_skull", "minecraft:wither_skeleton_skull",
-                                     "minecraft:zombie_head"});
+    return endsWithAny(identifier, {"_amethyst_bud", "_cluster"});
+}
+
+bool SkullBlock::matches(const std::string &identifier) {
+    return equalsAny(identifier, {"minecraft:creeper_head", "minecraft:dragon_head",
+                                  "minecraft:piglin_head", "minecraft:player_head",
+                                  "minecraft:skeleton_skull", "minecraft:wither_skeleton_skull",
+                                  "minecraft:zombie_head"});
+}
+
+PistonMoveReaction SkullBlock::getPistonMoveReaction() const {
+    return PistonMoveReaction::Break;
+}
+
+bool GlazedTerracottaBlock::matches(const std::string &identifier) {
+    return endsWith(identifier, "_glazed_terracotta");
+}
+
+PistonMoveReaction GlazedTerracottaBlock::getPistonMoveReaction() const {
+    return PistonMoveReaction::PushOnly;
 }
 
 BlockState FaceAttachedBlock::applyPlacementOrientation(const BlockState &state,
@@ -320,6 +356,10 @@ void DoorOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &p
 std::vector<Vector3i> DoorOrientationBlock::getAffectedBlocks(Level &level, const Vector3i &position,
                                                               const BlockState &state) const {
     return DoubleBlock::otherHalf(level, position, state);
+}
+
+PistonMoveReaction DoorOrientationBlock::getPistonMoveReaction() const {
+    return PistonMoveReaction::Break;
 }
 
 BlockState DoorOrientationBlock::applyPlacementOrientation(const BlockState &state,

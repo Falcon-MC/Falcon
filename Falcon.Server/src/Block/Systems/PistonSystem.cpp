@@ -80,30 +80,12 @@ namespace {
         return set.find(value) != set.end();
     }
 
-    bool isDoor(const std::string &identifier) {
-        return identifier.find("_door") != std::string::npos;
-    }
+    PistonMoveReaction moveReactionOf(const BlockState &state) {
+        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+        if (block == nullptr)
+            return PistonMoveReaction::Normal;
 
-    bool isLeaves(const std::string &identifier) {
-        return identifier.find("leaves") != std::string::npos;
-    }
-
-    bool isSign(const std::string &identifier) {
-        return identifier.find("_sign") != std::string::npos || identifier == "minecraft:standing_sign"
-               || identifier == "minecraft:wall_sign";
-    }
-
-    bool isHead(const std::string &identifier) {
-        return identifier.find("_head") != std::string::npos || identifier.find("skull") != std::string::npos;
-    }
-
-    bool isLiquid(const std::string &identifier) {
-        return identifier == "minecraft:water" || identifier == "minecraft:flowing_water"
-               || identifier == "minecraft:lava" || identifier == "minecraft:flowing_lava";
-    }
-
-    bool isGlazedTerracotta(const std::string &identifier) {
-        return identifier.find("glazed_terracotta") != std::string::npos;
+        return block->getPistonMoveReaction();
     }
 
     bool isFlowable(const BlockState &state) {
@@ -183,7 +165,7 @@ bool PistonSystem::canBePulled(const BlockState &state) {
     if (!canBePushed(state))
         return false;
 
-    return !contains(UNPULLABLE_EXTRA, state.mName) && !isGlazedTerracotta(state.mName);
+    return !contains(UNPULLABLE_EXTRA, state.mName) && moveReactionOf(state) != PistonMoveReaction::PushOnly;
 }
 
 bool PistonSystem::breaksWhenMoved(const BlockState &state) {
@@ -193,8 +175,7 @@ bool PistonSystem::breaksWhenMoved(const BlockState &state) {
         return false;
     if (contains(BREAKS_WHEN_MOVED, state.mName))
         return true;
-    if (isDoor(state.mName) || isLeaves(state.mName) || isSign(state.mName) || isHead(state.mName)
-        || isLiquid(state.mName))
+    if (moveReactionOf(state) == PistonMoveReaction::Break)
         return true;
 
     return isFlowable(state);
@@ -205,8 +186,7 @@ bool PistonSystem::sticksToPiston(const BlockState &state) {
         return true;
     if (contains(BREAKS_WHEN_MOVED, state.mName))
         return false;
-    if (isDoor(state.mName) || isLeaves(state.mName) || isSign(state.mName) || isHead(state.mName)
-        || isLiquid(state.mName) || isGlazedTerracotta(state.mName))
+    if (moveReactionOf(state) != PistonMoveReaction::Normal)
         return false;
 
     return !isFlowable(state);
