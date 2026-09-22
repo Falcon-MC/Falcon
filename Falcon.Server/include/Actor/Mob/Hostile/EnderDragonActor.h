@@ -13,4 +13,8 @@ public:
     float getDefaultMaxHealth() const override { return 200.0f; }
 
     int getExperienceDrop() const override { return 12000; }
+
+    bool hasGravity() const override {
+        return false;
+    }
 };

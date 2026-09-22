@@ -21,4 +21,8 @@ public:
     float resolveMaxHealth(Difficulty difficulty) const override;
 
     int getExperienceDrop() const override { return 50; }
+
+    bool hasGravity() const override {
+        return false;
+    }
 };

@@ -22,29 +22,6 @@ namespace {
     const float FIRE_TICK_DAMAGE = 1.0f;
     const int32_t SUNLIGHT_BURN_TICKS = 8 * 20;
     const int32_t DAYLIGHT_SUBTRACTED_THRESHOLD = 4;
-
-    bool burnsInSunlight(const std::string &identifier) {
-        static const std::unordered_set<std::string> burning = {
-                "minecraft:zombie",
-                "minecraft:zombie_villager",
-                "minecraft:zombie_villager_v2",
-                "minecraft:skeleton",
-                "minecraft:stray",
-                "minecraft:phantom",
-                "minecraft:drowned"
-        };
-
-        return burning.count(identifier) != 0;
-    }
-
-    bool isFlyingActor(const std::string &identifier) {
-        return identifier == "minecraft:allay" || identifier == "minecraft:bat" ||
-               identifier == "minecraft:bee" || identifier == "minecraft:blaze" ||
-               identifier == "minecraft:ender_dragon" || identifier == "minecraft:ghast" ||
-               identifier == "minecraft:happy_ghast" || identifier == "minecraft:parrot" ||
-               identifier == "minecraft:phantom" || identifier == "minecraft:shulker_bullet" ||
-               identifier == "minecraft:vex" || identifier == "minecraft:wither";
-    }
 }
 
 namespace {
@@ -85,8 +62,8 @@ void ServerActor::tick(ServerNetworkHandler &owner) {
 
 PhysicsComponent ServerActor::getPhysics() const {
     PhysicsComponent physics;
-    physics.mHasGravity = !isFlyingActor(mIdentifier);
-    physics.mPushable = mIdentifier != "minecraft:xp_orb";
+    physics.mHasGravity = hasGravity();
+    physics.mPushable = isPushable();
     return physics;
 }
 
@@ -109,7 +86,7 @@ void ServerActor::markMovementSynced() {
 }
 
 void ServerActor::tickSunlightBurn(ServerNetworkHandler &owner) {
-    if (!burnsInSunlight(mIdentifier) || isOnFire() || hasEffect(MobEffectId::FireResistance))
+    if (!burnsInDaylight() || isOnFire() || hasEffect(MobEffectId::FireResistance))
         return;
 
     Level &level = owner.getLevelFor(*this);

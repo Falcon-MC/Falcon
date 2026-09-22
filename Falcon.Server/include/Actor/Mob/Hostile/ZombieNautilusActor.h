@@ -13,4 +13,8 @@ public:
     float getDefaultMaxHealth() const override { return 15.0f; }
 
     int getExperienceDrop() const override { return randomRange(1, 3); }
+
+    bool burnsInDaylight() const override {
+        return true;
+    }
 };

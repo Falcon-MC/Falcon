@@ -11,4 +11,8 @@ public:
     ActorSize getSize() const override { return ActorSize{4.0f, 4.0f}; }
 
     float getDefaultMaxHealth() const override { return 20.0f; }
+
+    bool hasGravity() const override {
+        return false;
+    }
 };

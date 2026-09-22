@@ -98,6 +98,18 @@ public:
 
     virtual PhysicsComponent getPhysics() const;
 
+    virtual bool hasGravity() const {
+        return true;
+    }
+
+    virtual bool isPushable() const {
+        return true;
+    }
+
+    virtual bool burnsInDaylight() const {
+        return false;
+    }
+
     bool needsMovementSync() const;
 
     void markMovementSynced();
