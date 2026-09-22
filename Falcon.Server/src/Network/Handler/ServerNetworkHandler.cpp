@@ -42,7 +42,6 @@
 #include "Command/DamageCommand.h"
 #include "Command/DayLockCommand.h"
 #include "Command/DefaultGameModeCommand.h"
-#include "Command/HelpCommand.h"
 #include "Command/PardonIpCommand.h"
 #include "Command/ParticleCommand.h"
 #include "Command/PlaySoundCommand.h"
@@ -589,7 +588,6 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mCommands.registerCommand(std::make_shared<SaveCommand>(*this, SaveCommand::Mode::Save));
     mCommands.registerCommand(std::make_shared<SaveCommand>(*this, SaveCommand::Mode::On));
     mCommands.registerCommand(std::make_shared<SaveCommand>(*this, SaveCommand::Mode::Off));
-    mCommands.registerCommand(std::make_shared<HelpCommand>(*this));
     mCommands.registerCommand(std::make_shared<StatusCommand>(*this));
     mCommands.registerCommand(std::make_shared<TransferCommand>(*this));
     mCommands.registerCommand(std::make_shared<PlaySoundCommand>(*this));
