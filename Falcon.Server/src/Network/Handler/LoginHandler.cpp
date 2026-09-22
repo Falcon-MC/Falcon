@@ -3,6 +3,7 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include "Block/Components/CreativeContentTable.h"
+#include "Block/DataDrivenBlockDefinitions.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/VoxelShapeRegistry.h"
 #include "Command/Command.h"
@@ -362,7 +363,9 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mBlockNetworkIdsHashed = owner.getProperties().getBlockNetworkIdsAreHashes();
     startGame.mInventoriesServerAuthoritative = true;
 
-    startGame.mBlockProperties = CustomContentRegistry::getInstance().getBlockProperties();
+    startGame.mBlockProperties = DataDrivenBlockDefinitions::getAll();
+    const std::vector<BlockPropertyData> &customBlocks = CustomContentRegistry::getInstance().getBlockProperties();
+    startGame.mBlockProperties.insert(startGame.mBlockProperties.end(), customBlocks.begin(), customBlocks.end());
 
     startGame.mGamerules = owner.getLevel().getGameRules().toNetwork();
 
@@ -389,7 +392,6 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     sendCameraPresets(owner, player);
     sendBiomeDefinitions(owner, player);
     sendAttributes(owner, player);
-    sendAvailableCommands(owner, player);
     sendAbilities(owner, player);
     owner._sendEntityData(player);
 
@@ -1040,6 +1042,8 @@ void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner
     player.grantSpawnInvulnerability();
     BonusChest::placeIfPending(owner, owner.getLevel());
     LOG_INFO(LogAreaID::Server, "Player %s spawned", player.getName().c_str());
+
+    sendAvailableCommands(owner, player);
 
     player.setEffectsNetworkReady(true);
     player.syncEffects();

@@ -19,6 +19,8 @@ falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE FalconItemData S
         DELIMITER falconitems OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ItemPaletteJson.h")
 falcon_bedrock_data_embed_binary(FILE item_components.nbt NAMESPACE FalconItemData SYMBOL kItemComponentsNbt
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ItemComponentsNbt.h")
+falcon_bedrock_data_embed_binary(FILE block_definitions.nbt NAMESPACE FalconBlockDefinitionData
+        SYMBOL kBlockDefinitionsNbt OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockDefinitionsNbt.h")
 falcon_bedrock_data_embed_text(FILE entity_loot_tables.json NAMESPACE FalconLootData SYMBOL kEntityLootTablesJson
         DELIMITER falconentityloot OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/EntityLootTablesJson.h")
 falcon_bedrock_data_embed_text(FILE r16_to_current_item_map.json NAMESPACE FalconLegacyItemData
