@@ -41,7 +41,7 @@ void RandomStrollGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
 
 void RandomStrollGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     mTicksSinceTarget++;
-    if (mTicksSinceTarget < mInterval)
+    if (!shouldPickTarget(mob))
         return;
 
     Level &level = owner.getLevelFor(mob);
@@ -53,6 +53,11 @@ void RandomStrollGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
 
     mob.getNavigation().moveTo(target, mSpeed);
     mTicksSinceTarget = 0;
+}
+
+bool RandomStrollGoal::shouldPickTarget(MobActor &mob) const {
+    (void) mob;
+    return mTicksSinceTarget >= mInterval;
 }
 
 Vector3f RandomStrollGoal::_randomTarget(const MobActor &mob) const {

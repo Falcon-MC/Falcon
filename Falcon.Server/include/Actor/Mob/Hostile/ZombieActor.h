@@ -15,4 +15,9 @@ public:
     bool burnsInDaylight() const override {
         return true;
     }
+
+    float getAttackDamage(Difficulty difficulty) const override;
+
+protected:
+    void registerGoals(GoalSelector &goalSelector) override;
 };

@@ -11,13 +11,6 @@ namespace {
         static std::mt19937 generator(std::random_device{}());
         return generator;
     }
-
-    float distanceSquared(const Vector3f &left, const Vector3f &right) {
-        const float dx = left.x - right.x;
-        const float dy = left.y - right.y;
-        const float dz = left.z - right.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
 }
 
 LookAtPlayerGoal::LookAtPlayerGoal(float range, int32_t probability, int32_t total, int32_t duration,
@@ -67,7 +60,6 @@ void LookAtPlayerGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
 
 ServerPlayer *LookAtPlayerGoal::_findNearestPlayer(ServerNetworkHandler &owner, const MobActor &mob) const {
     const float rangeSquared = mRange * mRange;
-    const Vector3f position = mob.getPosition();
 
     ServerPlayer *nearest = nullptr;
     float nearestDistance = rangeSquared;
@@ -76,7 +68,7 @@ ServerPlayer *LookAtPlayerGoal::_findNearestPlayer(ServerNetworkHandler &owner, 
         if (!player.isSpawned() || player.isDead() || player.getDimension() != mob.getDimension())
             continue;
 
-        const float distance = distanceSquared(position, player.getPosition());
+        const float distance = mob.distanceSquaredTo(player);
         if (distance > nearestDistance)
             continue;
 

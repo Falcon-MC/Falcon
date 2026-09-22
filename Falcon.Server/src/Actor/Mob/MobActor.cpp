@@ -6,6 +6,7 @@
 #include "Loot/LootTableRegistry.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Types/StartGameTypes.h"
 
 #include <random>
 
@@ -34,6 +35,45 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     mNavigation.tick(owner, *this);
     tickControls(owner);
     ServerActor::tick(owner);
+}
+
+void MobActor::onDamaged(ServerNetworkHandler &owner, ServerPlayer *source) {
+    mLastHurtTick = owner.getCurrentTick();
+    mLastHurtBy = source != nullptr ? source->getRuntimeId() : 0;
+    mHurtCount++;
+}
+
+ServerPlayer *MobActor::getTarget(ServerNetworkHandler &owner) const {
+    if (mTargetRuntimeId == 0)
+        return nullptr;
+
+    ServerPlayer *player = findPlayer(owner, mTargetRuntimeId);
+    return player != nullptr && canTarget(*player) ? player : nullptr;
+}
+
+bool MobActor::canTarget(const ServerPlayer &player) const {
+    if (!player.isSpawned() || player.isDead() || player.getDimension() != getDimension())
+        return false;
+
+    const int32_t gameType = player.getGameType();
+    return gameType != (int32_t) GameType::Creative && gameType != (int32_t) GameType::Spectator;
+}
+
+float MobActor::distanceSquaredTo(const Actor &other) const {
+    const Vector3f position = getPosition();
+    const Vector3f otherPosition = other.getPosition();
+    const float dx = position.x - otherPosition.x;
+    const float dy = position.y - otherPosition.y;
+    const float dz = position.z - otherPosition.z;
+    return dx * dx + dy * dy + dz * dz;
+}
+
+ServerPlayer *MobActor::findPlayer(ServerNetworkHandler &owner, uint64_t runtimeId) {
+    for (auto &entry: owner.getPlayers()) {
+        if (entry.second.getRuntimeId() == runtimeId)
+            return &entry.second;
+    }
+    return nullptr;
 }
 
 void MobActor::tickControls(ServerNetworkHandler &owner) {

@@ -144,6 +144,7 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *
     setHealth(getHealth() - amount);
     setNoDamageTicks(INVULNERABILITY_TICKS);
     setLastDamageAmount(amount);
+    onDamaged(owner, source);
 
     if (getHealth() > 0.0f)
         owner.syncActorAttributes(*this);

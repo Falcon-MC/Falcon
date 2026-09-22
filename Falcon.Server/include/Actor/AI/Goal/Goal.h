@@ -8,7 +8,8 @@ class ServerNetworkHandler;
 enum class GoalControlFlag : uint8_t {
     Move = 1 << 0,
     Look = 1 << 1,
-    Jump = 1 << 2
+    Jump = 1 << 2,
+    Target = 1 << 3
 };
 
 class Goal {

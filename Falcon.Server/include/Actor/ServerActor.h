@@ -64,6 +64,11 @@ public:
         return false;
     }
 
+    virtual void onDamaged(ServerNetworkHandler &owner, ServerPlayer *source) {
+        (void) owner;
+        (void) source;
+    }
+
     virtual float getBaseOffset() const {
         return 0.0f;
     }

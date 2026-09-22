@@ -11,6 +11,7 @@
 #include "Actor/ServerActor.h"
 #include "Server/PropertiesSettings.h"
 
+#include <cstdint>
 #include <string>
 
 class Level;
@@ -63,6 +64,41 @@ public:
         return mNavigation;
     }
 
+    void onDamaged(ServerNetworkHandler &owner, ServerPlayer *source) override;
+
+    virtual float getAttackDamage(Difficulty difficulty) const {
+        (void) difficulty;
+        return 0.0f;
+    }
+
+    int64_t getLastHurtTick() const {
+        return mLastHurtTick;
+    }
+
+    uint64_t getLastHurtBy() const {
+        return mLastHurtBy;
+    }
+
+    uint32_t getHurtCount() const {
+        return mHurtCount;
+    }
+
+    void setTarget(uint64_t runtimeId) {
+        mTargetRuntimeId = runtimeId;
+    }
+
+    void clearTarget() {
+        mTargetRuntimeId = 0;
+    }
+
+    ServerPlayer *getTarget(ServerNetworkHandler &owner) const;
+
+    bool canTarget(const ServerPlayer &player) const;
+
+    float distanceSquaredTo(const Actor &other) const;
+
+    static ServerPlayer *findPlayer(ServerNetworkHandler &owner, uint64_t runtimeId);
+
 protected:
     virtual void registerGoals(GoalSelector &goalSelector) {
         (void) goalSelector;
@@ -73,6 +109,10 @@ protected:
 private:
     GoalSelector mGoalSelector;
     bool mGoalsRegistered = false;
+    int64_t mLastHurtTick = INT64_MIN / 2;
+    uint64_t mLastHurtBy = 0;
+    uint32_t mHurtCount = 0;
+    uint64_t mTargetRuntimeId = 0;
     PathNavigation mNavigation;
     MoveControl mMoveControl;
     LookControl mLookControl;

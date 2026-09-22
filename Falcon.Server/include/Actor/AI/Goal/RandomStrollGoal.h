@@ -19,6 +19,17 @@ public:
 
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
+protected:
+    virtual bool shouldPickTarget(MobActor &mob) const;
+
+    int32_t getTicksSinceTarget() const {
+        return mTicksSinceTarget;
+    }
+
+    int32_t getInterval() const {
+        return mInterval;
+    }
+
 private:
     Vector3f _randomTarget(const MobActor &mob) const;
 
