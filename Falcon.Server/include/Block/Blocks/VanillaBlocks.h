@@ -2861,6 +2861,106 @@ public:
 
     static Block BLACK_WOOL_STAIRS();
 
+    static Block WHITE_CONCRETE_SLAB();
+
+    static Block WHITE_CONCRETE_DOUBLE_SLAB();
+
+    static Block WHITE_CONCRETE_STAIRS();
+
+    static Block ORANGE_CONCRETE_SLAB();
+
+    static Block ORANGE_CONCRETE_DOUBLE_SLAB();
+
+    static Block ORANGE_CONCRETE_STAIRS();
+
+    static Block MAGENTA_CONCRETE_SLAB();
+
+    static Block MAGENTA_CONCRETE_DOUBLE_SLAB();
+
+    static Block MAGENTA_CONCRETE_STAIRS();
+
+    static Block LIGHT_BLUE_CONCRETE_SLAB();
+
+    static Block LIGHT_BLUE_CONCRETE_DOUBLE_SLAB();
+
+    static Block LIGHT_BLUE_CONCRETE_STAIRS();
+
+    static Block YELLOW_CONCRETE_SLAB();
+
+    static Block YELLOW_CONCRETE_DOUBLE_SLAB();
+
+    static Block YELLOW_CONCRETE_STAIRS();
+
+    static Block LIME_CONCRETE_SLAB();
+
+    static Block LIME_CONCRETE_DOUBLE_SLAB();
+
+    static Block LIME_CONCRETE_STAIRS();
+
+    static Block PINK_CONCRETE_SLAB();
+
+    static Block PINK_CONCRETE_DOUBLE_SLAB();
+
+    static Block PINK_CONCRETE_STAIRS();
+
+    static Block GRAY_CONCRETE_SLAB();
+
+    static Block GRAY_CONCRETE_DOUBLE_SLAB();
+
+    static Block GRAY_CONCRETE_STAIRS();
+
+    static Block LIGHT_GRAY_CONCRETE_SLAB();
+
+    static Block LIGHT_GRAY_CONCRETE_DOUBLE_SLAB();
+
+    static Block LIGHT_GRAY_CONCRETE_STAIRS();
+
+    static Block CYAN_CONCRETE_SLAB();
+
+    static Block CYAN_CONCRETE_DOUBLE_SLAB();
+
+    static Block CYAN_CONCRETE_STAIRS();
+
+    static Block PURPLE_CONCRETE_SLAB();
+
+    static Block PURPLE_CONCRETE_DOUBLE_SLAB();
+
+    static Block PURPLE_CONCRETE_STAIRS();
+
+    static Block BLUE_CONCRETE_SLAB();
+
+    static Block BLUE_CONCRETE_DOUBLE_SLAB();
+
+    static Block BLUE_CONCRETE_STAIRS();
+
+    static Block BROWN_CONCRETE_SLAB();
+
+    static Block BROWN_CONCRETE_DOUBLE_SLAB();
+
+    static Block BROWN_CONCRETE_STAIRS();
+
+    static Block GREEN_CONCRETE_SLAB();
+
+    static Block GREEN_CONCRETE_DOUBLE_SLAB();
+
+    static Block GREEN_CONCRETE_STAIRS();
+
+    static Block RED_CONCRETE_SLAB();
+
+    static Block RED_CONCRETE_DOUBLE_SLAB();
+
+    static Block RED_CONCRETE_STAIRS();
+
+    static Block BLACK_CONCRETE_SLAB();
+
+    static Block BLACK_CONCRETE_DOUBLE_SLAB();
+
+    static Block BLACK_CONCRETE_STAIRS();
+
+    static Block SHELF_MUSHROOM();
+
+    static Block RED_SHRUB();
+
     static Block GRASS();
 
     static Block fromData(const BlockData &data);

@@ -52,6 +52,7 @@ namespace {
                 {"minecraft:short_grass", {PlantSupport::Dirt, true}},
                 {"minecraft:fern", {PlantSupport::Dirt, true}},
                 {"minecraft:deadbush", {PlantSupport::DirtSandClay, true}},
+                {"minecraft:red_shrub", {PlantSupport::DirtSandClay, true}},
                 {"minecraft:wheat", {PlantSupport::Farmland, false}},
                 {"minecraft:carrots", {PlantSupport::Farmland, false}},
                 {"minecraft:potatoes", {PlantSupport::Farmland, false}},
