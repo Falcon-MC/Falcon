@@ -7,7 +7,7 @@ PlayerCommandOrigin::PlayerCommandOrigin(ServerNetworkHandler &handler, ServerPl
                                          const CommandOriginData &origin)
         : mHandler(handler), mPlayer(player), mOrigin(origin) {}
 
-const std::string &PlayerCommandOrigin::getSenderName() const {
+std::string PlayerCommandOrigin::getSenderName() const {
     return mPlayer.getName();
 }
 

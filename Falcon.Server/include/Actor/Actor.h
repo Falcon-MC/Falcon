@@ -22,6 +22,8 @@ public:
 
     virtual const char *getIdentifier() const = 0;
 
+    virtual std::string getName() const;
+
     uint64_t getRuntimeId() const { return mRuntimeId; }
 
     int64_t getUniqueId() const { return (int64_t) mRuntimeId; }

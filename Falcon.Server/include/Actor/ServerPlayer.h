@@ -52,7 +52,9 @@ public:
 
     bool isSpawned() const { return mLoginState == LoginState::Spawned; }
 
-    const std::string &getName() const { return mName; }
+    std::string getName() const override {
+        return mName;
+    }
 
     void setName(const std::string &name) { mName = name; }
 

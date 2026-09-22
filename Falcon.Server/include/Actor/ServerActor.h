@@ -190,6 +190,10 @@ public:
 
     const std::string &getNameTag() const { return mNameTag; }
 
+    std::string getName() const override {
+        return mNameTag.empty() ? Actor::getName() : mNameTag;
+    }
+
     void setNameTag(const std::string &nameTag) { mNameTag = nameTag; }
 
     virtual bool shouldSave() const { return isAlive() && !mIsProjectile && !hasOwnerPlayer(); }

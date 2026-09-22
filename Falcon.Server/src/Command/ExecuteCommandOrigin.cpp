@@ -6,7 +6,7 @@ ExecuteCommandOrigin::ExecuteCommandOrigin(CommandOrigin &base, ServerPlayer *ex
                                            const Vector3f &rotation, Level *level)
         : mBase(base), mExecutor(executor), mPosition(position), mRotation(rotation), mLevel(level) {}
 
-const std::string &ExecuteCommandOrigin::getSenderName() const {
+std::string ExecuteCommandOrigin::getSenderName() const {
     if (mExecutor != nullptr)
         return mExecutor->getName();
 

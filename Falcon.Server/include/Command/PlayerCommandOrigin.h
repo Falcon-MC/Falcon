@@ -10,7 +10,7 @@ class PlayerCommandOrigin : public CommandOrigin {
 public:
     PlayerCommandOrigin(ServerNetworkHandler &handler, ServerPlayer &player, const CommandOriginData &origin);
 
-    const std::string &getSenderName() const override;
+    std::string getSenderName() const override;
 
     bool isPlayer() const override { return true; }
 

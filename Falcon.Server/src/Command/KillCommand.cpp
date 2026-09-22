@@ -46,7 +46,7 @@ bool KillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
 
     for (ServerActor *actor: actors) {
         actor->kill(mHandler, nullptr, 0);
-        sender.sendTranslation("commands.kill.successful", {actor->getIdentifier()});
+        sender.sendTranslation("commands.kill.successful", {actor->getName()});
     }
 
     for (ServerPlayer *target: targets) {

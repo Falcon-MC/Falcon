@@ -13,7 +13,7 @@ class CommandOrigin {
 public:
     virtual ~CommandOrigin() = default;
 
-    virtual const std::string &getSenderName() const = 0;
+    virtual std::string getSenderName() const = 0;
 
     virtual bool isPlayer() const = 0;
 

@@ -10,7 +10,7 @@ public:
     ExecuteCommandOrigin(CommandOrigin &base, ServerPlayer *executor, const Vector3f &position,
                          const Vector3f &rotation, Level *level);
 
-    const std::string &getSenderName() const override;
+    std::string getSenderName() const override;
 
     bool isPlayer() const override { return mExecutor != nullptr; }
 

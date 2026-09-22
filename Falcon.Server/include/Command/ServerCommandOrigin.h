@@ -8,7 +8,7 @@ class ServerCommandOrigin : public CommandOrigin {
 public:
     explicit ServerCommandOrigin(ServerNetworkHandler *handler = nullptr);
 
-    const std::string &getSenderName() const override;
+    std::string getSenderName() const override;
 
     bool isPlayer() const override { return false; }
 

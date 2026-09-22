@@ -122,7 +122,7 @@ void AbstractSlimeActor::_attackTouchingPlayers(ServerNetworkHandler &owner) {
             continue;
 
         owner.applyDamage(player, getContactDamage(), "death.attack.mob",
-                          {player.getName(), "%entity." + getTypeId().substr(getTypeId().find(':') + 1) + ".name"});
+                          {player.getName(), getName()});
         mAttackCooldown = ATTACK_COOLDOWN_TICKS;
     }
 }

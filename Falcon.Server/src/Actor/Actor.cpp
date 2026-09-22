@@ -124,6 +124,12 @@ void Actor::setMaxHealth(float maxHealth) {
     mAttributes.setBaseMaximum(ATTRIBUTE_HEALTH, maxHealth);
 }
 
+std::string Actor::getName() const {
+    const std::string identifier = getIdentifier();
+    const size_t separator = identifier.find(':');
+    return "%entity." + (separator == std::string::npos ? identifier : identifier.substr(separator + 1)) + ".name";
+}
+
 bool Actor::isAlive() const {
     return getHealth() > 0.0f;
 }

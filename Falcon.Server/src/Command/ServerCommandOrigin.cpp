@@ -9,9 +9,8 @@ Level *ServerCommandOrigin::getLevel() {
     return mHandler == nullptr ? nullptr : &mHandler->getLevel();
 }
 
-const std::string &ServerCommandOrigin::getSenderName() const {
-    static const std::string name = "Console";
-    return name;
+std::string ServerCommandOrigin::getSenderName() const {
+    return "Console";
 }
 
 void ServerCommandOrigin::sendMessage(const std::string &message) {

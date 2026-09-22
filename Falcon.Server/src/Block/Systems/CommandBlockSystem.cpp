@@ -42,7 +42,7 @@ namespace {
         {
         }
 
-        const std::string &getSenderName() const override
+        std::string getSenderName() const override
         {
             return mName;
         }
