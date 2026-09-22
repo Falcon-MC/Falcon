@@ -48,8 +48,6 @@ check it against its `.sha256` file and run it. On the first start, a setup wiza
 - [BedrockData](https://github.com/Falcon-MC/BedrockData) - game data files, versioned by protocol
 - [BlockStateUpdater](https://github.com/Falcon-MC/BlockStateUpdater) - block state upgrade schemas
 - [leveldb](https://github.com/Falcon-MC/leveldb) - LevelDB with the zlib compression used by Bedrock worlds
-- [DataGen](https://github.com/Falcon-MC/DataGen) - generates the game data from a dedicated server
-
 ## Building
 
 Falcon needs CMake 3.16+, a C++17 compiler, zlib and OpenSSL. On Windows the reference toolchain is
