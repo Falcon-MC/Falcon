@@ -18,7 +18,7 @@ FALCON_REGISTER_ITEM_CUSTOM(FireChargeItem, 41,
                                 return std::make_unique<FireChargeItem>(item);
                             });
 
-#include "Block/BlockData.h"
+#include "Block/BlockSupport.h"
 #include "Block/Systems/FireSystem.h"
 #include "Inventory/InventoryManager.h"
 #include "Inventory/PlayerInventory.h"
@@ -49,11 +49,6 @@ namespace {
         return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
     }
 
-    bool isSolid(const std::string &identifier) {
-        const BlockData *data = BlockDataTable::find(identifier.c_str());
-        return data != nullptr && data->mSolid;
-    }
-
     bool isObsidian(Level &level, const Vector3i &position) {
         return level.getBlockState(position.x, position.y, position.z).mName == "minecraft:obsidian";
     }
@@ -62,10 +57,10 @@ namespace {
         if (level.getBlockState(placement.x, placement.y, placement.z).mName != "minecraft:air")
             return false;
 
-        const std::string identifier = level.getBlockState(target.x, target.y, target.z).mName;
-        const int burnChance = FireSystem::getBurnChance(identifier);
+        const BlockState state = level.getBlockState(target.x, target.y, target.z);
+        const int burnChance = FireSystem::getBurnChance(state.mName);
 
-        return burnChance != FireSystem::UNBURNABLE && (isSolid(identifier) || burnChance > 0);
+        return burnChance != FireSystem::UNBURNABLE && (BlockSupport::isSolid(state) || burnChance > 0);
     }
 
 }

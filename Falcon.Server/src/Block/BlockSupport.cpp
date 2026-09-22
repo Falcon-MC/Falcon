@@ -1,6 +1,7 @@
 #include "Block/BlockSupport.h"
 
 #include "Block/Block.h"
+#include "Block/BlockData.h"
 #include "Block/Blocks/FenceBlocks.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Components/PlacementOrientation.h"
@@ -22,6 +23,11 @@ namespace BlockSupport {
                         position.z - FACE_OFFSETS[blockFace][2]);
     }
 
+    bool isSolid(const BlockState &state) {
+        const BlockData *data = BlockDataTable::find(state.mName.c_str());
+        return data != nullptr && data->mSolid;
+    }
+
     bool isReplaceable(const BlockState &state) {
         if (DecorationSupport::isAir(state))
             return true;
@@ -38,9 +44,9 @@ namespace BlockSupport {
             return blockFace == FACE_DOWN;
 
         if (blockFace == FACE_DOWN)
-            return DecorationSupport::isSolid(support) && !DecorationSupport::isTransparent(support);
+            return isSolid(support) && !DecorationSupport::isTransparent(support);
 
-        if (DecorationSupport::isSolid(support))
+        if (isSolid(support))
             return true;
 
         if (VanillaBlocks::getAs<WallBlock>(support.mName) != nullptr
@@ -51,6 +57,6 @@ namespace BlockSupport {
     }
 
     bool isSolidOrCauldron(const BlockState &support) {
-        return DecorationSupport::isSolid(support) || support.mName == "minecraft:cauldron";
+        return isSolid(support) || support.mName == "minecraft:cauldron";
     }
 }

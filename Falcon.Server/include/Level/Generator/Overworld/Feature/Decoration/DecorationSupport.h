@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Block/BlockState.h"
+#include "Block/BlockSupport.h"
 
 #include <cstdint>
 
@@ -35,7 +36,7 @@ namespace DecorationSupport {
 
     bool isAir(const BlockState &state);
 
-    bool isSolid(const BlockState &state);
+    using BlockSupport::isSolid;
 
     bool isTransparent(const BlockState &state);
 

@@ -2,10 +2,15 @@
 
 #include "Block/Blocks/LiquidBlock.h"
 
+#include <string>
+
 class LavaBlock : public LiquidBlock {
 public:
     explicit LavaBlock(const BlockState &state) : LiquidBlock(state) {}
     explicit LavaBlock(const LiquidBlock &block) : LiquidBlock(block) {}
+    explicit LavaBlock(const Block &block) : LiquidBlock(block) {}
+
+    static bool matches(const std::string &identifier);
 
     int getTickRate() const override { return 30; }
     int getFlowDecayPerBlock() const override { return 2; }

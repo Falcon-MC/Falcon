@@ -5,6 +5,8 @@
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
 #include "Block/BlockState.h"
+#include "Block/BlockSupport.h"
+#include "Block/Blocks/FireBlock.h"
 #include "Block/Blocks/PlacementRuleBlocks.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/RedstoneSystem.h"
@@ -123,11 +125,6 @@ namespace {
         return Vector3i(position.x + dx, position.y + dy, position.z + dz);
     }
 
-    bool isSolid(const std::string &identifier) {
-        const BlockData *data = BlockDataTable::find(identifier.c_str());
-        return data != nullptr && data->mSolid;
-    }
-
     bool isTopFacingSurfaceSolid(const BlockState &state) {
         const std::string &identifier = state.mName;
 
@@ -146,7 +143,7 @@ namespace {
         if (identifier == "minecraft:moss_carpet" || identifier == "minecraft:azalea")
             return false;
 
-        return isSolid(identifier);
+        return BlockSupport::isSolid(state);
     }
 
     bool burnsForever(const std::string &identifier) {
@@ -286,7 +283,7 @@ namespace {
 }
 
 bool FireSystem::matches(const std::string &identifier) {
-    return identifier == "minecraft:fire" || identifier == "minecraft:soul_fire";
+    return VanillaBlocks::getAs<FireBlock>(identifier) != nullptr;
 }
 
 int FireSystem::getBurnChance(const std::string &identifier) {

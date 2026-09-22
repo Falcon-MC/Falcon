@@ -1,6 +1,8 @@
 #include "Block/Systems/FireBlocksFetch.h"
 
 #include "Block/Block.h"
+#include "Block/Blocks/FireBlock.h"
+#include "Block/Blocks/VanillaBlocks.h"
 #include "Level/Level.h"
 
 #include <cmath>
@@ -23,11 +25,11 @@ FireContact FireBlocksFetch::at(Level &level, const Vector3f &feet) {
     for (int32_t x = minX; x <= maxX; ++x) {
         for (int32_t y = minY; y <= maxY; ++y) {
             for (int32_t z = minZ; z <= maxZ; ++z) {
-                const Block block(level.getBlockState(x, y, z));
-                if (!block.isFire())
+                const BlockState state = level.getBlockState(x, y, z);
+                if (VanillaBlocks::getAs<FireBlock>(state.mName) == nullptr)
                     continue;
 
-                return FireContact{true, block.getIdentifier() == "minecraft:soul_fire" ? 2.0f : 1.0f};
+                return FireContact{true, state.mName == "minecraft:soul_fire" ? 2.0f : 1.0f};
             }
         }
     }

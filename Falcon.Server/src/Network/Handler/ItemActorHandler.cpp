@@ -3,6 +3,10 @@
 #include "Actor/ActorFlags.h"
 #include "Actor/ItemActor.h"
 #include "Actor/ServerPlayer.h"
+#include "Block/Blocks/ContainerBlock.h"
+#include "Block/Blocks/FireBlock.h"
+#include "Block/Blocks/LavaBlock.h"
+#include "Block/Blocks/VanillaBlocks.h"
 #include "Core/Math/MathConstants.h"
 #include "Inventory/InventoryManager.h"
 #include "Inventory/PlayerInventory.h"
@@ -50,10 +54,15 @@ namespace {
     const float ITEM_GROUND_PROBE_DEPTH = 0.01f;
     const float ITEM_PICKUP_RANGE_SQUARED = 2.25f;
 
+    bool isCampfire(const std::string &identifier) {
+        const ContainerBlockDefinition *definition = ContainerBlock::findDefinition(identifier);
+        return definition != nullptr && definition->mKind == ContainerBlockKind::Campfire;
+    }
+
     bool isFireBlock(const std::string &identifier) {
-        return identifier == "minecraft:fire" || identifier == "minecraft:soul_fire"
-               || identifier == "minecraft:lava" || identifier == "minecraft:flowing_lava"
-               || identifier == "minecraft:campfire" || identifier == "minecraft:soul_campfire";
+        const Block *block = VanillaBlocks::fromIdentifier(identifier);
+        return dynamic_cast<const FireBlock *>(block) != nullptr || dynamic_cast<const LavaBlock *>(block) != nullptr
+               || isCampfire(identifier);
     }
 
     bool isFireResistant(const ItemStack &item) {

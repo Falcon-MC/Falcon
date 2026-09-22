@@ -44,9 +44,8 @@ namespace {
 
     const std::unordered_set<std::string> &replaceableIdentifiers() {
         static const std::unordered_set<std::string> identifiers = {
-                "minecraft:water", "minecraft:flowing_water", "minecraft:lava", "minecraft:flowing_lava",
                 "minecraft:bubble_column", "minecraft:bush", "minecraft:crimson_roots", "minecraft:warped_roots",
-                "minecraft:nether_sprouts", "minecraft:fire", "minecraft:soul_fire", "minecraft:large_fern",
+                "minecraft:nether_sprouts", "minecraft:large_fern",
                 "minecraft:tall_grass", "minecraft:short_dry_grass", "minecraft:tall_dry_grass",
                 "minecraft:leaf_litter", "minecraft:glow_lichen", "minecraft:sculk_vein", "minecraft:resin_clump",
                 "minecraft:seagrass", "minecraft:vine"

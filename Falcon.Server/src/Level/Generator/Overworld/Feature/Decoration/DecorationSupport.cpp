@@ -1,7 +1,9 @@
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 
 #include "Block/BlockData.h"
+#include "Block/Blocks/LiquidBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Blocks/WaterBlock.h"
 #include "Block/Systems/LiquidPhysicsSystem.h"
 #include "Level/Generator/Biome/BiomeIds.h"
 #include "Level/Generator/Feature/BlockManager.h"
@@ -40,14 +42,6 @@ namespace DecorationSupport {
         return state.mName == "minecraft:air";
     }
 
-    bool isSolid(const BlockState &state) {
-        const BlockData *data = BlockDataTable::find(state.mName.c_str());
-        if (data == nullptr)
-            return false;
-
-        return data->mSolid;
-    }
-
     bool isTransparent(const BlockState &state) {
         const BlockData *data = BlockDataTable::find(state.mName.c_str());
         if (data == nullptr)
@@ -65,12 +59,11 @@ namespace DecorationSupport {
     }
 
     bool isLiquid(const BlockState &state) {
-        return state.mName == "minecraft:water" || state.mName == "minecraft:flowing_water"
-               || state.mName == "minecraft:lava" || state.mName == "minecraft:flowing_lava";
+        return VanillaBlocks::getAs<LiquidBlock>(state.mName) != nullptr;
     }
 
     bool isWater(const BlockState &state) {
-        return state.mName == "minecraft:water" || state.mName == "minecraft:flowing_water";
+        return VanillaBlocks::getAs<WaterBlock>(state.mName) != nullptr;
     }
 
     bool isSand(const BlockState &state) {

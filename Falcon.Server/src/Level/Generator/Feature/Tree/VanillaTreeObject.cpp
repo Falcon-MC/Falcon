@@ -1,6 +1,7 @@
 #include "Level/Generator/Feature/Tree/VanillaTreeObject.h"
 
 #include "Block/BlockData.h"
+#include "Block/BlockSupport.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/LevelChunk.h"
@@ -89,11 +90,7 @@ bool VanillaTreeObject::isLeaves(const std::string &identifier) {
 }
 
 bool VanillaTreeObject::isSolid(const BlockState &state) {
-    const BlockData *data = BlockDataTable::find(state.mName.c_str());
-    if (data == nullptr)
-        return false;
-
-    return data->mSolid;
+    return BlockSupport::isSolid(state);
 }
 
 bool VanillaTreeObject::canBeReplaced(const BlockState &state) {

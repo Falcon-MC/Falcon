@@ -1,13 +1,26 @@
 #include "Block/Blocks/LiquidBlock.h"
 
+#include "Block/Blocks/LavaBlock.h"
+#include "Block/Blocks/WaterBlock.h"
+
 #include <algorithm>
 
+bool LiquidBlock::canBeReplaced(const BlockState &state) const {
+    (void) state;
+
+    return true;
+}
+
+PistonMoveReaction LiquidBlock::getPistonMoveReaction() const {
+    return PistonMoveReaction::Break;
+}
+
 bool LiquidBlock::isWater() const {
-    return getIdentifier() == "minecraft:water" || getIdentifier() == "minecraft:flowing_water";
+    return WaterBlock::matches(getIdentifier());
 }
 
 bool LiquidBlock::isLava() const {
-    return getIdentifier() == "minecraft:lava" || getIdentifier() == "minecraft:flowing_lava";
+    return LavaBlock::matches(getIdentifier());
 }
 
 bool LiquidBlock::isLiquid() const {

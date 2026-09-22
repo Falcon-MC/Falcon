@@ -9,6 +9,12 @@ public:
 
     explicit LiquidBlock(const BlockState &state) : Block(state) {}
 
+    explicit LiquidBlock(const Block &block) : Block(block) {}
+
+    bool canBeReplaced(const BlockState &state) const override;
+
+    PistonMoveReaction getPistonMoveReaction() const override;
+
     bool isWater() const;
     bool isLava() const;
     bool isLiquid() const;

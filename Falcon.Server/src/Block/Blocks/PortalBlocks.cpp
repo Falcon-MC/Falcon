@@ -2,8 +2,11 @@
 
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockClassRegistry.h"
-#include "Block/BlockData.h"
 #include "Block/BlockState.h"
+#include "Block/BlockSupport.h"
+#include "Block/Blocks/LavaBlock.h"
+#include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Blocks/WaterBlock.h"
 #include "Inventory/InventoryManager.h"
 #include "Inventory/PlayerInventory.h"
 #include "Level/Dimension.h"
@@ -58,19 +61,6 @@ namespace {
 
     bool isObsidianAt(Level &level, int32_t x, int32_t y, int32_t z) {
         return identifierAt(level, x, y, z) == OBSIDIAN_IDENTIFIER;
-    }
-
-    bool isSolidIdentifier(const std::string &identifier) {
-        const BlockData *data = BlockDataTable::find(identifier.c_str());
-        return data != nullptr && data->mSolid;
-    }
-
-    bool isLavaIdentifier(const std::string &identifier) {
-        return identifier == "minecraft:lava" || identifier == "minecraft:flowing_lava";
-    }
-
-    bool isWaterIdentifier(const std::string &identifier) {
-        return identifier == "minecraft:water" || identifier == "minecraft:flowing_water";
     }
 
     int32_t stateFlag(const BlockState &state, const std::string &key) {
@@ -365,16 +355,16 @@ bool PortalBlock::findDestination(Level &destination, const Vector3i &source, Ve
                            && isAirAt(destination, x, i + 3, z)
                            && isAirAt(destination, x, i + 4, z);
 
-        if (!space || !isSolidIdentifier(ground))
+        if (!space || !BlockSupport::isSolid(BlockState(ground)))
             continue;
 
-        if (isLavaIdentifier(ground))
+        if (VanillaBlocks::getAs<LavaBlock>(ground) != nullptr)
             continue;
 
         if (toNether) {
             if (ground == BEDROCK_IDENTIFIER)
                 continue;
-        } else if (isWaterIdentifier(ground)) {
+        } else if (VanillaBlocks::getAs<WaterBlock>(ground) != nullptr) {
             continue;
         }
 

@@ -45,6 +45,12 @@ enum class PlacementMergeResult {
     Rejected
 };
 
+enum class PistonMoveReaction {
+    Normal,
+    Break,
+    PushOnly
+};
+
 class Block {
 public:
     virtual ~Block() = default;
@@ -209,6 +215,10 @@ public:
         return false;
     }
 
+    virtual PistonMoveReaction getPistonMoveReaction() const {
+        return PistonMoveReaction::Normal;
+    }
+
     virtual BlockState applyPlacementOrientation(const BlockState &state,
                                                  const BlockPlacementContext &context) const;
 
@@ -228,10 +238,6 @@ public:
     const std::string &getIdentifier() const { return mIdentifier; }
 
     const std::string &getName() const { return mName; }
-
-    bool isFire() const {
-        return mIdentifier == "minecraft:fire" || mIdentifier == "minecraft:soul_fire";
-    }
 
     const Tag &getStates() const { return mStates; }
 
