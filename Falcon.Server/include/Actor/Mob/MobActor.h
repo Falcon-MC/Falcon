@@ -4,6 +4,7 @@
 #include "Actor/AI/Control/JumpControl.h"
 #include "Actor/AI/Control/LookControl.h"
 #include "Actor/AI/Control/MoveControl.h"
+#include "Actor/AI/Goal/GoalSelector.h"
 #include "Actor/ActorCategory.h"
 #include "Actor/ActorSize.h"
 #include "Actor/ServerActor.h"
@@ -58,9 +59,15 @@ public:
     }
 
 protected:
+    virtual void registerGoals(GoalSelector &goalSelector) {
+        (void) goalSelector;
+    }
+
     void tickControls(ServerNetworkHandler &owner);
 
 private:
+    GoalSelector mGoalSelector;
+    bool mGoalsRegistered = false;
     MoveControl mMoveControl;
     LookControl mLookControl;
     JumpControl mJumpControl;

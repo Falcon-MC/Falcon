@@ -15,12 +15,11 @@ namespace {
     const float SATURATED_SPEED_RATIO = 0.4756f;
     const float MIN_JUMP_HEIGHT = 0.01f;
     const float MAX_JUMP_HEIGHT = 1.1f;
-    const char *MOVEMENT_ATTRIBUTE = "minecraft:movement";
 }
 
-void MoveControl::setWantedPosition(const Vector3f &position, float speedModifier) {
+void MoveControl::setWantedPosition(const Vector3f &position, float speed) {
     mWantedPosition = position;
-    mSpeedModifier = speedModifier;
+    mSpeed = speed;
     mHasWanted = true;
 }
 
@@ -39,7 +38,7 @@ void MoveControl::tick(ServerNetworkHandler &owner, MobActor &mob, JumpControl &
     if (!jumpControl.isCoolingDown() && !mob.isOnGround() && !inWater && motion.y > 0.0f)
         return;
 
-    const float speed = mob.getAttributes().get(MOVEMENT_ATTRIBUTE) * mSpeedModifier;
+    const float speed = mSpeed * mob.getMovementSpeedMultiplier();
     if (motion.x * motion.x + motion.z * motion.z > speed * speed * SATURATED_SPEED_RATIO)
         return;
 

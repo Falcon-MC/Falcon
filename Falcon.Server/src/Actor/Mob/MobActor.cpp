@@ -25,6 +25,12 @@ MobActor::MobActor(uint64_t runtimeId, const std::string &identifier) : ServerAc
 }
 
 void MobActor::tick(ServerNetworkHandler &owner) {
+    if (!mGoalsRegistered) {
+        registerGoals(mGoalSelector);
+        mGoalsRegistered = true;
+    }
+
+    mGoalSelector.tick(owner, *this);
     tickControls(owner);
     ServerActor::tick(owner);
 }

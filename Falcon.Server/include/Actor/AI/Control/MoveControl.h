@@ -8,7 +8,7 @@ class ServerNetworkHandler;
 
 class MoveControl {
 public:
-    void setWantedPosition(const Vector3f &position, float speedModifier);
+    void setWantedPosition(const Vector3f &position, float speed);
 
     void stop();
 
@@ -30,7 +30,7 @@ private:
     void _tryJump(ServerNetworkHandler &owner, MobActor &mob, JumpControl &jumpControl, float dx, float dz) const;
 
     Vector3f mWantedPosition;
-    float mSpeedModifier = 1.0f;
+    float mSpeed = 0.0f;
     bool mHasWanted = false;
     bool mMoving = false;
 };
