@@ -124,6 +124,18 @@ void Actor::setMaxHealth(float maxHealth) {
     mAttributes.setBaseMaximum(ATTRIBUTE_HEALTH, maxHealth);
 }
 
+bool Actor::catchFireFrom(const Actor &attacker, Difficulty difficulty) {
+    if (!attacker.isOnFire() || attacker.isPlayer() || hasEffect(MobEffectId::FireResistance))
+        return false;
+
+    const int fireTicks = 2 * (int) difficulty * 20;
+    if (fireTicks <= mFireTicks)
+        return false;
+
+    setFireTicks(fireTicks);
+    return true;
+}
+
 std::string Actor::getName() const {
     const std::string identifier = getIdentifier();
     const size_t separator = identifier.find(':');

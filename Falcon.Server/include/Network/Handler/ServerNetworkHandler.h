@@ -222,7 +222,7 @@ public:
 
     void broadcastActorEvent(ServerActor &actor, EntityEventType eventType);
 
-    bool damageActor(ServerActor &actor, float amount, ServerPlayer *source, int32_t lootingLevel = -1);
+    bool damageActor(ServerActor &actor, float amount, Actor *attacker, int32_t lootingLevel = -1);
 
     void hurtActor(Actor &actor, float amount, const std::string &deathMessageKey);
 
@@ -393,7 +393,7 @@ public:
 
     void applyDamage(ServerPlayer &player, float amount, const std::string &deathMessageKey,
                      const std::vector<std::string> &deathMessageParameters = {},
-                     bool applyArmor = true, bool respectCooldown = true);
+                     bool applyArmor = true, bool respectCooldown = true, const Actor *attacker = nullptr);
 
     void killPlayer(ServerPlayer &player, const std::string &deathMessageKey,
                     const std::vector<std::string> &deathMessageParameters = {});

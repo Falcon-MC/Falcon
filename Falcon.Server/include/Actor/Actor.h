@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+enum class Difficulty : int;
+
 class Actor {
 public:
     explicit Actor(uint64_t runtimeId);
@@ -23,6 +25,12 @@ public:
     virtual const char *getIdentifier() const = 0;
 
     virtual std::string getName() const;
+
+    virtual bool isPlayer() const {
+        return false;
+    }
+
+    bool catchFireFrom(const Actor &attacker, Difficulty difficulty);
 
     uint64_t getRuntimeId() const { return mRuntimeId; }
 

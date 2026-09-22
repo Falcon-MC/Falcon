@@ -56,6 +56,10 @@ public:
         return mName;
     }
 
+    bool isPlayer() const override {
+        return true;
+    }
+
     void setName(const std::string &name) { mName = name; }
 
     const std::string &getUuid() const { return mUuid; }

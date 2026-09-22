@@ -811,8 +811,8 @@ void ServerNetworkHandler::broadcastActorEvent(ServerActor &actor, EntityEventTy
     }
 }
 
-bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, ServerPlayer *source, int32_t lootingLevel) {
-    return actor.hurt(*this, amount, source, lootingLevel);
+bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, Actor *attacker, int32_t lootingLevel) {
+    return actor.hurt(*this, amount, attacker, lootingLevel);
 }
 
 void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::string &deathMessageKey) {

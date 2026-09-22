@@ -68,7 +68,7 @@ void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Server
         return;
 
     const float healthBefore = target.getHealth();
-    owner.applyDamage(target, damage, DEATH_MESSAGE, {target.getName(), mob.getName()});
+    owner.applyDamage(target, damage, DEATH_MESSAGE, {target.getName(), mob.getName()}, true, true, &mob);
     if (target.getHealth() >= healthBefore)
         return;
 

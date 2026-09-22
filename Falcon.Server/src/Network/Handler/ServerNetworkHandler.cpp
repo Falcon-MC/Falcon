@@ -1985,7 +1985,7 @@ void ServerNetworkHandler::_handleSuffocationDamage(ServerPlayer &player) {
 
 void ServerNetworkHandler::applyDamage(ServerPlayer &player, float amount, const std::string &deathMessageKey,
                                        const std::vector<std::string> &deathMessageParameters, bool applyArmor,
-                                       bool respectCooldown) {
+                                       bool respectCooldown, const Actor *attacker) {
     if (!player.isSpawned() || player.isDead() || amount <= 0.0f)
         return;
 
@@ -2036,6 +2036,9 @@ void ServerNetworkHandler::applyDamage(ServerPlayer &player, float amount, const
         killPlayer(player, deathMessageKey, deathMessageParameters);
         return;
     }
+
+    if (attacker != nullptr && player.catchFireFrom(*attacker, mProperties.getDifficulty()))
+        _sendEntityData(player);
 
     _sendHealth(player);
     _broadcastEntityEvent(player, (uint8_t) EntityEventType::HurtAnimation);

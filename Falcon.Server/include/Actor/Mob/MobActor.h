@@ -64,7 +64,7 @@ public:
         return mNavigation;
     }
 
-    void onDamaged(ServerNetworkHandler &owner, ServerPlayer *source) override;
+    void onDamaged(ServerNetworkHandler &owner, Actor *attacker) override;
 
     virtual float getAttackDamage(Difficulty difficulty) const {
         (void) difficulty;

@@ -37,9 +37,9 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     ServerActor::tick(owner);
 }
 
-void MobActor::onDamaged(ServerNetworkHandler &owner, ServerPlayer *source) {
+void MobActor::onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
     mLastHurtTick = owner.getCurrentTick();
-    mLastHurtBy = source != nullptr ? source->getRuntimeId() : 0;
+    mLastHurtBy = attacker != nullptr && attacker->isPlayer() ? attacker->getRuntimeId() : 0;
     mHurtCount++;
 }
 

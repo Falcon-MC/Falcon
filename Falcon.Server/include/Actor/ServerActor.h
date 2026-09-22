@@ -64,9 +64,9 @@ public:
         return false;
     }
 
-    virtual void onDamaged(ServerNetworkHandler &owner, ServerPlayer *source) {
+    virtual void onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
         (void) owner;
-        (void) source;
+        (void) attacker;
     }
 
     virtual float getBaseOffset() const {
@@ -102,7 +102,7 @@ public:
      * item source is holding, which is right for melee but not for a projectile, whose level is
      * captured when it is launched.
      */
-    bool hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source, int32_t lootingLevel = -1);
+    bool hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel = -1);
 
     virtual void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0);
 

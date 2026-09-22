@@ -131,20 +131,24 @@ void ServerActor::tickFire(ServerNetworkHandler &owner) {
     }
 }
 
-bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source, int32_t lootingLevel) {
+bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel) {
     if (!isAlive() || amount < 0.0f || isInvulnerable())
         return false;
 
     if (getNoDamageTicks() > 0 && amount <= getLastDamageAmount())
         return false;
 
+    ServerPlayer *source = dynamic_cast<ServerPlayer *>(attacker);
     if (onHurt(owner, amount, source))
         return true;
 
     setHealth(getHealth() - amount);
     setNoDamageTicks(INVULNERABILITY_TICKS);
     setLastDamageAmount(amount);
-    onDamaged(owner, source);
+    onDamaged(owner, attacker);
+
+    if (attacker != nullptr && getHealth() > 0.0f && catchFireFrom(*attacker, owner.getProperties().getDifficulty()))
+        owner.syncActorFlags(*this);
 
     if (getHealth() > 0.0f)
         owner.syncActorAttributes(*this);
