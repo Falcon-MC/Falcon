@@ -1449,7 +1449,7 @@ void ScriptApi::_buildEvents() {
     static const char *afterNamed[] = {
             "projectileHitBlock", "projectileHitEntity", "entityHitBlock", "entityHitEntity",
             "entityItemDrop", "playerHotbarSelectedSlotChange", "playerInventoryItemChange",
-            "playerInteractWithBlock", "entitySpawn", "entityRemove", "entityLoad", "entityDie", "worldLoad"
+            "playerInteractWithBlock", "entitySpawn", "entityRemove", "entityLoad", "worldLoad"
     };
     for (const char *name: afterNamed)
         JS_SetPropertyStr(mContext, mAfterEvents, name, makeNamedSignal(mContext, name));
@@ -1462,10 +1462,12 @@ void ScriptApi::_buildEvents() {
 
     static const char *beforeNamed[] = {
             "playerInteractWithBlock", "entityHurt", "effectAdd", "playerInteractWithEntity",
-            "itemUse", "chatSend", "worldInitialize", "itemUseOn"
+            "itemUse", "worldInitialize", "itemUseOn"
     };
-    for (const char *name: beforeNamed)
-        JS_SetPropertyStr(mContext, mBeforeEvents, name, makeNamedSignal(mContext, name));
+    for (const char *name: beforeNamed) {
+        const std::string key = std::string("before.") + name;
+        JS_SetPropertyStr(mContext, mBeforeEvents, name, makeNamedSignal(mContext, key.c_str()));
+    }
 }
 
 void ScriptApi::addSubscriber(ScriptEvent event, JSValue callback) {
@@ -1583,14 +1585,14 @@ void ScriptApi::emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, i
     JS_SetPropertyStr(mContext, event, "block", makeBlock(player.getDimension(), x, y, z));
     JS_SetPropertyStr(mContext, event, "itemStack", makeHeldItemStack(player, typeId));
 
-    if (hasNamedSubscribers("itemUseOn"))
-        emitNamed("itemUseOn", JS_DupValue(mContext, event));
+    if (hasNamedSubscribers("before.itemUseOn"))
+        emitNamed("before.itemUseOn", JS_DupValue(mContext, event));
 
     fireHeldItemComponents(player, "onUseOn", event);
 }
 
 void ScriptApi::emitWorldInitialize() {
-    if (!hasNamedSubscribers("worldInitialize"))
+    if (!hasNamedSubscribers("before.worldInitialize"))
         return;
 
     JSValue global = JS_GetGlobalObject(mContext);
@@ -1602,7 +1604,7 @@ void ScriptApi::emitWorldInitialize() {
     JS_SetPropertyStr(mContext, event, "itemComponentRegistry", itemRegistry);
     JS_SetPropertyStr(mContext, event, "blockComponentRegistry", blockRegistry);
 
-    emitNamed("worldInitialize", event);
+    emitNamed("before.worldInitialize", event);
 }
 
 void ScriptApi::emitWorldLoad() {
@@ -1787,6 +1789,18 @@ void ScriptApi::_subscribeGameEvents() {
         JS_SetPropertyStr(mContext, object, "itemStack", makeHeldItemStack(event.mPlayer, event.mItemIdentifier));
         JS_SetPropertyStr(mContext, object, "source", makePlayer(event.mPlayer));
         _dispatch(ScriptEvent::AfterItemUse, object);
+    });
+
+    bus.after().mPlayerHotbarSelectedSlotChange.subscribe([this](PlayerHotbarSelectedSlotChangeAfterEvent &event) {
+        if (!hasNamedSubscribers("playerHotbarSelectedSlotChange"))
+            return;
+
+        JSValue object = JS_NewObject(mContext);
+        JS_SetPropertyStr(mContext, object, "player", makePlayer(event.mPlayer));
+        JS_SetPropertyStr(mContext, object, "newSlotSelected", JS_NewInt32(mContext, event.mNewSlotSelected));
+        JS_SetPropertyStr(mContext, object, "previousSlotSelected", JS_NewInt32(mContext, event.mPreviousSlotSelected));
+        JS_SetPropertyStr(mContext, object, "itemStack", makeItem(event.mPlayer.getInventory().getItemInHand()));
+        emitNamed("playerHotbarSelectedSlotChange", object);
     });
 
     bus.before().mPlayerBreakBlock.subscribe([this](PlayerBreakBlockBeforeEvent &event) {
@@ -4482,4 +4496,66 @@ void ScriptApi::install() {
 
 void ScriptApi::tick(int64_t currentTick) {
     mScheduler.tick(currentTick);
+    _emitInventoryChanges();
+}
+
+JSValue ScriptApi::makeEntity(Actor &actor) {
+    ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor);
+    if (player != nullptr)
+        return makePlayer(*player);
+
+    ServerActor *serverActor = dynamic_cast<ServerActor *>(&actor);
+    if (serverActor != nullptr)
+        return makeActor(*serverActor);
+
+    return JS_UNDEFINED;
+}
+
+JSValue ScriptApi::makeItem(const ItemStack &item) {
+    if (item.isAir() || item.mDefinition == nullptr)
+        return JS_UNDEFINED;
+
+    return makeItemStack(item.mDefinition->getIdentifier(), item.mCount);
+}
+
+void ScriptApi::_emitInventoryChanges() {
+    if (!hasNamedSubscribers("playerInventoryItemChange")) {
+        mInventorySnapshots.clear();
+        return;
+    }
+
+    std::unordered_map<uint64_t, std::vector<ItemStack>> current;
+
+    for (auto &entry: mHost.getPlayers()) {
+        ServerPlayer &player = entry.second;
+        if (!player.isSpawned())
+            continue;
+
+        const std::vector<ItemStack> &contents = player.getInventory().getContents();
+        const uint64_t key = player.getRuntimeId();
+        auto previous = mInventorySnapshots.find(key);
+
+        if (previous != mInventorySnapshots.end()) {
+            for (size_t slot = 0; slot < contents.size() && slot < previous->second.size(); ++slot) {
+                const ItemStack &before = previous->second[slot];
+                const ItemStack &after = contents[slot];
+                const bool same = before.mDefinition == after.mDefinition && before.mCount == after.mCount
+                                  && before.mDamage == after.mDamage && before.mTag == after.mTag;
+                if (same)
+                    continue;
+
+                JSValue event = JS_NewObject(mContext);
+                JS_SetPropertyStr(mContext, event, "player", makePlayer(player));
+                JS_SetPropertyStr(mContext, event, "slot", JS_NewInt32(mContext, (int32_t) slot));
+                JS_SetPropertyStr(mContext, event, "inventoryType", JS_NewString(mContext, "Inventory"));
+                JS_SetPropertyStr(mContext, event, "itemStack", makeItem(after));
+                JS_SetPropertyStr(mContext, event, "beforeItemStack", makeItem(before));
+                emitNamed("playerInventoryItemChange", event);
+            }
+        }
+
+        current[key] = contents;
+    }
+
+    mInventorySnapshots = std::move(current);
 }
