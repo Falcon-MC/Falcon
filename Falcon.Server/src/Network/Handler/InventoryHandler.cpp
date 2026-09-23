@@ -319,8 +319,11 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
 
         if (packet.mActionType == 0) {
             ServerActor *target = owner.getActor((int64_t) packet.mRuntimeActorId);
-            if (target != nullptr)
-                target->onInteract(owner, player);
+            if (target != nullptr && !owner.getScriptEngine().beforePlayerInteractWithEntity(player, *target)) {
+                target = owner.getActor((int64_t) packet.mRuntimeActorId);
+                if (target != nullptr)
+                    target->onInteract(owner, player);
+            }
         }
         return;
     }

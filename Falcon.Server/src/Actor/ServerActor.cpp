@@ -138,6 +138,10 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, Actor *attacke
     if (getNoDamageTicks() > 0 && amount <= getLastDamageAmount())
         return false;
 
+    if (owner.getScriptEngine().beforeEntityHurt(*this, amount, attacker != nullptr ? "entityAttack" : "none",
+                                                 attacker))
+        return false;
+
     ServerPlayer *source = dynamic_cast<ServerPlayer *>(attacker);
     if (onHurt(owner, amount, source))
         return true;

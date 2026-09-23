@@ -203,6 +203,9 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
     if (input.mDuration == 0 && !input.mInfinite)
         return false;
 
+    if (sAddFilter && !sAddFilter(mActor, input))
+        return false;
+
     MobEffectInstance instance = input;
     instance.mAmplifier = std::clamp(instance.mAmplifier, 0, 255);
     const int32_t key = (int32_t) instance.mId;

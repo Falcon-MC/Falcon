@@ -293,6 +293,10 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
                 MAX_REACH * MAX_REACH)
                 return false;
 
+            owner.getScriptEngine().onEntityHitEntity(*this, target);
+            if (!target.isAlive())
+                return false;
+
             const ItemStack &weapon = getInventory().getItemInHand();
             const ItemData *weaponData = weapon.isAir() || weapon.mDefinition == nullptr
                                                  ? nullptr
@@ -336,6 +340,10 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
                          victim->getPosition().y - getPosition().y,
                          victim->getPosition().z - getPosition().z);
     if (delta.x * delta.x + delta.y * delta.y + delta.z * delta.z > MAX_REACH * MAX_REACH)
+        return false;
+
+    owner.getScriptEngine().onEntityHitEntity(*this, *victim);
+    if (victim->isDead())
         return false;
 
     const ItemStack &held = getInventory().getItemInHand();

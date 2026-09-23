@@ -579,12 +579,14 @@ void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerP
         return;
     }
 
-    const BlockState &state = level.getChunk(position.x >> 4, position.z >> 4)
-                                    .getBlock(position.x & 15, position.y, position.z & 15);
+    const BlockState state = level.getChunk(position.x >> 4, position.z >> 4)
+                                   .getBlock(position.x & 15, position.y, position.z & 15);
 
     if (state.mName == "minecraft:air") {
         return;
     }
+
+    owner.getScriptEngine().onEntityHitBlock(player, position, face);
 
     const Block *punchedBlock = VanillaBlocks::fromIdentifier(state.mName);
     if (punchedBlock != nullptr && punchedBlock->onPunch(owner, player, position, state))
@@ -914,6 +916,12 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     if (isInSpawnProtection(owner, player, level, transaction.mBlockPosition))
         return false;
+
+    ScriptEngine &scripts = owner.getScriptEngine();
+    if (scripts.beforePlayerInteractWithBlock(player, transaction.mBlockPosition, face))
+        return false;
+
+    scripts.onPlayerInteractWithBlock(player, transaction.mBlockPosition, face);
 
     owner.getScriptEngine().onItemUseOnBlock(player, transaction.mBlockPosition.x,
                                              transaction.mBlockPosition.y, transaction.mBlockPosition.z);

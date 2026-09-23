@@ -156,6 +156,7 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     mActors[uniqueId] = std::move(actor);
 
     broadcastActorSpawn(*result);
+    mScriptEngine.onEntitySpawn(*result);
     return result;
 }
 
@@ -174,6 +175,7 @@ FallingBlockActor *ServerNetworkHandler::spawnFallingBlock(Level &level, const B
     mActors[uniqueId] = std::move(actor);
 
     broadcastActorSpawn(*result);
+    mScriptEngine.onEntitySpawn(*result);
     return result;
 }
 
@@ -192,6 +194,7 @@ PrimedTntActor *ServerNetworkHandler::spawnPrimedTnt(Level &level, const Vector3
     mActors[uniqueId] = std::move(actor);
 
     broadcastActorSpawn(*result);
+    mScriptEngine.onEntitySpawn(*result);
     return result;
 }
 
@@ -507,6 +510,11 @@ void ServerNetworkHandler::applyPotionEffects(ServerPlayer &player, int32_t poti
 
 void ServerNetworkHandler::removeActor(int64_t uniqueId) {
     auto it = mActors.find(uniqueId);
+    if (it == mActors.end())
+        return;
+
+    mScriptEngine.onEntityRemove(*it->second);
+    it = mActors.find(uniqueId);
     if (it == mActors.end())
         return;
 
@@ -1324,12 +1332,14 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 if (hitPlayer != nullptr) {
+                    mScriptEngine.onProjectileHitEntity(actor, *hitPlayer, contactPosition);
                     onThrownProjectileHit(actor, contactPosition, hitPlayer);
                     expired.push_back(actorId);
                     continue;
                 }
 
                 if (hitActor != nullptr) {
+                    mScriptEngine.onProjectileHitEntity(actor, *hitActor, contactPosition);
                     onThrownProjectileHitActor(actor, contactPosition, *hitActor);
                     expired.push_back(actorId);
                     continue;

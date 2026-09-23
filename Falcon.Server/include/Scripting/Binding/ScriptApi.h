@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Level/Dimension.h"
+#include "Protocol/Types/ItemStack.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
 #include "Scripting/ScriptScheduler.h"
 
@@ -11,6 +12,7 @@
 
 #include <quickjs.h>
 
+class Actor;
 class ServerNetworkHandler;
 class ServerPlayer;
 class ServerActor;
@@ -69,6 +71,10 @@ public:
     JSValue makeActor(ServerActor &actor);
 
     ServerActor *resolveActor(JSValueConst value);
+
+    JSValue makeEntity(Actor &actor);
+
+    JSValue makeItem(const ItemStack &item);
 
     JSClassID actorClassId() const { return mActorClassId; }
 
@@ -148,6 +154,8 @@ private:
 
     bool _dispatchCancellable(ScriptEvent event, JSValue eventObject);
 
+    void _emitInventoryChanges();
+
     JSContext *mContext;
     JSRuntime *mRuntime;
     ServerNetworkHandler &mHost;
@@ -169,6 +177,7 @@ private:
 
     std::vector<JSValue> mSubscribers[(int) ScriptEvent::Count];
     std::unordered_map<std::string, std::vector<JSValue>> mNamedSubscribers;
+    std::unordered_map<uint64_t, std::vector<ItemStack>> mInventorySnapshots;
 
     uint32_t mNextFormId;
     std::unordered_map<uint32_t, JSValue> mFormResolvers;

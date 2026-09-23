@@ -1,6 +1,10 @@
 #include "Scripting/ScriptEngine.h"
 
+#include "Actor/MobEffect.h"
+#include "Actor/ServerActor.h"
+#include "Actor/ServerPlayer.h"
 #include "Core/Debug/BedrockLog.h"
+#include "Network/Handler/ServerNetworkHandler.h"
 #include "Scripting/Binding/ScriptApi.h"
 
 #include <chrono>
@@ -16,6 +20,32 @@ namespace {
     int64_t nowMs() {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
+    const char *directionName(int32_t face) {
+        static const char *NAMES[] = {"Down", "Up", "North", "South", "West", "East"};
+        return face >= 0 && face < 6 ? NAMES[face] : "Up";
+    }
+
+    JSValue makePoint(JSContext *ctx, float x, float y, float z) {
+        JSValue point = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, point, "x", JS_NewFloat64(ctx, x));
+        JS_SetPropertyStr(ctx, point, "y", JS_NewFloat64(ctx, y));
+        JS_SetPropertyStr(ctx, point, "z", JS_NewFloat64(ctx, z));
+        return point;
+    }
+
+    JSValue eventHitGetter(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        return JS_GetPropertyStr(ctx, thisVal, "_hit");
+    }
+
+    void fillBlockInteraction(JSContext *ctx, ScriptApi &api, JSValue event, ServerPlayer &player,
+                              const Vector3i &position, int32_t face) {
+        JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "block", api.makeBlock(player.getDimension(), position.x, position.y, position.z));
+        JS_SetPropertyStr(ctx, event, "blockFace", JS_NewString(ctx, directionName(face)));
+        JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(player.getInventory().getItemInHand()));
+        JS_SetPropertyStr(ctx, event, "isFirstEvent", JS_NewBool(ctx, true));
     }
 
     std::string valueToString(JSContext *ctx, JSValueConst value) {
@@ -168,6 +198,7 @@ ScriptEngine::ScriptEngine()
 }
 
 ScriptEngine::~ScriptEngine() {
+    MobEffectManager::setAddFilter(nullptr);
     mApi.reset();
 
     if (mContext != nullptr)
@@ -185,6 +216,10 @@ void ScriptEngine::bindHost(ServerNetworkHandler &host) {
 
     mApi.reset(new ScriptApi(mContext, mRuntime, host));
     mApi->install();
+
+    MobEffectManager::setAddFilter([this](Actor &actor, const MobEffectInstance &effect) {
+        return !beforeEffectAdd(actor, effect);
+    });
 }
 
 void ScriptEngine::_installConsole() {
@@ -287,6 +322,145 @@ void ScriptEngine::onWorldInitialize() {
     mApi->emitWorldInitialize();
     mApi->emitWorldLoad();
     _pumpJobs();
+}
+
+template<typename Fill>
+bool ScriptEngine::_emit(const char *name, bool cancellable, Fill fill) {
+    if (mApi == nullptr || !mApi->hasNamedSubscribers(name))
+        return false;
+
+    mExecutionDeadlineMs = nowMs() + mWatchdogMs;
+
+    JSValue event = JS_NewObject(mContext);
+    fill(*mApi, event);
+    if (cancellable)
+        JS_SetPropertyStr(mContext, event, "cancel", JS_NewBool(mContext, false));
+
+    const bool cancelled = mApi->emitNamed(name, event);
+    _pumpJobs();
+    return cancellable && cancelled;
+}
+
+void ScriptEngine::onProjectileHitEntity(ServerActor &projectile, Actor &hitEntity, const Vector3f &location) {
+    _emit("projectileHitEntity", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(mContext, event, "projectile", api.makeActor(projectile));
+        JS_SetPropertyStr(mContext, event, "location", makePoint(mContext, location.x, location.y, location.z));
+        JS_SetPropertyStr(mContext, event, "dimension", api.makeDimension(projectile.getDimension()));
+
+        if (projectile.hasOwnerPlayer()) {
+            ServerPlayer *owner = api.resolvePlayerByHandle(projectile.getOwnerPlayerHandle());
+            if (owner != nullptr)
+                JS_SetPropertyStr(mContext, event, "source", api.makePlayer(*owner));
+        } else if (projectile.getOwnerUniqueId() >= 0) {
+            ServerActor *owner = api.host().getActor(projectile.getOwnerUniqueId());
+            if (owner != nullptr)
+                JS_SetPropertyStr(mContext, event, "source", api.makeActor(*owner));
+        }
+
+        JSValue hit = JS_NewObject(mContext);
+        JS_SetPropertyStr(mContext, hit, "entity", api.makeEntity(hitEntity));
+        JS_SetPropertyStr(mContext, event, "_hit", hit);
+        JS_SetPropertyStr(mContext, event, "getEntityHit",
+                          JS_NewCFunction(mContext, eventHitGetter, "getEntityHit", 0));
+    });
+}
+
+void ScriptEngine::onEntityHitBlock(Actor &damagingEntity, const Vector3i &position, int32_t face) {
+    _emit("entityHitBlock", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(mContext, event, "damagingEntity", api.makeEntity(damagingEntity));
+        JS_SetPropertyStr(mContext, event, "hitBlock",
+                          api.makeBlock(damagingEntity.getDimension(), position.x, position.y, position.z));
+        JS_SetPropertyStr(mContext, event, "blockFace", JS_NewString(mContext, directionName(face)));
+    });
+}
+
+void ScriptEngine::onEntityHitEntity(Actor &damagingEntity, Actor &hitEntity) {
+    _emit("entityHitEntity", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(mContext, event, "damagingEntity", api.makeEntity(damagingEntity));
+        JS_SetPropertyStr(mContext, event, "hitEntity", api.makeEntity(hitEntity));
+    });
+}
+
+void ScriptEngine::onEntityItemDrop(Actor &entity, const ItemStack &item) {
+    _emit("entityItemDrop", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(mContext, event, "entity", api.makeEntity(entity));
+        JS_SetPropertyStr(mContext, event, "itemStack", api.makeItem(item));
+    });
+}
+
+void ScriptEngine::onPlayerInteractWithBlock(ServerPlayer &player, const Vector3i &position, int32_t face) {
+    _emit("playerInteractWithBlock", false, [&](ScriptApi &api, JSValue event) {
+        fillBlockInteraction(mContext, api, event, player, position, face);
+    });
+}
+
+void ScriptEngine::onEntitySpawn(ServerActor &entity) {
+    _emit("entitySpawn", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(mContext, event, "entity", api.makeActor(entity));
+        JS_SetPropertyStr(mContext, event, "cause", JS_NewString(mContext, "Spawned"));
+    });
+}
+
+void ScriptEngine::onEntityRemove(ServerActor &entity) {
+    _emit("entityRemove", false, [&](ScriptApi &, JSValue event) {
+        const std::string id = std::to_string(entity.getUniqueId());
+        JS_SetPropertyStr(mContext, event, "removedEntityId", JS_NewStringLen(mContext, id.data(), id.size()));
+        JS_SetPropertyStr(mContext, event, "typeId",
+                          JS_NewStringLen(mContext, entity.getTypeId().data(), entity.getTypeId().size()));
+    });
+}
+
+void ScriptEngine::onEntityLoad(ServerActor &entity) {
+    _emit("entityLoad", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(mContext, event, "entity", api.makeActor(entity));
+    });
+}
+
+bool ScriptEngine::beforePlayerInteractWithBlock(ServerPlayer &player, const Vector3i &position, int32_t face) {
+    return _emit("before.playerInteractWithBlock", true, [&](ScriptApi &api, JSValue event) {
+        fillBlockInteraction(mContext, api, event, player, position, face);
+    });
+}
+
+bool ScriptEngine::beforeEntityHurt(Actor &hurtEntity, float damage, const std::string &cause, const Actor *attacker) {
+    return _emit("before.entityHurt", true, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(mContext, event, "hurtEntity", api.makeEntity(hurtEntity));
+        JS_SetPropertyStr(mContext, event, "damage", JS_NewFloat64(mContext, damage));
+
+        JSValue source = JS_NewObject(mContext);
+        JS_SetPropertyStr(mContext, source, "cause", JS_NewStringLen(mContext, cause.data(), cause.size()));
+        if (attacker != nullptr)
+            JS_SetPropertyStr(mContext, source, "damagingEntity", api.makeEntity(const_cast<Actor &>(*attacker)));
+        JS_SetPropertyStr(mContext, event, "damageSource", source);
+    });
+}
+
+bool ScriptEngine::beforeEffectAdd(Actor &entity, const MobEffectInstance &effect) {
+    return _emit("before.effectAdd", true, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(mContext, event, "entity", api.makeEntity(entity));
+        JS_SetPropertyStr(mContext, event, "effectType", JS_NewString(mContext, getMobEffectName(effect.mId)));
+        JS_SetPropertyStr(mContext, event, "duration", JS_NewInt32(mContext, effect.mDuration));
+        JS_SetPropertyStr(mContext, event, "amplifier", JS_NewInt32(mContext, effect.mAmplifier));
+    });
+}
+
+bool ScriptEngine::beforePlayerInteractWithEntity(ServerPlayer &player, Actor &target) {
+    return _emit("before.playerInteractWithEntity", true, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(mContext, event, "player", api.makePlayer(player));
+        JS_SetPropertyStr(mContext, event, "target", api.makeEntity(target));
+        JS_SetPropertyStr(mContext, event, "itemStack", api.makeItem(player.getInventory().getItemInHand()));
+    });
+}
+
+bool ScriptEngine::beforeItemUse(ServerPlayer &player) {
+    const ItemStack &held = player.getInventory().getItemInHand();
+    if (held.isAir() || held.mDefinition == nullptr)
+        return false;
+
+    return _emit("before.itemUse", true, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(mContext, event, "source", api.makePlayer(player));
+        JS_SetPropertyStr(mContext, event, "itemStack", api.makeItem(held));
+    });
 }
 
 void ScriptEngine::tick(int64_t currentTick) {

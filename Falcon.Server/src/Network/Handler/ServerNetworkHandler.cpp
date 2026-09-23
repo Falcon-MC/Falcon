@@ -1496,6 +1496,7 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
         mActors[uniqueId] = std::move(actor);
 
         broadcastActorSpawn(*result);
+        mScriptEngine.onEntityLoad(*result);
     }
 }
 
@@ -1534,6 +1535,11 @@ void ServerNetworkHandler::saveActorsForChunk(Level &level, int32_t chunkX, int3
 
     for (const int64_t uniqueId: culled) {
         auto it = mActors.find(uniqueId);
+        if (it == mActors.end())
+            continue;
+
+        mScriptEngine.onEntityRemove(*it->second);
+        it = mActors.find(uniqueId);
         if (it == mActors.end())
             continue;
 
@@ -2016,6 +2022,9 @@ void ServerNetworkHandler::applyDamage(ServerPlayer &player, float amount, const
     if (isDamageDisabledByGameRule(getLevelFor(player).getGameRules(), deathMessageKey))
         return;
 
+    if (mScriptEngine.beforeEntityHurt(player, amount, deathMessageKey, attacker))
+        return;
+
     const float rawAmount = amount;
 
     if (respectCooldown && deathMessageKey != "death.attack.suicide" && player.getNoDamageTicks() > 0) {
@@ -2137,6 +2146,7 @@ void ServerNetworkHandler::_throwItem(ServerPlayer &player, const ItemStack &ite
                           std::cos(yaw) * std::cos(pitch) * THROW_SPEED);
 
     dropItem(getLevelFor(player), dropPosition, item, motion, THROW_PICKUP_DELAY);
+    mScriptEngine.onEntityItemDrop(player, item);
 }
 
 void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
@@ -2841,6 +2851,12 @@ bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &ite
 }
 
 void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
+    if (mScriptEngine.beforeItemUse(player)) {
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
+                                              player.getInventory().getSelectedSlot());
+        return;
+    }
+
     const ItemStack &heldItem = player.getInventory().getItemInHand();
 
     emitItemUse(player);
