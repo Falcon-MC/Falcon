@@ -2,6 +2,7 @@
 
 #include "LanguageFiles.h"
 
+#include <algorithm>
 #include <cctype>
 
 namespace {
@@ -23,9 +24,47 @@ namespace {
     }
 }
 
+std::string Localization::sServerLocale = Localization::DEFAULT_LOCALE;
+
 const Localization &Localization::getInstance() {
     static const Localization instance;
     return instance;
+}
+
+void Localization::setServerLocale(const std::string &locale) {
+    sServerLocale = getInstance().hasLocale(locale) ? locale : std::string(DEFAULT_LOCALE);
+}
+
+const std::string &Localization::getServerLocale() {
+    return sServerLocale;
+}
+
+std::string Localization::translate(const std::string &key, const std::vector<std::string> &parameters) const {
+    return translate(sServerLocale, key, parameters);
+}
+
+bool Localization::hasLocale(const std::string &locale) const {
+    return mLanguages.find(locale) != mLanguages.end();
+}
+
+std::vector<std::string> Localization::getLocales() const {
+    std::vector<std::string> locales;
+    locales.reserve(mLanguages.size());
+
+    for (const auto &entry: mLanguages)
+        locales.push_back(entry.first);
+
+    std::sort(locales.begin(), locales.end());
+    return locales;
+}
+
+std::string Localization::getLanguageName(const std::string &locale) const {
+    const auto entries = mLanguages.find(locale);
+    if (entries == mLanguages.end())
+        return locale;
+
+    const auto name = entries->second.find(LANGUAGE_NAME_KEY);
+    return name == entries->second.end() ? locale : name->second;
 }
 
 Localization::Localization() {

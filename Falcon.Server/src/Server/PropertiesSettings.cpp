@@ -55,6 +55,7 @@ namespace {
 const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
     static const std::vector<PropertyDefinition> definitions = {
             {"server-name", "Falcon Server", PropertyKind::String, 0, 0, nullptr},
+            {"language", "en_US", PropertyKind::String, 0, 0, nullptr},
             {"gamemode", "survival", PropertyKind::Enum, 0, 0, "survival,creative,adventure,spectator"},
             {"force-gamemode", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"difficulty", "easy", PropertyKind::Enum, 0, 0, "peaceful,easy,normal,hard"},

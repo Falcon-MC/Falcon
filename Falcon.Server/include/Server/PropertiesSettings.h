@@ -83,6 +83,10 @@ public:
     // typed access, named after the properties they map to
     std::string getServerName() const { return getString("server-name"); }
 
+    std::string getLanguage() const {
+        return getString("language");
+    }
+
     GameType getGameType() const;
 
     bool getForceGameType() const { return getBool("force-gamemode"); }

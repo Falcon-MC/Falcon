@@ -8,10 +8,24 @@ class Localization {
 public:
     static constexpr const char *DEFAULT_LOCALE = "en_US";
 
+    static constexpr const char *LANGUAGE_NAME_KEY = "language.name";
+
     static const Localization &getInstance();
+
+    static void setServerLocale(const std::string &locale);
+
+    static const std::string &getServerLocale();
 
     std::string translate(const std::string &locale, const std::string &key,
                           const std::vector<std::string> &parameters = {}) const;
+
+    std::string translate(const std::string &key, const std::vector<std::string> &parameters = {}) const;
+
+    bool hasLocale(const std::string &locale) const;
+
+    std::vector<std::string> getLocales() const;
+
+    std::string getLanguageName(const std::string &locale) const;
 
 private:
     using Entries = std::unordered_map<std::string, std::string>;
@@ -27,4 +41,6 @@ private:
     static std::string _format(const std::string &text, const std::vector<std::string> &parameters);
 
     std::unordered_map<std::string, Entries> mLanguages;
+
+    static std::string sServerLocale;
 };
