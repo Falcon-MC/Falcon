@@ -71,6 +71,10 @@ public:
 
     void setXuid(const std::string &xuid) { mXuid = xuid; }
 
+    const std::string &getPlayFabId() const { return mPlayFabId; }
+
+    void setPlayFabId(const std::string &playFabId) { mPlayFabId = playFabId; }
+
     const SerializedSkin &getSkin() const { return mSkin; }
 
     void setSkin(const SerializedSkin &skin) { mSkin = skin; }
@@ -411,6 +415,7 @@ private:
     std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;
     int64_t mLastItemUseTick = -1000;
     std::string mXuid;
+    std::string mPlayFabId;
     int mBuildPlatform = -1;
     std::string mLocale;
     int64_t mItemUseStartTick = 0;

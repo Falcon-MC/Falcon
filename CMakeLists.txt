@@ -66,7 +66,7 @@ FetchContent_MakeAvailable(libdatachannel)
 FetchContent_Declare(
     falcon_protocol
     GIT_REPOSITORY https://github.com/Falcon-MC/Protocol.git
-    GIT_TAG main
+    GIT_TAG 26.60
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )
@@ -75,7 +75,7 @@ FetchContent_MakeAvailable(falcon_protocol)
 FetchContent_Declare(
     falcon_network
     GIT_REPOSITORY https://github.com/Falcon-MC/Network.git
-    GIT_TAG main
+    GIT_TAG 26.60
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )

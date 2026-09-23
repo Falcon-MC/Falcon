@@ -8,8 +8,8 @@ struct ServerSettings {
     int maxPlayers = 20;
     std::string motd = "Falcon Server";
     std::string subMotd = "Falcon";
-    std::string gameVersion = "1.26.51";
-    int protocolVersion = 2193;
+    std::string gameVersion = "1.26.60";
+    int protocolVersion = 2216;
     bool runSetupWizard = true;
 };
 

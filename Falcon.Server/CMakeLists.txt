@@ -4,7 +4,7 @@ project(Falcon.Server LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(FALCON_BEDROCK_DATA_PROTOCOL 2193)
+set(FALCON_BEDROCK_DATA_PROTOCOL 2216)
 include("${falcon_bedrock_data_SOURCE_DIR}/cmake/FalconBedrockData.cmake")
 
 falcon_bedrock_data_file(recipes.json FALCON_RECIPES_JSON)
@@ -78,7 +78,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FALCON_LANGUAGE
 configure_file(cmake/LanguageFiles.h.in "${FALCON_GENERATED_DIR}/LanguageFiles.h" @ONLY)
 
 if(NOT FALCON_BUILD_VERSION)
-    set(FALCON_BUILD_VERSION "1.26.51.01")
+    set(FALCON_BUILD_VERSION "1.26.60.01")
 endif()
 if(NOT FALCON_BUILD_ID)
     set(FALCON_BUILD_ID "0")
