@@ -1,3 +1,5 @@
+language.name=Български
+
 falcon.commands.about.version=Този сървър използва Falcon версия %1$s (%2$s в %3$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (протокол %2$s)
 falcon.commands.about.build=Компилация %1$s, конфигурация %2$s
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Летенето не е разрешено н�
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (пик %3$s)
 falcon.commands.status.players=Играчи онлайн: %1$s/%2$s
+
+falcon.wizard.language.selected=Езикът е зададен на %1$s
+falcon.wizard.license.label=ЛИЦЕНЗ
+falcon.wizard.license.question=Приемаш ли лиценза
+falcon.wizard.license.accepted=Лицензът е приет.
+falcon.wizard.license.acceptedByArgument=Лицензът е приет с --accept-license.
+falcon.wizard.license.refused=Трябва да приемеш лиценза, за да използваш Falcon. Сървърът ще спре сега.
+falcon.wizard.welcome=Добре дошъл! Изглежда Falcon се стартира тук за първи път.
+falcon.wizard.welcome.defaults=Отговори на няколко въпроса, за да настроиш сървъра си. Натисни %1$s, за да запазиш стойността в скобите.
+falcon.wizard.welcome.flags=Стартирай с --no-wizard, за да пропуснеш съветника, с --accept-license, за да пропуснеш лиценза, или с --language=fr_FR, за да избереш език.
+falcon.wizard.configureNow=Настрой сървъра сега
+falcon.wizard.keepDefaults=Запазват се настройките по подразбиране.
+falcon.wizard.saveFailed=Неуспешен запис на %1$s
+falcon.wizard.pressEnter=Натисни Enter, за да стартираш сървъра
+falcon.wizard.step=СТЪПКА %1$s/%2$s
+falcon.wizard.default=по подразбиране
+falcon.wizard.invalid.confirmation=Моля, отговори с y (да) или n (не).
+falcon.wizard.invalid.number=Моля, въведи число между %1$s и %2$s.
+falcon.wizard.invalid.choice=Моля, въведи число от 1 до %1$s или едно от имената.
+
+falcon.wizard.server.title=Сървър
+falcon.wizard.server.description=Как сървърът ти се показва в списъка със сървъри и как играчите играят на него.
+falcon.wizard.server.name=Име на сървъра
+falcon.wizard.server.name.set=Името на сървъра е зададено на %1$s
+falcon.wizard.server.gamemode=Режим на игра по подразбиране
+falcon.wizard.server.gamemode.set=Режимът на игра е зададен на %1$s
+falcon.wizard.server.difficulty=Трудност
+falcon.wizard.server.difficulty.set=Трудността е зададена на %1$s
+falcon.wizard.server.maxPlayers=Максимален брой играчи
+falcon.wizard.server.maxPlayers.set=До %1$s играчи могат да се присъединят
+falcon.wizard.gamemode.survival=Оцеляване
+falcon.wizard.gamemode.creative=Творчески
+falcon.wizard.gamemode.adventure=Приключение
+falcon.wizard.gamemode.spectator=Наблюдател
+falcon.wizard.difficulty.peaceful=Мирна
+falcon.wizard.difficulty.easy=Лесна
+falcon.wizard.difficulty.normal=Нормална
+falcon.wizard.difficulty.hard=Трудна
+
+falcon.wizard.network.title=Мрежа
+falcon.wizard.network.description=Портовете трябва да са отворени в защитната стена и рутера за играчи извън твоята мрежа.
+falcon.wizard.network.portV4=IPv4 порт
+falcon.wizard.network.portV6=IPv6 порт
+falcon.wizard.network.ports.set=Слуша на порт %1$s (IPv4) и %2$s (IPv6)
+falcon.wizard.network.transport=Тип връзка
+falcon.wizard.network.transport.raknet=Само RakNet, класическата връзка
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, позволява и на приятели да се присъединят чрез Xbox Live
+falcon.wizard.network.transport.set=Типът връзка е зададен на %1$s
+falcon.wizard.network.onlineMode=Изисквай Xbox Live акаунт за присъединяване
+falcon.wizard.network.onlineMode.enabled=Играчите трябва да влязат с Xbox Live
+falcon.wizard.network.onlineMode.disabled=Всеки може да се присъедини с произволно име, докато онлайн режимът е изключен.
+falcon.wizard.network.lan=Показвай сървъра на играчи в локалната мрежа
+falcon.wizard.network.lan.enabled=Сървърът е видим в локалната мрежа
+falcon.wizard.network.lan.disabled=Сървърът е скрит от локалната мрежа
+
+falcon.wizard.world.title=Свят
+falcon.wizard.world.description=Светът, който се генерира при първото стартиране на сървъра.
+falcon.wizard.world.name=Име на света
+falcon.wizard.world.name.set=Името на света е зададено на %1$s
+falcon.wizard.world.seed=Семе на света
+falcon.wizard.world.seed.hint=Остави празно за случайно семе.
+falcon.wizard.world.seed.random=Ще бъде използвано случайно семе
+falcon.wizard.world.seed.set=Семето е зададено на %1$s
+falcon.wizard.world.viewDistance=Разстояние на видимост в чънкове
+falcon.wizard.world.viewDistance.set=Разстоянието на видимост е зададено на %1$s чънка
+
+falcon.wizard.players.title=Играчи
+falcon.wizard.players.description=Кой може да изпълнява администраторски команди и кой може да се присъединява.
+falcon.wizard.players.operators=Оператори
+falcon.wizard.players.operators.hint=Раздели няколко имена със запетаи, напр. Steve, Alex. Остави празно, за да пропуснеш.
+falcon.wizard.players.operators.none=Не е зададен оператор, никой няма да може да изпълнява администраторски команди.
+falcon.wizard.players.operators.set=Оператори: %1$s
+falcon.wizard.players.allowList=Позволи присъединяване само на поканени играчи (allowlist)
+falcon.wizard.players.allowList.disabled=Всеки може да се присъедини
+falcon.wizard.players.allowList.hint=Операторите се добавят автоматично. Раздели имената със запетаи.
+falcon.wizard.players.allowList.players=Други поканени играчи
+falcon.wizard.players.allowList.empty=Allowlist списъкът е празен, добави играчи с командата allowlist, преди някой да може да се присъедини.
+falcon.wizard.players.allowList.set=Allowlist: %1$s
+
+falcon.wizard.summary.title=Всичко е готово!
+falcon.wizard.summary.language=Език
+falcon.wizard.summary.serverName=Име на сървъра
+falcon.wizard.summary.gamemode=Режим на игра
+falcon.wizard.summary.players=Играчи
+falcon.wizard.summary.players.value=до %1$s
+falcon.wizard.summary.ports=Портове
+falcon.wizard.summary.transport=Връзка
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=задължително
+falcon.wizard.summary.notRequired=не е задължително
+falcon.wizard.summary.world=Свят
+falcon.wizard.summary.operators=Оператори
+falcon.wizard.summary.allowList=Allowlist
+falcon.wizard.summary.none=няма
+falcon.wizard.summary.on=вкл.
+falcon.wizard.summary.off=изкл.
+falcon.wizard.summary.saved=Всичко е запазено в %1$s, можеш да го редактираш по всяко време.
+
+falcon.wizard.addresses.lookup=Търсене на адресите ти...
+falcon.wizard.addresses.local=Същата мрежа
+falcon.wizard.addresses.external=Интернет
+falcon.wizard.addresses.unknown=неизвестен
+falcon.wizard.addresses.hint=Играчите извън твоята мрежа се нуждаят от пренасочен порт на рутера ти, за да се присъединят.

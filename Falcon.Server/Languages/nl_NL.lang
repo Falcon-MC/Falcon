@@ -1,3 +1,5 @@
+language.name=Nederlands
+
 falcon.commands.about.version=Deze server draait Falcon versie %1$s (%2$s op %3$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protocol %2$s)
 falcon.commands.about.build=Build %1$s, configuratie %2$s
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Vliegen is niet toegestaan op deze server
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (piek %3$s)
 falcon.commands.status.players=Spelers online: %1$s/%2$s
+
+falcon.wizard.language.selected=Taal ingesteld op %1$s
+falcon.wizard.license.label=LICENTIE
+falcon.wizard.license.question=Ga je akkoord met de licentie
+falcon.wizard.license.accepted=Licentie geaccepteerd.
+falcon.wizard.license.acceptedByArgument=Licentie geaccepteerd met --accept-license.
+falcon.wizard.license.refused=Je moet de licentie accepteren om Falcon te gebruiken. De server stopt nu.
+falcon.wizard.welcome=Welkom! Het lijkt erop dat Falcon hier voor het eerst draait.
+falcon.wizard.welcome.defaults=Beantwoord een paar vragen om je server in te stellen. Druk op %1$s om de waarde tussen haakjes te behouden.
+falcon.wizard.welcome.flags=Start met --no-wizard om deze wizard over te slaan, --accept-license om de licentie over te slaan, of --language=fr_FR om een taal te kiezen.
+falcon.wizard.configureNow=De server nu instellen
+falcon.wizard.keepDefaults=De standaardinstellingen worden behouden.
+falcon.wizard.saveFailed=Kon %1$s niet wegschrijven
+falcon.wizard.pressEnter=Druk op Enter om de server te starten
+falcon.wizard.step=STAP %1$s/%2$s
+falcon.wizard.default=standaard
+falcon.wizard.invalid.confirmation=Antwoord met y (ja) of n (nee).
+falcon.wizard.invalid.number=Voer een getal in tussen %1$s en %2$s.
+falcon.wizard.invalid.choice=Voer een getal in van 1 tot %1$s of een van de namen.
+
+falcon.wizard.server.title=Server
+falcon.wizard.server.description=Hoe je server in de serverlijst verschijnt en hoe spelers erop spelen.
+falcon.wizard.server.name=Servernaam
+falcon.wizard.server.name.set=Servernaam ingesteld op %1$s
+falcon.wizard.server.gamemode=Standaard spelmodus
+falcon.wizard.server.gamemode.set=Spelmodus ingesteld op %1$s
+falcon.wizard.server.difficulty=Moeilijkheidsgraad
+falcon.wizard.server.difficulty.set=Moeilijkheidsgraad ingesteld op %1$s
+falcon.wizard.server.maxPlayers=Maximaal aantal spelers
+falcon.wizard.server.maxPlayers.set=Tot %1$s spelers kunnen meedoen
+falcon.wizard.gamemode.survival=Overleven
+falcon.wizard.gamemode.creative=Creatief
+falcon.wizard.gamemode.adventure=Avontuur
+falcon.wizard.gamemode.spectator=Toeschouwer
+falcon.wizard.difficulty.peaceful=Vredig
+falcon.wizard.difficulty.easy=Makkelijk
+falcon.wizard.difficulty.normal=Normaal
+falcon.wizard.difficulty.hard=Moeilijk
+
+falcon.wizard.network.title=Netwerk
+falcon.wizard.network.description=Poorten moeten open staan in je firewall en router voor spelers buiten je netwerk.
+falcon.wizard.network.portV4=IPv4-poort
+falcon.wizard.network.portV6=IPv6-poort
+falcon.wizard.network.ports.set=Luistert op poort %1$s (IPv4) en %2$s (IPv6)
+falcon.wizard.network.transport=Verbindingstype
+falcon.wizard.network.transport.raknet=Alleen RakNet, de klassieke verbinding
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, laat vrienden ook meedoen via Xbox Live
+falcon.wizard.network.transport.set=Verbindingstype ingesteld op %1$s
+falcon.wizard.network.onlineMode=Een Xbox Live-account vereisen om mee te doen
+falcon.wizard.network.onlineMode.enabled=Spelers moeten inloggen met Xbox Live
+falcon.wizard.network.onlineMode.disabled=Iedereen kan met elke naam meedoen zolang de onlinemodus is uitgeschakeld.
+falcon.wizard.network.lan=De server tonen aan spelers op je lokale netwerk
+falcon.wizard.network.lan.enabled=De server is zichtbaar op het lokale netwerk
+falcon.wizard.network.lan.disabled=De server is verborgen op het lokale netwerk
+
+falcon.wizard.world.title=Wereld
+falcon.wizard.world.description=De wereld die wordt gegenereerd bij de eerste start van de server.
+falcon.wizard.world.name=Wereldnaam
+falcon.wizard.world.name.set=Wereldnaam ingesteld op %1$s
+falcon.wizard.world.seed=Wereldseed
+falcon.wizard.world.seed.hint=Laat leeg voor een willekeurige seed.
+falcon.wizard.world.seed.random=Er wordt een willekeurige seed gebruikt
+falcon.wizard.world.seed.set=Seed ingesteld op %1$s
+falcon.wizard.world.viewDistance=Kijkafstand in chunks
+falcon.wizard.world.viewDistance.set=Kijkafstand ingesteld op %1$s chunks
+
+falcon.wizard.players.title=Spelers
+falcon.wizard.players.description=Wie beheerderscommando's mag uitvoeren, en wie mag meedoen.
+falcon.wizard.players.operators=Operators
+falcon.wizard.players.operators.hint=Scheid meerdere namen met komma's, bijv. Steve, Alex. Laat leeg om over te slaan.
+falcon.wizard.players.operators.none=Er is geen operator ingesteld, niemand kan beheerderscommando's uitvoeren.
+falcon.wizard.players.operators.set=Operators: %1$s
+falcon.wizard.players.allowList=Alleen uitgenodigde spelers laten meedoen (toelatingslijst)
+falcon.wizard.players.allowList.disabled=Iedereen kan meedoen
+falcon.wizard.players.allowList.hint=Operators worden automatisch toegevoegd. Scheid namen met komma's.
+falcon.wizard.players.allowList.players=Andere uitgenodigde spelers
+falcon.wizard.players.allowList.empty=De toelatingslijst is leeg, voeg spelers toe met het allowlist-commando voordat iemand kan meedoen.
+falcon.wizard.players.allowList.set=Toelatingslijst: %1$s
+
+falcon.wizard.summary.title=Alles is klaar!
+falcon.wizard.summary.language=Taal
+falcon.wizard.summary.serverName=Servernaam
+falcon.wizard.summary.gamemode=Spelmodus
+falcon.wizard.summary.players=Spelers
+falcon.wizard.summary.players.value=tot %1$s
+falcon.wizard.summary.ports=Poorten
+falcon.wizard.summary.transport=Verbinding
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=vereist
+falcon.wizard.summary.notRequired=niet vereist
+falcon.wizard.summary.world=Wereld
+falcon.wizard.summary.operators=Operators
+falcon.wizard.summary.allowList=Toelatingslijst
+falcon.wizard.summary.none=geen
+falcon.wizard.summary.on=aan
+falcon.wizard.summary.off=uit
+falcon.wizard.summary.saved=Alles is opgeslagen in %1$s, je kunt het op elk moment aanpassen.
+
+falcon.wizard.addresses.lookup=Je adressen worden opgezocht...
+falcon.wizard.addresses.local=Hetzelfde netwerk
+falcon.wizard.addresses.external=Internet
+falcon.wizard.addresses.unknown=onbekend
+falcon.wizard.addresses.hint=Spelers buiten je netwerk kunnen alleen meedoen als de poort op je router is doorgestuurd.

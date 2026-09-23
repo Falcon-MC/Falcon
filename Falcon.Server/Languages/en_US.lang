@@ -1,3 +1,5 @@
+language.name=English (United States)
+
 falcon.commands.about.version=This server is running Falcon version %1$s (%2$s on %3$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protocol %2$s)
 falcon.commands.about.build=Build %1$s, %2$s configuration
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Flying is not enabled on this server
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (peak %3$s)
 falcon.commands.status.players=Players online: %1$s/%2$s
+
+falcon.wizard.language.selected=Language set to %1$s
+falcon.wizard.license.label=LICENSE
+falcon.wizard.license.question=Do you accept the license
+falcon.wizard.license.accepted=License accepted.
+falcon.wizard.license.acceptedByArgument=License accepted with --accept-license.
+falcon.wizard.license.refused=You have to accept the license to use Falcon. The server will now stop.
+falcon.wizard.welcome=Welcome! It looks like this is the first time Falcon runs here.
+falcon.wizard.welcome.defaults=Answer a few questions to set up your server. Press %1$s to keep the value in brackets.
+falcon.wizard.welcome.flags=Start with --no-wizard to skip this wizard, --accept-license to skip the license, or --language=fr_FR to pick a language.
+falcon.wizard.configureNow=Set up the server now
+falcon.wizard.keepDefaults=Keeping the default settings.
+falcon.wizard.saveFailed=Could not write %1$s
+falcon.wizard.pressEnter=Press Enter to start the server
+falcon.wizard.step=STEP %1$s/%2$s
+falcon.wizard.default=default
+falcon.wizard.invalid.confirmation=Please answer with y or n.
+falcon.wizard.invalid.number=Please enter a number between %1$s and %2$s.
+falcon.wizard.invalid.choice=Please enter a number from 1 to %1$s or one of the names.
+
+falcon.wizard.server.title=Server
+falcon.wizard.server.description=How your server appears in the server list and how players play on it.
+falcon.wizard.server.name=Server name
+falcon.wizard.server.name.set=Server name set to %1$s
+falcon.wizard.server.gamemode=Default gamemode
+falcon.wizard.server.gamemode.set=Gamemode set to %1$s
+falcon.wizard.server.difficulty=Difficulty
+falcon.wizard.server.difficulty.set=Difficulty set to %1$s
+falcon.wizard.server.maxPlayers=Maximum players
+falcon.wizard.server.maxPlayers.set=Up to %1$s players can join
+falcon.wizard.gamemode.survival=Survival
+falcon.wizard.gamemode.creative=Creative
+falcon.wizard.gamemode.adventure=Adventure
+falcon.wizard.gamemode.spectator=Spectator
+falcon.wizard.difficulty.peaceful=Peaceful
+falcon.wizard.difficulty.easy=Easy
+falcon.wizard.difficulty.normal=Normal
+falcon.wizard.difficulty.hard=Hard
+
+falcon.wizard.network.title=Network
+falcon.wizard.network.description=Ports must be open in your firewall and router for players outside your network.
+falcon.wizard.network.portV4=IPv4 port
+falcon.wizard.network.portV6=IPv6 port
+falcon.wizard.network.ports.set=Listening on port %1$s (IPv4) and %2$s (IPv6)
+falcon.wizard.network.transport=Connection type
+falcon.wizard.network.transport.raknet=RakNet only, the classic connection
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, also lets friends join through Xbox Live
+falcon.wizard.network.transport.set=Connection type set to %1$s
+falcon.wizard.network.onlineMode=Require an Xbox Live account to join
+falcon.wizard.network.onlineMode.enabled=Players must sign in with Xbox Live
+falcon.wizard.network.onlineMode.disabled=Anyone can join with any name while online mode is disabled.
+falcon.wizard.network.lan=Show the server to players on your local network
+falcon.wizard.network.lan.enabled=The server is visible on the local network
+falcon.wizard.network.lan.disabled=The server is hidden from the local network
+
+falcon.wizard.world.title=World
+falcon.wizard.world.description=The world that is generated the first time the server starts.
+falcon.wizard.world.name=World name
+falcon.wizard.world.name.set=World name set to %1$s
+falcon.wizard.world.seed=World seed
+falcon.wizard.world.seed.hint=Leave empty for a random seed.
+falcon.wizard.world.seed.random=A random seed will be used
+falcon.wizard.world.seed.set=Seed set to %1$s
+falcon.wizard.world.viewDistance=View distance in chunks
+falcon.wizard.world.viewDistance.set=View distance set to %1$s chunks
+
+falcon.wizard.players.title=Players
+falcon.wizard.players.description=Who can run administrative commands, and who is allowed to join.
+falcon.wizard.players.operators=Operators
+falcon.wizard.players.operators.hint=Separate several names with commas, e.g. Steve, Alex. Leave empty to skip.
+falcon.wizard.players.operators.none=No operator was set, nobody will be able to run administrative commands.
+falcon.wizard.players.operators.set=Operators: %1$s
+falcon.wizard.players.allowList=Only let invited players join (allowlist)
+falcon.wizard.players.allowList.disabled=Everyone can join
+falcon.wizard.players.allowList.hint=Operators are added automatically. Separate names with commas.
+falcon.wizard.players.allowList.players=Other invited players
+falcon.wizard.players.allowList.empty=The allowlist is empty, add players with the allowlist command before anyone can join.
+falcon.wizard.players.allowList.set=Allowlist: %1$s
+
+falcon.wizard.summary.title=All set!
+falcon.wizard.summary.language=Language
+falcon.wizard.summary.serverName=Server name
+falcon.wizard.summary.gamemode=Gamemode
+falcon.wizard.summary.players=Players
+falcon.wizard.summary.players.value=up to %1$s
+falcon.wizard.summary.ports=Ports
+falcon.wizard.summary.transport=Connection
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=required
+falcon.wizard.summary.notRequired=not required
+falcon.wizard.summary.world=World
+falcon.wizard.summary.operators=Operators
+falcon.wizard.summary.allowList=Allowlist
+falcon.wizard.summary.none=none
+falcon.wizard.summary.on=on
+falcon.wizard.summary.off=off
+falcon.wizard.summary.saved=Everything was saved to %1$s, you can edit it at any time.
+
+falcon.wizard.addresses.lookup=Looking up your addresses...
+falcon.wizard.addresses.local=Same network
+falcon.wizard.addresses.external=Internet
+falcon.wizard.addresses.unknown=unknown
+falcon.wizard.addresses.hint=Players outside your network need the port forwarded on your router to join.

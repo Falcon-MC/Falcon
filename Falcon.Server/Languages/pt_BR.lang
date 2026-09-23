@@ -1,3 +1,5 @@
+language.name=Português (Brasil)
+
 falcon.commands.about.version=Este servidor usa o Falcon versão %1$s (%2$s em %3$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protocolo %2$s)
 falcon.commands.about.build=Build %1$s, configuração %2$s
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Voar não é permitido neste servidor
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (pico %3$s)
 falcon.commands.status.players=Jogadores online: %1$s/%2$s
+
+falcon.wizard.language.selected=Idioma definido como %1$s
+falcon.wizard.license.label=LICENÇA
+falcon.wizard.license.question=Você aceita a licença
+falcon.wizard.license.accepted=Licença aceita.
+falcon.wizard.license.acceptedByArgument=Licença aceita com --accept-license.
+falcon.wizard.license.refused=Você precisa aceitar a licença para usar o Falcon. O servidor será encerrado agora.
+falcon.wizard.welcome=Bem-vindo! Parece que é a primeira vez que o Falcon roda aqui.
+falcon.wizard.welcome.defaults=Responda algumas perguntas para configurar seu servidor. Pressione %1$s para manter o valor entre colchetes.
+falcon.wizard.welcome.flags=Inicie com --no-wizard para pular este assistente, --accept-license para pular a licença ou --language=fr_FR para escolher um idioma.
+falcon.wizard.configureNow=Configurar o servidor agora
+falcon.wizard.keepDefaults=Mantendo as configurações padrão.
+falcon.wizard.saveFailed=Não foi possível gravar %1$s
+falcon.wizard.pressEnter=Pressione Enter para iniciar o servidor
+falcon.wizard.step=ETAPA %1$s/%2$s
+falcon.wizard.default=padrão
+falcon.wizard.invalid.confirmation=Responda com y (sim) ou n (não).
+falcon.wizard.invalid.number=Digite um número entre %1$s e %2$s.
+falcon.wizard.invalid.choice=Digite um número de 1 a %1$s ou um dos nomes.
+
+falcon.wizard.server.title=Servidor
+falcon.wizard.server.description=Como seu servidor aparece na lista de servidores e como os jogadores jogam nele.
+falcon.wizard.server.name=Nome do servidor
+falcon.wizard.server.name.set=Nome do servidor definido como %1$s
+falcon.wizard.server.gamemode=Modo de jogo padrão
+falcon.wizard.server.gamemode.set=Modo de jogo definido como %1$s
+falcon.wizard.server.difficulty=Dificuldade
+falcon.wizard.server.difficulty.set=Dificuldade definida como %1$s
+falcon.wizard.server.maxPlayers=Máximo de jogadores
+falcon.wizard.server.maxPlayers.set=Até %1$s jogadores podem entrar
+falcon.wizard.gamemode.survival=Sobrevivência
+falcon.wizard.gamemode.creative=Criativo
+falcon.wizard.gamemode.adventure=Aventura
+falcon.wizard.gamemode.spectator=Espectador
+falcon.wizard.difficulty.peaceful=Pacífico
+falcon.wizard.difficulty.easy=Fácil
+falcon.wizard.difficulty.normal=Normal
+falcon.wizard.difficulty.hard=Difícil
+
+falcon.wizard.network.title=Rede
+falcon.wizard.network.description=As portas precisam estar abertas no firewall e no roteador para jogadores fora da sua rede.
+falcon.wizard.network.portV4=Porta IPv4
+falcon.wizard.network.portV6=Porta IPv6
+falcon.wizard.network.ports.set=Escutando na porta %1$s (IPv4) e %2$s (IPv6)
+falcon.wizard.network.transport=Tipo de conexão
+falcon.wizard.network.transport.raknet=Somente RakNet, a conexão clássica
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, também permite que amigos entrem pelo Xbox Live
+falcon.wizard.network.transport.set=Tipo de conexão definido como %1$s
+falcon.wizard.network.onlineMode=Exigir uma conta Xbox Live para entrar
+falcon.wizard.network.onlineMode.enabled=Os jogadores precisam entrar com o Xbox Live
+falcon.wizard.network.onlineMode.disabled=Qualquer pessoa pode entrar com qualquer nome enquanto o modo online estiver desativado.
+falcon.wizard.network.lan=Mostrar o servidor para jogadores na sua rede local
+falcon.wizard.network.lan.enabled=O servidor está visível na rede local
+falcon.wizard.network.lan.disabled=O servidor está oculto na rede local
+
+falcon.wizard.world.title=Mundo
+falcon.wizard.world.description=O mundo gerado na primeira vez que o servidor é iniciado.
+falcon.wizard.world.name=Nome do mundo
+falcon.wizard.world.name.set=Nome do mundo definido como %1$s
+falcon.wizard.world.seed=Semente do mundo
+falcon.wizard.world.seed.hint=Deixe em branco para uma semente aleatória.
+falcon.wizard.world.seed.random=Uma semente aleatória será usada
+falcon.wizard.world.seed.set=Semente definida como %1$s
+falcon.wizard.world.viewDistance=Distância de visão em chunks
+falcon.wizard.world.viewDistance.set=Distância de visão definida como %1$s chunks
+
+falcon.wizard.players.title=Jogadores
+falcon.wizard.players.description=Quem pode usar comandos de administração e quem tem permissão para entrar.
+falcon.wizard.players.operators=Operadores
+falcon.wizard.players.operators.hint=Separe vários nomes com vírgulas, ex.: Steve, Alex. Deixe em branco para pular.
+falcon.wizard.players.operators.none=Nenhum operador foi definido, ninguém poderá usar comandos de administração.
+falcon.wizard.players.operators.set=Operadores: %1$s
+falcon.wizard.players.allowList=Permitir apenas jogadores convidados (lista de permissões)
+falcon.wizard.players.allowList.disabled=Todos podem entrar
+falcon.wizard.players.allowList.hint=Os operadores são adicionados automaticamente. Separe os nomes com vírgulas.
+falcon.wizard.players.allowList.players=Outros jogadores convidados
+falcon.wizard.players.allowList.empty=A lista de permissões está vazia, adicione jogadores com o comando allowlist para que alguém possa entrar.
+falcon.wizard.players.allowList.set=Lista de permissões: %1$s
+
+falcon.wizard.summary.title=Tudo pronto!
+falcon.wizard.summary.language=Idioma
+falcon.wizard.summary.serverName=Nome do servidor
+falcon.wizard.summary.gamemode=Modo de jogo
+falcon.wizard.summary.players=Jogadores
+falcon.wizard.summary.players.value=até %1$s
+falcon.wizard.summary.ports=Portas
+falcon.wizard.summary.transport=Conexão
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=obrigatório
+falcon.wizard.summary.notRequired=não obrigatório
+falcon.wizard.summary.world=Mundo
+falcon.wizard.summary.operators=Operadores
+falcon.wizard.summary.allowList=Lista de permissões
+falcon.wizard.summary.none=nenhum
+falcon.wizard.summary.on=ativado
+falcon.wizard.summary.off=desativado
+falcon.wizard.summary.saved=Tudo foi salvo em %1$s, você pode editar a qualquer momento.
+
+falcon.wizard.addresses.lookup=Buscando seus endereços...
+falcon.wizard.addresses.local=Mesma rede
+falcon.wizard.addresses.external=Internet
+falcon.wizard.addresses.unknown=desconhecido
+falcon.wizard.addresses.hint=Jogadores fora da sua rede precisam que a porta esteja redirecionada no seu roteador para entrar.

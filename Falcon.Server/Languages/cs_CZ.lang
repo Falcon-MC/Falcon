@@ -1,3 +1,5 @@
+language.name=Čeština
+
 falcon.commands.about.version=Tento server používá Falcon verze %1$s (%2$s na %3$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
 falcon.commands.about.build=Sestavení %1$s, konfigurace %2$s
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Létání není na tomto serveru povoleno
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (špička %3$s)
 falcon.commands.status.players=Hráči online: %1$s/%2$s
+
+falcon.wizard.language.selected=Jazyk nastaven na %1$s
+falcon.wizard.license.label=LICENCE
+falcon.wizard.license.question=Přijímáš licenci
+falcon.wizard.license.accepted=Licence přijata.
+falcon.wizard.license.acceptedByArgument=Licence přijata pomocí --accept-license.
+falcon.wizard.license.refused=Pro používání Falcon musíš přijmout licenci. Server se nyní zastaví.
+falcon.wizard.welcome=Vítej! Vypadá to, že Falcon tu běží poprvé.
+falcon.wizard.welcome.defaults=Odpověz na pár otázek a nastav svůj server. Stiskni %1$s pro ponechání hodnoty v závorkách.
+falcon.wizard.welcome.flags=Spusť s --no-wizard pro přeskočení průvodce, --accept-license pro přeskočení licence nebo --language=fr_FR pro výběr jazyka.
+falcon.wizard.configureNow=Nastavit server nyní
+falcon.wizard.keepDefaults=Ponechávám výchozí nastavení.
+falcon.wizard.saveFailed=Nelze zapsat %1$s
+falcon.wizard.pressEnter=Stiskni Enter pro spuštění serveru
+falcon.wizard.step=KROK %1$s/%2$s
+falcon.wizard.default=výchozí
+falcon.wizard.invalid.confirmation=Odpověz prosím y (ano) nebo n (ne).
+falcon.wizard.invalid.number=Zadej číslo mezi %1$s a %2$s.
+falcon.wizard.invalid.choice=Zadej číslo od 1 do %1$s nebo jeden z názvů.
+
+falcon.wizard.server.title=Server
+falcon.wizard.server.description=Jak se tvůj server zobrazuje v seznamu serverů a jak na něm hráči hrají.
+falcon.wizard.server.name=Název serveru
+falcon.wizard.server.name.set=Název serveru nastaven na %1$s
+falcon.wizard.server.gamemode=Výchozí herní režim
+falcon.wizard.server.gamemode.set=Herní režim nastaven na %1$s
+falcon.wizard.server.difficulty=Obtížnost
+falcon.wizard.server.difficulty.set=Obtížnost nastavena na %1$s
+falcon.wizard.server.maxPlayers=Maximální počet hráčů
+falcon.wizard.server.maxPlayers.set=Připojit se může až %1$s hráčů
+falcon.wizard.gamemode.survival=Přežití
+falcon.wizard.gamemode.creative=Tvořivý
+falcon.wizard.gamemode.adventure=Dobrodružství
+falcon.wizard.gamemode.spectator=Divák
+falcon.wizard.difficulty.peaceful=Mírová
+falcon.wizard.difficulty.easy=Snadná
+falcon.wizard.difficulty.normal=Normální
+falcon.wizard.difficulty.hard=Těžká
+
+falcon.wizard.network.title=Síť
+falcon.wizard.network.description=Pro hráče mimo tvou síť musí být porty otevřené ve firewallu a routeru.
+falcon.wizard.network.portV4=Port IPv4
+falcon.wizard.network.portV6=Port IPv6
+falcon.wizard.network.ports.set=Naslouchá na portu %1$s (IPv4) a %2$s (IPv6)
+falcon.wizard.network.transport=Typ připojení
+falcon.wizard.network.transport.raknet=Pouze RakNet, klasické připojení
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, přátelé se mohou připojit i přes Xbox Live
+falcon.wizard.network.transport.set=Typ připojení nastaven na %1$s
+falcon.wizard.network.onlineMode=Vyžadovat účet Xbox Live pro připojení
+falcon.wizard.network.onlineMode.enabled=Hráči se musí přihlásit přes Xbox Live
+falcon.wizard.network.onlineMode.disabled=Dokud je online režim vypnutý, může se kdokoli připojit s libovolným jménem.
+falcon.wizard.network.lan=Zobrazit server hráčům v místní síti
+falcon.wizard.network.lan.enabled=Server je viditelný v místní síti
+falcon.wizard.network.lan.disabled=Server je v místní síti skrytý
+
+falcon.wizard.world.title=Svět
+falcon.wizard.world.description=Svět, který se vygeneruje při prvním spuštění serveru.
+falcon.wizard.world.name=Název světa
+falcon.wizard.world.name.set=Název světa nastaven na %1$s
+falcon.wizard.world.seed=Seed světa
+falcon.wizard.world.seed.hint=Nech prázdné pro náhodný seed.
+falcon.wizard.world.seed.random=Bude použit náhodný seed
+falcon.wizard.world.seed.set=Seed nastaven na %1$s
+falcon.wizard.world.viewDistance=Dohled v chuncích
+falcon.wizard.world.viewDistance.set=Dohled nastaven na %1$s chunků
+
+falcon.wizard.players.title=Hráči
+falcon.wizard.players.description=Kdo může spouštět administrátorské příkazy a kdo se smí připojit.
+falcon.wizard.players.operators=Operátoři
+falcon.wizard.players.operators.hint=Více jmen odděl čárkami, např. Steve, Alex. Nech prázdné pro přeskočení.
+falcon.wizard.players.operators.none=Nebyl nastaven žádný operátor, nikdo nebude moci spouštět administrátorské příkazy.
+falcon.wizard.players.operators.set=Operátoři: %1$s
+falcon.wizard.players.allowList=Povolit připojení jen pozvaným hráčům (allowlist)
+falcon.wizard.players.allowList.disabled=Připojit se může kdokoli
+falcon.wizard.players.allowList.hint=Operátoři jsou přidáni automaticky. Jména odděl čárkami.
+falcon.wizard.players.allowList.players=Další pozvaní hráči
+falcon.wizard.players.allowList.empty=Allowlist je prázdný, přidej hráče příkazem allowlist, než se kdokoli bude moci připojit.
+falcon.wizard.players.allowList.set=Allowlist: %1$s
+
+falcon.wizard.summary.title=Vše je připraveno!
+falcon.wizard.summary.language=Jazyk
+falcon.wizard.summary.serverName=Název serveru
+falcon.wizard.summary.gamemode=Herní režim
+falcon.wizard.summary.players=Hráči
+falcon.wizard.summary.players.value=až %1$s
+falcon.wizard.summary.ports=Porty
+falcon.wizard.summary.transport=Připojení
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=vyžadováno
+falcon.wizard.summary.notRequired=nevyžadováno
+falcon.wizard.summary.world=Svět
+falcon.wizard.summary.operators=Operátoři
+falcon.wizard.summary.allowList=Allowlist
+falcon.wizard.summary.none=žádní
+falcon.wizard.summary.on=zapnuto
+falcon.wizard.summary.off=vypnuto
+falcon.wizard.summary.saved=Vše bylo uloženo do %1$s, můžeš to kdykoli upravit.
+
+falcon.wizard.addresses.lookup=Zjišťuji tvé adresy...
+falcon.wizard.addresses.local=Stejná síť
+falcon.wizard.addresses.external=Internet
+falcon.wizard.addresses.unknown=neznámá
+falcon.wizard.addresses.hint=Hráči mimo tvou síť potřebují pro připojení přesměrovaný port na tvém routeru.

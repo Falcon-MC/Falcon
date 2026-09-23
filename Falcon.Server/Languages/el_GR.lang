@@ -1,3 +1,5 @@
+language.name=Ελληνικά
+
 falcon.commands.about.version=Αυτός ο διακομιστής εκτελεί το Falcon έκδοση %1$s (%2$s στο %3$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (πρωτόκολλο %2$s)
 falcon.commands.about.build=Έκδοση κατασκευής %1$s, διαμόρφωση %2$s
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Η πτήση δεν επιτρέπεται σ�
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (μέγιστο %3$s)
 falcon.commands.status.players=Συνδεδεμένοι παίκτες: %1$s/%2$s
+
+falcon.wizard.language.selected=Η γλώσσα ορίστηκε σε %1$s
+falcon.wizard.license.label=ΑΔΕΙΑ ΧΡΗΣΗΣ
+falcon.wizard.license.question=Αποδέχεσαι την άδεια χρήσης
+falcon.wizard.license.accepted=Η άδεια χρήσης έγινε αποδεκτή.
+falcon.wizard.license.acceptedByArgument=Η άδεια χρήσης έγινε αποδεκτή με --accept-license.
+falcon.wizard.license.refused=Πρέπει να αποδεχτείς την άδεια χρήσης για να χρησιμοποιήσεις το Falcon. Ο διακομιστής θα σταματήσει τώρα.
+falcon.wizard.welcome=Καλώς ήρθες! Φαίνεται ότι το Falcon εκτελείται εδώ για πρώτη φορά.
+falcon.wizard.welcome.defaults=Απάντησε σε μερικές ερωτήσεις για να ρυθμίσεις τον διακομιστή σου. Πάτησε %1$s για να κρατήσεις την τιμή σε αγκύλες.
+falcon.wizard.welcome.flags=Ξεκίνα με --no-wizard για να παραλείψεις τον οδηγό, --accept-license για να παραλείψεις την άδεια χρήσης, ή --language=fr_FR για να επιλέξεις γλώσσα.
+falcon.wizard.configureNow=Ρύθμιση του διακομιστή τώρα
+falcon.wizard.keepDefaults=Διατηρούνται οι προεπιλεγμένες ρυθμίσεις.
+falcon.wizard.saveFailed=Αδυναμία εγγραφής του %1$s
+falcon.wizard.pressEnter=Πάτησε Enter για να ξεκινήσει ο διακομιστής
+falcon.wizard.step=ΒΗΜΑ %1$s/%2$s
+falcon.wizard.default=προεπιλογή
+falcon.wizard.invalid.confirmation=Απάντησε με y (ναι) ή n (όχι).
+falcon.wizard.invalid.number=Εισήγαγε έναν αριθμό από %1$s έως %2$s.
+falcon.wizard.invalid.choice=Εισήγαγε έναν αριθμό από 1 έως %1$s ή ένα από τα ονόματα.
+
+falcon.wizard.server.title=Διακομιστής
+falcon.wizard.server.description=Πώς εμφανίζεται ο διακομιστής σου στη λίστα διακομιστών και πώς παίζουν οι παίκτες σε αυτόν.
+falcon.wizard.server.name=Όνομα διακομιστή
+falcon.wizard.server.name.set=Το όνομα διακομιστή ορίστηκε σε %1$s
+falcon.wizard.server.gamemode=Προεπιλεγμένη λειτουργία παιχνιδιού
+falcon.wizard.server.gamemode.set=Η λειτουργία παιχνιδιού ορίστηκε σε %1$s
+falcon.wizard.server.difficulty=Δυσκολία
+falcon.wizard.server.difficulty.set=Η δυσκολία ορίστηκε σε %1$s
+falcon.wizard.server.maxPlayers=Μέγιστος αριθμός παικτών
+falcon.wizard.server.maxPlayers.set=Έως %1$s παίκτες μπορούν να συνδεθούν
+falcon.wizard.gamemode.survival=Επιβίωση
+falcon.wizard.gamemode.creative=Δημιουργική
+falcon.wizard.gamemode.adventure=Περιπέτεια
+falcon.wizard.gamemode.spectator=Θεατής
+falcon.wizard.difficulty.peaceful=Ειρηνική
+falcon.wizard.difficulty.easy=Εύκολη
+falcon.wizard.difficulty.normal=Κανονική
+falcon.wizard.difficulty.hard=Δύσκολη
+
+falcon.wizard.network.title=Δίκτυο
+falcon.wizard.network.description=Οι θύρες πρέπει να είναι ανοιχτές στο τείχος προστασίας και στον δρομολογητή για παίκτες εκτός του δικτύου σου.
+falcon.wizard.network.portV4=Θύρα IPv4
+falcon.wizard.network.portV6=Θύρα IPv6
+falcon.wizard.network.ports.set=Ακρόαση στη θύρα %1$s (IPv4) και %2$s (IPv6)
+falcon.wizard.network.transport=Τύπος σύνδεσης
+falcon.wizard.network.transport.raknet=Μόνο RakNet, η κλασική σύνδεση
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, επιτρέπει επίσης σε φίλους να συνδεθούν μέσω Xbox Live
+falcon.wizard.network.transport.set=Ο τύπος σύνδεσης ορίστηκε σε %1$s
+falcon.wizard.network.onlineMode=Απαίτηση λογαριασμού Xbox Live για σύνδεση
+falcon.wizard.network.onlineMode.enabled=Οι παίκτες πρέπει να συνδεθούν με Xbox Live
+falcon.wizard.network.onlineMode.disabled=Όσο η λειτουργία online είναι απενεργοποιημένη, οποιοσδήποτε μπορεί να συνδεθεί με οποιοδήποτε όνομα.
+falcon.wizard.network.lan=Εμφάνιση του διακομιστή σε παίκτες του τοπικού δικτύου
+falcon.wizard.network.lan.enabled=Ο διακομιστής είναι ορατός στο τοπικό δίκτυο
+falcon.wizard.network.lan.disabled=Ο διακομιστής είναι κρυφός στο τοπικό δίκτυο
+
+falcon.wizard.world.title=Κόσμος
+falcon.wizard.world.description=Ο κόσμος που δημιουργείται την πρώτη φορά που ξεκινά ο διακομιστής.
+falcon.wizard.world.name=Όνομα κόσμου
+falcon.wizard.world.name.set=Το όνομα κόσμου ορίστηκε σε %1$s
+falcon.wizard.world.seed=Σπόρος κόσμου
+falcon.wizard.world.seed.hint=Άφησέ το κενό για τυχαίο σπόρο.
+falcon.wizard.world.seed.random=Θα χρησιμοποιηθεί τυχαίος σπόρος
+falcon.wizard.world.seed.set=Ο σπόρος ορίστηκε σε %1$s
+falcon.wizard.world.viewDistance=Απόσταση ορατότητας σε chunks
+falcon.wizard.world.viewDistance.set=Η απόσταση ορατότητας ορίστηκε σε %1$s chunks
+
+falcon.wizard.players.title=Παίκτες
+falcon.wizard.players.description=Ποιος μπορεί να εκτελεί εντολές διαχείρισης και ποιος επιτρέπεται να συνδεθεί.
+falcon.wizard.players.operators=Διαχειριστές
+falcon.wizard.players.operators.hint=Χώρισε πολλά ονόματα με κόμματα, π.χ. Steve, Alex. Άφησέ το κενό για παράλειψη.
+falcon.wizard.players.operators.none=Δεν ορίστηκε διαχειριστής, κανείς δεν θα μπορεί να εκτελεί εντολές διαχείρισης.
+falcon.wizard.players.operators.set=Διαχειριστές: %1$s
+falcon.wizard.players.allowList=Σύνδεση μόνο για προσκεκλημένους παίκτες (allowlist)
+falcon.wizard.players.allowList.disabled=Όλοι μπορούν να συνδεθούν
+falcon.wizard.players.allowList.hint=Οι διαχειριστές προστίθενται αυτόματα. Χώρισε τα ονόματα με κόμματα.
+falcon.wizard.players.allowList.players=Άλλοι προσκεκλημένοι παίκτες
+falcon.wizard.players.allowList.empty=Η allowlist είναι κενή, πρόσθεσε παίκτες με την εντολή allowlist πριν μπορέσει να συνδεθεί κάποιος.
+falcon.wizard.players.allowList.set=Allowlist: %1$s
+
+falcon.wizard.summary.title=Όλα έτοιμα!
+falcon.wizard.summary.language=Γλώσσα
+falcon.wizard.summary.serverName=Όνομα διακομιστή
+falcon.wizard.summary.gamemode=Λειτουργία παιχνιδιού
+falcon.wizard.summary.players=Παίκτες
+falcon.wizard.summary.players.value=έως %1$s
+falcon.wizard.summary.ports=Θύρες
+falcon.wizard.summary.transport=Σύνδεση
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=απαιτείται
+falcon.wizard.summary.notRequired=δεν απαιτείται
+falcon.wizard.summary.world=Κόσμος
+falcon.wizard.summary.operators=Διαχειριστές
+falcon.wizard.summary.allowList=Allowlist
+falcon.wizard.summary.none=κανένας
+falcon.wizard.summary.on=ενεργό
+falcon.wizard.summary.off=ανενεργό
+falcon.wizard.summary.saved=Όλα αποθηκεύτηκαν στο %1$s, μπορείς να τα επεξεργαστείς ανά πάσα στιγμή.
+
+falcon.wizard.addresses.lookup=Αναζήτηση των διευθύνσεών σου...
+falcon.wizard.addresses.local=Ίδιο δίκτυο
+falcon.wizard.addresses.external=Διαδίκτυο
+falcon.wizard.addresses.unknown=άγνωστη
+falcon.wizard.addresses.hint=Οι παίκτες εκτός του δικτύου σου χρειάζονται προώθηση θύρας στον δρομολογητή σου για να συνδεθούν.

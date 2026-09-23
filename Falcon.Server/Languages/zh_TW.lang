@@ -1,3 +1,5 @@
+language.name=繁體中文
+
 falcon.commands.about.version=此伺服器正在執行 Falcon 版本 %1$s（%3$s 上的 %2$s）
 falcon.commands.about.game=Minecraft：基岩版 %1$s（通訊協定 %2$s）
 falcon.commands.about.build=組建 %1$s，%2$s 組態
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=此伺服器不允許飛行
 
 falcon.commands.status.performance=TPS：%1$s，MSPT：%2$s（峰值 %3$s）
 falcon.commands.status.players=線上玩家：%1$s/%2$s
+
+falcon.wizard.language.selected=語言已設定為 %1$s
+falcon.wizard.license.label=授權條款
+falcon.wizard.license.question=你是否接受授權條款
+falcon.wizard.license.accepted=已接受授權條款。
+falcon.wizard.license.acceptedByArgument=已透過 --accept-license 接受授權條款。
+falcon.wizard.license.refused=必須接受授權條款才能使用 Falcon。伺服器現在將停止。
+falcon.wizard.welcome=歡迎！看起來這是 Falcon 第一次在這裡執行。
+falcon.wizard.welcome.defaults=回答幾個問題來設定你的伺服器。按 %1$s 保留方括號中的值。
+falcon.wizard.welcome.flags=使用 --no-wizard 啟動可略過此精靈，--accept-license 可略過授權條款，--language=fr_FR 可選擇語言。
+falcon.wizard.configureNow=現在設定伺服器
+falcon.wizard.keepDefaults=保留預設設定。
+falcon.wizard.saveFailed=無法寫入 %1$s
+falcon.wizard.pressEnter=按 Enter 啟動伺服器
+falcon.wizard.step=第 %1$s/%2$s 步
+falcon.wizard.default=預設
+falcon.wizard.invalid.confirmation=請輸入 y（是）或 n（否）。
+falcon.wizard.invalid.number=請輸入 %1$s 到 %2$s 之間的數字。
+falcon.wizard.invalid.choice=請輸入 1 到 %1$s 之間的數字或其中一個名稱。
+
+falcon.wizard.server.title=伺服器
+falcon.wizard.server.description=你的伺服器在伺服器清單中的顯示方式，以及玩家如何遊玩。
+falcon.wizard.server.name=伺服器名稱
+falcon.wizard.server.name.set=伺服器名稱已設定為 %1$s
+falcon.wizard.server.gamemode=預設遊戲模式
+falcon.wizard.server.gamemode.set=遊戲模式已設定為 %1$s
+falcon.wizard.server.difficulty=難度
+falcon.wizard.server.difficulty.set=難度已設定為 %1$s
+falcon.wizard.server.maxPlayers=最大玩家數
+falcon.wizard.server.maxPlayers.set=最多可加入 %1$s 名玩家
+falcon.wizard.gamemode.survival=生存
+falcon.wizard.gamemode.creative=創造
+falcon.wizard.gamemode.adventure=冒險
+falcon.wizard.gamemode.spectator=旁觀
+falcon.wizard.difficulty.peaceful=和平
+falcon.wizard.difficulty.easy=簡單
+falcon.wizard.difficulty.normal=普通
+falcon.wizard.difficulty.hard=困難
+
+falcon.wizard.network.title=網路
+falcon.wizard.network.description=要讓你網路以外的玩家加入，必須在防火牆和路由器中開放連接埠。
+falcon.wizard.network.portV4=IPv4 連接埠
+falcon.wizard.network.portV6=IPv6 連接埠
+falcon.wizard.network.ports.set=正在監聽連接埠 %1$s（IPv4）和 %2$s（IPv6）
+falcon.wizard.network.transport=連線類型
+falcon.wizard.network.transport.raknet=僅 RakNet，傳統連線方式
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet，好友也能透過 Xbox Live 加入
+falcon.wizard.network.transport.set=連線類型已設定為 %1$s
+falcon.wizard.network.onlineMode=要求使用 Xbox Live 帳戶加入
+falcon.wizard.network.onlineMode.enabled=玩家必須登入 Xbox Live
+falcon.wizard.network.onlineMode.disabled=線上模式關閉時，任何人都能以任意名稱加入。
+falcon.wizard.network.lan=向區域網路中的玩家顯示伺服器
+falcon.wizard.network.lan.enabled=伺服器在區域網路中可見
+falcon.wizard.network.lan.disabled=伺服器在區域網路中隱藏
+
+falcon.wizard.world.title=世界
+falcon.wizard.world.description=伺服器首次啟動時產生的世界。
+falcon.wizard.world.name=世界名稱
+falcon.wizard.world.name.set=世界名稱已設定為 %1$s
+falcon.wizard.world.seed=世界種子碼
+falcon.wizard.world.seed.hint=留空則使用隨機種子碼。
+falcon.wizard.world.seed.random=將使用隨機種子碼
+falcon.wizard.world.seed.set=種子碼已設定為 %1$s
+falcon.wizard.world.viewDistance=視野距離（區塊）
+falcon.wizard.world.viewDistance.set=視野距離已設定為 %1$s 個區塊
+
+falcon.wizard.players.title=玩家
+falcon.wizard.players.description=誰可以使用管理指令，以及誰可以加入。
+falcon.wizard.players.operators=管理員
+falcon.wizard.players.operators.hint=多個名稱以逗號分隔，例如 Steve, Alex。留空則略過。
+falcon.wizard.players.operators.none=未設定管理員，沒有人能使用管理指令。
+falcon.wizard.players.operators.set=管理員：%1$s
+falcon.wizard.players.allowList=僅允許受邀玩家加入（白名單）
+falcon.wizard.players.allowList.disabled=所有人都可以加入
+falcon.wizard.players.allowList.hint=管理員會自動加入。名稱之間以逗號分隔。
+falcon.wizard.players.allowList.players=其他受邀玩家
+falcon.wizard.players.allowList.empty=白名單為空，請先使用 allowlist 指令新增玩家，否則沒有人能加入。
+falcon.wizard.players.allowList.set=白名單：%1$s
+
+falcon.wizard.summary.title=一切就緒！
+falcon.wizard.summary.language=語言
+falcon.wizard.summary.serverName=伺服器名稱
+falcon.wizard.summary.gamemode=遊戲模式
+falcon.wizard.summary.players=玩家
+falcon.wizard.summary.players.value=最多 %1$s
+falcon.wizard.summary.ports=連接埠
+falcon.wizard.summary.transport=連線
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=必要
+falcon.wizard.summary.notRequired=非必要
+falcon.wizard.summary.world=世界
+falcon.wizard.summary.operators=管理員
+falcon.wizard.summary.allowList=白名單
+falcon.wizard.summary.none=無
+falcon.wizard.summary.on=開啟
+falcon.wizard.summary.off=關閉
+falcon.wizard.summary.saved=所有設定已儲存到 %1$s，你可以隨時修改。
+
+falcon.wizard.addresses.lookup=正在查詢你的位址...
+falcon.wizard.addresses.local=同一網路
+falcon.wizard.addresses.external=網際網路
+falcon.wizard.addresses.unknown=未知
+falcon.wizard.addresses.hint=你網路以外的玩家需要在路由器上設定連接埠轉送才能加入。

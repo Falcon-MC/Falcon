@@ -11,6 +11,8 @@ struct ServerSettings {
     std::string gameVersion = "1.26.51";
     int protocolVersion = 2193;
     bool runSetupWizard = true;
+    bool acceptLicense = false;
+    std::string language;
 };
 
 void startServer(const ServerSettings &settings = ServerSettings());

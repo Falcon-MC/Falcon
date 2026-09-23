@@ -11,6 +11,7 @@
 #include "Level/Generator/Biome/BiomeChunkGenDataRegistry.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Network/TransportFactory.h"
+#include "Server/Localization.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/SetupWizard.h"
 
@@ -31,6 +32,7 @@
 
 static const char *PROPERTIES_FILE = "server.properties";
 static const char *OPS_FILE = "ops.txt";
+static const char *ALLOWLIST_FILE = "allowlist.json";
 static const char *PROFILER_CONFIG_FILE = "bootstrap.json";
 static const char *CDN_CONFIG_FILE = "cdn_config.json";
 
@@ -189,11 +191,15 @@ void startServer(const ServerSettings &settings) {
     BlockPaletteRegistry::getInstance().initialize();
 
     if (settings.runSetupWizard && SetupWizard::isInteractive() && SetupWizard::isNeeded(PROPERTIES_FILE)) {
-        SetupWizard wizard(PROPERTIES_FILE, OPS_FILE);
-        wizard.run();
+        SetupWizard wizard(PROPERTIES_FILE, OPS_FILE, ALLOWLIST_FILE);
+        if (!wizard.run(settings.acceptLicense, settings.language)) {
+            BedrockLog::shutdown();
+            return;
+        }
     }
 
     PropertiesSettings properties(PROPERTIES_FILE);
+    Localization::setServerLocale(properties.getLanguage());
     logStartupBanner(properties);
 
     const TransportLayer transport = properties.getTransportLayer();
@@ -300,6 +306,10 @@ int main(int argc, char **argv) {
 
         if (argument == "--no-wizard")
             settings.runSetupWizard = false;
+        else if (argument == "--accept-license")
+            settings.acceptLicense = true;
+        else if (argument.rfind("--language=", 0) == 0)
+            settings.language = argument.substr(std::string("--language=").size());
     }
 
     startServer(settings);

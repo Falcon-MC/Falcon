@@ -1,3 +1,5 @@
+language.name=日本語
+
 falcon.commands.about.version=このサーバーは Falcon バージョン %1$s (%2$s、%3$s) で動作しています
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (プロトコル %2$s)
 falcon.commands.about.build=ビルド %1$s、%2$s 構成
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=このサーバーでは飛行が許可され�
 
 falcon.commands.status.performance=TPS: %1$s、MSPT: %2$s (ピーク %3$s)
 falcon.commands.status.players=オンラインのプレイヤー: %1$s/%2$s
+
+falcon.wizard.language.selected=言語を %1$s に設定しました
+falcon.wizard.license.label=ライセンス
+falcon.wizard.license.question=ライセンスに同意しますか
+falcon.wizard.license.accepted=ライセンスに同意しました。
+falcon.wizard.license.acceptedByArgument=--accept-license によりライセンスに同意しました。
+falcon.wizard.license.refused=Falcon を使用するにはライセンスへの同意が必要です。サーバーを停止します。
+falcon.wizard.welcome=ようこそ！Falcon をここで起動するのは初めてのようです。
+falcon.wizard.welcome.defaults=いくつかの質問に答えてサーバーを設定してください。括弧内の値を使うには %1$s を押してください。
+falcon.wizard.welcome.flags=--no-wizard でこのウィザードを、--accept-license でライセンスをスキップできます。--language=fr_FR で言語を選択できます。
+falcon.wizard.configureNow=今すぐサーバーを設定する
+falcon.wizard.keepDefaults=デフォルト設定を使用します。
+falcon.wizard.saveFailed=%1$s に書き込めませんでした
+falcon.wizard.pressEnter=Enter を押してサーバーを起動
+falcon.wizard.step=ステップ %1$s/%2$s
+falcon.wizard.default=デフォルト
+falcon.wizard.invalid.confirmation=y または n で答えてください (はい/いいえ)。
+falcon.wizard.invalid.number=%1$s から %2$s までの数値を入力してください。
+falcon.wizard.invalid.choice=1 から %1$s までの数値、または名前のいずれかを入力してください。
+
+falcon.wizard.server.title=サーバー
+falcon.wizard.server.description=サーバー一覧でのサーバーの表示と、プレイヤーの遊び方を設定します。
+falcon.wizard.server.name=サーバー名
+falcon.wizard.server.name.set=サーバー名を %1$s に設定しました
+falcon.wizard.server.gamemode=デフォルトのゲームモード
+falcon.wizard.server.gamemode.set=ゲームモードを %1$s に設定しました
+falcon.wizard.server.difficulty=難易度
+falcon.wizard.server.difficulty.set=難易度を %1$s に設定しました
+falcon.wizard.server.maxPlayers=最大プレイヤー数
+falcon.wizard.server.maxPlayers.set=最大 %1$s 人のプレイヤーが参加できます
+falcon.wizard.gamemode.survival=サバイバル
+falcon.wizard.gamemode.creative=クリエイティブ
+falcon.wizard.gamemode.adventure=アドベンチャー
+falcon.wizard.gamemode.spectator=スペクテイター
+falcon.wizard.difficulty.peaceful=ピースフル
+falcon.wizard.difficulty.easy=イージー
+falcon.wizard.difficulty.normal=ノーマル
+falcon.wizard.difficulty.hard=ハード
+
+falcon.wizard.network.title=ネットワーク
+falcon.wizard.network.description=ネットワーク外のプレイヤーが参加するには、ファイアウォールとルーターでポートを開放する必要があります。
+falcon.wizard.network.portV4=IPv4 ポート
+falcon.wizard.network.portV6=IPv6 ポート
+falcon.wizard.network.ports.set=ポート %1$s (IPv4) と %2$s (IPv6) で待ち受けます
+falcon.wizard.network.transport=接続の種類
+falcon.wizard.network.transport.raknet=RakNet のみ、従来の接続
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet、フレンドが Xbox Live 経由で参加することもできます
+falcon.wizard.network.transport.set=接続の種類を %1$s に設定しました
+falcon.wizard.network.onlineMode=参加に Xbox Live アカウントを必須にする
+falcon.wizard.network.onlineMode.enabled=プレイヤーは Xbox Live でサインインする必要があります
+falcon.wizard.network.onlineMode.disabled=オンラインモードが無効の間は、誰でも任意の名前で参加できます。
+falcon.wizard.network.lan=ローカルネットワーク上のプレイヤーにサーバーを表示する
+falcon.wizard.network.lan.enabled=サーバーはローカルネットワークに表示されます
+falcon.wizard.network.lan.disabled=サーバーはローカルネットワークに表示されません
+
+falcon.wizard.world.title=ワールド
+falcon.wizard.world.description=サーバーの初回起動時に生成されるワールドです。
+falcon.wizard.world.name=ワールド名
+falcon.wizard.world.name.set=ワールド名を %1$s に設定しました
+falcon.wizard.world.seed=ワールドのシード値
+falcon.wizard.world.seed.hint=空欄にするとランダムなシード値になります。
+falcon.wizard.world.seed.random=ランダムなシード値を使用します
+falcon.wizard.world.seed.set=シード値を %1$s に設定しました
+falcon.wizard.world.viewDistance=描画距離 (チャンク)
+falcon.wizard.world.viewDistance.set=描画距離を %1$s チャンクに設定しました
+
+falcon.wizard.players.title=プレイヤー
+falcon.wizard.players.description=管理コマンドを実行できる人と、参加を許可する人を設定します。
+falcon.wizard.players.operators=オペレーター
+falcon.wizard.players.operators.hint=複数の名前はカンマで区切ってください (例: Steve, Alex)。スキップするには空欄のままにします。
+falcon.wizard.players.operators.none=オペレーターが設定されていないため、誰も管理コマンドを実行できません。
+falcon.wizard.players.operators.set=オペレーター: %1$s
+falcon.wizard.players.allowList=招待したプレイヤーのみ参加を許可する (allowlist)
+falcon.wizard.players.allowList.disabled=誰でも参加できます
+falcon.wizard.players.allowList.hint=オペレーターは自動的に追加されます。名前はカンマで区切ってください。
+falcon.wizard.players.allowList.players=その他の招待プレイヤー
+falcon.wizard.players.allowList.empty=許可リストが空です。誰かが参加できるように allowlist コマンドでプレイヤーを追加してください。
+falcon.wizard.players.allowList.set=許可リスト: %1$s
+
+falcon.wizard.summary.title=準備完了！
+falcon.wizard.summary.language=言語
+falcon.wizard.summary.serverName=サーバー名
+falcon.wizard.summary.gamemode=ゲームモード
+falcon.wizard.summary.players=プレイヤー
+falcon.wizard.summary.players.value=最大 %1$s 人
+falcon.wizard.summary.ports=ポート
+falcon.wizard.summary.transport=接続
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=必須
+falcon.wizard.summary.notRequired=不要
+falcon.wizard.summary.world=ワールド
+falcon.wizard.summary.operators=オペレーター
+falcon.wizard.summary.allowList=許可リスト
+falcon.wizard.summary.none=なし
+falcon.wizard.summary.on=オン
+falcon.wizard.summary.off=オフ
+falcon.wizard.summary.saved=すべて %1$s に保存しました。いつでも編集できます。
+
+falcon.wizard.addresses.lookup=アドレスを確認しています...
+falcon.wizard.addresses.local=同じネットワーク
+falcon.wizard.addresses.external=インターネット
+falcon.wizard.addresses.unknown=不明
+falcon.wizard.addresses.hint=ネットワーク外のプレイヤーが参加するには、ルーターでポート転送を設定する必要があります。

@@ -1,3 +1,5 @@
+language.name=Bahasa Indonesia
+
 falcon.commands.about.version=Server ini menjalankan Falcon versi %1$s (%2$s di %3$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
 falcon.commands.about.build=Build %1$s, konfigurasi %2$s
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Terbang tidak diizinkan di server ini
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (puncak %3$s)
 falcon.commands.status.players=Pemain online: %1$s/%2$s
+
+falcon.wizard.language.selected=Bahasa diatur ke %1$s
+falcon.wizard.license.label=LISENSI
+falcon.wizard.license.question=Apakah kamu menerima lisensi
+falcon.wizard.license.accepted=Lisensi diterima.
+falcon.wizard.license.acceptedByArgument=Lisensi diterima dengan --accept-license.
+falcon.wizard.license.refused=Kamu harus menerima lisensi untuk menggunakan Falcon. Server akan berhenti sekarang.
+falcon.wizard.welcome=Selamat datang! Sepertinya ini pertama kalinya Falcon dijalankan di sini.
+falcon.wizard.welcome.defaults=Jawab beberapa pertanyaan untuk menyiapkan server. Tekan %1$s untuk memakai nilai dalam kurung.
+falcon.wizard.welcome.flags=Jalankan dengan --no-wizard untuk melewati wizard ini, --accept-license untuk melewati lisensi, atau --language=fr_FR untuk memilih bahasa.
+falcon.wizard.configureNow=Siapkan server sekarang
+falcon.wizard.keepDefaults=Menggunakan pengaturan bawaan.
+falcon.wizard.saveFailed=Tidak dapat menulis %1$s
+falcon.wizard.pressEnter=Tekan Enter untuk memulai server
+falcon.wizard.step=LANGKAH %1$s/%2$s
+falcon.wizard.default=bawaan
+falcon.wizard.invalid.confirmation=Silakan jawab dengan y atau n (ya/tidak).
+falcon.wizard.invalid.number=Masukkan angka antara %1$s dan %2$s.
+falcon.wizard.invalid.choice=Masukkan angka dari 1 sampai %1$s atau salah satu nama.
+
+falcon.wizard.server.title=Server
+falcon.wizard.server.description=Bagaimana server kamu tampil di daftar server dan bagaimana pemain bermain di dalamnya.
+falcon.wizard.server.name=Nama server
+falcon.wizard.server.name.set=Nama server diatur ke %1$s
+falcon.wizard.server.gamemode=Mode permainan bawaan
+falcon.wizard.server.gamemode.set=Mode permainan diatur ke %1$s
+falcon.wizard.server.difficulty=Kesulitan
+falcon.wizard.server.difficulty.set=Kesulitan diatur ke %1$s
+falcon.wizard.server.maxPlayers=Jumlah pemain maksimum
+falcon.wizard.server.maxPlayers.set=Hingga %1$s pemain dapat bergabung
+falcon.wizard.gamemode.survival=Bertahan Hidup
+falcon.wizard.gamemode.creative=Kreatif
+falcon.wizard.gamemode.adventure=Petualangan
+falcon.wizard.gamemode.spectator=Penonton
+falcon.wizard.difficulty.peaceful=Damai
+falcon.wizard.difficulty.easy=Mudah
+falcon.wizard.difficulty.normal=Normal
+falcon.wizard.difficulty.hard=Sulit
+
+falcon.wizard.network.title=Jaringan
+falcon.wizard.network.description=Port harus dibuka di firewall dan router kamu agar pemain di luar jaringan bisa bergabung.
+falcon.wizard.network.portV4=Port IPv4
+falcon.wizard.network.portV6=Port IPv6
+falcon.wizard.network.ports.set=Mendengarkan di port %1$s (IPv4) dan %2$s (IPv6)
+falcon.wizard.network.transport=Jenis koneksi
+falcon.wizard.network.transport.raknet=Hanya RakNet, koneksi klasik
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, teman juga bisa bergabung melalui Xbox Live
+falcon.wizard.network.transport.set=Jenis koneksi diatur ke %1$s
+falcon.wizard.network.onlineMode=Wajibkan akun Xbox Live untuk bergabung
+falcon.wizard.network.onlineMode.enabled=Pemain harus masuk dengan Xbox Live
+falcon.wizard.network.onlineMode.disabled=Siapa pun bisa bergabung dengan nama apa pun selama mode online dinonaktifkan.
+falcon.wizard.network.lan=Tampilkan server ke pemain di jaringan lokal
+falcon.wizard.network.lan.enabled=Server terlihat di jaringan lokal
+falcon.wizard.network.lan.disabled=Server disembunyikan dari jaringan lokal
+
+falcon.wizard.world.title=Dunia
+falcon.wizard.world.description=Dunia yang dibuat saat server pertama kali dijalankan.
+falcon.wizard.world.name=Nama dunia
+falcon.wizard.world.name.set=Nama dunia diatur ke %1$s
+falcon.wizard.world.seed=Seed dunia
+falcon.wizard.world.seed.hint=Kosongkan untuk seed acak.
+falcon.wizard.world.seed.random=Seed acak akan digunakan
+falcon.wizard.world.seed.set=Seed diatur ke %1$s
+falcon.wizard.world.viewDistance=Jarak pandang dalam chunk
+falcon.wizard.world.viewDistance.set=Jarak pandang diatur ke %1$s chunk
+
+falcon.wizard.players.title=Pemain
+falcon.wizard.players.description=Siapa yang bisa menjalankan perintah admin, dan siapa yang boleh bergabung.
+falcon.wizard.players.operators=Operator
+falcon.wizard.players.operators.hint=Pisahkan beberapa nama dengan koma, mis. Steve, Alex. Kosongkan untuk melewati.
+falcon.wizard.players.operators.none=Tidak ada operator, tidak ada yang bisa menjalankan perintah admin.
+falcon.wizard.players.operators.set=Operator: %1$s
+falcon.wizard.players.allowList=Hanya izinkan pemain yang diundang (allowlist)
+falcon.wizard.players.allowList.disabled=Semua orang bisa bergabung
+falcon.wizard.players.allowList.hint=Operator ditambahkan secara otomatis. Pisahkan nama dengan koma.
+falcon.wizard.players.allowList.players=Pemain undangan lainnya
+falcon.wizard.players.allowList.empty=Daftar izin kosong, tambahkan pemain dengan perintah allowlist agar ada yang bisa bergabung.
+falcon.wizard.players.allowList.set=Daftar izin: %1$s
+
+falcon.wizard.summary.title=Semua siap!
+falcon.wizard.summary.language=Bahasa
+falcon.wizard.summary.serverName=Nama server
+falcon.wizard.summary.gamemode=Mode permainan
+falcon.wizard.summary.players=Pemain
+falcon.wizard.summary.players.value=hingga %1$s
+falcon.wizard.summary.ports=Port
+falcon.wizard.summary.transport=Koneksi
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=wajib
+falcon.wizard.summary.notRequired=tidak wajib
+falcon.wizard.summary.world=Dunia
+falcon.wizard.summary.operators=Operator
+falcon.wizard.summary.allowList=Daftar izin
+falcon.wizard.summary.none=tidak ada
+falcon.wizard.summary.on=aktif
+falcon.wizard.summary.off=nonaktif
+falcon.wizard.summary.saved=Semua telah disimpan ke %1$s, kamu bisa mengubahnya kapan saja.
+
+falcon.wizard.addresses.lookup=Mencari alamat kamu...
+falcon.wizard.addresses.local=Jaringan yang sama
+falcon.wizard.addresses.external=Internet
+falcon.wizard.addresses.unknown=tidak diketahui
+falcon.wizard.addresses.hint=Pemain di luar jaringan kamu memerlukan port forwarding di router untuk bergabung.

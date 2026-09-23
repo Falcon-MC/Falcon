@@ -1,3 +1,5 @@
+language.name=Türkçe
+
 falcon.commands.about.version=Bu sunucu Falcon %1$s sürümünü çalıştırıyor (%3$s üzerinde %2$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
 falcon.commands.about.build=Derleme %1$s, %2$s yapılandırması
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Bu sunucuda uçmaya izin verilmiyor
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (en yüksek %3$s)
 falcon.commands.status.players=Çevrim içi oyuncular: %1$s/%2$s
+
+falcon.wizard.language.selected=Dil %1$s olarak ayarlandı
+falcon.wizard.license.label=LİSANS
+falcon.wizard.license.question=Lisansı kabul ediyor musunuz
+falcon.wizard.license.accepted=Lisans kabul edildi.
+falcon.wizard.license.acceptedByArgument=Lisans --accept-license ile kabul edildi.
+falcon.wizard.license.refused=Falcon'u kullanmak için lisansı kabul etmeniz gerekir. Sunucu şimdi duracak.
+falcon.wizard.welcome=Hoş geldiniz! Görünüşe göre Falcon burada ilk kez çalışıyor.
+falcon.wizard.welcome.defaults=Sunucunuzu kurmak için birkaç soruyu yanıtlayın. Köşeli parantez içindeki değeri korumak için %1$s tuşuna basın.
+falcon.wizard.welcome.flags=Sihirbazı atlamak için --no-wizard, lisansı atlamak için --accept-license veya dil seçmek için --language=fr_FR ile başlatın.
+falcon.wizard.configureNow=Sunucuyu şimdi kur
+falcon.wizard.keepDefaults=Varsayılan ayarlar korunuyor.
+falcon.wizard.saveFailed=%1$s yazılamadı
+falcon.wizard.pressEnter=Sunucuyu başlatmak için Enter'a basın
+falcon.wizard.step=ADIM %1$s/%2$s
+falcon.wizard.default=varsayılan
+falcon.wizard.invalid.confirmation=Lütfen y (evet) veya n (hayır) ile yanıtlayın.
+falcon.wizard.invalid.number=Lütfen %1$s ile %2$s arasında bir sayı girin.
+falcon.wizard.invalid.choice=Lütfen 1 ile %1$s arasında bir sayı ya da adlardan birini girin.
+
+falcon.wizard.server.title=Sunucu
+falcon.wizard.server.description=Sunucunuzun sunucu listesinde nasıl göründüğü ve oyuncuların nasıl oynadığı.
+falcon.wizard.server.name=Sunucu adı
+falcon.wizard.server.name.set=Sunucu adı %1$s olarak ayarlandı
+falcon.wizard.server.gamemode=Varsayılan oyun modu
+falcon.wizard.server.gamemode.set=Oyun modu %1$s olarak ayarlandı
+falcon.wizard.server.difficulty=Zorluk
+falcon.wizard.server.difficulty.set=Zorluk %1$s olarak ayarlandı
+falcon.wizard.server.maxPlayers=En fazla oyuncu
+falcon.wizard.server.maxPlayers.set=En fazla %1$s oyuncu katılabilir
+falcon.wizard.gamemode.survival=Hayatta Kalma
+falcon.wizard.gamemode.creative=Yaratıcı
+falcon.wizard.gamemode.adventure=Macera
+falcon.wizard.gamemode.spectator=İzleyici
+falcon.wizard.difficulty.peaceful=Barışçıl
+falcon.wizard.difficulty.easy=Kolay
+falcon.wizard.difficulty.normal=Normal
+falcon.wizard.difficulty.hard=Zor
+
+falcon.wizard.network.title=Ağ
+falcon.wizard.network.description=Ağınızın dışındaki oyuncular için portların güvenlik duvarında ve modemde açık olması gerekir.
+falcon.wizard.network.portV4=IPv4 portu
+falcon.wizard.network.portV6=IPv6 portu
+falcon.wizard.network.ports.set=%1$s (IPv4) ve %2$s (IPv6) portları dinleniyor
+falcon.wizard.network.transport=Bağlantı türü
+falcon.wizard.network.transport.raknet=Yalnızca RakNet, klasik bağlantı
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, arkadaşlar Xbox Live üzerinden de katılabilir
+falcon.wizard.network.transport.set=Bağlantı türü %1$s olarak ayarlandı
+falcon.wizard.network.onlineMode=Katılmak için Xbox Live hesabı zorunlu olsun
+falcon.wizard.network.onlineMode.enabled=Oyuncular Xbox Live ile giriş yapmalı
+falcon.wizard.network.onlineMode.disabled=Çevrim içi mod kapalıyken herkes istediği adla katılabilir.
+falcon.wizard.network.lan=Sunucuyu yerel ağınızdaki oyunculara göster
+falcon.wizard.network.lan.enabled=Sunucu yerel ağda görünür
+falcon.wizard.network.lan.disabled=Sunucu yerel ağda gizli
+
+falcon.wizard.world.title=Dünya
+falcon.wizard.world.description=Sunucu ilk kez başladığında oluşturulan dünya.
+falcon.wizard.world.name=Dünya adı
+falcon.wizard.world.name.set=Dünya adı %1$s olarak ayarlandı
+falcon.wizard.world.seed=Dünya tohumu
+falcon.wizard.world.seed.hint=Rastgele bir tohum için boş bırakın.
+falcon.wizard.world.seed.random=Rastgele bir tohum kullanılacak
+falcon.wizard.world.seed.set=Tohum %1$s olarak ayarlandı
+falcon.wizard.world.viewDistance=Parça cinsinden görüş mesafesi
+falcon.wizard.world.viewDistance.set=Görüş mesafesi %1$s parça olarak ayarlandı
+
+falcon.wizard.players.title=Oyuncular
+falcon.wizard.players.description=Kimlerin yönetici komutlarını kullanabileceği ve kimlerin katılabileceği.
+falcon.wizard.players.operators=Operatörler
+falcon.wizard.players.operators.hint=Birden fazla adı virgülle ayırın, örn. Steve, Alex. Atlamak için boş bırakın.
+falcon.wizard.players.operators.none=Hiç operatör belirlenmedi, kimse yönetici komutlarını kullanamayacak.
+falcon.wizard.players.operators.set=Operatörler: %1$s
+falcon.wizard.players.allowList=Yalnızca davetli oyuncular katılabilsin (izin listesi)
+falcon.wizard.players.allowList.disabled=Herkes katılabilir
+falcon.wizard.players.allowList.hint=Operatörler otomatik olarak eklenir. Adları virgülle ayırın.
+falcon.wizard.players.allowList.players=Diğer davetli oyuncular
+falcon.wizard.players.allowList.empty=İzin listesi boş, kimse katılmadan önce allowlist komutuyla oyuncu ekleyin.
+falcon.wizard.players.allowList.set=İzin listesi: %1$s
+
+falcon.wizard.summary.title=Her şey hazır!
+falcon.wizard.summary.language=Dil
+falcon.wizard.summary.serverName=Sunucu adı
+falcon.wizard.summary.gamemode=Oyun modu
+falcon.wizard.summary.players=Oyuncular
+falcon.wizard.summary.players.value=en fazla %1$s
+falcon.wizard.summary.ports=Portlar
+falcon.wizard.summary.transport=Bağlantı
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=zorunlu
+falcon.wizard.summary.notRequired=zorunlu değil
+falcon.wizard.summary.world=Dünya
+falcon.wizard.summary.operators=Operatörler
+falcon.wizard.summary.allowList=İzin listesi
+falcon.wizard.summary.none=yok
+falcon.wizard.summary.on=açık
+falcon.wizard.summary.off=kapalı
+falcon.wizard.summary.saved=Her şey %1$s dosyasına kaydedildi, istediğiniz zaman düzenleyebilirsiniz.
+
+falcon.wizard.addresses.lookup=Adresleriniz bulunuyor...
+falcon.wizard.addresses.local=Aynı ağ
+falcon.wizard.addresses.external=İnternet
+falcon.wizard.addresses.unknown=bilinmiyor
+falcon.wizard.addresses.hint=Ağınızın dışındaki oyuncuların katılabilmesi için modeminizde port yönlendirmesi gerekir.

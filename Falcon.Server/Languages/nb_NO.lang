@@ -1,3 +1,5 @@
+language.name=Norsk bokmål
+
 falcon.commands.about.version=Denne serveren kjører Falcon versjon %1$s (%2$s på %3$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokoll %2$s)
 falcon.commands.about.build=Build %1$s, %2$s-konfigurasjon
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Det er ikke tillatt å fly på denne serveren
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (topp %3$s)
 falcon.commands.status.players=Spillere pålogget: %1$s/%2$s
+
+falcon.wizard.language.selected=Språk satt til %1$s
+falcon.wizard.license.label=LISENS
+falcon.wizard.license.question=Godtar du lisensen
+falcon.wizard.license.accepted=Lisens godtatt.
+falcon.wizard.license.acceptedByArgument=Lisens godtatt med --accept-license.
+falcon.wizard.license.refused=Du må godta lisensen for å bruke Falcon. Serveren stopper nå.
+falcon.wizard.welcome=Velkommen! Det ser ut til at dette er første gang Falcon kjører her.
+falcon.wizard.welcome.defaults=Svar på noen spørsmål for å sette opp serveren din. Trykk %1$s for å beholde verdien i hakeparentes.
+falcon.wizard.welcome.flags=Start med --no-wizard for å hoppe over veiviseren, --accept-license for å hoppe over lisensen, eller --language=fr_FR for å velge språk.
+falcon.wizard.configureNow=Sett opp serveren nå
+falcon.wizard.keepDefaults=Beholder standardinnstillingene.
+falcon.wizard.saveFailed=Kunne ikke skrive %1$s
+falcon.wizard.pressEnter=Trykk Enter for å starte serveren
+falcon.wizard.step=TRINN %1$s/%2$s
+falcon.wizard.default=standard
+falcon.wizard.invalid.confirmation=Svar med y (ja) eller n (nei).
+falcon.wizard.invalid.number=Skriv inn et tall mellom %1$s og %2$s.
+falcon.wizard.invalid.choice=Skriv inn et tall fra 1 til %1$s eller et av navnene.
+
+falcon.wizard.server.title=Server
+falcon.wizard.server.description=Hvordan serveren din vises i serverlisten og hvordan spillerne spiller på den.
+falcon.wizard.server.name=Servernavn
+falcon.wizard.server.name.set=Servernavn satt til %1$s
+falcon.wizard.server.gamemode=Standard spillmodus
+falcon.wizard.server.gamemode.set=Spillmodus satt til %1$s
+falcon.wizard.server.difficulty=Vanskelighetsgrad
+falcon.wizard.server.difficulty.set=Vanskelighetsgrad satt til %1$s
+falcon.wizard.server.maxPlayers=Maks antall spillere
+falcon.wizard.server.maxPlayers.set=Opptil %1$s spillere kan bli med
+falcon.wizard.gamemode.survival=Overlevelse
+falcon.wizard.gamemode.creative=Kreativ
+falcon.wizard.gamemode.adventure=Eventyr
+falcon.wizard.gamemode.spectator=Tilskuer
+falcon.wizard.difficulty.peaceful=Fredelig
+falcon.wizard.difficulty.easy=Lett
+falcon.wizard.difficulty.normal=Normal
+falcon.wizard.difficulty.hard=Vanskelig
+
+falcon.wizard.network.title=Nettverk
+falcon.wizard.network.description=Portene må være åpne i brannmuren og ruteren for spillere utenfor nettverket ditt.
+falcon.wizard.network.portV4=IPv4-port
+falcon.wizard.network.portV6=IPv6-port
+falcon.wizard.network.ports.set=Lytter på port %1$s (IPv4) og %2$s (IPv6)
+falcon.wizard.network.transport=Tilkoblingstype
+falcon.wizard.network.transport.raknet=Kun RakNet, den klassiske tilkoblingen
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, lar også venner bli med via Xbox Live
+falcon.wizard.network.transport.set=Tilkoblingstype satt til %1$s
+falcon.wizard.network.onlineMode=Krev en Xbox Live-konto for å bli med
+falcon.wizard.network.onlineMode.enabled=Spillere må logge på med Xbox Live
+falcon.wizard.network.onlineMode.disabled=Hvem som helst kan bli med under hvilket som helst navn så lenge nettmodus er deaktivert.
+falcon.wizard.network.lan=Vis serveren for spillere på det lokale nettverket
+falcon.wizard.network.lan.enabled=Serveren er synlig på det lokale nettverket
+falcon.wizard.network.lan.disabled=Serveren er skjult på det lokale nettverket
+
+falcon.wizard.world.title=Verden
+falcon.wizard.world.description=Verdenen som genereres første gang serveren starter.
+falcon.wizard.world.name=Verdensnavn
+falcon.wizard.world.name.set=Verdensnavn satt til %1$s
+falcon.wizard.world.seed=Verdensfrø
+falcon.wizard.world.seed.hint=La stå tomt for et tilfeldig frø.
+falcon.wizard.world.seed.random=Et tilfeldig frø blir brukt
+falcon.wizard.world.seed.set=Frø satt til %1$s
+falcon.wizard.world.viewDistance=Siktavstand i chunker
+falcon.wizard.world.viewDistance.set=Siktavstand satt til %1$s chunker
+
+falcon.wizard.players.title=Spillere
+falcon.wizard.players.description=Hvem som kan kjøre administratorkommandoer, og hvem som får bli med.
+falcon.wizard.players.operators=Operatører
+falcon.wizard.players.operators.hint=Skill flere navn med komma, f.eks. Steve, Alex. La stå tomt for å hoppe over.
+falcon.wizard.players.operators.none=Ingen operatør ble satt, ingen vil kunne kjøre administratorkommandoer.
+falcon.wizard.players.operators.set=Operatører: %1$s
+falcon.wizard.players.allowList=La bare inviterte spillere bli med (tillatelsesliste)
+falcon.wizard.players.allowList.disabled=Alle kan bli med
+falcon.wizard.players.allowList.hint=Operatører legges til automatisk. Skill navn med komma.
+falcon.wizard.players.allowList.players=Andre inviterte spillere
+falcon.wizard.players.allowList.empty=Tillatelseslisten er tom, legg til spillere med allowlist-kommandoen før noen kan bli med.
+falcon.wizard.players.allowList.set=Tillatelsesliste: %1$s
+
+falcon.wizard.summary.title=Alt er klart!
+falcon.wizard.summary.language=Språk
+falcon.wizard.summary.serverName=Servernavn
+falcon.wizard.summary.gamemode=Spillmodus
+falcon.wizard.summary.players=Spillere
+falcon.wizard.summary.players.value=opptil %1$s
+falcon.wizard.summary.ports=Porter
+falcon.wizard.summary.transport=Tilkobling
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=påkrevd
+falcon.wizard.summary.notRequired=ikke påkrevd
+falcon.wizard.summary.world=Verden
+falcon.wizard.summary.operators=Operatører
+falcon.wizard.summary.allowList=Tillatelsesliste
+falcon.wizard.summary.none=ingen
+falcon.wizard.summary.on=på
+falcon.wizard.summary.off=av
+falcon.wizard.summary.saved=Alt ble lagret i %1$s, du kan redigere det når som helst.
+
+falcon.wizard.addresses.lookup=Slår opp adressene dine...
+falcon.wizard.addresses.local=Samme nettverk
+falcon.wizard.addresses.external=Internett
+falcon.wizard.addresses.unknown=ukjent
+falcon.wizard.addresses.hint=Spillere utenfor nettverket ditt trenger at porten videresendes på ruteren for å bli med.

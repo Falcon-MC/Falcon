@@ -1,3 +1,5 @@
+language.name=Русский
+
 falcon.commands.about.version=На этом сервере работает Falcon версии %1$s (%2$s в %3$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (протокол %2$s)
 falcon.commands.about.build=Сборка %1$s, конфигурация %2$s
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Полеты на этом сервере за�
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (пик %3$s)
 falcon.commands.status.players=Игроков в сети: %1$s/%2$s
+
+falcon.wizard.language.selected=Выбран язык: %1$s
+falcon.wizard.license.label=ЛИЦЕНЗИЯ
+falcon.wizard.license.question=Вы принимаете лицензию
+falcon.wizard.license.accepted=Лицензия принята.
+falcon.wizard.license.acceptedByArgument=Лицензия принята с помощью --accept-license.
+falcon.wizard.license.refused=Чтобы использовать Falcon, нужно принять лицензию. Сервер будет остановлен.
+falcon.wizard.welcome=Добро пожаловать! Похоже, Falcon запускается здесь впервые.
+falcon.wizard.welcome.defaults=Ответьте на несколько вопросов, чтобы настроить сервер. Нажмите %1$s, чтобы оставить значение в скобках.
+falcon.wizard.welcome.flags=Запустите с --no-wizard, чтобы пропустить мастер, с --accept-license, чтобы пропустить лицензию, или с --language=fr_FR, чтобы выбрать язык.
+falcon.wizard.configureNow=Настроить сервер сейчас
+falcon.wizard.keepDefaults=Оставлены настройки по умолчанию.
+falcon.wizard.saveFailed=Не удалось записать %1$s
+falcon.wizard.pressEnter=Нажмите Enter, чтобы запустить сервер
+falcon.wizard.step=ШАГ %1$s/%2$s
+falcon.wizard.default=по умолчанию
+falcon.wizard.invalid.confirmation=Ответьте y (да) или n (нет).
+falcon.wizard.invalid.number=Введите число от %1$s до %2$s.
+falcon.wizard.invalid.choice=Введите число от 1 до %1$s или одно из названий.
+
+falcon.wizard.server.title=Сервер
+falcon.wizard.server.description=Как ваш сервер выглядит в списке серверов и как на нём играют.
+falcon.wizard.server.name=Название сервера
+falcon.wizard.server.name.set=Название сервера: %1$s
+falcon.wizard.server.gamemode=Режим игры по умолчанию
+falcon.wizard.server.gamemode.set=Режим игры: %1$s
+falcon.wizard.server.difficulty=Сложность
+falcon.wizard.server.difficulty.set=Сложность: %1$s
+falcon.wizard.server.maxPlayers=Максимум игроков
+falcon.wizard.server.maxPlayers.set=Подключиться смогут до %1$s игроков
+falcon.wizard.gamemode.survival=Выживание
+falcon.wizard.gamemode.creative=Творческий
+falcon.wizard.gamemode.adventure=Приключение
+falcon.wizard.gamemode.spectator=Наблюдатель
+falcon.wizard.difficulty.peaceful=Мирная
+falcon.wizard.difficulty.easy=Лёгкая
+falcon.wizard.difficulty.normal=Нормальная
+falcon.wizard.difficulty.hard=Сложная
+
+falcon.wizard.network.title=Сеть
+falcon.wizard.network.description=Чтобы игроки извне вашей сети могли подключиться, порты должны быть открыты в брандмауэре и роутере.
+falcon.wizard.network.portV4=Порт IPv4
+falcon.wizard.network.portV6=Порт IPv6
+falcon.wizard.network.ports.set=Сервер слушает порт %1$s (IPv4) и %2$s (IPv6)
+falcon.wizard.network.transport=Тип подключения
+falcon.wizard.network.transport.raknet=Только RakNet, классическое подключение
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, друзья также смогут зайти через Xbox Live
+falcon.wizard.network.transport.set=Тип подключения: %1$s
+falcon.wizard.network.onlineMode=Требовать учётную запись Xbox Live для входа
+falcon.wizard.network.onlineMode.enabled=Игроки должны войти через Xbox Live
+falcon.wizard.network.onlineMode.disabled=Пока онлайн-режим выключен, любой может зайти под любым именем.
+falcon.wizard.network.lan=Показывать сервер игрокам в локальной сети
+falcon.wizard.network.lan.enabled=Сервер виден в локальной сети
+falcon.wizard.network.lan.disabled=Сервер скрыт в локальной сети
+
+falcon.wizard.world.title=Мир
+falcon.wizard.world.description=Мир, который создаётся при первом запуске сервера.
+falcon.wizard.world.name=Название мира
+falcon.wizard.world.name.set=Название мира: %1$s
+falcon.wizard.world.seed=Сид мира
+falcon.wizard.world.seed.hint=Оставьте пустым для случайного сида.
+falcon.wizard.world.seed.random=Будет использован случайный сид
+falcon.wizard.world.seed.set=Сид: %1$s
+falcon.wizard.world.viewDistance=Дальность прорисовки в чанках
+falcon.wizard.world.viewDistance.set=Дальность прорисовки: %1$s чанков
+
+falcon.wizard.players.title=Игроки
+falcon.wizard.players.description=Кто может использовать команды администратора и кому разрешено заходить.
+falcon.wizard.players.operators=Операторы
+falcon.wizard.players.operators.hint=Разделяйте имена запятыми, например Steve, Alex. Оставьте пустым, чтобы пропустить.
+falcon.wizard.players.operators.none=Оператор не задан, никто не сможет использовать команды администратора.
+falcon.wizard.players.operators.set=Операторы: %1$s
+falcon.wizard.players.allowList=Пускать только приглашённых игроков (белый список)
+falcon.wizard.players.allowList.disabled=Зайти может любой
+falcon.wizard.players.allowList.hint=Операторы добавляются автоматически. Разделяйте имена запятыми.
+falcon.wizard.players.allowList.players=Другие приглашённые игроки
+falcon.wizard.players.allowList.empty=Белый список пуст, добавьте игроков командой allowlist, прежде чем кто-то сможет зайти.
+falcon.wizard.players.allowList.set=Белый список: %1$s
+
+falcon.wizard.summary.title=Всё готово!
+falcon.wizard.summary.language=Язык
+falcon.wizard.summary.serverName=Название сервера
+falcon.wizard.summary.gamemode=Режим игры
+falcon.wizard.summary.players=Игроки
+falcon.wizard.summary.players.value=до %1$s
+falcon.wizard.summary.ports=Порты
+falcon.wizard.summary.transport=Подключение
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=обязателен
+falcon.wizard.summary.notRequired=не обязателен
+falcon.wizard.summary.world=Мир
+falcon.wizard.summary.operators=Операторы
+falcon.wizard.summary.allowList=Белый список
+falcon.wizard.summary.none=нет
+falcon.wizard.summary.on=включён
+falcon.wizard.summary.off=выключен
+falcon.wizard.summary.saved=Всё сохранено в %1$s, его можно изменить в любой момент.
+
+falcon.wizard.addresses.lookup=Определяем ваши адреса...
+falcon.wizard.addresses.local=Та же сеть
+falcon.wizard.addresses.external=Интернет
+falcon.wizard.addresses.unknown=неизвестно
+falcon.wizard.addresses.hint=Чтобы игроки извне вашей сети могли зайти, нужно пробросить порт на роутере.

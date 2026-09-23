@@ -1,3 +1,5 @@
+language.name=Magyar
+
 falcon.commands.about.version=Ez a szerver a Falcon %1$s verzióját futtatja (%2$s, %3$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokoll: %2$s)
 falcon.commands.about.build=%1$s build, %2$s konfiguráció
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Ezen a szerveren nem engedélyezett a repülés
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (csúcs %3$s)
 falcon.commands.status.players=Online játékosok: %1$s/%2$s
+
+falcon.wizard.language.selected=Nyelv beállítva: %1$s
+falcon.wizard.license.label=LICENC
+falcon.wizard.license.question=Elfogadod a licencet
+falcon.wizard.license.accepted=Licenc elfogadva.
+falcon.wizard.license.acceptedByArgument=Licenc elfogadva a --accept-license kapcsolóval.
+falcon.wizard.license.refused=A Falcon használatához el kell fogadnod a licencet. A szerver most leáll.
+falcon.wizard.welcome=Üdv! Úgy tűnik, a Falcon most fut itt először.
+falcon.wizard.welcome.defaults=Válaszolj néhány kérdésre a szerver beállításához. Nyomd meg a(z) %1$s gombot a zárójelben lévő érték megtartásához.
+falcon.wizard.welcome.flags=Indítsd a --no-wizard kapcsolóval a varázsló kihagyásához, a --accept-license kapcsolóval a licenc kihagyásához, vagy a --language=fr_FR kapcsolóval a nyelv kiválasztásához.
+falcon.wizard.configureNow=Szerver beállítása most
+falcon.wizard.keepDefaults=Az alapértelmezett beállítások megmaradnak.
+falcon.wizard.saveFailed=Nem sikerült írni: %1$s
+falcon.wizard.pressEnter=Nyomd meg az Entert a szerver indításához
+falcon.wizard.step=%1$s/%2$s. LÉPÉS
+falcon.wizard.default=alapértelmezett
+falcon.wizard.invalid.confirmation=Kérlek, y vagy n betűvel válaszolj (igen/nem).
+falcon.wizard.invalid.number=Adj meg egy számot %1$s és %2$s között.
+falcon.wizard.invalid.choice=Adj meg egy számot 1 és %1$s között, vagy az egyik nevet.
+
+falcon.wizard.server.title=Szerver
+falcon.wizard.server.description=Hogyan jelenik meg a szervered a szerverlistában, és hogyan játszanak rajta a játékosok.
+falcon.wizard.server.name=Szerver neve
+falcon.wizard.server.name.set=Szerver neve beállítva: %1$s
+falcon.wizard.server.gamemode=Alapértelmezett játékmód
+falcon.wizard.server.gamemode.set=Játékmód beállítva: %1$s
+falcon.wizard.server.difficulty=Nehézség
+falcon.wizard.server.difficulty.set=Nehézség beállítva: %1$s
+falcon.wizard.server.maxPlayers=Játékosok maximális száma
+falcon.wizard.server.maxPlayers.set=Legfeljebb %1$s játékos csatlakozhat
+falcon.wizard.gamemode.survival=Túlélő
+falcon.wizard.gamemode.creative=Kreatív
+falcon.wizard.gamemode.adventure=Kaland
+falcon.wizard.gamemode.spectator=Néző
+falcon.wizard.difficulty.peaceful=Békés
+falcon.wizard.difficulty.easy=Könnyű
+falcon.wizard.difficulty.normal=Normál
+falcon.wizard.difficulty.hard=Nehéz
+
+falcon.wizard.network.title=Hálózat
+falcon.wizard.network.description=A hálózatodon kívüli játékosok számára a portokat meg kell nyitni a tűzfalban és a routeren.
+falcon.wizard.network.portV4=IPv4 port
+falcon.wizard.network.portV6=IPv6 port
+falcon.wizard.network.ports.set=Figyelés a(z) %1$s (IPv4) és %2$s (IPv6) porton
+falcon.wizard.network.transport=Kapcsolat típusa
+falcon.wizard.network.transport.raknet=Csak RakNet, a klasszikus kapcsolat
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, a barátok Xbox Live-on keresztül is csatlakozhatnak
+falcon.wizard.network.transport.set=Kapcsolat típusa beállítva: %1$s
+falcon.wizard.network.onlineMode=Xbox Live-fiók szükséges a csatlakozáshoz
+falcon.wizard.network.onlineMode.enabled=A játékosoknak be kell jelentkezniük Xbox Live-val
+falcon.wizard.network.onlineMode.disabled=Kikapcsolt online mód mellett bárki bármilyen névvel csatlakozhat.
+falcon.wizard.network.lan=A szerver megjelenítése a helyi hálózaton lévő játékosoknak
+falcon.wizard.network.lan.enabled=A szerver látható a helyi hálózaton
+falcon.wizard.network.lan.disabled=A szerver rejtve van a helyi hálózat elől
+
+falcon.wizard.world.title=Világ
+falcon.wizard.world.description=A világ, amely a szerver első indításakor generálódik.
+falcon.wizard.world.name=Világ neve
+falcon.wizard.world.name.set=Világ neve beállítva: %1$s
+falcon.wizard.world.seed=Világmag
+falcon.wizard.world.seed.hint=Hagyd üresen véletlenszerű maghoz.
+falcon.wizard.world.seed.random=Véletlenszerű mag lesz használva
+falcon.wizard.world.seed.set=Mag beállítva: %1$s
+falcon.wizard.world.viewDistance=Látótávolság chunkokban
+falcon.wizard.world.viewDistance.set=Látótávolság beállítva: %1$s chunk
+
+falcon.wizard.players.title=Játékosok
+falcon.wizard.players.description=Ki futtathat adminisztrátori parancsokat, és ki csatlakozhat.
+falcon.wizard.players.operators=Operátorok
+falcon.wizard.players.operators.hint=Több nevet vesszővel válassz el, pl. Steve, Alex. Hagyd üresen a kihagyáshoz.
+falcon.wizard.players.operators.none=Nincs beállítva operátor, senki sem futtathat adminisztrátori parancsokat.
+falcon.wizard.players.operators.set=Operátorok: %1$s
+falcon.wizard.players.allowList=Csak meghívott játékosok csatlakozhatnak (allowlist)
+falcon.wizard.players.allowList.disabled=Bárki csatlakozhat
+falcon.wizard.players.allowList.hint=Az operátorok automatikusan hozzáadódnak. A neveket vesszővel válaszd el.
+falcon.wizard.players.allowList.players=További meghívott játékosok
+falcon.wizard.players.allowList.empty=Az engedélyezőlista üres, adj hozzá játékosokat az allowlist paranccsal, mielőtt bárki csatlakozhatna.
+falcon.wizard.players.allowList.set=Engedélyezőlista: %1$s
+
+falcon.wizard.summary.title=Minden kész!
+falcon.wizard.summary.language=Nyelv
+falcon.wizard.summary.serverName=Szerver neve
+falcon.wizard.summary.gamemode=Játékmód
+falcon.wizard.summary.players=Játékosok
+falcon.wizard.summary.players.value=legfeljebb %1$s
+falcon.wizard.summary.ports=Portok
+falcon.wizard.summary.transport=Kapcsolat
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=kötelező
+falcon.wizard.summary.notRequired=nem kötelező
+falcon.wizard.summary.world=Világ
+falcon.wizard.summary.operators=Operátorok
+falcon.wizard.summary.allowList=Engedélyezőlista
+falcon.wizard.summary.none=nincs
+falcon.wizard.summary.on=be
+falcon.wizard.summary.off=ki
+falcon.wizard.summary.saved=Minden mentve ide: %1$s, bármikor szerkesztheted.
+
+falcon.wizard.addresses.lookup=Címek lekérdezése...
+falcon.wizard.addresses.local=Azonos hálózat
+falcon.wizard.addresses.external=Internet
+falcon.wizard.addresses.unknown=ismeretlen
+falcon.wizard.addresses.hint=A hálózatodon kívüli játékosok csak akkor csatlakozhatnak, ha a portot továbbítod a routereden.

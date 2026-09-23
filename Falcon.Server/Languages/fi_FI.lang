@@ -1,3 +1,5 @@
+language.name=Suomi
+
 falcon.commands.about.version=Tällä palvelimella on käytössä Falcon-versio %1$s (%2$s haarassa %3$s)
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokolla %2$s)
 falcon.commands.about.build=Koontiversio %1$s, %2$s-määritys
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=Lentäminen ei ole sallittua tällä palvelimel
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (huippu %3$s)
 falcon.commands.status.players=Pelaajia paikalla: %1$s/%2$s
+
+falcon.wizard.language.selected=Kieleksi asetettu %1$s
+falcon.wizard.license.label=LISENSSI
+falcon.wizard.license.question=Hyväksytkö lisenssin
+falcon.wizard.license.accepted=Lisenssi hyväksytty.
+falcon.wizard.license.acceptedByArgument=Lisenssi hyväksytty valitsimella --accept-license.
+falcon.wizard.license.refused=Sinun on hyväksyttävä lisenssi käyttääksesi Falconia. Palvelin pysähtyy nyt.
+falcon.wizard.welcome=Tervetuloa! Näyttää siltä, että Falcon käynnistyy täällä ensimmäistä kertaa.
+falcon.wizard.welcome.defaults=Vastaa muutamaan kysymykseen palvelimen määrittämiseksi. Paina %1$s säilyttääksesi hakasulkeissa olevan arvon.
+falcon.wizard.welcome.flags=Käynnistä valitsimella --no-wizard ohittaaksesi tämän ohjatun asennuksen, --accept-license ohittaaksesi lisenssin tai --language=fr_FR valitaksesi kielen.
+falcon.wizard.configureNow=Määritä palvelin nyt
+falcon.wizard.keepDefaults=Oletusasetukset säilytetään.
+falcon.wizard.saveFailed=Kohteeseen %1$s ei voitu kirjoittaa
+falcon.wizard.pressEnter=Käynnistä palvelin painamalla Enter
+falcon.wizard.step=VAIHE %1$s/%2$s
+falcon.wizard.default=oletus
+falcon.wizard.invalid.confirmation=Vastaa y (kyllä) tai n (ei).
+falcon.wizard.invalid.number=Anna luku väliltä %1$s–%2$s.
+falcon.wizard.invalid.choice=Anna luku väliltä 1–%1$s tai jokin nimistä.
+
+falcon.wizard.server.title=Palvelin
+falcon.wizard.server.description=Miten palvelimesi näkyy palvelinluettelossa ja miten sillä pelataan.
+falcon.wizard.server.name=Palvelimen nimi
+falcon.wizard.server.name.set=Palvelimen nimeksi asetettu %1$s
+falcon.wizard.server.gamemode=Oletuspelitila
+falcon.wizard.server.gamemode.set=Pelitilaksi asetettu %1$s
+falcon.wizard.server.difficulty=Vaikeustaso
+falcon.wizard.server.difficulty.set=Vaikeustasoksi asetettu %1$s
+falcon.wizard.server.maxPlayers=Pelaajien enimmäismäärä
+falcon.wizard.server.maxPlayers.set=Enintään %1$s pelaajaa voi liittyä
+falcon.wizard.gamemode.survival=Selviytyminen
+falcon.wizard.gamemode.creative=Luova
+falcon.wizard.gamemode.adventure=Seikkailu
+falcon.wizard.gamemode.spectator=Katsoja
+falcon.wizard.difficulty.peaceful=Rauhallinen
+falcon.wizard.difficulty.easy=Helppo
+falcon.wizard.difficulty.normal=Normaali
+falcon.wizard.difficulty.hard=Vaikea
+
+falcon.wizard.network.title=Verkko
+falcon.wizard.network.description=Porttien on oltava auki palomuurissa ja reitittimessä, jotta verkkosi ulkopuoliset pelaajat voivat liittyä.
+falcon.wizard.network.portV4=IPv4-portti
+falcon.wizard.network.portV6=IPv6-portti
+falcon.wizard.network.ports.set=Kuunnellaan porttia %1$s (IPv4) ja %2$s (IPv6)
+falcon.wizard.network.transport=Yhteystyyppi
+falcon.wizard.network.transport.raknet=Vain RakNet, perinteinen yhteys
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet, kaverit voivat liittyä myös Xbox Liven kautta
+falcon.wizard.network.transport.set=Yhteystyypiksi asetettu %1$s
+falcon.wizard.network.onlineMode=Vaadi Xbox Live -tili liittymiseen
+falcon.wizard.network.onlineMode.enabled=Pelaajien on kirjauduttava Xbox Liveen
+falcon.wizard.network.onlineMode.disabled=Kuka tahansa voi liittyä millä tahansa nimellä, kun online-tila on poissa käytöstä.
+falcon.wizard.network.lan=Näytä palvelin lähiverkkosi pelaajille
+falcon.wizard.network.lan.enabled=Palvelin näkyy lähiverkossa
+falcon.wizard.network.lan.disabled=Palvelin on piilotettu lähiverkosta
+
+falcon.wizard.world.title=Maailma
+falcon.wizard.world.description=Maailma, joka luodaan, kun palvelin käynnistyy ensimmäistä kertaa.
+falcon.wizard.world.name=Maailman nimi
+falcon.wizard.world.name.set=Maailman nimeksi asetettu %1$s
+falcon.wizard.world.seed=Maailman siemen
+falcon.wizard.world.seed.hint=Jätä tyhjäksi satunnaista siementä varten.
+falcon.wizard.world.seed.random=Käytetään satunnaista siementä
+falcon.wizard.world.seed.set=Siemeneksi asetettu %1$s
+falcon.wizard.world.viewDistance=Näköetäisyys lohkoina
+falcon.wizard.world.viewDistance.set=Näköetäisyydeksi asetettu %1$s lohkoa
+
+falcon.wizard.players.title=Pelaajat
+falcon.wizard.players.description=Kuka voi käyttää ylläpitokomentoja ja kuka saa liittyä.
+falcon.wizard.players.operators=Operaattorit
+falcon.wizard.players.operators.hint=Erota useat nimet pilkuilla, esim. Steve, Alex. Jätä tyhjäksi ohittaaksesi.
+falcon.wizard.players.operators.none=Operaattoreita ei asetettu, joten kukaan ei voi käyttää ylläpitokomentoja.
+falcon.wizard.players.operators.set=Operaattorit: %1$s
+falcon.wizard.players.allowList=Salli liittyminen vain kutsutuille pelaajille (sallitut-luettelo)
+falcon.wizard.players.allowList.disabled=Kaikki voivat liittyä
+falcon.wizard.players.allowList.hint=Operaattorit lisätään automaattisesti. Erota nimet pilkuilla.
+falcon.wizard.players.allowList.players=Muut kutsutut pelaajat
+falcon.wizard.players.allowList.empty=Sallitut-luettelo on tyhjä, lisää pelaajia allowlist-komennolla ennen kuin kukaan voi liittyä.
+falcon.wizard.players.allowList.set=Sallitut-luettelo: %1$s
+
+falcon.wizard.summary.title=Valmista!
+falcon.wizard.summary.language=Kieli
+falcon.wizard.summary.serverName=Palvelimen nimi
+falcon.wizard.summary.gamemode=Pelitila
+falcon.wizard.summary.players=Pelaajat
+falcon.wizard.summary.players.value=enintään %1$s
+falcon.wizard.summary.ports=Portit
+falcon.wizard.summary.transport=Yhteys
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=pakollinen
+falcon.wizard.summary.notRequired=ei pakollinen
+falcon.wizard.summary.world=Maailma
+falcon.wizard.summary.operators=Operaattorit
+falcon.wizard.summary.allowList=Sallitut-luettelo
+falcon.wizard.summary.none=ei mitään
+falcon.wizard.summary.on=käytössä
+falcon.wizard.summary.off=pois käytöstä
+falcon.wizard.summary.saved=Kaikki tallennettiin kohteeseen %1$s, voit muokata sitä milloin tahansa.
+
+falcon.wizard.addresses.lookup=Haetaan osoitteitasi...
+falcon.wizard.addresses.local=Sama verkko
+falcon.wizard.addresses.external=Internet
+falcon.wizard.addresses.unknown=tuntematon
+falcon.wizard.addresses.hint=Verkkosi ulkopuoliset pelaajat tarvitsevat reitittimeen portinohjauksen voidakseen liittyä.

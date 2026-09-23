@@ -1,3 +1,5 @@
+language.name=简体中文
+
 falcon.commands.about.version=此服务器正在运行 Falcon 版本 %1$s（%3$s 上的 %2$s）
 falcon.commands.about.game=Minecraft：基岩版 %1$s（协议 %2$s）
 falcon.commands.about.build=构建 %1$s，%2$s 配置
@@ -26,3 +28,106 @@ falcon.disconnect.flyingDisabled=此服务器不允许飞行
 
 falcon.commands.status.performance=TPS：%1$s，MSPT：%2$s（峰值 %3$s）
 falcon.commands.status.players=在线玩家：%1$s/%2$s
+
+falcon.wizard.language.selected=语言已设置为 %1$s
+falcon.wizard.license.label=许可证
+falcon.wizard.license.question=你是否接受许可证
+falcon.wizard.license.accepted=已接受许可证。
+falcon.wizard.license.acceptedByArgument=已通过 --accept-license 接受许可证。
+falcon.wizard.license.refused=必须接受许可证才能使用 Falcon。服务器现在将停止。
+falcon.wizard.welcome=欢迎！看起来这是 Falcon 第一次在这里运行。
+falcon.wizard.welcome.defaults=回答几个问题来设置你的服务器。按 %1$s 保留方括号中的值。
+falcon.wizard.welcome.flags=使用 --no-wizard 启动可跳过此向导，--accept-license 可跳过许可证，--language=fr_FR 可选择语言。
+falcon.wizard.configureNow=现在设置服务器
+falcon.wizard.keepDefaults=保留默认设置。
+falcon.wizard.saveFailed=无法写入 %1$s
+falcon.wizard.pressEnter=按 Enter 启动服务器
+falcon.wizard.step=第 %1$s/%2$s 步
+falcon.wizard.default=默认
+falcon.wizard.invalid.confirmation=请输入 y（是）或 n（否）。
+falcon.wizard.invalid.number=请输入 %1$s 到 %2$s 之间的数字。
+falcon.wizard.invalid.choice=请输入 1 到 %1$s 之间的数字或其中一个名称。
+
+falcon.wizard.server.title=服务器
+falcon.wizard.server.description=你的服务器在服务器列表中的显示方式，以及玩家如何游玩。
+falcon.wizard.server.name=服务器名称
+falcon.wizard.server.name.set=服务器名称已设置为 %1$s
+falcon.wizard.server.gamemode=默认游戏模式
+falcon.wizard.server.gamemode.set=游戏模式已设置为 %1$s
+falcon.wizard.server.difficulty=难度
+falcon.wizard.server.difficulty.set=难度已设置为 %1$s
+falcon.wizard.server.maxPlayers=最大玩家数
+falcon.wizard.server.maxPlayers.set=最多可加入 %1$s 名玩家
+falcon.wizard.gamemode.survival=生存
+falcon.wizard.gamemode.creative=创造
+falcon.wizard.gamemode.adventure=冒险
+falcon.wizard.gamemode.spectator=旁观
+falcon.wizard.difficulty.peaceful=和平
+falcon.wizard.difficulty.easy=简单
+falcon.wizard.difficulty.normal=普通
+falcon.wizard.difficulty.hard=困难
+
+falcon.wizard.network.title=网络
+falcon.wizard.network.description=要让你网络以外的玩家加入，必须在防火墙和路由器中开放端口。
+falcon.wizard.network.portV4=IPv4 端口
+falcon.wizard.network.portV6=IPv6 端口
+falcon.wizard.network.ports.set=正在监听端口 %1$s（IPv4）和 %2$s（IPv6）
+falcon.wizard.network.transport=连接类型
+falcon.wizard.network.transport.raknet=仅 RakNet，经典连接方式
+falcon.wizard.network.transport.nethernet=RakNet + NetherNet，好友还可以通过 Xbox Live 加入
+falcon.wizard.network.transport.set=连接类型已设置为 %1$s
+falcon.wizard.network.onlineMode=要求使用 Xbox Live 账户加入
+falcon.wizard.network.onlineMode.enabled=玩家必须登录 Xbox Live
+falcon.wizard.network.onlineMode.disabled=在线模式关闭时，任何人都可以用任意名称加入。
+falcon.wizard.network.lan=向局域网中的玩家显示服务器
+falcon.wizard.network.lan.enabled=服务器在局域网中可见
+falcon.wizard.network.lan.disabled=服务器在局域网中隐藏
+
+falcon.wizard.world.title=世界
+falcon.wizard.world.description=服务器首次启动时生成的世界。
+falcon.wizard.world.name=世界名称
+falcon.wizard.world.name.set=世界名称已设置为 %1$s
+falcon.wizard.world.seed=世界种子
+falcon.wizard.world.seed.hint=留空则使用随机种子。
+falcon.wizard.world.seed.random=将使用随机种子
+falcon.wizard.world.seed.set=种子已设置为 %1$s
+falcon.wizard.world.viewDistance=视距（区块）
+falcon.wizard.world.viewDistance.set=视距已设置为 %1$s 个区块
+
+falcon.wizard.players.title=玩家
+falcon.wizard.players.description=谁可以使用管理命令，以及谁可以加入。
+falcon.wizard.players.operators=管理员
+falcon.wizard.players.operators.hint=多个名称用逗号分隔，例如 Steve, Alex。留空则跳过。
+falcon.wizard.players.operators.none=未设置管理员，没有人能够使用管理命令。
+falcon.wizard.players.operators.set=管理员：%1$s
+falcon.wizard.players.allowList=仅允许受邀玩家加入（白名单）
+falcon.wizard.players.allowList.disabled=所有人都可以加入
+falcon.wizard.players.allowList.hint=管理员会自动添加。名称之间用逗号分隔。
+falcon.wizard.players.allowList.players=其他受邀玩家
+falcon.wizard.players.allowList.empty=白名单为空，请先使用 allowlist 命令添加玩家，否则没有人能加入。
+falcon.wizard.players.allowList.set=白名单：%1$s
+
+falcon.wizard.summary.title=一切就绪！
+falcon.wizard.summary.language=语言
+falcon.wizard.summary.serverName=服务器名称
+falcon.wizard.summary.gamemode=游戏模式
+falcon.wizard.summary.players=玩家
+falcon.wizard.summary.players.value=最多 %1$s
+falcon.wizard.summary.ports=端口
+falcon.wizard.summary.transport=连接
+falcon.wizard.summary.onlineMode=Xbox Live
+falcon.wizard.summary.required=必需
+falcon.wizard.summary.notRequired=非必需
+falcon.wizard.summary.world=世界
+falcon.wizard.summary.operators=管理员
+falcon.wizard.summary.allowList=白名单
+falcon.wizard.summary.none=无
+falcon.wizard.summary.on=开启
+falcon.wizard.summary.off=关闭
+falcon.wizard.summary.saved=所有设置已保存到 %1$s，你可以随时修改。
+
+falcon.wizard.addresses.lookup=正在查找你的地址...
+falcon.wizard.addresses.local=同一网络
+falcon.wizard.addresses.external=互联网
+falcon.wizard.addresses.unknown=未知
+falcon.wizard.addresses.hint=你网络以外的玩家需要在路由器上设置端口转发才能加入。
