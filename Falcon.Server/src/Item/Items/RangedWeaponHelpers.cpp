@@ -24,6 +24,9 @@ namespace RangedWeaponHelpers {
 
     int findArrowSlot(const ServerPlayer &player) {
         const PlayerInventory &inventory = player.getInventory();
+        if (isArrowStack(inventory.getOffhand()))
+            return OFFHAND_SLOT;
+
         for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; ++slot) {
             if (isArrowStack(inventory.getItem(slot)))
                 return slot;
@@ -31,8 +34,21 @@ namespace RangedWeaponHelpers {
         return -1;
     }
 
+    const ItemStack &arrowAt(const ServerPlayer &player, int slot) {
+        const PlayerInventory &inventory = player.getInventory();
+        return slot == OFFHAND_SLOT ? inventory.getOffhand() : inventory.getItem(slot);
+    }
+
     void consumeArrow(ServerPlayer &player, int slot) {
         PlayerInventory &inventory = player.getInventory();
+        if (slot == OFFHAND_SLOT) {
+            ItemStack arrow = inventory.getOffhand();
+            arrow.mCount -= 1;
+            inventory.setOffhand(arrow.mCount <= 0 ? ItemStack::air() : std::move(arrow));
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Offhand, 0);
+            return;
+        }
+
         ItemStack arrow = inventory.getItem(slot);
         arrow.mCount -= 1;
         if (arrow.mCount <= 0)

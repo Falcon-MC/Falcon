@@ -190,6 +190,7 @@ void InventoryHandler::handleOpenInventory(ServerNetworkHandler &owner, ServerPl
 void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                               ServerPlayer &player, const ItemStackRequestPacket &packet) {
     PlayerInventory &inventory = player.getInventory();
+    const ItemStack offhandBefore = inventory.getOffhand();
 
     ItemStackResponsePacket response;
     bool needsResync = false;
@@ -269,6 +270,11 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     }
 
     _updateEnchantOptions(owner, player);
+
+    const ItemStack &offhandAfter = inventory.getOffhand();
+    if (offhandAfter.mDefinition != offhandBefore.mDefinition || offhandAfter.mCount != offhandBefore.mCount
+        || offhandAfter.mDamage != offhandBefore.mDamage)
+        sendOffhandContent(owner, player);
 
     if (player.getInventoryManager().isContainerOpen())
         owner.refreshContainerViewers(player.getInventoryManager().getContainerPosition(), &player);

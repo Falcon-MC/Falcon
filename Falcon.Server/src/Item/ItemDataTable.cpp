@@ -618,6 +618,13 @@ const ItemData gItemDataTable[] = {
 
 const size_t gItemDataCount = sizeof(gItemDataTable) / sizeof(gItemDataTable[0]);
 
+bool allowsOffHand(const std::string &identifier) {
+    return identifier == "minecraft:arrow" || identifier == "minecraft:shield"
+           || identifier == "minecraft:totem_of_undying" || identifier == "minecraft:firework_rocket"
+           || identifier == "minecraft:filled_map" || identifier == "minecraft:empty_map"
+           || identifier == "minecraft:nautilus_shell";
+}
+
 }
 
 const ItemData *ItemDataTable::getAll() {
@@ -727,6 +734,9 @@ const ItemComponents &ItemDataTable::getComponents(const std::string &identifier
 
     if (identifier.find("netherite") != std::string::npos || identifier == "minecraft:ancient_debris")
         value.emplace<FireResistantItemComponent>();
+
+    if (allowsOffHand(identifier))
+        value.emplace<AllowOffHandItemComponent>();
 
     auto result = components.emplace(identifier, std::move(value));
     return result.first->second;

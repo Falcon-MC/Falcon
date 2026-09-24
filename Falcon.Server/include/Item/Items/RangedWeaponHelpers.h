@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Inventory/PlayerInventory.h"
+
 #include <cstdint>
 
 class ServerPlayer;
@@ -9,10 +11,13 @@ namespace RangedWeaponHelpers {
     extern const char *ARROW_ACTOR;
 
     const float ARROW_BASE_DAMAGE = 2.0f;
+    const int OFFHAND_SLOT = PlayerInventory::CONTAINER_SIZE;
 
     bool hasFiniteResources(const ServerPlayer &player);
 
     int findArrowSlot(const ServerPlayer &player);
+
+    const ItemStack &arrowAt(const ServerPlayer &player, int slot);
 
     void consumeArrow(ServerPlayer &player, int slot);
 

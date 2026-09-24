@@ -72,7 +72,7 @@ bool BowItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player, con
     data.mBaseDamage = ARROW_BASE_DAMAGE;
     data.mCritical = force >= BOW_MAX_FORCE;
     if (finiteResources && arrowSlot >= 0) {
-        data.mPickupItem = player.getInventory().getItem(arrowSlot);
+        data.mPickupItem = arrowAt(player, arrowSlot);
         data.mPickupItem.mCount = 1;
     }
     applyBowEnchantments(item, data);

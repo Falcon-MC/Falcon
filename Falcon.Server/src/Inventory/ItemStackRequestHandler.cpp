@@ -4,6 +4,8 @@
 #include "Inventory/BundleInventory.h"
 #include "Item/EnchantmentData.h"
 #include "Item/EnchantmentHelper.h"
+#include "Item/Components/ItemComponentTypes.h"
+#include "Item/ItemData.h"
 #include "Item/ItemEnchantments.h"
 
 #include <algorithm>
@@ -564,8 +566,44 @@ namespace {
         return item != nullptr && ItemEnchantments::getLevel(*item, EnchantmentIds::BINDING) > 0;
     }
 
+    bool rejectedByOffhand(PlayerInventory &inventory, RequestContext &context, const FullContainerName &destination,
+                           const FullContainerName &source, int sourceSlot) {
+        if (destination.mContainer != ContainerSlotType::Offhand)
+            return false;
+
+        const ItemStack *item = resolveSlot(inventory, context, source, sourceSlot);
+        if (item == nullptr || item->isAir() || item->mDefinition == nullptr)
+            return false;
+
+        const std::string &identifier = item->mDefinition->getIdentifier();
+        if (ItemDataTable::find(identifier) == nullptr)
+            return false;
+
+        return ItemDataTable::getComponents(identifier).get<AllowOffHandItemComponent>() == nullptr;
+    }
+
     bool applyAction(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched) {
+        switch (action.mType) {
+            case ItemStackRequestActionType::Take:
+            case ItemStackRequestActionType::Place:
+                if (rejectedByOffhand(inventory, context, action.mDestination.mContainerName,
+                                      action.mSource.mContainerName, action.mSource.mSlot))
+                    return false;
+                break;
+
+            case ItemStackRequestActionType::Swap:
+                if (rejectedByOffhand(inventory, context, action.mDestination.mContainerName,
+                                      action.mSource.mContainerName, action.mSource.mSlot)
+                    || rejectedByOffhand(inventory, context, action.mSource.mContainerName,
+                                         action.mDestination.mContainerName, action.mDestination.mSlot))
+                    return false;
+                break;
+
+            default:
+                break;
+        }
+
         switch (action.mType) {
             case ItemStackRequestActionType::Take:
             case ItemStackRequestActionType::Place:
