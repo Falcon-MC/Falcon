@@ -26,39 +26,3 @@ public:
 
     virtual BlockState getUnpoweredState(const BlockState &state) const = 0;
 };
-
-class RedstoneRepeaterBlock final : public RedstoneDiodeBlock {
-public:
-    explicit RedstoneRepeaterBlock(const Block &block) : RedstoneDiodeBlock(block)
-    {
-    }
-
-    bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                    const BlockState &state) const override;
-
-    static bool matches(const std::string &identifier);
-
-    bool isPowered(const BlockState &state) const override;
-
-    BlockState getPoweredState(const BlockState &state) const override;
-
-    BlockState getUnpoweredState(const BlockState &state) const override;
-};
-
-class RedstoneComparatorBlock final : public RedstoneDiodeBlock {
-public:
-    explicit RedstoneComparatorBlock(const Block &block) : RedstoneDiodeBlock(block)
-    {
-    }
-
-    bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                    const BlockState &state) const override;
-
-    static bool matches(const std::string &identifier);
-
-    bool isPowered(const BlockState &state) const override;
-
-    BlockState getPoweredState(const BlockState &state) const override;
-
-    BlockState getUnpoweredState(const BlockState &state) const override;
-};

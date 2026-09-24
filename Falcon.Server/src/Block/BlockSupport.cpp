@@ -2,7 +2,8 @@
 
 #include "Block/Block.h"
 #include "Block/BlockData.h"
-#include "Block/Blocks/FenceBlocks.h"
+#include "Block/Blocks/FenceBlock.h"
+#include "Block/Blocks/WallBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Components/PlacementOrientation.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"

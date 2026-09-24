@@ -2,7 +2,7 @@
 
 #include "Block/BlockActor.h"
 #include "Block/BlockIdentifier.h"
-#include "Block/Blocks/PlacementRuleBlocks.h"
+#include "Block/Blocks/DoubleSlabBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Protocol/Types/ItemStack.h"
 

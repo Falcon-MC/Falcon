@@ -1,6 +1,7 @@
 #include "Block/Components/BlockBehaviorRegistry.h"
 
 #include "Block/Components/BlockBehavior.h"
+#include "Block/Blocks/BlueIceBlockBehavior.h"
 #include "Block/Blocks/IceBlockBehavior.h"
 #include "Block/Blocks/SlimeBlockBehavior.h"
 

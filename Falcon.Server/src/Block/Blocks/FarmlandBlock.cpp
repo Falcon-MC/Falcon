@@ -3,7 +3,7 @@
 #include "Actor/Mob/MobActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockClassRegistry.h"
-#include "Block/Blocks/GrowthBlocks.h"
+#include "Block/Blocks/CropBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"

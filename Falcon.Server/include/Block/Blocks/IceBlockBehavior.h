@@ -8,10 +8,3 @@ public:
         return 0.98f;
     }
 };
-
-class BlueIceBlockBehavior final : public IceBlockBehavior {
-public:
-    float getFrictionFactor() const override {
-        return 0.989f;
-    }
-};

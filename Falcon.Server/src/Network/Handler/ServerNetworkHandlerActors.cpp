@@ -39,8 +39,6 @@
 #include "Actor/Misc/ExperienceOrbActor.h"
 #include "Actor/Projectile/ProjectileActor.h"
 #include "Item/Items/FireworkRocketItem.h"
-#include "Item/Items/RangedWeaponItems.h"
-#include "Item/Items/ThrowableItems.h"
 #include "Item/PotionEffects.h"
 #include "Item/StringToItemParser.h"
 #include "Actor/ExperienceValues.h"

@@ -1,7 +1,7 @@
 #include "Block/Systems/PrecipitationSystem.h"
 
-#include "Block/Blocks/GrowthBlocks.h"
 #include "Block/Blocks/IceBlock.h"
+#include "Block/Blocks/LeavesBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Blocks/WaterBlock.h"
 #include "Block/Systems/RandomTickSystem.h"
@@ -25,7 +25,7 @@ namespace {
     }
 
     bool isWaterSource(const BlockState *state) {
-        return state != nullptr && WaterBlock::matches(state->mName) && state->mStates.getInt("liquid_depth", 0) == 0;
+        return state != nullptr && WaterBlock::isSource(*state);
     }
 
     bool isWater(const BlockState *state) {

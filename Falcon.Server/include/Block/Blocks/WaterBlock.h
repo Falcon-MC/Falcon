@@ -14,6 +14,8 @@ public:
 
     static BlockState source();
 
+    static bool isSource(const BlockState &state);
+
     int getTickRate() const override { return 5; }
     int getFlowDecayPerBlock() const override { return 1; }
     int getMinAdjacentSourcesToFormSource() const override { return 2; }

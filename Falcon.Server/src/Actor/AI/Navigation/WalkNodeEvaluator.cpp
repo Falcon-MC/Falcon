@@ -1,9 +1,9 @@
 #include "Actor/AI/Navigation/WalkNodeEvaluator.h"
 
 #include "Block/BlockShape.h"
-#include "Block/Blocks/FenceBlocks.h"
+#include "Block/Blocks/FenceBlock.h"
+#include "Block/Blocks/FenceGateOrientationBlock.h"
 #include "Block/Blocks/LiquidView.h"
-#include "Block/Blocks/OrientationBlocks.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Level/Level.h"
 

@@ -5,7 +5,11 @@
 FALCON_REGISTER_ITEM(BoneMealItem, 100);
 
 #include "Block/BlockIdentifier.h"
-#include "Block/Blocks/GrowthBlocks.h"
+#include "Block/Blocks/CropBlock.h"
+#include "Block/Blocks/NetherWartBlock.h"
+#include "Block/Blocks/NyliumBlock.h"
+#include "Block/Blocks/SaplingBlock.h"
+#include "Block/Blocks/StemBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Inventory/InventoryManager.h"
