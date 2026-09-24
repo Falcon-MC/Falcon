@@ -13,7 +13,6 @@
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
 #include <string>
-#include <vector>
 
 FALCON_REGISTER_ITEM(ToolInteractionItem, 120);
 

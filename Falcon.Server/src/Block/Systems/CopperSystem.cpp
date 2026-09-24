@@ -43,7 +43,18 @@ std::string CopperSystem::waxedOf(const std::string &identifier) {
         return std::string();
 
     const std::string candidate = WAXED + identifier.substr(PREFIX.size());
-    return exists(candidate) ? candidate : std::string();
+    if (exists(candidate))
+        return candidate;
+
+    const std::string suffix = "_block";
+    if (candidate.size() > suffix.size()
+        && candidate.compare(candidate.size() - suffix.size(), suffix.size(), suffix) == 0) {
+        const std::string trimmed = candidate.substr(0, candidate.size() - suffix.size());
+        if (exists(trimmed))
+            return trimmed;
+    }
+
+    return std::string();
 }
 
 std::string CopperSystem::withoutWaxOf(const std::string &identifier) {
@@ -51,7 +62,10 @@ std::string CopperSystem::withoutWaxOf(const std::string &identifier) {
         return std::string();
 
     const std::string candidate = PREFIX + identifier.substr(WAXED.size());
-    return exists(candidate) ? candidate : std::string();
+    if (exists(candidate))
+        return candidate;
+
+    return exists(candidate + "_block") ? candidate + "_block" : std::string();
 }
 
 std::string CopperSystem::scrapedOf(const std::string &identifier) {
