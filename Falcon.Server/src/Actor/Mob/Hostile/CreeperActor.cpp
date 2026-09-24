@@ -43,7 +43,7 @@ namespace {
 
     const double EXPLOSION_RADIUS = 3.0;
     const double CHARGED_MULTIPLIER = 2.0;
-    const float EXPLOSION_HEIGHT_RATIO = 0.5f;
+    const int32_t FUSE_SYNC_INTERVAL = 5;
     const char *const FUSE_SOUND = "random.fuse";
     const char *const IGNITE_SOUND = "fire.ignite";
     const char *const FLINT_AND_STEEL = "minecraft:flint_and_steel";
@@ -115,7 +115,7 @@ void CreeperActor::tick(ServerNetworkHandler &owner) {
 
 void CreeperActor::_syncFuse(ServerNetworkHandler &owner) {
     const bool visible = mSwell > 0;
-    if (visible == mFuseVisible && !visible)
+    if (visible == mFuseVisible && (!visible || mSwell % FUSE_SYNC_INTERVAL != 0))
         return;
 
     mFuseVisible = visible;
@@ -130,8 +130,7 @@ void CreeperActor::_explode(ServerNetworkHandler &owner) {
     mExploded = true;
 
     Level &level = owner.getLevelFor(*this);
-    const Vector3f position = getPosition();
-    const Vector3f center(position.x, position.y + getSize().mHeight * EXPLOSION_HEIGHT_RATIO, position.z);
+    const Vector3f center = getPosition();
     const double radius = mPowered ? EXPLOSION_RADIUS * CHARGED_MULTIPLIER : EXPLOSION_RADIUS;
 
     std::vector<int64_t> headCandidates;
@@ -212,7 +211,7 @@ Tag CreeperActor::saveNbt() const {
     Tag data = HostileActor::saveNbt();
     data.putByte(TAG_POWERED, mPowered ? 1 : 0);
     data.putByte(TAG_IGNITED, mIgnited ? 1 : 0);
-    data.putShort(TAG_SWELL, (int16_t) mSwell);
+    data.putByte(TAG_SWELL, (int8_t) mSwell);
     return data;
 }
 
@@ -220,7 +219,7 @@ void CreeperActor::loadNbt(const Tag &data) {
     HostileActor::loadNbt(data);
     mPowered = data.getByte(TAG_POWERED, 0) != 0;
     mIgnited = data.getByte(TAG_IGNITED, 0) != 0;
-    mSwell = data.getShort(TAG_SWELL, 0);
+    mSwell = data.getByte(TAG_SWELL, 0);
     getFlags().set(ActorFlag::Powered, mPowered);
     getFlags().set(ActorFlag::Ignited, mSwell > 0);
     mFuseVisible = mSwell > 0;
