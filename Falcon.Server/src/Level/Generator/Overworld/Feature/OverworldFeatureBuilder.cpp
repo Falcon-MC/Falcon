@@ -55,15 +55,15 @@ void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, std::vector
     const std::set<int32_t> biomes = collectBiomesInChunk(chunk);
 
     std::unordered_set<std::string> seenIdentifiers;
-    std::vector<BiomeConsolidatedFeatureData> sortedFeatures;
+    std::vector<BiomeFeatureEntry> sortedFeatures;
 
     for (int32_t biomeId: biomes) {
-        const std::vector<BiomeConsolidatedFeatureData> *features =
+        const std::vector<BiomeFeatureEntry> *features =
                 BiomeChunkGenDataRegistry::getConsolidatedFeatures(biomeId);
         if (features == nullptr)
             continue;
 
-        for (const BiomeConsolidatedFeatureData &feature: *features) {
+        for (const BiomeFeatureEntry &feature: *features) {
             if (!seenIdentifiers.insert(feature.mIdentifier).second)
                 continue;
 
@@ -72,7 +72,7 @@ void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, std::vector
     }
 
     std::stable_sort(sortedFeatures.begin(), sortedFeatures.end(),
-                     [](const BiomeConsolidatedFeatureData &left, const BiomeConsolidatedFeatureData &right) {
+                     [](const BiomeFeatureEntry &left, const BiomeFeatureEntry &right) {
                          return left.mEvalOrder < right.mEvalOrder;
                      });
 
@@ -81,7 +81,7 @@ void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, std::vector
 
     ChunkGenerateContext context(level, chunk);
 
-    for (const BiomeConsolidatedFeatureData &data: sortedFeatures) {
+    for (const BiomeFeatureEntry &data: sortedFeatures) {
         IFeaturePtr feature = GenerateFeatureRegistry::get(data.mIdentifier);
         if (feature == nullptr)
             feature = GenerateFeatureRegistry::get(data.mFeature);

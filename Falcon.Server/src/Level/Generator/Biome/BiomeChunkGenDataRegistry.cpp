@@ -84,9 +84,9 @@ namespace {
     }
 }
 
-std::unordered_map<int32_t, std::vector<BiomeConsolidatedFeatureData>> &
+std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>> &
 BiomeChunkGenDataRegistry::_featuresByBiome() {
-    static std::unordered_map<int32_t, std::vector<BiomeConsolidatedFeatureData>> map;
+    static std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>> map;
     return map;
 }
 
@@ -175,7 +175,7 @@ void BiomeChunkGenDataRegistry::initialize() {
         if (featuresTag == nullptr)
             continue;
 
-        std::vector<BiomeConsolidatedFeatureData> features;
+        std::vector<BiomeFeatureEntry> features;
         for (const Tag &featureTag: featuresTag->getList()) {
             const Tag *identifierTag = featureTag.get("identifier");
             const Tag *featureNameTag = featureTag.get("feature");
@@ -183,7 +183,7 @@ void BiomeChunkGenDataRegistry::initialize() {
             if (identifierTag == nullptr || featureNameTag == nullptr)
                 continue;
 
-            BiomeConsolidatedFeatureData data;
+            BiomeFeatureEntry data;
             data.mIdentifier = stringAt((int32_t) identifierTag->asShort());
             data.mFeature = stringAt((int32_t) featureNameTag->asShort());
 
@@ -202,10 +202,10 @@ void BiomeChunkGenDataRegistry::initialize() {
     loaded = true;
 }
 
-const std::vector<BiomeConsolidatedFeatureData> *
+const std::vector<BiomeFeatureEntry> *
 BiomeChunkGenDataRegistry::getConsolidatedFeatures(int32_t biomeId) {
-    const std::unordered_map<int32_t, std::vector<BiomeConsolidatedFeatureData>> &map = _featuresByBiome();
-    const std::unordered_map<int32_t, std::vector<BiomeConsolidatedFeatureData>>::const_iterator found =
+    const std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>> &map = _featuresByBiome();
+    const std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>>::const_iterator found =
             map.find(biomeId);
     if (found == map.end())
         return nullptr;
