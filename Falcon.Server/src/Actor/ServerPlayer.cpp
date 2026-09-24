@@ -9,6 +9,7 @@
 #include "Item/ItemData.h"
 #include "Item/ItemEnchantments.h"
 #include "Item/VanillaItems.h"
+#include "Core/Math/MathConstants.h"
 #include "Level/Level.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -253,8 +254,9 @@ float ServerPlayer::_applyAttackerModifiers(float baseDamage, float damage) cons
 }
 
 bool ServerPlayer::_isCriticalHit() const {
-    return !isFlying() && getFallDistance() > 0.0f && !hasEffect(MobEffectId::Blindness)
-           && !getFlags().get(ActorFlag::Swimming);
+    return !isFlying() && !isOnGround() && getFallDistance() > 0.0f && !hasEffect(MobEffectId::Blindness)
+           && !getFlags().get(ActorFlag::Swimming) && !getFlags().get(ActorFlag::Riding)
+           && !getFlags().get(ActorFlag::Gliding);
 }
 
 bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId) {
@@ -270,6 +272,8 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
 
     if (!isSpawned() || isDead() || getGameType() == (int32_t) GameType::Spectator)
         return false;
+
+    interruptShieldForAttack(owner);
 
     ServerPlayer *victim = nullptr;
     for (auto &entry: owner.getPlayers()) {
@@ -316,7 +320,13 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             if (attackDamage <= 0.0f)
                 return false;
 
+            const bool critical = _isCriticalHit();
+            const bool magic = target.getMeleeEnchantmentBonus(weapon) > 0.0f;
             owner.damageActor(target, attackDamage, this);
+            if (critical)
+                broadcastAnimation(owner, target, AnimatePacket::Action::CriticalHit);
+            if (magic)
+                broadcastAnimation(owner, target, AnimatePacket::Action::MagicCriticalHit);
             if (target.isAlive())
                 target.onMeleeEnchantmentHit(weapon);
             if (weaponType != nullptr)
@@ -360,6 +370,12 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     damage = _applyAttackerModifiers(baseDamage, damage + victim->getMeleeEnchantmentBonus(held));
     if (damage <= 0.0f)
         return false;
+
+    const bool axe = data != nullptr && data->mToolType == ToolType::Axe;
+    if (victim->blockWithShield(owner, getPosition(), damage, this, axe)) {
+        exhaust(0.1f);
+        return true;
+    }
 
     const bool coldTarget = victim->getAttackTime() <= 0;
     const float rawDamage = damage;
@@ -435,6 +451,140 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
         broadcastAnimation(owner, *victim, AnimatePacket::Action::CriticalHit);
     if (victim->getMeleeEnchantmentBonus(held) > 0.0f)
         broadcastAnimation(owner, *victim, AnimatePacket::Action::MagicCriticalHit);
+    return true;
+}
+
+namespace {
+    const char *const SHIELD = "minecraft:shield";
+    const char *const SHIELD_COOLDOWN_CATEGORY = "shield";
+    const char *const SHIELD_BLOCK_SOUND = "item.shield.block";
+    const int32_t SHIELD_TRANSITION_TICKS = 2;
+    const int32_t SHIELD_ATTACK_REENABLE_TICKS = 6;
+    const int32_t SHIELD_DISABLE_TICKS = 100;
+    const float SHIELD_MIN_DURABILITY_DAMAGE = 3.0f;
+    const float SHIELD_KNOCKBACK = 0.4f;
+
+    bool isShield(const ItemStack &item) {
+        return !item.isAir() && item.mDefinition != nullptr && item.mDefinition->getIdentifier() == SHIELD;
+    }
+}
+
+bool ServerPlayer::_hasShieldReady(int64_t currentTick) const {
+    if (currentTick < mShieldDisabledUntilTick)
+        return false;
+
+    return isShield(mInventory.getItemInHand()) || isShield(mInventory.getOffhand());
+}
+
+bool ServerPlayer::_shouldRaiseShield(int64_t currentTick) const {
+    return isSpawned() && !isDead() && getFlags().get(ActorFlag::Sneaking) && mShieldInterruptTicks <= 0
+           && getGameType() != (int32_t) GameType::Spectator && _hasShieldReady(currentTick);
+}
+
+bool ServerPlayer::isBlockingWithShield() const {
+    return getFlags().get(ActorFlag::Blocking);
+}
+
+void ServerPlayer::_setShieldFlags(ServerNetworkHandler &owner, bool blocking, bool transition) {
+    if (getFlags().get(ActorFlag::Blocking) == blocking && getFlags().get(ActorFlag::TransitionBlocking) == transition)
+        return;
+
+    getFlags().set(ActorFlag::Blocking, blocking);
+    getFlags().set(ActorFlag::TransitionBlocking, transition);
+    owner._sendEntityData(*this);
+}
+
+void ServerPlayer::tickShield(ServerNetworkHandler &owner) {
+    const int64_t currentTick = owner.getCurrentTick();
+
+    if (mShieldTransitionTicks > 0) {
+        --mShieldTransitionTicks;
+        if (mShieldTransitionTicks == 0 && getFlags().get(ActorFlag::TransitionBlocking))
+            _setShieldFlags(owner, getFlags().get(ActorFlag::Blocking), false);
+    }
+
+    if (mShieldInterruptTicks > 0) {
+        --mShieldInterruptTicks;
+        if (mShieldInterruptTicks > 0)
+            return;
+
+        if (!mShieldReblockAfterAttack)
+            return;
+
+        mShieldReblockAfterAttack = false;
+    }
+
+    const bool raise = _shouldRaiseShield(currentTick);
+    if (raise == isBlockingWithShield())
+        return;
+
+    mShieldTransitionTicks = SHIELD_TRANSITION_TICKS;
+    _setShieldFlags(owner, raise, true);
+}
+
+void ServerPlayer::interruptShieldForAttack(ServerNetworkHandler &owner) {
+    if (mShieldInterruptTicks > 0 || !getFlags().get(ActorFlag::Sneaking)
+        || !_hasShieldReady(owner.getCurrentTick()))
+        return;
+
+    mShieldReblockAfterAttack = true;
+    mShieldInterruptTicks = SHIELD_ATTACK_REENABLE_TICKS;
+    mShieldTransitionTicks = SHIELD_TRANSITION_TICKS;
+    _setShieldFlags(owner, false, true);
+}
+
+void ServerPlayer::_damageShield(ServerNetworkHandler &owner, float damage) {
+    if (damage < SHIELD_MIN_DURABILITY_DAMAGE || getGameType() == (int32_t) GameType::Creative)
+        return;
+
+    const int amount = 1 + (int) std::floor(damage);
+    if (isShield(mInventory.getItemInHand())) {
+        const int slot = mInventory.getSelectedSlot();
+        ItemStack shield = mInventory.getItemInHand();
+        if (!damageItem(shield, amount))
+            return;
+
+        mInventory.setItem(slot, std::move(shield));
+        mInventoryManager.syncSlot(InventoryManager::InventoryId::Inventory, slot);
+        return;
+    }
+
+    ItemStack shield = mInventory.getOffhand();
+    if (!damageItem(shield, amount))
+        return;
+
+    mInventory.setOffhand(std::move(shield));
+    mInventoryManager.syncSlot(InventoryManager::InventoryId::Offhand, 0);
+}
+
+bool ServerPlayer::blockWithShield(ServerNetworkHandler &owner, const Vector3f &source, float damage, Actor *attacker,
+                                   bool disablesShield) {
+    if (!isBlockingWithShield() || !_hasShieldReady(owner.getCurrentTick()))
+        return false;
+
+    const Vector3f position = getPosition();
+    const float yaw = getRotation().y * MathConstants::PI_F / 180.0f;
+    const float towardX = source.x - position.x;
+    const float towardZ = source.z - position.z;
+    if (-std::sin(yaw) * towardX + std::cos(yaw) * towardZ <= 0.0f)
+        return false;
+
+    owner.playNamedSound(owner.getLevelFor(*this), SHIELD_BLOCK_SOUND, position, 1.0f, 1.0f);
+    _damageShield(owner, damage);
+
+    if (attacker != nullptr) {
+        const Vector3f attackerPosition = attacker->getPosition();
+        owner.knockBack(*attacker, attackerPosition.x - position.x, attackerPosition.z - position.z,
+                        SHIELD_KNOCKBACK);
+    }
+
+    if (disablesShield) {
+        mShieldDisabledUntilTick = owner.getCurrentTick() + SHIELD_DISABLE_TICKS;
+        owner.startPlayerItemCooldown(*this, SHIELD_COOLDOWN_CATEGORY, SHIELD_DISABLE_TICKS);
+        mShieldTransitionTicks = 0;
+        _setShieldFlags(owner, false, false);
+    }
+
     return true;
 }
 

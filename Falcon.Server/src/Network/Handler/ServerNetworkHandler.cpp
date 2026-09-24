@@ -1143,6 +1143,7 @@ void ServerNetworkHandler::tick() {
         player.tickGroundTracking();
         player.tickCombat(1);
         player.tickItemCooldowns(mCurrentTick);
+        player.tickShield(*this);
         player.tickSpinAttack(*this);
         ElytraItem::tickGliding(*this, player);
         FurnaceSystem::tick(*this, player);

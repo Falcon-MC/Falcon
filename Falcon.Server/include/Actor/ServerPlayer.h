@@ -399,10 +399,27 @@ public:
         mHasChunkPosition = false;
     }
 
+    bool isBlockingWithShield() const;
+
+    void tickShield(ServerNetworkHandler &owner);
+
+    void interruptShieldForAttack(ServerNetworkHandler &owner);
+
+    bool blockWithShield(ServerNetworkHandler &owner, const Vector3f &source, float damage, Actor *attacker,
+                         bool disablesShield);
+
 private:
     float _applyAttackerModifiers(float baseDamage, float damage) const;
 
     bool _isCriticalHit() const;
+
+    bool _hasShieldReady(int64_t currentTick) const;
+
+    bool _shouldRaiseShield(int64_t currentTick) const;
+
+    void _setShieldFlags(ServerNetworkHandler &owner, bool blocking, bool transition);
+
+    void _damageShield(ServerNetworkHandler &owner, float damage);
 
     NetworkIdentifier mId;
     LoginState mLoginState;
@@ -468,4 +485,8 @@ private:
     PacketSender *mSender;
     bool mEffectsNetworkReady = false;
     std::unordered_map<std::string, int64_t> mItemCooldowns;
+    int32_t mShieldTransitionTicks = 0;
+    int32_t mShieldInterruptTicks = 0;
+    bool mShieldReblockAfterAttack = false;
+    int64_t mShieldDisabledUntilTick = 0;
 };

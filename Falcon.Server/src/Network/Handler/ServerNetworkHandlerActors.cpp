@@ -443,6 +443,14 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     }
 
     ServerPlayer *victimPlayer = dynamic_cast<ServerPlayer *>(&target);
+    const Vector3f motion = projectile.getMotion();
+    const Vector3f origin(hitPosition.x - motion.x, hitPosition.y - motion.y, hitPosition.z - motion.z);
+    if (victimPlayer != nullptr && victimPlayer->blockWithShield(*this, origin, damage, nullptr, false)) {
+        if (isTrident)
+            dropProjectileItem(projectile, hitPosition);
+        return true;
+    }
+
     if (victimPlayer != nullptr) {
         applyDamage(*victimPlayer, damage, "death.attack.arrow",
                     {victimPlayer->getName(), shooter == nullptr ? std::string() : shooter->getName()},
