@@ -2,7 +2,7 @@
 
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
-#include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/CopperSystem.h"
 #include "Item/ItemClassRegistry.h"
 #include "Item/ItemData.h"
 #include "Level/Level.h"
@@ -18,13 +18,8 @@
 FALCON_REGISTER_ITEM(ToolInteractionItem, 120);
 
 namespace {
-    constexpr int32_t COPPER_WAX_OFF = 2031;
-    constexpr int32_t COPPER_SCRAPE = 2032;
-
     const std::string PREFIX = "minecraft:";
     const std::string STRIPPED = "minecraft:stripped_";
-    const std::string WAXED = "minecraft:waxed_";
-    const char *const OXIDATION_STAGES[] = {"exposed_", "weathered_", "oxidized_"};
     const char *const STRIPPABLE_SUFFIXES[] = {"_log", "_wood", "_stem", "_hyphae"};
 
     enum class Effect {
@@ -70,31 +65,6 @@ namespace {
         return exists(candidate) ? candidate : std::string();
     }
 
-    std::string withoutWaxOf(const std::string &identifier) {
-        if (!startsWith(identifier, WAXED))
-            return std::string();
-
-        const std::string candidate = PREFIX + identifier.substr(WAXED.size());
-        return exists(candidate) ? candidate : std::string();
-    }
-
-    std::string scrapedOf(const std::string &identifier) {
-        for (size_t stage = 0; stage < 3; stage++) {
-            const std::string prefix = PREFIX + OXIDATION_STAGES[stage];
-            if (!startsWith(identifier, prefix))
-                continue;
-
-            const std::string rest = identifier.substr(prefix.size());
-            std::string candidate = stage == 0 ? PREFIX + rest : PREFIX + OXIDATION_STAGES[stage - 1] + rest;
-            if (stage == 0 && !exists(candidate))
-                candidate += "_block";
-
-            return exists(candidate) ? candidate : std::string();
-        }
-
-        return std::string();
-    }
-
     bool transformationFor(ToolType tool, const std::string &identifier, Transformation &out) {
         if (tool == ToolType::Hoe) {
             out.mNeedsAirAbove = true;
@@ -127,13 +97,13 @@ namespace {
             if (!out.mIdentifier.empty())
                 return true;
 
-            out.mIdentifier = withoutWaxOf(identifier);
+            out.mIdentifier = CopperSystem::withoutWaxOf(identifier);
             if (!out.mIdentifier.empty()) {
                 out.mEffect = Effect::WaxOff;
                 return true;
             }
 
-            out.mIdentifier = scrapedOf(identifier);
+            out.mIdentifier = CopperSystem::scrapedOf(identifier);
             if (!out.mIdentifier.empty()) {
                 out.mEffect = Effect::Scrape;
                 return true;
@@ -141,25 +111,6 @@ namespace {
         }
 
         return false;
-    }
-
-    BlockState transform(const BlockState &source, const std::string &identifier) {
-        const Block *block = VanillaBlocks::fromIdentifier(identifier);
-        BlockState result = block == nullptr ? BlockState(identifier) : block->toBlockState();
-
-        const std::vector<std::string> keys = result.mStates.getKeys();
-        for (const std::string &key: keys) {
-            const Tag *value = source.mStates.get(key);
-            if (value != nullptr)
-                result.mStates.put(key, *value);
-        }
-
-        return result;
-    }
-
-    void replace(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state) {
-        level.setBlockState(position.x, position.y, position.z, state);
-        BlockActionHandler::broadcastBlockUpdate(owner, level, position, state);
     }
 }
 
@@ -192,16 +143,8 @@ bool ToolInteractionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer
         && level.getBlockState(blockPosition.x, blockPosition.y + 1, blockPosition.z).mName != "minecraft:air")
         return false;
 
-    const BlockState result = transform(clicked, transformation.mIdentifier);
-    replace(owner, level, blockPosition, result);
-
-    if (clicked.mStates.contains("upper_block_bit")) {
-        const int32_t offset = clicked.mStates.getByte("upper_block_bit", 0) != 0 ? -1 : 1;
-        const Vector3i other(blockPosition.x, blockPosition.y + offset, blockPosition.z);
-        const BlockState otherState = level.getBlockState(other.x, other.y, other.z);
-        if (otherState.mName == clicked.mName)
-            replace(owner, level, other, transform(otherState, transformation.mIdentifier));
-    }
+    const BlockState result = CopperSystem::replaceWithPair(owner, level, blockPosition, clicked,
+                                                            transformation.mIdentifier);
 
     const Vector3f center((float) blockPosition.x + 0.5f, (float) blockPosition.y + 0.5f,
                           (float) blockPosition.z + 0.5f);
@@ -211,7 +154,8 @@ bool ToolInteractionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer
                              BlockStateHasher::hash(result.mName, result.mStates));
     } else {
         LevelEventPacket event;
-        event.mEventId = transformation.mEffect == Effect::WaxOff ? COPPER_WAX_OFF : COPPER_SCRAPE;
+        event.mEventId = transformation.mEffect == Effect::WaxOff ? CopperSystem::WAX_OFF_EVENT
+                                                                  : CopperSystem::SCRAPE_EVENT;
         event.mPosition = center;
         event.mData = 0;
         BlockActionHandler::broadcastToViewers(owner, level, center, event);

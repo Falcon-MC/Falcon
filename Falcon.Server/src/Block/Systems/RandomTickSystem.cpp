@@ -1,6 +1,7 @@
 #include "Block/Systems/RandomTickSystem.h"
 
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/CopperSystem.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 #include "Level/SubChunk.h"
@@ -115,5 +116,8 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
             continue;
 
         block->onRandomTick(owner, level, candidate.mPosition, current);
+        CopperSystem::onRandomTick(owner, level, candidate.mPosition,
+                                   level.getBlockState(candidate.mPosition.x, candidate.mPosition.y,
+                                                       candidate.mPosition.z));
     }
 }
