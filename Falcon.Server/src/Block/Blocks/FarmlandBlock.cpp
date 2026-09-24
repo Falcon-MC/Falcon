@@ -7,6 +7,7 @@
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
+#include "Network/Handler/ServerNetworkHandler.h"
 
 #include <random>
 
