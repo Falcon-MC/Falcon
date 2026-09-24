@@ -208,6 +208,12 @@ void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &leve
         return;
     }
 
+    if (state.mName == "minecraft:pointed_dripstone" && state.mStates.getBool("hanging", false)) {
+        const BlockState above = level.getBlockState(position.x, position.y + 1, position.z);
+        if (level.isSolidAt(position.x, position.y + 1, position.z) || above.mName == "minecraft:pointed_dripstone")
+            return;
+    }
+
     const Vector3i below(position.x, position.y - 1, position.z);
     if (!canFallInto(level, below))
         return;
