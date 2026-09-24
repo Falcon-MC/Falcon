@@ -13,8 +13,10 @@ FALCON_REGISTER_BLOCK(NyliumBlock, 310);
 
 #include "Block/BlockIdentifier.h"
 #include "Block/BlockLightProperties.h"
+#include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Feature/BlockManager.h"
+#include "Level/Generator/Feature/IFeature.h"
 #include "Level/Generator/Feature/Tree/LegacyTreeObject.h"
 #include "Level/Generator/Random/SimpleRandom.h"
 #include "Level/Level.h"
@@ -31,6 +33,11 @@ namespace {
     const int MINIMUM_SPREAD_LIGHT_LEVEL = 4;
     const int MAXIMUM_SPREAD_LIGHT_FILTER = 2;
     const int LEAVES_SEARCH_DISTANCE = 7;
+    const char *STEM_FACING = "facing_direction";
+    const int32_t STEM_FACING_DOWN = 0;
+    const int32_t STEM_FACING_NORTH = 2;
+    const int32_t STEM_FACING_EAST = 5;
+    const int STEM_SIDES[4][2] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
 
     int64_t randomSeed() {
         return (int64_t) std::chrono::steady_clock::now().time_since_epoch().count();
@@ -163,8 +170,28 @@ void CropBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
     level.setBlock(position, withState(state, getGrowthState(), growth + 1), false);
 }
 
-std::string StemBlock::getFruitIdentifier() const {
-    return getIdentifier() == "minecraft:melon_stem" ? "minecraft:melon_block" : "minecraft:pumpkin";
+BlockState StemBlock::getFruitState() const {
+    return getIdentifier() == "minecraft:melon_stem" ? VanillaBlocks::MELON_BLOCK().toBlockState()
+                                                     : VanillaBlocks::PUMPKIN().toBlockState();
+}
+
+void StemBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                   const BlockState &state) const {
+    CropBlock::onNeighbourChanged(owner, level, position, state);
+
+    const BlockState current = level.getBlockState(position.x, position.y, position.z);
+    if (current.mName != state.mName)
+        return;
+
+    const int32_t facing = current.mStates.getInt(STEM_FACING, STEM_FACING_DOWN);
+    if (facing < STEM_FACING_NORTH || facing > STEM_FACING_EAST)
+        return;
+
+    const int32_t side = facing - STEM_FACING_NORTH;
+    const BlockState fruit = level.getBlockState(position.x + STEM_SIDES[side][0], position.y,
+                                                 position.z + STEM_SIDES[side][1]);
+    if (fruit.mName != getFruitState().mName)
+        level.setBlock(position, withState(current, STEM_FACING, STEM_FACING_DOWN), false);
 }
 
 void StemBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -181,27 +208,26 @@ void StemBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
         return;
     }
 
-    static const int SIDES[4][2] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
-    const std::string fruit = getFruitIdentifier();
+    const BlockState fruit = getFruitState();
 
-    for (const auto &side: SIDES) {
+    for (const auto &side: STEM_SIDES) {
         const BlockState neighbour = level.getBlockState(position.x + side[0], position.y, position.z + side[1]);
-        if (neighbour.mName == fruit)
+        if (neighbour.mName == fruit.mName)
             return;
     }
 
     const int chosen = RandomTickSystem::nextInt(4);
-    const Vector3i target(position.x + SIDES[chosen][0], position.y, position.z + SIDES[chosen][1]);
+    const Vector3i target(position.x + STEM_SIDES[chosen][0], position.y, position.z + STEM_SIDES[chosen][1]);
 
     if (level.getBlockState(target.x, target.y, target.z).mName != "minecraft:air")
         return;
 
     const BlockState below = level.getBlockState(target.x, target.y - 1, target.z);
-    if (below.mName != "minecraft:farmland" && below.mName != "minecraft:grass_block"
-        && below.mName != "minecraft:dirt")
+    if (!IFeature::isSupportDirt(below) && below.mName != "minecraft:farmland")
         return;
 
-    level.setBlock(target, BlockState(fruit), false);
+    level.setBlock(target, fruit, true);
+    level.setBlock(position, withState(state, STEM_FACING, STEM_FACING_NORTH + chosen), false);
 }
 
 TreeWoodType SaplingBlock::getWoodType() const {

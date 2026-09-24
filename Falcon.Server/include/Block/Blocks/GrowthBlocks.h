@@ -47,8 +47,11 @@ public:
     void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
 
+    void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                            const BlockState &state) const override;
+
 private:
-    std::string getFruitIdentifier() const;
+    BlockState getFruitState() const;
 };
 
 class SaplingBlock : public PlantBlock {
