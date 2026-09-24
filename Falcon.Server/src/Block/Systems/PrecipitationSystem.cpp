@@ -74,8 +74,21 @@ bool PrecipitationSystem::isCold(Level &level, const Vector3i &position) {
 }
 
 void PrecipitationSystem::tickColumn(Level &level, int32_t x, int32_t z) {
-    const Vector3i top(x, level.getHeightAt(x, z), z);
-    const Vector3i below(x, top.y - 1, z);
+    int32_t surface = level.getMaxY();
+    while (surface >= level.getMinY()) {
+        const BlockState *state = level.peekBlockPtr(x, surface, z);
+        if (state == nullptr)
+            return;
+        if (state->mName != "minecraft:air")
+            break;
+        --surface;
+    }
+
+    if (surface < level.getMinY())
+        return;
+
+    const Vector3i below(x, surface, z);
+    const Vector3i top(x, surface + 1, z);
 
     if (shouldFreeze(level, below))
         level.setBlock(below, BlockState(IceBlock::IDENTIFIER), true);
