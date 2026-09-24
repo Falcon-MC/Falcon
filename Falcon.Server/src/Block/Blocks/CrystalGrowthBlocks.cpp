@@ -174,19 +174,38 @@ bool PointedDripstoneBlock::findTip(Level &level, const Vector3i &root, bool han
 
 bool PointedDripstoneBlock::canTipGrow(Level &level, const Vector3i &tip, bool hanging) {
     const Vector3i target = offset(tip, hanging ? -1 : 1);
-    return isInRange(level, target) && DecorationSupport::isAir(stateAt(level, target));
+    if (!isInRange(level, target))
+        return false;
+
+    const BlockState next = stateAt(level, target);
+    if (LiquidView(next).isLiquid())
+        return false;
+
+    return DecorationSupport::isAir(next)
+           || (pointsTowards(next, !hanging) && next.mStates.getString(THICKNESS, "tip") == "tip");
 }
 
 void PointedDripstoneBlock::grow(Level &level, const Vector3i &tip, bool hanging) {
-    const Vector3i target = offset(tip, hanging ? -1 : 1);
-    if (!isInRange(level, target) || !DecorationSupport::isAir(stateAt(level, target)))
+    if (!canTipGrow(level, tip, hanging))
         return;
+
+    const Vector3i target = offset(tip, hanging ? -1 : 1);
+    const BlockState targetState = stateAt(level, target);
+
+    if (!DecorationSupport::isAir(targetState)) {
+        level.setBlock(tip, DecorationSupport::withState(stateAt(level, tip), THICKNESS, "merge"), false);
+        level.setBlock(target, DecorationSupport::withState(targetState, THICKNESS, "merge"), false);
+        refreshThickness(level, offset(tip, hanging ? 1 : -1), hanging);
+        refreshThickness(level, offset(target, hanging ? -1 : 1), !hanging);
+        return;
+    }
 
     BlockState placed = VanillaBlocks::POINTED_DRIPSTONE().toBlockState();
     placed = DecorationSupport::withState(placed, HANGING, hanging ? 1 : 0);
     placed = DecorationSupport::withState(placed, THICKNESS, "tip");
     level.setBlock(target, placed, true);
     refreshThickness(level, target, hanging);
+    refreshThickness(level, offset(target, hanging ? -1 : 1), !hanging);
 }
 
 void PointedDripstoneBlock::growStalagmiteBelow(Level &level, const Vector3i &tip) {
