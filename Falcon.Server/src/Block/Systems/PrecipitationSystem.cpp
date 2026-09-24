@@ -94,7 +94,7 @@ void PrecipitationSystem::tickColumn(Level &level, int32_t x, int32_t z) {
         level.setBlock(below, BlockState(IceBlock::IDENTIFIER), true);
 
     if (level.isRaining() && level.canRainAt(x, z) && shouldSnow(level, top))
-        level.setBlock(top, BlockState("minecraft:snow_layer"), true);
+        level.setBlock(top, VanillaBlocks::SNOW_LAYER().toBlockState(), true);
 }
 
 bool PrecipitationSystem::shouldFreeze(Level &level, const Vector3i &position) {
