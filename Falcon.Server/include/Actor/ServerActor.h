@@ -83,6 +83,10 @@ public:
         return false;
     }
 
+    virtual void onStruckByLightning(ServerNetworkHandler &owner) {
+        (void) owner;
+    }
+
     virtual bool isInvulnerable() const {
         return false;
     }

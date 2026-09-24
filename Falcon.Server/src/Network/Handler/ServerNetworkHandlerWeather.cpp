@@ -114,6 +114,7 @@ void ServerNetworkHandler::strikeLightning(Level &level, const Vector3f &positio
         if (dx * dx + dy * dy + dz * dz > 9.0f)
             continue;
 
+        actor.onStruckByLightning(*this);
         damageActor(actor, (float) LIGHTNING_DAMAGE, nullptr);
         actor.setFireTicks((int) LIGHTNING_FIRE_TICKS);
         actor.setOnFire(true);
