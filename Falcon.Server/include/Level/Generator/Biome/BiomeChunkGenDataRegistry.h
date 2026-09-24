@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
-class BiomeConsolidatedFeatureData {
+class BiomeFeatureEntry {
 public:
     std::string mIdentifier;
     std::string mFeature;
@@ -16,7 +16,7 @@ class BiomeChunkGenDataRegistry {
 public:
     static void initialize();
 
-    static const std::vector<BiomeConsolidatedFeatureData> *getConsolidatedFeatures(int32_t biomeId);
+    static const std::vector<BiomeFeatureEntry> *getConsolidatedFeatures(int32_t biomeId);
 
     static bool isLoaded();
 
@@ -25,5 +25,5 @@ public:
     static std::vector<std::string> getBiomeNames();
 
 private:
-    static std::unordered_map<int32_t, std::vector<BiomeConsolidatedFeatureData>> &_featuresByBiome();
+    static std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>> &_featuresByBiome();
 };
