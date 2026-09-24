@@ -5,6 +5,7 @@
 #include "Actor/Movement/PostMoveTravelVelocitySystem.h"
 #include "Actor/Movement/PreMoveTravelVelocitySystem.h"
 #include "Actor/ServerActor.h"
+#include "Block/Systems/BlockContactSystem.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -34,9 +35,13 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
         result.mMoved = motion;
     }
 
-    const float fallDamage = PostMoveTravelVelocitySystem::apply(actor, physics, box, motion, result, feet);
+    float landingFallDistance = 0.0f;
+    const float fallDamage = PostMoveTravelVelocitySystem::apply(actor, physics, box, motion, result, feet,
+                                                                 landingFallDistance);
 
     _syncMovement(owner, actor);
+
+    BlockContactSystem::land(owner, actor, landingFallDistance);
 
     if (fallDamage > 0.0f)
         actor.hurt(owner, fallDamage, nullptr);

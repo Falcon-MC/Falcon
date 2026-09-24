@@ -5,6 +5,7 @@
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
 #include "Block/Blocks/FrostedIceBlock.h"
+#include "Block/Systems/BlockContactSystem.h"
 #include "Block/Systems/LavaResetFallDistanceSystem.h"
 #include "Block/Systems/FireBlocksFetch.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
@@ -211,6 +212,8 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
                                                                                  std::min(0.0f, requestedY));
             if (!landedOnSpecialBlock)
                 owner._handleFallDamage(player, hasSupport ? &supportBlock : nullptr);
+
+            BlockContactSystem::land(owner, player, player.getFallDistance());
         }
 
         player.resetFallDistance();

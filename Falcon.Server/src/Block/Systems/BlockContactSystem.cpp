@@ -13,6 +13,30 @@ namespace {
     const float PLAYER_CONTACT_WIDTH = 0.6f;
     const float PLAYER_CONTACT_HEIGHT = 1.8f;
     const float STEP_PROBE_DEPTH = 0.01f;
+
+    const Block *blockBelow(Level &level, const Vector3f &position, Vector3i &below, const BlockState *&state) {
+        below = Vector3i((int32_t) std::floor(position.x), (int32_t) std::floor(position.y - STEP_PROBE_DEPTH),
+                         (int32_t) std::floor(position.z));
+        if (!level.isChunkResident(below.x >> 4, below.z >> 4))
+            return nullptr;
+
+        state = level.peekBlockPtr(below.x, below.y, below.z);
+        return state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+    }
+}
+
+void BlockContactSystem::land(ServerNetworkHandler &owner, Actor &actor, float fallDistance) {
+    if (fallDistance <= 0.0f)
+        return;
+
+    Vector3i below;
+    const BlockState *state = nullptr;
+    const Block *block = blockBelow(owner.getLevelFor(actor), actor.getPosition(), below, state);
+    if (block == nullptr)
+        return;
+
+    const BlockState landed = *state;
+    block->onFallOn(owner, actor, below, landed, fallDistance);
 }
 
 void BlockContactSystem::tick(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -86,13 +110,9 @@ bool BlockContactSystem::touchInsideBlocks(ServerNetworkHandler &owner, Actor &a
     if (!actor.isOnGround())
         return true;
 
-    const Vector3i below((int32_t) std::floor(position.x), (int32_t) std::floor(position.y - STEP_PROBE_DEPTH),
-                         (int32_t) std::floor(position.z));
-    if (!level.isChunkResident(below.x >> 4, below.z >> 4))
-        return true;
-
-    const BlockState *state = level.peekBlockPtr(below.x, below.y, below.z);
-    const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+    Vector3i below;
+    const BlockState *state = nullptr;
+    const Block *block = blockBelow(level, position, below, state);
     if (block != nullptr)
         block->onStepOn(owner, actor, below, *state);
 

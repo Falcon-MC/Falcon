@@ -85,6 +85,15 @@ public:
         (void) state;
     }
 
+    virtual void onFallOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                          const BlockState &state, float fallDistance) const {
+        (void) owner;
+        (void) actor;
+        (void) position;
+        (void) state;
+        (void) fallDistance;
+    }
+
     virtual bool onPunch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                          const BlockState &state) const {
         (void) owner;

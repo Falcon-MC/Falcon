@@ -5,7 +5,8 @@
 
 float PostMoveTravelVelocitySystem::apply(ServerActor &actor, const PhysicsComponent &physics,
                                           const AxisAlignedBB &box, Vector3f motion, const ActorMoveResult &result,
-                                          const LiquidContact &feet) {
+                                          const LiquidContact &feet, float &landingFallDistance) {
+    landingFallDistance = 0.0f;
     actor.setPosition(Vector3f((box.mMinX + box.mMaxX) * 0.5f, box.mMinY, (box.mMinZ + box.mMaxZ) * 0.5f));
 
     if (result.mCollidedX)
@@ -31,6 +32,7 @@ float PostMoveTravelVelocitySystem::apply(ServerActor &actor, const PhysicsCompo
     }
 
     actor.updateFallDistance();
+    landingFallDistance = actor.getFallDistance();
     const float damage = actor.computeFallDamage();
     actor.resetFallDistance();
     return damage;
