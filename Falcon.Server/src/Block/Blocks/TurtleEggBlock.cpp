@@ -3,11 +3,9 @@
 #include "Block/BlockClassRegistry.h"
 #include "Block/Blocks/EggHelpers.h"
 #include "Block/Systems/RandomTickSystem.h"
-#include "Core/Math/MathConstants.h"
 #include "Level/Level.h"
+#include "Level/LightSystem.h"
 #include "Network/Handler/ServerNetworkHandler.h"
-
-#include <cmath>
 
 FALCON_REGISTER_BLOCK(TurtleEggBlock, 185);
 
@@ -18,7 +16,6 @@ namespace {
     const int32_t OFF_HOURS_CHANCE = 500;
     const float HATCH_WINDOW_START = 0.65f;
     const float HATCH_WINDOW_END = 0.7f;
-    const float DAY_LENGTH = 24000.0f;
     const float CRACK_VOLUME = 0.7f;
     const float BABY_SCALE = 0.16f;
     const char *const CRACK_SOUND = "block.turtle_egg.crack";
@@ -49,12 +46,7 @@ bool TurtleEggBlock::matches(const std::string &identifier) {
 }
 
 bool TurtleEggBlock::isHatchingTime(Level &level) {
-    float progress = (float) level.getDayTime() / DAY_LENGTH - 0.25f;
-    if (progress < 0.0f)
-        progress += 1.0f;
-
-    const float smoothed = 0.5f - std::cos(progress * MathConstants::PI_F) / 2.0f;
-    const float angle = (progress * 2.0f + smoothed) / 3.0f;
+    const float angle = LightSystem::calculateCelestialAngle(level.getTime());
     return angle > HATCH_WINDOW_START && angle < HATCH_WINDOW_END;
 }
 

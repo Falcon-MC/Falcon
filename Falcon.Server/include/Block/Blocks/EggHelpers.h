@@ -2,8 +2,6 @@
 
 #include "Block/Block.h"
 
-#include <string>
-
 namespace EggHelpers {
     const char *const CRACKED_STATE = "cracked_state";
 
