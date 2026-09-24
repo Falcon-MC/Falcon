@@ -6,6 +6,7 @@
 #include "Block/Systems/CopperSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Level.h"
+#include "Network/Handler/ServerNetworkHandler.h"
 
 FALCON_REGISTER_BLOCK(CoralBlock, 185);
 
@@ -31,7 +32,8 @@ namespace {
 }
 
 bool CoralBlock::isLiveCoral(const std::string &identifier) {
-    if (identifier.compare(0, PREFIX.size(), PREFIX) != 0 || identifier.compare(0, DEAD_PREFIX.size(), DEAD_PREFIX) == 0)
+    if (identifier.compare(0, PREFIX.size(), PREFIX) != 0
+        || identifier.compare(0, DEAD_PREFIX.size(), DEAD_PREFIX) == 0)
         return false;
 
     return endsWith(identifier, "_coral") || endsWith(identifier, "_coral_block")
@@ -48,7 +50,7 @@ void CoralBlock::scheduleDeathCheck(Level &level, const Vector3i &position) {
 
 bool CoralBlock::isWater(Level &level, const Vector3i &position, int layer) {
     const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z, layer);
-    return state != nullptr && WaterBlock::matches(state->mName);
+    return state == nullptr || WaterBlock::matches(state->mName);
 }
 
 bool CoralBlock::hasWater(Level &level, const Vector3i &position, const BlockState &state) {
@@ -81,6 +83,13 @@ void CoralBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, co
     (void) owner;
 
     dieWithoutWater(level, position, state);
+}
+
+void CoralBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                          const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+    Block::onPlaced(owner, player, position, state, usedItem, blockFace);
+
+    scheduleDeathCheck(owner.getLevelFor(player), position);
 }
 
 void CoralBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

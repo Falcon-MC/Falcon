@@ -3,6 +3,7 @@
 #include "Block/BlockClassRegistry.h"
 #include "Block/Blocks/CoralBlock.h"
 #include "Level/Level.h"
+#include "Network/Handler/ServerNetworkHandler.h"
 
 FALCON_REGISTER_BLOCK(CoralFanBlock, 185);
 
@@ -15,6 +16,13 @@ void CoralFanBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level,
     (void) owner;
 
     CoralBlock::dieWithoutWater(level, position, state);
+}
+
+void CoralFanBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                             const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+    WallAttachedBlock::onPlaced(owner, player, position, state, usedItem, blockFace);
+
+    CoralBlock::scheduleDeathCheck(owner.getLevelFor(player), position);
 }
 
 void CoralFanBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
