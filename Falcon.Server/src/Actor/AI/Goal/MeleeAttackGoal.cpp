@@ -67,8 +67,11 @@ void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Server
     if (damage <= 0.0f)
         return;
 
-    if (target.blockWithShield(owner, mob.getPosition(), damage, &mob, false))
+    if (target.blockWithShield(owner, mob.getPosition(), damage, &mob, false)) {
+        owner.broadcastActorEvent(mob, EntityEventType::ArmSwing);
+        mTicksSinceAttack = 0;
         return;
+    }
 
     const float healthBefore = target.getHealth();
     owner.applyDamage(target, damage, DEATH_MESSAGE, {target.getName(), mob.getName()}, true, true, &mob);

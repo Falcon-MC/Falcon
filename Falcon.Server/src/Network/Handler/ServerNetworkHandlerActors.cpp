@@ -446,8 +446,17 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     const Vector3f motion = projectile.getMotion();
     const Vector3f origin(hitPosition.x - motion.x, hitPosition.y - motion.y, hitPosition.z - motion.z);
     if (victimPlayer != nullptr && victimPlayer->blockWithShield(*this, origin, damage, nullptr, false)) {
-        if (isTrident)
-            dropProjectileItem(projectile, hitPosition);
+        if (!isTrident)
+            return true;
+
+        data.mHadCollision = true;
+        if (data.mLoyaltyLevel > 0 && shooter != nullptr) {
+            data.mReturning = true;
+            playLevelSound(getLevelFor(projectile), LevelSoundEvent::TRIDENT_RETURN, hitPosition);
+            return false;
+        }
+
+        dropProjectileItem(projectile, hitPosition);
         return true;
     }
 

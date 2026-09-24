@@ -4,12 +4,12 @@
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/ServerActor.h"
 #include "Block/Inventory/EnderChestInventoryStore.h"
+#include "Core/Math/MathConstants.h"
 #include "Inventory/ItemStackNbt.h"
 #include "Inventory/InventoryManager.h"
 #include "Item/ItemData.h"
 #include "Item/ItemEnchantments.h"
 #include "Item/VanillaItems.h"
-#include "Core/Math/MathConstants.h"
 #include "Level/Level.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -322,10 +322,12 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
 
             const bool critical = _isCriticalHit();
             const bool magic = target.getMeleeEnchantmentBonus(weapon) > 0.0f;
+            const float healthBefore = target.getHealth();
             owner.damageActor(target, attackDamage, this);
-            if (critical)
+            const bool hurt = target.getHealth() < healthBefore;
+            if (hurt && critical)
                 broadcastAnimation(owner, target, AnimatePacket::Action::CriticalHit);
-            if (magic)
+            if (hurt && magic)
                 broadcastAnimation(owner, target, AnimatePacket::Action::MagicCriticalHit);
             if (target.isAlive())
                 target.onMeleeEnchantmentHit(weapon);
@@ -372,8 +374,14 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
         return false;
 
     const bool axe = data != nullptr && data->mToolType == ToolType::Axe;
+    if (victim->isBlockingWithShield() && victim->getNoDamageTicks() > 0)
+        return false;
+
     if (victim->blockWithShield(owner, getPosition(), damage, this, axe)) {
+        victim->setNoDamageTicks(10);
+        owner.damagePlayerHeldItem(*this, (data != nullptr && data->mToolType == ToolType::Sword) ? 1 : 2);
         exhaust(0.1f);
+        owner._sendAttributes(*this);
         return true;
     }
 
