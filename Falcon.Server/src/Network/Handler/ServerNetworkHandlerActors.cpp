@@ -1,6 +1,7 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include "Actor/ActorClassRegistry.h"
+#include "Actor/ActorFlags.h"
 #include "Actor/DynamicPropertyStore.h"
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/Mob/MobActor.h"
@@ -55,6 +56,7 @@
 #include <cmath>
 
 namespace {
+    const int32_t ACTOR_DATA_SCALE = 38;
     const float ARROW_KNOCKBACK = 0.3f;
     const float PUNCH_KNOCKBACK_PER_LEVEL = 0.5f;
     const float IMPALING_DAMAGE_PER_LEVEL = 2.5f;
@@ -156,6 +158,35 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     broadcastActorSpawn(*result);
     mScriptEngine.onEntitySpawn(*result);
     return result;
+}
+
+ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::string &identifier,
+                                                  const Vector3f &position, float scale) {
+    ServerActor *baby = spawnActor(level, identifier, position);
+    if (baby == nullptr)
+        return nullptr;
+
+    baby->getFlags().set(ActorFlag::Baby, true);
+
+    EntityDataMap metadata;
+    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID};
+    const int64_t flagValues[] = {baby->getFlags().getLowBits(), baby->getFlags().getHighBits()};
+    for (int index = 0; index < 2; index++) {
+        EntityDataEntry entry;
+        entry.mId = flagIds[index];
+        entry.mFormat = EntityDataFormat::Long;
+        entry.mLongValue = flagValues[index];
+        metadata.mEntries.push_back(entry);
+    }
+
+    EntityDataEntry scaleEntry;
+    scaleEntry.mId = ACTOR_DATA_SCALE;
+    scaleEntry.mFormat = EntityDataFormat::Float;
+    scaleEntry.mFloatValue = scale;
+    metadata.mEntries.push_back(scaleEntry);
+
+    sendActorMetadata(*baby, metadata);
+    return baby;
 }
 
 FallingBlockActor *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockState &state,

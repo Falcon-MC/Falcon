@@ -136,6 +136,9 @@ public:
     ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                             const std::function<void(ServerActor &)> &configure = nullptr);
 
+    ServerActor *spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position,
+                                float scale);
+
     FallingBlockActor *spawnFallingBlock(Level &level, const BlockState &state, const Vector3f &position);
 
     PrimedTntActor *spawnPrimedTnt(Level &level, const Vector3f &position, const Vector3f &motion, int32_t fuse);

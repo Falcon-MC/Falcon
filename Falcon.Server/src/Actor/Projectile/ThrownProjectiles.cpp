@@ -1,6 +1,5 @@
 #include "Actor/Projectile/ProjectileActor.h"
 
-#include "Actor/ActorFlags.h"
 #include "Actor/Mob/Hostile/BlazeActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -22,7 +21,6 @@ namespace {
     const int32_t EGG_QUADRUPLE_HATCH_COUNT = 4;
     const float EGG_HATCH_HEIGHT = 0.5f;
     const char *HATCHED_ACTOR = "minecraft:chicken";
-    const int32_t ACTOR_DATA_SCALE = 38;
     const float BABY_SCALE = 0.5f;
     const float ENDER_PEARL_DAMAGE = 5.0f;
     const char *ENDER_PEARL_DEATH_MESSAGE = "death.fell.accident.generic";
@@ -50,14 +48,6 @@ namespace {
     void knockBackFrom(ServerNetworkHandler &owner, Actor &target, const Vector3f &hitPosition, float force) {
         const Vector3f position = target.getPosition();
         owner.knockBack(target, position.x - hitPosition.x, position.z - hitPosition.z, force);
-    }
-
-    void pushEntry(EntityDataMap &metadata, int32_t id, int64_t value) {
-        EntityDataEntry entry;
-        entry.mId = id;
-        entry.mFormat = EntityDataFormat::Long;
-        entry.mLongValue = value;
-        metadata.mEntries.push_back(entry);
     }
 }
 
@@ -104,23 +94,7 @@ void EggActor::_hatchChicks(ServerNetworkHandler &owner, const Vector3f &hitPosi
     const Vector3f spawnPosition(hitPosition.x, hitPosition.y + EGG_HATCH_HEIGHT, hitPosition.z);
 
     for (int32_t chick = 0; chick < chicks; ++chick) {
-        ServerActor *hatched = owner.spawnActor(level, HATCHED_ACTOR, spawnPosition);
-        if (hatched == nullptr)
-            continue;
-
-        hatched->getFlags().set(ActorFlag::Baby, true);
-
-        EntityDataMap metadata;
-        pushEntry(metadata, ActorFlags::FLAGS_DATA_ID, hatched->getFlags().getLowBits());
-        pushEntry(metadata, ActorFlags::FLAGS_2_DATA_ID, hatched->getFlags().getHighBits());
-
-        EntityDataEntry scale;
-        scale.mId = ACTOR_DATA_SCALE;
-        scale.mFormat = EntityDataFormat::Float;
-        scale.mFloatValue = BABY_SCALE;
-        metadata.mEntries.push_back(scale);
-
-        owner.sendActorMetadata(*hatched, metadata);
+        owner.spawnBabyActor(level, HATCHED_ACTOR, spawnPosition, BABY_SCALE);
     }
 }
 
