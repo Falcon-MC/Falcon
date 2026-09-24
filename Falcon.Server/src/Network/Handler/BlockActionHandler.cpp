@@ -369,12 +369,12 @@ void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, Level &
 }
 
 void BlockActionHandler::broadcastBlockUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                              const BlockState &state) {
+                                              const BlockState &state, uint32_t layer) {
     UpdateBlockPacket update;
     update.mBlockPosition = position;
     update.mRuntimeId = (uint32_t) BlockStateHasher::hash(state.mName, state.mStates);
     update.mFlags = UpdateBlockPacket::Flag::All;
-    update.mDataLayer = 0;
+    update.mDataLayer = layer;
     broadcastToViewers(owner, level,
                        Vector3f((float) position.x + 0.5f,
                                 (float) position.y + 0.5f,

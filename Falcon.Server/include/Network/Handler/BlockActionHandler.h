@@ -17,7 +17,7 @@ public:
                                    const Packet &packet, const ServerPlayer *except = nullptr);
 
     static void broadcastBlockUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                     const BlockState &state);
+                                     const BlockState &state, uint32_t layer = 0);
 
     static void breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 

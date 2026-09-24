@@ -6,6 +6,7 @@
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
+#include "Network/Handler/BlockActionHandler.h"
 
 FALCON_REGISTER_BLOCK(CactusBlock, 311);
 FALCON_REGISTER_BLOCK(ReedsBlock, 312);
@@ -232,7 +233,7 @@ void BambooSaplingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level,
     (void) owner;
 
     const Vector3i top = above(position);
-    if (state.mStates.getInt(AGE_BIT, 0) != 0 || !isInRange(level, top) || !isAirAt(level, top))
+    if (state.mStates.getBool(AGE_BIT, false) || !isInRange(level, top) || !isAirAt(level, top))
         return;
 
     if (RandomTickSystem::getFullLight(level, top) < BAMBOO_MIN_LIGHT || RandomTickSystem::nextInt(3) != 0)
@@ -264,7 +265,7 @@ void BambooBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const 
     (void) owner;
 
     const Vector3i top = above(position);
-    if (state.mStates.getInt(AGE_BIT, 0) != 0 || !isInRange(level, top) || !isAirAt(level, top))
+    if (state.mStates.getBool(AGE_BIT, false) || !isInRange(level, top) || !isAirAt(level, top))
         return;
 
     if (RandomTickSystem::getFullLight(level, top) < BAMBOO_MIN_LIGHT)
@@ -332,7 +333,6 @@ void KelpBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
     if (!isInRange(level, top) || !isWaterSource(stateAt(level, top)))
         return;
 
-    level.setBlockStateAtLayer(top.x, top.y, top.z, 1, WaterBlock::source());
     level.setBlock(top, DecorationSupport::withState(state, KELP_AGE, age + 1), true);
 }
 
@@ -342,9 +342,9 @@ bool VineBlock::matches(const std::string &identifier) {
 
 void VineBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                              const BlockState &state) const {
-    (void) owner;
-
     if (RandomTickSystem::nextInt(4) != 0)
+    level.setBlockStateAtLayer(top.x, top.y, top.z, 1, WaterBlock::source());
+    BlockActionHandler::broadcastBlockUpdate(owner, level, top, WaterBlock::source(), 1);
         return;
 
     const int32_t face = RandomTickSystem::nextInt(6);
