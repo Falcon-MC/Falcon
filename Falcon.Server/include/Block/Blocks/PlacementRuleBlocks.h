@@ -5,7 +5,7 @@
 
 #include <string>
 
-class ReplaceableBlock final : public Block {
+class ReplaceableBlock : public Block {
 public:
     explicit ReplaceableBlock(const Block &block) : Block(block)
     {
