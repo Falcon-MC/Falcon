@@ -81,6 +81,44 @@ private:
     static void putVineOnHorizontalFace(Level &level, const Vector3i &position, int32_t bits);
 };
 
+class SweetBerryBushBlock : public Block {
+public:
+    explicit SweetBerryBushBlock(const Block &block) : Block(block) {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                      const BlockState &state) const override;
+};
+
+class CocoaBlock : public Block {
+public:
+    explicit CocoaBlock(const Block &block) : Block(block) {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                      const BlockState &state) const override;
+};
+
+class ChorusFlowerBlock : public Block {
+public:
+    explicit ChorusFlowerBlock(const Block &block) : Block(block) {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                      const BlockState &state) const override;
+
+private:
+    static bool allNeighboursEmpty(Level &level, const Vector3i &position, int32_t exceptFace);
+
+    static void placeFlower(Level &level, const Vector3i &position, int32_t age);
+};
+
 class CaveVinesBlock : public Block {
 public:
     explicit CaveVinesBlock(const Block &block) : Block(block) {

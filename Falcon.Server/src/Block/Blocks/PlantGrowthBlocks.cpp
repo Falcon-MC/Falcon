@@ -15,6 +15,9 @@ FALCON_REGISTER_BLOCK(BambooBlock, 314);
 FALCON_REGISTER_BLOCK(KelpBlock, 315);
 FALCON_REGISTER_BLOCK(VineBlock, 316);
 FALCON_REGISTER_BLOCK(CaveVinesBlock, 317);
+FALCON_REGISTER_BLOCK(SweetBerryBushBlock, 318);
+FALCON_REGISTER_BLOCK(CocoaBlock, 319);
+FALCON_REGISTER_BLOCK(ChorusFlowerBlock, 321);
 
 namespace {
     const char *AGE = "age";
@@ -38,6 +41,14 @@ namespace {
     const int32_t CAVE_VINES_BERRY_PERCENT = 11;
     const int32_t VINE_SPREAD_LIMIT = 5;
     const int32_t VINE_SPREAD_RADIUS = 4;
+    const char *GROWTH = "growth";
+    const int32_t MAX_BERRY_GROWTH = 3;
+    const int32_t BERRY_GROWTH_CHANCE = 5;
+    const int32_t BERRY_MIN_LIGHT = 9;
+    const int32_t MAX_COCOA_AGE = 2;
+    const int32_t MAX_CHORUS_AGE = 5;
+    const int32_t CHORUS_BRANCH_AGE = 4;
+    const int32_t NO_FACE = -1;
 
     const int32_t FACE_DOWN = 0;
     const int32_t FACE_UP = 1;
@@ -323,8 +334,6 @@ bool KelpBlock::matches(const std::string &identifier) {
 
 void KelpBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                              const BlockState &state) const {
-    (void) owner;
-
     const int32_t age = state.mStates.getInt(KELP_AGE, 0);
     if (age >= MAX_KELP_AGE || RandomTickSystem::nextInt(100) >= KELP_GROWTH_PERCENT)
         return;
@@ -334,6 +343,8 @@ void KelpBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
         return;
 
     level.setBlock(top, DecorationSupport::withState(state, KELP_AGE, age + 1), true);
+    level.setBlockStateAtLayer(top.x, top.y, top.z, 1, WaterBlock::source());
+    BlockActionHandler::broadcastBlockUpdate(owner, level, top, WaterBlock::source(), 1);
 }
 
 bool VineBlock::matches(const std::string &identifier) {
@@ -342,9 +353,9 @@ bool VineBlock::matches(const std::string &identifier) {
 
 void VineBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                              const BlockState &state) const {
+    (void) owner;
+
     if (RandomTickSystem::nextInt(4) != 0)
-    level.setBlockStateAtLayer(top.x, top.y, top.z, 1, WaterBlock::source());
-    BlockActionHandler::broadcastBlockUpdate(owner, level, top, WaterBlock::source(), 1);
         return;
 
     const int32_t face = RandomTickSystem::nextInt(6);
@@ -443,6 +454,125 @@ void VineBlock::putVineOnHorizontalFace(Level &level, const Vector3i &position, 
             return;
         }
     }
+}
+
+bool SweetBerryBushBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:sweet_berry_bush";
+}
+
+void SweetBerryBushBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                       const BlockState &state) const {
+    (void) owner;
+
+    const int32_t growth = state.mStates.getInt(GROWTH, 0);
+    if (growth >= MAX_BERRY_GROWTH || RandomTickSystem::nextInt(BERRY_GROWTH_CHANCE) != 0)
+        return;
+
+    if (RandomTickSystem::getFullLight(level, above(position)) < BERRY_MIN_LIGHT)
+        return;
+
+    level.setBlock(position, DecorationSupport::withState(state, GROWTH, growth + 1), true);
+}
+
+bool CocoaBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:cocoa";
+}
+
+void CocoaBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state) const {
+    (void) owner;
+
+    const int32_t age = state.mStates.getInt(AGE, 0);
+    if (age >= MAX_COCOA_AGE || RandomTickSystem::nextInt(2) != 0)
+        return;
+
+    level.setBlock(position, DecorationSupport::withState(state, AGE, age + 1), true);
+}
+
+bool ChorusFlowerBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:chorus_flower";
+}
+
+void ChorusFlowerBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                     const BlockState &state) const {
+    (void) owner;
+
+    const Vector3i top = above(position);
+    if (!isInRange(level, top) || !isAirAt(level, top))
+        return;
+
+    const int32_t age = state.mStates.getInt(AGE, 0);
+    if (age >= MAX_CHORUS_AGE)
+        return;
+
+    bool growUp = false;
+    bool grounded = false;
+    const BlockState under = stateAt(level, below(position));
+
+    if (under.mName == "minecraft:end_stone") {
+        growUp = true;
+    } else if (under.mName == "minecraft:chorus_plant") {
+        int32_t height = 1;
+        for (int32_t step = 0; step < 4; ++step) {
+            const BlockState stem = stateAt(level, Vector3i(position.x, position.y - height - 1, position.z));
+            if (stem.mName == "minecraft:chorus_plant") {
+                ++height;
+                continue;
+            }
+            if (stem.mName == "minecraft:end_stone")
+                grounded = true;
+            break;
+        }
+
+        if (height < 2 || height <= RandomTickSystem::nextInt(grounded ? 5 : 4))
+            growUp = true;
+    } else if (DecorationSupport::isAir(under)) {
+        growUp = true;
+    }
+
+    const Vector3i twoAbove = above(top);
+    if (growUp && isInRange(level, twoAbove) && isAirAt(level, twoAbove) && allNeighboursEmpty(level, top, NO_FACE)) {
+        level.setBlock(position, VanillaBlocks::CHORUS_PLANT().toBlockState(), true);
+        placeFlower(level, top, age);
+        return;
+    }
+
+    if (age < CHORUS_BRANCH_AGE) {
+        int32_t attempts = RandomTickSystem::nextInt(4);
+        if (grounded)
+            ++attempts;
+
+        bool branched = false;
+        for (int32_t attempt = 0; attempt < attempts; ++attempt) {
+            const int32_t face = HORIZONTAL_FACES[RandomTickSystem::nextInt(4)];
+            const Vector3i branch = side(position, face);
+            if (isAirAt(level, branch) && isAirAt(level, below(branch))
+                && allNeighboursEmpty(level, branch, opposite(face))) {
+                placeFlower(level, branch, age + 1);
+                branched = true;
+            }
+        }
+
+        if (branched) {
+            level.setBlock(position, VanillaBlocks::CHORUS_PLANT().toBlockState(), true);
+            return;
+        }
+    }
+
+    level.setBlock(position, DecorationSupport::withState(state, AGE, MAX_CHORUS_AGE), true);
+}
+
+bool ChorusFlowerBlock::allNeighboursEmpty(Level &level, const Vector3i &position, int32_t exceptFace) {
+    for (int32_t face: HORIZONTAL_FACES) {
+        if (face != exceptFace && !isAirAt(level, side(position, face)))
+            return false;
+    }
+    return true;
+}
+
+void ChorusFlowerBlock::placeFlower(Level &level, const Vector3i &position, int32_t age) {
+    level.setBlock(position, DecorationSupport::withState(VanillaBlocks::CHORUS_FLOWER().toBlockState(), AGE, age),
+                   true);
 }
 
 bool CaveVinesBlock::matches(const std::string &identifier) {
