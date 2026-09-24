@@ -12,6 +12,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    static BlockState source();
+
     int getTickRate() const override { return 5; }
     int getFlowDecayPerBlock() const override { return 1; }
     int getMinAdjacentSourcesToFormSource() const override { return 2; }

@@ -11,5 +11,7 @@ public:
 
     static int getFullLight(Level &level, const Vector3i &position);
 
+    static int getBlockLight(Level &level, const Vector3i &position);
+
     static int nextInt(int bound);
 };

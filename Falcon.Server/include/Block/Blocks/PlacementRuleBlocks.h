@@ -32,6 +32,9 @@ public:
     PlacementMergeResult mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
                                         const Vector3f &clickPosition, Vector3i &position,
                                         BlockState &state) const override;
+
+    void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                      const BlockState &state) const override;
 };
 
 class SlabBlock final : public Block {

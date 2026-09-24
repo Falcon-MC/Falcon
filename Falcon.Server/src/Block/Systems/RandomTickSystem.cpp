@@ -53,6 +53,17 @@ int RandomTickSystem::getFullLight(Level &level, const Vector3i &position) {
     return skyLight > blockLight ? skyLight : blockLight;
 }
 
+int RandomTickSystem::getBlockLight(Level &level, const Vector3i &position) {
+    if (position.y < level.getMinY() || position.y > level.getMaxY())
+        return 0;
+
+    LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
+    if (chunk == nullptr || !chunk->hasBlockLight())
+        return 0;
+
+    return chunk->getBlockLight(position.x & 15, position.y, position.z & 15);
+}
+
 void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
     const int32_t speed = level.getGameRules().getInt("randomtickspeed");
     if (speed <= 0)

@@ -161,6 +161,7 @@
 #include "Block/Systems/FurnaceSystem.h"
 #include "Block/Systems/CommandBlockSystem.h"
 #include "Block/Systems/FireSystem.h"
+#include "Block/Systems/PrecipitationSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Protocol/Packets/CommandBlockUpdatePacket.h"
@@ -1287,6 +1288,7 @@ void ServerNetworkHandler::tick() {
     for (Level *level: levels) {
         FireSystem::tick(*this, *level);
         RandomTickSystem::tick(*this, *level);
+        PrecipitationSystem::tick(*this, *level);
     }
     mProfiler.endSection(ProfilerSection::Fire);
 

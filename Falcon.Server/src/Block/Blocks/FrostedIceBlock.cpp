@@ -1,6 +1,7 @@
 #include "Block/Blocks/FrostedIceBlock.h"
 
 #include "Block/BlockClassRegistry.h"
+#include "Block/Blocks/WaterBlock.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Level.h"
 
@@ -21,12 +22,6 @@ namespace {
 
     Vector3i offset(const Vector3i &position, const Vector3i &delta) {
         return Vector3i(position.x + delta.x, position.y + delta.y, position.z + delta.z);
-    }
-
-    BlockState waterSource() {
-        Tag states = Tag::ofCompound();
-        states.putInt("liquid_depth", 0);
-        return BlockState("minecraft:water", states);
     }
 }
 
@@ -57,7 +52,7 @@ void FrostedIceBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &lev
     (void) state;
 
     if (countFrostedNeighbours(level, position) < 2)
-        level.setBlock(position, waterSource(), true);
+        level.setBlock(position, WaterBlock::source(), true);
 }
 
 int FrostedIceBlock::countFrostedNeighbours(Level &level, const Vector3i &position) {
@@ -82,7 +77,7 @@ void FrostedIceBlock::slightlyMelt(Level &level, const Vector3i &position, const
         return;
     }
 
-    level.setBlock(position, waterSource(), true);
+    level.setBlock(position, WaterBlock::source(), true);
     if (!source)
         return;
 

@@ -20,6 +20,7 @@ FALCON_REGISTER_BLOCK(RedStoneWireBlock, 400);
 #include "Block/Blocks/LiquidView.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Components/PlacementOrientation.h"
+#include "Block/Systems/RandomTickSystem.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -35,6 +36,7 @@ namespace {
     const int LIGHT_WEIGHTED_MAX_WEIGHT = 15;
     const int HEAVY_WEIGHTED_MAX_WEIGHT = 150;
     const int SNOW_LAYER_MAX_HEIGHT = 7;
+    const int SNOW_MELT_LIGHT_LEVEL = 12;
     const int CANDLES_MAX = 3;
     const char *SNOW_LAYER_HEIGHT = "height";
     const char *CANDLES = "candles";
@@ -138,6 +140,15 @@ PlacementMergeResult SnowLayerBlock::mergePlacement(Level &level, const Vector3i
     }
 
     return PlacementMergeResult::None;
+}
+
+void SnowLayerBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                  const BlockState &state) const {
+    (void) owner;
+    (void) state;
+
+    if (RandomTickSystem::getBlockLight(level, position) >= SNOW_MELT_LIGHT_LEVEL)
+        level.setBlock(position, BlockState("minecraft:air"), true);
 }
 
 bool SlabBlock::matches(const std::string &identifier) {
