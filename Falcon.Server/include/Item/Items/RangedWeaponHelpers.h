@@ -4,6 +4,7 @@
 
 #include <cstdint>
 
+class ServerNetworkHandler;
 class ServerPlayer;
 
 namespace RangedWeaponHelpers {
@@ -19,7 +20,7 @@ namespace RangedWeaponHelpers {
 
     const ItemStack &arrowAt(const ServerPlayer &player, int slot);
 
-    void consumeArrow(ServerPlayer &player, int slot);
+    void consumeArrow(ServerNetworkHandler &owner, ServerPlayer &player, int slot);
 
     float chargeForce(int32_t elapsedTicks, float maxForce);
 }

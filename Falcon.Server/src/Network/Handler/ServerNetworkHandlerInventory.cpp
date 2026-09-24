@@ -6,6 +6,7 @@
 #include "Item/ItemData.h"
 #include "Item/ItemEnchantments.h"
 #include "Item/StringToItemParser.h"
+#include "Network/Handler/InventoryHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/PlayerStartItemCooldownPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -68,6 +69,7 @@ void ServerNetworkHandler::setPlayerEquipment(ServerPlayer &player, const std::s
     } else if (slot == "Offhand") {
         inventory.setOffhand(stack);
         player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Offhand, 0);
+        InventoryHandler::sendOffhandContent(*this, player);
     } else {
         inventory.setItemInHand(stack);
         player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());

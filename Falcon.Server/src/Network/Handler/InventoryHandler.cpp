@@ -273,7 +273,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
     const ItemStack &offhandAfter = inventory.getOffhand();
     if (offhandAfter.mDefinition != offhandBefore.mDefinition || offhandAfter.mCount != offhandBefore.mCount
-        || offhandAfter.mDamage != offhandBefore.mDamage)
+        || offhandAfter.mDamage != offhandBefore.mDamage || !(offhandAfter.mTag == offhandBefore.mTag))
         sendOffhandContent(owner, player);
 
     if (player.getInventoryManager().isContainerOpen())

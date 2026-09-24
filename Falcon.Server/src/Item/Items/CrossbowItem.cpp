@@ -140,7 +140,7 @@ void CrossbowItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player
                                           player.getInventory().getSelectedSlot());
 
     if (finiteResources) {
-        consumeArrow(player, arrowSlot);
+        consumeArrow(owner, player, arrowSlot);
         owner.damagePlayerHeldItem(player, 2);
     }
 

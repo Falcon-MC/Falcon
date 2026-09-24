@@ -84,7 +84,7 @@ bool BowItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player, con
 
     if (finiteResources) {
         if (!data.mPickupCreativeOnly)
-            consumeArrow(player, arrowSlot);
+            consumeArrow(owner, player, arrowSlot);
         owner.damagePlayerHeldItem(player, 1);
     }
 

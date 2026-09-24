@@ -1,6 +1,7 @@
 #include "Item/Items/RangedWeaponHelpers.h"
 
 #include "Actor/ServerPlayer.h"
+#include "Network/Handler/InventoryHandler.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
 
@@ -39,13 +40,14 @@ namespace RangedWeaponHelpers {
         return slot == OFFHAND_SLOT ? inventory.getOffhand() : inventory.getItem(slot);
     }
 
-    void consumeArrow(ServerPlayer &player, int slot) {
+    void consumeArrow(ServerNetworkHandler &owner, ServerPlayer &player, int slot) {
         PlayerInventory &inventory = player.getInventory();
         if (slot == OFFHAND_SLOT) {
             ItemStack arrow = inventory.getOffhand();
             arrow.mCount -= 1;
             inventory.setOffhand(arrow.mCount <= 0 ? ItemStack::air() : std::move(arrow));
             player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Offhand, 0);
+            InventoryHandler::sendOffhandContent(owner, player);
             return;
         }
 
