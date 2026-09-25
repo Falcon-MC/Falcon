@@ -15,7 +15,7 @@
 	<img src="https://img.shields.io/badge/minecraft-v1.26.51%20(Bedrock)-56383E" alt="Minecraft">
 	<img src="https://img.shields.io/badge/protocol-2193-blue" alt="Protocol">
 	<img src="https://img.shields.io/badge/language-C%2B%2B17-00599C" alt="C++17">
-	<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey" alt="Platform">
+	<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
 </p>
 
 ## What is this?
@@ -30,7 +30,7 @@ all reimplemented by hand, with vanilla behavior as the reference.
 
 ## Getting started
 
-Download the latest Windows or Linux build from the [releases](https://github.com/Falcon-MC/Falcon/releases),
+Download the latest Windows, Linux or macOS build from the [releases](https://github.com/Falcon-MC/Falcon/releases),
 check it against its `.sha256` file and run it. On the first start, a setup wizard in the console writes
 `server.properties`.
 
