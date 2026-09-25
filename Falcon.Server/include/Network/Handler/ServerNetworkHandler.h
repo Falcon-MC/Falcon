@@ -407,6 +407,10 @@ public:
 
     void _consumeHeldItem(ServerPlayer &player);
 
+    void _tickItemUse(ServerPlayer &player);
+
+    void _completeItemUse(ServerPlayer &player, int32_t itemId);
+
     void _sendInventory(ServerPlayer &player);
 
     const std::vector<CreativeItemData> &getCreativeItems() { _buildCreativeContent(); return mCreativeItems; }
@@ -607,6 +611,10 @@ private:
     Vector3f _respawnPositionFor(ServerPlayer &player);
 
     void _tickSleep();
+
+    void _tickPlayer(ServerPlayer &player);
+
+    void _registerCommands();
 
     void onReceiveIPSupport(RakPeerHelper::IPSupport support) override;
 
