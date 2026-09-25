@@ -140,11 +140,27 @@ jobs:
             -DFALCON_BUILD_INTERNAL_PLUGINS=ON
           cmake --build build --parallel
 
+      - name: Build the example plugin against the packaged SDK
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          set -euo pipefail
+          cmake -DFALCON_BUILD_DIR=build -DFALCON_SOURCE_DIR=. -DFALCON_SDK_OUTPUT=sdk -DFALCON_SDK_PLATFORM=linux \
+            -DFALCON_SDK_VERSION=ci -P Falcon.Server/cmake/FalconPackageSDK.cmake
+          du -sh sdk
+          cmake -S build/_deps/falcon_plugin_api-src -B sdk-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DFALCON_PLUGIN_API_BUILD_EXAMPLES=OFF \
+            -DFALCON_PLUGIN_API_BUILD_INTERNAL_EXAMPLES=ON \
+            -DFALCON_SDK_DIR="$PWD/sdk"
+          cmake --build sdk-build --parallel
+
       - name: Load the example plugin in the server
         run: |
           set -euo pipefail
           mkdir -p run/plugins/GardenPlugin
-          cp build/InternalPlugins/GardenPlugin/libGardenPlugin.so run/plugins/GardenPlugin/
+          cp sdk-build/examples/internal/GardenPlugin/libGardenPlugin.so run/plugins/GardenPlugin/
           cp build/_deps/falcon_plugin_api-src/examples/internal/GardenPlugin/plugin.json run/plugins/GardenPlugin/
           cd run
           timeout --signal=INT --kill-after=30 120 ../build/Falcon.Server/FalconServer --no-wizard < /dev/null \

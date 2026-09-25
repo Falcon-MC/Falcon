@@ -121,14 +121,17 @@ jobs:
         include:
           - name: linux-x64
             os: ubuntu-22.04
+            platform: linux
             artifact: FalconServer-linux-x64
             binary: FalconServer
           - name: windows-x64
             os: windows-2022
-            artifact: FalconServer-windows-x64.exe
+            platform: windows
+            artifact: FalconServer.exe
             binary: FalconServer.exe
           - name: macos-arm64
             os: macos-14
+            platform: macos
             artifact: FalconServer-macos-arm64
             binary: FalconServer
 
@@ -224,6 +227,24 @@ jobs:
             shasum -a 256 "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"
           fi
 
+      - name: Package the internal plugin SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="FalconSDK-${{ matrix.platform }}"
+          cmake -DFALCON_BUILD_DIR=build -DFALCON_SOURCE_DIR=. -DFALCON_SDK_OUTPUT="dist/$SDK" \
+            -DFALCON_SDK_PLATFORM=${{ matrix.platform }} -DFALCON_SDK_VERSION=${{ needs.prepare.outputs.version }} \
+            -P Falcon.Server/cmake/FalconPackageSDK.cmake
+          cd dist
+          cmake -E tar czf "$SDK.tar.gz" "$SDK"
+          rm -rf "$SDK"
+          if command -v sha256sum > /dev/null; then
+            sha256sum "$SDK.tar.gz" > "$SDK.tar.gz.sha256"
+          else
+            shasum -a 256 "$SDK.tar.gz" > "$SDK.tar.gz.sha256"
+          fi
+          ls -lh
+
       - name: Upload the build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -264,12 +285,13 @@ jobs:
           body: |
             **Falcon ${{ needs.prepare.outputs.version }} for Minecraft: Bedrock Edition 1.26.51 (protocol 2193)**
 
-            | Platform | Download |
-            | --- | --- |
-            | Linux x64 | `FalconServer-linux-x64` |
-            | Windows x64 | `FalconServer-windows-x64.exe` |
-            | macOS Apple Silicon | `FalconServer-macos-arm64` |
+            | Platform | Server | Internal plugin SDK |
+            | --- | --- | --- |
+            | Linux x64 | `FalconServer-linux-x64` | `FalconSDK-linux.tar.gz` |
+            | Windows x64 | `FalconServer.exe` | `FalconSDK-windows.tar.gz` |
+            | macOS Apple Silicon | `FalconServer-macos-arm64` | `FalconSDK-macos.tar.gz` |
 
-            Each binary ships with a `.sha256` checksum file.
+            Each file ships with a `.sha256` checksum file. The SDK is only needed to build internal plugins
+            against this exact release, see its `README.txt`.
 
             ${{ needs.prepare.outputs.changelog }}
