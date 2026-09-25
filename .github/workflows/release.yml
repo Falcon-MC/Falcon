@@ -100,7 +100,8 @@ jobs:
             fi
 
             echo ""
-            git log --no-merges --reverse --pretty=format:"- [\`%h\`](${COMMIT_BASE}/%H) %s" "$RANGE"
+            git log --no-merges --reverse --pretty=format:"- [\`%h\`](${COMMIT_BASE}/%H) %s" "$RANGE" \
+              | sed -E 's/(^|[^`])@([A-Za-z0-9_-]+)/\1`@\2`/g'
             echo ""
             echo ""
 
