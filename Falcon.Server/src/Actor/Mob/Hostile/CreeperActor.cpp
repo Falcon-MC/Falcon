@@ -1,12 +1,5 @@
 #include "Actor/Mob/Hostile/CreeperActor.h"
 
-#include "Actor/AI/Goal/FloatGoal.h"
-#include "Actor/AI/Goal/HurtByTargetGoal.h"
-#include "Actor/AI/Goal/LookAtPlayerGoal.h"
-#include "Actor/AI/Goal/MeleeAttackGoal.h"
-#include "Actor/AI/Goal/NearestAttackableTargetGoal.h"
-#include "Actor/AI/Goal/RandomStrollGoal.h"
-#include "Actor/AI/Goal/SwellGoal.h"
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/ActorFlags.h"
 #include "Actor/ServerPlayer.h"
@@ -20,27 +13,6 @@
 FALCON_REGISTER_ACTOR(CreeperActor, CreeperActor::IDENTIFIER);
 
 namespace {
-    const int32_t FLOAT_PRIORITY = 1;
-    const int32_t SWELL_PRIORITY = 2;
-    const int32_t MELEE_PRIORITY = 4;
-    const float MELEE_SPEED = 0.25f;
-    const int32_t MELEE_COOL_DOWN = 20;
-    const float NO_ATTACK_RANGE_SQUARED = -1.0f;
-    const int32_t STROLL_PRIORITY = 5;
-    const float STROLL_SPEED = 0.2f;
-    const int32_t STROLL_RANGE = 12;
-    const int32_t STROLL_INTERVAL = 100;
-    const int32_t STROLL_WATER_RETRIES = 10;
-    const int32_t LOOK_PRIORITY = 6;
-    const float LOOK_RANGE = 8.0f;
-    const int32_t LOOK_PROBABILITY = 4;
-    const int32_t LOOK_PROBABILITY_TOTAL = 10;
-    const int32_t LOOK_DURATION = 100;
-    const int32_t LOOK_CHECK_INTERVAL = 100;
-    const int32_t NEAREST_TARGET_PRIORITY = 1;
-    const int32_t HURT_BY_TARGET_PRIORITY = 2;
-    const float TARGET_RANGE = 16.0f;
-
     const double EXPLOSION_RADIUS = 3.0;
     const double CHARGED_MULTIPLIER = 2.0;
     const int32_t FUSE_SYNC_INTERVAL = 5;
@@ -72,22 +44,6 @@ namespace {
 
         return nullptr;
     }
-}
-
-void CreeperActor::registerGoals(GoalSelector &goalSelector) {
-    goalSelector.addGoal(FLOAT_PRIORITY, std::make_unique<FloatGoal>());
-    goalSelector.addGoal(SWELL_PRIORITY, std::make_unique<SwellGoal>());
-    goalSelector.addGoal(MELEE_PRIORITY, std::make_unique<MeleeAttackGoal>(MELEE_SPEED, TARGET_RANGE,
-                                                                           MELEE_COOL_DOWN,
-                                                                           NO_ATTACK_RANGE_SQUARED));
-    goalSelector.addGoal(STROLL_PRIORITY, std::make_unique<RandomStrollGoal>(STROLL_SPEED, STROLL_RANGE,
-                                                                             STROLL_INTERVAL, true,
-                                                                             STROLL_WATER_RETRIES));
-    goalSelector.addGoal(LOOK_PRIORITY, std::make_unique<LookAtPlayerGoal>(LOOK_RANGE, LOOK_PROBABILITY,
-                                                                           LOOK_PROBABILITY_TOTAL, LOOK_DURATION,
-                                                                           LOOK_CHECK_INTERVAL));
-    goalSelector.addGoal(NEAREST_TARGET_PRIORITY, std::make_unique<NearestAttackableTargetGoal>(TARGET_RANGE));
-    goalSelector.addGoal(HURT_BY_TARGET_PRIORITY, std::make_unique<HurtByTargetGoal>());
 }
 
 void CreeperActor::tick(ServerNetworkHandler &owner) {

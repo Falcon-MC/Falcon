@@ -194,6 +194,9 @@ ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::strin
     if (baby == nullptr)
         return nullptr;
 
+    if (MobActor *mob = dynamic_cast<MobActor *>(baby))
+        mob->markBorn();
+
     baby->getFlags().set(ActorFlag::Baby, true);
 
     EntityDataMap metadata;
@@ -767,6 +770,16 @@ void ServerNetworkHandler::syncActorAttributes(ServerActor &actor) {
         if (entry.second.isSpawned())
             mNetworkHandler->send(entry.first, packet, mCodecContext);
     }
+}
+
+void ServerNetworkHandler::syncActorScale(ServerActor &actor, float scale) {
+    EntityDataMap metadata;
+    EntityDataEntry entry;
+    entry.mId = ACTOR_DATA_SCALE;
+    entry.mFormat = EntityDataFormat::Float;
+    entry.mFloatValue = scale;
+    metadata.mEntries.push_back(entry);
+    sendActorMetadata(actor, metadata);
 }
 
 void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {

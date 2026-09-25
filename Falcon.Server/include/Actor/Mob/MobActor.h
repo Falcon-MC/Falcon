@@ -7,12 +7,16 @@
 #include "Actor/AI/Goal/GoalSelector.h"
 #include "Actor/AI/Navigation/PathNavigation.h"
 #include "Actor/ActorCategory.h"
+#include "Actor/ActorFlags.h"
 #include "Actor/ActorSize.h"
 #include "Actor/ServerActor.h"
+#include "Core/Json/Json.h"
 #include "Server/PropertiesSettings.h"
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 class Level;
 class LootTable;
@@ -66,10 +70,51 @@ public:
 
     void onDamaged(ServerNetworkHandler &owner, Actor *attacker) override;
 
-    virtual float getAttackDamage(Difficulty difficulty) const {
-        (void) difficulty;
-        return 0.0f;
+    virtual float getAttackDamage(Difficulty difficulty) const;
+
+    const json::Value *getDefinition() const;
+
+    const json::Value *getComponent(const std::string &name) const;
+
+    const std::unordered_map<std::string, const json::Value *> &getComponents() const;
+
+    std::vector<std::string> getFamilies() const;
+
+    float getMovementSpeed() const;
+
+    bool hasComponentGroup(const std::string &group) const;
+
+    void addComponentGroup(const std::string &group);
+
+    void removeComponentGroup(const std::string &group);
+
+    void fireEvent(ServerNetworkHandler &owner, const std::string &event);
+
+    void markBorn();
+
+    bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
+
+    bool isInLove() const {
+        return mLoveTicks > 0;
     }
+
+    void finishBreeding(ServerNetworkHandler &owner);
+
+    bool isTamed() const {
+        return !mTamedBy.empty();
+    }
+
+    const std::string &getTamedBy() const {
+        return mTamedBy;
+    }
+
+    bool isSitting() const {
+        return mSitting;
+    }
+
+    Tag saveNbt() const override;
+
+    void loadNbt(const Tag &data) override;
 
     int64_t getLastHurtTick() const {
         return mLastHurtTick;
@@ -107,8 +152,43 @@ protected:
     void tickControls(ServerNetworkHandler &owner);
 
 private:
+    void _rebuildComponents() const;
+
+    void _registerGoals(ServerNetworkHandler &owner);
+
+    void _syncBody(ServerNetworkHandler &owner);
+
+    void _markComponentsChanged();
+
+    void _tickLifecycle(ServerNetworkHandler &owner);
+
+    void _setFlag(ServerNetworkHandler &owner, ActorFlag flag, bool value);
+
+    bool _tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _tryFeedBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _tryStartLove(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _trySit(ServerNetworkHandler &owner, ServerPlayer &player);
+
     GoalSelector mGoalSelector;
+    int32_t mLoveTicks = 0;
+    int32_t mBreedCooldown = 0;
+    int32_t mAgeTicks = 0;
+    std::string mTamedBy;
+    bool mSitting = false;
     bool mGoalsRegistered = false;
+    bool mGoalsDirty = false;
+    bool mBodyDirty = true;
+    float mScale = 1.0f;
+    bool mDefinitionStarted = false;
+    bool mBorn = false;
+    std::vector<std::string> mComponentGroups;
+    mutable const json::Value *mDefinition = nullptr;
+    mutable bool mDefinitionResolved = false;
+    mutable std::unordered_map<std::string, const json::Value *> mComponents;
+    mutable bool mComponentsDirty = true;
     int64_t mLastHurtTick = INT64_MIN / 2;
     uint64_t mLastHurtBy = 0;
     uint32_t mHurtCount = 0;

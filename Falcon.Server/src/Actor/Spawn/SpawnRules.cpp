@@ -1,6 +1,5 @@
 #include "Actor/Spawn/SpawnRules.h"
 
-#include "Block/BlockData.h"
 #include "Core/Debug/BedrockLog.h"
 #include "EntityDespawnJson.h"
 #include "Level/BlockStateUpgrades.h"
@@ -25,20 +24,13 @@ namespace {
         return fallback;
     }
 
-    std::string currentBlockName(const std::string &name) {
-        if (BlockDataTable::find(name.c_str()) != nullptr)
-            return name;
-
-        return BlockStateUpgrades::upgrade(BlockStateData(name, Tag::ofCompound(), 0)).getName();
-    }
-
     std::vector<std::string> readBlocks(const json::Value &value) {
         std::vector<std::string> blocks;
         const auto add = [&blocks](const json::Value &entry) {
             if (entry.isString())
-                blocks.push_back(currentBlockName(entry.mString));
+                blocks.push_back(BlockStateUpgrades::currentName(entry.mString));
             else if (entry.isObject() && entry.get("name") != nullptr)
-                blocks.push_back(currentBlockName(entry.get("name")->string()));
+                blocks.push_back(BlockStateUpgrades::currentName(entry.get("name")->string()));
         };
 
         if (value.isArray()) {

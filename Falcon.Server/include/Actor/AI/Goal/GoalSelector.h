@@ -18,6 +18,8 @@ public:
 
     void stopAll(ServerNetworkHandler &owner, MobActor &mob);
 
+    void clear(ServerNetworkHandler &owner, MobActor &mob);
+
 private:
     struct PrioritizedGoal {
         int32_t mPriority;

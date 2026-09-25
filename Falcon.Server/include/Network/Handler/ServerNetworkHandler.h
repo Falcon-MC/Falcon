@@ -220,6 +220,8 @@ public:
 
     void syncActorFlags(ServerActor &actor);
 
+    void syncActorScale(ServerActor &actor, float scale);
+
     void syncActorAttributes(ServerActor &actor);
 
     void syncActorFirework(ServerActor &actor);

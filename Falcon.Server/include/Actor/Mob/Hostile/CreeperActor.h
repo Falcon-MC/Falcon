@@ -15,8 +15,6 @@ public:
 
     float getDefaultMaxHealth() const override { return 20.0f; }
 
-    void registerGoals(GoalSelector &goalSelector) override;
-
     void tick(ServerNetworkHandler &owner) override;
 
     bool isExpired() const override {
