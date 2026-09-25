@@ -2,6 +2,7 @@
 
 #include "Block/BlockData.h"
 #include "Block/BlockIdentifier.h"
+#include "Block/BlockTypeIds.h"
 #include "Block/Blocks/OpenableBlock.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Level.h"
@@ -24,6 +25,11 @@ namespace {
 
 bool DoorBlock::matches(const std::string &identifier) {
     return BlockIdentifier::endsWith(identifier, "_door");
+}
+
+bool DoorBlock::isOpenableByHand(const std::string &identifier) {
+    const BlockData *data = BlockDataTable::find(identifier.c_str());
+    return data != nullptr && data->mTypeId != BlockTypeIds::IRON_DOOR;
 }
 
 bool DoorBlock::isRightHinged(Level *level, const std::string &identifier, const Vector3i &position,

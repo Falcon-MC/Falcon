@@ -176,10 +176,6 @@ namespace {
         return 1.0 / (seconds * 20.0);
     }
 
-    int32_t breakSpeedEventData(double speed) {
-        return (int32_t) std::clamp(65535.0 * speed, 0.0, 65535.0);
-    }
-
     int64_t expectedBreakTicks(ServerPlayer &player, const BlockData *blockData) {
         const double seconds = calculateBreakSeconds(player, blockData);
         if (seconds < 0.0)
@@ -382,6 +378,10 @@ void BlockActionHandler::broadcastBlockUpdate(ServerNetworkHandler &owner, Level
                                 (float) position.y + 0.5f,
                                 (float) position.z + 0.5f),
                        update);
+}
+
+int32_t BlockActionHandler::breakSpeedEventData(double speed) {
+    return (int32_t) std::clamp(65535.0 * speed, 0.0, 65535.0);
 }
 
 bool BlockActionHandler::canInteractWithBlock(ServerPlayer &player, const Vector3i &position) {

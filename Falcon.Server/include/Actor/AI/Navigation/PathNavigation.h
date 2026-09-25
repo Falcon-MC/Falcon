@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Actor/AI/Navigation/Path.h"
+#include "Actor/AI/Navigation/PathOptions.h"
 #include "Core/Math/Vector3f.h"
 
 #include <cstdint>
@@ -18,12 +19,21 @@ public:
         return !mHasTarget;
     }
 
+    void setCanOpenDoors(bool canOpenDoors) {
+        mOptions.mCanOpenDoors = canOpenDoors;
+    }
+
+    void setAvoidSun(bool avoidSun) {
+        mOptions.mAvoidSun = avoidSun;
+    }
+
     void tick(ServerNetworkHandler &owner, MobActor &mob);
 
 private:
     void _checkStuck(MobActor &mob);
 
     Path mPath;
+    PathOptions mOptions;
     Vector3f mTarget;
     Vector3f mLastPosition;
     float mSpeed = 0.0f;

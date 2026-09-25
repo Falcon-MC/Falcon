@@ -19,6 +19,8 @@ public:
     static void broadcastBlockUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                      const BlockState &state, uint32_t layer = 0);
 
+    static int32_t breakSpeedEventData(double speed);
+
     static void breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 
     static void destroyBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

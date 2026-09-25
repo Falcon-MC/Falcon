@@ -1,9 +1,12 @@
 #include "Actor/AI/Navigation/WalkNodeEvaluator.h"
 
 #include "Block/BlockShape.h"
+#include "Block/Blocks/DoorBlock.h"
+#include "Block/Blocks/DoorOrientationBlock.h"
 #include "Block/Blocks/FenceBlock.h"
 #include "Block/Blocks/FenceGateOrientationBlock.h"
 #include "Block/Blocks/LiquidView.h"
+#include "Block/Blocks/OpenableBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Level/Level.h"
 
@@ -14,6 +17,7 @@ namespace {
     const float HALF_BLOCK = 0.5f;
     const float BOX_EPSILON = 1.0e-4f;
     const float BARRIER_SAMPLES_PER_BLOCK = 4.0f;
+    const int64_t DAYTIME_END = 12000;
 
     int64_t packPosition(int32_t x, int32_t y, int32_t z) {
         return ((int64_t) (x & 0x3FFFFFF) << 38) | ((int64_t) (z & 0x3FFFFFF) << 12) | (int64_t) (y & 0xFFF);
@@ -23,14 +27,27 @@ namespace {
         uint64_t value = (uint64_t) key * 0x9E3779B97F4A7C15ull;
         return (uint32_t) (value >> 32);
     }
+
+    bool isSunExposed(Level &level, int32_t x, int32_t y, int32_t z) {
+        return y >= level.getHeightAt(x, z);
+    }
+
+    bool isSunny(const Level &level) {
+        return level.hasSkyLight() && level.getDayTime() < DAYTIME_END && !level.isRaining();
+    }
 }
 
-void WalkNodeEvaluator::prepare(Level &level, float width, float height, float startY, bool inWater) {
+void WalkNodeEvaluator::prepare(Level &level, float width, float height, const Vector3f &start, bool inWater,
+                                const PathOptions &options) {
     mLevel = &level;
     mRadius = width * HALF_BLOCK;
     mHeight = height;
-    mStartY = startY;
+    mStartY = start.y;
     mInWater = inWater;
+    mCanOpenDoors = options.mCanOpenDoors;
+    mAvoidSun = options.mAvoidSun && isSunny(level)
+                && !isSunExposed(level, (int32_t) std::floor(start.x), (int32_t) std::floor(start.y),
+                                 (int32_t) std::floor(start.z));
 
     mStamp++;
     if (mStamp == 0) {
@@ -56,6 +73,9 @@ bool WalkNodeEvaluator::isStandable(int32_t x, int32_t y, int32_t z) {
         return false;
 
     if ((flags & (Collides | Water)) == 0)
+        return false;
+
+    if ((_block(x, y + 1, z).mFlags & (ClosedDoor | Exposed)) != 0)
         return false;
 
     return isPassable((float) x + HALF_BLOCK, (float) (y + 1), (float) z + HALF_BLOCK);
@@ -147,6 +167,9 @@ WalkNodeEvaluator::CachedBlock WalkNodeEvaluator::_classify(int32_t x, int32_t y
     if (state == nullptr)
         return block;
 
+    if (mAvoidSun && isSunExposed(*mLevel, x, y, z))
+        block.mFlags |= Exposed;
+
     const LiquidView liquid(*state);
     if (liquid.isLava())
         block.mFlags |= Lava;
@@ -165,7 +188,13 @@ WalkNodeEvaluator::CachedBlock WalkNodeEvaluator::_classify(int32_t x, int32_t y
         || dynamic_cast<const FenceGateOrientationBlock *>(definition) != nullptr)
         block.mFlags |= Fence;
 
-    if (BlockShape::hasCollision(*state)) {
+    const bool closedDoor = dynamic_cast<const DoorOrientationBlock *>(definition) != nullptr
+                            && !OpenableBlock::isOpen(*state);
+    const bool opensDoor = closedDoor && mCanOpenDoors && DoorBlock::isOpenableByHand(state->mName);
+    if (closedDoor && !opensDoor)
+        block.mFlags |= ClosedDoor;
+
+    if (!opensDoor && BlockShape::hasCollision(*state)) {
         block.mFlags |= Collides;
         block.mShape = BlockShape::getShapeAt(*state, x, y, z);
     }

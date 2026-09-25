@@ -2,6 +2,7 @@
 
 #include "Actor/AI/Goal/AvoidMobTypeGoal.h"
 #include "Actor/AI/Goal/BehaviorItems.h"
+#include "Actor/AI/Goal/BreakDoorGoal.h"
 #include "Actor/AI/Goal/BreedGoal.h"
 #include "Actor/AI/Goal/EatBlockGoal.h"
 #include "Actor/AI/Goal/FleeSunGoal.h"
@@ -14,6 +15,7 @@
 #include "Actor/AI/Goal/LookAtPlayerGoal.h"
 #include "Actor/AI/Goal/MeleeAttackGoal.h"
 #include "Actor/AI/Goal/NearestAttackableTargetGoal.h"
+#include "Actor/AI/Goal/OpenDoorGoal.h"
 #include "Actor/AI/Goal/OwnerTargetGoal.h"
 #include "Actor/AI/Goal/PanicGoal.h"
 #include "Actor/AI/Goal/RandomLookAroundGoal.h"
@@ -59,6 +61,13 @@ namespace {
     const float RANGED_DEFAULT_INTERVAL = 1.0f;
     const float FOLLOW_OWNER_START = 10.0f;
     const float FOLLOW_OWNER_STOP = 2.0f;
+
+    const char *const OPEN_DOOR_ANNOTATION = "minecraft:annotation.open_door";
+    const char *const BREAK_DOOR_ANNOTATION = "minecraft:annotation.break_door";
+    const char *const FLEE_SUN_BEHAVIOR = "minecraft:behavior.flee_sun";
+    const char *const NAVIGATION_COMPONENTS[] = {"minecraft:navigation.walk", "minecraft:navigation.generic"};
+    const int32_t DOOR_GOAL_PRIORITY = 1;
+    const float BREAK_DOOR_DEFAULT_SECONDS = 12.0f;
 
     float numberOf(const json::Value &component, const char *key, float fallback) {
         const json::Value *value = component.get(key);
@@ -172,6 +181,23 @@ namespace {
         const json::Value *event = trigger->get("event");
         return event == nullptr ? std::string() : event->string();
     }
+
+    bool isFlagSet(const json::Value &component, const char *key) {
+        const json::Value *value = component.get(key);
+        return value != nullptr && value->boolean(false);
+    }
+
+    bool canOpenDoors(const MobActor &mob) {
+        if (mob.getComponent(OPEN_DOOR_ANNOTATION) != nullptr || mob.getComponent(BREAK_DOOR_ANNOTATION) != nullptr)
+            return true;
+
+        for (const char *name: NAVIGATION_COMPONENTS) {
+            const json::Value *navigation = mob.getComponent(name);
+            if (navigation != nullptr && isFlagSet(*navigation, "can_open_doors"))
+                return true;
+        }
+        return false;
+    }
 }
 
 void BehaviorGoals::build(MobActor &mob, GoalSelector &selector) {
@@ -184,6 +210,19 @@ void BehaviorGoals::build(MobActor &mob, GoalSelector &selector) {
         std::unique_ptr<Goal> goal = _create(mob, entry.first.substr(prefix.size()), *entry.second);
         if (goal != nullptr)
             selector.addGoal((int32_t) numberOf(*entry.second, "priority", 0.0f), std::move(goal));
+    }
+
+    PathNavigation &navigation = mob.getNavigation();
+    navigation.setCanOpenDoors(canOpenDoors(mob));
+    navigation.setAvoidSun(mob.getComponent(FLEE_SUN_BEHAVIOR) != nullptr);
+
+    if (mob.getComponent(OPEN_DOOR_ANNOTATION) != nullptr)
+        selector.addGoal(DOOR_GOAL_PRIORITY, std::make_unique<OpenDoorGoal>());
+
+    const json::Value *breakDoor = mob.getComponent(BREAK_DOOR_ANNOTATION);
+    if (breakDoor != nullptr) {
+        const float seconds = numberOf(*breakDoor, "break_time", BREAK_DOOR_DEFAULT_SECONDS);
+        selector.addGoal(DOOR_GOAL_PRIORITY, std::make_unique<BreakDoorGoal>(secondsToTicks(seconds)));
     }
 }
 

@@ -36,7 +36,7 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
 
         mNeedsPath = false;
         mob.getMoveControl().stop();
-        if (!PathFinder::get().findPath(owner.getLevelFor(mob), mob, mTarget, mPath)) {
+        if (!PathFinder::get().findPath(owner.getLevelFor(mob), mob, mTarget, mOptions, mPath)) {
             stop(mob);
             return;
         }
