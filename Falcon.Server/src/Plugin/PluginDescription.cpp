@@ -96,5 +96,19 @@ bool PluginDescription::load(const std::string &path, PluginDescription &out, st
         error = "invalid or missing api-version";
         return false;
     }
+    if (out.mRuntime == "java") {
+        out.mJar = readString(*root, "jar");
+        if (out.mJar.empty())
+            out.mJar = out.mName + ".jar";
+        if (!parseApiVersion(readString(*root, "api-version"), out.mApiMajor, out.mApiMinor)) {
+            error = "invalid or missing api-version";
+            return false;
+        }
+    }
+    if (out.mRuntime == "dotnet") {
+        out.mAssembly = readString(*root, "assembly");
+        if (out.mAssembly.empty())
+            out.mAssembly = out.mName + ".dll";
+    }
     return true;
 }

@@ -13,6 +13,8 @@ public:
     std::string mMain;
     std::string mRuntime;
     std::string mDescription;
+    std::string mJar;
+    std::string mAssembly;
     uint32_t mApiMajor = 0;
     uint32_t mApiMinor = 0;
     std::vector<std::string> mAuthors;

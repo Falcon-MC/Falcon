@@ -3,7 +3,9 @@
 #include "Actor/ServerPlayer.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/DotnetHost.h"
 #include "Plugin/InternalPluginLoader.h"
+#include "Plugin/JvmHost.h"
 #include "Plugin/PluginCommand.h"
 #include "Plugin/PluginPackets.h"
 #include "Plugin/PluginServerApi.h"
@@ -100,7 +102,8 @@ void PluginManager::loadAll(const std::string &directory) {
             continue;
         }
 
-        if (!native && description.mRuntime != "internal") {
+        if (!native && description.mRuntime != "internal" && description.mRuntime != "java"
+            && description.mRuntime != "dotnet") {
             LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: the %s runtime is not supported yet",
                       description.mName.c_str(), description.mRuntime.c_str());
             continue;
@@ -127,8 +130,17 @@ void PluginManager::loadAll(const std::string &directory) {
         }
 
         const bool internal = plugin->mDescription.mRuntime == "internal";
-        if (!dependenciesLoaded || !(internal ? InternalPluginLoader::load(*plugin, mOwner) : _loadNative(*plugin)))
+        if (!dependenciesLoaded)
             continue;
+        if (plugin->mDescription.mRuntime == "java") {
+            if (!JvmHost::load(*plugin))
+                continue;
+        } else if (plugin->mDescription.mRuntime == "dotnet") {
+            if (!DotnetHost::load(*plugin))
+                continue;
+        } else if (!(internal ? InternalPluginLoader::load(*plugin, mOwner) : _loadNative(*plugin))) {
+            continue;
+        }
 
         loadedNames.insert(toLower(plugin->mDescription.mName));
         loaded.push_back(std::move(plugin));

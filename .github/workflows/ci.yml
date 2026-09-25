@@ -167,3 +167,118 @@ jobs:
             | tee console.log || true
           grep -q "Loaded internal plugin GardenPlugin" console.log server.log
           grep -q "Enabled plugin GardenPlugin" console.log server.log
+
+  dotnet-plugins:
+    name: .NET plugins linux-x64
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache zlib1g-dev libssl-dev
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Cache compiler objects
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ci-ccache-dotnet-plugins-${{ github.sha }}
+          restore-keys: |
+            ci-ccache-dotnet-plugins-
+            ci-ccache-linux-x64-
+
+      - name: Build the server
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build --parallel
+
+      - name: Build the example C# plugin
+        run: |
+          set -euo pipefail
+          api=build/_deps/falcon_plugin_api-src
+          dotnet publish "$api/dotnet/Falcon.PluginAPI/Falcon.PluginAPI.csproj" -c Release -o run/plugins/.dotnet
+          dotnet publish "$api/examples/dotnet/HelloPlugin/HelloPlugin.csproj" -c Release -o run/plugins/HelloPlugin
+          cp "$api/examples/dotnet/HelloPlugin/plugin.json" run/plugins/HelloPlugin/
+          ls run/plugins/.dotnet run/plugins/HelloPlugin
+
+      - name: Load the example C# plugin in the server
+        run: |
+          set -euo pipefail
+          cd run
+          timeout --signal=INT --kill-after=30 120 ../build/Falcon.Server/FalconServer --no-wizard < /dev/null \
+            | tee console.log || true
+          grep -q "Loaded .NET plugin HelloPlugin" console.log server.log
+          grep -q "Enabled plugin HelloPlugin" console.log server.log
+
+  java-plugins:
+    name: Java plugins linux-x64
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache zlib1g-dev libssl-dev
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 22
+          cache: maven
+
+      - name: Cache compiler objects
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ci-ccache-java-plugins-${{ github.sha }}
+          restore-keys: |
+            ci-ccache-java-plugins-
+            ci-ccache-linux-x64-
+
+      - name: Build the server
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build --parallel
+
+      - name: Build the example Java plugin
+        run: |
+          set -euo pipefail
+          api=build/_deps/falcon_plugin_api-src
+          mvn -B -f "$api/java/pom.xml" install
+          mvn -B -f "$api/examples/java/HelloPlugin/pom.xml" package
+          mkdir -p run/plugins/.java run/plugins/HelloPlugin
+          cp "$api"/java/target/falcon-plugin-api-*.jar run/plugins/.java/
+          cp "$api/examples/java/HelloPlugin/target/HelloPlugin.jar" run/plugins/HelloPlugin/
+          cp "$api/examples/java/HelloPlugin/plugin.json" run/plugins/HelloPlugin/
+          ls run/plugins/.java run/plugins/HelloPlugin
+
+      - name: Load the example Java plugin in the server
+        run: |
+          set -euo pipefail
+          cd run
+          timeout --signal=INT --kill-after=30 120 ../build/Falcon.Server/FalconServer --no-wizard < /dev/null \
+            | tee console.log || true
+          grep -q "Loaded Java plugin HelloPlugin" console.log server.log
+          grep -q "Enabled plugin HelloPlugin" console.log server.log
