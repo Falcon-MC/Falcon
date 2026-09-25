@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.19)
+
 foreach(requiredVariable FALCON_BUILD_DIR FALCON_SOURCE_DIR FALCON_SDK_OUTPUT FALCON_SDK_PLATFORM FALCON_SDK_VERSION)
     if(NOT DEFINED ${requiredVariable})
         message(FATAL_ERROR "${requiredVariable} is not set")
