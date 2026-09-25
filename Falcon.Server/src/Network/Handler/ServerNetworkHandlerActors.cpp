@@ -450,7 +450,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         DamageSource source = DamageSource::environment("death.attack.arrow", victimPlayer->getName());
         source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
         source.mAttacker = shooter;
-        source.fromOrigin(origin).asProjectile().withoutArmor().withoutCooldown();
+        source.fromOrigin(origin).asProjectile();
 
         if (hurt(*victimPlayer, damage, source) == DamageResult::Blocked) {
             if (!isTrident)
