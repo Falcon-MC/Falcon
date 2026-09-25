@@ -4,6 +4,7 @@
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/BinaryStream.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
+#include "Level/FalconDataVersion.h"
 
 #include <filesystem>
 #include <fstream>
@@ -101,6 +102,18 @@ std::string LevelStorage::_makeKey(int32_t chunkX, int32_t chunkZ, LevelDbTag ta
     return key;
 }
 
+std::string LevelStorage::_makeDataVersionKey(int32_t chunkX, int32_t chunkZ) const {
+    std::string key;
+    _appendLInt(key, chunkX);
+    _appendLInt(key, chunkZ);
+
+    if (mDimensionId != 0)
+        _appendLInt(key, mDimensionId);
+
+    key += FalconDataVersion::TAG;
+    return key;
+}
+
 std::string LevelStorage::_makeSubChunkKey(int32_t chunkX, int32_t chunkZ, int8_t subY) const {
     std::string key = _makeKey(chunkX, chunkZ, LevelDbTag::SubChunkPrefix);
     key.push_back((char) subY);
@@ -171,6 +184,11 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
 
     const std::string version(1, (char) LevelChunk::STORAGE_VERSION);
     batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::Version), version);
+
+    std::string dataVersion;
+    _appendLInt(dataVersion, (int32_t) (FalconDataVersion::CURRENT & 0xffffffff));
+    _appendLInt(dataVersion, (int32_t) (FalconDataVersion::CURRENT >> 32));
+    batch.Put(_makeDataVersionKey(chunk.getX(), chunk.getZ()), dataVersion);
 
     std::string finalized;
     _appendLInt(finalized, chunk.isPopulated() ? FINALIZED_STATE_DONE : FINALIZED_STATE_NEEDS_POPULATION);

@@ -83,6 +83,8 @@ public:
 private:
     std::string _makeKey(int32_t chunkX, int32_t chunkZ, LevelDbTag tag) const;
 
+    std::string _makeDataVersionKey(int32_t chunkX, int32_t chunkZ) const;
+
     std::string _makeSubChunkKey(int32_t chunkX, int32_t chunkZ, int8_t subY) const;
 
     std::string _makePendingChangesKey(int32_t chunkX, int32_t chunkZ) const;

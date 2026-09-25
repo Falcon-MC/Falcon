@@ -8,6 +8,7 @@
 #include "Item/ItemEnchantments.h"
 #include "Server/Profiler.h"
 #include "Actor/ServerPlayer.h"
+#include "Level/FalconDataVersion.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Packets/ActorEventPacket.h"
@@ -207,6 +208,7 @@ Tag ServerActor::saveNbt() const {
     Tag data = Tag::ofCompound();
 
     data.putString("identifier", mIdentifier);
+    data.putLong(FalconDataVersion::TAG, FalconDataVersion::CURRENT);
     data.put("Pos", floatList3(mPosition.x, mPosition.y, mPosition.z));
     data.put("Rotation", floatList3(mRotation.x, mRotation.y, mRotation.z));
     data.put("Motion", floatList3(mMotion.x, mMotion.y, mMotion.z));

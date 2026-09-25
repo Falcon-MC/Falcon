@@ -10,6 +10,7 @@
 #include "Item/ItemData.h"
 #include "Item/ItemEnchantments.h"
 #include "Item/VanillaItems.h"
+#include "Level/FalconDataVersion.h"
 #include "Level/Level.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -859,6 +860,7 @@ void ServerPlayer::resetTitle() {
 Tag ServerPlayer::saveNbt(const std::string &levelName) const {
     Tag data = Tag::ofCompound();
 
+    data.putLong(FalconDataVersion::TAG, FalconDataVersion::CURRENT);
     data.put(TAG_POS, floatList(mPosition.x, mPosition.y, mPosition.z));
     data.put(TAG_MOTION, floatList(mMotion.x, mMotion.y, mMotion.z));
     data.put(TAG_ROTATION, floatList(mRotation.x, mRotation.y, mRotation.z));
