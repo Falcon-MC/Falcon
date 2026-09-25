@@ -55,7 +55,7 @@ body:
   - type: input
     attributes:
       label: Bedrock client version
-      placeholder: "1.26.51"
+      placeholder: "1.26.52"
     validations:
       required: true
 

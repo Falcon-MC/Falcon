@@ -12,7 +12,7 @@
 <p align="center">
 	<a href="https://falcon-mc.github.io"><img src="https://img.shields.io/badge/website-falcon--mc.github.io-2ea44f" alt="Website"></a>
 	<a href="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml"><img src="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-	<img src="https://img.shields.io/badge/minecraft-v1.26.51%20(Bedrock)-56383E" alt="Minecraft">
+	<img src="https://img.shields.io/badge/minecraft-v1.26.52%20(Bedrock)-56383E" alt="Minecraft">
 	<img src="https://img.shields.io/badge/protocol-2193-blue" alt="Protocol">
 	<img src="https://img.shields.io/badge/language-C%2B%2B17-00599C" alt="C++17">
 	<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
@@ -38,7 +38,7 @@ check it against its `.sha256` file and run it. On the first start, a setup wiza
 
 | Minecraft | Protocol |
 |-----------|----------|
-| 1.26.51   | 2193     |
+| 1.26.52   | 2193     |
 
 ## Related repositories
 

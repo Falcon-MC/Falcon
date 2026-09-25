@@ -51,7 +51,7 @@ namespace {
     const long long KEY_REFRESH_INTERVAL_SECONDS = 30 * 60;
     const long long FAILURE_BACKOFF_SECONDS = 60;
 
-    const char *MINECRAFT_VERSION_NETWORK = "1.26.51";
+    const char *MINECRAFT_VERSION_NETWORK = "1.26.52";
     const char *DISCOVERY_URL_PREFIX =
             "https://client.discovery.minecraft-services.net/api/v1.0/discovery/MinecraftPE/builds/";
     const char *AUTHORIZATION_SERVICE_URI_FALLBACK = "https://authorization.franchise.minecraft-services.net";
