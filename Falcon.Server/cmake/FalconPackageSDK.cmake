@@ -70,8 +70,8 @@ file(WRITE "${FALCON_SDK_OUTPUT}/FalconInternalSDK.cmake" "${sdkContent}")
 string(CONCAT readme
         "Falcon internal plugin SDK ${FALCON_SDK_VERSION} for ${FALCON_SDK_PLATFORM}\n\n"
         "Compiler: ${FALCON_INTERNAL_CXX_COMPILER_ID} ${FALCON_INTERNAL_CXX_COMPILER_VERSION}\n\n"
-        "Internal plugins only load on the Falcon ${FALCON_SDK_VERSION} release for ${FALCON_SDK_PLATFORM}, and must be\n"
-        "built with the same compiler and version. Point falcon_add_internal_plugin at this folder:\n\n"
+        "Internal plugins only load on the Falcon ${FALCON_SDK_VERSION} release for ${FALCON_SDK_PLATFORM},\n"
+        "and must be built with the same compiler and version. Point falcon_add_internal_plugin at this folder:\n\n"
         "    cmake -B build -DFALCON_SDK_DIR=/path/to/this/folder\n\n"
         "See https://github.com/Falcon-MC/PluginAPI for a complete example.\n")
 file(WRITE "${FALCON_SDK_OUTPUT}/README.txt" "${readme}")
