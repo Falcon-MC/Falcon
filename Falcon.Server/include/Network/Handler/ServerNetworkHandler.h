@@ -58,6 +58,7 @@ class CraftingEventPacket;
 class CommandBlockUpdatePacket;
 class Item;
 class NetherNetInstance;
+class PluginManager;
 
 class ServerNetworkHandler : public NetworkHandler::Listener,
                              public NetworkPacketHandler,
@@ -102,6 +103,8 @@ public:
     EventBus &getEventBus() { return mEventBus; }
 
     ScriptEngine &getScriptEngine() { return mScriptEngine; }
+
+    PluginManager &getPluginManager() { return *mPluginManager; }
 
     std::string &getCraftingDataBytes() { return mCraftingDataBytes; }
 
@@ -714,4 +717,6 @@ private:
 
     std::mutex mMainThreadTaskMutex;
     std::vector<std::function<void()>> mMainThreadTasks;
+
+    std::unique_ptr<PluginManager> mPluginManager;
 };

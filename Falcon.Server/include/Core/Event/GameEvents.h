@@ -56,8 +56,10 @@ struct PlayerJoinAfterEvent : public Event {
 
 struct PlayerLeaveAfterEvent : public Event {
     std::string mPlayerName;
+    ServerPlayer *mPlayer;
 
-    explicit PlayerLeaveAfterEvent(std::string playerName) : mPlayerName(std::move(playerName)) {}
+    PlayerLeaveAfterEvent(std::string playerName, ServerPlayer *player)
+            : mPlayerName(std::move(playerName)), mPlayer(player) {}
 };
 
 struct PlayerPlaceBlockAfterEvent : public Event {

@@ -30,6 +30,7 @@
 #include "Network/Handler/LoginHandler.h"
 #include "Network/Handler/MovementHandler.h"
 #include "Network/Handler/SubChunkRequestHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/SubChunkRequestPacket.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Level/LevelChunk.h"
@@ -382,6 +383,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     _registerVanillaDefinitions();
 
     AuthKeyProvider::getInstance().start();
+    mPluginManager = std::make_unique<PluginManager>(*this);
 }
 
 int ServerNetworkHandler::_getServerViewDistance() const {
@@ -538,6 +540,9 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
         return false;
     }
 
+    mPluginManager->loadAll("plugins");
+    mPluginManager->enableAll();
+
     if (!mNetworkHandler->host(definition)) {
         LOG_ERROR(LogAreaID::Network, "Failed to bind UDP port %u", definition.mPort);
         return false;
@@ -596,6 +601,8 @@ void ServerNetworkHandler::_loadScripts() {
 void ServerNetworkHandler::stopServerListening() {
     if (!mIsListening)
         return;
+
+    mPluginManager->disableAll();
 
     if (!mPlayers.empty()) {
         LOG_INFO(LogAreaID::Server, "Saving data for %zu player(s)", mPlayers.size());
@@ -680,6 +687,8 @@ void ServerNetworkHandler::tick() {
             task();
     }
     mProfiler.endSection(ProfilerSection::ConsoleCommands);
+
+    mPluginManager->tick();
 
     mNetworkHandler->runEvents();
 
@@ -886,7 +895,7 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
             broadcastTranslation("multiplayer.player.left", {player->getName()});
             _removeFromPlayerList(*player);
 
-            PlayerLeaveAfterEvent leaveEvent(player->getName());
+            PlayerLeaveAfterEvent leaveEvent(player->getName(), player);
             mEventBus.after().mPlayerLeave.emit(leaveEvent);
         }
     }

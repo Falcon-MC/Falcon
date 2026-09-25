@@ -100,4 +100,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(falcon_bedrock_data)
 
+set(FALCON_PLUGIN_API_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    falcon_plugin_api
+    GIT_REPOSITORY https://github.com/Falcon-MC/PluginAPI.git
+    GIT_TAG main
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+)
+FetchContent_MakeAvailable(falcon_plugin_api)
+
 add_subdirectory(Falcon.Server)
