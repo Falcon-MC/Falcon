@@ -454,6 +454,7 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     player.setRotation(Vector3f(0.0f, 0.0f, 0.0f));
     player.clearPendingMove();
     player.resetAirSupply();
+    player.extinguish();
 
     const Vector3f eyePosition(spawn.x, spawn.y + PLAYER_BASE_OFFSET, spawn.z);
 
