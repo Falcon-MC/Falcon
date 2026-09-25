@@ -96,8 +96,10 @@ void ServerNetworkHandler::strikeLightning(Level &level, const Vector3f &positio
         if (dx * dx + dy * dy + dz * dz > 9.0f)
             continue;
 
-        applyDamage(player, (float) LIGHTNING_DAMAGE, "death.attack.lightningBolt", {player.getName()},
-                    false, false);
+        hurt(player, (float) LIGHTNING_DAMAGE,
+             DamageSource::environment("death.attack.lightningBolt", player.getName())
+                     .withoutArmor()
+                     .withoutCooldown());
         player.setFireTicks((int) LIGHTNING_FIRE_TICKS);
         player.setOnFire(true);
     }

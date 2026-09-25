@@ -108,7 +108,10 @@ bool EnderPearlActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
             continue;
 
         shooter.teleport(owner, hitPosition, MovePlayerTeleportationCause::Behavior);
-        owner.applyDamage(shooter, ENDER_PEARL_DAMAGE, ENDER_PEARL_DEATH_MESSAGE, {shooter.getName()}, false, false);
+        owner.hurt(shooter, ENDER_PEARL_DAMAGE,
+                   DamageSource::environment(ENDER_PEARL_DEATH_MESSAGE, shooter.getName())
+                           .withoutArmor()
+                           .withoutCooldown());
         break;
     }
 

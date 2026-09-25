@@ -275,7 +275,8 @@ namespace {
         if (!FireSystem::matches(stateAt(level, block).mName))
             return;
 
-        owner.applyDamage(player, FireSystem::CONTACT_DAMAGE, "death.attack.inFire", {player.getName()});
+        owner.hurt(player, FireSystem::CONTACT_DAMAGE,
+                   DamageSource::environment("death.attack.inFire", player.getName()));
 
         if (player.getFireTicks() < FireSystem::COMBUST_TICKS)
             player.setFireTicks(FireSystem::COMBUST_TICKS);

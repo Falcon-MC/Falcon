@@ -121,10 +121,8 @@ void AbstractSlimeActor::_attackTouchingPlayers(ServerNetworkHandler &owner) {
             || target.y + PLAYER_HEIGHT < position.y - ATTACK_RANGE || target.y > position.y + height)
             continue;
 
-        if (!player.blockWithShield(owner, getPosition(), getContactDamage(), this, false)) {
-            owner.applyDamage(player, getContactDamage(), "death.attack.mob",
-                              {player.getName(), getName()}, true, true, this);
-        }
+        owner.hurt(player, getContactDamage(),
+                   DamageSource::attack("death.attack.mob", player.getName(), *this, getName(), getPosition()));
         mAttackCooldown = ATTACK_COOLDOWN_TICKS;
     }
 }

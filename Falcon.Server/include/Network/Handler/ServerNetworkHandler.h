@@ -23,6 +23,7 @@
 #include "Server/Profiler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ResourcePackManager.h"
+#include "Actor/DamageSource.h"
 #include "Actor/FallingBlockActor.h"
 #include "Actor/PrimedTntActor.h"
 #include "Actor/ItemActor.h"
@@ -394,9 +395,7 @@ public:
     ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
                         int pickupDelay);
 
-    void applyDamage(ServerPlayer &player, float amount, const std::string &deathMessageKey,
-                     const std::vector<std::string> &deathMessageParameters = {},
-                     bool applyArmor = true, bool respectCooldown = true, const Actor *attacker = nullptr);
+    DamageResult hurt(ServerPlayer &player, float amount, const DamageSource &source);
 
     void killPlayer(ServerPlayer &player, const std::string &deathMessageKey,
                     const std::vector<std::string> &deathMessageParameters = {});

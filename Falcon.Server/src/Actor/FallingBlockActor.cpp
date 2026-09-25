@@ -277,7 +277,7 @@ void FallingBlockActor::_damageEntitiesAt(ServerNetworkHandler &owner, const Vec
         if (playerPosition.z + halfWidth < minZ || playerPosition.z - halfWidth > maxZ)
             continue;
 
-        owner.applyDamage(player, damage, deathKey, {player.getName()}, true, false);
+        owner.hurt(player, damage, DamageSource::environment(deathKey, player.getName()).withoutCooldown());
     }
 
     for (auto &entry: owner.getActors()) {

@@ -443,27 +443,29 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     }
 
     ServerPlayer *victimPlayer = dynamic_cast<ServerPlayer *>(&target);
-    const Vector3f motion = projectile.getMotion();
-    const Vector3f origin(hitPosition.x - motion.x, hitPosition.y - motion.y, hitPosition.z - motion.z);
-    if (victimPlayer != nullptr && victimPlayer->blockWithShield(*this, origin, damage, nullptr, false)) {
-        if (!isTrident)
-            return true;
-
-        data.mHadCollision = true;
-        if (data.mLoyaltyLevel > 0 && shooter != nullptr) {
-            data.mReturning = true;
-            playLevelSound(getLevelFor(projectile), LevelSoundEvent::TRIDENT_RETURN, hitPosition);
-            return false;
-        }
-
-        dropProjectileItem(projectile, hitPosition);
-        return true;
-    }
-
     if (victimPlayer != nullptr) {
-        applyDamage(*victimPlayer, damage, "death.attack.arrow",
-                    {victimPlayer->getName(), shooter == nullptr ? std::string() : shooter->getName()},
-                    false, false);
+        const Vector3f motion = projectile.getMotion();
+        const Vector3f origin(hitPosition.x - motion.x, hitPosition.y - motion.y, hitPosition.z - motion.z);
+
+        DamageSource source = DamageSource::environment("death.attack.arrow", victimPlayer->getName());
+        source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
+        source.mAttacker = shooter;
+        source.fromOrigin(origin).asProjectile().withoutArmor().withoutCooldown();
+
+        if (hurt(*victimPlayer, damage, source) == DamageResult::Blocked) {
+            if (!isTrident)
+                return true;
+
+            data.mHadCollision = true;
+            if (data.mLoyaltyLevel > 0 && shooter != nullptr) {
+                data.mReturning = true;
+                playLevelSound(getLevelFor(projectile), LevelSoundEvent::TRIDENT_RETURN, hitPosition);
+                return false;
+            }
+
+            dropProjectileItem(projectile, hitPosition);
+            return true;
+        }
     } else {
         ServerActor *victimActor = dynamic_cast<ServerActor *>(&target);
         if (victimActor != nullptr)
@@ -537,8 +539,10 @@ void ServerNetworkHandler::applyPotionEffects(ServerPlayer &player, int32_t poti
             if (effect.mId == MobEffectId::InstantHealth) {
                 player.heal(4.0f * (float) (1 << effect.mAmplifier));
             } else if (effect.mId == MobEffectId::InstantDamage) {
-                applyDamage(player, 6.0f * (float) (1 << effect.mAmplifier), "death.attack.magic",
-                            {player.getName()}, false, false);
+                hurt(player, 6.0f * (float) (1 << effect.mAmplifier),
+                     DamageSource::environment("death.attack.magic", player.getName())
+                             .withoutArmor()
+                             .withoutCooldown());
             }
             continue;
         }
@@ -871,7 +875,7 @@ bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, Actor *
 
 void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::string &deathMessageKey) {
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor)) {
-        applyDamage(*player, amount, deathMessageKey, {player->getName()});
+        hurt(*player, amount, DamageSource::environment(deathMessageKey, player->getName()));
         return;
     }
 

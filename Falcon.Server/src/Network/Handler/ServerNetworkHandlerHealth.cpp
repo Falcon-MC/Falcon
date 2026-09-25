@@ -62,7 +62,8 @@ namespace {
         return (int) std::floor((6.0f + (float) (level * level)) * modifier / 3.0f);
     }
 
-    float applyArmorModifiers(const ServerPlayer &player, float amount, const std::string &deathMessageKey) {
+    float applyArmorModifiers(const ServerPlayer &player, float amount, const std::string &deathMessageKey,
+                              float efficiency) {
         const bool fireDamage = deathMessageKey == "death.attack.lava"
                                 || deathMessageKey == "death.attack.onFire"
                                 || deathMessageKey == "death.attack.inFire";
@@ -103,12 +104,15 @@ namespace {
                         ItemEnchantments::getLevel(armor, EnchantmentIds::PROJECTILE_PROTECTION), 1.5f);
         }
 
-        if (armorDamage)
-            amount *= std::max(0.0f, 1.0f - std::min(1.0f, (float) armorPoints * 0.04f));
+        const float effectivePoints = (float) armorPoints * efficiency;
+        const float effectiveFactor = (float) enchantmentProtectionFactor * efficiency;
 
-        if (enchantmentProtectionFactor > 0) {
+        if (armorDamage)
+            amount *= std::max(0.0f, 1.0f - std::min(1.0f, effectivePoints * 0.04f));
+
+        if (effectiveFactor > 0.0f) {
             const int scaledProtection = std::min(
-                    (int) std::ceil(std::min(enchantmentProtectionFactor, 25) *
+                    (int) std::ceil(std::min(effectiveFactor, 25.0f) *
                                     (50.0f + (float) (rand() % 51)) / 100.0f), 20);
             amount *= std::max(0.0f, 1.0f - (float) scaledProtection * 0.04f);
         }
@@ -140,7 +144,7 @@ void ServerNetworkHandler::_handleFallDamage(ServerPlayer &player, const Block *
     if (damage < 1.0f)
         return;
 
-    applyDamage(player, damage, "death.fell.accident.generic", {player.getName()});
+    hurt(player, damage, DamageSource::environment("death.fell.accident.generic", player.getName()));
 }
 
 void ServerNetworkHandler::_handleVoidDamage(ServerPlayer &player) {
@@ -150,7 +154,7 @@ void ServerNetworkHandler::_handleVoidDamage(ServerPlayer &player) {
     if (player.getPosition().y > (float) (LevelChunk::MIN_Y - 16))
         return;
 
-    applyDamage(player, 10.0f, "death.attack.outOfWorld", {player.getName()});
+    hurt(player, 10.0f, DamageSource::environment("death.attack.outOfWorld", player.getName()));
 }
 
 bool ServerNetworkHandler::_isEyeInsideSolidBlock(Level &level, const Vector3f &position, float height) {
@@ -184,71 +188,80 @@ void ServerNetworkHandler::_handleSuffocationDamage(ServerPlayer &player) {
     if (!_isEyeInsideSolidBlock(getLevelFor(player), player.getPosition(), PLAYER_COLLISION_HEIGHT))
         return;
 
-    applyDamage(player, SUFFOCATION_DAMAGE, "death.attack.inWall", {player.getName()});
+    hurt(player, SUFFOCATION_DAMAGE, DamageSource::environment("death.attack.inWall", player.getName()));
 }
 
-void ServerNetworkHandler::applyDamage(ServerPlayer &player, float amount, const std::string &deathMessageKey,
-                                       const std::vector<std::string> &deathMessageParameters, bool applyArmor,
-                                       bool respectCooldown, const Actor *attacker) {
+DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, const DamageSource &source) {
+    const std::string &key = source.mDeathMessageKey;
     if (!player.isSpawned() || player.isDead() || amount <= 0.0f)
-        return;
+        return DamageResult::Ignored;
 
     const int32_t gameType = player.getGameType();
     if (gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator)
-        return;
+        return DamageResult::Ignored;
 
-    if (player.isSpawnInvulnerable() && deathMessageKey != "death.attack.suicide")
-        return;
+    if (player.isSpawnInvulnerable() && key != "death.attack.suicide")
+        return DamageResult::Ignored;
 
-    if (isDamageDisabledByGameRule(getLevelFor(player).getGameRules(), deathMessageKey))
-        return;
+    if (isDamageDisabledByGameRule(getLevelFor(player).getGameRules(), key))
+        return DamageResult::Ignored;
 
-    if (mScriptEngine.beforeEntityHurt(player, amount, deathMessageKey, attacker))
-        return;
+    if (mScriptEngine.beforeEntityHurt(player, amount, key, source.mAttacker))
+        return DamageResult::Ignored;
 
-    const float rawAmount = amount;
+    const bool cooling = source.mRespectCooldown && key != "death.attack.suicide" && player.getNoDamageTicks() > 0;
+    if (cooling && player.getLastDamageAmount() >= amount)
+        return DamageResult::Ignored;
 
-    if (respectCooldown && deathMessageKey != "death.attack.suicide" && player.getNoDamageTicks() > 0) {
-        if (player.getLastDamageAmount() >= amount)
-            return;
-        amount -= player.getLastDamageAmount();
+    if (source.mOrigin.has_value()) {
+        Actor *knockedBack = source.mProjectile ? nullptr : source.mAttacker;
+        if (player.blockWithShield(*this, *source.mOrigin, amount, knockedBack, source.mDisablesShield)) {
+            if (source.mRespectCooldown)
+                player.setNoDamageTicks(10);
+            return DamageResult::Blocked;
+        }
     }
 
-    if (respectCooldown) {
+    const float rawAmount = amount;
+    if (cooling)
+        amount -= player.getLastDamageAmount();
+
+    if (source.mRespectCooldown) {
         player.setNoDamageTicks(10);
         player.setLastDamageAmount(rawAmount);
     }
 
-    if (applyArmor)
-        amount = applyArmorModifiers(player, amount, deathMessageKey);
+    if (source.mApplyArmor)
+        amount = applyArmorModifiers(player, amount, key, source.mArmorEfficiency);
 
-    if (deathMessageKey != "death.attack.outOfWorld" && deathMessageKey != "death.attack.suicide") {
+    if (key != "death.attack.outOfWorld" && key != "death.attack.suicide") {
         if (const MobEffectInstance *resistance = player.getEffect(MobEffectId::Resistance))
             amount *= 1.0f - std::min(1.0f, 0.2f * (float) resistance->level());
     }
 
     if (amount <= 0.0f)
-        return;
+        return DamageResult::Ignored;
 
-    if (player.getHealth() - amount < 1.0f && deathMessageKey != "death.attack.outOfWorld" &&
-        deathMessageKey != "death.attack.suicide" && TotemItem::consume(*this, player))
-        return;
+    if (player.getHealth() - amount < 1.0f && key != "death.attack.outOfWorld" &&
+        key != "death.attack.suicide" && TotemItem::consume(*this, player))
+        return DamageResult::Dealt;
 
     const float health = player.reduceHealth(amount);
 
-    EntityHurtAfterEvent hurtEvent(player, amount, deathMessageKey);
+    EntityHurtAfterEvent hurtEvent(player, amount, key);
     mEventBus.after().mEntityHurt.emit(hurtEvent);
 
     if (health <= 0.0f) {
-        killPlayer(player, deathMessageKey, deathMessageParameters);
-        return;
+        killPlayer(player, key, source.mDeathMessageParameters);
+        return DamageResult::Dealt;
     }
 
-    if (attacker != nullptr && player.catchFireFrom(*attacker, mProperties.getDifficulty()))
+    if (source.mAttacker != nullptr && player.catchFireFrom(*source.mAttacker, mProperties.getDifficulty()))
         _sendEntityData(player);
 
     _sendHealth(player);
     _broadcastEntityEvent(player, (uint8_t) EntityEventType::HurtAnimation);
+    return DamageResult::Dealt;
 }
 
 void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &deathMessageKey,

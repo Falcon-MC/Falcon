@@ -200,8 +200,11 @@ void SpearItem::applySpearDamage(ServerNetworkHandler &owner, ServerPlayer &atta
                                  float damage) const {
     ServerPlayer *victim = dynamic_cast<ServerPlayer *>(&target);
     if (victim != nullptr) {
-        owner.applyDamage(*victim, damage, "death.attack.player", {victim->getName(), attacker.getName()},
-                          false, false);
+        owner.hurt(*victim, damage,
+                   DamageSource::attack("death.attack.player", victim->getName(), attacker, attacker.getName(),
+                                        attacker.getPosition())
+                           .withoutArmor()
+                           .withoutCooldown());
         return;
     }
 

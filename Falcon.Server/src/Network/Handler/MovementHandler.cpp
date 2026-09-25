@@ -244,9 +244,9 @@ void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer
 
     if (!creative && !fireResistance) {
         if (contact.lava)
-            owner.applyDamage(player, 4.0f, "death.attack.lava", {player.getName()});
+            owner.hurt(player, 4.0f, DamageSource::environment("death.attack.lava", player.getName()));
         if (fireContact.fire)
-            owner.applyDamage(player, fireContact.damage, "death.attack.onFire", {player.getName()});
+            owner.hurt(player, fireContact.damage, DamageSource::environment("death.attack.onFire", player.getName()));
     }
 
     tickBreathing(owner, player, contact.eyeInWater);
@@ -286,7 +286,7 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
             int air = player.getAirSupply() - 1;
             if (air <= DROWNING_AIR) {
                 air = 0;
-                owner.applyDamage(player, DROWNING_DAMAGE, "death.attack.drown", {player.getName()});
+                owner.hurt(player, DROWNING_DAMAGE, DamageSource::environment("death.attack.drown", player.getName()));
             }
             player.setAirSupply(air);
         }

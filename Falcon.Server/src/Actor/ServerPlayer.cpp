@@ -88,12 +88,6 @@ namespace {
     constexpr float PLAYER_HEIGHT = 1.8f;
     constexpr int ATTACK_COOLDOWN_TICKS = 10;
 
-    int protectionFactor(int level) {
-        if (level <= 0)
-            return 0;
-        return (int) std::floor((6.0f + (float) (level * level)) * 0.75f / 3.0f);
-    }
-
     void broadcastEvent(ServerNetworkHandler &owner, const Actor &actor, EntityEventType eventType) {
         ActorEventPacket packet;
         packet.mRuntimeActorId = actor.getRuntimeId();
@@ -172,32 +166,6 @@ namespace {
             victim.getInventoryManager().syncContents(InventoryManager::InventoryId::Armor);
             InventoryHandler::sendArmorContent(owner, victim);
         }
-    }
-
-    float armorReducedDamage(const ServerPlayer &victim, float amount, float armorEfficiency = 1.0f) {
-        float armorPoints = 0.0f;
-        float epf = 0.0f;
-        for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot) {
-            const ItemStack &armor = victim.getInventory().getArmor(slot);
-            if (armor.isAir() || armor.mDefinition == nullptr)
-                continue;
-
-            const ItemData *data = ItemDataTable::find(armor.mDefinition->getIdentifier());
-            if (data != nullptr)
-                armorPoints += (float) data->mArmorPoints;
-            epf += (float) protectionFactor(ItemEnchantments::getLevel(armor, EnchantmentIds::PROTECTION));
-        }
-
-        armorPoints *= armorEfficiency;
-        epf *= armorEfficiency;
-
-        amount *= std::max(0.0f, 1.0f - std::min(1.0f, armorPoints * 0.04f));
-        if (epf > 0.0f) {
-            const int scaled = std::min((int) std::ceil(std::min(epf, 25.0f) *
-                                                        (50.0f + (float) (std::rand() % 51)) / 100.0f), 20);
-            amount *= std::max(0.0f, 1.0f - (float) scaled * 0.04f);
-        }
-        return amount;
     }
 
     void damageHeldItem(ServerPlayer &attacker) {
@@ -374,42 +342,33 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
         return false;
 
     const bool axe = data != nullptr && data->mToolType == ToolType::Axe;
-    if (victim->isBlockingWithShield() && victim->getNoDamageTicks() > 0)
+    const bool coldTarget = victim->getAttackTime() <= 0;
+    const float armorEfficiency = heldType == nullptr ? 1.0f : heldType->getArmorEfficiency(held);
+    const DamageSource source = DamageSource::attack("death.attack.player", victim->getName(), *this, getName(),
+                                                     getPosition())
+            .disablingShield(axe)
+            .withArmorEfficiency(armorEfficiency);
+
+    const DamageResult result = owner.hurt(*victim, damage, source);
+    if (result == DamageResult::Ignored)
         return false;
 
-    if (victim->blockWithShield(owner, getPosition(), damage, this, axe)) {
-        victim->setNoDamageTicks(10);
-        owner.damagePlayerHeldItem(*this, (data != nullptr && data->mToolType == ToolType::Sword) ? 1 : 2);
+    const int32_t weaponWear = (data != nullptr && data->mToolType == ToolType::Sword) ? 1 : 2;
+    if (result == DamageResult::Blocked) {
+        owner.damagePlayerHeldItem(*this, weaponWear);
         exhaust(0.1f);
         owner._sendAttributes(*this);
         return true;
     }
 
-    const bool coldTarget = victim->getAttackTime() <= 0;
-    const float rawDamage = damage;
-    if (victim->getNoDamageTicks() > 0) {
-        if (victim->getLastDamageAmount() >= damage)
-            return false;
-        damage -= victim->getLastDamageAmount();
-    }
-
-    const float armorEfficiency = heldType == nullptr ? 1.0f : heldType->getArmorEfficiency(held);
-    const float finalDamage = armorReducedDamage(*victim, damage, armorEfficiency);
-    if (finalDamage <= 0.0f)
-        return false;
-
-    owner.applyDamage(*victim, finalDamage, "death.attack.player", {victim->getName(), getName()}, false, false);
     if (heldType != nullptr)
         heldType->onPostAttack(owner, *this, *victim, damage, held);
 
-    const int32_t weaponWear = (data != nullptr && data->mToolType == ToolType::Sword) ? 1 : 2;
     owner.damagePlayerHeldItem(*this, weaponWear);
 
     if (victim->isDead())
         return true;
 
-    victim->setNoDamageTicks(10);
-    victim->setLastDamageAmount(rawDamage);
     if (coldTarget)
         victim->setAttackTime(ATTACK_COOLDOWN_TICKS);
 
@@ -446,8 +405,11 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             victim->getInventory().setArmor(slot, std::move(armor));
     }
     if (thornsDamage > 0)
-        owner.applyDamage(*this, (float) thornsDamage, "death.attack.thorns", {getName(), victim->getName()}, false,
-                          false);
+        owner.hurt(*this, (float) thornsDamage,
+                   DamageSource::attack("death.attack.thorns", getName(), *victim, victim->getName(),
+                                        victim->getPosition())
+                           .withoutArmor()
+                           .withoutCooldown());
     victim->getInventoryManager().syncContents(InventoryManager::InventoryId::Armor);
     InventoryHandler::sendArmorContent(owner, *victim);
 
@@ -645,8 +607,10 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
             continue;
 
         if (reaches(target.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
-            owner.applyDamage(target, SPIN_ATTACK_DAMAGE, "death.attack.player",
-                              {target.getName(), getName()}, false, false);
+            owner.hurt(target, SPIN_ATTACK_DAMAGE,
+                       DamageSource::attack("death.attack.player", target.getName(), *this, getName(), position)
+                               .withoutArmor()
+                               .withoutCooldown());
     }
 
     --mSpinAttackTicks;
