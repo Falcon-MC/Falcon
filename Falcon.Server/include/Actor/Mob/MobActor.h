@@ -9,6 +9,7 @@
 #include "Actor/ActorCategory.h"
 #include "Actor/ActorFlags.h"
 #include "Actor/ActorSize.h"
+#include "Actor/Mob/MobEquipment.h"
 #include "Actor/ServerActor.h"
 #include "Core/Json/Json.h"
 #include "Server/PropertiesSettings.h"
@@ -144,6 +145,10 @@ public:
 
     static Actor *findActor(ServerNetworkHandler &owner, uint64_t runtimeId);
 
+    MobEquipment &getEquipment() {
+        return mEquipment;
+    }
+
 protected:
     virtual void registerGoals(GoalSelector &goalSelector) {
         (void) goalSelector;
@@ -214,4 +219,5 @@ private:
     LookControl mLookControl;
     JumpControl mJumpControl;
     BodyControl mBodyControl;
+    MobEquipment mEquipment;
 };

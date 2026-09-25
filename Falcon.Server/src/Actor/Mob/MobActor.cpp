@@ -70,8 +70,10 @@ MobActor::MobActor(uint64_t runtimeId, const std::string &identifier) : ServerAc
 void MobActor::tick(ServerNetworkHandler &owner) {
     if (!mDefinitionStarted) {
         mDefinitionStarted = true;
-        if (getDefinition() != nullptr)
+        if (getDefinition() != nullptr) {
             fireEvent(owner, mBorn ? BORN_EVENT : SPAWNED_EVENT);
+            mEquipment.equipFromTable(owner, *this);
+        }
     }
 
     if (!mGoalsRegistered || mGoalsDirty)
@@ -541,6 +543,7 @@ Tag MobActor::saveNbt() const {
     data.putInt(TAG_BREED_COOLDOWN, mBreedCooldown);
     data.putString(TAG_TAMED_BY, mTamedBy);
     data.putByte(TAG_SITTING, mSitting ? 1 : 0);
+    mEquipment.saveNbt(data);
 
     return data;
 }
@@ -671,6 +674,7 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
     if (owner.getLevel().getGameRules().getBool("domobloot")) {
         Level &level = owner.getLevelFor(*this);
         dropLoot(owner, level, source, lootingLevel);
+        mEquipment.dropOnDeath(owner, level, *this, source != nullptr, lootingLevel);
 
         const int experience = getExperienceDrop();
         if (experience > 0 && source != nullptr)

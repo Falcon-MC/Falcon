@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+class LootPool;
+
 class LootEntry {
 public:
     enum class Type {
@@ -32,6 +34,7 @@ private:
     int32_t mWeight = 1;
     std::vector<std::unique_ptr<LootCondition>> mConditions;
     std::vector<std::unique_ptr<LootFunction>> mFunctions;
+    std::vector<LootPool> mPools;
 };
 
 class LootPool {
@@ -41,9 +44,15 @@ public:
     void roll(const LootContext &context, std::vector<LootDrop> &drops, int32_t depth) const;
 
 private:
+    void _rollTier(const LootContext &context, std::vector<LootDrop> &drops, int32_t depth) const;
+
     LootRange mRolls;
     std::vector<std::unique_ptr<LootCondition>> mConditions;
     std::vector<LootEntry> mEntries;
+    bool mHasTiers = false;
+    int32_t mTierInitialRange = 1;
+    int32_t mTierBonusRolls = 0;
+    float mTierBonusChance = 0.0f;
 };
 
 class LootTable {

@@ -3,6 +3,7 @@
 #include "Loot/LegacyItemMapper.h"
 #include "Loot/LootTableRegistry.h"
 
+#include <algorithm>
 #include <random>
 
 LootEntry::LootEntry(const json::Value &definition)
@@ -22,6 +23,13 @@ LootEntry::LootEntry(const json::Value &definition)
     const json::Value *weight = definition.get("weight");
     if (weight != nullptr)
         mWeight = weight->integer(1);
+
+    const json::Value *pools = definition.get("pools");
+    if (pools == nullptr || !pools->isArray())
+        return;
+
+    for (const std::unique_ptr<json::Value> &pool: pools->mArray)
+        mPools.emplace_back(*pool);
 }
 
 bool LootEntry::isAvailable(const LootContext &context) const {
@@ -53,6 +61,12 @@ void LootEntry::roll(const LootContext &context, std::vector<LootDrop> &drops, i
 
     if (drop.mCount > 0)
         drops.push_back(drop);
+
+    if (depth >= LootTable::MAX_NESTING)
+        return;
+
+    for (const LootPool &pool: mPools)
+        pool.roll(context, drops, depth + 1);
 }
 
 LootPool::LootPool(const json::Value &definition)
@@ -64,6 +78,38 @@ LootPool::LootPool(const json::Value &definition)
 
     for (const std::unique_ptr<json::Value> &entry: entries->mArray)
         mEntries.emplace_back(*entry);
+
+    const json::Value *tiers = definition.get("tiers");
+    if (tiers == nullptr || !tiers->isObject())
+        return;
+
+    mHasTiers = true;
+    const json::Value *initialRange = tiers->get("initial_range");
+    if (initialRange != nullptr)
+        mTierInitialRange = std::max(1, initialRange->integer(1));
+
+    const json::Value *bonusRolls = tiers->get("bonus_rolls");
+    if (bonusRolls != nullptr)
+        mTierBonusRolls = std::max(0, bonusRolls->integer(0));
+
+    const json::Value *bonusChance = tiers->get("bonus_chance");
+    if (bonusChance != nullptr)
+        mTierBonusChance = (float) bonusChance->number(0.0);
+}
+
+void LootPool::_rollTier(const LootContext &context, std::vector<LootDrop> &drops, int32_t depth) const {
+    if (mEntries.empty())
+        return;
+
+    int32_t tier = std::uniform_int_distribution<int32_t>(0, mTierInitialRange - 1)(context.mRandom);
+    for (int32_t bonus = 0; bonus < mTierBonusRolls; ++bonus) {
+        if (std::uniform_real_distribution<float>(0.0f, 1.0f)(context.mRandom) < mTierBonusChance)
+            tier++;
+    }
+
+    const LootEntry &entry = mEntries[(size_t) std::min(tier, (int32_t) mEntries.size() - 1)];
+    if (entry.isAvailable(context))
+        entry.roll(context, drops, depth);
 }
 
 void LootPool::roll(const LootContext &context, std::vector<LootDrop> &drops, int32_t depth) const {
@@ -72,6 +118,11 @@ void LootPool::roll(const LootContext &context, std::vector<LootDrop> &drops, in
 
     const int32_t rolls = mRolls.rollInt(context.mRandom);
     for (int32_t roll = 0; roll < rolls; ++roll) {
+        if (mHasTiers) {
+            _rollTier(context, drops, depth);
+            continue;
+        }
+
         std::vector<const LootEntry *> available;
         int32_t totalWeight = 0;
         for (const LootEntry &entry: mEntries) {

@@ -644,6 +644,9 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
     }
 
     mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
+
+    if (MobActor *mob = dynamic_cast<MobActor *>(&actor))
+        mob->getEquipment().sendTo(*this, player, actor);
 }
 
 void ServerNetworkHandler::_sendActorRemove(ServerPlayer &player, const ServerActor &actor) {

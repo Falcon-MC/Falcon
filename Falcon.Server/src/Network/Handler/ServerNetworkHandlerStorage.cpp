@@ -75,6 +75,8 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
         }
 
         actor->loadNbt(tag);
+        if (mob != nullptr)
+            mob->getEquipment().loadNbt(tag, mCodecContext);
         actor->setDimension(level.getDimensionType());
 
         ServerActor *result = actor.get();
