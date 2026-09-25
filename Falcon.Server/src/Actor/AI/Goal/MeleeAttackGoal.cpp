@@ -19,7 +19,7 @@ MeleeAttackGoal::MeleeAttackGoal(float speed, float maxRange, int32_t coolDown, 
 }
 
 bool MeleeAttackGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
-    const ServerPlayer *target = mob.getTarget(owner);
+    const Actor *target = mob.getTarget(owner);
     return target != nullptr && mob.distanceSquaredTo(*target) <= mMaxRangeSquared;
 }
 
@@ -40,7 +40,7 @@ void MeleeAttackGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
 void MeleeAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     mTicksSinceAttack++;
 
-    ServerPlayer *target = mob.getTarget(owner);
+    Actor *target = mob.getTarget(owner);
     if (target == nullptr)
         return;
 
@@ -62,18 +62,22 @@ void MeleeAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         _attack(owner, mob, *target);
 }
 
-void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, ServerPlayer &target) {
+void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor &target) {
     const float damage = mob.getAttackDamage(owner.getProperties().getDifficulty());
     if (damage <= 0.0f)
         return;
 
     const float healthBefore = target.getHealth();
-    const DamageResult result = owner.hurt(target, damage, DamageSource::attack(DEATH_MESSAGE, target.getName(), mob,
-                                                                                mob.getName(), mob.getPosition()));
-    if (result == DamageResult::Blocked) {
-        owner.broadcastActorEvent(mob, EntityEventType::ArmSwing);
-        mTicksSinceAttack = 0;
-        return;
+    if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&target)) {
+        const DamageSource source = DamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(),
+                                                         mob.getPosition());
+        if (owner.hurt(*player, damage, source) == DamageResult::Blocked) {
+            owner.broadcastActorEvent(mob, EntityEventType::ArmSwing);
+            mTicksSinceAttack = 0;
+            return;
+        }
+    } else if (ServerActor *actor = dynamic_cast<ServerActor *>(&target)) {
+        owner.damageActor(*actor, damage, &mob);
     }
 
     if (target.getHealth() >= healthBefore)

@@ -29,7 +29,7 @@ bool LeapAtTargetGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (mMustBeOnGround && !mob.isOnGround())
         return false;
 
-    const ServerPlayer *target = mob.getTarget(owner);
+    const Actor *target = mob.getTarget(owner);
     if (target == nullptr)
         return false;
 
@@ -46,7 +46,7 @@ bool LeapAtTargetGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &m
 }
 
 void LeapAtTargetGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
-    const ServerPlayer *target = mob.getTarget(owner);
+    const Actor *target = mob.getTarget(owner);
     if (target == nullptr)
         return;
 

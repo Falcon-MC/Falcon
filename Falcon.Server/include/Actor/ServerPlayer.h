@@ -117,6 +117,32 @@ public:
 
     const PlayerInventory &getInventory() const { return mInventory; }
 
+    void recordHurtBy(uint64_t runtimeId, int64_t tick) {
+        mLastHurtByRuntimeId = runtimeId;
+        mLastHurtByTick = tick;
+    }
+
+    void recordAttacked(uint64_t runtimeId, int64_t tick) {
+        mLastAttackedRuntimeId = runtimeId;
+        mLastAttackedTick = tick;
+    }
+
+    uint64_t getLastHurtByRuntimeId() const {
+        return mLastHurtByRuntimeId;
+    }
+
+    int64_t getLastHurtByTick() const {
+        return mLastHurtByTick;
+    }
+
+    uint64_t getLastAttackedRuntimeId() const {
+        return mLastAttackedRuntimeId;
+    }
+
+    int64_t getLastAttackedTick() const {
+        return mLastAttackedTick;
+    }
+
     std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() { return mDynamicProperties; }
 
     int64_t getLastItemUseTick() const { return mLastItemUseTick; }
@@ -481,6 +507,10 @@ private:
     bool mIsOp = false;
     bool mFlying = false;
     PlayerInventory mInventory;
+    uint64_t mLastHurtByRuntimeId = 0;
+    int64_t mLastHurtByTick = 0;
+    uint64_t mLastAttackedRuntimeId = 0;
+    int64_t mLastAttackedTick = 0;
     InventoryManager mInventoryManager;
     PacketSender *mSender;
     bool mEffectsNetworkReady = false;

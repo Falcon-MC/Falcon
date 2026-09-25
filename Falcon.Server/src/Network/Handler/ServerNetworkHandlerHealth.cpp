@@ -214,6 +214,12 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (cooling && player.getLastDamageAmount() >= amount)
         return DamageResult::Ignored;
 
+    if (source.mAttacker != nullptr && source.mAttacker != &player) {
+        player.recordHurtBy(source.mAttacker->getRuntimeId(), mCurrentTick);
+        if (ServerPlayer *attacker = dynamic_cast<ServerPlayer *>(source.mAttacker))
+            attacker->recordAttacked(player.getRuntimeId(), mCurrentTick);
+    }
+
     PluginEvent damageEvent;
     damageEvent.mType = FALCON_EVENT_ENTITY_DAMAGE;
     damageEvent.mCancellable = true;

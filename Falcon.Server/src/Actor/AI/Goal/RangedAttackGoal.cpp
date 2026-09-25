@@ -55,7 +55,7 @@ void RangedAttackGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
 }
 
 void RangedAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
-    const ServerPlayer *target = mob.getTarget(owner);
+    const Actor *target = mob.getTarget(owner);
     if (target == nullptr)
         return;
 

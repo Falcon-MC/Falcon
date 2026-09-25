@@ -2,10 +2,12 @@
 
 #include "Inventory/Container.h"
 #include "Item/ItemData.h"
+#include "Loot/LegacyItemMapper.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include <cmath>
 #include <cstddef>
+#include <string>
 
 namespace {
     const char *BOOK = "minecraft:book";
@@ -14,11 +16,15 @@ namespace {
 
 ItemStack LootItems::toItemStack(ServerNetworkHandler &owner, const LootDrop &drop) {
     const bool enchantedBook = drop.mIdentifier == BOOK && !drop.mEnchantments.empty();
-    ItemStack stack = owner.createItemStack(enchantedBook ? ENCHANTED_BOOK : drop.mIdentifier, drop.mCount);
+    const std::string qualified = drop.mIdentifier.find(':') == std::string::npos ? "minecraft:" + drop.mIdentifier
+                                                                                   : drop.mIdentifier;
+    const std::string resolved = LegacyItemMapper::getInstance().resolve(qualified, drop.mData);
+    const bool remapped = resolved != qualified;
+    ItemStack stack = owner.createItemStack(enchantedBook ? ENCHANTED_BOOK : resolved, drop.mCount);
     if (stack.isAir())
         return stack;
 
-    if (drop.mData != 0 && stack.mDamage == 0 && drop.mDurabilityFraction >= 1.0f)
+    if (!remapped && drop.mData != 0 && stack.mDamage == 0 && drop.mDurabilityFraction >= 1.0f)
         stack.mDamage = drop.mData;
 
     if (drop.mDurabilityFraction < 1.0f) {

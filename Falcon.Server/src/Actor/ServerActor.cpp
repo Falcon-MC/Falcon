@@ -161,6 +161,9 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, Actor *attacke
         return false;
 
     ServerPlayer *source = dynamic_cast<ServerPlayer *>(attacker);
+    if (source != nullptr)
+        source->recordAttacked(getRuntimeId(), owner.getCurrentTick());
+
     if (onHurt(owner, amount, source))
         return true;
 

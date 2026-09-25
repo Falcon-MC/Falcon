@@ -4,6 +4,7 @@
 #include "Actor/AI/Goal/BehaviorItems.h"
 #include "Actor/Definition/EntityDefinitions.h"
 #include "Actor/Definition/EntityEvents.h"
+#include "Actor/Definition/EntityFilter.h"
 #include "Actor/ServerPlayer.h"
 #include "Level/Level.h"
 #include "Loot/LootItems.h"
@@ -30,6 +31,8 @@ namespace {
     const float DEFAULT_AGEABLE_SECONDS = 1200.0f;
     const float DEFAULT_FEED_GROWTH = 0.1f;
     const int32_t TICKS_PER_SECOND = 20;
+    const char *const LOOT_TABLE_PREFIX = "loot_tables/";
+    const int64_t OWNER_SYNC_INTERVAL = 20;
 
     std::mt19937 &lifecycleRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -78,6 +81,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
         _syncBody(owner);
 
     _tickLifecycle(owner);
+    _tickSensors(owner);
 
     mGoalSelector.tick(owner, *this);
     mNavigation.tick(owner, *this);
@@ -107,6 +111,12 @@ void MobActor::_tickLifecycle(ServerNetworkHandler &owner) {
     if (mBreedCooldown > 0)
         mBreedCooldown--;
 
+    if (mInteractCooldown > 0)
+        mInteractCooldown--;
+
+    if (isTamed() && owner.getCurrentTick() % OWNER_SYNC_INTERVAL == 0)
+        _syncOwner(owner);
+
     if (mLoveTicks > 0 && --mLoveTicks == 0)
         _setFlag(owner, ActorFlag::InLove, false);
 
@@ -124,13 +134,120 @@ void MobActor::_tickLifecycle(ServerNetworkHandler &owner) {
         fireEvent(owner, event);
 }
 
+void MobActor::_fireComponentEvent(ServerNetworkHandler &owner, const char *component) {
+    const std::string event = eventOf(getComponent(component));
+    if (!event.empty())
+        fireEvent(owner, event);
+}
+
+void MobActor::_tickSensors(ServerNetworkHandler &owner) {
+    if (mTargetAcquired) {
+        mTargetAcquired = false;
+        _fireComponentEvent(owner, "minecraft:on_target_acquired");
+    }
+
+    if (mTargetEscaped) {
+        mTargetEscaped = false;
+        _fireComponentEvent(owner, "minecraft:on_target_escape");
+    }
+
+    const json::Value *sensor = getComponent("minecraft:environment_sensor");
+    const json::Value *triggers = sensor == nullptr ? nullptr : sensor->get("triggers");
+    if (triggers == nullptr)
+        return;
+
+    const auto run = [this, &owner](const json::Value &trigger) {
+        const std::string event = eventOf(&trigger);
+        const json::Value *filters = trigger.get("filters");
+        if (!event.empty() && (filters == nullptr || EntityFilter::test(*filters, owner, *this)))
+            fireEvent(owner, event);
+    };
+
+    if (!triggers->isArray()) {
+        run(*triggers);
+        return;
+    }
+
+    for (const std::unique_ptr<json::Value> &trigger: triggers->mArray)
+        run(*trigger);
+}
+
 bool MobActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack held = player.getInventory().getItemInHand();
-    if (_tryTame(owner, player, held) || _tryFeedBaby(owner, player, held) || _tryStartLove(owner, player, held)
-        || _trySit(owner, player))
+    if (_tryInteract(owner, player) || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held)
+        || _tryStartLove(owner, player, held) || _trySit(owner, player))
         return true;
 
     return ServerActor::onInteract(owner, player);
+}
+
+bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
+    const json::Value *interact = getComponent("minecraft:interact");
+    if (interact == nullptr || mInteractCooldown > 0)
+        return false;
+
+    const json::Value *list = interact->get("interactions");
+    std::vector<const json::Value *> interactions;
+    if (list != nullptr && list->isArray()) {
+        for (const std::unique_ptr<json::Value> &entry: list->mArray)
+            interactions.push_back(entry.get());
+    } else {
+        interactions.push_back(list != nullptr ? list : interact);
+    }
+
+    for (const json::Value *interaction: interactions) {
+        const json::Value *onInteract = interaction->get("on_interact");
+        const json::Value *filters = onInteract == nullptr ? nullptr : onInteract->get("filters");
+        if (filters != nullptr && !EntityFilter::test(*filters, owner, *this, &player))
+            continue;
+
+        Level &level = owner.getLevelFor(*this);
+        const json::Value *spawnItems = interaction->get("spawn_items");
+        const json::Value *table = spawnItems == nullptr ? nullptr : spawnItems->get("table");
+        if (table != nullptr)
+            _spawnLoot(owner, level, table->string());
+
+        const int32_t hurtItem = (int32_t) numberIn(interaction, "hurt_item", 0.0f);
+        if (hurtItem > 0)
+            owner.damagePlayerHeldItem(player, hurtItem);
+
+        const json::Value *useItem = interaction->get("use_item");
+        if (useItem != nullptr && useItem->boolean(false))
+            player.consumeOneHeldItem();
+
+        const json::Value *sound = interaction->get("play_sounds");
+        if (sound != nullptr && sound->isString())
+            owner.playLevelSound(level, sound->mString, getPosition(), getIdentifier());
+
+        mInteractCooldown = (int32_t) (numberIn(interaction, "cooldown", 0.0f) * TICKS_PER_SECOND);
+
+        const std::string event = eventOf(onInteract);
+        if (!event.empty())
+            fireEvent(owner, event);
+        return true;
+    }
+    return false;
+}
+
+void MobActor::_spawnLoot(ServerNetworkHandler &owner, Level &level, const std::string &path) {
+    const std::string prefix = LOOT_TABLE_PREFIX;
+    const std::string key = path.rfind(prefix, 0) == 0 ? path.substr(prefix.size()) : path;
+    const LootTable *table = LootTableRegistry::getInstance().get(key);
+    if (table == nullptr)
+        return;
+
+    LootContext context(lootRandom());
+    context.mDifficulty = (int32_t) owner.getProperties().getDifficulty();
+    const json::Value *color = getComponent("minecraft:color");
+    context.mColorIndex = (int32_t) numberIn(color, "value", 0.0f);
+
+    const Vector3f position = getPosition();
+    for (const LootDrop &drop: table->roll(context)) {
+        const ItemStack stack = LootItems::toItemStack(owner, drop);
+        if (!stack.isAir())
+            owner.dropItem(level, position, stack, ItemActorHandler::randomDropMotion(),
+                           ItemActorHandler::DROP_PICKUP_DELAY);
+    }
 }
 
 bool MobActor::_tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
@@ -148,6 +265,7 @@ bool MobActor::_tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const
     mTamedBy = player.getName();
     setPersistent(true);
     _setFlag(owner, ActorFlag::Tamed, true);
+    _syncOwner(owner);
     owner.broadcastActorEvent(*this, EntityEventType::TamingSucceeded);
 
     const std::string event = eventOf(tameable->get("tame_event"));
@@ -210,19 +328,92 @@ void MobActor::_syncBody(ServerNetworkHandler &owner) {
     if (getDefinition() == nullptr)
         return;
 
-    const bool baby = getComponent("minecraft:is_baby") != nullptr;
-    if (getFlags().get(ActorFlag::Baby) != baby) {
-        getFlags().set(ActorFlag::Baby, baby);
-        owner.syncActorFlags(*this);
-    }
+    _setFlag(owner, ActorFlag::Baby, getComponent("minecraft:is_baby") != nullptr);
+    _setFlag(owner, ActorFlag::Sheared, getComponent("minecraft:is_sheared") != nullptr);
 
-    const json::Value *scaleComponent = getComponent("minecraft:scale");
-    const json::Value *scaleValue = scaleComponent == nullptr ? nullptr : scaleComponent->get("value");
-    const float scale = scaleValue == nullptr ? 1.0f : (float) scaleValue->number(1.0);
+    const float scale = numberIn(getComponent("minecraft:scale"), "value", 1.0f);
     if (scale != mScale) {
         mScale = scale;
         owner.syncActorScale(*this, scale);
     }
+
+    EntityDataMap metadata;
+    _appendDefinitionData(metadata);
+    if (!metadata.mEntries.empty())
+        owner.sendActorMetadata(*this, metadata);
+}
+
+void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
+    const auto pushInt = [&metadata](int32_t id, int32_t value) {
+        EntityDataEntry entry;
+        entry.mId = id;
+        entry.mFormat = EntityDataFormat::Int;
+        entry.mIntValue = value;
+        metadata.mEntries.push_back(entry);
+    };
+
+    if (const json::Value *variant = getComponent("minecraft:variant"))
+        pushInt(ActorFlags::VARIANT_DATA_ID, (int32_t) numberIn(variant, "value", 0.0f));
+    if (const json::Value *mark = getComponent("minecraft:mark_variant"))
+        pushInt(ActorFlags::MARK_VARIANT_DATA_ID, (int32_t) numberIn(mark, "value", 0.0f));
+
+    if (const json::Value *color = getComponent("minecraft:color")) {
+        EntityDataEntry entry;
+        entry.mId = ActorFlags::COLOR_DATA_ID;
+        entry.mFormat = EntityDataFormat::Byte;
+        entry.mByteValue = (int8_t) numberIn(color, "value", 0.0f);
+        metadata.mEntries.push_back(entry);
+    }
+
+    if (mOwnerRuntimeId != 0) {
+        EntityDataEntry entry;
+        entry.mId = ActorFlags::OWNER_DATA_ID;
+        entry.mFormat = EntityDataFormat::Long;
+        entry.mLongValue = (int64_t) mOwnerRuntimeId;
+        metadata.mEntries.push_back(entry);
+    }
+}
+
+void MobActor::fillSpawnMetadata(EntityDataMap &metadata) const {
+    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID};
+    const int64_t flagValues[] = {getFlags().getLowBits(), getFlags().getHighBits()};
+    for (int index = 0; index < 2; index++) {
+        EntityDataEntry entry;
+        entry.mId = flagIds[index];
+        entry.mFormat = EntityDataFormat::Long;
+        entry.mLongValue = flagValues[index];
+        metadata.mEntries.push_back(entry);
+    }
+
+    EntityDataEntry scale;
+    scale.mId = ActorFlags::SCALE_DATA_ID;
+    scale.mFormat = EntityDataFormat::Float;
+    scale.mFloatValue = mScale;
+    metadata.mEntries.push_back(scale);
+
+    _appendDefinitionData(metadata);
+}
+
+void MobActor::_syncOwner(ServerNetworkHandler &owner) {
+    uint64_t runtimeId = 0;
+    if (isTamed()) {
+        for (auto &entry: owner.getPlayers()) {
+            if (entry.second.getName() == mTamedBy)
+                runtimeId = entry.second.getRuntimeId();
+        }
+    }
+
+    if (runtimeId == mOwnerRuntimeId)
+        return;
+
+    mOwnerRuntimeId = runtimeId;
+    EntityDataMap metadata;
+    EntityDataEntry entry;
+    entry.mId = ActorFlags::OWNER_DATA_ID;
+    entry.mFormat = EntityDataFormat::Long;
+    entry.mLongValue = runtimeId == 0 ? -1 : (int64_t) runtimeId;
+    metadata.mEntries.push_back(entry);
+    owner.sendActorMetadata(*this, metadata);
 }
 
 const json::Value *MobActor::getDefinition() const {
@@ -378,24 +569,47 @@ void MobActor::loadNbt(const Tag &data) {
 
 void MobActor::onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
     mLastHurtTick = owner.getCurrentTick();
-    mLastHurtBy = attacker != nullptr && attacker->isPlayer() ? attacker->getRuntimeId() : 0;
+    mLastHurtBy = attacker != nullptr && attacker != this ? attacker->getRuntimeId() : 0;
     mHurtCount++;
 }
 
-ServerPlayer *MobActor::getTarget(ServerNetworkHandler &owner) const {
+void MobActor::setTarget(uint64_t runtimeId) {
+    if (mTargetRuntimeId == 0 && runtimeId != 0)
+        mTargetAcquired = true;
+    mTargetRuntimeId = runtimeId;
+}
+
+void MobActor::clearTarget() {
+    if (mTargetRuntimeId != 0)
+        mTargetEscaped = true;
+    mTargetRuntimeId = 0;
+}
+
+Actor *MobActor::getTarget(ServerNetworkHandler &owner) const {
     if (mTargetRuntimeId == 0)
         return nullptr;
 
-    ServerPlayer *player = findPlayer(owner, mTargetRuntimeId);
-    return player != nullptr && canTarget(*player) ? player : nullptr;
+    Actor *target = findActor(owner, mTargetRuntimeId);
+    return target != nullptr && canTarget(*target) ? target : nullptr;
 }
 
-bool MobActor::canTarget(const ServerPlayer &player) const {
-    if (!player.isSpawned() || player.isDead() || player.getDimension() != getDimension())
+bool MobActor::canTarget(const Actor &actor) const {
+    if (&actor == this || actor.getDimension() != getDimension() || !actor.isAlive() || actor.isDead())
         return false;
 
-    const int32_t gameType = player.getGameType();
-    return gameType != (int32_t) GameType::Creative && gameType != (int32_t) GameType::Spectator;
+    const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(&actor);
+    if (player == nullptr)
+        return true;
+
+    const int32_t gameType = player->getGameType();
+    return player->isSpawned() && gameType != (int32_t) GameType::Creative
+           && gameType != (int32_t) GameType::Spectator;
+}
+
+Actor *MobActor::findActor(ServerNetworkHandler &owner, uint64_t runtimeId) {
+    if (ServerPlayer *player = findPlayer(owner, runtimeId))
+        return player;
+    return owner.getActor((int64_t) runtimeId);
 }
 
 float MobActor::distanceSquaredTo(const Actor &other) const {

@@ -18,6 +18,7 @@ enum class ActorFlag : int {
     Sitting = 24,
     Angry = 25,
     Tamed = 28,
+    Sheared = 31,
     Gliding = 32,
     Moving = 34,
     Breathing = 35,
@@ -37,6 +38,11 @@ class ActorFlags {
 public:
     static const int32_t FLAGS_DATA_ID = 0;
     static const int32_t FLAGS_2_DATA_ID = 91;
+    static const int32_t VARIANT_DATA_ID = 2;
+    static const int32_t COLOR_DATA_ID = 3;
+    static const int32_t OWNER_DATA_ID = 5;
+    static const int32_t SCALE_DATA_ID = 38;
+    static const int32_t MARK_VARIANT_DATA_ID = 43;
     static const int32_t PLAYER_FLAGS_DATA_ID = 26;
     static const int32_t BED_POSITION_DATA_ID = 28;
     static const int32_t FUSE_LENGTH_DATA_ID = 55;

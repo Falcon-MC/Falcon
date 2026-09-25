@@ -1,14 +1,19 @@
 #pragma once
 
 #include "Actor/AI/Goal/Goal.h"
-#include "Core/Json/Json.h"
 
 #include <cstdint>
-#include <memory>
 
-class HurtByTargetGoal : public Goal {
+class ServerPlayer;
+
+class OwnerTargetGoal : public Goal {
 public:
-    explicit HurtByTargetGoal(std::shared_ptr<json::Value> filters = nullptr);
+    enum class Mode {
+        OwnerHurtBy,
+        OwnerHurt
+    };
+
+    explicit OwnerTargetGoal(Mode mode);
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
@@ -19,6 +24,10 @@ public:
     void stop(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
-    std::shared_ptr<json::Value> mFilters;
-    uint32_t mHandledHurtCount = 0;
+    ServerPlayer *_findOwner(ServerNetworkHandler &owner, const MobActor &mob) const;
+
+    Mode mMode;
+    int64_t mHandledTick = 0;
+    int64_t mPendingTick = 0;
+    uint64_t mPendingTarget = 0;
 };

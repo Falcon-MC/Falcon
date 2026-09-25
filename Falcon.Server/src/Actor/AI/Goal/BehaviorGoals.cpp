@@ -14,6 +14,7 @@
 #include "Actor/AI/Goal/LookAtPlayerGoal.h"
 #include "Actor/AI/Goal/MeleeAttackGoal.h"
 #include "Actor/AI/Goal/NearestAttackableTargetGoal.h"
+#include "Actor/AI/Goal/OwnerTargetGoal.h"
 #include "Actor/AI/Goal/PanicGoal.h"
 #include "Actor/AI/Goal/RandomLookAroundGoal.h"
 #include "Actor/AI/Goal/RandomStrollGoal.h"
@@ -64,26 +65,38 @@ namespace {
         return value == nullptr ? fallback : (float) value->number(fallback);
     }
 
-    bool referencesPlayer(const json::Value &value) {
-        if (value.isObject()) {
-            const json::Value *test = value.get("test");
-            const json::Value *expected = value.get("value");
-            if (test != nullptr && test->string() == "is_family" && expected != nullptr
-                && expected->string() == "player")
-                return true;
+    std::vector<NearestAttackableTargetGoal::Entry> targetEntries(const json::Value &component) {
+        std::vector<NearestAttackableTargetGoal::Entry> entries;
+        const json::Value *types = component.get("entity_types");
+        if (types == nullptr)
+            return entries;
 
-            for (const auto &entry: value.mObject) {
-                if (referencesPlayer(*entry.second))
-                    return true;
-            }
-            return false;
-        }
+        const auto add = [&entries](const json::Value &type) {
+            NearestAttackableTargetGoal::Entry entry;
+            if (const json::Value *filters = type.get("filters"))
+                entry.mFilters = std::shared_ptr<json::Value>(filters->clone());
+            entry.mMaxDistance = numberOf(type, "max_dist", 0.0f);
+            entries.push_back(std::move(entry));
+        };
 
-        for (const std::unique_ptr<json::Value> &entry: value.mArray) {
-            if (referencesPlayer(*entry))
-                return true;
+        if (types->isArray()) {
+            for (const std::unique_ptr<json::Value> &type: types->mArray)
+                add(*type);
+        } else {
+            add(*types);
         }
-        return false;
+        return entries;
+    }
+
+    std::shared_ptr<json::Value> firstFilters(const json::Value &component) {
+        const json::Value *types = component.get("entity_types");
+        if (types == nullptr)
+            return nullptr;
+
+        const json::Value *first = types->isArray() ? (types->mArray.empty() ? nullptr : types->mArray[0].get())
+                                                    : types;
+        const json::Value *filters = first == nullptr ? nullptr : first->get("filters");
+        return filters == nullptr ? nullptr : std::shared_ptr<json::Value>(filters->clone());
     }
 
     float targetRange(const MobActor &mob, const json::Value &component) {
@@ -198,14 +211,16 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     }
 
     if (behavior == "hurt_by_target")
-        return std::make_unique<HurtByTargetGoal>();
+        return std::make_unique<HurtByTargetGoal>(firstFilters(component));
 
-    if (behavior == "nearest_attackable_target") {
-        const json::Value *types = component.get("entity_types");
-        if (types == nullptr || !referencesPlayer(*types))
-            return nullptr;
-        return std::make_unique<NearestAttackableTargetGoal>(targetRange(mob, component));
-    }
+    if (behavior == "nearest_attackable_target" || behavior == "nearest_prioritized_attackable_target")
+        return std::make_unique<NearestAttackableTargetGoal>(targetRange(mob, component), targetEntries(component));
+
+    if (behavior == "owner_hurt_by_target")
+        return std::make_unique<OwnerTargetGoal>(OwnerTargetGoal::Mode::OwnerHurtBy);
+
+    if (behavior == "owner_hurt_target")
+        return std::make_unique<OwnerTargetGoal>(OwnerTargetGoal::Mode::OwnerHurt);
 
     if (behavior == "melee_attack" || behavior == "melee_box_attack") {
         const int32_t coolDown = (int32_t) std::lround(numberOf(component, "cooldown_time", 1.0f) * TICKS_PER_SECOND);

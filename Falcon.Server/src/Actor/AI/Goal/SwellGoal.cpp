@@ -12,7 +12,7 @@ namespace {
     const float EYE_RATIO = 0.85f;
     const float PLAYER_EYE_HEIGHT = 1.62f;
 
-    bool canSee(ServerNetworkHandler &owner, MobActor &mob, const ServerPlayer &target) {
+    bool canSee(ServerNetworkHandler &owner, MobActor &mob, const Actor &target) {
         const Vector3f from = mob.getPosition();
         const Vector3f to = target.getPosition();
         return !Explosion::isRayCollidingWithBlocks(owner.getLevelFor(mob), from.x,
@@ -30,7 +30,7 @@ bool SwellGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (creeper == nullptr)
         return false;
 
-    const ServerPlayer *target = mob.getTarget(owner);
+    const Actor *target = mob.getTarget(owner);
     return creeper->getSwell() > 0 || (target != nullptr && mob.distanceSquaredTo(*target) < START_RANGE_SQUARED);
 }
 
@@ -53,7 +53,7 @@ void SwellGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (creeper == nullptr)
         return;
 
-    const ServerPlayer *target = mob.getTarget(owner);
+    const Actor *target = mob.getTarget(owner);
     if (target == nullptr || mob.distanceSquaredTo(*target) > CANCEL_RANGE_SQUARED || !canSee(owner, mob, *target)) {
         creeper->setSwellDirection(-1);
         return;

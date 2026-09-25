@@ -1,12 +1,21 @@
 #pragma once
 
 #include "Actor/AI/Goal/Goal.h"
+#include "Core/Json/Json.h"
 
-class ServerPlayer;
+#include <memory>
+#include <vector>
+
+class Actor;
 
 class NearestAttackableTargetGoal : public Goal {
 public:
-    explicit NearestAttackableTargetGoal(float range);
+    struct Entry {
+        std::shared_ptr<json::Value> mFilters;
+        float mMaxDistance = 0.0f;
+    };
+
+    NearestAttackableTargetGoal(float range, std::vector<Entry> entries);
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
@@ -17,9 +26,10 @@ public:
     void stop(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
-    ServerPlayer *_findNearest(ServerNetworkHandler &owner, const MobActor &mob) const;
+    Actor *_findNearest(ServerNetworkHandler &owner, MobActor &mob) const;
 
-    bool _inRange(const MobActor &mob, const ServerPlayer &player) const;
+    bool _matches(ServerNetworkHandler &owner, MobActor &mob, const Actor &candidate) const;
 
     float mRangeSquared;
+    std::vector<Entry> mEntries;
 };

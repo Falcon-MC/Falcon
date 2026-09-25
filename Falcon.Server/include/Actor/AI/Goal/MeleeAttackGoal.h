@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-class ServerPlayer;
+class Actor;
 
 class MeleeAttackGoal : public Goal {
 public:
@@ -19,7 +19,7 @@ public:
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
-    void _attack(ServerNetworkHandler &owner, MobActor &mob, ServerPlayer &target);
+    void _attack(ServerNetworkHandler &owner, MobActor &mob, Actor &target);
 
     float mSpeed;
     float mMaxRangeSquared;

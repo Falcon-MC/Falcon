@@ -92,6 +92,8 @@ public:
 
     void markBorn();
 
+    void fillSpawnMetadata(EntityDataMap &metadata) const override;
+
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
 
     bool isInLove() const {
@@ -128,21 +130,19 @@ public:
         return mHurtCount;
     }
 
-    void setTarget(uint64_t runtimeId) {
-        mTargetRuntimeId = runtimeId;
-    }
+    void setTarget(uint64_t runtimeId);
 
-    void clearTarget() {
-        mTargetRuntimeId = 0;
-    }
+    void clearTarget();
 
-    ServerPlayer *getTarget(ServerNetworkHandler &owner) const;
+    Actor *getTarget(ServerNetworkHandler &owner) const;
 
-    bool canTarget(const ServerPlayer &player) const;
+    bool canTarget(const Actor &actor) const;
 
     float distanceSquaredTo(const Actor &other) const;
 
     static ServerPlayer *findPlayer(ServerNetworkHandler &owner, uint64_t runtimeId);
+
+    static Actor *findActor(ServerNetworkHandler &owner, uint64_t runtimeId);
 
 protected:
     virtual void registerGoals(GoalSelector &goalSelector) {
@@ -162,6 +162,10 @@ private:
 
     void _tickLifecycle(ServerNetworkHandler &owner);
 
+    void _tickSensors(ServerNetworkHandler &owner);
+
+    void _fireComponentEvent(ServerNetworkHandler &owner, const char *component);
+
     void _setFlag(ServerNetworkHandler &owner, ActorFlag flag, bool value);
 
     bool _tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
@@ -172,11 +176,23 @@ private:
 
     bool _trySit(ServerNetworkHandler &owner, ServerPlayer &player);
 
+    bool _tryInteract(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    void _spawnLoot(ServerNetworkHandler &owner, Level &level, const std::string &path);
+
+    void _appendDefinitionData(EntityDataMap &metadata) const;
+
+    void _syncOwner(ServerNetworkHandler &owner);
+
     GoalSelector mGoalSelector;
+    bool mTargetAcquired = false;
+    bool mTargetEscaped = false;
     int32_t mLoveTicks = 0;
     int32_t mBreedCooldown = 0;
+    int32_t mInteractCooldown = 0;
     int32_t mAgeTicks = 0;
     std::string mTamedBy;
+    uint64_t mOwnerRuntimeId = 0;
     bool mSitting = false;
     bool mGoalsRegistered = false;
     bool mGoalsDirty = false;

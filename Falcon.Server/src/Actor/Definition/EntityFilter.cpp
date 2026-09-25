@@ -1,6 +1,8 @@
 #include "Actor/Definition/EntityFilter.h"
 
+#include "Actor/AI/Goal/BehaviorItems.h"
 #include "Actor/Mob/MobActor.h"
+#include "Actor/ServerPlayer.h"
 #include "Block/Blocks/LiquidView.h"
 #include "Core/Math/Vector3i.h"
 #include "Level/Generator/Biome/BiomeChunkGenDataRegistry.h"
@@ -17,6 +19,7 @@
 namespace {
     const int64_t DAY_LENGTH = 24000;
     const int64_t DAYTIME_END = 12000;
+    const float MAX_LIGHT = 15.0f;
 
     std::mt19937 &filterRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -40,6 +43,20 @@ namespace {
     }
 
     bool compareNumbers(int64_t left, int64_t right, const std::string &op) {
+        if (op == "<")
+            return left < right;
+        if (op == ">")
+            return left > right;
+        if (op == "<=")
+            return left <= right;
+        if (op == ">=")
+            return left >= right;
+        if (isNegation(op))
+            return left != right;
+        return left == right;
+    }
+
+    bool compareFloats(float left, float right, const std::string &op) {
         if (op == "<")
             return left < right;
         if (op == ">")
@@ -170,6 +187,26 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         const int32_t y = test == "is_underwater" ? (int32_t) std::floor(target->getPosition().y + 1.0f) : position.y;
         const bool result = LiquidView(level.getBlockState(position.x, y, position.z)).isWater();
         return applyBoolean(result, value, op);
+    }
+
+    if (test == "is_brightness") {
+        const int32_t blockLight = level.getBlockLightAt(position.x, position.y, position.z);
+        const int32_t skyLight = level.getSkyLightAt(position.x, position.y, position.z)
+                                 - level.getSkyLightSubtracted();
+        const float brightness = (float) std::max(blockLight, skyLight) / MAX_LIGHT;
+        return value != nullptr && compareFloats(brightness, (float) value->number(0.0), op);
+    }
+
+    if (test == "is_underground")
+        return applyBoolean(position.y < level.getHeightAt(position.x, position.z), value, op);
+
+    if (test == "has_equipment") {
+        const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(target);
+        const json::Value *domain = filter.get("domain");
+        const bool hand = domain == nullptr || domain->string() == "hand" || domain->string() == "any";
+        const bool result = player != nullptr && hand && value != nullptr
+                            && BehaviorItems(value).contains(player->getInventory().getItemInHand());
+        return isNegation(op) ? !result : result;
     }
 
     if (test == "is_snow_covered") {
