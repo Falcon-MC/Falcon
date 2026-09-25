@@ -48,6 +48,7 @@
 #include <random>
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
@@ -56,6 +57,33 @@
 #include <cmath>
 
 namespace {
+    bool allowProjectileHit(ServerNetworkHandler &owner, ServerActor &projectile, Level &level,
+                            const Vector3f &position, Actor *target, const Vector3i *block) {
+        PluginManager &plugins = owner.getPluginManager();
+        if (!plugins.hasSubscribers(FALCON_EVENT_PROJECTILE_HIT))
+            return true;
+
+        PluginEvent hitEvent;
+        hitEvent.mType = FALCON_EVENT_PROJECTILE_HIT;
+        hitEvent.mCancellable = true;
+        hitEvent.mEntity = &projectile;
+        hitEvent.mTarget = target;
+        hitEvent.mLevel = &level;
+        hitEvent.mPosition = position;
+        if (block != nullptr) {
+            hitEvent.mBlockPosition = *block;
+            hitEvent.mBlockName = level.getBlockState(block->x, block->y, block->z).mName;
+        }
+
+        for (auto &entry: owner.getPlayers()) {
+            if ((int64_t) entry.second.getRuntimeId() == projectile.getOwnerUniqueId())
+                hitEvent.mAttacker = &entry.second;
+        }
+
+        plugins.dispatch(hitEvent);
+        return !hitEvent.mCancelled;
+    }
+
     const int32_t ACTOR_DATA_SCALE = 38;
     const float ARROW_KNOCKBACK = 0.3f;
     const float PUNCH_KNOCKBACK_PER_LEVEL = 0.5f;
@@ -1302,6 +1330,11 @@ void ServerNetworkHandler::tickActors() {
             if (actor.getLifetimeTicks() > 1 && level.isSolidAt(blockX, blockY, blockZ)) {
                 const Vector3f hitPosition((float) blockX + 0.5f, (float) blockY + 0.5f, (float) blockZ + 0.5f);
                 const Vector3i hitBlock(blockX, blockY, blockZ);
+                if (!allowProjectileHit(*this, actor, level, hitPosition, nullptr, &hitBlock)) {
+                    expired.push_back(actorId);
+                    continue;
+                }
+
                 const BlockState hitState = level.getBlockState(blockX, blockY, blockZ);
                 const Block *block = VanillaBlocks::fromIdentifier(hitState.mName);
                 if (block != nullptr && block->onProjectileHit(*this, level, hitBlock, hitState, actor)) {
@@ -1382,6 +1415,11 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 if (hitPlayer != nullptr) {
+                    if (!allowProjectileHit(*this, actor, level, contactPosition, hitPlayer, nullptr)) {
+                        expired.push_back(actorId);
+                        continue;
+                    }
+
                     mScriptEngine.onProjectileHitEntity(actor, *hitPlayer, contactPosition);
                     onThrownProjectileHit(actor, contactPosition, hitPlayer);
                     expired.push_back(actorId);
@@ -1389,6 +1427,11 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 if (hitActor != nullptr) {
+                    if (!allowProjectileHit(*this, actor, level, contactPosition, hitActor, nullptr)) {
+                        expired.push_back(actorId);
+                        continue;
+                    }
+
                     mScriptEngine.onProjectileHitEntity(actor, *hitActor, contactPosition);
                     onThrownProjectileHitActor(actor, contactPosition, *hitActor);
                     expired.push_back(actorId);

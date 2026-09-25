@@ -26,6 +26,8 @@ public:
 
     bool explode();
 
+    bool explodeWithoutBlocks();
+
     bool explodeA();
 
     bool explodeB();
@@ -37,6 +39,10 @@ public:
 
 private:
     static int64_t _key(const Vector3i &position);
+
+    bool _findAffectedBlocks();
+
+    bool _allowByPlugins();
 
     static float _calculateEntityDamage(double doubleRadius, double impact);
 

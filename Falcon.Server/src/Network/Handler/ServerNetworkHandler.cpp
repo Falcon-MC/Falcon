@@ -671,11 +671,26 @@ void ServerNetworkHandler::tick() {
 
     mProfiler.beginSection(ProfilerSection::ConsoleCommands);
     {
-        std::lock_guard<std::mutex> lock(mConsoleQueueMutex);
-        while (!mConsoleQueue.empty()) {
+        std::vector<std::string> commandLines;
+        {
+            std::lock_guard<std::mutex> lock(mConsoleQueueMutex);
+            while (!mConsoleQueue.empty()) {
+                commandLines.push_back(std::move(mConsoleQueue.front()));
+                mConsoleQueue.pop();
+            }
+        }
+
+        for (std::string &commandLine: commandLines) {
+            PluginEvent commandEvent;
+            commandEvent.mType = FALCON_EVENT_SERVER_COMMAND;
+            commandEvent.mCancellable = true;
+            commandEvent.mMessage = &commandLine;
+            mPluginManager->dispatch(commandEvent);
+            if (commandEvent.mCancelled)
+                continue;
+
             ServerCommandOrigin sender(this);
-            mCommands.dispatch(sender, mConsoleQueue.front());
-            mConsoleQueue.pop();
+            mCommands.dispatch(sender, commandLine);
         }
     }
 
@@ -692,6 +707,12 @@ void ServerNetworkHandler::tick() {
     mProfiler.endSection(ProfilerSection::ConsoleCommands);
 
     mPluginManager->tick();
+    if (mPluginManager->hasSubscribers(FALCON_EVENT_SERVER_TICK)) {
+        PluginEvent tickEvent;
+        tickEvent.mType = FALCON_EVENT_SERVER_TICK;
+        tickEvent.mTick = (uint64_t) mCurrentTick;
+        mPluginManager->dispatch(tickEvent);
+    }
 
     mNetworkHandler->runEvents();
 
@@ -1897,8 +1918,18 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequ
 
     LOG_INFO(LogAreaID::Server, "%s issued command: %s", player->getName().c_str(), packet.mCommand.c_str());
 
+    std::string commandLine = packet.mCommand;
+    PluginEvent commandEvent;
+    commandEvent.mType = FALCON_EVENT_PLAYER_COMMAND;
+    commandEvent.mCancellable = true;
+    commandEvent.mPlayer = player;
+    commandEvent.mMessage = &commandLine;
+    mPluginManager->dispatch(commandEvent);
+    if (commandEvent.mCancelled)
+        return;
+
     PlayerCommandOrigin sender(*this, *player, packet.mOrigin);
-    mCommands.dispatch(sender, packet.mCommand);
+    mCommands.dispatch(sender, commandLine);
 }
 
 void ServerNetworkHandler::onReceiveIPSupport(RakPeerHelper::IPSupport support) {

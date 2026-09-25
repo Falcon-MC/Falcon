@@ -12,6 +12,7 @@
 #include "Level/LevelChunk.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Level/Particle/BlockExplodeParticle.h"
 #include "Level/Particle/ExplodeParticle.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
@@ -101,7 +102,42 @@ bool Explosion::explode() {
     return false;
 }
 
+bool Explosion::explodeWithoutBlocks() {
+    if (!_allowByPlugins())
+        return false;
+
+    return explodeB();
+}
+
 bool Explosion::explodeA() {
+    if (!_findAffectedBlocks())
+        return false;
+
+    return _allowByPlugins();
+}
+
+bool Explosion::_allowByPlugins() {
+    PluginManager &plugins = mOwner.getPluginManager();
+    if (!plugins.hasSubscribers(FALCON_EVENT_EXPLOSION))
+        return true;
+
+    PluginEvent explosionEvent;
+    explosionEvent.mType = FALCON_EVENT_EXPLOSION;
+    explosionEvent.mCancellable = true;
+    explosionEvent.mEntity = const_cast<ServerActor *>(mSourceActor);
+    explosionEvent.mLevel = &mLevel;
+    explosionEvent.mPosition = mSource;
+    explosionEvent.mAmount = mSize;
+    explosionEvent.mBlocks = &mAffectedBlocks;
+    plugins.dispatch(explosionEvent);
+    if (explosionEvent.mCancelled)
+        return false;
+
+    mSize = std::max(explosionEvent.mAmount, 0.0);
+    return true;
+}
+
+bool Explosion::_findAffectedBlocks() {
     if (mSourceActor != nullptr) {
         const Vector3i floor((int32_t) std::floor(mSource.x), (int32_t) std::floor(mSource.y),
                              (int32_t) std::floor(mSource.z));

@@ -281,7 +281,7 @@ namespace {
         if (breakBlocks != 0)
             explosion.explode();
         else
-            explosion.explodeB();
+            explosion.explodeWithoutBlocks();
     }
 }
 

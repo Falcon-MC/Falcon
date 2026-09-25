@@ -128,6 +128,86 @@ namespace {
         }
         source->mPacketData->assign(reinterpret_cast<const char *>(data), length);
     }
+
+    FalconLevel *eventLevel(FalconEvent *target) {
+        return toHandle(event(target)->mLevel);
+    }
+
+    FalconEntity *eventTarget(FalconEvent *target) {
+        return toHandle(event(target)->mTarget);
+    }
+
+    FalconVec3 eventPosition(FalconEvent *target) {
+        const Vector3f &position = event(target)->mPosition;
+        return FalconVec3{position.x, position.y, position.z};
+    }
+
+    uint32_t eventBlockCount(FalconEvent *target) {
+        const PluginEvent *source = event(target);
+        if (source->mBlocks == nullptr)
+            return 0;
+        return (uint32_t) source->mBlocks->size();
+    }
+
+    FalconBlockPos eventBlockAt(FalconEvent *target, uint32_t index) {
+        const PluginEvent *source = event(target);
+        if (source->mBlocks == nullptr || index >= source->mBlocks->size())
+            return FalconBlockPos{0, 0, 0};
+
+        const Vector3i &position = (*source->mBlocks)[index];
+        return FalconBlockPos{position.x, position.y, position.z};
+    }
+
+    void eventSetBlocks(FalconEvent *target, const FalconBlockPos *positions, uint32_t count) {
+        PluginEvent *source = event(target);
+        if (source->mMonitor || source->mBlocks == nullptr)
+            return;
+
+        source->mBlocks->clear();
+        if (positions == nullptr)
+            return;
+
+        source->mBlocks->reserve(count);
+        for (uint32_t index = 0; index < count; ++index) {
+            source->mBlocks->emplace_back(positions[index].x, positions[index].y, positions[index].z);
+        }
+    }
+
+    FalconGameMode eventGameMode(FalconEvent *target) {
+        return (FalconGameMode) event(target)->mGameMode;
+    }
+
+    FalconGameMode eventPreviousGameMode(FalconEvent *target) {
+        return (FalconGameMode) event(target)->mPreviousGameMode;
+    }
+
+    FalconDimension eventDimension(FalconEvent *target) {
+        return event(target)->mDimension;
+    }
+
+    FalconDimension eventPreviousDimension(FalconEvent *target) {
+        return event(target)->mPreviousDimension;
+    }
+
+    uint64_t eventTick(FalconEvent *target) {
+        return event(target)->mTick;
+    }
+
+    const char *eventSourceContainer(FalconEvent *target) {
+        return hold(event(target)->mSourceContainer);
+    }
+
+    int32_t eventSourceSlot(FalconEvent *target) {
+        return event(target)->mSourceSlot;
+    }
+
+    const char *eventDestinationContainer(FalconEvent *target) {
+        return hold(event(target)->mDestinationContainer);
+    }
+
+    int32_t eventDestinationSlot(FalconEvent *target) {
+        return event(target)->mDestinationSlot;
+    }
 }
 
 void PluginServerApi::fillEvents(FalconServerApi &api) {
@@ -153,4 +233,19 @@ void PluginServerApi::fillEvents(FalconServerApi &api) {
     api.eventPacketId = &eventPacketId;
     api.eventPacketData = &eventPacketData;
     api.eventSetPacketData = &eventSetPacketData;
+    api.eventLevel = &eventLevel;
+    api.eventTarget = &eventTarget;
+    api.eventPosition = &eventPosition;
+    api.eventBlockCount = &eventBlockCount;
+    api.eventBlockAt = &eventBlockAt;
+    api.eventSetBlocks = &eventSetBlocks;
+    api.eventGameMode = &eventGameMode;
+    api.eventPreviousGameMode = &eventPreviousGameMode;
+    api.eventDimension = &eventDimension;
+    api.eventPreviousDimension = &eventPreviousDimension;
+    api.eventTick = &eventTick;
+    api.eventSourceContainer = &eventSourceContainer;
+    api.eventSourceSlot = &eventSourceSlot;
+    api.eventDestinationContainer = &eventDestinationContainer;
+    api.eventDestinationSlot = &eventDestinationSlot;
 }

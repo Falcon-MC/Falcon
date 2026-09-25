@@ -22,6 +22,7 @@
 #include "Network/PacketSender.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/BlockActorDataPacket.h"
 #include "Protocol/Packets/ContainerClosePacket.h"
@@ -843,6 +844,47 @@ void InventoryManager::onCurrentWindowRemove() {
     }
 }
 
+bool InventoryManager::_allowPluginOpen(const Vector3i &position) {
+    if (mOwner == nullptr || mPlayer == nullptr)
+        return true;
+
+    PluginManager &plugins = mOwner->getPluginManager();
+    if (!plugins.hasSubscribers(FALCON_EVENT_INVENTORY_OPEN) && !plugins.hasSubscribers(FALCON_EVENT_INVENTORY_CLOSE))
+        return true;
+
+    Level &level = mOwner->getLevelFor(*mPlayer);
+    PluginEvent openEvent;
+    openEvent.mType = FALCON_EVENT_INVENTORY_OPEN;
+    openEvent.mCancellable = true;
+    openEvent.mPlayer = mPlayer;
+    openEvent.mLevel = &level;
+    openEvent.mBlockPosition = position;
+    openEvent.mBlockName = level.getBlockState(position.x, position.y, position.z).mName;
+    plugins.dispatch(openEvent);
+    if (openEvent.mCancelled)
+        return false;
+
+    mPluginOpen = true;
+    mPluginOpenPosition = position;
+    return true;
+}
+
+void InventoryManager::dispatchPluginClose() {
+    if (!mPluginOpen || mOwner == nullptr || mPlayer == nullptr)
+        return;
+
+    mPluginOpen = false;
+    Level &level = mOwner->getLevelFor(*mPlayer);
+    PluginEvent closeEvent;
+    closeEvent.mType = FALCON_EVENT_INVENTORY_CLOSE;
+    closeEvent.mPlayer = mPlayer;
+    closeEvent.mLevel = &level;
+    closeEvent.mBlockPosition = mPluginOpenPosition;
+    closeEvent.mBlockName = level.getBlockState(mPluginOpenPosition.x, mPluginOpenPosition.y,
+                                                mPluginOpenPosition.z).mName;
+    mOwner->getPluginManager().dispatch(closeEvent);
+}
+
 bool InventoryManager::onClientOpenCraftingTable(const Vector3i &position) {
     if (mPlayer == nullptr || mSender == nullptr) {
         return false;
@@ -855,6 +897,9 @@ bool InventoryManager::onClientOpenCraftingTable(const Vector3i &position) {
     if (mMainInventoryWindowId != CONTAINER_ID_NONE || mFurnaceWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow) {
         return false;
     }
+
+    if (!_allowPluginOpen(position))
+        return false;
 
     const int windowId = _getNewWindowId();
     mCraftingTableWindowId = windowId;
@@ -874,6 +919,9 @@ bool InventoryManager::openContainer(ContainerType type, const Vector3i &positio
     if (mPlayer == nullptr || mSender == nullptr) {
         return false;
     }
+
+    if (!_allowPluginOpen(position))
+        return false;
 
     ContainerOpenPacket open;
     open.mWindowId = (int8_t) _getNewWindowId();
@@ -938,7 +986,7 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
 
     BlockActorStore *blockActors = _blockActors();
     BlockActor *blockActor = blockActors == nullptr ? nullptr : blockActors->find(position);
-    if (blockActor == nullptr)
+    if (blockActor == nullptr || !_allowPluginOpen(position))
         return false;
 
     const int windowId = _getNewWindowId();
@@ -994,7 +1042,7 @@ bool InventoryManager::onClientOpenChest(const Vector3i &position) {
 
     BlockActorStore *blockActors = _blockActors();
     ChestBlockActor *chest = blockActors == nullptr ? nullptr : blockActors->find<ChestBlockActor>(position);
-    if (chest == nullptr)
+    if (chest == nullptr || !_allowPluginOpen(position))
         return false;
 
     const int windowId = _getNewWindowId();
@@ -1152,7 +1200,7 @@ bool InventoryManager::onClientOpenFurnace(const Vector3i &position, FurnaceKind
     }
 
     BlockActorStore *blockActors = _blockActors();
-    if (blockActors == nullptr)
+    if (blockActors == nullptr || !_allowPluginOpen(position))
         return false;
 
     const int windowId = _getNewWindowId();

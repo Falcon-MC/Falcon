@@ -6,6 +6,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/ChangeDimensionPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
@@ -93,6 +94,19 @@ void ServerNetworkHandler::changePlayerDimension(ServerPlayer &player, Dimension
     if (player.getDimension() == dimension)
         return;
 
+    PluginEvent dimensionEvent;
+    dimensionEvent.mType = FALCON_EVENT_PLAYER_CHANGE_DIMENSION;
+    dimensionEvent.mCancellable = true;
+    dimensionEvent.mPlayer = &player;
+    dimensionEvent.mDimension = (uint32_t) Dimension::toId(dimension);
+    dimensionEvent.mPreviousDimension = (uint32_t) Dimension::toId(player.getDimension());
+    dimensionEvent.mFrom = player.getPosition();
+    dimensionEvent.mTo = position;
+    mPluginManager->dispatch(dimensionEvent);
+    if (dimensionEvent.mCancelled)
+        return;
+
+    const Vector3f destination = dimensionEvent.mToChanged ? dimensionEvent.mTo : position;
     Level &previous = getLevelFor(player);
     previous.unregisterAllChunkLoaders(player.getRuntimeId());
 
@@ -103,12 +117,12 @@ void ServerNetworkHandler::changePlayerDimension(ServerPlayer &player, Dimension
     player.resetChunkStreaming();
     player.getChunkStreamState() = ChunkStreamState();
 
-    player.setPosition(position);
+    player.setPosition(destination);
     player.clearPendingMove();
 
     ChangeDimensionPacket change;
     change.mDimension = Dimension::toId(dimension);
-    change.mPosition = position;
+    change.mPosition = destination;
     change.mRespawn = false;
     change.mHasLoadingScreenId = false;
     change.mLoadingScreenId = 0;

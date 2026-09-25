@@ -57,6 +57,7 @@
 #include "Command/XpCommand.h"
 #include "Core/Event/GameEvents.h"
 #include "Network/Handler/MovementHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/CommandOutputPacket.h"
 #include "Protocol/Packets/SetPlayerGameTypePacket.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -215,6 +216,18 @@ std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &
 
 void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode) {
     const int32_t previousGameMode = player.getGameType();
+
+    if (previousGameMode != gameMode) {
+        PluginEvent gameModeEvent;
+        gameModeEvent.mType = FALCON_EVENT_PLAYER_GAME_MODE_CHANGE;
+        gameModeEvent.mCancellable = true;
+        gameModeEvent.mPlayer = &player;
+        gameModeEvent.mGameMode = gameMode;
+        gameModeEvent.mPreviousGameMode = previousGameMode;
+        mPluginManager->dispatch(gameModeEvent);
+        if (gameModeEvent.mCancelled)
+            return;
+    }
 
     player.setGameType(gameMode);
     player.setHungerEnabled(gameMode == (int32_t) GameType::Survival || gameMode == (int32_t) GameType::Adventure);

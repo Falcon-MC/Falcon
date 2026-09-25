@@ -7,9 +7,11 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 class Actor;
 class ItemStack;
+class Level;
 class ServerPlayer;
 
 struct PluginEvent {
@@ -32,4 +34,17 @@ struct PluginEvent {
     ItemStack *mItem = nullptr;
     uint32_t mPacketId = 0;
     std::string *mPacketData = nullptr;
+    Level *mLevel = nullptr;
+    Actor *mTarget = nullptr;
+    Vector3f mPosition;
+    std::vector<Vector3i> *mBlocks = nullptr;
+    int32_t mGameMode = 0;
+    int32_t mPreviousGameMode = 0;
+    uint32_t mDimension = 0;
+    uint32_t mPreviousDimension = 0;
+    uint64_t mTick = 0;
+    std::string mSourceContainer;
+    int32_t mSourceSlot = -1;
+    std::string mDestinationContainer;
+    int32_t mDestinationSlot = -1;
 };

@@ -146,7 +146,7 @@ void CreeperActor::_explode(ServerNetworkHandler &owner) {
     if (level.getGameRules().getBool("mobgriefing"))
         explosion.explode();
     else
-        explosion.explodeB();
+        explosion.explodeWithoutBlocks();
 
     _dropChargedHead(owner, headCandidates);
 }

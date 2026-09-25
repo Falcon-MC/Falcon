@@ -32,9 +32,173 @@
 #include "Protocol/Types/InventoryActionData.h"
 #include "Protocol/Types/InventorySource.h"
 
+#include <algorithm>
+#include <string>
 #include <utility>
 
 namespace {
+    bool isBlockContainer(ContainerSlotType type) {
+        return type == ContainerSlotType::LevelEntity || type == ContainerSlotType::Barrel
+               || type == ContainerSlotType::ShulkerBox || type == ContainerSlotType::CrafterBlockContainer;
+    }
+
+    std::string containerName(ContainerSlotType type) {
+        if (isBlockContainer(type))
+            return "container";
+
+        switch (type) {
+            case ContainerSlotType::Hotbar:
+                return "hotbar";
+            case ContainerSlotType::Inventory:
+                return "inventory";
+            case ContainerSlotType::HotbarAndInventory:
+                return "hotbar_and_inventory";
+            case ContainerSlotType::Armor:
+                return "armor";
+            case ContainerSlotType::Offhand:
+                return "offhand";
+            case ContainerSlotType::Cursor:
+                return "cursor";
+            case ContainerSlotType::CraftingInput:
+                return "crafting_input";
+            case ContainerSlotType::CraftingOutput:
+            case ContainerSlotType::CreatedOutput:
+                return "crafting_output";
+            case ContainerSlotType::FurnaceIngredient:
+            case ContainerSlotType::BlastFurnaceIngredient:
+            case ContainerSlotType::SmokerIngredient:
+                return "furnace_ingredient";
+            case ContainerSlotType::FurnaceFuel:
+                return "furnace_fuel";
+            case ContainerSlotType::FurnaceResult:
+                return "furnace_result";
+            case ContainerSlotType::EnchantingInput:
+                return "enchanting_input";
+            case ContainerSlotType::EnchantingMaterial:
+                return "enchanting_material";
+            case ContainerSlotType::DynamicContainer:
+                return "bundle";
+            default:
+                return "other";
+        }
+    }
+
+    const char *transactionName(ItemStackRequestActionType type) {
+        switch (type) {
+            case ItemStackRequestActionType::Take:
+                return "take";
+            case ItemStackRequestActionType::Place:
+                return "place";
+            case ItemStackRequestActionType::Swap:
+                return "swap";
+            case ItemStackRequestActionType::Drop:
+                return "drop";
+            case ItemStackRequestActionType::Destroy:
+                return "destroy";
+            case ItemStackRequestActionType::Consume:
+                return "consume";
+            default:
+                return nullptr;
+        }
+    }
+
+    bool hasDestination(ItemStackRequestActionType type) {
+        return type == ItemStackRequestActionType::Take || type == ItemStackRequestActionType::Place
+               || type == ItemStackRequestActionType::Swap;
+    }
+
+    ItemStack itemAt(const PlayerInventory &inventory, Container *openContainer, ContainerSlotType type, int slot) {
+        if (isBlockContainer(type)) {
+            if (openContainer == nullptr || slot < 0 || slot >= openContainer->getContainerSize())
+                return ItemStack::air();
+            return openContainer->getContainerItem(slot);
+        }
+
+        const ItemStack *item = inventory.resolveSlot(type, slot);
+        return item == nullptr ? ItemStack::air() : *item;
+    }
+
+    bool isCraft(const ItemStackRequestAction &action) {
+        if (action.mType == ItemStackRequestActionType::CraftCreative)
+            return true;
+
+        return (action.mType == ItemStackRequestActionType::CraftRecipe
+                || action.mType == ItemStackRequestActionType::CraftRecipeAuto)
+               && action.mRecipeNetworkId < EnchantmentHelper::RECIPE_ID_BASE;
+    }
+
+    ItemStack craftResult(ServerNetworkHandler &owner, const ItemStackRequestAction &action) {
+        if (action.mType == ItemStackRequestActionType::CraftCreative) {
+            for (const CreativeItemData &entry: owner.getCreativeItems()) {
+                if (entry.mNetId == action.mCreativeItemNetworkId)
+                    return entry.mItem;
+            }
+            return ItemStack::air();
+        }
+
+        const std::vector<ItemStack> &outputs = owner.getRecipeOutputs();
+        const int32_t netId = action.mRecipeNetworkId;
+        if (netId <= 0 || (size_t) netId > outputs.size())
+            return ItemStack::air();
+
+        return outputs[(size_t) netId - 1];
+    }
+
+    bool allowRequest(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStackRequest &request) {
+        PluginManager &plugins = owner.getPluginManager();
+        const bool transactions = plugins.hasSubscribers(FALCON_EVENT_INVENTORY_TRANSACTION);
+        const bool crafts = plugins.hasSubscribers(FALCON_EVENT_CRAFT_ITEM);
+        if (!transactions && !crafts)
+            return true;
+
+        const PlayerInventory &inventory = player.getInventory();
+        Container *openContainer = player.getInventoryManager().getContainer();
+
+        for (const ItemStackRequestAction &action: request.mActions) {
+            if (isCraft(action)) {
+                if (!crafts)
+                    continue;
+
+                ItemStack result = craftResult(owner, action);
+                PluginEvent craftEvent;
+                craftEvent.mType = FALCON_EVENT_CRAFT_ITEM;
+                craftEvent.mCancellable = true;
+                craftEvent.mPlayer = &player;
+                craftEvent.mItem = &result;
+                craftEvent.mAmount = (double) std::max(1, action.mNumberOfRequestedCrafts);
+                plugins.dispatch(craftEvent);
+                if (craftEvent.mCancelled)
+                    return false;
+                continue;
+            }
+
+            const char *name = transactionName(action.mType);
+            if (!transactions || name == nullptr)
+                continue;
+
+            const ContainerSlotType sourceType = action.mSource.mContainerName.mContainer;
+            ItemStack item = itemAt(inventory, openContainer, sourceType, action.mSource.mSlot);
+            PluginEvent transactionEvent;
+            transactionEvent.mType = FALCON_EVENT_INVENTORY_TRANSACTION;
+            transactionEvent.mCancellable = true;
+            transactionEvent.mPlayer = &player;
+            transactionEvent.mCause = name;
+            transactionEvent.mItem = &item;
+            transactionEvent.mAmount = (double) action.mCount;
+            transactionEvent.mSourceContainer = containerName(sourceType);
+            transactionEvent.mSourceSlot = action.mSource.mSlot;
+            if (hasDestination(action.mType)) {
+                transactionEvent.mDestinationContainer = containerName(action.mDestination.mContainerName.mContainer);
+                transactionEvent.mDestinationSlot = action.mDestination.mSlot;
+            }
+
+            plugins.dispatch(transactionEvent);
+            if (transactionEvent.mCancelled)
+                return false;
+        }
+        return true;
+    }
+
     void playBundleSounds(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStackRequest &request,
                           bool succeeded) {
         bool inserted = false;
@@ -217,6 +381,15 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         const bool creativeMode = gameType == (int32_t) GameType::Creative
                                   || gameType == (int32_t) GameType::Spectator;
         int32_t enchantLevelsConsumed = 0;
+
+        if (!allowRequest(owner, player, request)) {
+            ItemStackResponseEntry rejected;
+            rejected.mRequestId = request.mRequestId;
+            rejected.mResult = ItemStackRequestHandler::RESULT_ERROR;
+            needsResync = true;
+            response.mEntries.push_back(std::move(rejected));
+            continue;
+        }
 
         ItemStackResponseEntry entry = ItemStackRequestHandler::execute(inventory, request, owner.getCreativeItems(),
                                                                        owner.getRecipeOutputs(),
@@ -480,6 +653,7 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
 void InventoryHandler::handleContainerClose(ServerPlayer &player, const ContainerClosePacket &packet) {
     PlayerInventory &inventory = player.getInventory();
     InventoryManager &manager = player.getInventoryManager();
+    manager.dispatchPluginClose();
     int windowId = (int) packet.mWindowId;
     if (windowId == InventoryManager::CONTAINER_ID_NONE) {
         windowId = manager.getCurrentWindowId();

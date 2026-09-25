@@ -120,6 +120,8 @@ public:
 
     void onClientRemoveWindow(int windowId);
 
+    void dispatchPluginClose();
+
     int getCurrentWindowId() const {
         return mFurnaceWindowId != CONTAINER_ID_NONE
                ? mFurnaceWindowId
@@ -134,6 +136,8 @@ public:
 
 private:
     int _getNewWindowId();
+
+    bool _allowPluginOpen(const Vector3i &position);
 
     int _getWindowId(InventoryId inventory) const;
 
@@ -187,4 +191,6 @@ private:
     bool mHasPendingCloseWindow;
     int mPendingCloseWindowId;
     bool mHasPendingOpenMainInventory;
+    bool mPluginOpen = false;
+    Vector3i mPluginOpenPosition;
 };
