@@ -343,6 +343,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
 
     const bool axe = data != nullptr && data->mToolType == ToolType::Axe;
     const bool coldTarget = victim->getAttackTime() <= 0;
+    const float effectiveDamage = victim->getNoDamageTicks() > 0 ? damage - victim->getLastDamageAmount() : damage;
     const float armorEfficiency = heldType == nullptr ? 1.0f : heldType->getArmorEfficiency(held);
     const DamageSource source = DamageSource::attack("death.attack.player", victim->getName(), *this, getName(),
                                                      getPosition())
@@ -362,7 +363,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     }
 
     if (heldType != nullptr)
-        heldType->onPostAttack(owner, *this, *victim, damage, held);
+        heldType->onPostAttack(owner, *this, *victim, effectiveDamage, held);
 
     owner.damagePlayerHeldItem(*this, weaponWear);
 
@@ -387,7 +388,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (wasOnFire != victim->isOnFire())
         owner._sendEntityData(*victim);
 
-    damageArmor(owner, *victim, damage);
+    damageArmor(owner, *victim, effectiveDamage);
 
     int thornsDamage = 0;
     for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot) {
@@ -404,12 +405,12 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
         if (damageItem(armor, itemDamage))
             victim->getInventory().setArmor(slot, std::move(armor));
     }
-    if (thornsDamage > 0)
-        owner.hurt(*this, (float) thornsDamage,
-                   DamageSource::attack("death.attack.thorns", getName(), *victim, victim->getName(),
-                                        victim->getPosition())
-                           .withoutArmor()
-                           .withoutCooldown());
+    if (thornsDamage > 0) {
+        DamageSource thornsSource = DamageSource::environment("death.attack.thorns", getName());
+        thornsSource.mDeathMessageParameters.push_back(victim->getName());
+        thornsSource.mAttacker = victim;
+        owner.hurt(*this, (float) thornsDamage, thornsSource.withoutArmor().withoutCooldown());
+    }
     victim->getInventoryManager().syncContents(InventoryManager::InventoryId::Armor);
     InventoryHandler::sendArmorContent(owner, *victim);
 

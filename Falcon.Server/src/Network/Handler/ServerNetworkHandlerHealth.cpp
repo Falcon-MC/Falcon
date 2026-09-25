@@ -216,8 +216,10 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (source.mOrigin.has_value()) {
         Actor *knockedBack = source.mProjectile ? nullptr : source.mAttacker;
         if (player.blockWithShield(*this, *source.mOrigin, amount, knockedBack, source.mDisablesShield)) {
-            if (source.mRespectCooldown)
+            if (source.mRespectCooldown) {
                 player.setNoDamageTicks(10);
+                player.setLastDamageAmount(amount);
+            }
             return DamageResult::Blocked;
         }
     }
