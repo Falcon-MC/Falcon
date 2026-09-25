@@ -347,6 +347,7 @@ void PluginManager::_disable(LoadedPlugin &plugin) {
     }), mSubscriptions.end());
     _updateSubscribedTypes();
     mPermissions->clearPlugin(plugin);
+    mServices.removePlugin(plugin);
 
     if (plugin.mDescription.mRuntime == "internal")
         InternalPluginLoader::unload(plugin);
@@ -382,15 +383,27 @@ uint64_t PluginManager::subscribe(LoadedPlugin &plugin, FalconEventType type, Fa
     if (handler == nullptr || priority > FALCON_PRIORITY_MONITOR)
         return 0;
 
-    const uint64_t id = mNextSubscriptionId++;
-    const Subscription subscription{id, &plugin, type, priority, ignoreCancelled, handler, userData};
+    return _insertSubscription(Subscription{0, &plugin, type, priority, ignoreCancelled, handler, userData, ""});
+}
+
+uint64_t PluginManager::subscribeCustom(LoadedPlugin &plugin, const std::string &name, FalconEventPriority priority,
+                                        bool ignoreCancelled, FalconEventHandler handler, void *userData) {
+    if (handler == nullptr || priority > FALCON_PRIORITY_MONITOR || name.empty())
+        return 0;
+
+    return _insertSubscription(Subscription{0, &plugin, FALCON_EVENT_CUSTOM, priority, ignoreCancelled, handler,
+                                            userData, name});
+}
+
+uint64_t PluginManager::_insertSubscription(Subscription subscription) {
+    subscription.mId = mNextSubscriptionId++;
     const auto position = std::upper_bound(mSubscriptions.begin(), mSubscriptions.end(), subscription,
                                            [](const Subscription &left, const Subscription &right) {
                                                return left.mPriority < right.mPriority;
                                            });
     mSubscriptions.insert(position, subscription);
     _updateSubscribedTypes();
-    return id;
+    return subscription.mId;
 }
 
 void PluginManager::unsubscribe(uint64_t id) {
@@ -431,6 +444,9 @@ void PluginManager::dispatch(PluginEvent &event) {
 
     for (const Subscription &subscription: snapshot) {
         if (subscription.mType != event.mType || !subscription.mPlugin->mEnabled)
+            continue;
+
+        if (event.mType == FALCON_EVENT_CUSTOM && subscription.mName != event.mCustomName)
             continue;
 
         event.mMonitor = subscription.mPriority == FALCON_PRIORITY_MONITOR;

@@ -4,6 +4,7 @@
 #include "Plugin/PluginEvent.h"
 #include "Plugin/PluginPermissions.h"
 #include "Plugin/PluginScheduler.h"
+#include "Plugin/PluginServices.h"
 
 #include <falcon/falcon_api.h>
 
@@ -37,6 +38,9 @@ public:
     uint64_t subscribe(LoadedPlugin &plugin, FalconEventType type, FalconEventPriority priority, bool ignoreCancelled,
                        FalconEventHandler handler, void *userData);
 
+    uint64_t subscribeCustom(LoadedPlugin &plugin, const std::string &name, FalconEventPriority priority,
+                             bool ignoreCancelled, FalconEventHandler handler, void *userData);
+
     void unsubscribe(uint64_t id);
 
     bool registerCommand(LoadedPlugin &plugin, const FalconCommandDescriptor &descriptor);
@@ -55,6 +59,10 @@ public:
         return *mPermissions;
     }
 
+    PluginServices &getServices() {
+        return mServices;
+    }
+
     bool hasSubscribers(FalconEventType type) const {
         return type < 64 && (mSubscribedTypes & ((uint64_t) 1 << type)) != 0;
     }
@@ -68,7 +76,10 @@ private:
         bool mIgnoreCancelled;
         FalconEventHandler mHandler;
         void *mUserData;
+        std::string mName;
     };
+
+    uint64_t _insertSubscription(Subscription subscription);
 
     bool _loadNative(LoadedPlugin &plugin);
 
@@ -83,6 +94,7 @@ private:
     ServerNetworkHandler &mOwner;
     PluginScheduler mScheduler;
     std::unique_ptr<PluginPermissions> mPermissions;
+    PluginServices mServices;
     uint64_t mSubscribedTypes = 0;
     std::vector<std::unique_ptr<LoadedPlugin>> mPlugins;
     std::vector<Subscription> mSubscriptions;

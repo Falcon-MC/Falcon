@@ -23,4 +23,6 @@ public:
     static void fillPackets(FalconServerApi &api);
 
     static void fillContent(FalconServerApi &api);
+
+    static void fillServices(FalconServerApi &api);
 };

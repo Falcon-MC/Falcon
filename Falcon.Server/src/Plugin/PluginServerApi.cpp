@@ -153,6 +153,7 @@ namespace {
         PluginServerApi::fillPermissions(api);
         PluginServerApi::fillPackets(api);
         PluginServerApi::fillContent(api);
+        PluginServerApi::fillServices(api);
         return api;
     }
 }

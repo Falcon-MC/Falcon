@@ -47,4 +47,6 @@ struct PluginEvent {
     int32_t mSourceSlot = -1;
     std::string mDestinationContainer;
     int32_t mDestinationSlot = -1;
+    std::string mCustomName;
+    std::string mCustomData;
 };
