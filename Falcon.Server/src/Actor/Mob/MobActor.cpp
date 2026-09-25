@@ -92,6 +92,13 @@ void MobActor::tick(ServerNetworkHandler &owner) {
 }
 
 void MobActor::_registerGoals(ServerNetworkHandler &owner) {
+    mGoalsDirty = false;
+    const bool sameGroups = mGoalGroups.size() == mComponentGroups.size()
+                            && std::is_permutation(mGoalGroups.begin(), mGoalGroups.end(), mComponentGroups.begin());
+    if (mGoalsRegistered && sameGroups)
+        return;
+
+    mGoalGroups = mComponentGroups;
     mGoalSelector.clear(owner, *this);
     registerGoals(mGoalSelector);
     if (mGoalSelector.isEmpty())
@@ -327,8 +334,13 @@ void MobActor::finishBreeding(ServerNetworkHandler &owner) {
 
 void MobActor::_syncBody(ServerNetworkHandler &owner) {
     mBodyDirty = false;
-    if (getDefinition() == nullptr)
+    const bool sameGroups = mBodyGroups.size() == mComponentGroups.size()
+                            && std::is_permutation(mBodyGroups.begin(), mBodyGroups.end(), mComponentGroups.begin());
+    if (getDefinition() == nullptr || (mBodySynced && sameGroups))
         return;
+
+    mBodyGroups = mComponentGroups;
+    mBodySynced = true;
 
     _setFlag(owner, ActorFlag::Baby, getComponent("minecraft:is_baby") != nullptr);
     _setFlag(owner, ActorFlag::Sheared, getComponent("minecraft:is_sheared") != nullptr);

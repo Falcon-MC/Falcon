@@ -206,6 +206,9 @@ private:
     bool mDefinitionStarted = false;
     bool mBorn = false;
     std::vector<std::string> mComponentGroups;
+    std::vector<std::string> mGoalGroups;
+    std::vector<std::string> mBodyGroups;
+    bool mBodySynced = false;
     mutable const json::Value *mDefinition = nullptr;
     mutable bool mDefinitionResolved = false;
     mutable std::unordered_map<std::string, const json::Value *> mComponents;
