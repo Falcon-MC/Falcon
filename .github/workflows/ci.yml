@@ -241,7 +241,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 22
-          cache: maven
 
       - name: Cache compiler objects
         uses: actions/cache@v4
