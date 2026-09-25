@@ -55,6 +55,10 @@ void NativeLibrary::close() {
     mHandle = nullptr;
 }
 
+void NativeLibrary::detach() {
+    mHandle = nullptr;
+}
+
 std::string NativeLibrary::fileName(const std::string &main) {
 #if defined(_WIN32)
     return main + ".dll";

@@ -1,5 +1,7 @@
 #include "Block/BlockClassRegistry.h"
 
+#include "Plugin/PluginRegistrationScope.h"
+
 #include <algorithm>
 #include <vector>
 
@@ -9,6 +11,8 @@ namespace {
         int mOrder;
         BlockClassRegistry::Matcher mMatcher;
         BlockClassRegistry::Factory mFactory;
+        const void *mOwner;
+        bool mActive;
     };
 
     std::vector<Entry> &entries() {
@@ -17,6 +21,7 @@ namespace {
     }
 
     bool gSorted = false;
+    int gNextOrder = 0;
 
     void sortEntries() {
         if (gSorted)
@@ -30,22 +35,51 @@ namespace {
 
         gSorted = true;
     }
+
+    const Entry *findEntry(const std::string &identifier) {
+        sortEntries();
+
+        for (const Entry &entry: entries()) {
+            if (entry.mActive && entry.mMatcher(identifier))
+                return &entry;
+        }
+
+        return nullptr;
+    }
 }
 
 BlockClassRegistry::Registration::Registration(int priority, Matcher matcher, Factory factory) {
-    entries().push_back({priority, (int) entries().size(), matcher, factory});
+    entries().push_back({priority, gNextOrder++, matcher, factory, PluginRegistrationScope::getOwner(),
+                         PluginRegistrationScope::isActive()});
     gSorted = false;
 }
 
 std::unique_ptr<Block> BlockClassRegistry::create(const Block &block) {
-    sortEntries();
-
-    const std::string &identifier = block.getIdentifier();
-
-    for (const Entry &entry: entries()) {
-        if (entry.mMatcher(identifier))
-            return entry.mFactory(block);
-    }
+    const Entry *entry = findEntry(block.getIdentifier());
+    if (entry != nullptr)
+        return entry->mFactory(block);
 
     return std::make_unique<Block>(block);
+}
+
+const void *BlockClassRegistry::findOwner(const std::string &identifier) {
+    const Entry *entry = findEntry(identifier);
+    return entry == nullptr ? nullptr : entry->mOwner;
+}
+
+void BlockClassRegistry::activate(const void *owner) {
+    for (Entry &entry: entries()) {
+        if (entry.mOwner == owner)
+            entry.mActive = true;
+    }
+}
+
+void BlockClassRegistry::remove(const void *owner) {
+    if (owner == nullptr)
+        return;
+
+    std::vector<Entry> &registered = entries();
+    registered.erase(std::remove_if(registered.begin(), registered.end(), [owner](const Entry &entry) {
+        return entry.mOwner == owner;
+    }), registered.end());
 }

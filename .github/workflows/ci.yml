@@ -106,3 +106,48 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           cmake --build build --parallel
+
+  internal-plugins:
+    name: Internal plugins linux-x64
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache zlib1g-dev libssl-dev
+
+      - name: Cache compiler objects
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ci-ccache-internal-plugins-${{ github.sha }}
+          restore-keys: |
+            ci-ccache-internal-plugins-
+            ci-ccache-linux-x64-
+
+      - name: Build the server and the internal example plugins
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DFALCON_BUILD_INTERNAL_PLUGINS=ON
+          cmake --build build --parallel
+
+      - name: Load the example plugin in the server
+        run: |
+          set -euo pipefail
+          mkdir -p run/plugins/GardenPlugin
+          cp build/InternalPlugins/GardenPlugin/libGardenPlugin.so run/plugins/GardenPlugin/
+          cp build/_deps/falcon_plugin_api-src/examples/internal/GardenPlugin/plugin.json run/plugins/GardenPlugin/
+          cd run
+          timeout --signal=INT --kill-after=30 120 ../build/Falcon.Server/FalconServer --no-wizard < /dev/null \
+            | tee console.log || true
+          grep -q "Loaded internal plugin GardenPlugin" console.log server.log
+          grep -q "Enabled plugin GardenPlugin" console.log server.log

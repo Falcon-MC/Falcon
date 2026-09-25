@@ -619,4 +619,6 @@ public:
     static const std::vector<std::unique_ptr<Item>> &getAll();
 
     static const Item *fromIdentifier(const std::string &identifier);
+
+    static void refreshOverrides();
 };

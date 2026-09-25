@@ -104,9 +104,18 @@ set(FALCON_PLUGIN_API_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     falcon_plugin_api
     GIT_REPOSITORY https://github.com/Falcon-MC/PluginAPI.git
-    GIT_TAG f6caaaec101f73d8285b5e9eb54d23c985fb7fdb
+    GIT_TAG d7cfbd23b3da03fe1a6249a2b2d85897627d6c05
     GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(falcon_plugin_api)
 
 add_subdirectory(Falcon.Server)
+
+option(FALCON_BUILD_INTERNAL_PLUGINS "Build the internal example plugins against this server" OFF)
+
+if(FALCON_BUILD_INTERNAL_PLUGINS)
+    if(NOT COMMAND falcon_add_internal_plugin)
+        message(FATAL_ERROR "The pinned PluginAPI has no internal plugin support")
+    endif()
+    add_subdirectory("${falcon_plugin_api_SOURCE_DIR}/examples/internal" "${CMAKE_BINARY_DIR}/InternalPlugins")
+endif()

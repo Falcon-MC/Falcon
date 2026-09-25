@@ -91,7 +91,8 @@ bool PluginDescription::load(const std::string &path, PluginDescription &out, st
         error = "missing version or main";
         return false;
     }
-    if (!parseApiVersion(readString(*root, "api-version"), out.mApiMajor, out.mApiMinor)) {
+    const bool native = out.mRuntime == "native";
+    if (native && !parseApiVersion(readString(*root, "api-version"), out.mApiMajor, out.mApiMinor)) {
         error = "invalid or missing api-version";
         return false;
     }

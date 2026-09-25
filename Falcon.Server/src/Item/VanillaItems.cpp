@@ -5,6 +5,9 @@
 #include "Item/ItemTypeIds.h"
 #include "Plugin/PluginContentRegistry.h"
 
+#include <atomic>
+#include <unordered_map>
+
 Item VanillaItems::AIR() {
     return Item(ItemTypeIds::AIR, "minecraft:air", "Air");
 }
@@ -2433,6 +2436,17 @@ namespace {
     std::unique_ptr<Item> makeItem(const Item &base) {
         return ItemClassRegistry::create(base);
     }
+
+    struct ItemOverrides {
+        std::unordered_map<std::string, std::unique_ptr<Item>> mByIdentifier;
+    };
+
+    std::atomic<const ItemOverrides *> gItemOverrides{nullptr};
+
+    std::vector<std::unique_ptr<ItemOverrides>> &publishedOverrides() {
+        static auto *published = new std::vector<std::unique_ptr<ItemOverrides>>();
+        return *published;
+    }
 }
 
 const std::vector<std::unique_ptr<Item>> &VanillaItems::getAll() {
@@ -2451,10 +2465,35 @@ const std::vector<std::unique_ptr<Item>> &VanillaItems::getAll() {
 }
 
 const Item *VanillaItems::fromIdentifier(const std::string &identifier) {
+    const ItemOverrides *overrides = gItemOverrides.load(std::memory_order_acquire);
+    if (overrides != nullptr) {
+        const auto overridden = overrides->mByIdentifier.find(identifier);
+        if (overridden != overrides->mByIdentifier.end())
+            return overridden->second.get();
+    }
+
     for (const std::unique_ptr<Item> &item: getAll()) {
         if (item->getIdentifier() == identifier)
             return item.get();
     }
 
     return PluginContentRegistry::getInstance().getItemType(identifier);
+}
+
+void VanillaItems::refreshOverrides() {
+    auto overrides = std::make_unique<ItemOverrides>();
+
+    for (size_t i = 0; i < ItemDataTable::getCount(); ++i) {
+        const Item base(ItemDataTable::at(i));
+        if (ItemClassRegistry::findOwner(base.getIdentifier()) != nullptr)
+            overrides->mByIdentifier[base.getIdentifier()] = makeItem(base);
+    }
+
+    if (overrides->mByIdentifier.empty()) {
+        gItemOverrides.store(nullptr, std::memory_order_release);
+        return;
+    }
+
+    gItemOverrides.store(overrides.get(), std::memory_order_release);
+    publishedOverrides().push_back(std::move(overrides));
 }

@@ -18,6 +18,8 @@ public:
 
     void close();
 
+    void detach();
+
     static std::string fileName(const std::string &main);
 
 private:

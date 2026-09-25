@@ -16,5 +16,6 @@ struct LoadedPlugin {
     std::vector<std::string> mCommands;
     std::unique_ptr<NativeLibrary> mLibrary;
     FalconPluginCallbacks mCallbacks{};
+    std::shared_ptr<void> mInstance;
     bool mEnabled = false;
 };

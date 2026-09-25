@@ -6,6 +6,7 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Plugin/PluginContentRegistry.h"
 
+#include <atomic>
 #include <string>
 #include <unordered_set>
 
@@ -25,6 +26,20 @@ namespace {
 namespace {
     std::unique_ptr<Block> makeBlock(const BlockData &data) {
         return BlockClassRegistry::create(VanillaBlocks::fromData(data));
+    }
+}
+
+namespace {
+    struct BlockOverrides {
+        std::unordered_map<std::string, std::unique_ptr<Block>> mByIdentifier;
+        std::unordered_map<int32_t, const Block *> mByTypeId;
+    };
+
+    std::atomic<const BlockOverrides *> gBlockOverrides{nullptr};
+
+    std::vector<std::unique_ptr<BlockOverrides>> &publishedOverrides() {
+        static auto *published = new std::vector<std::unique_ptr<BlockOverrides>>();
+        return *published;
     }
 }
 
@@ -5981,6 +5996,13 @@ const Block *VanillaBlocks::fromIdentifier(const std::string &identifier) {
         return index;
     }();
 
+    const BlockOverrides *overrides = gBlockOverrides.load(std::memory_order_acquire);
+    if (overrides != nullptr) {
+        const auto overridden = overrides->mByIdentifier.find(identifier);
+        if (overridden != overrides->mByIdentifier.end())
+            return overridden->second.get();
+    }
+
     const auto match = byIdentifier.find(std::string_view(identifier));
     return match == byIdentifier.end() ? PluginContentRegistry::getInstance().getBlockType(identifier)
                                        : match->second;
@@ -5995,6 +6017,36 @@ const Block *VanillaBlocks::fromTypeId(int32_t typeId) {
         return index;
     }();
 
+    const BlockOverrides *overrides = gBlockOverrides.load(std::memory_order_acquire);
+    if (overrides != nullptr) {
+        const auto overridden = overrides->mByTypeId.find(typeId);
+        if (overridden != overrides->mByTypeId.end())
+            return overridden->second;
+    }
+
     const auto match = byTypeId.find(typeId);
     return match == byTypeId.end() ? nullptr : match->second;
+}
+
+void VanillaBlocks::refreshOverrides() {
+    auto overrides = std::make_unique<BlockOverrides>();
+
+    for (size_t index = 0; index < BlockDataTable::getCount(); ++index) {
+        const BlockData &data = BlockDataTable::getEntries()[index];
+        if (data.mTypeId == BlockTypeIds::AIR || BlockClassRegistry::findOwner(data.mIdentifier) == nullptr)
+            continue;
+
+        std::unique_ptr<Block> block = makeBlock(data);
+        const std::string identifier = block->getIdentifier();
+        overrides->mByTypeId[block->getTypeId()] = block.get();
+        overrides->mByIdentifier[identifier] = std::move(block);
+    }
+
+    if (overrides->mByIdentifier.empty()) {
+        gBlockOverrides.store(nullptr, std::memory_order_release);
+        return;
+    }
+
+    gBlockOverrides.store(overrides.get(), std::memory_order_release);
+    publishedOverrides().push_back(std::move(overrides));
 }

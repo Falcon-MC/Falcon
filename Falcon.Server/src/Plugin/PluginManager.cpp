@@ -3,6 +3,7 @@
 #include "Actor/ServerPlayer.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/InternalPluginLoader.h"
 #include "Plugin/PluginCommand.h"
 #include "Plugin/PluginPackets.h"
 #include "Plugin/PluginServerApi.h"
@@ -90,14 +91,16 @@ void PluginManager::loadAll(const std::string &directory) {
             continue;
         }
 
-        if (description.mApiMajor != FALCON_API_VERSION_MAJOR || description.mApiMinor > FALCON_API_VERSION_MINOR) {
+        const bool native = description.mRuntime == "native";
+        if (native && (description.mApiMajor != FALCON_API_VERSION_MAJOR
+                       || description.mApiMinor > FALCON_API_VERSION_MINOR)) {
             LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: it needs API %u.%u, the server provides %u.%u",
                       description.mName.c_str(), description.mApiMajor, description.mApiMinor,
                       FALCON_API_VERSION_MAJOR, FALCON_API_VERSION_MINOR);
             continue;
         }
 
-        if (description.mRuntime != "native") {
+        if (!native && description.mRuntime != "internal") {
             LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: the %s runtime is not supported yet",
                       description.mName.c_str(), description.mRuntime.c_str());
             continue;
@@ -123,7 +126,8 @@ void PluginManager::loadAll(const std::string &directory) {
             }
         }
 
-        if (!dependenciesLoaded || !_loadNative(*plugin))
+        const bool internal = plugin->mDescription.mRuntime == "internal";
+        if (!dependenciesLoaded || !(internal ? InternalPluginLoader::load(*plugin, mOwner) : _loadNative(*plugin)))
             continue;
 
         loadedNames.insert(toLower(plugin->mDescription.mName));
@@ -147,6 +151,8 @@ void PluginManager::loadAll(const std::string &directory) {
             LOG_ERROR(LogAreaID::Server, "[%s] onLoad threw an exception", plugin->mDescription.mName.c_str());
         }
     }
+
+    InternalPluginLoader::refresh();
 }
 
 bool PluginManager::_loadNative(LoadedPlugin &plugin) {
@@ -341,6 +347,9 @@ void PluginManager::_disable(LoadedPlugin &plugin) {
     }), mSubscriptions.end());
     _updateSubscribedTypes();
     mPermissions->clearPlugin(plugin);
+
+    if (plugin.mDescription.mRuntime == "internal")
+        InternalPluginLoader::unload(plugin);
 }
 
 void PluginManager::_updateSubscribedTypes() {
