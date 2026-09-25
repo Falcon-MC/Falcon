@@ -1,5 +1,7 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 
+#include "Actor/ActorClassRegistry.h"
+#include "Actor/Mob/MobActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockActorStore.h"
 #include "Core/Debug/BedrockLog.h"
@@ -58,9 +60,13 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
         else if (identifier == PrimedTntActor::IDENTIFIER)
             actor.reset(new PrimedTntActor(runtimeId, PrimedTntActor::DEFAULT_FUSE));
         else
-            actor.reset(new ServerActor(runtimeId, identifier));
+            actor = ActorClassRegistry::create(runtimeId, identifier);
 
         actor->getAttributes() = ActorAttributes::createActorDefaults();
+
+        MobActor *mob = dynamic_cast<MobActor *>(actor.get());
+        if (mob != nullptr)
+            mob->setMaxHealth(mob->resolveMaxHealth(mProperties.getDifficulty()));
 
         const CustomActorDefinition *definition = CustomContentRegistry::getInstance().getActorDefinition(identifier);
         if (definition != nullptr) {
