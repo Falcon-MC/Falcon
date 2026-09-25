@@ -31,6 +31,7 @@
 #include "Network/Handler/MovementHandler.h"
 #include "Network/Handler/SubChunkRequestHandler.h"
 #include "Plugin/PluginManager.h"
+#include "Plugin/PluginPackets.h"
 #include "Protocol/Packets/SubChunkRequestPacket.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Level/LevelChunk.h"
@@ -541,6 +542,7 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
     }
 
     mPluginManager->loadAll("plugins");
+    CustomContentRegistry::getInstance().freeze();
     mPluginManager->enableAll();
 
     if (!mNetworkHandler->host(definition)) {
@@ -978,7 +980,16 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
         return;
 
     try {
-        ReadOnlyBinaryStream stream(data);
+        std::string received;
+        const std::string *source = &data;
+        if (mPluginManager->hasSubscribers(FALCON_EVENT_DATA_PACKET_RECEIVE)) {
+            received = data;
+            if (!PluginPackets::onReceive(*mPluginManager, id, received))
+                return;
+            source = &received;
+        }
+
+        ReadOnlyBinaryStream stream(*source);
 
         unsigned char senderSubId;
         unsigned char clientSubId;

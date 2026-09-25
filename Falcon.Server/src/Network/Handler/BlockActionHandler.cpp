@@ -27,6 +27,8 @@
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginBlock.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelEventPacket.h"
@@ -430,12 +432,25 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
         return;
     }
 
+    PluginEvent pluginEvent;
+    pluginEvent.mType = FALCON_EVENT_BLOCK_BREAK;
+    pluginEvent.mCancellable = true;
+    pluginEvent.mPlayer = &player;
+    pluginEvent.mBlockPosition = position;
+    pluginEvent.mBlockName = brokenState.mName;
+    PluginManager::getInstance().dispatch(pluginEvent);
+    if (pluginEvent.mCancelled) {
+        sendCurrentBlockState(owner, player, position);
+        return;
+    }
+
     const std::string brokenIdentifier = brokenState.mName;
     const BlockData *brokenData = BlockDataTable::find(brokenState.mName.c_str());
     const bool creative = player.getGameType() == (int32_t) GameType::Creative;
     const ItemStack heldItem = player.getInventory().getItemInHand();
 
     destroyBlock(owner, level, position, brokenState, !creative, heldItem);
+    PluginBlock::brokenBy(player, position, brokenIdentifier);
 
     PlayerBreakBlockAfterEvent brokenEvent(player, position, brokenIdentifier);
     owner.getEventBus().after().mPlayerBreakBlock.emit(brokenEvent);
@@ -459,10 +474,9 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
 void BlockActionHandler::spawnBlockDrops(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                          const BlockState &brokenState, const ItemStack &tool) {
     const BlockData *brokenData = BlockDataTable::find(brokenState.mName.c_str());
-    if (brokenData == nullptr)
-        return;
-
     const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
+    if (brokenData == nullptr && brokenBlock == nullptr)
+        return;
     const bool silkTouch = ItemEnchantments::getLevel(tool, EnchantmentIds::SILK_TOUCH) > 0;
     const int32_t fortuneLevel = ItemEnchantments::getLevel(tool, EnchantmentIds::FORTUNE);
 
@@ -494,6 +508,9 @@ void BlockActionHandler::spawnBlockDrops(ServerNetworkHandler &owner, Level &lev
             spawnDrop(furnaceDropIdentifier(drop.mIdentifier), drop.mCount);
         return;
     }
+
+    if (brokenData == nullptr)
+        return;
 
     std::string dropIdentifier;
     int32_t dropCount = 0;
@@ -921,6 +938,16 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (scripts.beforePlayerInteractWithBlock(player, transaction.mBlockPosition, face))
         return false;
 
+    PluginEvent interactPluginEvent;
+    interactPluginEvent.mType = FALCON_EVENT_PLAYER_INTERACT_BLOCK;
+    interactPluginEvent.mCancellable = true;
+    interactPluginEvent.mPlayer = &player;
+    interactPluginEvent.mBlockPosition = transaction.mBlockPosition;
+    interactPluginEvent.mBlockFace = (uint32_t) face;
+    PluginManager::getInstance().dispatch(interactPluginEvent);
+    if (interactPluginEvent.mCancelled)
+        return false;
+
     scripts.onPlayerInteractWithBlock(player, transaction.mBlockPosition, face);
 
     owner.getScriptEngine().onItemUseOnBlock(player, transaction.mBlockPosition.x,
@@ -942,6 +969,10 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     if (itemFirst && itemType->onUseOnBlock(owner, player, interactItem, transaction.mBlockPosition,
                                             transaction.mBlockFace, transaction.mClickPosition))
+        return true;
+
+    if (!onCooldown && useBlock && PluginBlock::interactAt(player, transaction.mBlockPosition,
+                                                           (uint32_t) transaction.mBlockFace, clickedState.mName))
         return true;
 
     if (!onCooldown && useBlock && clickedBlock != nullptr &&
@@ -1030,6 +1061,16 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         return false;
 
     if (isBlockedByActor(owner, level, target, placedState, player))
+        return false;
+
+    PluginEvent placePluginEvent;
+    placePluginEvent.mType = FALCON_EVENT_BLOCK_PLACE;
+    placePluginEvent.mCancellable = true;
+    placePluginEvent.mPlayer = &player;
+    placePluginEvent.mBlockPosition = target;
+    placePluginEvent.mBlockName = placedState.mName;
+    PluginManager::getInstance().dispatch(placePluginEvent);
+    if (placePluginEvent.mCancelled)
         return false;
 
     std::vector<BlockPlacementEntry> placementBlocks;

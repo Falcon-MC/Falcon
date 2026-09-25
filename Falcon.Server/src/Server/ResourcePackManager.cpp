@@ -312,6 +312,10 @@ void ResourcePackManager::_loadFolder(const std::string &path, const std::string
     _loadPackBytes(writer.finish(), label, std::string());
 }
 
+void ResourcePackManager::loadFolder(const std::string &path, const std::string &label) {
+    _loadFolder(path, label);
+}
+
 void ResourcePackManager::loadBundledAddonsFrom(const std::string &directory) {
     std::error_code error;
     const std::filesystem::path root(directory);

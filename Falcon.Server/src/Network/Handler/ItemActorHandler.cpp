@@ -14,6 +14,7 @@
 #include "Level/Level.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/AddItemActorPacket.h"
 #include "Protocol/Packets/MoveActorAbsolutePacket.h"
 #include "Protocol/Packets/RemoveActorPacket.h"
@@ -262,6 +263,18 @@ namespace {
                 continue;
 
             const ItemStack pickedItem = actor.getItem();
+
+            ItemStack eventItem = pickedItem;
+            PluginEvent pluginEvent;
+            pluginEvent.mType = FALCON_EVENT_PLAYER_PICKUP_ITEM;
+            pluginEvent.mCancellable = true;
+            pluginEvent.mPlayer = &player;
+            pluginEvent.mItem = &eventItem;
+            PluginManager::getInstance().dispatch(pluginEvent);
+            if (actor.isRemoved())
+                return;
+            if (pluginEvent.mCancelled)
+                continue;
 
             std::vector<int> touchedSlots;
             if (!inventory.addItem(actor.getItem(), touchedSlots))

@@ -28,6 +28,8 @@ public:
 
     bool loadCdnConfig(const std::string &path);
 
+    void loadFolder(const std::string &path, const std::string &label);
+
     const std::vector<ResourcePack> &getPacks() const { return mPacks; }
 
     const ResourcePack *findById(const std::string &uuid) const;

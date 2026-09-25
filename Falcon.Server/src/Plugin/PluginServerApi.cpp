@@ -5,46 +5,13 @@
 #include "Command/CommandOrigin.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Network/Handler/ServerNetworkHandler.h"
-#include "Plugin/PluginEvent.h"
-#include "Plugin/PluginManager.h"
+#include "Plugin/PluginApiHelpers.h"
 
-#include <array>
 #include <string>
 
+using namespace PluginApiHelpers;
+
 namespace {
-    const char *hold(std::string value) {
-        thread_local std::array<std::string, 16> buffers;
-        thread_local size_t next = 0;
-        std::string &slot = buffers[next];
-        next = (next + 1) % buffers.size();
-        slot = std::move(value);
-        return slot.c_str();
-    }
-
-    ServerNetworkHandler &owner() {
-        return PluginManager::getInstance().getOwner();
-    }
-
-    ServerPlayer *player(FalconPlayer *handle) {
-        return reinterpret_cast<ServerPlayer *>(handle);
-    }
-
-    FalconPlayer *handle(ServerPlayer *value) {
-        return reinterpret_cast<FalconPlayer *>(value);
-    }
-
-    PluginEvent *event(FalconEvent *handle) {
-        return reinterpret_cast<PluginEvent *>(handle);
-    }
-
-    CommandOrigin *sender(FalconCommandSender *handle) {
-        return reinterpret_cast<CommandOrigin *>(handle);
-    }
-
-    LoadedPlugin *plugin(FalconPlugin *handle) {
-        return PluginManager::fromHandle(handle);
-    }
-
     ServerPlayer *spawnedPlayerAt(uint32_t index) {
         uint32_t current = 0;
         for (auto &entry: owner().getPlayers()) {
@@ -90,13 +57,13 @@ namespace {
     }
 
     FalconPlayer *onlinePlayer(uint32_t index) {
-        return handle(spawnedPlayerAt(index));
+        return toHandle(spawnedPlayerAt(index));
     }
 
     FalconPlayer *findPlayer(const char *name) {
         if (name == nullptr)
             return nullptr;
-        return handle(owner().getPlayerByName(name));
+        return toHandle(owner().getPlayerByName(name));
     }
 
     const char *playerName(FalconPlayer *target) {
@@ -135,36 +102,6 @@ namespace {
         PluginManager::getInstance().unsubscribe(subscription);
     }
 
-    FalconEventType eventType(FalconEvent *source) {
-        return event(source)->mType;
-    }
-
-    int eventIsCancellable(FalconEvent *source) {
-        return event(source)->mCancellable ? 1 : 0;
-    }
-
-    int eventIsCancelled(FalconEvent *source) {
-        return event(source)->mCancelled ? 1 : 0;
-    }
-
-    void eventSetCancelled(FalconEvent *source, int cancelled) {
-        if (event(source)->mCancellable && !event(source)->mMonitor)
-            event(source)->mCancelled = cancelled != 0;
-    }
-
-    FalconPlayer *eventPlayer(FalconEvent *source) {
-        return handle(event(source)->mPlayer);
-    }
-
-    const char *eventMessage(FalconEvent *source) {
-        return event(source)->mMessage == nullptr ? "" : event(source)->mMessage->c_str();
-    }
-
-    void eventSetMessage(FalconEvent *source, const char *message) {
-        if (event(source)->mMessage != nullptr && message != nullptr && !event(source)->mMonitor)
-            *event(source)->mMessage = message;
-    }
-
     int registerCommand(FalconPlugin *source, const FalconCommandDescriptor *descriptor) {
         if (descriptor == nullptr)
             return 0;
@@ -176,7 +113,7 @@ namespace {
     }
 
     FalconPlayer *senderPlayer(FalconCommandSender *source) {
-        return handle(sender(source)->asPlayer());
+        return toHandle(sender(source)->asPlayer());
     }
 
     void senderSendMessage(FalconCommandSender *source, const char *message) {
@@ -207,36 +144,41 @@ namespace {
         api.size = (uint32_t) sizeof(FalconServerApi);
         api.versionMajor = FALCON_API_VERSION_MAJOR;
         api.versionMinor = FALCON_API_VERSION_MINOR;
-        api.serverVersion = &serverVersion;
-        api.log = &logMessage;
-        api.pluginName = &pluginName;
-        api.pluginDataFolder = &pluginDataFolder;
-        api.onlinePlayerCount = &onlinePlayerCount;
-        api.onlinePlayer = &onlinePlayer;
-        api.findPlayer = &findPlayer;
-        api.playerName = &playerName;
-        api.playerIsOperator = &playerIsOperator;
-        api.playerSendMessage = &playerSendMessage;
-        api.playerKick = &playerKick;
-        api.broadcastMessage = &broadcastMessage;
-        api.subscribe = &subscribe;
-        api.unsubscribe = &unsubscribe;
-        api.eventType = &eventType;
-        api.eventIsCancellable = &eventIsCancellable;
-        api.eventIsCancelled = &eventIsCancelled;
-        api.eventSetCancelled = &eventSetCancelled;
-        api.eventPlayer = &eventPlayer;
-        api.eventMessage = &eventMessage;
-        api.eventSetMessage = &eventSetMessage;
-        api.registerCommand = &registerCommand;
-        api.senderName = &senderName;
-        api.senderPlayer = &senderPlayer;
-        api.senderSendMessage = &senderSendMessage;
-        api.scheduleTask = &scheduleTask;
-        api.runAsync = &runAsync;
-        api.cancelTask = &cancelTask;
+        PluginServerApi::fillCore(api);
+        PluginServerApi::fillEvents(api);
+        PluginServerApi::fillEntities(api);
+        PluginServerApi::fillPlayers(api);
+        PluginServerApi::fillWorld(api);
+        PluginServerApi::fillItems(api);
+        PluginServerApi::fillPermissions(api);
+        PluginServerApi::fillPackets(api);
+        PluginServerApi::fillContent(api);
         return api;
     }
+}
+
+void PluginServerApi::fillCore(FalconServerApi &api) {
+    api.serverVersion = &serverVersion;
+    api.log = &logMessage;
+    api.pluginName = &pluginName;
+    api.pluginDataFolder = &pluginDataFolder;
+    api.onlinePlayerCount = &onlinePlayerCount;
+    api.onlinePlayer = &onlinePlayer;
+    api.findPlayer = &findPlayer;
+    api.playerName = &playerName;
+    api.playerIsOperator = &playerIsOperator;
+    api.playerSendMessage = &playerSendMessage;
+    api.playerKick = &playerKick;
+    api.broadcastMessage = &broadcastMessage;
+    api.subscribe = &subscribe;
+    api.unsubscribe = &unsubscribe;
+    api.registerCommand = &registerCommand;
+    api.senderName = &senderName;
+    api.senderPlayer = &senderPlayer;
+    api.senderSendMessage = &senderSendMessage;
+    api.scheduleTask = &scheduleTask;
+    api.runAsync = &runAsync;
+    api.cancelTask = &cancelTask;
 }
 
 const FalconServerApi &PluginServerApi::get() {

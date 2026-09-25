@@ -8,6 +8,7 @@
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/MovementHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <chrono>
@@ -56,6 +57,21 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     player.tickSpinAttack(*this);
     ElytraItem::tickGliding(*this, player);
     FurnaceSystem::tick(*this, player);
+
+    if (player.hasPendingMove() && player.getPendingMovePosition() != player.getPosition()) {
+        PluginEvent moveEvent;
+        moveEvent.mType = FALCON_EVENT_PLAYER_MOVE;
+        moveEvent.mCancellable = true;
+        moveEvent.mPlayer = &player;
+        moveEvent.mFrom = player.getPosition();
+        moveEvent.mTo = player.getPendingMovePosition();
+        PluginManager::getInstance().dispatch(moveEvent);
+
+        if (moveEvent.mCancelled)
+            player.teleport(*this, moveEvent.mFrom);
+        else if (moveEvent.mToChanged)
+            player.teleport(*this, moveEvent.mTo);
+    }
 
     if (player.hasPendingMove()) {
         const int32_t gameType = player.getGameType();

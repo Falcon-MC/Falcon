@@ -3,6 +3,7 @@
 #include "Item/ItemClassRegistry.h"
 #include "Item/ItemData.h"
 #include "Item/ItemTypeIds.h"
+#include "Plugin/PluginContentRegistry.h"
 
 Item VanillaItems::AIR() {
     return Item(ItemTypeIds::AIR, "minecraft:air", "Air");
@@ -2455,5 +2456,5 @@ const Item *VanillaItems::fromIdentifier(const std::string &identifier) {
             return item.get();
     }
 
-    return nullptr;
+    return PluginContentRegistry::getInstance().getItemType(identifier);
 }

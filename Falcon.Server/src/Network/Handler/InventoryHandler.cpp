@@ -18,6 +18,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/ContainerClosePacket.h"
 #include "Protocol/Packets/CraftingEventPacket.h"
 #include "Protocol/Packets/InventoryTransactionPacket.h"
@@ -261,8 +262,30 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Offhand, 0);
     }
 
-    for (const ItemStack &dropped: droppedItems)
-        owner._throwItem(player, dropped);
+    for (const ItemStack &dropped: droppedItems) {
+        ItemStack droppedCopy = dropped;
+        PluginEvent dropEvent;
+        dropEvent.mType = FALCON_EVENT_PLAYER_DROP_ITEM;
+        dropEvent.mCancellable = true;
+        dropEvent.mPlayer = &player;
+        dropEvent.mItem = &droppedCopy;
+        PluginManager::getInstance().dispatch(dropEvent);
+
+        if (!dropEvent.mCancelled) {
+            owner._throwItem(player, dropped);
+            continue;
+        }
+
+        std::vector<int> touched;
+        const int remaining = inventory.addItemPartial(dropped, touched);
+        needsResync = true;
+        if (remaining <= 0)
+            continue;
+
+        ItemStack rest = dropped;
+        rest.mCount = remaining;
+        owner._throwItem(player, rest);
+    }
 
     player.getInventoryManager().syncCraftingPreview(owner.getRecipeOutputs(), owner.getRecipeSourceIndices());
     if (player.getInventoryManager().isFurnaceOpen()) {
@@ -326,6 +349,19 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
         if (packet.mActionType == 0) {
             ServerActor *target = owner.getActor((int64_t) packet.mRuntimeActorId);
             if (target != nullptr && !owner.getScriptEngine().beforePlayerInteractWithEntity(player, *target)) {
+                target = owner.getActor((int64_t) packet.mRuntimeActorId);
+                if (target == nullptr)
+                    return;
+
+                PluginEvent event;
+                event.mType = FALCON_EVENT_PLAYER_INTERACT_ENTITY;
+                event.mCancellable = true;
+                event.mPlayer = &player;
+                event.mEntity = target;
+                PluginManager::getInstance().dispatch(event);
+                if (event.mCancelled)
+                    return;
+
                 target = owner.getActor((int64_t) packet.mRuntimeActorId);
                 if (target != nullptr)
                     target->onInteract(owner, player);
@@ -418,6 +454,18 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
     thrown.mCount = droppedCount;
     thrown.mUsingNetId = false;
     thrown.mNetId = 0;
+
+    ItemStack eventItem = thrown;
+    PluginEvent dropEvent;
+    dropEvent.mType = FALCON_EVENT_PLAYER_DROP_ITEM;
+    dropEvent.mCancellable = true;
+    dropEvent.mPlayer = &player;
+    dropEvent.mItem = &eventItem;
+    PluginManager::getInstance().dispatch(dropEvent);
+    if (dropEvent.mCancelled) {
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, sourceSlot);
+        return;
+    }
 
     item->mCount -= droppedCount;
     if (item->mCount <= 0)

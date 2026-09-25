@@ -4,6 +4,7 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Plugin/PluginCommand.h"
+#include "Plugin/PluginPackets.h"
 #include "Plugin/PluginServerApi.h"
 
 #include <algorithm>
@@ -27,9 +28,13 @@ namespace {
 PluginManager::PluginManager(ServerNetworkHandler &owner) : mOwner(owner) {
     gInstance = this;
     _hookEventBus();
+    mPermissions = std::make_unique<PluginPermissions>(mOwner.getEventBus());
 }
 
 PluginManager::~PluginManager() {
+    if (mOwner.isTransportReady())
+        mOwner.getNetworkHandler().setOutboundFilter(nullptr);
+
     EventBus &bus = mOwner.getEventBus();
     bus.after().mPlayerJoin.unsubscribe(mJoinHook);
     bus.after().mPlayerLeave.unsubscribe(mQuitHook);
@@ -125,6 +130,12 @@ void PluginManager::loadAll(const std::string &directory) {
         loaded.push_back(std::move(plugin));
     }
     mPlugins.swap(loaded);
+
+    for (std::unique_ptr<LoadedPlugin> &plugin: mPlugins) {
+        const fs::path resourcePack = fs::path(plugin->mDirectory) / "resource_pack";
+        if (fs::exists(resourcePack / "manifest.json", errorCode))
+            mOwner.getResourcePacks().loadFolder(resourcePack.string(), plugin->mDescription.mName);
+    }
 
     for (std::unique_ptr<LoadedPlugin> &plugin: mPlugins) {
         if (plugin->mCallbacks.onLoad == nullptr)
@@ -328,6 +339,29 @@ void PluginManager::_disable(LoadedPlugin &plugin) {
     mSubscriptions.erase(std::remove_if(mSubscriptions.begin(), mSubscriptions.end(), [&](const Subscription &entry) {
         return entry.mPlugin == &plugin;
     }), mSubscriptions.end());
+    _updateSubscribedTypes();
+    mPermissions->clearPlugin(plugin);
+}
+
+void PluginManager::_updateSubscribedTypes() {
+    uint64_t types = 0;
+    for (const Subscription &subscription: mSubscriptions) {
+        if (subscription.mType < 64)
+            types |= (uint64_t) 1 << subscription.mType;
+    }
+    mSubscribedTypes = types;
+
+    if (!mOwner.isTransportReady())
+        return;
+
+    if (!hasSubscribers(FALCON_EVENT_DATA_PACKET_SEND)) {
+        mOwner.getNetworkHandler().setOutboundFilter(nullptr);
+        return;
+    }
+
+    mOwner.getNetworkHandler().setOutboundFilter([this](const NetworkIdentifier &id, std::string &data) {
+        return PluginPackets::onSend(*this, id, data);
+    });
 }
 
 void PluginManager::tick() {
@@ -346,6 +380,7 @@ uint64_t PluginManager::subscribe(LoadedPlugin &plugin, FalconEventType type, Fa
                                                return left.mPriority < right.mPriority;
                                            });
     mSubscriptions.insert(position, subscription);
+    _updateSubscribedTypes();
     return id;
 }
 
@@ -353,6 +388,7 @@ void PluginManager::unsubscribe(uint64_t id) {
     mSubscriptions.erase(std::remove_if(mSubscriptions.begin(), mSubscriptions.end(), [id](const Subscription &entry) {
         return entry.mId == id;
     }), mSubscriptions.end());
+    _updateSubscribedTypes();
 }
 
 bool PluginManager::registerCommand(LoadedPlugin &plugin, const FalconCommandDescriptor &descriptor) {
@@ -375,6 +411,13 @@ bool PluginManager::registerCommand(LoadedPlugin &plugin, const FalconCommandDes
 }
 
 void PluginManager::dispatch(PluginEvent &event) {
+    static constexpr int MAX_DISPATCH_DEPTH = 8;
+    thread_local int depth = 0;
+
+    if (!hasSubscribers(event.mType) || depth >= MAX_DISPATCH_DEPTH)
+        return;
+
+    depth++;
     const std::vector<Subscription> snapshot = mSubscriptions;
 
     for (const Subscription &subscription: snapshot) {
@@ -395,6 +438,7 @@ void PluginManager::dispatch(PluginEvent &event) {
     }
 
     event.mMonitor = false;
+    depth--;
 }
 
 void PluginManager::_hookEventBus() {

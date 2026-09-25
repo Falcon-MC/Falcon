@@ -12,6 +12,8 @@ public:
 
     std::vector<CommandOverloadData> getOverloads() const override;
 
+    static const char *findDeathMessageKey(const std::string &cause);
+
 private:
     ServerNetworkHandler &mHandler;
 };

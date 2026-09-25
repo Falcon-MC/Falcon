@@ -4,6 +4,7 @@
 #include "Block/BlockPaletteRegistry.h"
 #include "Block/BlockTypeIds.h"
 #include "Core/Debug/BedrockLog.h"
+#include "Plugin/PluginContentRegistry.h"
 
 #include <string>
 #include <unordered_set>
@@ -5981,7 +5982,8 @@ const Block *VanillaBlocks::fromIdentifier(const std::string &identifier) {
     }();
 
     const auto match = byIdentifier.find(std::string_view(identifier));
-    return match == byIdentifier.end() ? nullptr : match->second;
+    return match == byIdentifier.end() ? PluginContentRegistry::getInstance().getBlockType(identifier)
+                                       : match->second;
 }
 
 const Block *VanillaBlocks::fromTypeId(int32_t typeId) {

@@ -147,6 +147,42 @@ const CustomActorDefinition *CustomContentRegistry::getActorDefinition(const std
     return nullptr;
 }
 
+bool CustomContentRegistry::hasIdentifier(const std::string &identifier) const {
+    for (const CustomItemDefinition &item: mItems) {
+        if (item.mIdentifier == identifier)
+            return true;
+    }
+    return isCustomBlock(identifier) || getActorDefinition(identifier) != nullptr;
+}
+
+const CustomItemDefinition *CustomContentRegistry::registerItem(const CustomItemDefinition &item,
+                                                                ItemDefinitionRegistry &items) {
+    if (mFrozen || hasIdentifier(item.mIdentifier) || items.getDefinition(item.mIdentifier) != nullptr)
+        return nullptr;
+
+    _registerItem(item, items);
+    return &mItems.back();
+}
+
+const CustomBlockDefinition *CustomContentRegistry::registerBlock(const CustomBlockDefinition &block,
+                                                                  ItemDefinitionRegistry &items,
+                                                                  BlockDefinitionRegistry &blocks) {
+    if (mFrozen || hasIdentifier(block.mIdentifier) || items.getDefinition(block.mIdentifier) != nullptr ||
+        blocks.getDefinition(block.mIdentifier) != nullptr)
+        return nullptr;
+
+    _registerBlock(block, items, blocks);
+    return &mBlocks.back();
+}
+
+const CustomActorDefinition *CustomContentRegistry::registerActor(const CustomActorDefinition &actor) {
+    if (mFrozen || hasIdentifier(actor.mIdentifier))
+        return nullptr;
+
+    mActors.push_back(actor);
+    return &mActors.back();
+}
+
 void CustomContentRegistry::load(const BehaviorPackManager &packs, ItemDefinitionRegistry &items,
                                  BlockDefinitionRegistry &blocks) {
     for (const BehaviorPack &pack: packs.getPacks()) {
@@ -619,7 +655,7 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
     itemProperties.putInt("damage", 0);
     itemProperties.putBool("foil", false);
     itemProperties.putInt("frame_count", 1);
-    itemProperties.putBool("hand_equipped", false);
+    itemProperties.putBool("hand_equipped", item.mHandEquipped);
     itemProperties.putBool("liquid_clipped", false);
     itemProperties.putInt("max_stack_size", item.mMaxStackSize);
     itemProperties.putFloat("mining_speed", 1.0f);

@@ -51,6 +51,10 @@ namespace {
     }
 }
 
+const char *DamageCommand::findDeathMessageKey(const std::string &cause) {
+    return deathMessageKeyFor(cause);
+}
+
 DamageCommand::DamageCommand(ServerNetworkHandler &handler)
         : Command("damage", "commands.damage.description", "/damage <target> <amount> [cause]"), mHandler(handler) {}
 

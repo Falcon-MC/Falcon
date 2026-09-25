@@ -15,6 +15,7 @@
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 #include "Network/Handler/ItemActorHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/DeathInfoPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
@@ -213,6 +214,24 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (cooling && player.getLastDamageAmount() >= amount)
         return DamageResult::Ignored;
 
+    PluginEvent damageEvent;
+    damageEvent.mType = FALCON_EVENT_ENTITY_DAMAGE;
+    damageEvent.mCancellable = true;
+    damageEvent.mEntity = &player;
+    damageEvent.mAttacker = source.mAttacker;
+    damageEvent.mAmount = amount;
+    damageEvent.mCause = key;
+    PluginManager::getInstance().dispatch(damageEvent);
+    if (damageEvent.mCancelled)
+        return DamageResult::Ignored;
+
+    amount = (float) damageEvent.mAmount;
+    if (amount <= 0.0f)
+        return DamageResult::Ignored;
+
+    if (cooling && player.getLastDamageAmount() >= amount)
+        return DamageResult::Ignored;
+
     if (source.mOrigin.has_value()) {
         Actor *knockedBack = source.mProjectile ? nullptr : source.mAttacker;
         if (player.blockWithShield(*this, *source.mOrigin, amount, knockedBack, source.mDisablesShield)) {
@@ -308,8 +327,21 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     const std::vector<std::string> parameters = deathMessageParameters.empty()
                                                 ? std::vector<std::string>{player.getName()}
                                                 : deathMessageParameters;
-    if (rules.getBool("showdeathmessages"))
-        broadcastTranslation(key, parameters);
+
+    std::string deathMessage = key;
+    PluginEvent deathEvent;
+    deathEvent.mType = FALCON_EVENT_PLAYER_DEATH;
+    deathEvent.mPlayer = &player;
+    deathEvent.mEntity = &player;
+    deathEvent.mMessage = &deathMessage;
+    PluginManager::getInstance().dispatch(deathEvent);
+
+    if (rules.getBool("showdeathmessages")) {
+        if (deathMessage == key)
+            broadcastTranslation(key, parameters);
+        else if (!deathMessage.empty())
+            broadcastSystemMessage(deathMessage);
+    }
 
     const Vector3f spawn = mLevel.getSpawnPositionForPlayer();
 
@@ -401,7 +433,15 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     if (!player.isDead())
         return;
 
-    const Vector3f spawn = _respawnPositionFor(player);
+    Vector3f spawn = _respawnPositionFor(player);
+
+    PluginEvent respawnEvent;
+    respawnEvent.mType = FALCON_EVENT_PLAYER_RESPAWN;
+    respawnEvent.mPlayer = &player;
+    respawnEvent.mTo = spawn;
+    PluginManager::getInstance().dispatch(respawnEvent);
+    if (respawnEvent.mToChanged)
+        spawn = respawnEvent.mTo;
 
     if (player.getDimension() != DimensionType::Overworld)
         changePlayerDimension(player, DimensionType::Overworld, spawn);

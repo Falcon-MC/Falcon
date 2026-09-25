@@ -148,7 +148,20 @@ void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, con
     BinaryStream stream;
     packet.writeWithHeader(stream, context);
 
-    send(id, stream.getBuffer(), _toPeerReliability(packet), _toPeerCompressibility(packet));
+    if (!mOutboundFilter) {
+        send(id, stream.getBuffer(), _toPeerReliability(packet), _toPeerCompressibility(packet));
+        return;
+    }
+
+    std::string data = stream.getBuffer();
+    if (!mOutboundFilter(id, data))
+        return;
+
+    send(id, data, _toPeerReliability(packet), _toPeerCompressibility(packet));
+}
+
+void NetworkHandler::setOutboundFilter(OutboundFilter filter) {
+    mOutboundFilter = std::move(filter);
 }
 
 void NetworkHandler::sendToAll(const Packet &packet, const PacketCodecContext &context) {

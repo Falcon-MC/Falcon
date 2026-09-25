@@ -11,6 +11,7 @@
 #include "Level/FalconDataVersion.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
@@ -139,8 +140,24 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, Actor *attacke
     if (getNoDamageTicks() > 0 && amount <= getLastDamageAmount())
         return false;
 
-    if (owner.getScriptEngine().beforeEntityHurt(*this, amount, attacker != nullptr ? "entityAttack" : "none",
-                                                 attacker))
+    const char *cause = attacker != nullptr ? "entityAttack" : "none";
+    if (owner.getScriptEngine().beforeEntityHurt(*this, amount, cause, attacker))
+        return false;
+
+    PluginEvent damageEvent;
+    damageEvent.mType = FALCON_EVENT_ENTITY_DAMAGE;
+    damageEvent.mCancellable = true;
+    damageEvent.mEntity = this;
+    damageEvent.mAttacker = attacker;
+    damageEvent.mAmount = amount;
+    damageEvent.mCause = attacker == nullptr ? "death.attack.generic"
+                                             : attacker->isPlayer() ? "death.attack.player" : "death.attack.mob";
+    PluginManager::getInstance().dispatch(damageEvent);
+    if (damageEvent.mCancelled)
+        return false;
+
+    amount = (float) damageEvent.mAmount;
+    if (amount <= 0.0f)
         return false;
 
     ServerPlayer *source = dynamic_cast<ServerPlayer *>(attacker);
@@ -181,7 +198,6 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, Actor *attacke
 }
 
 void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t lootingLevel) {
-    (void) source;
     (void) lootingLevel;
 
     if (isDead())
@@ -192,6 +208,12 @@ void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_
     owner.broadcastActorEvent(*this, getDeathEvent());
     setDead(true);
     setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+
+    PluginEvent event;
+    event.mType = FALCON_EVENT_ENTITY_DEATH;
+    event.mEntity = this;
+    event.mAttacker = source;
+    PluginManager::getInstance().dispatch(event);
 }
 
 int32_t ServerActor::getIntProperty(const std::string &name, int32_t fallback) const {

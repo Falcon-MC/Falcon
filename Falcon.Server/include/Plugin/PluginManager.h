@@ -2,6 +2,7 @@
 
 #include "Plugin/LoadedPlugin.h"
 #include "Plugin/PluginEvent.h"
+#include "Plugin/PluginPermissions.h"
 #include "Plugin/PluginScheduler.h"
 
 #include <falcon/falcon_api.h>
@@ -50,6 +51,14 @@ public:
         return mScheduler;
     }
 
+    PluginPermissions &getPermissions() {
+        return *mPermissions;
+    }
+
+    bool hasSubscribers(FalconEventType type) const {
+        return type < 64 && (mSubscribedTypes & ((uint64_t) 1 << type)) != 0;
+    }
+
 private:
     struct Subscription {
         uint64_t mId;
@@ -69,8 +78,12 @@ private:
 
     void _disable(LoadedPlugin &plugin);
 
+    void _updateSubscribedTypes();
+
     ServerNetworkHandler &mOwner;
     PluginScheduler mScheduler;
+    std::unique_ptr<PluginPermissions> mPermissions;
+    uint64_t mSubscribedTypes = 0;
     std::vector<std::unique_ptr<LoadedPlugin>> mPlugins;
     std::vector<Subscription> mSubscriptions;
     uint64_t mNextSubscriptionId = 1;

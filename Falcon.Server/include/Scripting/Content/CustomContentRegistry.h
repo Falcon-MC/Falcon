@@ -25,6 +25,7 @@ struct CustomItemDefinition {
     float mSaturationModifier = 0.6f;
     bool mCanAlwaysEat = false;
     int32_t mMaxDurability = 0;
+    bool mHandEquipped = false;
     std::vector<std::string> mCustomComponents;
     bool mHasDigger = false;
     bool mDiggerUseEfficiency = false;
@@ -136,6 +137,23 @@ public:
 
     bool isCustomBlock(const std::string &identifier) const;
 
+    bool hasIdentifier(const std::string &identifier) const;
+
+    const CustomItemDefinition *registerItem(const CustomItemDefinition &item, ItemDefinitionRegistry &items);
+
+    const CustomBlockDefinition *registerBlock(const CustomBlockDefinition &block, ItemDefinitionRegistry &items,
+                                               BlockDefinitionRegistry &blocks);
+
+    const CustomActorDefinition *registerActor(const CustomActorDefinition &actor);
+
+    void freeze() {
+        mFrozen = true;
+    }
+
+    bool isFrozen() const {
+        return mFrozen;
+    }
+
     static CustomContentRegistry &getInstance();
 
 private:
@@ -163,4 +181,5 @@ private:
     std::vector<CustomActorDefinition> mActors;
     std::vector<CustomRecipe> mRecipes;
     std::vector<BlockPropertyData> mBlockProperties;
+    bool mFrozen = false;
 };
