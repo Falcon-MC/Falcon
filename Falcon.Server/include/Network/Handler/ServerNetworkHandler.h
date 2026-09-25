@@ -29,6 +29,7 @@
 #include "Actor/ItemActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
+#include "Actor/Spawn/NaturalSpawner.h"
 #include "Protocol/Types/ContainerSlotType.h"
 #include "Protocol/Types/EntityDataMap.h"
 #include "Protocol/Packets/ActorEventPacket.h"
@@ -666,6 +667,7 @@ private:
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
+    NaturalSpawner mNaturalSpawner;
     std::unordered_map<NetworkIdentifier, PacketRateLimiter, NetworkIdentifier::Hasher> mRateLimiters;
 
     struct LingeringCloud {

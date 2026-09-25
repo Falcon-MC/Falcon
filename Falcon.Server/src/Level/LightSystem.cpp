@@ -173,9 +173,9 @@ float LightSystem::calculateCelestialAngle(int64_t time) {
     return angle + (smoothed - angle) / 3.0f;
 }
 
-int32_t LightSystem::calculateSkyLightSubtracted(const Level &level) {
-    const float rain = level.isRaining() ? 1.0f : 0.0f;
-    const float thunder = level.isThundering() ? 1.0f : 0.0f;
+int32_t LightSystem::calculateSkyLightSubtracted(const Level &level, bool includeWeather) {
+    const float rain = includeWeather && level.isRaining() ? 1.0f : 0.0f;
+    const float thunder = includeWeather && level.isThundering() ? 1.0f : 0.0f;
 
     const float rainFactor = 1.0f - rain * WEATHER_REDUCTION;
     const float thunderFactor = 1.0f - thunder * WEATHER_REDUCTION;

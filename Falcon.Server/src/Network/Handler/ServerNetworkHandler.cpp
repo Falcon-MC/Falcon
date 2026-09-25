@@ -848,6 +848,9 @@ void ServerNetworkHandler::tick() {
     }
     mProfiler.endSection(ProfilerSection::Fire);
 
+    for (Level *level: levels)
+        mNaturalSpawner.tick(*this, *level);
+
     mProfiler.beginSection(ProfilerSection::Announcement);
     _updateServerAnnouncement();
     mProfiler.endSection(ProfilerSection::Announcement);

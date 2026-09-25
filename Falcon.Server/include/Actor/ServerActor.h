@@ -205,6 +205,22 @@ public:
 
     void setNameTag(const std::string &nameTag) { mNameTag = nameTag; }
 
+    bool isPersistent() const {
+        return mPersistent || !mNameTag.empty();
+    }
+
+    void setPersistent(bool persistent) {
+        mPersistent = persistent;
+    }
+
+    int32_t getFarFromPlayerTicks() const {
+        return mFarFromPlayerTicks;
+    }
+
+    void setFarFromPlayerTicks(int32_t ticks) {
+        mFarFromPlayerTicks = ticks;
+    }
+
     virtual bool shouldSave() const { return isAlive() && !mIsProjectile && !hasOwnerPlayer(); }
 
     virtual Tag saveNbt() const;
@@ -226,6 +242,8 @@ private:
     int32_t mPickupDelay = 0;
     ProjectileData mProjectileData;
     std::string mNameTag;
+    bool mPersistent = true;
+    int32_t mFarFromPlayerTicks = 0;
 
     std::unordered_map<std::string, int32_t> mIntProperties;
     std::unordered_map<std::string, float> mFloatProperties;

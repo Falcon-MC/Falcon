@@ -6,6 +6,7 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Core/Debug/FileLogEndPoint.h"
+#include "Actor/Spawn/SpawnRules.h"
 #include "Block/BlockPaletteRegistry.h"
 #include "Level/AutoCompaction.h"
 #include "Level/Generator/Biome/BiomeChunkGenDataRegistry.h"
@@ -189,6 +190,7 @@ void startServer(const ServerSettings &settings) {
 
     BiomeChunkGenDataRegistry::initialize();
     BlockPaletteRegistry::getInstance().initialize();
+    SpawnRules::initialize();
 
     if (settings.runSetupWizard && SetupWizard::isInteractive() && SetupWizard::isNeeded(PROPERTIES_FILE)) {
         SetupWizard wizard(PROPERTIES_FILE, OPS_FILE, ALLOWLIST_FILE);

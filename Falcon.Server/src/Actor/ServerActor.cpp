@@ -238,6 +238,7 @@ Tag ServerActor::saveNbt() const {
     data.putFloat("Health", getHealth());
     data.putFloat("MaxHealth", getMaxHealth());
     data.putString("NameTag", mNameTag);
+    data.putByte("Persistent", mPersistent ? 1 : 0);
     data.putLong("OwnerUniqueId", mOwnerUniqueId);
     saveTags(data);
 
@@ -275,6 +276,7 @@ void ServerActor::loadNbt(const Tag &data) {
     setMaxHealth(data.getFloat("MaxHealth", getMaxHealth()));
     setHealth(data.getFloat("Health", getHealth()));
     mNameTag = data.getString("NameTag", mNameTag);
+    mPersistent = data.getByte("Persistent", 1) != 0;
     mOwnerUniqueId = data.getLong("OwnerUniqueId", mOwnerUniqueId);
 
     loadTags(data);

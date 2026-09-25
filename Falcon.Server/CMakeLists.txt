@@ -23,6 +23,10 @@ falcon_bedrock_data_embed_binary(FILE block_definitions.nbt NAMESPACE FalconBloc
         SYMBOL kBlockDefinitionsNbt OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockDefinitionsNbt.h")
 falcon_bedrock_data_embed_text(FILE entity_loot_tables.json NAMESPACE FalconLootData SYMBOL kEntityLootTablesJson
         DELIMITER falconentityloot OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/EntityLootTablesJson.h")
+falcon_bedrock_data_embed_text(FILE spawn_rules.json NAMESPACE FalconSpawnData SYMBOL kSpawnRulesJson
+        DELIMITER falconspawn OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/SpawnRulesJson.h")
+falcon_bedrock_data_embed_text(FILE entity_despawn.json NAMESPACE FalconSpawnData SYMBOL kEntityDespawnJson
+        DELIMITER falcondespawn OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/EntityDespawnJson.h")
 falcon_bedrock_data_embed_text(FILE r16_to_current_item_map.json NAMESPACE FalconLegacyItemData
         SYMBOL kLegacyItemMapJson DELIMITER falconlegacy
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/LegacyItemMapJson.h")

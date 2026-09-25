@@ -6,6 +6,8 @@
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Level/Generator/Biome/BiomeIds.h"
+#include "Level/Generator/End/TheEndGeneratorConstants.h"
+#include "Level/Generator/Nether/NetherBiomeIds.h"
 
 #include <algorithm>
 
@@ -69,7 +71,13 @@ namespace {
                 {"mangrove_swamp",                 BiomeIds::MANGROVE_SWAMP},
                 {"cherry_grove",                   BiomeIds::CHERRY_GROVE},
                 {"pale_garden",                    BiomeIds::PALE_GARDEN},
-                {"sulfur_caves",                   BiomeIds::SULFUR_CAVES}
+                {"sulfur_caves",                   BiomeIds::SULFUR_CAVES},
+                {"hell",                           NetherBiomeIds::HELL},
+                {"soulsand_valley",                NetherBiomeIds::SOULSAND_VALLEY},
+                {"crimson_forest",                 NetherBiomeIds::CRIMSON_FOREST},
+                {"warped_forest",                  NetherBiomeIds::WARPED_FOREST},
+                {"basalt_deltas",                  NetherBiomeIds::BASALT_DELTAS},
+                {"the_end",                        TheEndGeneratorConstants::BIOME_ID}
         };
 
         return map;
@@ -88,6 +96,16 @@ std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>> &
 BiomeChunkGenDataRegistry::_featuresByBiome() {
     static std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>> map;
     return map;
+}
+
+std::unordered_map<int32_t, std::unordered_set<std::string>> &BiomeChunkGenDataRegistry::_tagsByBiome() {
+    static std::unordered_map<int32_t, std::unordered_set<std::string>> map;
+    return map;
+}
+
+bool BiomeChunkGenDataRegistry::hasTag(int32_t biomeId, const std::string &tag) {
+    const auto found = _tagsByBiome().find(biomeId);
+    return found != _tagsByBiome().end() && found->second.count(tag) != 0;
 }
 
 int32_t BiomeChunkGenDataRegistry::getBiomeId(const std::string &biomeName) {
@@ -162,6 +180,14 @@ void BiomeChunkGenDataRegistry::initialize() {
         const int32_t biomeId = getBiomeId(stringAt((int32_t) indexTag->asShort()));
         if (biomeId < 0)
             continue;
+
+        const Tag *tagsTag = dataTag->get("tags");
+        const Tag *tagList = tagsTag == nullptr ? nullptr : tagsTag->get("tags");
+        if (tagList != nullptr) {
+            std::unordered_set<std::string> &tags = _tagsByBiome()[biomeId];
+            for (const Tag &tag: tagList->getList())
+                tags.insert(stringAt((int32_t) tag.asShort()));
+        }
 
         const Tag *chunkGenDataTag = dataTag->get("chunkGenData");
         if (chunkGenDataTag == nullptr)

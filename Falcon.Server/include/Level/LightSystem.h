@@ -24,7 +24,7 @@ public:
 
     static int64_t packPosition(int32_t x, int32_t y, int32_t z);
 
-    static int32_t calculateSkyLightSubtracted(const Level &level);
+    static int32_t calculateSkyLightSubtracted(const Level &level, bool includeWeather = true);
 
     static float calculateCelestialAngle(int64_t time);
 
