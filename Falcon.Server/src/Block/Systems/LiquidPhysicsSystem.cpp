@@ -405,9 +405,10 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
         return;
     }
 
+    const bool belowSameFluid = isSameFluid(below, currentState);
     const int baseDecay = source || current.isFalling() ? 0 : current.getDecay();
     const int nextDecay = baseDecay + step;
-    if (nextDecay <= 7) {
+    if (nextDecay <= 7 && (source || !belowSameFluid)) {
         static const int offsets[4][3] = {{-1, 0, 0}, {1, 0, 0}, {0, 0, -1}, {0, 0, 1}};
 
         for (int j = 0; j < 4; ++j) {
@@ -449,6 +450,13 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
             }
         }
 
+        const BlockState above = _fluidAt(position.x, position.y + 1, position.z);
+        if (isSameFluid(above, currentState)) {
+            if (!current.isFalling())
+                setFluidState(position, makeState(lava, 0, true));
+            return;
+        }
+
         int smallest = std::numeric_limits<int>::max();
         static const int offsets[4][3] = {{-1, 0, 0}, {1, 0, 0}, {0, 0, -1}, {0, 0, 1}};
         for (const auto &offset: offsets) {
@@ -458,13 +466,6 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
             const LiquidView sideLiquid(side);
             const int sideDecay = sideLiquid.isSource() || sideLiquid.isFalling() ? 0 : sideLiquid.getDecay();
             smallest = std::min(smallest, sideDecay);
-        }
-
-        const BlockState above = _fluidAt(position.x, position.y + 1, position.z);
-        if (isSameFluid(above, currentState)) {
-            const LiquidView aboveLiquid(above);
-            if (aboveLiquid.isSource() || aboveLiquid.isFalling())
-                smallest = 0;
         }
 
         if (smallest == std::numeric_limits<int>::max() || smallest + step > 7) {
