@@ -74,4 +74,7 @@ private:
     std::vector<std::unique_ptr<LoadedPlugin>> mPlugins;
     std::vector<Subscription> mSubscriptions;
     uint64_t mNextSubscriptionId = 1;
+    uint32_t mJoinHook = 0;
+    uint32_t mQuitHook = 0;
+    uint32_t mChatHook = 0;
 };

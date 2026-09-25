@@ -7,11 +7,13 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 struct LoadedPlugin {
     PluginDescription mDescription;
     std::string mDirectory;
     std::string mDataFolder;
+    std::vector<std::string> mCommands;
     std::unique_ptr<NativeLibrary> mLibrary;
     FalconPluginCallbacks mCallbacks{};
     bool mEnabled = false;

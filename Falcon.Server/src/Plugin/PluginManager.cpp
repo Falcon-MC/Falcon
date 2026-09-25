@@ -30,6 +30,11 @@ PluginManager::PluginManager(ServerNetworkHandler &owner) : mOwner(owner) {
 }
 
 PluginManager::~PluginManager() {
+    EventBus &bus = mOwner.getEventBus();
+    bus.after().mPlayerJoin.unsubscribe(mJoinHook);
+    bus.after().mPlayerLeave.unsubscribe(mQuitHook);
+    bus.before().mChatSend.unsubscribe(mChatHook);
+
     disableAll();
     mScheduler.shutdown();
     mSubscriptions.clear();
@@ -102,9 +107,22 @@ void PluginManager::loadAll(const std::string &directory) {
     _sortByDependencies();
 
     std::vector<std::unique_ptr<LoadedPlugin>> loaded;
+    std::unordered_set<std::string> loadedNames;
     for (std::unique_ptr<LoadedPlugin> &plugin: mPlugins) {
-        if (_loadNative(*plugin))
-            loaded.push_back(std::move(plugin));
+        bool dependenciesLoaded = true;
+        for (const std::string &dependency: plugin->mDescription.mDepend) {
+            if (loadedNames.count(toLower(dependency)) == 0) {
+                LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: dependency %s failed to load",
+                          plugin->mDescription.mName.c_str(), dependency.c_str());
+                dependenciesLoaded = false;
+            }
+        }
+
+        if (!dependenciesLoaded || !_loadNative(*plugin))
+            continue;
+
+        loadedNames.insert(toLower(plugin->mDescription.mName));
+        loaded.push_back(std::move(plugin));
     }
     mPlugins.swap(loaded);
 
@@ -161,7 +179,12 @@ void PluginManager::_sortByDependencies() {
     for (std::unique_ptr<LoadedPlugin> &plugin: mPlugins)
         byName[toLower(plugin->mDescription.mName)] = plugin.get();
 
-    std::unordered_map<LoadedPlugin *, std::vector<LoadedPlugin *>> before;
+    struct Edge {
+        LoadedPlugin *mPlugin;
+        bool mHard;
+    };
+
+    std::unordered_map<LoadedPlugin *, std::vector<Edge>> before;
     std::unordered_set<LoadedPlugin *> rejected;
     for (std::unique_ptr<LoadedPlugin> &plugin: mPlugins) {
         const PluginDescription &description = plugin->mDescription;
@@ -174,19 +197,19 @@ void PluginManager::_sortByDependencies() {
                 rejected.insert(plugin.get());
                 continue;
             }
-            before[plugin.get()].push_back(it->second);
+            before[plugin.get()].push_back(Edge{it->second, true});
         }
 
         for (const std::string &dependency: description.mSoftDepend) {
             const auto it = byName.find(toLower(dependency));
             if (it != byName.end())
-                before[plugin.get()].push_back(it->second);
+                before[plugin.get()].push_back(Edge{it->second, false});
         }
 
         for (const std::string &dependent: description.mLoadBefore) {
             const auto it = byName.find(toLower(dependent));
             if (it != byName.end())
-                before[it->second].push_back(plugin.get());
+                before[it->second].push_back(Edge{plugin.get(), false});
         }
     }
 
@@ -199,21 +222,25 @@ void PluginManager::_sortByDependencies() {
             return true;
         if (rejected.count(plugin) != 0)
             return false;
-        if (!visiting.insert(plugin).second) {
-            LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: circular dependency",
-                      plugin->mDescription.mName.c_str());
-            rejected.insert(plugin);
-            return false;
-        }
 
-        for (LoadedPlugin *dependency: before[plugin]) {
-            const std::string dependencyName = toLower(dependency->mDescription.mName);
-            const std::vector<std::string> &hardDependencies = plugin->mDescription.mDepend;
-            const bool hard = std::any_of(hardDependencies.begin(), hardDependencies.end(),
-                                          [&](const std::string &name) {
-                                              return toLower(name) == dependencyName;
-                                          });
-            if (!visit(dependency) && hard) {
+        visiting.insert(plugin);
+        for (const Edge &edge: before[plugin]) {
+            const char *name = plugin->mDescription.mName.c_str();
+            const char *dependencyName = edge.mPlugin->mDescription.mName.c_str();
+
+            if (visiting.count(edge.mPlugin) != 0) {
+                if (!edge.mHard)
+                    continue;
+
+                LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: circular dependency on %s", name,
+                          dependencyName);
+                rejected.insert(plugin);
+                visiting.erase(plugin);
+                return false;
+            }
+
+            if (!visit(edge.mPlugin) && edge.mHard) {
+                LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: dependency %s failed", name, dependencyName);
                 rejected.insert(plugin);
                 visiting.erase(plugin);
                 return false;
@@ -267,6 +294,7 @@ void PluginManager::enableAll() {
 
         if (!enabled) {
             LOG_ERROR(LogAreaID::Server, "Could not enable plugin %s", name.c_str());
+            plugin->mEnabled = false;
             _disable(*plugin);
             continue;
         }
@@ -293,6 +321,10 @@ void PluginManager::_disable(LoadedPlugin &plugin) {
 
     plugin.mEnabled = false;
     mScheduler.cancelAll(plugin);
+
+    for (const std::string &command: plugin.mCommands)
+        mOwner.getCommands().unregisterCommand(command);
+    plugin.mCommands.clear();
     mSubscriptions.erase(std::remove_if(mSubscriptions.begin(), mSubscriptions.end(), [&](const Subscription &entry) {
         return entry.mPlugin == &plugin;
     }), mSubscriptions.end());
@@ -338,22 +370,18 @@ bool PluginManager::registerCommand(LoadedPlugin &plugin, const FalconCommandDes
         return false;
 
     commands.registerCommand(std::make_shared<PluginCommand>(plugin, name, descriptor));
+    plugin.mCommands.push_back(name);
     return true;
 }
 
 void PluginManager::dispatch(PluginEvent &event) {
     const std::vector<Subscription> snapshot = mSubscriptions;
-    bool monitorCancelled = false;
-    bool monitorStarted = false;
 
     for (const Subscription &subscription: snapshot) {
         if (subscription.mType != event.mType || !subscription.mPlugin->mEnabled)
             continue;
 
-        if (subscription.mPriority == FALCON_PRIORITY_MONITOR && !monitorStarted) {
-            monitorStarted = true;
-            monitorCancelled = event.mCancelled;
-        }
+        event.mMonitor = subscription.mPriority == FALCON_PRIORITY_MONITOR;
 
         if (subscription.mIgnoreCancelled && event.mCancelled)
             continue;
@@ -364,23 +392,22 @@ void PluginManager::dispatch(PluginEvent &event) {
             LOG_ERROR(LogAreaID::Server, "[%s] An event handler threw an exception",
                       subscription.mPlugin->mDescription.mName.c_str());
         }
-
-        if (monitorStarted)
-            event.mCancelled = monitorCancelled;
     }
+
+    event.mMonitor = false;
 }
 
 void PluginManager::_hookEventBus() {
     EventBus &bus = mOwner.getEventBus();
 
-    bus.after().mPlayerJoin.subscribe([this](PlayerJoinAfterEvent &source) {
+    mJoinHook = bus.after().mPlayerJoin.subscribe([this](PlayerJoinAfterEvent &source) {
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_JOIN;
         event.mPlayer = &source.mPlayer;
         dispatch(event);
     });
 
-    bus.after().mPlayerLeave.subscribe([this](PlayerLeaveAfterEvent &source) {
+    mQuitHook = bus.after().mPlayerLeave.subscribe([this](PlayerLeaveAfterEvent &source) {
         if (source.mPlayer == nullptr)
             return;
 
@@ -390,7 +417,7 @@ void PluginManager::_hookEventBus() {
         dispatch(event);
     });
 
-    bus.before().mChatSend.subscribe([this](PlayerChatBeforeEvent &source) {
+    mChatHook = bus.before().mChatSend.subscribe([this](PlayerChatBeforeEvent &source) {
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_CHAT;
         event.mCancellable = true;

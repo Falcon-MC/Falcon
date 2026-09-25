@@ -59,6 +59,17 @@ void PluginScheduler::cancelAll(const LoadedPlugin &plugin) {
         if (task.mPlugin == &plugin)
             task.mCancelled = true;
     }
+
+    std::lock_guard<std::mutex> lock(mMutex);
+    for (auto it = mPending.begin(); it != mPending.end();) {
+        if (it->mPlugin != &plugin) {
+            ++it;
+            continue;
+        }
+
+        mCompleted.push_back(*it);
+        it = mPending.erase(it);
+    }
 }
 
 void PluginScheduler::tick() {
@@ -88,10 +99,8 @@ void PluginScheduler::tick() {
         completed.swap(mCompleted);
     }
 
-    for (const AsyncJob &job: completed) {
-        if (job.mPlugin->mEnabled)
-            runGuarded(*job.mPlugin, job.mDone, job.mUserData);
-    }
+    for (const AsyncJob &job: completed)
+        runGuarded(*job.mPlugin, job.mDone, job.mUserData);
 }
 
 void PluginScheduler::shutdown() {
@@ -107,6 +116,17 @@ void PluginScheduler::shutdown() {
         mWorker.join();
 
     mTasks.clear();
+
+    std::deque<AsyncJob> remaining;
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        remaining.swap(mCompleted);
+        remaining.insert(remaining.end(), mPending.begin(), mPending.end());
+        mPending.clear();
+    }
+
+    for (const AsyncJob &job: remaining)
+        runGuarded(*job.mPlugin, job.mDone, job.mUserData);
 }
 
 void PluginScheduler::_workerLoop() {

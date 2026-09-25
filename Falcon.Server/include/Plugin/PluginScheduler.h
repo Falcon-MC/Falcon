@@ -2,6 +2,7 @@
 
 #include <falcon/falcon_api.h>
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -53,7 +54,7 @@ private:
 
     std::vector<Task> mTasks;
     uint64_t mCurrentTick = 0;
-    uint64_t mNextId = 1;
+    std::atomic<uint64_t> mNextId{1};
 
     std::thread mWorker;
     std::mutex mMutex;

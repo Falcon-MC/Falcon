@@ -11,6 +11,8 @@ class CommandMap {
 public:
     void registerCommand(std::shared_ptr<Command> command);
 
+    void unregisterCommand(const std::string &name);
+
     Command *getCommand(const std::string &name) const;
 
     bool dispatch(CommandOrigin &sender, const std::string &commandLine);

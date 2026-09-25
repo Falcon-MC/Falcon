@@ -148,7 +148,7 @@ namespace {
     }
 
     void eventSetCancelled(FalconEvent *source, int cancelled) {
-        if (event(source)->mCancellable)
+        if (event(source)->mCancellable && !event(source)->mMonitor)
             event(source)->mCancelled = cancelled != 0;
     }
 
@@ -161,7 +161,7 @@ namespace {
     }
 
     void eventSetMessage(FalconEvent *source, const char *message) {
-        if (event(source)->mMessage != nullptr && message != nullptr)
+        if (event(source)->mMessage != nullptr && message != nullptr && !event(source)->mMonitor)
             *event(source)->mMessage = message;
     }
 

@@ -545,6 +545,7 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
 
     if (!mNetworkHandler->host(definition)) {
         LOG_ERROR(LogAreaID::Network, "Failed to bind UDP port %u", definition.mPort);
+        mPluginManager->disableAll();
         return false;
     }
 
