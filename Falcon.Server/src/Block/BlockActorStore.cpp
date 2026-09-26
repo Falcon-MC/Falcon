@@ -3,6 +3,7 @@
 #include "Block/Actor/ChestBlockActor.h"
 #include "Block/Actor/CommandBlockActor.h"
 #include "Block/Actor/ContainerBlockActor.h"
+#include "Block/Actor/CopperGolemStatueBlockActor.h"
 #include "Block/Actor/BedBlockActor.h"
 #include "Block/Actor/EnderChestBlockActor.h"
 #include "Block/BlockActorClassRegistry.h"
@@ -169,6 +170,7 @@ FALCON_REGISTER_BLOCK_ACTOR(BarrelBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(ShulkerBoxBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(EnderChestBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BedBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(CopperGolemStatueBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(HopperBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(DispenserBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(DropperBlockActor);
