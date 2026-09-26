@@ -171,6 +171,8 @@ void SurfaceOverwriteBuilder::apply(LevelChunk &chunk, int64_t levelSeed) const 
                         const BlockState above = chunk.getBlock(x, y + 1, z);
                         if (above == airState())
                             chunk.setBlock(x, y + 1, z, snowLayerState());
+                        else
+                            chunk.setBlock(x, y + 1, z, 1, snowLayerState());
                     }
                     break;
                 }
