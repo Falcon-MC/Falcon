@@ -106,6 +106,7 @@
 #include "Protocol/Packets/PlayerHotbarPacket.h"
 #include "Block/Components/CreativeContentTable.h"
 #include "Block/Block.h"
+#include "Block/Actor/BeehiveBlockActor.h"
 #include "Block/Actor/HopperBlockActor.h"
 #include "Block/Systems/FurnaceSystem.h"
 #include "Block/Systems/CommandBlockSystem.h"
@@ -810,6 +811,7 @@ void ServerNetworkHandler::tick() {
     mProfiler.endSection(ProfilerSection::Furnaces);
 
     HopperBlockActor::tickAll(*this);
+    BeehiveBlockActor::tickAll(*this);
 
     mProfiler.beginSection(ProfilerSection::ItemActors);
     ItemActorHandler::tickItemActors(*this);

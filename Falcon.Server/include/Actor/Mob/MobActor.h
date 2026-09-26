@@ -42,6 +42,10 @@ public:
         return mTransformed || mDespawned;
     }
 
+    void despawn() {
+        mDespawned = true;
+    }
+
     virtual const LootTable *getLootTable() const;
 
     virtual float resolveMaxHealth(Difficulty difficulty) const;

@@ -27,6 +27,9 @@ public:
 
     static bool use(ServerNetworkHandler &owner, ServerPlayer &player, const ItemUseTransaction &transaction);
 
+    static bool applyResult(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &heldItem,
+                            const char *resultIdentifier);
+
 private:
     static bool isReplaceable(const BlockState &state);
 
@@ -35,9 +38,6 @@ private:
     static BlockState makeLiquidState(Content content);
 
     static const char *getFilledIdentifier(Content content);
-
-    static bool applyResult(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &heldItem,
-                            const char *resultIdentifier);
 
     static void sendBlockState(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 

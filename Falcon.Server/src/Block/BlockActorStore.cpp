@@ -1,5 +1,6 @@
 #include "Block/BlockActorStore.h"
 
+#include "Block/Actor/BeehiveBlockActor.h"
 #include "Block/Actor/ChestBlockActor.h"
 #include "Block/Actor/CommandBlockActor.h"
 #include "Block/Actor/ContainerBlockActor.h"
@@ -186,6 +187,7 @@ FALCON_REGISTER_BLOCK_ACTOR(JukeboxBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(ShelfBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(ItemFrameBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(GlowItemFrameBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(BeehiveBlockActor);
 
 std::unique_ptr<BlockActor> BlockActorStore::create(const std::string &blockActorId) {
     return BlockActorClassRegistry::create(blockActorId);
