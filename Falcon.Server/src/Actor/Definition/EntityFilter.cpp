@@ -47,6 +47,25 @@ namespace {
         return -1;
     }
 
+    const char *const NUMERIC_SUBJECTS[] = {"self", "other", "parent", "player", "target", "baby", "damager",
+                                            "block"};
+    const char *const NUMERIC_OPERATORS[] = {"==", "!=", "<", "<=", ">", ">="};
+
+    std::string enumName(const json::Value *value, const char *const names[], size_t count,
+                         const std::string &fallback) {
+        if (value == nullptr)
+            return fallback;
+        if (!value->isNumber())
+            return value->string();
+
+        const int32_t index = value->integer(-1);
+        return index >= 0 && (size_t) index < count ? names[index] : fallback;
+    }
+
+    int32_t difficultyValue(const json::Value &value) {
+        return value.isNumber() ? value.integer(-1) : difficultyOf(value.string());
+    }
+
     bool isNegation(const std::string &op) {
         return op == "!=" || op == "not" || op == "<>";
     }
@@ -226,9 +245,15 @@ bool EntityFilter::test(const json::Value &filter, ServerNetworkHandler &owner, 
         return _testAll(filter, owner, self, other);
     if (const json::Value *all = filter.get("all_of"))
         return _testAll(*all, owner, self, other);
+    if (const json::Value *all = filter.get("AND"))
+        return _testAll(*all, owner, self, other);
     if (const json::Value *any = filter.get("any_of"))
         return _testAny(*any, owner, self, other);
+    if (const json::Value *any = filter.get("OR"))
+        return _testAny(*any, owner, self, other);
     if (const json::Value *none = filter.get("none_of"))
+        return !_testAny(*none, owner, self, other);
+    if (const json::Value *none = filter.get("NOT"))
         return !_testAny(*none, owner, self, other);
     return _testSingle(filter, owner, self, other);
 }
@@ -290,11 +315,11 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         return true;
 
     const std::string test = testValue->string();
-    const json::Value *operation = filter.get("operator");
-    const std::string op = operation == nullptr ? "==" : operation->string();
+    const std::string op = enumName(filter.get("operator"), NUMERIC_OPERATORS,
+                                    sizeof(NUMERIC_OPERATORS) / sizeof(NUMERIC_OPERATORS[0]), "==");
     const json::Value *value = filter.get("value");
-    const json::Value *subjectValue = filter.get("subject");
-    const std::string subject = subjectValue == nullptr ? "self" : subjectValue->string();
+    const std::string subject = enumName(filter.get("subject"), NUMERIC_SUBJECTS,
+                                         sizeof(NUMERIC_SUBJECTS) / sizeof(NUMERIC_SUBJECTS[0]), "self");
     const Actor *target = &self;
     if (subject == "other" || subject == "damager" || subject == "player")
         target = other;
@@ -305,7 +330,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         return _testBlock(test, op, value, owner, self);
 
     if (test == "is_difficulty") {
-        const int32_t expected = value == nullptr ? -1 : difficultyOf(value->string());
+        const int32_t expected = value == nullptr ? -1 : difficultyValue(*value);
         return expected >= 0 && compareNumbers((int32_t) owner.getProperties().getDifficulty(), expected, op);
     }
 
@@ -445,6 +470,18 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         const MobActor *mob = dynamic_cast<const MobActor *>(target);
         const bool result = mob != nullptr && value != nullptr && mob->getComponent(value->string()) != nullptr;
         return isNegation(op) ? !result : result;
+    }
+
+    if (test == "is_panicking") {
+        const MobActor *mob = dynamic_cast<const MobActor *>(target);
+        return applyBoolean(mob != nullptr && mob->isPanicking(), value, op);
+    }
+
+    if (test == "owner_distance") {
+        const MobActor *mob = dynamic_cast<const MobActor *>(target);
+        const ServerPlayer *mobOwner = mob == nullptr ? nullptr : mob->getOwner(owner);
+        return mobOwner != nullptr && value != nullptr
+               && compareFloats(std::sqrt(mob->distanceSquaredTo(*mobOwner)), (float) value->number(0.0), op);
     }
 
     if (test == "in_nether")
