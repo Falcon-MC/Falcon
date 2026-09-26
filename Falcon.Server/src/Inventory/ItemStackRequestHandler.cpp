@@ -51,6 +51,10 @@ namespace {
         int32_t mPlayerXpLevel = 0;
         bool mCreativeMode = false;
         int32_t mEnchantLevelsConsumed = 0;
+        bool mEnchantActive = false;
+        int32_t mEnchantMaterialRequired = 0;
+        int32_t mEnchantInputConsumed = 0;
+        int32_t mEnchantMaterialConsumed = 0;
     };
 
     ItemStack *findBundleOwner(PlayerInventory &inventory, RequestContext &context, int32_t bundleId,
@@ -412,6 +416,14 @@ namespace {
             context.mCraftingConsumed[(size_t) gridSlot] += action.mCount;
         }
 
+        if (context.mEnchantActive && action.mType == ItemStackRequestActionType::Consume) {
+            const ContainerSlotType container = action.mSource.mContainerName.mContainer;
+            if (container == ContainerSlotType::EnchantingInput)
+                context.mEnchantInputConsumed += action.mCount;
+            else if (container == ContainerSlotType::EnchantingMaterial)
+                context.mEnchantMaterialConsumed += action.mCount;
+        }
+
         if (dropped && context.mDroppedItems != nullptr) {
             ItemStack drop = *source;
             drop.mCount = action.mCount;
@@ -484,6 +496,8 @@ namespace {
 
         context.mCreatedOutput = std::move(enchanted);
         context.mCreatedOutputActive = true;
+        context.mEnchantActive = true;
+        context.mEnchantMaterialRequired = context.mCreativeMode ? 0 : consumeCost;
 
         if (!context.mCreativeMode)
             context.mEnchantLevelsConsumed = consumeCost;
@@ -730,6 +744,14 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
                 return entry;
             }
         }
+    }
+
+    if (context.mEnchantActive
+        && (context.mEnchantInputConsumed != 1
+            || context.mEnchantMaterialConsumed < context.mEnchantMaterialRequired)) {
+        entry.mResult = RESULT_ERROR;
+        entry.mContainers.clear();
+        return entry;
     }
 
     if (context.mCreatedOutputActive && !context.mCreatedOutput.isAir()) {
