@@ -1,6 +1,7 @@
 #include "Actor/Definition/EntityFilter.h"
 
 #include "Actor/AI/Goal/BehaviorItems.h"
+#include "Actor/Definition/EntityDefinitions.h"
 #include "Actor/Mob/MobActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Blocks/LiquidView.h"
@@ -79,8 +80,21 @@ namespace {
         if (actor.isPlayer())
             return {"player"};
 
-        const MobActor *mob = dynamic_cast<const MobActor *>(&actor);
-        return mob == nullptr ? std::vector<std::string>() : mob->getFamilies();
+        if (const MobActor *mob = dynamic_cast<const MobActor *>(&actor))
+            return mob->getFamilies();
+
+        std::vector<std::string> families;
+        const ServerActor *serverActor = dynamic_cast<const ServerActor *>(&actor);
+        const json::Value *definition = serverActor == nullptr ? nullptr
+                                                               : EntityDefinitions::find(serverActor->getIdentifier());
+        const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
+        const json::Value *typeFamily = components == nullptr ? nullptr : components->get("minecraft:type_family");
+        const json::Value *family = typeFamily == nullptr ? nullptr : typeFamily->get("family");
+        if (family != nullptr) {
+            for (const std::unique_ptr<json::Value> &entry: family->mArray)
+                families.push_back(entry->string());
+        }
+        return families;
     }
 
     Vector3i blockPosition(const Actor &actor) {
@@ -139,7 +153,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     const json::Value *value = filter.get("value");
     const json::Value *subjectValue = filter.get("subject");
     const std::string subject = subjectValue == nullptr ? "self" : subjectValue->string();
-    const Actor *target = subject == "other" || subject == "target" ? other : &self;
+    const Actor *target = subject == "other" || subject == "target" || subject == "damager" ? other : &self;
 
     if (test == "is_difficulty") {
         const int32_t expected = value == nullptr ? -1 : difficultyOf(value->string());

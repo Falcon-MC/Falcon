@@ -111,6 +111,13 @@ public:
 
     bool hurt(ServerNetworkHandler &owner, float amount, const DamageSource &damageSource, int32_t lootingLevel = -1);
 
+    virtual bool senseDamage(ServerNetworkHandler &owner, float &amount, const DamageSource &source) {
+        (void) owner;
+        (void) amount;
+        (void) source;
+        return true;
+    }
+
     virtual float absorbDamage(float amount, const DamageSource &source) const {
         (void) source;
         return amount;

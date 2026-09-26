@@ -150,6 +150,9 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const DamageSo
     if (getNoDamageTicks() > 0 && amount <= getLastDamageAmount())
         return false;
 
+    if (!senseDamage(owner, amount, damageSource))
+        return false;
+
     const char *cause = attacker != nullptr ? "entityAttack" : "none";
     if (owner.getScriptEngine().beforeEntityHurt(*this, amount, cause, attacker))
         return false;

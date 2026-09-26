@@ -63,9 +63,15 @@ public:
         return *this;
     }
 
+    DamageSource &withDamager(Actor *damager) {
+        mDamager = damager;
+        return *this;
+    }
+
     std::string mDeathMessageKey;
     std::vector<std::string> mDeathMessageParameters;
     Actor *mAttacker = nullptr;
+    Actor *mDamager = nullptr;
     std::optional<Vector3f> mOrigin;
     bool mProjectile = false;
     bool mApplyArmor = true;

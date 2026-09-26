@@ -1,59 +1,11 @@
 #include "Command/DamageCommand.h"
 
+#include "Actor/DamageCause.h"
 #include "Actor/ServerPlayer.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include <cmath>
 #include <cstdlib>
-
-namespace {
-    struct DamageCause {
-        const char *mName;
-        const char *mDeathMessageKey;
-    };
-
-    const DamageCause DAMAGE_CAUSES[] = {
-            {"anvil", "death.attack.anvil"},
-            {"drowning", "death.attack.drown"},
-            {"entity_explosion", "death.attack.explosion"},
-            {"block_explosion", "death.attack.explosion"},
-            {"fall", "death.fell.accident.generic"},
-            {"fire", "death.attack.inFire"},
-            {"fire_tick", "death.attack.onFire"},
-            {"freezing", "death.attack.freeze"},
-            {"lava", "death.attack.lava"},
-            {"lightning", "death.attack.lightningBolt"},
-            {"magic", "death.attack.magic"},
-            {"magma", "death.attack.hotFloor"},
-            {"projectile", "death.attack.arrow"},
-            {"stalagmite", "death.attack.stalagmite"},
-            {"starve", "death.attack.starve"},
-            {"suffocation", "death.attack.inWall"},
-            {"thorns", "death.attack.thorns"},
-            {"void", "death.attack.outOfWorld"},
-            {"override", "death.attack.generic"}
-    };
-
-    const char *deathMessageKeyFor(const std::string &cause) {
-        for (const DamageCause &entry: DAMAGE_CAUSES) {
-            if (cause == entry.mName)
-                return entry.mDeathMessageKey;
-        }
-
-        return nullptr;
-    }
-
-    std::vector<std::string> causeNames() {
-        std::vector<std::string> names;
-        for (const DamageCause &entry: DAMAGE_CAUSES)
-            names.push_back(entry.mName);
-        return names;
-    }
-}
-
-const char *DamageCommand::findDeathMessageKey(const std::string &cause) {
-    return deathMessageKeyFor(cause);
-}
 
 DamageCommand::DamageCommand(ServerNetworkHandler &handler)
         : Command("damage", "commands.damage.description", "/damage <target> <amount> [cause]"), mHandler(handler) {}
@@ -61,7 +13,7 @@ DamageCommand::DamageCommand(ServerNetworkHandler &handler)
 std::vector<CommandOverloadData> DamageCommand::getOverloads() const {
     CommandOverloadData overload;
     overload.mParameters = {makePlayerParameter("target"), makeTypedParameter("amount", CommandParamType::Int),
-                            makeEnumParameter("cause", "DamageCause", causeNames(), true)};
+                            makeEnumParameter("cause", "DamageCause", DamageCause::getNames(), true)};
     return {overload};
 }
 
@@ -80,7 +32,7 @@ bool DamageCommand::execute(CommandOrigin &sender, const std::vector<std::string
 
     const char *deathMessageKey = "death.attack.generic";
     if (arguments.size() > 2) {
-        deathMessageKey = deathMessageKeyFor(arguments[2]);
+        deathMessageKey = DamageCause::findDeathMessageKey(arguments[2]);
         if (deathMessageKey == nullptr) {
             sender.sendTranslation("commands.generic.parameter.invalid", {arguments[2]});
             return false;

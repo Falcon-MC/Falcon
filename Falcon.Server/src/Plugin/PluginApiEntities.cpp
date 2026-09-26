@@ -1,9 +1,9 @@
 #include "Plugin/PluginServerApi.h"
 
+#include "Actor/DamageCause.h"
 #include "Actor/DamageSource.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
-#include "Command/DamageCommand.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Plugin/PluginApiHelpers.h"
@@ -31,7 +31,7 @@ namespace {
 
     std::string deathMessageKeyFor(const char *cause, Actor *attacker) {
         if (cause != nullptr) {
-            const char *key = DamageCommand::findDeathMessageKey(cause);
+            const char *key = DamageCause::findDeathMessageKey(cause);
             if (key != nullptr)
                 return key;
             if (std::string(cause).rfind("death.", 0) == 0)

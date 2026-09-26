@@ -2,6 +2,7 @@
 
 #include "Actor/AI/Goal/BehaviorGoals.h"
 #include "Actor/AI/Goal/BehaviorItems.h"
+#include "Actor/DamageCause.h"
 #include "Actor/Definition/EntityDefinitions.h"
 #include "Actor/Definition/EntityEvents.h"
 #include "Actor/Definition/EntityFilter.h"
@@ -36,6 +37,7 @@ namespace {
     const int64_t OWNER_SYNC_INTERVAL = 20;
     const char *const TIMER_COMPONENT = "minecraft:timer";
     const char *const TRANSFORMATION_COMPONENT = "minecraft:transformation";
+    const char *const DAMAGE_SENSOR_COMPONENT = "minecraft:damage_sensor";
     const char *const LEGACY_ZOMBIE_PIGMAN = "minecraft:pig_zombie";
     const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
 
@@ -251,6 +253,51 @@ void MobActor::_tickSensors(ServerNetworkHandler &owner) {
 
     for (const std::unique_ptr<json::Value> &trigger: triggers->mArray)
         run(*trigger);
+}
+
+bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const DamageSource &source) {
+    const json::Value *sensor = getComponent(DAMAGE_SENSOR_COMPONENT);
+    const json::Value *triggers = sensor == nullptr ? nullptr : sensor->get("triggers");
+    if (triggers == nullptr)
+        return true;
+
+    std::vector<const json::Value *> entries;
+    if (triggers->isArray()) {
+        for (const std::unique_ptr<json::Value> &entry: triggers->mArray)
+            entries.push_back(entry.get());
+    } else {
+        entries.push_back(triggers);
+    }
+
+    const Actor *other = source.mAttacker != nullptr ? source.mAttacker : source.mDamager;
+    bool dealsDamage = true;
+    for (const json::Value *trigger: entries) {
+        const json::Value *cause = trigger->get("cause");
+        if (cause != nullptr && !DamageCause::matches(cause->string(), source.mDeathMessageKey))
+            continue;
+
+        const json::Value *onDamage = trigger->get("on_damage");
+        const json::Value *filters = onDamage == nullptr ? nullptr : onDamage->get("filters");
+        if (filters != nullptr && !EntityFilter::test(*filters, owner, *this, other))
+            continue;
+
+        amount = std::max(0.0f, amount * numberIn(trigger, "damage_multiplier", 1.0f)
+                                + numberIn(trigger, "damage_modifier", 0.0f));
+
+        const json::Value *deals = trigger->get("deals_damage");
+        if (deals != nullptr && (deals->isString() ? deals->mString != "yes" : !deals->boolean(true)))
+            dealsDamage = false;
+
+        const json::Value *sound = trigger->get("on_damage_sound_event");
+        if (sound != nullptr)
+            _playDefinitionSound(owner, sound->string());
+
+        const std::string event = eventOf(onDamage);
+        if (!event.empty() && targetsSelf(onDamage))
+            fireEvent(owner, event);
+    }
+
+    return dealsDamage;
 }
 
 void MobActor::_tickTimer(ServerNetworkHandler &owner) {

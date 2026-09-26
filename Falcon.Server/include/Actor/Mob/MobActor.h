@@ -75,6 +75,8 @@ public:
 
     void onDamaged(ServerNetworkHandler &owner, Actor *attacker) override;
 
+    bool senseDamage(ServerNetworkHandler &owner, float &amount, const DamageSource &source) override;
+
     float absorbDamage(float amount, const DamageSource &source) const override {
         return mEquipment.absorbDamage(amount, source);
     }
