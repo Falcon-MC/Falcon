@@ -46,17 +46,20 @@ namespace {
     }
 }
 
-LevelStorage::LevelStorage() : mDb(nullptr), mDimensionId(0) {}
+LevelStorage::LevelStorage() : mDimensionId(0) {}
 
 LevelStorage::~LevelStorage() {
     close();
 }
 
 LevelStorage::LevelStorage(LevelStorage &&other) noexcept
-        : mDb(std::move(other.mDb)), mDecompressAllocator(std::move(other.mDecompressAllocator)),
+        : mFilterPolicy(std::move(other.mFilterPolicy)), mBlockCache(std::move(other.mBlockCache)),
+          mDb(std::move(other.mDb)), mDecompressAllocator(std::move(other.mDecompressAllocator)),
           mPath(std::move(other.mPath)), mDimensionId(other.mDimensionId) {
     other.mDb.reset();
     other.mDecompressAllocator.reset();
+    other.mBlockCache.reset();
+    other.mFilterPolicy.reset();
 }
 
 LevelStorage &LevelStorage::operator=(LevelStorage &&other) noexcept {
@@ -65,12 +68,16 @@ LevelStorage &LevelStorage::operator=(LevelStorage &&other) noexcept {
 
     close();
 
+    mFilterPolicy = std::move(other.mFilterPolicy);
+    mBlockCache = std::move(other.mBlockCache);
     mDb = std::move(other.mDb);
     mDecompressAllocator = std::move(other.mDecompressAllocator);
     mPath = std::move(other.mPath);
     mDimensionId = other.mDimensionId;
     other.mDb.reset();
     other.mDecompressAllocator.reset();
+    other.mBlockCache.reset();
+    other.mFilterPolicy.reset();
 
     return *this;
 }
@@ -81,6 +88,8 @@ bool LevelStorage::attach(const LevelStorage &source, int dimensionId) {
 
     close();
 
+    mFilterPolicy = source.mFilterPolicy;
+    mBlockCache = source.mBlockCache;
     mDb = source.mDb;
     mDecompressAllocator = source.mDecompressAllocator;
     mPath = source.mPath;
@@ -144,8 +153,10 @@ bool LevelStorage::open(const std::string &worldsDirectory, const std::string &l
     options.compression = leveldb::kZlibRawCompression;
     options.block_size = 163840;
     options.write_buffer_size = 4 * 1024 * 1024;
-    options.filter_policy = leveldb::NewBloomFilterPolicy(10);
-    options.block_cache = leveldb::NewLRUCache(8 * 1024 * 1024);
+    mFilterPolicy.reset(leveldb::NewBloomFilterPolicy(10));
+    mBlockCache.reset(leveldb::NewLRUCache(8 * 1024 * 1024));
+    options.filter_policy = mFilterPolicy.get();
+    options.block_cache = mBlockCache.get();
 
     leveldb::DB *db = nullptr;
     const leveldb::Status status = leveldb::DB::Open(options, mPath, &db);
@@ -153,6 +164,8 @@ bool LevelStorage::open(const std::string &worldsDirectory, const std::string &l
     if (!status.ok()) {
         LOG_ERROR(LogAreaID::Server, "Could not open level database %s: %s", mPath.c_str(),
                   status.ToString().c_str());
+        mBlockCache.reset();
+        mFilterPolicy.reset();
         return false;
     }
 
@@ -175,6 +188,8 @@ void LevelStorage::close() {
 
     mDb.reset();
     mDecompressAllocator.reset();
+    mBlockCache.reset();
+    mFilterPolicy.reset();
 }
 
 leveldb::ReadOptions LevelStorage::_readOptions() const {

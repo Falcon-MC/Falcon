@@ -10,7 +10,9 @@
 #include <vector>
 
 namespace leveldb {
+    class Cache;
     class DB;
+    class FilterPolicy;
     class DecompressAllocator;
     struct ReadOptions;
 }
@@ -95,6 +97,8 @@ private:
 
     leveldb::ReadOptions _readOptions() const;
 
+    std::shared_ptr<const leveldb::FilterPolicy> mFilterPolicy;
+    std::shared_ptr<leveldb::Cache> mBlockCache;
     std::shared_ptr<leveldb::DB> mDb;
     std::shared_ptr<leveldb::DecompressAllocator> mDecompressAllocator;
     std::string mPath;
