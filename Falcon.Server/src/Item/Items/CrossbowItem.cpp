@@ -148,7 +148,8 @@ void CrossbowItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player
     }
 
     owner.playLevelSound(owner.getLevelFor(player),
-                         quickCharge > 0 ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_END
+                         ItemEnchantments::getLevel(item, EnchantmentIds::QUICK_CHARGE) > 0
+                         ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_END
                                          : LevelSoundEvent::CROSSBOW_LOADING_END,
                          player.getPosition(), "minecraft:player");
 }
