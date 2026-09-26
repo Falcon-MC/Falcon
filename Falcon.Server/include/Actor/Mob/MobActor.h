@@ -206,6 +206,16 @@ public:
         return mSitting;
     }
 
+    bool isPanicking() const {
+        return mPanicking;
+    }
+
+    void setPanicking(bool panicking) {
+        mPanicking = panicking;
+    }
+
+    ServerPlayer *getOwner(ServerNetworkHandler &owner) const;
+
     Tag saveNbt() const override;
 
     void loadNbt(const Tag &data) override;
@@ -460,5 +470,6 @@ private:
     int32_t mCelebrationSoundTicks = 0;
     static constexpr int32_t UNSET_AIR_SUPPLY = INT32_MIN;
     int32_t mAirSupply = UNSET_AIR_SUPPLY;
+    bool mPanicking = false;
     const json::Value *mCelebrationComponent = nullptr;
 };

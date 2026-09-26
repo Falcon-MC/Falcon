@@ -4,11 +4,11 @@
 
 #include <cstdint>
 
-class ServerPlayer;
+class Actor;
 
-class FollowOwnerGoal : public Goal {
+class MountPathingGoal : public Goal {
 public:
-    FollowOwnerGoal(float speed, float startDistance, float stopDistance);
+    MountPathingGoal(float speed, float targetDistance, bool trackTarget);
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
@@ -21,8 +21,10 @@ public:
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
+    static Actor *_riderTarget(ServerNetworkHandler &owner, const MobActor &mob);
+
     float mSpeed;
-    float mStartDistance;
-    float mStopDistance;
-    int32_t mTicksUntilRepath = 0;
+    float mTargetDistance;
+    bool mTrackTarget;
+    int32_t mRepathTicks = 0;
 };

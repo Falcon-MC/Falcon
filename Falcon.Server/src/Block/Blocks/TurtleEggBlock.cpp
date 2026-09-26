@@ -68,6 +68,22 @@ void TurtleEggBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
     level.setBlock(position, EggHelpers::cracked(state), true);
 }
 
+void TurtleEggBlock::breakEgg(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state) {
+    owner.playNamedSound(level, PlaySoundName::TURTLE_EGG_CRACK, centerOf(position), CRACK_VOLUME,
+                         EggHelpers::soundPitch());
+
+    const int32_t count = eggCount(state);
+    if (count <= 1) {
+        level.setBlock(position, BlockState("minecraft:air"), true);
+        return;
+    }
+
+    Tag states = state.mStates;
+    states.putString(EGG_COUNT, EGG_COUNTS[count - 2]);
+    level.setBlock(position, BlockState(state.mName, states), true);
+}
+
 void TurtleEggBlock::hatch(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) {
     const int32_t turtles = eggCount(state);

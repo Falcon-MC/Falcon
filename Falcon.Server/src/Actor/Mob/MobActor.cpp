@@ -703,6 +703,19 @@ void MobActor::_tickCelebration(ServerNetworkHandler &owner) {
                                             : minimum);
 }
 
+ServerPlayer *MobActor::getOwner(ServerNetworkHandler &owner) const {
+    if (!isTamed())
+        return nullptr;
+
+    for (auto &entry: owner.getPlayers()) {
+        ServerPlayer &player = entry.second;
+        if (isOwnedBy(player) && player.isSpawned() && !player.isDead() && player.getDimension() == getDimension()
+            && player.getGameType() != (int32_t) GameType::Spectator)
+            return &player;
+    }
+    return nullptr;
+}
+
 bool MobActor::canSwim() const {
     for (const char *name: NAVIGATION_COMPONENTS) {
         const json::Value *navigation = getComponent(name);

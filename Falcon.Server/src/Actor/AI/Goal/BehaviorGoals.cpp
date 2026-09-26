@@ -20,8 +20,10 @@
 #include "Actor/AI/Goal/GoalSelector.h"
 #include "Actor/AI/Goal/HurtByTargetGoal.h"
 #include "Actor/AI/Goal/LeapAtTargetGoal.h"
+#include "Actor/AI/Goal/LookAtEntityGoal.h"
 #include "Actor/AI/Goal/LookAtPlayerGoal.h"
 #include "Actor/AI/Goal/MeleeAttackGoal.h"
+#include "Actor/AI/Goal/MountPathingGoal.h"
 #include "Actor/AI/Goal/MoveToBlockGoal.h"
 #include "Actor/AI/Goal/MoveToWaterGoal.h"
 #include "Actor/AI/Goal/MoveTowardsHomeRestrictionGoal.h"
@@ -38,9 +40,13 @@
 #include "Actor/AI/Goal/RangedAttackGoal.h"
 #include "Actor/AI/Goal/RunAroundLikeCrazyGoal.h"
 #include "Actor/AI/Goal/SitGoal.h"
+#include "Actor/AI/Goal/SlimeGoals.h"
+#include "Actor/AI/Goal/SquidMovementGoal.h"
+#include "Actor/AI/Goal/StompTurtleEggGoal.h"
 #include "Actor/AI/Goal/SwellGoal.h"
 #include "Actor/AI/Goal/SwimIdleGoal.h"
 #include "Actor/AI/Goal/TemptGoal.h"
+#include "Actor/AI/Goal/TeleportToOwnerGoal.h"
 #include "Actor/AI/Goal/TimerFlagGoal.h"
 #include "Actor/AI/Goal/UseKineticWeaponGoal.h"
 #include "Actor/Mob/MobActor.h"
@@ -114,6 +120,9 @@ namespace {
     const float TIMER_FLAG_DEFAULT_COOLDOWN = 10.0f;
     const float SOUND_DEFAULT_INTERVAL = 3.0f;
     const float PICKUP_DEFAULT_GOAL_RADIUS = 0.5f;
+    const float LOOK_ENTITY_DEFAULT_MIN_TIME = 2.0f;
+    const float LOOK_ENTITY_DEFAULT_MAX_TIME = 4.0f;
+    const float LOOK_ENTITY_FULL_ANGLE = 360.0f;
     const float SWIM_DEFAULT_XZ = 10.0f;
     const float SWIM_DEFAULT_Y = 7.0f;
     const float SWIM_WANDER_DEFAULT_CHANCE = 0.00833f;
@@ -575,6 +584,45 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "charge_held_item")
         return std::make_unique<ChargeHeldItemGoal>();
+
+    if (behavior == "slime_float")
+        return std::make_unique<SlimeFloatGoal>();
+
+    if (behavior == "slime_keep_on_jumping")
+        return std::make_unique<SlimeKeepOnJumpingGoal>();
+
+    if (behavior == "slime_random_direction")
+        return std::make_unique<SlimeRandomDirectionGoal>();
+
+    if (behavior == "slime_attack")
+        return std::make_unique<SlimeAttackGoal>();
+
+    if (behavior == "squid_idle")
+        return std::make_unique<SquidMovementGoal>();
+
+    if (behavior == "mount_pathing")
+        return std::make_unique<MountPathingGoal>(speed, numberOf(component, "target_dist", 0.0f),
+                                                  isFlagSet(component, "track_target"));
+
+    if (behavior == "teleport_to_owner")
+        return std::make_unique<TeleportToOwnerGoal>(cloneOf(component.get("filters")));
+
+    if (behavior == "look_at_entity") {
+        LookAtEntityGoal::Settings settings;
+        settings.mRange = numberOf(component, "look_distance", LOOK_DEFAULT_DISTANCE);
+        settings.mProbability = numberOf(component, "probability", LOOK_DEFAULT_PROBABILITY);
+        settings.mMinLookTicks = secondsToTicks(rangeValue(component, "look_time", "min", LOOK_ENTITY_DEFAULT_MIN_TIME));
+        settings.mMaxLookTicks = secondsToTicks(rangeValue(component, "look_time", "max", LOOK_ENTITY_DEFAULT_MAX_TIME));
+        settings.mHorizontalAngle = numberOf(component, "angle_of_view_horizontal", LOOK_ENTITY_FULL_ANGLE);
+        settings.mFilters = cloneOf(component.get("filters"));
+        return std::make_unique<LookAtEntityGoal>(settings);
+    }
+
+    if (behavior == "stomp_turtle_egg")
+        return std::make_unique<StompTurtleEggGoal>(speed, (int32_t) numberOf(component, "search_range", 0.0f),
+                                                    (int32_t) numberOf(component, "search_height", 0.0f),
+                                                    numberOf(component, "goal_radius", PICKUP_DEFAULT_GOAL_RADIUS),
+                                                    (int32_t) numberOf(component, "interval", 0.0f));
 
     if (behavior == "random_swim")
         return std::make_unique<RandomSwimGoal>(speed, (int32_t) numberOf(component, "xz_dist", SWIM_DEFAULT_XZ),

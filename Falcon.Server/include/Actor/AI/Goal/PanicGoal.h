@@ -8,6 +8,10 @@ public:
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
+    void start(ServerNetworkHandler &owner, MobActor &mob) override;
+
+    void stop(ServerNetworkHandler &owner, MobActor &mob) override;
+
 protected:
     bool shouldPickTarget(MobActor &mob) const override;
 

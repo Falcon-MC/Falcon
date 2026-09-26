@@ -5,6 +5,8 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Types/StartGameTypes.h"
 
+#include <algorithm>
+#include <cmath>
 #include <random>
 
 namespace {
@@ -18,6 +20,13 @@ namespace {
     constexpr float PLAYER_HEIGHT = 1.8f;
     constexpr int MIN_SPLIT_COUNT = 2;
     constexpr int MAX_SPLIT_COUNT = 4;
+    constexpr const char *MOVEMENT_JUMP_COMPONENT = "minecraft:movement.jump";
+    constexpr float DEFAULT_JUMP_DELAY_MIN = 0.5f;
+    constexpr float DEFAULT_JUMP_DELAY_MAX = 1.5f;
+    constexpr float AGGRESSIVE_DELAY_DIVISOR = 3.0f;
+    constexpr float TICKS_PER_SECOND = 20.0f;
+    constexpr float HOP_SPEED_FACTOR = 0.33f;
+    constexpr float DEGREES_TO_RADIANS = 0.017453292f;
 
     std::mt19937 &slimeRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -91,7 +100,63 @@ void AbstractSlimeActor::_split(ServerNetworkHandler &owner, Level &level) {
     }
 }
 
+int32_t AbstractSlimeActor::_nextJumpDelay() const {
+    const json::Value *jump = getComponent(MOVEMENT_JUMP_COMPONENT);
+    const json::Value *delay = jump == nullptr ? nullptr : jump->get("jump_delay");
+    float minimum = DEFAULT_JUMP_DELAY_MIN;
+    float maximum = DEFAULT_JUMP_DELAY_MAX;
+    if (delay != nullptr && delay->isArray() && delay->mArray.size() >= 2) {
+        minimum = (float) delay->mArray[0]->number(minimum);
+        maximum = (float) delay->mArray[1]->number(minimum);
+    }
+
+    float seconds = maximum > minimum ? std::uniform_real_distribution<float>(minimum, maximum)(slimeRandom()) : minimum;
+    if (mAggressive)
+        seconds /= AGGRESSIVE_DELAY_DIVISOR;
+    return std::max(1, (int32_t) std::lround(seconds * TICKS_PER_SECOND));
+}
+
+void AbstractSlimeActor::hop() {
+    Vector3f motion = getMotion();
+    motion.y = getHopPower();
+    setMotion(motion);
+    setOnGround(false);
+}
+
+void AbstractSlimeActor::_tickHop(ServerNetworkHandler &owner) {
+    (void) owner;
+    Vector3f rotation = getRotation();
+    rotation.y = mHopYaw;
+    setRotation(rotation);
+
+    if (mHopSpeed <= 0.0f)
+        return;
+
+    const float yaw = mHopYaw * DEGREES_TO_RADIANS;
+    const float speed = getMovementSpeed() * mHopSpeed * HOP_SPEED_FACTOR;
+    Vector3f motion = getMotion();
+
+    if (isOnGround()) {
+        if (--mJumpDelay > 0) {
+            motion.x = 0.0f;
+            motion.z = 0.0f;
+            setMotion(motion);
+            return;
+        }
+
+        mJumpDelay = _nextJumpDelay();
+        hop();
+        motion = getMotion();
+    }
+
+    motion.x = -std::sin(yaw) * speed;
+    motion.z = std::cos(yaw) * speed;
+    setMotion(motion);
+    mHopSpeed = 0.0f;
+}
+
 void AbstractSlimeActor::tick(ServerNetworkHandler &owner) {
+    _tickHop(owner);
     HostileActor::tick(owner);
 
     if (mAttackCooldown > 0)

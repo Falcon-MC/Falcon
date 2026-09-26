@@ -15,6 +15,9 @@ public:
     void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
 
+    static void breakEgg(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                         const BlockState &state);
+
 private:
     static bool isHatchingTime(Level &level);
 
