@@ -6,7 +6,6 @@
 #include "Block/Systems/LiquidBlocksFetch.h"
 #include "Level/LevelChunk.h"
 #include "Level/Level.h"
-#include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemStack.h"
@@ -97,28 +96,14 @@ bool ChorusFruitItem::findTeleportPosition(ServerNetworkHandler &owner, ServerPl
     return false;
 }
 
-void ChorusFruitItem::sendTeleportSound(ServerNetworkHandler &owner, ServerPlayer &player,
-                                         const Vector3f &position) {
-    LevelSoundEventPacket sound;
-    sound.mSound = "teleport";
-    sound.mPosition = position;
-    sound.mExtraData = -1;
-    sound.mActorType = player.getIdentifier();
-    sound.mActorUniqueId = player.getUniqueId();
-    sound.mIsBabyMob = false;
-    sound.mDisableRelativeVolume = false;
-    sound.mHasFirePosition = false;
-    BlockActionHandler::broadcastToViewers(owner, owner.getLevelFor(player), position, sound);
-}
-
 bool ChorusFruitItem::onEaten(ServerNetworkHandler &owner, ServerPlayer &player) {
     Vector3f destination;
     if (!findTeleportPosition(owner, player, destination))
         return true;
 
-    const Vector3f source = player.getPosition();
-    sendTeleportSound(owner, player, source);
+    Level &level = owner.getLevelFor(player);
+    owner.playLevelSound(level, LevelSoundEvent::TELEPORT, player.getPosition(), player.getIdentifier());
     player.teleport(owner, destination, MovePlayerTeleportationCause::ChorusFruit);
-    sendTeleportSound(owner, player, destination);
+    owner.playLevelSound(level, LevelSoundEvent::TELEPORT, destination, player.getIdentifier());
     return true;
 }

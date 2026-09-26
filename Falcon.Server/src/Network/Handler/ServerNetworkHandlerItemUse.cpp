@@ -311,16 +311,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         player.consumeFood(food->getNutrition(), food->getSaturation());
         applyFoodEffects(mEventBus, player, *food);
 
-        LevelSoundEventPacket burp;
-        burp.mSound = LevelSoundEvent::BURP;
-        burp.mPosition = player.getPosition();
-        burp.mExtraData = -1;
-        burp.mActorType = ":";
-        burp.mIsBabyMob = false;
-        burp.mDisableRelativeVolume = false;
-        burp.mActorUniqueId = -1;
-        burp.mHasFirePosition = false;
-        BlockActionHandler::broadcastToViewers(*this, getLevelFor(player), player.getPosition(), burp);
+        playLevelSound(getLevelFor(player), LevelSoundEvent::BURP, player.getPosition());
     }
 
     ItemStack remaining = inventory.getItemInHand();

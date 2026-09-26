@@ -22,6 +22,4 @@ private:
 
     static bool findTeleportPosition(ServerNetworkHandler &owner, ServerPlayer &player, Vector3f &destination);
 
-    static void sendTeleportSound(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &position);
-
 };
