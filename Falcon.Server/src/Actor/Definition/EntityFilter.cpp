@@ -105,6 +105,30 @@ namespace {
         return Vector3i((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                         (int32_t) std::floor(position.z));
     }
+
+    bool hasEquipmentIn(const ServerPlayer &player, const std::string &domain, const BehaviorItems &items) {
+        const PlayerInventory &inventory = player.getInventory();
+        if (domain == "head")
+            return items.contains(inventory.getArmor(PlayerInventory::ARMOR_HEAD));
+        if (domain == "torso")
+            return items.contains(inventory.getArmor(PlayerInventory::ARMOR_TORSO));
+        if (domain == "leg")
+            return items.contains(inventory.getArmor(PlayerInventory::ARMOR_LEGS));
+        if (domain == "feet")
+            return items.contains(inventory.getArmor(PlayerInventory::ARMOR_FEET));
+        if (domain == "offhand")
+            return items.contains(inventory.getOffhand());
+
+        if (domain == "armor") {
+            for (const ItemStack &armor: inventory.getArmorContents()) {
+                if (items.contains(armor))
+                    return true;
+            }
+            return false;
+        }
+
+        return (domain == "hand" || domain == "any") && items.contains(inventory.getItemInHand());
+    }
 }
 
 bool EntityFilter::test(const json::Value &filter, ServerNetworkHandler &owner, const MobActor &self,
@@ -353,9 +377,9 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     if (test == "has_equipment") {
         const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(target);
         const json::Value *domain = filter.get("domain");
-        const bool hand = domain == nullptr || domain->string() == "hand" || domain->string() == "any";
-        const bool result = player != nullptr && hand && value != nullptr
-                            && BehaviorItems(value).contains(player->getInventory().getItemInHand());
+        const bool result = player != nullptr && value != nullptr
+                            && hasEquipmentIn(*player, domain == nullptr ? "hand" : domain->string(),
+                                              BehaviorItems(value));
         return isNegation(op) ? !result : result;
     }
 

@@ -9,6 +9,7 @@
 #include "Actor/ActorCategory.h"
 #include "Actor/ActorFlags.h"
 #include "Actor/ActorSize.h"
+#include "Actor/Definition/LookedAtSensor.h"
 #include "Actor/Mob/MobEntitySpawner.h"
 #include "Actor/Mob/MobEquipment.h"
 #include "Actor/ServerActor.h"
@@ -293,6 +294,7 @@ private:
     Vector3i mEventBlock;
     bool mHasEventBlock = false;
     bool mDespawned = false;
+    LookedAtSensor mLookedAtSensor;
     std::vector<std::string> mComponentGroups;
     std::vector<std::string> mGoalGroups;
     std::vector<std::string> mBodyGroups;

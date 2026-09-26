@@ -251,6 +251,8 @@ void MobActor::_tickSensors(ServerNetworkHandler &owner) {
         _fireComponentEvent(owner, "minecraft:on_target_escape");
     }
 
+    mLookedAtSensor.tick(owner, *this);
+
     const json::Value *sensor = getComponent("minecraft:environment_sensor");
     const json::Value *triggers = sensor == nullptr ? nullptr : sensor->get("triggers");
     if (triggers == nullptr)
