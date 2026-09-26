@@ -185,11 +185,7 @@ bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
 
     player.startItemCooldown(item, owner.getCurrentTick(), USE_COOLDOWN_TICKS);
 
-    LevelEventPacket effect;
-    effect.mEventId = (LevelEventPacket::Event) BONE_MEAL_USE_EVENT;
-    effect.mPosition = centerOf(blockPosition);
-    effect.mData = 0;
-    BlockActionHandler::broadcastToViewers(owner, level, effect.mPosition, effect);
+    owner.broadcastLevelEvent(level, BONE_MEAL_USE_EVENT, centerOf(blockPosition), 0);
 
     if (player.getGameType() != (int32_t) GameType::Creative) {
         ItemStack remaining = item;

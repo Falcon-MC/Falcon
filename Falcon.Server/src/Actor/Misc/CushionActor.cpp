@@ -67,11 +67,9 @@ void CushionActor::breakCushion(ServerNetworkHandler &owner, bool dropItem) {
     BlockState wool;
     wool.mName = DyeColor::identifier(mColor, WOOL_SUFFIX);
 
-    LevelEventPacket destroy;
-    destroy.mEventId = LevelEventPacket::Event::ParticleDestroy;
-    destroy.mPosition = Vector3f(position.x, position.y + 0.5f, position.z);
-    destroy.mData = BlockStateHasher::hash(wool.mName, wool.mStates);
-    BlockActionHandler::broadcastToViewers(owner, level, destroy.mPosition, destroy);
+    owner.broadcastLevelEvent(level, LevelEventPacket::Event::ParticleDestroy,
+                              Vector3f(position.x, position.y + 0.5f, position.z),
+                              (int32_t) BlockStateHasher::hash(wool.mName, wool.mStates));
 
     if (dropItem)
         owner.spawnItemActor(level, DyeColor::identifier(mColor, ITEM_SUFFIX), 1, position);

@@ -64,10 +64,9 @@ bool BreakDoorGoal::_canBreakDoors(ServerNetworkHandler &owner, Level &level) co
 
 void BreakDoorGoal::_broadcastBreakEvent(ServerNetworkHandler &owner, Level &level, int32_t event,
                                          int32_t data) const {
-    LevelEventPacket packet;
-    packet.mEventId = event;
-    packet.mPosition = Vector3f((float) mDoorPosition.x + BLOCK_CENTER, (float) mDoorPosition.y + BLOCK_CENTER,
-                                (float) mDoorPosition.z + BLOCK_CENTER);
-    packet.mData = data;
-    BlockActionHandler::broadcastToViewers(owner, level, packet.mPosition, packet);
+    owner.broadcastLevelEvent(level, event,
+                              Vector3f((float) mDoorPosition.x + BLOCK_CENTER,
+                                       (float) mDoorPosition.y + BLOCK_CENTER,
+                                       (float) mDoorPosition.z + BLOCK_CENTER),
+                              data);
 }

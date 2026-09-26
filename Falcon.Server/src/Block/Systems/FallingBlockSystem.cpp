@@ -172,12 +172,8 @@ void FallingBlockSystem::setBlockState(ServerNetworkHandler &owner, Level &level
 
 void FallingBlockSystem::spawnDestroyParticle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                               const BlockState &state) {
-    LevelEventPacket destroy;
-    destroy.mEventId = LevelEventPacket::Event::ParticleDestroy;
-    destroy.mPosition = centerOf(position);
-    destroy.mData = BlockStateHasher::hash(state.mName, state.mStates);
-
-    BlockActionHandler::broadcastToViewers(owner, level, destroy.mPosition, destroy);
+    owner.broadcastLevelEvent(level, LevelEventPacket::Event::ParticleDestroy, centerOf(position),
+                              (int32_t) BlockStateHasher::hash(state.mName, state.mStates));
 }
 
 void FallingBlockSystem::spawnFallingBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

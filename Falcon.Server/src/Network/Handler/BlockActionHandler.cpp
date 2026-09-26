@@ -580,13 +580,9 @@ void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level,
     update.mFlags = UpdateBlockPacket::Flag::All;
     update.mDataLayer = 0;
 
-    LevelEventPacket destroy;
-    destroy.mEventId = LevelEventPacket::Event::ParticleDestroy;
-    destroy.mPosition = Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    destroy.mData = brokenHash;
-
-    broadcastToViewers(owner, level, destroy.mPosition, update);
-    broadcastToViewers(owner, level, destroy.mPosition, destroy);
+    const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+    broadcastToViewers(owner, level, center, update);
+    owner.broadcastLevelEvent(level, LevelEventPacket::Event::ParticleDestroy, center, brokenHash);
 
     if (brokenBlock != nullptr)
         brokenBlock->onBroken(owner, level, position, brokenState);
@@ -637,12 +633,10 @@ void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerP
 
     player.startBreakingBlock(position, face, breakSpeed, owner.getCurrentTick());
 
-    LevelEventPacket start;
-    start.mEventId = LevelEventPacket::Event::BlockStartBreak;
-    start.mPosition = Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    start.mData = breakSpeedEventData(breakSpeed);
-
-    broadcastToViewers(owner, level, start.mPosition, start);
+    owner.broadcastLevelEvent(level, LevelEventPacket::Event::BlockStartBreak,
+                              Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
+                                       (float) position.z + 0.5f),
+                              breakSpeedEventData(breakSpeed));
 
     if (creative)
         completeBreakingBlock(owner, player, position);
@@ -681,12 +675,10 @@ void BlockActionHandler::continueBreakingBlock(ServerNetworkHandler &owner, Serv
     if (std::fabs(newBreakSpeed - player.getBreakSpeed()) > BREAK_SPEED_CHANGE_EPSILON) {
         player.setBreakSpeed(newBreakSpeed);
 
-        LevelEventPacket update;
-        update.mEventId = LevelEventPacket::Event::BlockUpdateBreak;
-        update.mPosition = Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                    (float) position.z + 0.5f);
-        update.mData = breakSpeedEventData(newBreakSpeed);
-        broadcastToViewers(owner, level, update.mPosition, update);
+        owner.broadcastLevelEvent(level, LevelEventPacket::Event::BlockUpdateBreak,
+                                  Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
+                                           (float) position.z + 0.5f),
+                                  breakSpeedEventData(newBreakSpeed));
     }
 
     player.addBreakProgress(player.getBreakSpeed());
@@ -755,11 +747,8 @@ void BlockActionHandler::sendBreakingFx(ServerNetworkHandler &owner, ServerPlaye
     const int32_t blockHash = BlockStateHasher::hash(state.mName, state.mStates);
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
 
-    LevelEventPacket punch;
-    punch.mEventId = LevelEventPacket::Event::ParticlePunchBlock;
-    punch.mPosition = center;
-    punch.mData = blockHash | (player.getBreakingFace() << 24);
-    broadcastToViewers(owner, level, center, punch);
+    owner.broadcastLevelEvent(level, LevelEventPacket::Event::ParticlePunchBlock, center,
+                              blockHash | (player.getBreakingFace() << 24));
 
     owner.playLevelSound(level, LevelSoundEvent::HIT, center, "", blockHash);
 
@@ -779,12 +768,10 @@ void BlockActionHandler::stopBreakingBlock(ServerNetworkHandler &owner, ServerPl
     const Vector3i position = player.getBreakingBlockPosition();
     player.stopBreakingBlock();
 
-    LevelEventPacket stop;
-    stop.mEventId = LevelEventPacket::Event::BlockStopBreak;
-    stop.mPosition = Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    stop.mData = 0;
-
-    broadcastToViewers(owner, owner.getLevelFor(player), stop.mPosition, stop);
+    owner.broadcastLevelEvent(owner.getLevelFor(player), LevelEventPacket::Event::BlockStopBreak,
+                              Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
+                                       (float) position.z + 0.5f),
+                              0);
 
 }
 

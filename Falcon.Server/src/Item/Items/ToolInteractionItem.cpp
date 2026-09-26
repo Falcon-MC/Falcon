@@ -152,12 +152,10 @@ bool ToolInteractionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer
         owner.playLevelSound(level, LevelSoundEvent::ITEM_USE_ON, center, ":",
                              BlockStateHasher::hash(result.mName, result.mStates));
     } else {
-        LevelEventPacket event;
-        event.mEventId = transformation.mEffect == Effect::WaxOff ? CopperSystem::WAX_OFF_EVENT
-                                                                  : CopperSystem::SCRAPE_EVENT;
-        event.mPosition = center;
-        event.mData = 0;
-        BlockActionHandler::broadcastToViewers(owner, level, center, event);
+        owner.broadcastLevelEvent(level,
+                                  transformation.mEffect == Effect::WaxOff ? CopperSystem::WAX_OFF_EVENT
+                                                                           : CopperSystem::SCRAPE_EVENT,
+                                  center, 0);
     }
 
     if (transformation.mDrop != nullptr)

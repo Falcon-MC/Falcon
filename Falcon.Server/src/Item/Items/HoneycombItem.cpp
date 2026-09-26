@@ -33,12 +33,10 @@ bool HoneycombItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &play
 
     CopperSystem::replaceWithPair(owner, level, blockPosition, clicked, waxed);
 
-    LevelEventPacket event;
-    event.mEventId = CopperSystem::WAX_ON_EVENT;
-    event.mPosition = Vector3f((float) blockPosition.x + 0.5f, (float) blockPosition.y + 0.5f,
-                               (float) blockPosition.z + 0.5f);
-    event.mData = 0;
-    BlockActionHandler::broadcastToViewers(owner, level, event.mPosition, event);
+    owner.broadcastLevelEvent(level, CopperSystem::WAX_ON_EVENT,
+                              Vector3f((float) blockPosition.x + 0.5f, (float) blockPosition.y + 0.5f,
+                                       (float) blockPosition.z + 0.5f),
+                              0);
 
     if (player.getGameType() != (int32_t) GameType::Creative) {
         ItemStack remaining = item;
