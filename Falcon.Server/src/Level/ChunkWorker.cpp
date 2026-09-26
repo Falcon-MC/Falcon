@@ -166,10 +166,17 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
         if (!chunk->hasHeightmap())
             LightSystem::computeHeightmap(*chunk);
 
-        mSources[sourceIndex]->populate(*chunk, result.mOverflowChanges);
+        std::vector<Tag> blockActors;
+        mSources[sourceIndex]->populate(*chunk, result.mOverflowChanges, blockActors);
         chunk->setPopulated(true);
         chunk->markDirty();
         mPopulatedCount.fetch_add(1);
+
+        if (!blockActors.empty() && mStorage.isOpen()) {
+            std::vector<Tag> stored = mStorage.loadBlockEntities(result.mX, result.mZ);
+            stored.insert(stored.end(), blockActors.begin(), blockActors.end());
+            mStorage.saveBlockEntities(result.mX, result.mZ, stored);
+        }
     }
 
     if (mStorage.isOpen()) {
