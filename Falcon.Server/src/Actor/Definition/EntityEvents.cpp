@@ -27,6 +27,32 @@ namespace {
         const json::Value *value = options.get(key);
         return value == nullptr ? fallback : value->boolean(fallback);
     }
+
+    struct ParticleTypeEntry {
+        const char *mName;
+        int32_t mType;
+    };
+
+    const int32_t LEVEL_EVENT_PARTICLE_TYPE = 0x4000;
+
+    const ParticleTypeEntry PARTICLE_TYPES[] = {
+            {"creakingcrumble", 94}
+    };
+
+    void emitParticle(ServerNetworkHandler &owner, MobActor &mob, const json::Value &options) {
+        const json::Value *name = options.get("particle");
+        if (name == nullptr)
+            return;
+
+        for (const ParticleTypeEntry &entry: PARTICLE_TYPES) {
+            if (name->string() != entry.mName)
+                continue;
+
+            owner.broadcastLevelEvent(owner.getLevelFor(mob), LEVEL_EVENT_PARTICLE_TYPE | entry.mType,
+                                      mob.getPosition(), 0);
+            return;
+        }
+    }
 }
 
 void EntityEvents::fire(ServerNetworkHandler &owner, MobActor &mob, const std::string &event, int32_t depth,
@@ -192,6 +218,9 @@ bool EntityEvents::_run(ServerNetworkHandler &owner, MobActor &mob, const json::
         if (name != nullptr)
             mob.playDefinitionSound(owner, name->string());
     }
+
+    if (const json::Value *particle = node.get("emit_particle"))
+        emitParticle(owner, mob, *particle);
 
     if (const json::Value *queue = node.get("queue_command"))
         _queueCommands(owner, mob, *queue);
