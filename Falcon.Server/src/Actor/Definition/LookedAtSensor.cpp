@@ -100,7 +100,7 @@ void LookedAtSensor::tick(ServerNetworkHandler &owner, MobActor &mob) {
     const std::string setTarget = stringOr(*component, "set_target", SET_TARGET_ONCE_AND_STOP);
     if (setTarget != SET_TARGET_NEVER) {
         if (mob.getTarget(owner) == nullptr)
-            mob.setTarget(looker->getRuntimeId());
+            mob.setTarget(owner, looker->getRuntimeId());
         mStopped = setTarget == SET_TARGET_ONCE_AND_STOP;
     }
 
