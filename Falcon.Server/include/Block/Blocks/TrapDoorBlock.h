@@ -1,16 +1,18 @@
 #pragma once
 
-#include "Block/Blocks/CardinalPlayerBlock.h"
+#include "Block/Block.h"
 
 #include <string>
 
-class FenceGateOrientationBlock final : public CardinalPlayerBlock {
+class TrapDoorBlock final : public Block {
 public:
-    explicit FenceGateOrientationBlock(const Block &block) : CardinalPlayerBlock(block)
+    explicit TrapDoorBlock(const Block &block) : Block(block)
     {
     }
 
     static bool matches(const std::string &identifier);
+
+    BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;

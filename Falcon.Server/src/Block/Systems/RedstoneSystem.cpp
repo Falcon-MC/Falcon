@@ -11,8 +11,8 @@
 #include "Block/Blocks/LeverBlock.h"
 #include "Block/Blocks/OpenableBlock.h"
 #include "Block/Blocks/DoorOrientationBlock.h"
-#include "Block/Blocks/FenceGateOrientationBlock.h"
-#include "Block/Blocks/TrapdoorOrientationBlock.h"
+#include "Block/Blocks/FenceGateBlock.h"
+#include "Block/Blocks/TrapDoorBlock.h"
 #include "Block/Blocks/PressurePlateBlock.h"
 #include "Block/Blocks/RedStoneWireBlock.h"
 #include "Block/Blocks/ObserverBlock.h"
@@ -1173,8 +1173,8 @@ void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
     } else if (dynamic_cast<const DoorOrientationBlock *>(block) != nullptr) {
         if (type == BlockUpdateType::Redstone)
             DoorBlock::onRedstoneUpdate(owner, level, position, state);
-    } else if (dynamic_cast<const TrapdoorOrientationBlock *>(block) != nullptr
-               || dynamic_cast<const FenceGateOrientationBlock *>(block) != nullptr) {
+    } else if (dynamic_cast<const TrapDoorBlock *>(block) != nullptr
+               || dynamic_cast<const FenceGateBlock *>(block) != nullptr) {
         if (type == BlockUpdateType::Redstone)
             OpenableBlock::onRedstoneUpdate(owner, level, position, state);
     } else if (dynamic_cast<const TntBlock *>(block) != nullptr) {

@@ -1,4 +1,4 @@
-#include "Block/Blocks/BellOrientationBlock.h"
+#include "Block/Blocks/BellBlock.h"
 
 #include "Block/BlockClassRegistry.h"
 #include "Block/BlockData.h"
@@ -7,7 +7,7 @@
 #include "Block/Components/PlacementOrientation.h"
 #include "Level/Level.h"
 
-FALCON_REGISTER_BLOCK(BellOrientationBlock, 200);
+FALCON_REGISTER_BLOCK(BellBlock, 200);
 
 namespace {
     bool isSolidNeighbour(Level *level, const Vector3i &position) {
@@ -23,11 +23,11 @@ namespace {
     }
 }
 
-bool BellOrientationBlock::matches(const std::string &identifier) {
+bool BellBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:bell";
 }
 
-BlockState BellOrientationBlock::applyPlacementOrientation(const BlockState &state,
+BlockState BellBlock::applyPlacementOrientation(const BlockState &state,
                                                            const BlockPlacementContext &context) const {
     using namespace PlacementOrientation;
 

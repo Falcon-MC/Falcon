@@ -82,7 +82,7 @@ void ServerNetworkHandler::_handleFallDamage(ServerPlayer &player, const Block *
     if (damage < 1.0f)
         return;
 
-    hurt(player, damage, DamageSource::environment("death.fell.accident.generic", player.getName()));
+    hurt(player, damage, ActorDamageSource::environment("death.fell.accident.generic", player.getName()));
 }
 
 void ServerNetworkHandler::_handleVoidDamage(ServerPlayer &player) {
@@ -92,7 +92,7 @@ void ServerNetworkHandler::_handleVoidDamage(ServerPlayer &player) {
     if (player.getPosition().y > (float) (LevelChunk::MIN_Y - 16))
         return;
 
-    hurt(player, 10.0f, DamageSource::environment("death.attack.outOfWorld", player.getName()));
+    hurt(player, 10.0f, ActorDamageSource::environment("death.attack.outOfWorld", player.getName()));
 }
 
 bool ServerNetworkHandler::_isEyeInsideSolidBlock(Level &level, const Vector3f &position, float height) {
@@ -126,10 +126,10 @@ void ServerNetworkHandler::_handleSuffocationDamage(ServerPlayer &player) {
     if (!_isEyeInsideSolidBlock(getLevelFor(player), player.getPosition(), PLAYER_COLLISION_HEIGHT))
         return;
 
-    hurt(player, SUFFOCATION_DAMAGE, DamageSource::environment("death.attack.inWall", player.getName()));
+    hurt(player, SUFFOCATION_DAMAGE, ActorDamageSource::environment("death.attack.inWall", player.getName()));
 }
 
-DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, const DamageSource &source) {
+DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, const ActorDamageSource &source) {
     const std::string &key = source.mDeathMessageKey;
     if (!player.isSpawned() || player.isDead() || amount <= 0.0f)
         return DamageResult::Ignored;

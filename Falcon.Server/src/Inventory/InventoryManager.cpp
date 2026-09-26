@@ -9,7 +9,7 @@
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
 #include "Block/Blocks/FenceBlock.h"
-#include "Block/Blocks/FenceGateOrientationBlock.h"
+#include "Block/Blocks/FenceGateBlock.h"
 #include "Block/Blocks/FurnaceBlock.h"
 #include "Block/Blocks/SlabBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
@@ -462,7 +462,7 @@ namespace {
         if (isWoodLike(id) && id.find("_button") != std::string::npos) return 100;
         if (isWoodLike(id) && (id.find("_trapdoor") != std::string::npos
             || VanillaBlocks::getAs<FenceBlock>(id) != nullptr
-            || VanillaBlocks::getAs<FenceGateOrientationBlock>(id) != nullptr
+            || VanillaBlocks::getAs<FenceGateBlock>(id) != nullptr
             || id.find("_pressure_plate") != std::string::npos
             || id.find("_stairs") != std::string::npos)) return 300;
         if (id.find("wooden_") != std::string::npos) return 200;

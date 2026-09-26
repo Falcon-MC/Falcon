@@ -10,7 +10,7 @@
 #include <string>
 
 class Actor;
-class DamageSource;
+class ActorDamageSource;
 class Level;
 class MobActor;
 class ServerNetworkHandler;
@@ -39,7 +39,7 @@ public:
 
     bool dropSlot(ServerNetworkHandler &owner, Level &level, const Vector3f &position, const std::string &slotName);
 
-    float absorbDamage(float amount, const DamageSource &source) const;
+    float absorbDamage(float amount, const ActorDamageSource &source) const;
 
     void saveNbt(Tag &data) const;
 

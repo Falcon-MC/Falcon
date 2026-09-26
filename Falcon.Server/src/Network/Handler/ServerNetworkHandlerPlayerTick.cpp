@@ -99,7 +99,7 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     if (fireTickDamage && player.getGameType() != (int32_t) GameType::Creative &&
         player.getGameType() != (int32_t) GameType::Spectator &&
         !player.hasEffect(MobEffectId::FireResistance))
-        hurt(player, 1.0f, DamageSource::environment("death.attack.inFire", player.getName()));
+        hurt(player, 1.0f, ActorDamageSource::environment("death.attack.inFire", player.getName()));
 
     if (wasOnFire != player.isOnFire())
         _sendEntityData(player);
@@ -145,7 +145,7 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
 
     if (player.consumeStarveDamage())
         hurt(player, 1.0f,
-             DamageSource::environment("death.attack.starve", player.getName()).withoutArmor().withoutCooldown());
+             ActorDamageSource::environment("death.attack.starve", player.getName()).withoutArmor().withoutCooldown());
     if (wasSprinting != player.getFlags().get(ActorFlag::Sprinting))
         _sendEntityData(player);
 

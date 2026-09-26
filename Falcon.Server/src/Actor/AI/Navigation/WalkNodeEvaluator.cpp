@@ -4,7 +4,7 @@
 #include "Block/Blocks/DoorBlock.h"
 #include "Block/Blocks/DoorOrientationBlock.h"
 #include "Block/Blocks/FenceBlock.h"
-#include "Block/Blocks/FenceGateOrientationBlock.h"
+#include "Block/Blocks/FenceGateBlock.h"
 #include "Block/Blocks/LiquidView.h"
 #include "Block/Blocks/OpenableBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
@@ -185,7 +185,7 @@ WalkNodeEvaluator::CachedBlock WalkNodeEvaluator::_classify(int32_t x, int32_t y
 
     const Block *definition = VanillaBlocks::fromIdentifier(state->mName);
     if (dynamic_cast<const FenceBlock *>(definition) != nullptr
-        || dynamic_cast<const FenceGateOrientationBlock *>(definition) != nullptr)
+        || dynamic_cast<const FenceGateBlock *>(definition) != nullptr)
         block.mFlags |= Fence;
 
     const bool closedDoor = dynamic_cast<const DoorOrientationBlock *>(definition) != nullptr

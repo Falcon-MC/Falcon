@@ -248,7 +248,7 @@ void Explosion::_damageEntities() {
         const double impact = (1.0 - distance) * density;
         const float damage = _scaleDamageForDifficulty(_calculateEntityDamage(explosionSize, impact));
 
-        mOwner.hurt(player, damage, DamageSource::environment(DEATH_KEY, player.getName()).fromOrigin(mSource));
+        mOwner.hurt(player, damage, ActorDamageSource::environment(DEATH_KEY, player.getName()).fromOrigin(mSource));
 
         const Vector3f current = player.getMotion();
         player.setMotion(Vector3f(current.x + motion.x * (float) impact, current.y + motion.y * (float) impact,
@@ -277,7 +277,7 @@ void Explosion::_damageEntities() {
         const double impact = (1.0 - distance) * density;
 
         mOwner.damageActor(*actor, _calculateEntityDamage(explosionSize, impact),
-                           DamageSource::environment(DEATH_KEY, actor->getName()));
+                           ActorDamageSource::environment(DEATH_KEY, actor->getName()));
 
         const Vector3f current = actor->getMotion();
         actor->setMotion(Vector3f(current.x + motion.x * (float) impact, current.y + motion.y * (float) impact,

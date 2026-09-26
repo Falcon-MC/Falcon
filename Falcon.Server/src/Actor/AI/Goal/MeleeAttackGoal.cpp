@@ -69,7 +69,7 @@ void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor 
 
     const float healthBefore = target.getHealth();
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&target)) {
-        const DamageSource source = DamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(),
+        const ActorDamageSource source = ActorDamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(),
                                                          mob.getPosition());
         if (owner.hurt(*player, damage, source) == DamageResult::Blocked) {
             owner.broadcastActorEvent(mob, EntityEventType::ArmSwing);

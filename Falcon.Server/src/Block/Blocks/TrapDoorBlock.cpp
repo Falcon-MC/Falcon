@@ -1,4 +1,4 @@
-#include "Block/Blocks/TrapdoorOrientationBlock.h"
+#include "Block/Blocks/TrapDoorBlock.h"
 
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockClassRegistry.h"
@@ -9,13 +9,13 @@
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
-FALCON_REGISTER_BLOCK(TrapdoorOrientationBlock, 130);
+FALCON_REGISTER_BLOCK(TrapDoorBlock, 130);
 
-bool TrapdoorOrientationBlock::matches(const std::string &identifier) {
+bool TrapDoorBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:trapdoor" || BlockIdentifier::endsWith(identifier, "_trapdoor");
 }
 
-BlockState TrapdoorOrientationBlock::applyPlacementOrientation(const BlockState &state,
+BlockState TrapDoorBlock::applyPlacementOrientation(const BlockState &state,
                                                                const BlockPlacementContext &context) const {
     using namespace PlacementOrientation;
 
@@ -26,12 +26,12 @@ BlockState TrapdoorOrientationBlock::applyPlacementOrientation(const BlockState 
     return BlockState(result.mName, states);
 }
 
-bool TrapdoorOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
+bool TrapDoorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
                                           const Vector3i &position, const BlockState &state) const {
     return OpenableBlock::toggle(owner, owner.getLevelFor(player), position, state);
 }
 
-void TrapdoorOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
+void TrapDoorBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
                                         const Vector3i &position, const BlockState &state,
                                         const ItemStack &usedItem, int blockFace) const {
     (void) usedItem;

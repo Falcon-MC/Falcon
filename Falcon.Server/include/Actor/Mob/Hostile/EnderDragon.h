@@ -2,7 +2,7 @@
 
 #include "Actor/Mob/Hostile/HostileActor.h"
 
-class EnderDragonActor : public HostileActor {
+class EnderDragon : public HostileActor {
 public:
     static constexpr const char *IDENTIFIER = "minecraft:ender_dragon";
 

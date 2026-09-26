@@ -272,7 +272,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             const float healthBefore = target.getHealth();
             const float armorEfficiency = weaponType == nullptr ? 1.0f : weaponType->getArmorEfficiency(weapon);
             owner.damageActor(target, attackDamage,
-                              DamageSource::attack("death.attack.player", target.getName(), *this, getName(),
+                              ActorDamageSource::attack("death.attack.player", target.getName(), *this, getName(),
                                                    getPosition())
                                       .withArmorEfficiency(armorEfficiency));
             const bool hurt = target.getHealth() < healthBefore;
@@ -328,7 +328,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     const bool coldTarget = victim->getAttackTime() <= 0;
     const float effectiveDamage = victim->getNoDamageTicks() > 0 ? damage - victim->getLastDamageAmount() : damage;
     const float armorEfficiency = heldType == nullptr ? 1.0f : heldType->getArmorEfficiency(held);
-    const DamageSource source = DamageSource::attack("death.attack.player", victim->getName(), *this, getName(),
+    const ActorDamageSource source = ActorDamageSource::attack("death.attack.player", victim->getName(), *this, getName(),
                                                      getPosition())
             .disablingShield(axe)
             .withArmorEfficiency(armorEfficiency);
@@ -389,7 +389,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             victim->getInventory().setArmor(slot, std::move(armor));
     }
     if (thornsDamage > 0) {
-        DamageSource thornsSource = DamageSource::environment("death.attack.thorns", getName());
+        ActorDamageSource thornsSource = ActorDamageSource::environment("death.attack.thorns", getName());
         thornsSource.mDeathMessageParameters.push_back(victim->getName());
         thornsSource.mAttacker = victim;
         owner.hurt(*this, (float) thornsDamage, thornsSource.withoutArmor().withoutCooldown());
@@ -579,7 +579,7 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
         const ActorSize size = target.getSize();
         if (reaches(target.getPosition(), size.mWidth, size.mHeight))
             owner.damageActor(target, SPIN_ATTACK_DAMAGE,
-                              DamageSource::attack("death.attack.player", target.getName(), *this, getName(),
+                              ActorDamageSource::attack("death.attack.player", target.getName(), *this, getName(),
                                                    position)
                                       .withoutArmor());
     }
@@ -594,7 +594,7 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
 
         if (reaches(target.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
             owner.hurt(target, SPIN_ATTACK_DAMAGE,
-                       DamageSource::attack("death.attack.player", target.getName(), *this, getName(), position)
+                       ActorDamageSource::attack("death.attack.player", target.getName(), *this, getName(), position)
                                .withoutArmor()
                                .withoutCooldown());
     }

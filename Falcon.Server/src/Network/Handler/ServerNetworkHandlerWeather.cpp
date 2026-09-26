@@ -122,7 +122,7 @@ void ServerNetworkHandler::strikeLightning(Level &level, const Vector3f &positio
             continue;
 
         hurt(player, (float) LIGHTNING_DAMAGE,
-             DamageSource::environment("death.attack.lightningBolt", player.getName())
+             ActorDamageSource::environment("death.attack.lightningBolt", player.getName())
                      .withoutArmor()
                      .withoutCooldown());
         player.setFireTicks((int) LIGHTNING_FIRE_TICKS);
@@ -143,7 +143,7 @@ void ServerNetworkHandler::strikeLightning(Level &level, const Vector3f &positio
 
         actor.onStruckByLightning(*this);
         damageActor(actor, (float) LIGHTNING_DAMAGE,
-                    DamageSource::environment("death.attack.lightningBolt", actor.getName())
+                    ActorDamageSource::environment("death.attack.lightningBolt", actor.getName())
                             .withoutArmor()
                             .withDamager(bolt));
         actor.setFireTicks((int) LIGHTNING_FIRE_TICKS);

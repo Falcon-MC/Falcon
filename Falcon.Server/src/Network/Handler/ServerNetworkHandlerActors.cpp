@@ -240,18 +240,18 @@ ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::strin
     return baby;
 }
 
-FallingBlockActor *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockState &state,
+FallingBlock *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockState &state,
                                                            const Vector3f &position) {
     const uint64_t runtimeId = allocateRuntimeId();
     const int64_t uniqueId = (int64_t) runtimeId;
 
-    std::unique_ptr<FallingBlockActor> actor(new FallingBlockActor(runtimeId, state));
+    std::unique_ptr<FallingBlock> actor(new FallingBlock(runtimeId, state));
     actor->getAttributes() = ActorAttributes::createActorDefaults();
     actor->setDimension(level.getDimensionType());
     actor->setPosition(position);
     actor->setHighestPosition(position.y);
 
-    FallingBlockActor *result = actor.get();
+    FallingBlock *result = actor.get();
     mActors[uniqueId] = std::move(actor);
 
     broadcastActorSpawn(*result);
@@ -512,7 +512,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         const Vector3f motion = projectile.getMotion();
         const Vector3f origin(hitPosition.x - motion.x, hitPosition.y - motion.y, hitPosition.z - motion.z);
 
-        DamageSource source = DamageSource::environment("death.attack.arrow", victimPlayer->getName());
+        ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimPlayer->getName());
         source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
         source.mAttacker = shooter;
         source.fromOrigin(origin).asProjectile();
@@ -534,7 +534,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     } else {
         ServerActor *victimActor = dynamic_cast<ServerActor *>(&target);
         if (victimActor != nullptr) {
-            DamageSource source = DamageSource::environment("death.attack.arrow", victimActor->getName());
+            ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimActor->getName());
             source.mAttacker = shooter;
             damageActor(*victimActor, damage, source.asProjectile(), data.mLootingLevel);
         }
@@ -608,7 +608,7 @@ void ServerNetworkHandler::applyPotionEffects(ServerPlayer &player, int32_t poti
                 player.heal(4.0f * (float) (1 << effect.mAmplifier));
             } else if (effect.mId == MobEffectId::InstantDamage) {
                 hurt(player, 6.0f * (float) (1 << effect.mAmplifier),
-                     DamageSource::environment("death.attack.magic", player.getName())
+                     ActorDamageSource::environment("death.attack.magic", player.getName())
                              .withoutArmor()
                              .withoutCooldown());
             }
@@ -638,7 +638,7 @@ void ServerNetworkHandler::applyPotionEffects(ServerActor &actor, int32_t potion
             syncActorAttributes(actor);
         } else {
             damageActor(actor, 6.0f * (float) (1 << effect.mAmplifier),
-                        DamageSource::environment("death.attack.magic", actor.getName()).withoutArmor());
+                        ActorDamageSource::environment("death.attack.magic", actor.getName()).withoutArmor());
         }
     }
 }
@@ -998,19 +998,19 @@ bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, Actor *
     return actor.hurt(*this, amount, attacker, lootingLevel);
 }
 
-bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, const DamageSource &source,
+bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, const ActorDamageSource &source,
                                        int32_t lootingLevel) {
     return actor.hurt(*this, amount, source, lootingLevel);
 }
 
 void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::string &deathMessageKey) {
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor)) {
-        hurt(*player, amount, DamageSource::environment(deathMessageKey, player->getName()));
+        hurt(*player, amount, ActorDamageSource::environment(deathMessageKey, player->getName()));
         return;
     }
 
     if (ServerActor *target = dynamic_cast<ServerActor *>(&actor))
-        target->hurt(*this, amount, DamageSource::environment(deathMessageKey, target->getName()));
+        target->hurt(*this, amount, ActorDamageSource::environment(deathMessageKey, target->getName()));
 }
 
 void ServerNetworkHandler::broadcastActorMove(ServerActor &actor) {
@@ -1305,7 +1305,7 @@ void ServerNetworkHandler::tickActors() {
             const ActorSize size = actor.getSize();
             if (_isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
                 actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE,
-                           DamageSource::environment("death.attack.inWall", actor.getName()));
+                           ActorDamageSource::environment("death.attack.inWall", actor.getName()));
 
             BlockContactSystem::tick(*this, actor);
             if (!actor.isAlive() || &getLevelFor(actor) != &level)

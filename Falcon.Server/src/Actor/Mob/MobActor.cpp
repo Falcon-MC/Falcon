@@ -273,7 +273,7 @@ void MobActor::_tickSensors(ServerNetworkHandler &owner) {
         run(*trigger);
 }
 
-bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const DamageSource &source) {
+bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
     const json::Value *sensor = getComponent(DAMAGE_SENSOR_COMPONENT);
     const json::Value *triggers = sensor == nullptr ? nullptr : sensor->get("triggers");
     if (triggers == nullptr)

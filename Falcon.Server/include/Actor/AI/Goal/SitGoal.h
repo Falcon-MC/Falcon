@@ -2,9 +2,9 @@
 
 #include "Actor/AI/Goal/Goal.h"
 
-class StayWhileSittingGoal : public Goal {
+class SitGoal : public Goal {
 public:
-    StayWhileSittingGoal();
+    SitGoal();
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 

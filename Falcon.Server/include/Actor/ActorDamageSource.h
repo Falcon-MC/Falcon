@@ -14,18 +14,18 @@ enum class DamageResult {
     Dealt
 };
 
-class DamageSource {
+class ActorDamageSource {
 public:
-    static DamageSource environment(const std::string &deathMessageKey, const std::string &victimName) {
-        DamageSource source;
+    static ActorDamageSource environment(const std::string &deathMessageKey, const std::string &victimName) {
+        ActorDamageSource source;
         source.mDeathMessageKey = deathMessageKey;
         source.mDeathMessageParameters = {victimName};
         return source;
     }
 
-    static DamageSource attack(const std::string &deathMessageKey, const std::string &victimName,
+    static ActorDamageSource attack(const std::string &deathMessageKey, const std::string &victimName,
                                Actor &attacker, const std::string &attackerName, const Vector3f &origin) {
-        DamageSource source;
+        ActorDamageSource source;
         source.mDeathMessageKey = deathMessageKey;
         source.mDeathMessageParameters = {victimName, attackerName};
         source.mAttacker = &attacker;
@@ -33,37 +33,37 @@ public:
         return source;
     }
 
-    DamageSource &withoutArmor() {
+    ActorDamageSource &withoutArmor() {
         mApplyArmor = false;
         return *this;
     }
 
-    DamageSource &withoutCooldown() {
+    ActorDamageSource &withoutCooldown() {
         mRespectCooldown = false;
         return *this;
     }
 
-    DamageSource &fromOrigin(const Vector3f &origin) {
+    ActorDamageSource &fromOrigin(const Vector3f &origin) {
         mOrigin = origin;
         return *this;
     }
 
-    DamageSource &asProjectile() {
+    ActorDamageSource &asProjectile() {
         mProjectile = true;
         return *this;
     }
 
-    DamageSource &disablingShield(bool disables) {
+    ActorDamageSource &disablingShield(bool disables) {
         mDisablesShield = disables;
         return *this;
     }
 
-    DamageSource &withArmorEfficiency(float efficiency) {
+    ActorDamageSource &withArmorEfficiency(float efficiency) {
         mArmorEfficiency = efficiency;
         return *this;
     }
 
-    DamageSource &withDamager(Actor *damager) {
+    ActorDamageSource &withDamager(Actor *damager) {
         mDamager = damager;
         return *this;
     }

@@ -122,7 +122,7 @@ void AbstractSlimeActor::_attackTouchingPlayers(ServerNetworkHandler &owner) {
             continue;
 
         owner.hurt(player, getContactDamage(),
-                   DamageSource::attack("death.attack.mob", player.getName(), *this, getName(), getPosition()));
+                   ActorDamageSource::attack("death.attack.mob", player.getName(), *this, getName(), getPosition()));
         mAttackCooldown = ATTACK_COOLDOWN_TICKS;
     }
 }

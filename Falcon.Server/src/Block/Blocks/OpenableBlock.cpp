@@ -1,7 +1,7 @@
 #include "Block/Blocks/OpenableBlock.h"
 
-#include "Block/Blocks/FenceGateOrientationBlock.h"
-#include "Block/Blocks/TrapdoorOrientationBlock.h"
+#include "Block/Blocks/FenceGateBlock.h"
+#include "Block/Blocks/TrapDoorBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Dimension.h"
@@ -14,10 +14,10 @@
 
 namespace {
     const char *soundOf(const BlockState &state, bool open) {
-        if (VanillaBlocks::getAs<TrapdoorOrientationBlock>(state.mName) != nullptr)
+        if (VanillaBlocks::getAs<TrapDoorBlock>(state.mName) != nullptr)
             return open ? LevelSoundEvent::TRAPDOOR_OPEN : LevelSoundEvent::TRAPDOOR_CLOSE;
 
-        if (VanillaBlocks::getAs<FenceGateOrientationBlock>(state.mName) != nullptr)
+        if (VanillaBlocks::getAs<FenceGateBlock>(state.mName) != nullptr)
             return open ? LevelSoundEvent::FENCE_GATE_OPEN : LevelSoundEvent::FENCE_GATE_CLOSE;
 
         return open ? LevelSoundEvent::DOOR_OPEN : LevelSoundEvent::DOOR_CLOSE;

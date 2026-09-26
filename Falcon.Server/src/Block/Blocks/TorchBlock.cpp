@@ -1,4 +1,4 @@
-#include "Block/Blocks/TorchOrientationBlock.h"
+#include "Block/Blocks/TorchBlock.h"
 
 #include "Block/BlockClassRegistry.h"
 #include "Block/BlockIdentifier.h"
@@ -8,15 +8,15 @@
 #include "Block/Components/PlacementOrientation.h"
 #include "Level/Level.h"
 
-FALCON_REGISTER_BLOCK(TorchOrientationBlock, 170);
+FALCON_REGISTER_BLOCK(TorchBlock, 170);
 
-bool TorchOrientationBlock::matches(const std::string &identifier) {
+bool TorchBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:torch"
            || BlockIdentifier::startsWith(identifier, "minecraft:colored_torch_")
            || BlockIdentifier::endsWith(identifier, "_torch");
 }
 
-BlockState TorchOrientationBlock::applyPlacementOrientation(const BlockState &state,
+BlockState TorchBlock::applyPlacementOrientation(const BlockState &state,
                                                             const BlockPlacementContext &context) const {
     using namespace PlacementOrientation;
 
@@ -27,14 +27,14 @@ BlockState TorchOrientationBlock::applyPlacementOrientation(const BlockState &st
     return BlockState(result.mName, states);
 }
 
-bool TorchOrientationBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
+bool TorchBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
     const int face = blockFace >= PlacementOrientation::FACE_NORTH ? blockFace : PlacementOrientation::FACE_UP;
     const Vector3i supportPosition = BlockSupport::supportOf(position, face);
     const BlockState support = level.getBlockState(supportPosition.x, supportPosition.y, supportPosition.z);
     return BlockSupport::isAttachable(support, face);
 }
 
-bool TorchOrientationBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+bool TorchBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
     using namespace PlacementOrientation;
 
     int face = FACE_UP;

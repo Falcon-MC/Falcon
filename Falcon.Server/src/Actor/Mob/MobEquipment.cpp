@@ -1,7 +1,7 @@
 #include "Actor/Mob/MobEquipment.h"
 
 #include "Actor/ArmorProtection.h"
-#include "Actor/DamageSource.h"
+#include "Actor/ActorDamageSource.h"
 #include "Actor/Mob/MobActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Inventory/ItemStackNbt.h"
@@ -229,7 +229,7 @@ bool MobEquipment::dropSlot(ServerNetworkHandler &owner, Level &level, const Vec
     return false;
 }
 
-float MobEquipment::absorbDamage(float amount, const DamageSource &source) const {
+float MobEquipment::absorbDamage(float amount, const ActorDamageSource &source) const {
     return ArmorProtection::apply(&mSlots[HEAD], FEET - HEAD + 1, amount, source.mDeathMessageKey,
                                   source.mArmorEfficiency);
 }

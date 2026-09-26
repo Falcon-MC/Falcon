@@ -127,7 +127,7 @@ void ServerActor::tickFire(ServerNetworkHandler &owner) {
     }
 
     if (getFireTicks() % 20 == 0)
-        hurt(owner, FIRE_TICK_DAMAGE, DamageSource::environment("death.attack.inFire", getName()));
+        hurt(owner, FIRE_TICK_DAMAGE, ActorDamageSource::environment("death.attack.inFire", getName()));
 
     setFireTicks(getFireTicks() - 1);
 
@@ -138,14 +138,14 @@ void ServerActor::tickFire(ServerNetworkHandler &owner) {
 }
 
 bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel) {
-    DamageSource source;
+    ActorDamageSource source;
     source.mDeathMessageKey = attacker == nullptr ? "death.attack.generic"
                                                   : attacker->isPlayer() ? "death.attack.player" : "death.attack.mob";
     source.mAttacker = attacker;
     return hurt(owner, amount, source, lootingLevel);
 }
 
-bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const DamageSource &damageSource,
+bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDamageSource &damageSource,
                        int32_t lootingLevel) {
     Actor *attacker = damageSource.mAttacker;
     if (!isAlive() || amount < 0.0f || isInvulnerable())

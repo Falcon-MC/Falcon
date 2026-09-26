@@ -1,12 +1,12 @@
 #pragma once
 
-#include "Block/Blocks/TorchOrientationBlock.h"
+#include "Block/Blocks/TorchBlock.h"
 
 #include <string>
 
-class RedstoneTorchBlock final : public TorchOrientationBlock {
+class RedstoneTorchBlock final : public TorchBlock {
 public:
-    explicit RedstoneTorchBlock(const Block &block) : TorchOrientationBlock(block)
+    explicit RedstoneTorchBlock(const Block &block) : TorchBlock(block)
     {
     }
 

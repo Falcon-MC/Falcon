@@ -3,7 +3,7 @@
 #include "Actor/Actor.h"
 #include "Actor/ActorPropertySchema.h"
 #include "Actor/ActorSize.h"
-#include "Actor/DamageSource.h"
+#include "Actor/ActorDamageSource.h"
 #include "Actor/DynamicPropertyValue.h"
 #include "Actor/Movement/PhysicsComponent.h"
 #include "Core/Math/Vector3f.h"
@@ -110,16 +110,16 @@ public:
      */
     bool hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel = -1);
 
-    bool hurt(ServerNetworkHandler &owner, float amount, const DamageSource &damageSource, int32_t lootingLevel = -1);
+    bool hurt(ServerNetworkHandler &owner, float amount, const ActorDamageSource &damageSource, int32_t lootingLevel = -1);
 
-    virtual bool senseDamage(ServerNetworkHandler &owner, float &amount, const DamageSource &source) {
+    virtual bool senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
         (void) owner;
         (void) amount;
         (void) source;
         return true;
     }
 
-    virtual float absorbDamage(float amount, const DamageSource &source) const {
+    virtual float absorbDamage(float amount, const ActorDamageSource &source) const {
         (void) source;
         return amount;
     }

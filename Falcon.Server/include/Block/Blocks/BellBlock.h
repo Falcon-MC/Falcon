@@ -4,9 +4,9 @@
 
 #include <string>
 
-class BellOrientationBlock final : public Block {
+class BellBlock final : public Block {
 public:
-    explicit BellOrientationBlock(const Block &block) : Block(block)
+    explicit BellBlock(const Block &block) : Block(block)
     {
     }
 

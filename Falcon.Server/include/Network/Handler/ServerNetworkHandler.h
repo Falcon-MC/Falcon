@@ -23,8 +23,8 @@
 #include "Server/Profiler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ResourcePackManager.h"
-#include "Actor/DamageSource.h"
-#include "Actor/Misc/FallingBlockActor.h"
+#include "Actor/ActorDamageSource.h"
+#include "Actor/Misc/FallingBlock.h"
 #include "Actor/Misc/PrimedTntActor.h"
 #include "Actor/Misc/ItemActor.h"
 #include "Actor/ServerActor.h"
@@ -151,7 +151,7 @@ public:
     ServerActor *spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position,
                                 float scale);
 
-    FallingBlockActor *spawnFallingBlock(Level &level, const BlockState &state, const Vector3f &position);
+    FallingBlock *spawnFallingBlock(Level &level, const BlockState &state, const Vector3f &position);
 
     PrimedTntActor *spawnPrimedTnt(Level &level, const Vector3f &position, const Vector3f &motion, int32_t fuse);
 
@@ -249,7 +249,7 @@ public:
 
     bool damageActor(ServerActor &actor, float amount, Actor *attacker, int32_t lootingLevel = -1);
 
-    bool damageActor(ServerActor &actor, float amount, const DamageSource &source, int32_t lootingLevel = -1);
+    bool damageActor(ServerActor &actor, float amount, const ActorDamageSource &source, int32_t lootingLevel = -1);
 
     void hurtActor(Actor &actor, float amount, const std::string &deathMessageKey);
 
@@ -418,7 +418,7 @@ public:
     ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
                         int pickupDelay);
 
-    DamageResult hurt(ServerPlayer &player, float amount, const DamageSource &source);
+    DamageResult hurt(ServerPlayer &player, float amount, const ActorDamageSource &source);
 
     void killPlayer(ServerPlayer &player, const std::string &deathMessageKey,
                     const std::vector<std::string> &deathMessageParameters = {});

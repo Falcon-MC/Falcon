@@ -4,9 +4,9 @@
 
 #include <string>
 
-class TorchOrientationBlock : public Block {
+class TorchBlock : public Block {
 public:
-    explicit TorchOrientationBlock(const Block &block) : Block(block)
+    explicit TorchBlock(const Block &block) : Block(block)
     {
     }
 

@@ -55,8 +55,8 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
         const int64_t uniqueId = (int64_t) runtimeId;
 
         std::unique_ptr<ServerActor> actor;
-        if (identifier == FallingBlockActor::IDENTIFIER)
-            actor.reset(new FallingBlockActor(runtimeId, BlockState()));
+        if (identifier == FallingBlock::IDENTIFIER)
+            actor.reset(new FallingBlock(runtimeId, BlockState()));
         else if (identifier == PrimedTntActor::IDENTIFIER)
             actor.reset(new PrimedTntActor(runtimeId, PrimedTntActor::DEFAULT_FUSE));
         else

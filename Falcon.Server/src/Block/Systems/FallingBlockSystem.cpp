@@ -1,6 +1,6 @@
 #include "Block/Systems/FallingBlockSystem.h"
 
-#include "Actor/Misc/FallingBlockActor.h"
+#include "Actor/Misc/FallingBlock.h"
 #include "Block/BlockData.h"
 #include "Block/Systems/BlockChangeSystem.h"
 #include "Level/Level.h"
@@ -185,7 +185,7 @@ void FallingBlockSystem::spawnFallingBlock(ServerNetworkHandler &owner, Level &l
 
     const Vector3f spawnPosition((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
 
-    FallingBlockActor *actor = owner.spawnFallingBlock(level, state, spawnPosition);
+    FallingBlock *actor = owner.spawnFallingBlock(level, state, spawnPosition);
     if (actor == nullptr)
         return;
 

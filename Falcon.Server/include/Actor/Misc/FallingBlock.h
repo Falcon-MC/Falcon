@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-class FallingBlockActor : public ServerActor {
+class FallingBlock : public ServerActor {
 public:
     static const char *IDENTIFIER;
 
@@ -20,7 +20,7 @@ public:
     static const float ANVIL_LAND_VOLUME;
     static const float ANVIL_LAND_PITCH;
 
-    FallingBlockActor(uint64_t runtimeId, const BlockState &blockState);
+    FallingBlock(uint64_t runtimeId, const BlockState &blockState);
 
     const BlockState &getBlockState() const { return mBlockState; }
 

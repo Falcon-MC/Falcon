@@ -1,7 +1,7 @@
 #include "Plugin/PluginServerApi.h"
 
 #include "Actor/DamageCause.h"
-#include "Actor/DamageSource.h"
+#include "Actor/ActorDamageSource.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Level/Level.h"
@@ -141,11 +141,11 @@ namespace {
         if (ServerPlayer *playerValue = asPlayer(value)) {
             const std::string key = deathMessageKeyFor(cause, source);
             if (source == nullptr) {
-                const DamageSource damage = DamageSource::environment(key, playerValue->getName());
+                const ActorDamageSource damage = ActorDamageSource::environment(key, playerValue->getName());
                 return owner().hurt(*playerValue, amount, damage) == DamageResult::Dealt ? 1 : 0;
             }
 
-            const DamageSource damage = DamageSource::attack(key, playerValue->getName(), *source, source->getName(),
+            const ActorDamageSource damage = ActorDamageSource::attack(key, playerValue->getName(), *source, source->getName(),
                                                              source->getPosition());
             return owner().hurt(*playerValue, amount, damage) == DamageResult::Dealt ? 1 : 0;
         }

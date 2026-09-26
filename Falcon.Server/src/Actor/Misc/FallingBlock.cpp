@@ -1,4 +1,4 @@
-#include "Actor/Misc/FallingBlockActor.h"
+#include "Actor/Misc/FallingBlock.h"
 
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/ServerPlayer.h"
@@ -14,15 +14,15 @@
 #include <algorithm>
 #include <cmath>
 
-const char *FallingBlockActor::IDENTIFIER = "minecraft:falling_block";
+const char *FallingBlock::IDENTIFIER = "minecraft:falling_block";
 
-const float FallingBlockActor::GRAVITY = 0.04f;
-const float FallingBlockActor::DRAG = 0.02f;
-const float FallingBlockActor::BASE_OFFSET = 0.49f;
-const float FallingBlockActor::ANVIL_DAMAGE_PER_FALL_DISTANCE = 2.0f;
-const float FallingBlockActor::ANVIL_MAX_DAMAGE = 40.0f;
-const float FallingBlockActor::ANVIL_LAND_VOLUME = 1.0f;
-const float FallingBlockActor::ANVIL_LAND_PITCH = 0.8f;
+const float FallingBlock::GRAVITY = 0.04f;
+const float FallingBlock::DRAG = 0.02f;
+const float FallingBlock::BASE_OFFSET = 0.49f;
+const float FallingBlock::ANVIL_DAMAGE_PER_FALL_DISTANCE = 2.0f;
+const float FallingBlock::ANVIL_MAX_DAMAGE = 40.0f;
+const float FallingBlock::ANVIL_LAND_VOLUME = 1.0f;
+const float FallingBlock::ANVIL_LAND_PITCH = 0.8f;
 
 namespace {
     const int32_t ACTOR_DATA_VARIANT = 2;
@@ -30,18 +30,18 @@ namespace {
     const char *DRIPSTONE_DEATH_KEY = "death.attack.stalagmite";
 }
 
-FallingBlockActor::FallingBlockActor(uint64_t runtimeId, const BlockState &blockState)
+FallingBlock::FallingBlock(uint64_t runtimeId, const BlockState &blockState)
         : ServerActor(runtimeId, IDENTIFIER), mBlockState(blockState) {
 }
 
-bool FallingBlockActor::_hasAliveLimit() const {
+bool FallingBlock::_hasAliveLimit() const {
     const std::string &identifier = mBlockState.mName;
 
     return identifier == "minecraft:sand" || identifier == "minecraft:gravel" ||
            identifier == "minecraft:anvil";
 }
 
-Vector3i FallingBlockActor::_restingPosition() const {
+Vector3i FallingBlock::_restingPosition() const {
     const Vector3f position = getPosition();
 
     return Vector3i((int32_t) std::lround(position.x - 0.5f),
@@ -49,7 +49,7 @@ Vector3i FallingBlockActor::_restingPosition() const {
                     (int32_t) std::lround(position.z - 0.5f));
 }
 
-void FallingBlockActor::fillSpawnMetadata(EntityDataMap &metadata) const {
+void FallingBlock::fillSpawnMetadata(EntityDataMap &metadata) const {
     EntityDataEntry variant;
     variant.mId = ACTOR_DATA_VARIANT;
     variant.mFormat = EntityDataFormat::Int;
@@ -57,7 +57,7 @@ void FallingBlockActor::fillSpawnMetadata(EntityDataMap &metadata) const {
     metadata.mEntries.push_back(variant);
 }
 
-void FallingBlockActor::tick(ServerNetworkHandler &owner) {
+void FallingBlock::tick(ServerNetworkHandler &owner) {
     if (mExpired)
         return;
 
@@ -132,7 +132,7 @@ void FallingBlockActor::tick(ServerNetworkHandler &owner) {
     owner.broadcastActorMove(*this);
 }
 
-void FallingBlockActor::_destroy(ServerNetworkHandler &owner, const Vector3i &position, bool dropItem) {
+void FallingBlock::_destroy(ServerNetworkHandler &owner, const Vector3i &position, bool dropItem) {
     mExpired = true;
 
     FallingBlockSystem::spawnDestroyParticle(owner, owner.getLevelFor(*this), position, mBlockState);
@@ -141,7 +141,7 @@ void FallingBlockActor::_destroy(ServerNetworkHandler &owner, const Vector3i &po
         _dropItem(owner);
 }
 
-void FallingBlockActor::_dropItem(ServerNetworkHandler &owner) {
+void FallingBlock::_dropItem(ServerNetworkHandler &owner) {
     const char *rule = mBlockState.mName == "minecraft:snow_layer" ? "dotiledrops" : "doentitydrops";
     if (!owner.getLevel().getGameRules().getBool(rule))
         return;
@@ -157,7 +157,7 @@ void FallingBlockActor::_dropItem(ServerNetworkHandler &owner) {
     owner.spawnItemActor(owner.getLevelFor(*this), identifier, 1, position);
 }
 
-void FallingBlockActor::_land(ServerNetworkHandler &owner, const Vector3i &position) {
+void FallingBlock::_land(ServerNetworkHandler &owner, const Vector3i &position) {
     mExpired = true;
 
     Level &level = owner.getLevelFor(*this);
@@ -210,11 +210,11 @@ void FallingBlockActor::_land(ServerNetworkHandler &owner, const Vector3i &posit
         _onDripstoneLanded(owner, target, placed);
 }
 
-void FallingBlockActor::_place(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
+void FallingBlock::_place(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
     FallingBlockSystem::setBlockState(owner, owner.getLevelFor(*this), position, state);
 }
 
-void FallingBlockActor::_onAnvilLanded(ServerNetworkHandler &owner, const Vector3i &position,
+void FallingBlock::_onAnvilLanded(ServerNetworkHandler &owner, const Vector3i &position,
                                        const BlockState &state) {
     _damageEntitiesAt(owner, position, ANVIL_DEATH_KEY);
 
@@ -233,7 +233,7 @@ void FallingBlockActor::_onAnvilLanded(ServerNetworkHandler &owner, const Vector
     owner.playNamedSound(level, PlaySoundName::ANVIL_LAND, soundPosition, ANVIL_LAND_VOLUME, ANVIL_LAND_PITCH);
 }
 
-void FallingBlockActor::_onDripstoneLanded(ServerNetworkHandler &owner, const Vector3i &position,
+void FallingBlock::_onDripstoneLanded(ServerNetworkHandler &owner, const Vector3i &position,
                                            const BlockState &state) {
     (void) state;
 
@@ -245,7 +245,7 @@ void FallingBlockActor::_onDripstoneLanded(ServerNetworkHandler &owner, const Ve
                          ANVIL_LAND_PITCH);
 }
 
-void FallingBlockActor::_damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i &position,
+void FallingBlock::_damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i &position,
                                           const std::string &deathKey) {
     const float fallDistance = getFallDistance();
     if (fallDistance <= 0.0f)
@@ -279,7 +279,7 @@ void FallingBlockActor::_damageEntitiesAt(ServerNetworkHandler &owner, const Vec
         if (playerPosition.z + halfWidth < minZ || playerPosition.z - halfWidth > maxZ)
             continue;
 
-        owner.hurt(player, damage, DamageSource::environment(deathKey, player.getName()).withoutCooldown());
+        owner.hurt(player, damage, ActorDamageSource::environment(deathKey, player.getName()).withoutCooldown());
     }
 
     for (auto &entry: owner.getActors()) {
@@ -299,11 +299,11 @@ void FallingBlockActor::_damageEntitiesAt(ServerNetworkHandler &owner, const Vec
         if (actorPosition.z + halfWidth < minZ || actorPosition.z - halfWidth > maxZ)
             continue;
 
-        owner.damageActor(*actor, damage, DamageSource::environment(deathKey, actor->getName()));
+        owner.damageActor(*actor, damage, ActorDamageSource::environment(deathKey, actor->getName()));
     }
 }
 
-Tag FallingBlockActor::saveNbt() const {
+Tag FallingBlock::saveNbt() const {
     Tag data = ServerActor::saveNbt();
 
     data.put("Block", mBlockState.toNbt());
@@ -314,7 +314,7 @@ Tag FallingBlockActor::saveNbt() const {
     return data;
 }
 
-void FallingBlockActor::loadNbt(const Tag &data) {
+void FallingBlock::loadNbt(const Tag &data) {
     ServerActor::loadNbt(data);
 
     const Tag *block = data.get("Block");

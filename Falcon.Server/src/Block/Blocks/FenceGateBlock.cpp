@@ -1,4 +1,4 @@
-#include "Block/Blocks/FenceGateOrientationBlock.h"
+#include "Block/Blocks/FenceGateBlock.h"
 
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockClassRegistry.h"
@@ -10,13 +10,13 @@
 
 #include <cmath>
 
-FALCON_REGISTER_BLOCK(FenceGateOrientationBlock, 225);
+FALCON_REGISTER_BLOCK(FenceGateBlock, 225);
 
-bool FenceGateOrientationBlock::matches(const std::string &identifier) {
+bool FenceGateBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:fence_gate" || BlockIdentifier::endsWith(identifier, "_fence_gate");
 }
 
-bool FenceGateOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
+bool FenceGateBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
                                            const Vector3i &position, const BlockState &state) const {
     using namespace PlacementOrientation;
 
@@ -39,7 +39,7 @@ bool FenceGateOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPl
     return OpenableBlock::toggle(owner, level, position, BlockState(state.mName, states));
 }
 
-void FenceGateOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
+void FenceGateBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
                                          const Vector3i &position, const BlockState &state,
                                          const ItemStack &usedItem, int blockFace) const {
     (void) usedItem;

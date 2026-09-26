@@ -26,7 +26,7 @@
 #include "Actor/AI/Goal/RandomLookAroundGoal.h"
 #include "Actor/AI/Goal/RandomStrollGoal.h"
 #include "Actor/AI/Goal/RangedAttackGoal.h"
-#include "Actor/AI/Goal/StayWhileSittingGoal.h"
+#include "Actor/AI/Goal/SitGoal.h"
 #include "Actor/AI/Goal/SwellGoal.h"
 #include "Actor/AI/Goal/TemptGoal.h"
 #include "Actor/AI/Goal/TimerFlagGoal.h"
@@ -463,7 +463,7 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                                                  numberOf(component, "stop_distance", FOLLOW_OWNER_STOP));
 
     if (behavior == "stay_while_sitting")
-        return std::make_unique<StayWhileSittingGoal>();
+        return std::make_unique<SitGoal>();
 
     if (behavior == "eat_block") {
         std::vector<std::pair<std::string, std::string>> pairs = eatPairs(component);

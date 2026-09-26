@@ -4,9 +4,9 @@
 
 #include <string>
 
-class CoralFanBlock : public WallAttachedBlock {
+class CoralFan : public WallAttachedBlock {
 public:
-    explicit CoralFanBlock(const Block &block) : WallAttachedBlock(block)
+    explicit CoralFan(const Block &block) : WallAttachedBlock(block)
     {
     }
 

@@ -44,7 +44,7 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
     BlockContactSystem::land(owner, actor, landingFallDistance);
 
     if (fallDamage > 0.0f)
-        actor.hurt(owner, fallDamage, DamageSource::environment("death.fell.accident.generic", actor.getName()));
+        actor.hurt(owner, fallDamage, ActorDamageSource::environment("death.fell.accident.generic", actor.getName()));
 }
 
 void ActorMovementSystem::_syncMovement(ServerNetworkHandler &owner, ServerActor &actor) {

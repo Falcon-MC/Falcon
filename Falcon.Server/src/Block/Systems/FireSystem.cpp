@@ -271,7 +271,7 @@ namespace {
             return;
 
         actor.hurt(owner, FireSystem::CONTACT_DAMAGE,
-                   DamageSource::environment("death.attack.inFire", actor.getName()));
+                   ActorDamageSource::environment("death.attack.inFire", actor.getName()));
 
         if (actor.getFireTicks() < FireSystem::COMBUST_TICKS) {
             actor.setFireTicks(FireSystem::COMBUST_TICKS);
@@ -298,7 +298,7 @@ namespace {
             return;
 
         owner.hurt(player, FireSystem::CONTACT_DAMAGE,
-                   DamageSource::environment("death.attack.inFire", player.getName()));
+                   ActorDamageSource::environment("death.attack.inFire", player.getName()));
 
         if (player.getFireTicks() < FireSystem::COMBUST_TICKS)
             player.setFireTicks(FireSystem::COMBUST_TICKS);
