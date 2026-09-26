@@ -45,28 +45,7 @@
 #include <vector>
 
 namespace {
-    struct FurnaceKey {
-        int32_t x;
-        int32_t y;
-        int32_t z;
-
-        bool operator==(const FurnaceKey &other) const {
-            return x == other.x && y == other.y && z == other.z;
-        }
-    };
-
-    struct FurnaceKeyHash {
-        size_t operator()(const FurnaceKey &key) const {
-            size_t value = (size_t) (uint32_t) key.x;
-            value = value * 31u + (size_t) (uint32_t) key.y;
-            value = value * 31u + (size_t) (uint32_t) key.z;
-            return value;
-        }
-    };
-
     const int32_t CHEST_ANIMATION_EVENT_TYPE = 1;
-
-    std::unordered_map<FurnaceKey, int64_t, FurnaceKeyHash> furnaceLastTick;
 
     const ItemStack &itemAt(const PlayerInventory &inventory, InventoryManager::InventoryId id, int slot) {
         switch (id) {
@@ -686,8 +665,6 @@ void InventoryManager::tickFurnace(ServerNetworkHandler &owner) {
         return;
     }
 
-    _storeFurnaceState(false);
-    const FurnaceKey key{mFurnacePosition.x, mFurnacePosition.y, mFurnacePosition.z};
     FurnaceBlockActor &state = level.getBlockActors().getOrCreate<FurnaceBlockActor>(mFurnacePosition);
     PlayerInventory &inventory = mPlayer->getInventory();
     const int previousBurn = mFurnaceBurnTime;
@@ -698,12 +675,6 @@ void InventoryManager::tickFurnace(ServerNetworkHandler &owner) {
         inventory.getFurnaceItem(FurnaceInventory::SLOT_FUEL),
         inventory.getFurnaceItem(FurnaceInventory::SLOT_OUTPUT)
     };
-    const auto lastTick = furnaceLastTick.find(key);
-    const bool processTick = lastTick == furnaceLastTick.end() || lastTick->second != owner.getCurrentTick();
-    if (processTick) {
-        tickFurnaceState(owner, mFurnacePosition, state);
-        furnaceLastTick[key] = owner.getCurrentTick();
-    }
     mFurnaceBurnTime = state.mBurnTime;
     mFurnaceMaxBurnTime = state.mMaxBurnTime;
     mFurnaceCookTime = state.mCookTime;
@@ -745,21 +716,37 @@ void InventoryManager::tickFurnace(ServerNetworkHandler &owner) {
         packet.mValue = mFurnaceMaxBurnTime;
         mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
     }
+}
+
+void InventoryManager::loadFurnaceView() {
+    BlockActorStore *blockActors = _blockActors();
+    if (mPlayer == nullptr || !isFurnaceOpen() || blockActors == nullptr)
+        return;
+
+    const FurnaceBlockActor &state = blockActors->getOrCreate<FurnaceBlockActor>(mFurnacePosition);
+    for (int slot = 0; slot < FurnaceInventory::SIZE; ++slot) {
+        mPlayer->getInventory().setFurnaceItem(slot, state.mInventory.mItems[(size_t) slot]);
+        mFurnaceObservedItems[(size_t) slot] = state.mInventory.mItems[(size_t) slot];
+    }
+}
+
+void InventoryManager::storeFurnaceView(ServerNetworkHandler &owner) {
+    if (mPlayer == nullptr || !isFurnaceOpen())
+        return;
 
     _storeFurnaceState(false);
+
+    Level &level = owner.getLevelFor(*mPlayer);
+    for (auto &entry: owner.getPlayers()) {
+        InventoryManager &manager = entry.second.getInventoryManager();
+        if (&manager != this && manager.isFurnaceOpen() && manager.getFurnacePosition() == mFurnacePosition
+            && &owner.getLevelFor(entry.second) == &level)
+            manager.tickFurnace(owner);
+    }
 }
 
 void InventoryManager::tickStoredFurnace(ServerNetworkHandler &owner, FurnaceBlockActor &furnace) {
-    const Vector3i &position = furnace.getPosition();
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &player = entry.second;
-        const InventoryManager &manager = player.getInventoryManager();
-        if (manager.isFurnaceOpen() && manager.getFurnacePosition() == position
-            && &owner.getLevelFor(player) == furnace.getLevel())
-            return;
-    }
-
-    tickFurnaceState(owner, position, furnace);
+    tickFurnaceState(owner, furnace.getPosition(), furnace);
 }
 
 void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
@@ -770,7 +757,6 @@ void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, Level &level
             manager.onClientRemoveWindow(manager.getFurnaceWindowId());
     }
 
-    const FurnaceKey key{position.x, position.y, position.z};
     FurnaceBlockActor *furnace = level.getBlockActors().find<FurnaceBlockActor>(position);
     if (furnace == nullptr)
         return;
@@ -783,7 +769,6 @@ void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, Level &level
     }
     _releaseFurnaceExperience(owner, *furnace);
     level.getBlockActors().remove(position);
-    furnaceLastTick.erase(key);
 }
 
 void InventoryManager::_sendOutputPacket(const ItemStack &item) {

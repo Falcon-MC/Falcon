@@ -87,6 +87,10 @@ public:
 
     void tickFurnace(ServerNetworkHandler &owner);
 
+    void loadFurnaceView();
+
+    void storeFurnaceView(ServerNetworkHandler &owner);
+
     static void tickStoredFurnace(ServerNetworkHandler &owner, FurnaceBlockActor &furnace);
 
     static void onFurnaceBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position);

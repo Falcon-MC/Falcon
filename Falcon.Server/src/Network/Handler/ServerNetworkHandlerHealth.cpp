@@ -351,9 +351,6 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     for (int slot = 0; slot < PlayerInventory::CRAFTING_TABLE_SIZE; ++slot)
         dropOnDeath(inventory.getCraftingTableItem(slot));
 
-    for (int slot = 0; slot < PlayerInventory::FURNACE_SIZE; ++slot)
-        dropOnDeath(inventory.getFurnaceItem(slot));
-
     inventory.clear();
     inventory.setSelectedSlot(0);
 

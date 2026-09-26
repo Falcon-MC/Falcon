@@ -413,6 +413,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         player.getInventoryManager().syncBundles();
     }
 
+    player.getInventoryManager().loadFurnaceView();
+
     for (const ItemStackRequest &request: packet.mRequests) {
         const int32_t gameType = player.getGameType();
         const bool creativeMode = gameType == (int32_t) GameType::Creative
@@ -456,6 +458,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
         response.mEntries.push_back(std::move(entry));
     }
+
+    player.getInventoryManager().storeFurnaceView(owner);
 
     for (const BundleSyncData &bundle: bundles) {
         const ItemStack *owned = inventory.resolveSlot(bundle.mOwnerContainer, bundle.mOwnerSlot);
@@ -762,11 +766,11 @@ void InventoryHandler::handleCraftingEvent(ServerNetworkHandler &owner, ServerPl
     }
 
     CraftingRecipeMatch match;
+    ItemStack output = ItemStack::air();
     const std::vector<ItemStack> &recipeOutputs = owner.getRecipeOutputs();
     const std::vector<uint32_t> &recipeSourceIndices = owner.getRecipeSourceIndices();
     if (!CraftingManager::matchResult(grid, gridWidth, packet.mOutputs.front(), recipeOutputs,
                                       recipeSourceIndices, match, output)) {
-    ItemStack output = ItemStack::air();
         return;
     }
 
