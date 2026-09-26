@@ -32,6 +32,9 @@ enum class ActorFlag : int {
     BlockedUsingDamagedShield = 75,
     Sleeping = 76,
     Crawling = 114,
+    TimerFlag1 = 115,
+    TimerFlag2 = 116,
+    TimerFlag3 = 117,
 };
 
 class ActorFlags {

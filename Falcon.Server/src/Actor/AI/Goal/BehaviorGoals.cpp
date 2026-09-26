@@ -29,6 +29,7 @@
 #include "Actor/AI/Goal/StayWhileSittingGoal.h"
 #include "Actor/AI/Goal/SwellGoal.h"
 #include "Actor/AI/Goal/TemptGoal.h"
+#include "Actor/AI/Goal/TimerFlagGoal.h"
 #include "Actor/Mob/MobActor.h"
 #include "Level/BlockStateUpgrades.h"
 
@@ -87,6 +88,10 @@ namespace {
     const float HOVER_DEFAULT_XZ_DISTANCE = 10.0f;
     const float HOVER_DEFAULT_Y_DISTANCE = 7.0f;
     const float HOVER_DEFAULT_INTERVAL = 120.0f;
+    const char *const TIMER_FLAG_PREFIX = "timer_flag_";
+    const ActorFlag TIMER_FLAGS[] = {ActorFlag::TimerFlag1, ActorFlag::TimerFlag2, ActorFlag::TimerFlag3};
+    const float TIMER_FLAG_DEFAULT_DURATION = 2.0f;
+    const float TIMER_FLAG_DEFAULT_COOLDOWN = 10.0f;
 
     float numberOf(const json::Value &component, const char *key, float fallback) {
         const json::Value *value = component.get(key);
@@ -204,6 +209,42 @@ namespace {
     bool isFlagSet(const json::Value &component, const char *key) {
         const json::Value *value = component.get(key);
         return value != nullptr && value->boolean(false);
+    }
+
+    int32_t timerFlagIndex(const std::string &behavior) {
+        const std::string prefix = TIMER_FLAG_PREFIX;
+        if (behavior.size() != prefix.size() + 1 || behavior.compare(0, prefix.size(), prefix) != 0)
+            return -1;
+
+        const int32_t index = behavior.back() - '1';
+        return index >= 0 && index < (int32_t) (sizeof(TIMER_FLAGS) / sizeof(TIMER_FLAGS[0])) ? index : -1;
+    }
+
+    int32_t rangeTicks(const json::Value &component, const char *key, const char *field, float fallback) {
+        return std::max(0, (int32_t) std::lround(rangeValue(component, key, field, fallback) * TICKS_PER_SECOND));
+    }
+
+    std::shared_ptr<json::Value> triggerOf(const json::Value &component, const char *key) {
+        const json::Value *trigger = component.get(key);
+        return trigger == nullptr ? nullptr : std::shared_ptr<json::Value>(trigger->clone());
+    }
+
+    uint8_t controlFlagsOf(const json::Value &component) {
+        const json::Value *flags = component.get("control_flags");
+        if (flags == nullptr || !flags->isArray())
+            return 0;
+
+        uint8_t result = 0;
+        for (const std::unique_ptr<json::Value> &flag: flags->mArray) {
+            const std::string name = flag->string();
+            if (name == "move")
+                result |= (uint8_t) GoalControlFlag::Move;
+            else if (name == "look")
+                result |= (uint8_t) GoalControlFlag::Look;
+            else if (name == "jump")
+                result |= (uint8_t) GoalControlFlag::Jump;
+        }
+        return result;
     }
 
     bool canOpenDoors(const MobActor &mob) {
@@ -472,6 +513,17 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                               : rangeValue(component, "attack_interval", "max", minimum);
         return std::make_unique<RangedAttackGoal>(speed, range, secondsToTicks(minimum), secondsToTicks(maximum),
                                                   projectile->string());
+    }
+
+    const int32_t timerFlag = timerFlagIndex(behavior);
+    if (timerFlag >= 0) {
+        return std::make_unique<TimerFlagGoal>(
+                TIMER_FLAGS[timerFlag],
+                rangeTicks(component, "duration_range", "min", TIMER_FLAG_DEFAULT_DURATION),
+                rangeTicks(component, "duration_range", "max", TIMER_FLAG_DEFAULT_DURATION),
+                rangeTicks(component, "cooldown_range", "min", TIMER_FLAG_DEFAULT_COOLDOWN),
+                rangeTicks(component, "cooldown_range", "max", TIMER_FLAG_DEFAULT_COOLDOWN),
+                triggerOf(component, "on_start"), triggerOf(component, "on_end"), controlFlagsOf(component));
     }
 
     return nullptr;
