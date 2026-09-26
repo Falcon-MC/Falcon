@@ -15,6 +15,7 @@
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <algorithm>
+#include <cmath>
 #include <random>
 
 namespace {
@@ -33,6 +34,10 @@ namespace {
     const int32_t TICKS_PER_SECOND = 20;
     const char *const LOOT_TABLE_PREFIX = "loot_tables/";
     const int64_t OWNER_SYNC_INTERVAL = 20;
+    const char *const TIMER_COMPONENT = "minecraft:timer";
+    const char *const TRANSFORMATION_COMPONENT = "minecraft:transformation";
+    const char *const LEGACY_ZOMBIE_PIGMAN = "minecraft:pig_zombie";
+    const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
 
     std::mt19937 &lifecycleRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -48,9 +53,70 @@ namespace {
         return event == nullptr ? std::string() : event->string();
     }
 
+    bool targetsSelf(const json::Value *trigger) {
+        const json::Value *target = trigger == nullptr || !trigger->isObject() ? nullptr : trigger->get("target");
+        return target == nullptr || target->string() == "self";
+    }
+
     float numberIn(const json::Value *component, const char *key, float fallback) {
         const json::Value *value = component == nullptr ? nullptr : component->get(key);
         return value == nullptr ? fallback : (float) value->number(fallback);
+    }
+
+    bool flagIn(const json::Value &component, const char *key) {
+        const json::Value *value = component.get(key);
+        return value != nullptr && value->boolean(false);
+    }
+
+    int32_t secondsToTicks(float seconds) {
+        return std::max(1, (int32_t) std::lround(seconds * (float) TICKS_PER_SECOND));
+    }
+
+    float weightedChoice(const json::Value &choices) {
+        int32_t total = 0;
+        for (const std::unique_ptr<json::Value> &choice: choices.mArray)
+            total += std::max(0, choice->get("weight") != nullptr ? choice->get("weight")->integer(1) : 1);
+
+        if (total <= 0)
+            return numberIn(choices.mArray.front().get(), "value", 0.0f);
+
+        int32_t roll = std::uniform_int_distribution<int32_t>(0, total - 1)(lifecycleRandom());
+        for (const std::unique_ptr<json::Value> &choice: choices.mArray) {
+            roll -= std::max(0, choice->get("weight") != nullptr ? choice->get("weight")->integer(1) : 1);
+            if (roll < 0)
+                return numberIn(choice.get(), "value", 0.0f);
+        }
+        return numberIn(choices.mArray.back().get(), "value", 0.0f);
+    }
+
+    int32_t timerTicks(const json::Value &timer) {
+        const json::Value *choices = timer.get("random_time_choices");
+        if (choices != nullptr && choices->isArray() && !choices->mArray.empty())
+            return secondsToTicks(weightedChoice(*choices));
+
+        const json::Value *time = timer.get("time");
+        if (time == nullptr || !time->isArray())
+            return secondsToTicks(time == nullptr ? 0.0f : (float) time->number(0.0));
+
+        if (time->mArray.empty())
+            return secondsToTicks(0.0f);
+
+        const float minimum = (float) time->mArray.front()->number(0.0);
+        const float maximum = (float) time->mArray.back()->number(0.0);
+        const json::Value *randomInterval = timer.get("randomInterval");
+        if ((randomInterval != nullptr && !randomInterval->boolean(true)) || maximum <= minimum)
+            return secondsToTicks(minimum);
+
+        return secondsToTicks(std::uniform_real_distribution<float>(minimum, maximum)(lifecycleRandom()));
+    }
+
+    int32_t transformationTicks(const json::Value &transformation) {
+        const json::Value *delay = transformation.get("delay");
+        if (delay == nullptr)
+            return 0;
+        if (delay->isObject())
+            return (int32_t) std::lround(numberIn(delay, "value", 0.0f) * (float) TICKS_PER_SECOND);
+        return (int32_t) std::lround((float) delay->number(0.0) * (float) TICKS_PER_SECOND);
     }
 
     std::mt19937 &experienceRandom() {
@@ -71,10 +137,15 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     if (!mDefinitionStarted) {
         mDefinitionStarted = true;
         if (getDefinition() != nullptr) {
-            fireEvent(owner, mBorn ? BORN_EVENT : SPAWNED_EVENT);
-            mEquipment.equipFromTable(owner, *this);
+            fireEvent(owner, !mSpawnEvent.empty() ? mSpawnEvent : mBorn ? BORN_EVENT : SPAWNED_EVENT);
+            if (!mEquipmentInherited)
+                mEquipment.equipFromTable(owner, *this);
         }
     }
+
+    _tickTransformation(owner);
+    if (mTransformed)
+        return;
 
     if (!mGoalsRegistered || mGoalsDirty)
         _registerGoals(owner);
@@ -84,6 +155,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
 
     _tickLifecycle(owner);
     _tickSensors(owner);
+    _tickTimer(owner);
 
     mGoalSelector.tick(owner, *this);
     mNavigation.tick(owner, *this);
@@ -179,6 +251,101 @@ void MobActor::_tickSensors(ServerNetworkHandler &owner) {
 
     for (const std::unique_ptr<json::Value> &trigger: triggers->mArray)
         run(*trigger);
+}
+
+void MobActor::_tickTimer(ServerNetworkHandler &owner) {
+    const json::Value *timer = getComponent(TIMER_COMPONENT);
+    if (timer != mTimerComponent) {
+        mTimerComponent = timer;
+        mTimerTicks = timer == nullptr ? 0 : timerTicks(*timer);
+    }
+
+    if (timer == nullptr || mTimerTicks < 0 || --mTimerTicks > 0)
+        return;
+
+    const json::Value *looping = timer->get("looping");
+    mTimerTicks = looping == nullptr || looping->boolean(true) ? timerTicks(*timer) : -1;
+
+    const json::Value *trigger = timer->get("time_down_event");
+    const std::string event = eventOf(trigger);
+    if (!event.empty() && targetsSelf(trigger))
+        fireEvent(owner, event);
+}
+
+void MobActor::_tickTransformation(ServerNetworkHandler &owner) {
+    const json::Value *transformation = getComponent(TRANSFORMATION_COMPONENT);
+    if (transformation != mTransformationComponent) {
+        mTransformationComponent = transformation;
+        if (transformation == nullptr)
+            return;
+
+        mTransformationTicks = transformationTicks(*transformation);
+        const json::Value *sound = transformation->get("begin_transform_sound");
+        if (sound != nullptr)
+            _playDefinitionSound(owner, sound->string());
+    }
+
+    if (transformation == nullptr || mTransformationTicks-- > 0)
+        return;
+
+    _transform(owner, *transformation);
+}
+
+void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transformation) {
+    const json::Value *into = transformation.get("into");
+    std::string identifier = into == nullptr ? std::string() : into->string();
+    if (identifier.empty())
+        return;
+
+    std::string spawnEvent;
+    const size_t eventStart = identifier.find('<');
+    if (eventStart != std::string::npos) {
+        const size_t eventEnd = identifier.find('>', eventStart);
+        spawnEvent = identifier.substr(eventStart + 1, eventEnd == std::string::npos ? std::string::npos
+                                                                                     : eventEnd - eventStart - 1);
+        identifier.resize(eventStart);
+    }
+
+    if (identifier == LEGACY_ZOMBIE_PIGMAN)
+        identifier = ZOMBIE_PIGMAN;
+
+    Level &level = owner.getLevelFor(*this);
+    const bool preserveEquipment = flagIn(transformation, "preserve_equipment");
+    owner.spawnActor(level, identifier, getPosition(), [this, &spawnEvent, preserveEquipment](ServerActor &actor) {
+        actor.setRotation(getRotation());
+        actor.setNameTag(getNameTag());
+        actor.setPersistent(isPersistent());
+
+        MobActor *mob = dynamic_cast<MobActor *>(&actor);
+        if (mob == nullptr)
+            return;
+
+        mob->mSpawnEvent = spawnEvent;
+        if (preserveEquipment) {
+            mob->mEquipment = mEquipment;
+            mob->mEquipmentInherited = true;
+        }
+    });
+
+    if (flagIn(transformation, "drop_equipment"))
+        mEquipment.dropAll(owner, level, getPosition());
+
+    const json::Value *sound = transformation.get("transformation_sound");
+    if (sound != nullptr)
+        _playDefinitionSound(owner, sound->string());
+
+    mTransformed = true;
+}
+
+void MobActor::_playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound) {
+    if (sound.empty())
+        return;
+
+    Level &level = owner.getLevelFor(*this);
+    if (sound.find('.') != std::string::npos)
+        owner.playNamedSound(level, sound, getPosition(), 1.0f, 1.0f);
+    else
+        owner.playLevelSound(level, sound, getPosition(), getIdentifier());
 }
 
 bool MobActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {

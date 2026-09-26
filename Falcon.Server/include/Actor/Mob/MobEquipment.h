@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Math/Vector3f.h"
 #include "Core/NBT/Tag.h"
 #include "Protocol/PacketCodecContext.h"
 #include "Protocol/Types/ItemStack.h"
@@ -32,6 +33,8 @@ public:
 
     void dropOnDeath(ServerNetworkHandler &owner, Level &level, const MobActor &mob, bool killedByPlayer,
                      int32_t lootingLevel);
+
+    void dropAll(ServerNetworkHandler &owner, Level &level, const Vector3f &position);
 
     float absorbDamage(float amount, const DamageSource &source) const;
 

@@ -36,6 +36,10 @@ public:
 
     virtual int getExperienceDrop() const { return 0; }
 
+    bool isExpired() const override {
+        return mTransformed;
+    }
+
     virtual const LootTable *getLootTable() const;
 
     virtual float resolveMaxHealth(Difficulty difficulty) const;
@@ -173,6 +177,14 @@ private:
 
     void _tickSensors(ServerNetworkHandler &owner);
 
+    void _tickTimer(ServerNetworkHandler &owner);
+
+    void _tickTransformation(ServerNetworkHandler &owner);
+
+    void _transform(ServerNetworkHandler &owner, const json::Value &transformation);
+
+    void _playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound);
+
     void _fireComponentEvent(ServerNetworkHandler &owner, const char *component);
 
     void _setFlag(ServerNetworkHandler &owner, ActorFlag flag, bool value);
@@ -209,6 +221,13 @@ private:
     float mScale = 1.0f;
     bool mDefinitionStarted = false;
     bool mBorn = false;
+    std::string mSpawnEvent;
+    bool mEquipmentInherited = false;
+    const json::Value *mTimerComponent = nullptr;
+    int32_t mTimerTicks = 0;
+    const json::Value *mTransformationComponent = nullptr;
+    int32_t mTransformationTicks = 0;
+    bool mTransformed = false;
     std::vector<std::string> mComponentGroups;
     std::vector<std::string> mGoalGroups;
     std::vector<std::string> mBodyGroups;

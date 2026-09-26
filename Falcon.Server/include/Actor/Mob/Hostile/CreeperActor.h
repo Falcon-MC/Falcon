@@ -18,7 +18,7 @@ public:
     void tick(ServerNetworkHandler &owner) override;
 
     bool isExpired() const override {
-        return mExploded;
+        return mExploded || MobActor::isExpired();
     }
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;

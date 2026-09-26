@@ -204,6 +204,16 @@ void MobEquipment::dropOnDeath(ServerNetworkHandler &owner, Level &level, const 
     }
 }
 
+void MobEquipment::dropAll(ServerNetworkHandler &owner, Level &level, const Vector3f &position) {
+    for (ItemStack &slot: mSlots) {
+        ItemStack item = std::move(slot);
+        slot = ItemStack::air();
+        if (!item.isAir())
+            owner.dropItem(level, position, item, ItemActorHandler::randomDropMotion(),
+                           ItemActorHandler::DROP_PICKUP_DELAY);
+    }
+}
+
 float MobEquipment::absorbDamage(float amount, const DamageSource &source) const {
     return ArmorProtection::apply(&mSlots[HEAD], FEET - HEAD + 1, amount, source.mDeathMessageKey,
                                   source.mArmorEfficiency);
