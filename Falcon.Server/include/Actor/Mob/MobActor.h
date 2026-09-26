@@ -183,6 +183,8 @@ private:
 
     void _tickTransformation(ServerNetworkHandler &owner);
 
+    int32_t _transformationAssist(ServerNetworkHandler &owner, const json::Value &delay);
+
     void _transform(ServerNetworkHandler &owner, const json::Value &transformation);
 
     void _playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound);

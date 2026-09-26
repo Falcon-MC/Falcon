@@ -7,6 +7,7 @@
 #include "Actor/Definition/EntityEvents.h"
 #include "Actor/Definition/EntityFilter.h"
 #include "Actor/ServerPlayer.h"
+#include "Block/BlockState.h"
 #include "Level/Level.h"
 #include "Loot/LootItems.h"
 #include "Loot/LootTableRegistry.h"
@@ -116,9 +117,27 @@ namespace {
         const json::Value *delay = transformation.get("delay");
         if (delay == nullptr)
             return 0;
-        if (delay->isObject())
-            return (int32_t) std::lround(numberIn(delay, "value", 0.0f) * (float) TICKS_PER_SECOND);
-        return (int32_t) std::lround((float) delay->number(0.0) * (float) TICKS_PER_SECOND);
+        if (!delay->isObject())
+            return (int32_t) std::lround((float) delay->number(0.0) * (float) TICKS_PER_SECOND);
+
+        float seconds = numberIn(delay, "value", 0.0f);
+        const float rangeMin = numberIn(delay, "range_min", 0.0f);
+        const float rangeMax = numberIn(delay, "range_max", 0.0f);
+        if (rangeMax > rangeMin)
+            seconds += std::uniform_real_distribution<float>(rangeMin, rangeMax)(lifecycleRandom());
+        else
+            seconds += rangeMin;
+
+        return (int32_t) std::lround(seconds * (float) TICKS_PER_SECOND);
+    }
+
+    bool isAssistBlock(const json::Value &types, const std::string &name) {
+        for (const std::unique_ptr<json::Value> &type: types.mArray) {
+            const std::string identifier = type->string();
+            if (identifier == name || "minecraft:" + identifier == name)
+                return true;
+        }
+        return false;
     }
 
     std::mt19937 &experienceRandom() {
@@ -332,10 +351,54 @@ void MobActor::_tickTransformation(ServerNetworkHandler &owner) {
             _playDefinitionSound(owner, sound->string());
     }
 
-    if (transformation == nullptr || mTransformationTicks-- > 0)
+    if (transformation == nullptr)
         return;
 
+    if (mTransformationTicks > 0) {
+        const json::Value *delay = transformation->get("delay");
+        const int32_t assist = delay != nullptr && delay->isObject() ? _transformationAssist(owner, *delay) : 0;
+        mTransformationTicks -= 1 + assist;
+        return;
+    }
+
     _transform(owner, *transformation);
+}
+
+int32_t MobActor::_transformationAssist(ServerNetworkHandler &owner, const json::Value &delay) {
+    const json::Value *types = delay.get("block_types");
+    const float assistChance = numberIn(&delay, "block_assist_chance", 0.0f);
+    if (types == nullptr || !types->isArray() || assistChance <= 0.0f
+        || std::uniform_real_distribution<float>(0.0f, 1.0f)(lifecycleRandom()) >= assistChance)
+        return 0;
+
+    const int32_t radius = (int32_t) numberIn(&delay, "block_radius", 0.0f);
+    const int32_t configuredMax = (int32_t) numberIn(&delay, "block_max", 0.0f);
+    const int32_t maximum = configuredMax > 0 ? configuredMax : radius;
+    const float blockChance = numberIn(&delay, "block_chance", 0.0f);
+
+    Level &level = owner.getLevelFor(*this);
+    const Vector3f position = getPosition();
+    const int32_t originX = (int32_t) std::floor(position.x);
+    const int32_t originY = (int32_t) std::floor(position.y);
+    const int32_t originZ = (int32_t) std::floor(position.z);
+
+    int32_t found = 0;
+    int32_t assist = 0;
+    for (int32_t x = originX - radius; x <= originX + radius && found < maximum; ++x) {
+        for (int32_t y = originY - radius; y <= originY + radius && found < maximum; ++y) {
+            for (int32_t z = originZ - radius; z <= originZ + radius && found < maximum; ++z) {
+                const BlockState *state = level.peekBlockPtr(x, y, z);
+                if (state == nullptr || !isAssistBlock(*types, state->mName))
+                    continue;
+
+                ++found;
+                if (std::uniform_real_distribution<float>(0.0f, 1.0f)(lifecycleRandom()) < blockChance)
+                    ++assist;
+            }
+        }
+    }
+
+    return assist;
 }
 
 void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transformation) {
