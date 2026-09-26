@@ -61,9 +61,6 @@ namespace {
         const std::string identifier = restored ? stored.getString(TAG_IDENTIFIER, CopperGolemActor::IDENTIFIER)
                                                 : std::string(CopperGolemActor::IDENTIFIER);
 
-        level.getBlockActors().remove(position);
-        level.setBlock(position, BlockState(), true);
-
         const Vector3f spawnPosition((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
         const auto configure = [&owner, &stored, restored, &spawnPosition](ServerActor &spawned) {
             if (!restored)
@@ -76,7 +73,14 @@ namespace {
                 mob->getEquipment().loadNbt(stored, owner.getCodecContext());
         };
 
-        MobActor *mob = dynamic_cast<MobActor *>(owner.spawnActor(level, identifier, spawnPosition, configure));
+        ServerActor *spawned = owner.spawnActor(level, identifier, spawnPosition, configure);
+        if (spawned == nullptr)
+            return;
+
+        level.getBlockActors().remove(position);
+        level.setBlock(position, BlockState(), true);
+
+        MobActor *mob = dynamic_cast<MobActor *>(spawned);
         if (!restored || mob == nullptr)
             return;
 
