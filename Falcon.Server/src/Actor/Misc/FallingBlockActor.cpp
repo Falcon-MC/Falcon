@@ -9,6 +9,7 @@
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/PlaySoundPacket.h"
 
 #include <algorithm>
 #include <cmath>
@@ -25,8 +26,6 @@ const float FallingBlockActor::ANVIL_LAND_PITCH = 0.8f;
 
 namespace {
     const int32_t ACTOR_DATA_VARIANT = 2;
-    const char *ANVIL_LAND_SOUND = "random.anvil_land";
-    const char *DRIPSTONE_LAND_SOUND = "pointed_dripstone.land";
     const char *ANVIL_DEATH_KEY = "death.attack.anvil";
     const char *DRIPSTONE_DEATH_KEY = "death.attack.stalagmite";
 }
@@ -231,7 +230,7 @@ void FallingBlockActor::_onAnvilLanded(ServerNetworkHandler &owner, const Vector
 
     const Vector3f soundPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
                                  (float) position.z + 0.5f);
-    owner.playNamedSound(level, ANVIL_LAND_SOUND, soundPosition, ANVIL_LAND_VOLUME, ANVIL_LAND_PITCH);
+    owner.playNamedSound(level, PlaySoundName::ANVIL_LAND, soundPosition, ANVIL_LAND_VOLUME, ANVIL_LAND_PITCH);
 }
 
 void FallingBlockActor::_onDripstoneLanded(ServerNetworkHandler &owner, const Vector3i &position,
@@ -242,7 +241,7 @@ void FallingBlockActor::_onDripstoneLanded(ServerNetworkHandler &owner, const Ve
 
     const Vector3f soundPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
                                  (float) position.z + 0.5f);
-    owner.playNamedSound(owner.getLevelFor(*this), DRIPSTONE_LAND_SOUND, soundPosition, ANVIL_LAND_VOLUME,
+    owner.playNamedSound(owner.getLevelFor(*this), PlaySoundName::POINTED_DRIPSTONE_LAND, soundPosition, ANVIL_LAND_VOLUME,
                          ANVIL_LAND_PITCH);
 }
 

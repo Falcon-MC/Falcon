@@ -5,6 +5,7 @@
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/PlaySoundPacket.h"
 
 FALCON_REGISTER_BLOCK(SnifferEggBlock, 185);
 
@@ -15,8 +16,6 @@ namespace {
     const int32_t HATCH_DELAY_SPREAD = 300;
     const float SOUND_VOLUME = 0.7f;
     const float BABY_SCALE = 0.5f;
-    const char *const CRACK_SOUND = "block.sniffer_egg.crack";
-    const char *const HATCH_SOUND = "block.sniffer_egg.hatch";
     const char *const SNIFFER = "minecraft:sniffer";
 
     Vector3f centerOf(const Vector3i &position) {
@@ -57,13 +56,13 @@ void SnifferEggBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &leve
     const Vector3f center = centerOf(position);
 
     if (EggHelpers::isFullyCracked(state)) {
-        owner.playNamedSound(level, HATCH_SOUND, center, SOUND_VOLUME, EggHelpers::soundPitch());
+        owner.playNamedSound(level, PlaySoundName::SNIFFER_EGG_HATCH, center, SOUND_VOLUME, EggHelpers::soundPitch());
         level.setBlock(position, BlockState("minecraft:air"), true);
         owner.spawnBabyActor(level, SNIFFER, Vector3f(center.x, (float) position.y, center.z), BABY_SCALE);
         return;
     }
 
-    owner.playNamedSound(level, CRACK_SOUND, center, SOUND_VOLUME, EggHelpers::soundPitch());
+    owner.playNamedSound(level, PlaySoundName::SNIFFER_EGG_CRACK, center, SOUND_VOLUME, EggHelpers::soundPitch());
     level.setBlock(position, EggHelpers::cracked(state), true);
     scheduleNextCrack(level, position);
 }

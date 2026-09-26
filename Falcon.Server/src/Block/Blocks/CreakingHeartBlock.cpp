@@ -8,6 +8,7 @@
 #include "Level/Level.h"
 #include "Level/Particle/CreakingHeartTrailParticle.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 
 #include <cmath>
 #include <initializer_list>
@@ -32,8 +33,6 @@ namespace {
     const char *const START_TWITCHING_EVENT = "minecraft:start_twitching";
     const char *const DAMAGED_BY_PLAYER_EVENT = "minecraft:on_spawned_creaking_damaged_by_player";
     const char *const CRUMBLING_EVENT = "minecraft:on_spawned_creaking_crumbling";
-    const char *const SPAWN_SOUND = "creaking_heart_spawn";
-    const char *const TRAIL_SOUND = "block.creaking_heart.trail";
 
     const int32_t UPDATE_TICKS = 20;
     const int32_t UPDATE_TICKS_VARIANCE = 5;
@@ -198,7 +197,7 @@ void CreakingHeartBlock::spawnCreaking(ServerNetworkHandler &owner, Level &level
         mob->setSpawnEvent(SPAWNED_BY_HEART_EVENT);
         mob->setHomePosition(home);
     });
-    owner.playLevelSound(level, SPAWN_SOUND, home);
+    owner.playLevelSound(level, LevelSoundEvent::CREAKING_HEART_SPAWN, home);
 }
 
 void CreakingHeartBlock::spreadResin(Level &level, const Vector3i &position) {
@@ -295,6 +294,6 @@ bool CreakingHeartBlock::onActorEvent(ServerNetworkHandler &owner, Level &level,
 
     spreadResin(level, position);
     level.addParticle(CreakingHeartTrailParticle(source.getPosition(), position));
-    owner.playLevelSound(level, TRAIL_SOUND, centerOf(position));
+    owner.playLevelSound(level, LevelSoundEvent::CREAKING_HEART_TRAIL, centerOf(position));
     return true;
 }

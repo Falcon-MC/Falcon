@@ -5,6 +5,7 @@
 #include "Actor/Mob/MobActor.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 
 #include <algorithm>
 #include <cmath>
@@ -17,7 +18,6 @@ namespace {
     const char *const NAMESPACE = "minecraft:";
     const char *const DEFAULT_SPAWN_ITEM = "egg";
     const char *const DEFAULT_SPAWN_EVENT = "minecraft:entity_born";
-    const char *const DEFAULT_SPAWN_SOUND = "plop";
     const float DEFAULT_MIN_WAIT_SECONDS = 300.0f;
     const float DEFAULT_MAX_WAIT_SECONDS = 600.0f;
     const int32_t TICKS_PER_SECOND = 20;
@@ -143,7 +143,7 @@ void MobEntitySpawner::_spawn(ServerNetworkHandler &owner, MobActor &mob, const 
             owner.spawnItemActor(level, item, 1, position);
     }
 
-    mob.playDefinitionSound(owner, textOf(entry, "spawn_sound", DEFAULT_SPAWN_SOUND));
+    mob.playDefinitionSound(owner, textOf(entry, "spawn_sound", LevelSoundEvent::PLOP));
 
     if (entity.empty())
         EntityEvents::fireTrigger(owner, mob, entry.get("spawn_item_event"));

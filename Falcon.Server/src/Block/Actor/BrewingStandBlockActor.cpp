@@ -8,6 +8,7 @@
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Packets/ContainerSetDataPacket.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 
 #include <memory>
@@ -19,7 +20,6 @@ namespace {
     const char *TAG_FUEL_AMOUNT = "FuelAmount";
     const char *TAG_FUEL_TOTAL = "FuelTotal";
     const char *BLAZE_POWDER = "minecraft:blaze_powder";
-    const char *BREWED_SOUND = "potion.brewed";
     const char *const SLOT_STATES[] = {"brewing_stand_slot_a_bit", "brewing_stand_slot_b_bit",
                                        "brewing_stand_slot_c_bit"};
     const int PROPERTY_BREW_TIME = 0;
@@ -174,7 +174,7 @@ void BrewingStandBlockActor::_brew(ServerNetworkHandler &owner) {
     _sendProperty(owner, PROPERTY_FUEL_AMOUNT, mFuelAmount);
     _sendProperty(owner, PROPERTY_FUEL_TOTAL, mFuelTotal);
     owner.refreshContainerViewers(mPosition, nullptr);
-    owner.playLevelSound(*mLevel, BREWED_SOUND, centerOf(mPosition));
+    owner.playLevelSound(*mLevel, LevelSoundEvent::POTION_BREWED, centerOf(mPosition));
 }
 
 void BrewingStandBlockActor::_stopBrewing(ServerNetworkHandler &owner) {

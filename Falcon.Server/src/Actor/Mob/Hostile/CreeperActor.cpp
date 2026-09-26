@@ -6,6 +6,7 @@
 #include "Level/Explosion.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/PlaySoundPacket.h"
 
 #include <string>
 #include <vector>
@@ -16,8 +17,6 @@ namespace {
     const double EXPLOSION_RADIUS = 3.0;
     const double CHARGED_MULTIPLIER = 2.0;
     const int32_t FUSE_SYNC_INTERVAL = 5;
-    const char *const FUSE_SOUND = "random.fuse";
-    const char *const IGNITE_SOUND = "fire.ignite";
     const char *const FLINT_AND_STEEL = "minecraft:flint_and_steel";
     const char *const TAG_POWERED = "powered";
     const char *const TAG_IGNITED = "IsFuseLit";
@@ -57,7 +56,7 @@ void CreeperActor::tick(ServerNetworkHandler &owner) {
 
     const int32_t direction = mIgnited ? 1 : mSwellDirection;
     if (direction > 0 && mSwell == 0)
-        owner.playNamedSound(owner.getLevelFor(*this), FUSE_SOUND, getPosition(), 1.0f, 0.5f);
+        owner.playNamedSound(owner.getLevelFor(*this), PlaySoundName::FUSE, getPosition(), 1.0f, 0.5f);
 
     mSwell += direction;
     if (mSwell < 0)
@@ -129,7 +128,7 @@ bool CreeperActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player)
         return HostileActor::onInteract(owner, player);
 
     mIgnited = true;
-    owner.playNamedSound(owner.getLevelFor(*this), IGNITE_SOUND, getPosition(), 1.0f, 1.0f);
+    owner.playNamedSound(owner.getLevelFor(*this), PlaySoundName::FIRE_IGNITE, getPosition(), 1.0f, 1.0f);
     owner.damagePlayerHeldItem(player, 1);
     return true;
 }

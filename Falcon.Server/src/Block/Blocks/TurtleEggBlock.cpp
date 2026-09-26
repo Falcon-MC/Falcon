@@ -6,6 +6,7 @@
 #include "Level/Level.h"
 #include "Level/LightSystem.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/PlaySoundPacket.h"
 
 FALCON_REGISTER_BLOCK(TurtleEggBlock, 185);
 
@@ -18,7 +19,6 @@ namespace {
     const float HATCH_WINDOW_END = 0.7f;
     const float CRACK_VOLUME = 0.7f;
     const float BABY_SCALE = 0.16f;
-    const char *const CRACK_SOUND = "block.turtle_egg.crack";
     const char *const TURTLE = "minecraft:turtle";
 
     bool isSand(const std::string &identifier) {
@@ -64,14 +64,14 @@ void TurtleEggBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
         return;
     }
 
-    owner.playNamedSound(level, CRACK_SOUND, centerOf(position), CRACK_VOLUME, EggHelpers::soundPitch());
+    owner.playNamedSound(level, PlaySoundName::TURTLE_EGG_CRACK, centerOf(position), CRACK_VOLUME, EggHelpers::soundPitch());
     level.setBlock(position, EggHelpers::cracked(state), true);
 }
 
 void TurtleEggBlock::hatch(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) {
     const int32_t turtles = eggCount(state);
-    owner.playNamedSound(level, CRACK_SOUND, centerOf(position), CRACK_VOLUME, EggHelpers::soundPitch());
+    owner.playNamedSound(level, PlaySoundName::TURTLE_EGG_CRACK, centerOf(position), CRACK_VOLUME, EggHelpers::soundPitch());
     level.setBlock(position, BlockState("minecraft:air"), true);
 
     for (int32_t turtle = 0; turtle < turtles; turtle++) {

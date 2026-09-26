@@ -11,6 +11,7 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/LevelEventPacket.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <cmath>
@@ -61,7 +62,7 @@ void CushionActor::breakCushion(ServerNetworkHandler &owner, bool dropItem) {
     Level &level = owner.getLevelFor(*this);
     const Vector3f position = getPosition();
 
-    owner.playLevelSound(level, "death", position, IDENTIFIER, -1);
+    owner.playLevelSound(level, LevelSoundEvent::DEATH, position, IDENTIFIER, -1);
 
     BlockState wool;
     wool.mName = DyeColor::identifier(mColor, WOOL_SUFFIX);

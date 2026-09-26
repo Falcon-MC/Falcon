@@ -12,6 +12,7 @@ FALCON_REGISTER_BLOCK(TntBlock, 410);
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/PlaySoundPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 
 #include <cmath>
@@ -20,7 +21,6 @@ FALCON_REGISTER_BLOCK(TntBlock, 410);
 namespace {
     const float PRIME_HORIZONTAL_MOTION = 0.02f;
     const float PRIME_VERTICAL_MOTION = 0.2f;
-    const char *FUSE_SOUND = "random.fuse";
     const char *ARROW = "minecraft:arrow";
     const char *SMALL_FIREBALL = "minecraft:small_fireball";
 
@@ -46,7 +46,7 @@ void TntBlock::prime(ServerNetworkHandler &owner, Level &level, const Vector3i &
                           -std::cos(angle) * PRIME_HORIZONTAL_MOTION);
 
     owner.spawnPrimedTnt(level, spawnPosition, motion, fuse);
-    owner.playNamedSound(level, FUSE_SOUND, spawnPosition, 1.0f, 1.0f);
+    owner.playNamedSound(level, PlaySoundName::FUSE, spawnPosition, 1.0f, 1.0f);
 }
 
 bool TntBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,

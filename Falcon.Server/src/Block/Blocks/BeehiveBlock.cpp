@@ -9,6 +9,7 @@
 #include "Item/Items/BucketItem.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemStack.h"
 #include "Protocol/Types/StartGameTypes.h"
 
@@ -25,8 +26,6 @@ namespace {
     const char *const GLASS_BOTTLE = "minecraft:glass_bottle";
     const char *const HONEY_BOTTLE = "minecraft:honey_bottle";
     const char *const HONEYCOMB = "minecraft:honeycomb";
-    const char *const SHEAR_SOUND = "block.beehive.shear";
-    const char *const BOTTLE_FILL_SOUND = "bottle.fill";
     const int32_t SHEARED_HONEYCOMBS = 3;
     const int DIRECTION_FACES[] = {PlacementOrientation::FACE_SOUTH, PlacementOrientation::FACE_WEST,
                                    PlacementOrientation::FACE_NORTH, PlacementOrientation::FACE_EAST};
@@ -81,12 +80,12 @@ bool BeehiveBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
     if (Block::isShears(held)) {
         for (int32_t count = 0; count < SHEARED_HONEYCOMBS; ++count)
             owner.spawnItemActor(level, HONEYCOMB, 1, center);
-        owner.playLevelSound(level, SHEAR_SOUND, center);
+        owner.playLevelSound(level, LevelSoundEvent::BEEHIVE_SHEAR, center);
         owner.damagePlayerHeldItem(player, 1);
     } else if (isGlassBottle(held)) {
         if (!BucketItem::applyResult(owner, player, held, HONEY_BOTTLE))
             return false;
-        owner.playLevelSound(level, BOTTLE_FILL_SOUND, center);
+        owner.playLevelSound(level, LevelSoundEvent::BOTTLE_FILL, center);
     } else {
         return false;
     }

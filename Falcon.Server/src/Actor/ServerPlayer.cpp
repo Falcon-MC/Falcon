@@ -17,6 +17,7 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Packets/AnimatePacket.h"
 #include "Protocol/Packets/ActorEventPacket.h"
+#include "Protocol/Packets/PlaySoundPacket.h"
 #include "Protocol/Packets/PlayerStartItemCooldownPacket.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
 #include "Protocol/Packets/SetTitlePacket.h"
@@ -410,7 +411,6 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
 namespace {
     const char *const SHIELD = "minecraft:shield";
     const char *const SHIELD_COOLDOWN_CATEGORY = "shield";
-    const char *const SHIELD_BLOCK_SOUND = "item.shield.block";
     const int32_t SHIELD_TRANSITION_TICKS = 2;
     const int32_t SHIELD_ATTACK_REENABLE_TICKS = 6;
     const int32_t SHIELD_DISABLE_TICKS = 100;
@@ -522,7 +522,7 @@ bool ServerPlayer::blockWithShield(ServerNetworkHandler &owner, const Vector3f &
     if (-std::sin(yaw) * towardX + std::cos(yaw) * towardZ <= 0.0f)
         return false;
 
-    owner.playNamedSound(owner.getLevelFor(*this), SHIELD_BLOCK_SOUND, position, 1.0f, 1.0f);
+    owner.playNamedSound(owner.getLevelFor(*this), PlaySoundName::SHIELD_BLOCK, position, 1.0f, 1.0f);
     _damageShield(owner, damage);
 
     if (attacker != nullptr) {

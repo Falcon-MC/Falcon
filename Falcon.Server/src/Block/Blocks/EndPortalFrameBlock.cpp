@@ -8,6 +8,7 @@
 #include "Inventory/PlayerInventory.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/PlaySoundPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/ItemStack.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -78,7 +79,7 @@ bool EndPortalFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &
     const BlockState filled(state.mName, states);
     writeBlock(level, position, filled, &owner);
 
-    owner.playNamedSound(level, "block.end_portal_frame.fill", centerOf(position), 1.0f, 1.0f);
+    owner.playNamedSound(level, PlaySoundName::END_PORTAL_FRAME_FILL, centerOf(position), 1.0f, 1.0f);
 
     if (player.getGameType() != (int32_t) GameType::Creative) {
         ItemStack updated = inventory.getItemInHand();
@@ -159,7 +160,7 @@ bool EndPortalFrameBlock::tryCompletePortal(Level &level, const Vector3i &frameP
     }
 
     if (owner != nullptr)
-        owner->playNamedSound(level, "block.end_portal.spawn", centerOf(center), 1.0f, 1.0f);
+        owner->playNamedSound(level, PlaySoundName::END_PORTAL_SPAWN, centerOf(center), 1.0f, 1.0f);
 
     return true;
 }

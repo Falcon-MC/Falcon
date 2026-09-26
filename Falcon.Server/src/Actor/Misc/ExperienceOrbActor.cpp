@@ -4,6 +4,7 @@
 #include "Actor/ServerPlayer.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/PlaySoundPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <cmath>
@@ -112,7 +113,7 @@ bool ExperienceOrbActor::_tryPickup(ServerNetworkHandler &owner, ServerPlayer &p
     player.getExperience().addXp(owner.repairWithMending(player, getExperienceValue()));
     player.syncExperience();
     owner.syncPlayerAttributes(player);
-    owner.playNamedSound(owner.getLevelFor(*this), "random.orb", position, PICKUP_VOLUME, PICKUP_PITCH);
+    owner.playNamedSound(owner.getLevelFor(*this), PlaySoundName::ORB, position, PICKUP_VOLUME, PICKUP_PITCH);
     return true;
 }
 

@@ -10,6 +10,7 @@
 #include "Block/Components/PlacementOrientation.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 
 #include <cstddef>
 #include <random>
@@ -26,9 +27,6 @@ namespace {
     const char *const EXITED_HIVE_EVENT = "minecraft:exited_hive";
     const char *const EXITED_DISTURBED_HIVE_EVENT = "minecraft:exited_disturbed_hive";
     const char *const EXITED_HIVE_ON_FIRE_EVENT = "minecraft:exited_hive_on_fire";
-    const char *const ENTER_SOUND = "block.beehive.enter";
-    const char *const EXIT_SOUND = "block.beehive.exit";
-    const char *const WORK_SOUND = "block.beehive.work";
     const int32_t NECTAR_STAY_TICKS = 2400;
     const int32_t STAY_TICKS = 600;
     const int32_t BLOCKED_EXIT_RETRY_TICKS = 600;
@@ -133,7 +131,7 @@ bool BeehiveBlockActor::admit(ServerNetworkHandler &owner, MobActor &mob) {
     const bool hasNectar = mob.getIntProperty(NECTAR_PROPERTY, 0) != 0;
     addOccupant(mob.getIdentifier(), mob.saveNbt(), hasNectar ? NECTAR_STAY_TICKS : STAY_TICKS);
     mob.despawn();
-    owner.playLevelSound(*mLevel, ENTER_SOUND, blockCenter(mPosition));
+    owner.playLevelSound(*mLevel, LevelSoundEvent::BEEHIVE_ENTER, blockCenter(mPosition));
     return true;
 }
 
@@ -195,7 +193,7 @@ bool BeehiveBlockActor::tick(ServerNetworkHandler &owner) {
 
         if (occupant.mTicksLeftToStay > 0 || sheltered) {
             if (std::uniform_real_distribution<float>(0.0f, 1.0f)(hiveRandom()) < WORK_SOUND_CHANCE)
-                owner.playLevelSound(level, WORK_SOUND, blockCenter(mPosition));
+                owner.playLevelSound(level, LevelSoundEvent::BEEHIVE_WORK, blockCenter(mPosition));
             ++index;
             continue;
         }
@@ -286,7 +284,7 @@ bool BeehiveBlockActor::_release(ServerNetworkHandler &owner, Level &level, cons
     if (actor == nullptr)
         return false;
 
-    owner.playLevelSound(level, EXIT_SOUND, blockCenter(hive));
+    owner.playLevelSound(level, LevelSoundEvent::BEEHIVE_EXIT, blockCenter(hive));
 
     MobActor *mob = dynamic_cast<MobActor *>(actor);
     if (mob == nullptr)
