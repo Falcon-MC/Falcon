@@ -1,16 +1,27 @@
 #include "Block/Blocks/OpenableBlock.h"
 
+#include "Block/Blocks/FenceGateOrientationBlock.h"
+#include "Block/Blocks/TrapdoorOrientationBlock.h"
+#include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Dimension.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 
 #include <array>
 #include <unordered_set>
 
 namespace {
-    const char *SOUND_DOOR_OPEN = "random.door_open";
-    const char *SOUND_DOOR_CLOSE = "random.door_close";
+    const char *soundOf(const BlockState &state, bool open) {
+        if (VanillaBlocks::getAs<TrapdoorOrientationBlock>(state.mName) != nullptr)
+            return open ? LevelSoundEvent::TRAPDOOR_OPEN : LevelSoundEvent::TRAPDOOR_CLOSE;
+
+        if (VanillaBlocks::getAs<FenceGateOrientationBlock>(state.mName) != nullptr)
+            return open ? LevelSoundEvent::FENCE_GATE_OPEN : LevelSoundEvent::FENCE_GATE_CLOSE;
+
+        return open ? LevelSoundEvent::DOOR_OPEN : LevelSoundEvent::DOOR_CLOSE;
+    }
 
     std::array<std::unordered_set<int64_t>, Dimension::DIMENSION_COUNT> gManualOverrides;
 
@@ -31,7 +42,7 @@ void OpenableBlock::setOpen(ServerNetworkHandler &owner, Level &level, const Vec
     level.setBlock(position, BlockState(state.mName, states), false);
 
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    owner.playLevelSound(level, open ? SOUND_DOOR_OPEN : SOUND_DOOR_CLOSE, center, "", state.getHash());
+    owner.playLevelSound(level, soundOf(state, open), center, "", state.getHash());
 }
 
 bool OpenableBlock::hasManualOverride(Level &level, const Vector3i &position) {

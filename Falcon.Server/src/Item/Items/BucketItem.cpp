@@ -353,7 +353,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
     }
 
     const char *sound = content == Content::PowderSnow
-                       ? "bucket_empty_powder_snow"
+                       ? LevelSoundEvent::BUCKET_EMPTY_POWDER_SNOW
                        : content == Content::Water
                          ? WaterBlock(makeLiquidState(content)).getBucketEmptySound()
                          : LavaBlock(makeLiquidState(content)).getBucketEmptySound();

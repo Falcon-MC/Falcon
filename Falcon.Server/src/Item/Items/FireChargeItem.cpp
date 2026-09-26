@@ -16,7 +16,7 @@ FALCON_REGISTER_ITEM_CUSTOM(FireChargeItem, 41,
 #include "Item/Items/FireStarterHelpers.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
-#include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 using namespace FireStarterHelpers;
@@ -40,7 +40,7 @@ bool FireChargeItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
     if (!FireSystem::ignite(owner, level, placement, isObsidian(level, blockPosition)))
         return false;
 
-    owner.playLevelSound(level, LevelSoundEvent::GHAST_FIREBALL, centerOf(placement));
+    owner.broadcastLevelEvent(level, LevelEventPacket::SoundGhastFireball, centerOf(placement), 0);
     player.consumeOneHeldItem();
     return true;
 }

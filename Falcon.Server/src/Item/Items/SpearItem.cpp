@@ -246,8 +246,9 @@ void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, co
     player.setMotion(motion);
     owner.sendActorMotion(player);
 
-    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::SPEAR_LUNGE, player.getPosition(),
-                         "minecraft:player");
+    const char *sound = lungeLevel >= 3 ? LevelSoundEvent::LUNGE_3
+                                        : (lungeLevel == 2 ? LevelSoundEvent::LUNGE_2 : LevelSoundEvent::LUNGE_1);
+    owner.playLevelSound(owner.getLevelFor(player), sound, player.getPosition(), "minecraft:player");
 
     player.exhaust(BASE_LUNGE_EXHAUST * (float) lungeLevel);
 }

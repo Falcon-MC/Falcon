@@ -4,7 +4,7 @@
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Packets/ActorEventPacket.h"
-#include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 
 #include <utility>
@@ -64,7 +64,7 @@ bool TotemItem::consume(ServerNetworkHandler &owner, ServerPlayer &player) {
     owner._broadcastEntityEvent(player, (uint8_t) EntityEventType::ConsumeTotem);
     Level &level = owner.getLevelFor(player);
     owner.spawnParticleEffect(level, TOTEM_PARTICLE, player.getPosition());
-    owner.playLevelSound(level, LevelSoundEvent::TOTEM, player.getPosition(), "minecraft:player");
+    owner.broadcastLevelEvent(level, LevelEventPacket::SoundTotemUsed, player.getPosition(), 0);
     owner._sendHealth(player);
     owner._sendEntityData(player);
 
