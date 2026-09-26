@@ -15,5 +15,5 @@ public:
 private:
     static bool allNeighboursEmpty(Level &level, const Vector3i &position, int32_t exceptFace);
 
-    static void placeFlower(Level &level, const Vector3i &position, int32_t age);
+    static bool placeFlower(Level &level, const Vector3i &position, int32_t age);
 };

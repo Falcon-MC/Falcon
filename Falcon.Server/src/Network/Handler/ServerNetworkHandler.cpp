@@ -1546,9 +1546,33 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     if (!isSignBlock(state.mName) && !hasSignText)
         return;
 
+    BlockActorDataPacket relayed = packet;
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_SIGN_CHANGE)) {
+        const char *const sides[] = {"FrontText", "BackText"};
+        for (const char *side: sides) {
+            Tag *sideData = relayed.mData.get(side);
+            if (sideData == nullptr || !sideData->isCompound())
+                continue;
+
+            std::string text = sideData->getString("Text");
+            PluginEvent signEvent;
+            signEvent.mType = FALCON_EVENT_SIGN_CHANGE;
+            signEvent.mCancellable = true;
+            signEvent.mPlayer = player;
+            signEvent.mLevel = &getLevelFor(*player);
+            signEvent.mBlockPosition = packet.mBlockPosition;
+            signEvent.mState = side == sides[0];
+            signEvent.mMessage = &text;
+            plugins->dispatch(signEvent);
+            if (signEvent.mCancelled)
+                return;
+            sideData->putString("Text", text);
+        }
+    }
+
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.second.getNetworkIdentifier(), packet, mCodecContext);
+            mNetworkHandler->send(entry.second.getNetworkIdentifier(), relayed, mCodecContext);
     }
 }
 
@@ -1811,6 +1835,21 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestAbil
         _disconnect(id, player->localize("falcon.disconnect.flyingDisabled"));
         mPlayers.erase(id);
         return;
+    }
+
+    if (packet.mBoolValue != player->isFlying()) {
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_TOGGLE_FLIGHT)) {
+            PluginEvent flightEvent;
+            flightEvent.mType = FALCON_EVENT_PLAYER_TOGGLE_FLIGHT;
+            flightEvent.mCancellable = true;
+            flightEvent.mPlayer = player;
+            flightEvent.mState = packet.mBoolValue;
+            plugins->dispatch(flightEvent);
+            if (flightEvent.mCancelled) {
+                _sendAbilities(*player);
+                return;
+            }
+        }
     }
 
     player->setFlying(packet.mBoolValue);

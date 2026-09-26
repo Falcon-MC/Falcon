@@ -142,21 +142,25 @@ void ChunkWorker::_processLoad(ChunkTask &task, size_t sourceIndex) {
     std::unique_ptr<LevelChunk> chunk(new LevelChunk(task.mX, task.mZ));
     chunk->setDimension(mGenerator.getDimensionType());
 
+    bool generated = false;
     if (mStorage.isOpen() && mStorage.loadChunk(*chunk)) {
         mLoadedCount.fetch_add(1);
     } else {
         mGenerator.generate(*chunk);
         mGeneratedCount.fetch_add(1);
+        generated = true;
     }
 
-    _finishChunk(std::move(chunk), sourceIndex, false);
+    _finishChunk(std::move(chunk), sourceIndex, false, generated);
 }
 
-void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident) {
+void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident,
+                               bool generated) {
     ChunkLoadResult result;
     result.mX = chunk->getX();
     result.mZ = chunk->getZ();
     result.mReplacesResident = replacesResident;
+    result.mGenerated = generated;
 
     if (!chunk->isPopulated() && sourceIndex < mSources.size()) {
         if (!chunk->hasHeightmap())
@@ -219,7 +223,7 @@ void ChunkWorker::_run(size_t queueIndex) {
         if (task.mKind == ChunkTask::Kind::Load)
             _processLoad(task, queueIndex);
         else if (task.mKind == ChunkTask::Kind::Populate)
-            _finishChunk(std::move(task.mChunk), queueIndex, true);
+            _finishChunk(std::move(task.mChunk), queueIndex, true, false);
         else
             _processSave(task);
 

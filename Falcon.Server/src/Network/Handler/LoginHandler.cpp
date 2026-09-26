@@ -53,6 +53,8 @@
 #include "Protocol/Packets/UpdateAbilitiesPacket.h"
 #include "Protocol/Packets/UpdateAttributesPacket.h"
 #include "Level/BonusChest.h"
+#include "Plugin/PluginEvent.h"
+#include "Plugin/PluginManager.h"
 #include "Server/Localization.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ResourcePackManager.h"
@@ -256,6 +258,22 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         owner._disconnect(id, "disconnectionScreen.serverFull");
         owner.getPlayers().erase(id);
         return;
+    }
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_PRE_LOGIN)) {
+        std::string kickMessage = "disconnectionScreen.noReason";
+        PluginEvent preLogin;
+        preLogin.mType = FALCON_EVENT_PLAYER_PRE_LOGIN;
+        preLogin.mCancellable = true;
+        preLogin.mPlayer = &player;
+        preLogin.mMessage = &kickMessage;
+        plugins->dispatch(preLogin);
+        if (preLogin.mCancelled) {
+            LOG_INFO(LogAreaID::Server, "Player %s was refused by a plugin", player.getName().c_str());
+            owner._disconnect(id, kickMessage);
+            owner.getPlayers().erase(id);
+            return;
+        }
     }
 
     player.setSkin(request.getSkin());

@@ -33,6 +33,8 @@ namespace EnchantmentHelper {
     std::vector<EnchantmentInstance> enchantRandomly(const std::string &identifier, bool allowTreasure,
                                                      uint64_t seed);
 
+    bool peekOptionCost(int32_t enchantNetId, int32_t &outConsumeCost);
+
     bool takeOption(int32_t enchantNetId, std::vector<EnchantmentInstance> &outEnchantments, int32_t &outConsumeCost,
                     int32_t &outRequiredLevel);
 

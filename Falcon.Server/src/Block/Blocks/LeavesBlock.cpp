@@ -5,6 +5,7 @@
 FALCON_REGISTER_BLOCK(LeavesBlock, 290);
 
 #include "Block/BlockIdentifier.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -84,6 +85,9 @@ void LeavesBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const 
         level.setBlock(position, BlockState(state.mName, states), false);
         return;
     }
+
+    if (!BlockChangeSystem::allows(level, position, BlockState("minecraft:air"), BlockChangeCause::Decay))
+        return;
 
     BlockActionHandler::destroyBlock(owner, level, position, state, true, ItemStack::air());
 }

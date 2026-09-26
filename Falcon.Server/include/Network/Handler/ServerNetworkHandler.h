@@ -163,6 +163,8 @@ public:
     ServerActor *spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
                                  float verticalOffset = 0.0f);
 
+    bool allowProjectileLaunch(ServerActor &projectile, Actor *shooter);
+
     bool onThrownProjectileHit(ServerActor &projectile, const Vector3f &hitPosition, ServerPlayer *hitPlayer);
 
     bool onThrownProjectileHitActor(ServerActor &projectile, const Vector3f &hitPosition, ServerActor &hitActor);

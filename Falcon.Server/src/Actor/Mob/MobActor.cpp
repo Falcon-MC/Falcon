@@ -15,6 +15,7 @@
 #include "Loot/LootTableRegistry.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
@@ -453,7 +454,7 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
 
     Level &level = owner.getLevelFor(*this);
     const bool preserveEquipment = flagIn(transformation, "preserve_equipment");
-    owner.spawnActor(level, identifier, getPosition(), [this, &spawnEvent, preserveEquipment](ServerActor &actor) {
+    const auto configure = [this, &spawnEvent, preserveEquipment](ServerActor &actor) {
         actor.setRotation(getRotation());
         actor.setNameTag(getNameTag());
         actor.setPersistent(isPersistent());
@@ -467,7 +468,21 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
             mob->mEquipment = mEquipment;
             mob->mEquipmentInherited = true;
         }
-    });
+    };
+
+    ServerActor *result = owner.spawnActor(level, identifier, getPosition(), configure);
+    if (result == nullptr) {
+        mTransformationTicks = transformationTicks(transformation);
+        return;
+    }
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_TRANSFORM)) {
+        PluginEvent transformEvent;
+        transformEvent.mType = FALCON_EVENT_ENTITY_TRANSFORM;
+        transformEvent.mEntity = this;
+        transformEvent.mTarget = result;
+        plugins->dispatch(transformEvent);
+    }
 
     if (flagIn(transformation, "drop_equipment"))
         mEquipment.dropAll(owner, level, getPosition());
@@ -916,10 +931,24 @@ void MobActor::onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
     mHurtCount++;
 }
 
-void MobActor::setTarget(uint64_t runtimeId) {
+bool MobActor::setTarget(ServerNetworkHandler &owner, uint64_t runtimeId) {
+    if (runtimeId != 0 && runtimeId != mTargetRuntimeId) {
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_TARGET)) {
+            PluginEvent targetEvent;
+            targetEvent.mType = FALCON_EVENT_ENTITY_TARGET;
+            targetEvent.mCancellable = true;
+            targetEvent.mEntity = this;
+            targetEvent.mTarget = findActor(owner, runtimeId);
+            plugins->dispatch(targetEvent);
+            if (targetEvent.mCancelled)
+                return false;
+        }
+    }
+
     if (mTargetRuntimeId == 0 && runtimeId != 0)
         mTargetAcquired = true;
     mTargetRuntimeId = runtimeId;
+    return true;
 }
 
 void MobActor::clearTarget() {

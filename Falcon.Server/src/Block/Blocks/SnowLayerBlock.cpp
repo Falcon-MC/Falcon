@@ -5,6 +5,7 @@
 FALCON_REGISTER_BLOCK(SnowLayerBlock, 340);
 
 #include "Block/Blocks/PlacementHelpers.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Level.h"
 
@@ -56,5 +57,5 @@ void SnowLayerBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
     (void) state;
 
     if (RandomTickSystem::getBlockLight(level, position) >= SNOW_MELT_LIGHT_LEVEL)
-        level.setBlock(position, BlockState("minecraft:air"), true);
+        BlockChangeSystem::change(level, position, BlockState("minecraft:air"), BlockChangeCause::Fade, true);
 }

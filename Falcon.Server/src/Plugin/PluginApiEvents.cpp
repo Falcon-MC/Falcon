@@ -1,6 +1,7 @@
 #include "Plugin/PluginApiHelpers.h"
 #include "Plugin/PluginEvent.h"
 #include "Plugin/PluginServerApi.h"
+#include "Protocol/Types/ItemStack.h"
 
 #include <string>
 
@@ -208,6 +209,37 @@ namespace {
     int32_t eventDestinationSlot(FalconEvent *target) {
         return event(target)->mDestinationSlot;
     }
+
+    int eventState(FalconEvent *target) {
+        return event(target)->mState ? 1 : 0;
+    }
+
+    double eventPreviousAmount(FalconEvent *target) {
+        return event(target)->mPreviousAmount;
+    }
+
+    const char *eventPreviousBlockName(FalconEvent *target) {
+        return hold(event(target)->mPreviousBlockName);
+    }
+
+    int32_t eventChunkX(FalconEvent *target) {
+        return event(target)->mChunkX;
+    }
+
+    int32_t eventChunkZ(FalconEvent *target) {
+        return event(target)->mChunkZ;
+    }
+
+    FalconItem *eventResult(FalconEvent *target) {
+        return toHandle(event(target)->mResult);
+    }
+
+    void eventSetResult(FalconEvent *target, FalconItem *result) {
+        PluginEvent *source = event(target);
+        if (source->mMonitor || source->mResult == nullptr || result == nullptr)
+            return;
+        *source->mResult = *item(result);
+    }
 }
 
 void PluginServerApi::fillEvents(FalconServerApi &api) {
@@ -248,4 +280,11 @@ void PluginServerApi::fillEvents(FalconServerApi &api) {
     api.eventSourceSlot = &eventSourceSlot;
     api.eventDestinationContainer = &eventDestinationContainer;
     api.eventDestinationSlot = &eventDestinationSlot;
+    api.eventState = &eventState;
+    api.eventPreviousAmount = &eventPreviousAmount;
+    api.eventPreviousBlockName = &eventPreviousBlockName;
+    api.eventChunkX = &eventChunkX;
+    api.eventChunkZ = &eventChunkZ;
+    api.eventResult = &eventResult;
+    api.eventSetResult = &eventSetResult;
 }

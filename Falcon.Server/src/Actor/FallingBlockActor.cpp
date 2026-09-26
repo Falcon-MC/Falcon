@@ -4,6 +4,7 @@
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
 #include "Block/BlockSupport.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/FallingBlockSystem.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
@@ -189,9 +190,11 @@ void FallingBlockActor::_land(ServerNetworkHandler &owner, const Vector3i &posit
 
     BlockState placed = mBlockState;
 
-    if (FallingBlockSystem::isConcretePowder(placed.mName) &&
-        FallingBlockSystem::isTouchingWater(level, target))
-        placed = BlockState(FallingBlockSystem::getConcreteFor(placed.mName));
+    if (FallingBlockSystem::isConcretePowder(placed.mName) && FallingBlockSystem::isTouchingWater(level, target)) {
+        const BlockState concrete(FallingBlockSystem::getConcreteFor(placed.mName));
+        if (BlockChangeSystem::allows(level, target, concrete, BlockChangeCause::Form))
+            placed = concrete;
+    }
 
     if (!BlockSupport::isReplaceable(existing))
         FallingBlockSystem::spawnDestroyParticle(owner, level, position, existing);

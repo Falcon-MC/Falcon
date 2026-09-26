@@ -4,6 +4,7 @@
 #include "Item/EnchantmentData.h"
 #include "Item/Item.h"
 #include "Item/ItemData.h"
+#include "Item/ItemDurability.h"
 #include "Item/ItemEnchantments.h"
 #include "Item/StringToItemParser.h"
 #include "Network/Handler/InventoryHandler.h"
@@ -82,32 +83,12 @@ void ServerNetworkHandler::damagePlayerHeldItem(ServerPlayer &player, int32_t am
 
     PlayerInventory &inventory = player.getInventory();
     ItemStack held = inventory.getItemInHand();
-    if (held.isAir() || held.mDefinition == nullptr)
+    if (!ItemDurability::apply(&player, held, amount))
         return;
 
-    const ItemData *itemData = ItemDataTable::find(held.mDefinition->getIdentifier());
-    if (itemData == nullptr || itemData->mMaxDurability <= 0)
-        return;
-
-    static std::mt19937 durabilityRng(0x9E3779B9u);
-    const int32_t unbreaking = ItemEnchantments::getLevel(held, EnchantmentIds::UNBREAKING);
-
-    int32_t applied = 0;
-    for (int32_t i = 0; i < amount; i++) {
-        if (unbreaking <= 0 || (durabilityRng() % (uint32_t) (unbreaking + 1)) == 0)
-            applied++;
-    }
-
-    if (applied == 0)
-        return;
-
-    held.mDamage += applied;
-    if (held.mDamage >= itemData->mMaxDurability) {
-        inventory.setItemInHand(ItemStack::air());
+    if (held.isAir())
         playLevelSound(getLevelFor(player), LevelSoundEvent::BREAK, player.getPosition(), "minecraft:player");
-    } else {
-        inventory.setItemInHand(std::move(held));
-    }
+    inventory.setItemInHand(std::move(held));
 
     player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
 }

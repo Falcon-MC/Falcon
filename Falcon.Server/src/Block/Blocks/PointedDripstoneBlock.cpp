@@ -5,6 +5,7 @@
 #include "Block/Blocks/LiquidView.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Blocks/WaterBlock.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -114,7 +115,8 @@ void PointedDripstoneBlock::grow(Level &level, const Vector3i &tip, bool hanging
     BlockState placed = VanillaBlocks::POINTED_DRIPSTONE().toBlockState();
     placed = DecorationSupport::withState(placed, HANGING, hanging ? 1 : 0);
     placed = DecorationSupport::withState(placed, THICKNESS, "tip");
-    level.setBlock(target, placed, true);
+    if (!BlockChangeSystem::change(level, target, placed, BlockChangeCause::Grow, true))
+        return;
     refreshThickness(level, target, hanging);
     refreshThickness(level, offset(target, hanging ? -1 : 1), !hanging);
 }

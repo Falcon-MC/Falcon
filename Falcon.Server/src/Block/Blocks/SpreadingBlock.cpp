@@ -6,6 +6,7 @@ FALCON_REGISTER_BLOCK(SpreadingBlock, 300);
 
 #include "Block/BlockLightProperties.h"
 #include "Block/Blocks/GrowthHelpers.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Level.h"
 
@@ -30,7 +31,7 @@ void SpreadingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
     const Vector3i above(position.x, position.y + 1, position.z);
 
     if (lightFilterAt(level, above) > 1) {
-        level.setBlock(position, BlockState("minecraft:dirt"), false);
+        BlockChangeSystem::change(level, position, BlockState("minecraft:dirt"), BlockChangeCause::Fade, false);
         return;
     }
 
@@ -49,5 +50,5 @@ void SpreadingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
         || lightFilterAt(level, targetAbove) >= MAXIMUM_SPREAD_LIGHT_FILTER)
         return;
 
-    level.setBlock(target, BlockState(state.mName), false);
+    BlockChangeSystem::spread(level, position, target, BlockState(state.mName), false);
 }

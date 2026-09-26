@@ -4,6 +4,7 @@
 #include "Block/Blocks/BambooBlock.h"
 #include "Block/Blocks/PlantGrowthHelpers.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -27,8 +28,9 @@ void BambooSaplingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level,
     if (RandomTickSystem::getFullLight(level, top) < BAMBOO_MIN_LIGHT || RandomTickSystem::nextInt(3) != 0)
         return;
 
-    level.setBlock(top, DecorationSupport::withState(VanillaBlocks::BAMBOO().toBlockState(), LEAF_SIZE,
-                                                     "small_leaves"), true);
+    BlockChangeSystem::change(level, top, DecorationSupport::withState(VanillaBlocks::BAMBOO().toBlockState(),
+                                                                       LEAF_SIZE, "small_leaves"),
+                              BlockChangeCause::Grow, true);
 }
 
 void BambooSaplingBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

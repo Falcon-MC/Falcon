@@ -5,6 +5,7 @@
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Blocks/WaterBlock.h"
 #include "Block/Components/PlacementOrientation.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -78,7 +79,8 @@ void BuddingAmethystBlock::onRandomTick(ServerNetworkHandler &owner, Level &leve
     const BlockState targetState = stateAt(level, target);
 
     if (DecorationSupport::isAir(targetState) || WaterBlock::isSource(targetState)) {
-        level.setBlock(target, budOfTier(0, face), true);
+        if (!BlockChangeSystem::change(level, target, budOfTier(0, face), BlockChangeCause::Grow, true))
+            return;
         if (WaterBlock::isSource(targetState)) {
             level.setBlockStateAtLayer(target.x, target.y, target.z, 1, WaterBlock::source());
             BlockActionHandler::broadcastBlockUpdate(owner, level, target, WaterBlock::source(), 1);
@@ -93,5 +95,5 @@ void BuddingAmethystBlock::onRandomTick(ServerNetworkHandler &owner, Level &leve
     if (targetState.mStates.getString(BLOCK_FACE, "") != PlacementOrientation::faceName(face))
         return;
 
-    level.setBlock(target, budOfTier(tier + 1, face), true);
+    BlockChangeSystem::change(level, target, budOfTier(tier + 1, face), BlockChangeCause::Grow, true);
 }

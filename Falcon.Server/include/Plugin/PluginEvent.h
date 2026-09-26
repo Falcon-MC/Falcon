@@ -49,4 +49,10 @@ struct PluginEvent {
     int32_t mDestinationSlot = -1;
     std::string mCustomName;
     std::string mCustomData;
+    bool mState = false;
+    double mPreviousAmount = 0.0;
+    std::string mPreviousBlockName;
+    int32_t mChunkX = 0;
+    int32_t mChunkZ = 0;
+    ItemStack *mResult = nullptr;
 };

@@ -148,13 +148,31 @@ namespace {
         PluginManager &plugins = owner.getPluginManager();
         const bool transactions = plugins.hasSubscribers(FALCON_EVENT_INVENTORY_TRANSACTION);
         const bool crafts = plugins.hasSubscribers(FALCON_EVENT_CRAFT_ITEM);
-        if (!transactions && !crafts)
+        const bool enchants = plugins.hasSubscribers(FALCON_EVENT_ITEM_ENCHANT);
+        if (!transactions && !crafts && !enchants)
             return true;
 
         const PlayerInventory &inventory = player.getInventory();
         Container *openContainer = player.getInventoryManager().getContainer();
 
         for (const ItemStackRequestAction &action: request.mActions) {
+            int32_t enchantCost = 0;
+            if (enchants && action.mType == ItemStackRequestActionType::CraftRecipe
+                && action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE
+                && EnchantmentHelper::peekOptionCost(action.mRecipeNetworkId, enchantCost)) {
+                ItemStack enchanted = itemAt(inventory, openContainer, ContainerSlotType::EnchantingInput, 0);
+                PluginEvent enchantEvent;
+                enchantEvent.mType = FALCON_EVENT_ITEM_ENCHANT;
+                enchantEvent.mCancellable = true;
+                enchantEvent.mPlayer = &player;
+                enchantEvent.mItem = &enchanted;
+                enchantEvent.mAmount = (double) enchantCost;
+                plugins.dispatch(enchantEvent);
+                if (enchantEvent.mCancelled)
+                    return false;
+                continue;
+            }
+
             if (isCraft(action)) {
                 if (!crafts)
                     continue;
@@ -306,6 +324,25 @@ void InventoryHandler::handleMobEquipment(ServerNetworkHandler &owner, ServerPla
     PlayerInventory &inventory = player.getInventory();
 
     const int previousSlot = inventory.getSelectedSlot();
+
+    if (packet.mHotbarSlot != previousSlot && packet.mHotbarSlot >= 0
+        && packet.mHotbarSlot < PlayerInventory::HOTBAR_SIZE) {
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ITEM_HELD)) {
+            ItemStack next = inventory.getItem(packet.mHotbarSlot);
+            PluginEvent heldEvent;
+            heldEvent.mType = FALCON_EVENT_PLAYER_ITEM_HELD;
+            heldEvent.mCancellable = true;
+            heldEvent.mPlayer = &player;
+            heldEvent.mSourceSlot = previousSlot;
+            heldEvent.mDestinationSlot = packet.mHotbarSlot;
+            heldEvent.mItem = &next;
+            plugins->dispatch(heldEvent);
+            if (heldEvent.mCancelled) {
+                sendHeldItem(owner, player);
+                return;
+            }
+        }
+    }
 
     player.getInventoryManager().onClientSelectHotbarSlot(packet.mHotbarSlot);
     inventory.setSelectedSlot(packet.mHotbarSlot);

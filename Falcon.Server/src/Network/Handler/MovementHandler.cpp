@@ -17,6 +17,8 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginEvent.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -26,6 +28,18 @@
 #include <cstdlib>
 
 namespace {
+    void dispatchPlayerState(ServerPlayer &player, FalconEventType type, bool state) {
+        PluginManager *plugins = PluginManager::findWithSubscribers(type);
+        if (plugins == nullptr)
+            return;
+
+        PluginEvent event;
+        event.mType = type;
+        event.mPlayer = &player;
+        event.mState = state;
+        plugins->dispatch(event);
+    }
+
     bool consumesAir(const ServerPlayer &player) {
         const int32_t respiration = ItemEnchantments::getLevel(
                 player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD), EnchantmentIds::RESPIRATION);
@@ -354,6 +368,13 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
 
     if (flags.getLowBits() != previous.getLowBits() || flags.getHighBits() != previous.getHighBits())
         owner._sendEntityData(player);
+
+    if (sneaking != previous.get(ActorFlag::Sneaking))
+        dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SNEAK, sneaking);
+    if (sprinting != previous.get(ActorFlag::Sprinting))
+        dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting);
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping))
+        dispatchPlayerState(player, FALCON_EVENT_PLAYER_JUMP, true);
 
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartUsingItem)) {
         player.clearAwaitingConsumableRelease();

@@ -10,6 +10,7 @@
 #include "Item/VanillaItems.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/InventoryHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
@@ -276,6 +277,21 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
         _sendAttributes(player);
         return;
+    }
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ITEM_CONSUME)) {
+        ItemStack consumed = usedItem;
+        PluginEvent consumeEvent;
+        consumeEvent.mType = FALCON_EVENT_PLAYER_ITEM_CONSUME;
+        consumeEvent.mCancellable = true;
+        consumeEvent.mPlayer = &player;
+        consumeEvent.mItem = &consumed;
+        plugins->dispatch(consumeEvent);
+        if (consumeEvent.mCancelled) {
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
+            _sendAttributes(player);
+            return;
+        }
     }
 
     if (usedItem.mDefinition != nullptr) {

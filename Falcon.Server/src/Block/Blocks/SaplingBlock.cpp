@@ -6,6 +6,7 @@ FALCON_REGISTER_BLOCK(SaplingBlock, 280);
 
 #include "Block/BlockIdentifier.h"
 #include "Block/Blocks/GrowthHelpers.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/Generator/Feature/Tree/LegacyTreeObject.h"
@@ -75,6 +76,10 @@ bool SaplingBlock::growTree(ServerNetworkHandler &owner, Level &level, const Vec
     if (manager.getChanged().empty())
         return false;
 
+    const BlockState grown = manager.getBlockAt(position.x, position.y, position.z);
+    if (!BlockChangeSystem::allows(level, position, grown, BlockChangeCause::Grow))
+        return false;
+
     const std::vector<Vector3i> changed = manager.getChanged();
     manager.applySubChunkUpdate();
 
@@ -98,7 +103,7 @@ void SaplingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const
     if (state.mStates.getByte("age_bit") == 0) {
         Tag states = state.mStates;
         states.putByte("age_bit", 1);
-        level.setBlock(position, BlockState(state.mName, states), false);
+        BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow, false);
         return;
     }
 

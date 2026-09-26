@@ -48,9 +48,8 @@ bool OwnerTargetGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mo
 }
 
 void OwnerTargetGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
-    (void) owner;
     mHandledTick = mPendingTick;
-    mob.setTarget(mPendingTarget);
+    mob.setTarget(owner, mPendingTarget);
 }
 
 void OwnerTargetGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {

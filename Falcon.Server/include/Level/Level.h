@@ -319,6 +319,8 @@ private:
 
     void _replayPendingChanges(int64_t key);
 
+    void _dispatchChunkEvent(uint32_t type, int32_t chunkX, int32_t chunkZ, bool generated);
+
     void _flushPendingBlockChanges(bool includeInFlight);
 
     ServerNetworkHandler *mOwner = nullptr;

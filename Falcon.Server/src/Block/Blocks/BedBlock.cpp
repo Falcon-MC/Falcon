@@ -13,6 +13,7 @@
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginManager.h"
 
 namespace {
     const char *HEAD_PIECE_BIT = "head_piece_bit";
@@ -188,6 +189,17 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
     if (player.getGameType() != (int32_t) GameType::Creative && isMonsterNearby(owner, level, head, footOffset)) {
         player.sendTranslation("§7%tile.bed.notSafe", {});
         return true;
+    }
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_BED_ENTER)) {
+        PluginEvent bedEvent;
+        bedEvent.mType = FALCON_EVENT_PLAYER_BED_ENTER;
+        bedEvent.mCancellable = true;
+        bedEvent.mPlayer = &player;
+        bedEvent.mBlockPosition = head;
+        plugins->dispatch(bedEvent);
+        if (bedEvent.mCancelled)
+            return true;
     }
 
     if (!owner.sleepOn(player, head))

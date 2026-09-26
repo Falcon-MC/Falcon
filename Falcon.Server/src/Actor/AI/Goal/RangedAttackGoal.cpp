@@ -93,4 +93,5 @@ void RangedAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     projectile->getProjectileData().mBaseDamage = RangedWeaponHelpers::ARROW_BASE_DAMAGE;
     projectile->setMotion(Vector3f(dx / length * PROJECTILE_SPEED, dy / length * PROJECTILE_SPEED,
                                    dz / length * PROJECTILE_SPEED));
+    owner.allowProjectileLaunch(*projectile, &mob);
 }

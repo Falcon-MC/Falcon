@@ -2,6 +2,7 @@
 
 #include "Block/BlockClassRegistry.h"
 #include "Block/Blocks/WaterBlock.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Level.h"
 
@@ -23,8 +24,7 @@ void IceBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vec
     if (RandomTickSystem::getBlockLight(level, position) < MELT_LIGHT_LEVEL)
         return;
 
-    if (level.getDimensionType() == DimensionType::Nether)
-        level.setBlock(position, BlockState("minecraft:air"), true);
-    else
-        level.setBlock(position, WaterBlock::source(), true);
+    const BlockState melted = level.getDimensionType() == DimensionType::Nether ? BlockState("minecraft:air")
+                                                                               : WaterBlock::source();
+    BlockChangeSystem::change(level, position, melted, BlockChangeCause::Fade, true);
 }

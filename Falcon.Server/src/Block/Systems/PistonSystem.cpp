@@ -9,6 +9,8 @@
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginEvent.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/BlockActorDataPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
@@ -302,6 +304,21 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
                 }
             }
         }
+    }
+
+    const FalconEventType pistonEvent = extending ? FALCON_EVENT_PISTON_EXTEND : FALCON_EVENT_PISTON_RETRACT;
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(pistonEvent)) {
+        std::vector<Vector3i> affected = toMove;
+        PluginEvent event;
+        event.mType = pistonEvent;
+        event.mCancellable = true;
+        event.mLevel = &level;
+        event.mBlockPosition = position;
+        event.mBlockFace = (uint32_t) face;
+        event.mBlocks = &affected;
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return false;
     }
 
     for (size_t index = toDestroy.size(); index > 0; --index) {

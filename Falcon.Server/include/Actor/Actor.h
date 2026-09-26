@@ -274,6 +274,8 @@ public:
     float computeFallDamage() const;
 
 protected:
+    void _changeFood(float food);
+
     static const float EXHAUSTION_PER_UNIT;
     static const float FALL_DAMAGE_THRESHOLD;
     static const int FOOD_TICK_PERIOD = 80;

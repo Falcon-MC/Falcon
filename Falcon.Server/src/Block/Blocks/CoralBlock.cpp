@@ -3,6 +3,7 @@
 #include "Block/BlockClassRegistry.h"
 #include "Block/BlockData.h"
 #include "Block/Blocks/WaterBlock.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/CopperSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Level.h"
@@ -75,7 +76,7 @@ void CoralBlock::dieWithoutWater(Level &level, const Vector3i &position, const B
     if (BlockDataTable::find(dead.c_str()) == nullptr)
         return;
 
-    level.setBlock(position, CopperSystem::transform(current, dead), true);
+    BlockChangeSystem::change(level, position, CopperSystem::transform(current, dead), BlockChangeCause::Fade, true);
 }
 
 void CoralBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

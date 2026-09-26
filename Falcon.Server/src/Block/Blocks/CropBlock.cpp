@@ -6,6 +6,7 @@ FALCON_REGISTER_BLOCK(CropBlock, 270);
 
 #include "Block/BlockIdentifier.h"
 #include "Block/Blocks/GrowthHelpers.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Level.h"
 
@@ -32,5 +33,6 @@ void CropBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
     if (growth >= getMaxGrowth())
         return;
 
-    level.setBlock(position, withState(state, getGrowthState(), growth + 1), false);
+    BlockChangeSystem::change(level, position, withState(state, getGrowthState(), growth + 1), BlockChangeCause::Grow,
+                              false);
 }

@@ -3,6 +3,7 @@
 #include "Block/BlockClassRegistry.h"
 #include "Block/Blocks/PlantGrowthHelpers.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
 
@@ -42,6 +43,6 @@ void ReedsBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const V
     if (height >= MAX_REEDS_HEIGHT)
         return;
 
-    level.setBlock(top, VanillaBlocks::REEDS().toBlockState(), true);
+    BlockChangeSystem::change(level, top, VanillaBlocks::REEDS().toBlockState(), BlockChangeCause::Grow, true);
     resetAge(level, position, state);
 }

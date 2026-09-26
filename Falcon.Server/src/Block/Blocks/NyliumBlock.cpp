@@ -5,6 +5,7 @@
 FALCON_REGISTER_BLOCK(NyliumBlock, 310);
 
 #include "Block/BlockLightProperties.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Level/Level.h"
 
 namespace {
@@ -25,5 +26,5 @@ void NyliumBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const 
     if (isTransparentAt(level, Vector3i(position.x, position.y + 1, position.z)))
         return;
 
-    level.setBlock(position, BlockState("minecraft:netherrack"), false);
+    BlockChangeSystem::change(level, position, BlockState("minecraft:netherrack"), BlockChangeCause::Fade, false);
 }

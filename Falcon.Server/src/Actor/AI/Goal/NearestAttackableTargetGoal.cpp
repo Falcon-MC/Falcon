@@ -24,7 +24,7 @@ bool NearestAttackableTargetGoal::canContinueToUse(ServerNetworkHandler &owner, 
 void NearestAttackableTargetGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     const Actor *nearest = _findNearest(owner, mob);
     if (nearest != nullptr)
-        mob.setTarget(nearest->getRuntimeId());
+        mob.setTarget(owner, nearest->getRuntimeId());
 }
 
 void NearestAttackableTargetGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {

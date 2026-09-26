@@ -3,6 +3,7 @@
 #include "Block/BlockClassRegistry.h"
 #include "Block/Blocks/PlantGrowthHelpers.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -39,7 +40,9 @@ void CaveVinesBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
     const bool berries = RandomTickSystem::nextInt(100) < CAVE_VINES_BERRY_PERCENT;
     const BlockState grown = berries ? VanillaBlocks::CAVE_VINES_HEAD_WITH_BERRIES().toBlockState()
                                      : VanillaBlocks::CAVE_VINES().toBlockState();
-    level.setBlock(tip, DecorationSupport::withState(grown, PLANT_AGE, age + 1), true);
+    if (!BlockChangeSystem::change(level, tip, DecorationSupport::withState(grown, PLANT_AGE, age + 1),
+                                   BlockChangeCause::Grow, true))
+        return;
 
     if (state.mName == "minecraft:cave_vines_head_with_berries") {
         const BlockState body = VanillaBlocks::CAVE_VINES_BODY_WITH_BERRIES().toBlockState();

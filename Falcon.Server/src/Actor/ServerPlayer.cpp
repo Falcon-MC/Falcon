@@ -8,6 +8,7 @@
 #include "Inventory/ItemStackNbt.h"
 #include "Inventory/InventoryManager.h"
 #include "Item/ItemData.h"
+#include "Item/ItemDurability.h"
 #include "Item/ItemEnchantments.h"
 #include "Item/VanillaItems.h"
 #include "Level/FalconDataVersion.h"
@@ -127,37 +128,13 @@ namespace {
         }
     }
 
-    bool shouldDamageDurability(const ItemStack &item) {
-        const int unbreaking = ItemEnchantments::getLevel(item, EnchantmentIds::UNBREAKING);
-        return unbreaking <= 0 || std::rand() % (unbreaking + 1) == 0;
-    }
-
-    bool damageItem(ItemStack &item, int amount) {
-        if (item.isAir() || item.mDefinition == nullptr || amount <= 0)
-            return false;
-
-        const ItemData *data = ItemDataTable::find(item.mDefinition->getIdentifier());
-        if (data == nullptr || data->mMaxDurability <= 0)
-            return false;
-
-        int applied = 0;
-        for (int index = 0; index < amount; ++index) {
-            if (shouldDamageDurability(item))
-                ++applied;
-        }
-        item.mDamage += applied;
-        if (item.mDamage >= data->mMaxDurability)
-            item = ItemStack::air();
-        return applied > 0;
-    }
-
     void damageArmor(ServerNetworkHandler &owner, ServerPlayer &victim, float baseDamage) {
         const int durability = std::max(1, (int) std::floor(baseDamage / 4.0f));
         bool changed = false;
         PlayerInventory &inventory = victim.getInventory();
         for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot) {
             ItemStack armor = inventory.getArmor(slot);
-            if (armor.isAir() || !damageItem(armor, durability))
+            if (armor.isAir() || !ItemDurability::apply(&victim, armor, durability))
                 continue;
             inventory.setArmor(slot, std::move(armor));
             changed = true;
@@ -176,7 +153,7 @@ namespace {
         PlayerInventory &inventory = attacker.getInventory();
         const int slot = inventory.getSelectedSlot();
         ItemStack held = inventory.getItemInHand();
-        if (!damageItem(held, 1))
+        if (!ItemDurability::apply(&attacker, held, 1))
             return;
 
         inventory.setItem(slot, std::move(held));
@@ -407,7 +384,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             itemDamage = 3;
             thornsDamage += thorns > 10 ? thorns - 10 : 1 + std::rand() % 4;
         }
-        if (damageItem(armor, itemDamage))
+        if (ItemDurability::apply(victim, armor, itemDamage))
             victim->getInventory().setArmor(slot, std::move(armor));
     }
     if (thornsDamage > 0) {
@@ -517,7 +494,7 @@ void ServerPlayer::_damageShield(ServerNetworkHandler &owner, float damage) {
     if (isShield(mInventory.getItemInHand())) {
         const int slot = mInventory.getSelectedSlot();
         ItemStack shield = mInventory.getItemInHand();
-        if (!damageItem(shield, amount))
+        if (!ItemDurability::apply(this, shield, amount))
             return;
 
         mInventory.setItem(slot, std::move(shield));
@@ -526,7 +503,7 @@ void ServerPlayer::_damageShield(ServerNetworkHandler &owner, float damage) {
     }
 
     ItemStack shield = mInventory.getOffhand();
-    if (!damageItem(shield, amount))
+    if (!ItemDurability::apply(this, shield, amount))
         return;
 
     mInventory.setOffhand(std::move(shield));

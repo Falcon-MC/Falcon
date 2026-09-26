@@ -55,6 +55,10 @@ PluginManager &PluginManager::getInstance() {
     return *gInstance;
 }
 
+PluginManager *PluginManager::findWithSubscribers(FalconEventType type) {
+    return gInstance != nullptr && gInstance->hasSubscribers(type) ? gInstance : nullptr;
+}
+
 LoadedPlugin *PluginManager::fromHandle(FalconPlugin *plugin) {
     return reinterpret_cast<LoadedPlugin *>(plugin);
 }
@@ -366,10 +370,10 @@ void PluginManager::_disable(LoadedPlugin &plugin) {
 }
 
 void PluginManager::_updateSubscribedTypes() {
-    uint64_t types = 0;
+    std::bitset<MAX_EVENT_TYPES> types;
     for (const Subscription &subscription: mSubscriptions) {
-        if (subscription.mType < 64)
-            types |= (uint64_t) 1 << subscription.mType;
+        if (subscription.mType < MAX_EVENT_TYPES)
+            types.set(subscription.mType);
     }
     mSubscribedTypes = types;
 

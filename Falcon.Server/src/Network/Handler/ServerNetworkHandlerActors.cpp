@@ -188,6 +188,18 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
 
     actor->initializeProperties();
 
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_SPAWN)) {
+        PluginEvent spawnEvent;
+        spawnEvent.mType = FALCON_EVENT_ENTITY_SPAWN;
+        spawnEvent.mCancellable = true;
+        spawnEvent.mEntity = actor.get();
+        spawnEvent.mLevel = &level;
+        spawnEvent.mPosition = actor->getPosition();
+        plugins->dispatch(spawnEvent);
+        if (spawnEvent.mCancelled)
+            return nullptr;
+    }
+
     ServerActor *result = actor.get();
     mActors[uniqueId] = std::move(actor);
 
@@ -311,7 +323,25 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     projectile->getProjectileData().mLootingLevel =
             ItemEnchantments::getLevel(player.getInventory().getItemInHand(), EnchantmentIds::LOOTING);
     projectile->setMotion(Vector3f(direction.x * speed, direction.y * speed, direction.z * speed));
-    return projectile;
+    return allowProjectileLaunch(*projectile, &player) ? projectile : nullptr;
+}
+
+bool ServerNetworkHandler::allowProjectileLaunch(ServerActor &projectile, Actor *shooter) {
+    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PROJECTILE_LAUNCH);
+    if (plugins == nullptr)
+        return true;
+
+    PluginEvent launchEvent;
+    launchEvent.mType = FALCON_EVENT_PROJECTILE_LAUNCH;
+    launchEvent.mCancellable = true;
+    launchEvent.mEntity = &projectile;
+    launchEvent.mAttacker = shooter;
+    plugins->dispatch(launchEvent);
+    if (!launchEvent.mCancelled)
+        return true;
+
+    removeActor((int64_t) projectile.getRuntimeId());
+    return false;
 }
 
 bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const Vector3f &hitPosition,

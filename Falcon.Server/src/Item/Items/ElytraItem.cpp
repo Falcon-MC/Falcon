@@ -3,6 +3,7 @@
 #include "Actor/ServerPlayer.h"
 #include "Item/EnchantmentData.h"
 #include "Item/ItemData.h"
+#include "Item/ItemDurability.h"
 #include "Item/ItemEnchantments.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -61,7 +62,8 @@ void ElytraItem::tickGliding(ServerNetworkHandler &owner, ServerPlayer &player) 
         return;
     }
 
-    chestplate.mDamage += 1;
+    if (!ItemDurability::apply(&player, chestplate, 1, false))
+        return;
     inventory.setArmor(PlayerInventory::ARMOR_TORSO, std::move(chestplate));
     player.getInventoryManager().syncContents(InventoryManager::InventoryId::Armor);
     InventoryHandler::sendArmorContent(owner, player);

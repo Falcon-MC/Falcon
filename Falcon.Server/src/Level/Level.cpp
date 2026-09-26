@@ -11,6 +11,8 @@
 #include "Block/BlockShape.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Core/Debug/BedrockLog.h"
+#include "Plugin/PluginEvent.h"
+#include "Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -539,11 +541,14 @@ size_t Level::processChunkUnloads() {
                 mStorage.saveChunk(chunk->second);
         }
 
+        const int32_t chunkX = chunk->second.getX();
+        const int32_t chunkZ = chunk->second.getZ();
         mChunks.erase(chunk);
         mChunkNetworkCache.erase(key);
         mRepopulatedChunks.erase(key);
         it = mUnloadQueue.erase(it);
         unloaded++;
+        _dispatchChunkEvent(FALCON_EVENT_CHUNK_UNLOAD, chunkX, chunkZ, false);
     }
 
     return unloaded;
@@ -649,6 +654,20 @@ bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
     return false;
 }
 
+void Level::_dispatchChunkEvent(uint32_t type, int32_t chunkX, int32_t chunkZ, bool generated) {
+    PluginManager *plugins = PluginManager::findWithSubscribers(type);
+    if (plugins == nullptr)
+        return;
+
+    PluginEvent event;
+    event.mType = type;
+    event.mLevel = this;
+    event.mChunkX = chunkX;
+    event.mChunkZ = chunkZ;
+    event.mState = generated;
+    plugins->dispatch(event);
+}
+
 size_t Level::drainCompletedChunks() {
     if (mChunkWorker == nullptr)
         return 0;
@@ -673,6 +692,7 @@ size_t Level::drainCompletedChunks() {
         if (result.mChunk != nullptr && (canInsert || canReplace)) {
             if (canInsert) {
                 mChunks.emplace(key, std::move(*result.mChunk));
+                _dispatchChunkEvent(FALCON_EVENT_CHUNK_LOAD, result.mX, result.mZ, result.mGenerated);
             } else {
                 resident->second = std::move(*result.mChunk);
                 mRepopulatedChunks.insert(key);

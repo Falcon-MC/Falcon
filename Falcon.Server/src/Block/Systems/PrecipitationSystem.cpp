@@ -4,6 +4,7 @@
 #include "Block/Blocks/LeavesBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Blocks/WaterBlock.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Overworld/Biome/ClimateAttributes.h"
 #include "Level/Level.h"
@@ -91,10 +92,11 @@ void PrecipitationSystem::tickColumn(Level &level, int32_t x, int32_t z) {
     const Vector3i top(x, surface + 1, z);
 
     if (shouldFreeze(level, below))
-        level.setBlock(below, BlockState(IceBlock::IDENTIFIER), true);
+        BlockChangeSystem::change(level, below, BlockState(IceBlock::IDENTIFIER), BlockChangeCause::Form, true);
 
     if (level.isRaining() && level.canRainAt(x, z) && shouldSnow(level, top))
-        level.setBlock(top, VanillaBlocks::SNOW_LAYER().toBlockState(), true);
+        BlockChangeSystem::change(level, top, VanillaBlocks::SNOW_LAYER().toBlockState(), BlockChangeCause::Form,
+                                  true);
 }
 
 bool PrecipitationSystem::shouldFreeze(Level &level, const Vector3i &position) {

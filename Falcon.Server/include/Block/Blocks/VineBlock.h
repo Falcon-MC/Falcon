@@ -15,7 +15,8 @@ public:
 private:
     static bool canSpread(Level &level, const Vector3i &position);
 
-    static void putVine(Level &level, const Vector3i &position, int32_t bits);
+    static void putVine(Level &level, const Vector3i &source, const Vector3i &position, int32_t bits);
 
-    static void putVineOnHorizontalFace(Level &level, const Vector3i &position, int32_t bits);
+    static void putVineOnHorizontalFace(Level &level, const Vector3i &source, const Vector3i &position,
+                                        int32_t bits);
 };

@@ -184,7 +184,7 @@ public:
         return mHurtCount;
     }
 
-    void setTarget(uint64_t runtimeId);
+    bool setTarget(ServerNetworkHandler &owner, uint64_t runtimeId);
 
     void clearTarget();
 

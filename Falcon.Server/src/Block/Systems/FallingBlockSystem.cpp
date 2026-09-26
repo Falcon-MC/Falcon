@@ -2,6 +2,7 @@
 
 #include "Actor/FallingBlockActor.h"
 #include "Block/BlockData.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -204,7 +205,9 @@ void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &leve
         return;
 
     if (isConcretePowder(state.mName) && isTouchingWater(level, position)) {
-        setBlockState(owner, level, position, BlockState(getConcreteFor(state.mName)));
+        const BlockState concrete(getConcreteFor(state.mName));
+        if (BlockChangeSystem::allows(level, position, concrete, BlockChangeCause::Form))
+            setBlockState(owner, level, position, concrete);
         return;
     }
 

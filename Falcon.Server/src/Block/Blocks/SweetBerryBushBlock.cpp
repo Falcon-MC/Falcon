@@ -2,6 +2,7 @@
 
 #include "Block/BlockClassRegistry.h"
 #include "Block/Blocks/PlantGrowthHelpers.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -32,5 +33,6 @@ void SweetBerryBushBlock::onRandomTick(ServerNetworkHandler &owner, Level &level
     if (RandomTickSystem::getFullLight(level, above(position)) < BERRY_MIN_LIGHT)
         return;
 
-    level.setBlock(position, DecorationSupport::withState(state, GROWTH, growth + 1), true);
+    BlockChangeSystem::change(level, position, DecorationSupport::withState(state, GROWTH, growth + 1),
+                              BlockChangeCause::Grow, true);
 }

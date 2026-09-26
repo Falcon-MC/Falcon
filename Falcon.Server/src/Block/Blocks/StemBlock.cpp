@@ -6,6 +6,7 @@ FALCON_REGISTER_BLOCK(StemBlock, 250);
 
 #include "Block/Blocks/GrowthHelpers.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Feature/IFeature.h"
 #include "Level/Level.h"
@@ -58,7 +59,8 @@ void StemBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
 
     const int32_t growth = state.mStates.getInt("growth");
     if (growth < 7) {
-        level.setBlock(position, withState(state, "growth", growth + 1), false);
+        BlockChangeSystem::change(level, position, withState(state, "growth", growth + 1), BlockChangeCause::Grow,
+                                  false);
         return;
     }
 
@@ -80,6 +82,7 @@ void StemBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
     if (!IFeature::isSupportDirt(below) && below.mName != "minecraft:farmland")
         return;
 
-    level.setBlock(target, fruit, true);
+    if (!BlockChangeSystem::change(level, target, fruit, BlockChangeCause::Grow, true))
+        return;
     level.setBlock(position, withState(state, STEM_FACING, STEM_FACING_NORTH + chosen), false);
 }

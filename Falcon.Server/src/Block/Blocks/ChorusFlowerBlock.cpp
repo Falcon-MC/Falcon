@@ -3,6 +3,7 @@
 #include "Block/BlockClassRegistry.h"
 #include "Block/Blocks/PlantGrowthHelpers.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -60,8 +61,9 @@ void ChorusFlowerBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, 
 
     const Vector3i twoAbove = above(top);
     if (growUp && isInRange(level, twoAbove) && isAirAt(level, twoAbove) && allNeighboursEmpty(level, top, NO_FACE)) {
+        if (!placeFlower(level, top, age))
+            return;
         level.setBlock(position, VanillaBlocks::CHORUS_PLANT().toBlockState(), true);
-        placeFlower(level, top, age);
         return;
     }
 
@@ -75,8 +77,7 @@ void ChorusFlowerBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, 
             const int32_t face = HORIZONTAL_FACES[RandomTickSystem::nextInt(4)];
             const Vector3i branch = side(position, face);
             if (isAirAt(level, branch) && isAirAt(level, below(branch))
-                && allNeighboursEmpty(level, branch, opposite(face))) {
-                placeFlower(level, branch, age + 1);
+                && allNeighboursEmpty(level, branch, opposite(face)) && placeFlower(level, branch, age + 1)) {
                 branched = true;
             }
         }
@@ -98,7 +99,9 @@ bool ChorusFlowerBlock::allNeighboursEmpty(Level &level, const Vector3i &positio
     return true;
 }
 
-void ChorusFlowerBlock::placeFlower(Level &level, const Vector3i &position, int32_t age) {
-    level.setBlock(position, DecorationSupport::withState(VanillaBlocks::CHORUS_FLOWER().toBlockState(), AGE, age),
-                   true);
+bool ChorusFlowerBlock::placeFlower(Level &level, const Vector3i &position, int32_t age) {
+    return BlockChangeSystem::change(level, position,
+                                     DecorationSupport::withState(VanillaBlocks::CHORUS_FLOWER().toBlockState(),
+                                                                  AGE, age),
+                                     BlockChangeCause::Grow, true);
 }

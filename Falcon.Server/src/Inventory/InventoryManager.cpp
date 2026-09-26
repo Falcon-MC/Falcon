@@ -551,7 +551,21 @@ namespace {
 
         if (state.mBurnTime <= 0 && canSmelt) {
             ItemStack fuel = state.mInventory.mItems[FurnaceInventory::SLOT_FUEL];
-            const int duration = fuelTime(fuel);
+            int duration = fuelTime(fuel);
+            if (duration > 0 && fuel.mCount > 0) {
+                if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_FURNACE_BURN)) {
+                    ItemStack burning = fuel;
+                    PluginEvent burnEvent;
+                    burnEvent.mType = FALCON_EVENT_FURNACE_BURN;
+                    burnEvent.mCancellable = true;
+                    burnEvent.mLevel = level;
+                    burnEvent.mBlockPosition = position;
+                    burnEvent.mItem = &burning;
+                    burnEvent.mAmount = (double) duration;
+                    plugins->dispatch(burnEvent);
+                    duration = burnEvent.mCancelled ? 0 : std::max(0, (int) burnEvent.mAmount);
+                }
+            }
             if (duration > 0 && fuel.mCount > 0) {
                 state.mBurnTime = duration;
                 state.mMaxBurnTime = duration;
@@ -577,16 +591,34 @@ namespace {
                 ++state.mCookTime;
                 const int duration = FurnaceInventory::cookDuration(state.mKind);
                 if (state.mCookTime >= duration) {
-                    ItemStack produced = result;
-                    if (!currentOutput.isAir())
-                        produced.mCount += currentOutput.mCount;
-                    state.mInventory.mItems[FurnaceInventory::SLOT_OUTPUT] = std::move(produced);
+                    ItemStack smelted = result;
+                    bool allowed = true;
+                    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_FURNACE_SMELT)) {
+                        ItemStack source = input;
+                        PluginEvent smeltEvent;
+                        smeltEvent.mType = FALCON_EVENT_FURNACE_SMELT;
+                        smeltEvent.mCancellable = true;
+                        smeltEvent.mLevel = level;
+                        smeltEvent.mBlockPosition = position;
+                        smeltEvent.mItem = &source;
+                        smeltEvent.mResult = &smelted;
+                        plugins->dispatch(smeltEvent);
+                        allowed = !smeltEvent.mCancelled && !smelted.isAir()
+                                  && (currentOutput.isAir() || stackMatches(currentOutput, smelted));
+                    }
 
-                    ItemStack consumed = input;
-                    consumed.mCount -= recipe->mInputCount;
-                    if (consumed.mCount <= 0)
-                        consumed = ItemStack::air();
-                    state.mInventory.mItems[FurnaceInventory::SLOT_INPUT] = std::move(consumed);
+                    if (allowed) {
+                        ItemStack produced = smelted;
+                        if (!currentOutput.isAir())
+                            produced.mCount += currentOutput.mCount;
+                        state.mInventory.mItems[FurnaceInventory::SLOT_OUTPUT] = std::move(produced);
+
+                        ItemStack consumed = input;
+                        consumed.mCount -= recipe->mInputCount;
+                        if (consumed.mCount <= 0)
+                            consumed = ItemStack::air();
+                        state.mInventory.mItems[FurnaceInventory::SLOT_INPUT] = std::move(consumed);
+                    }
                     state.mCookTime -= duration;
                 }
             } else if (state.mBurnTime <= 0) {

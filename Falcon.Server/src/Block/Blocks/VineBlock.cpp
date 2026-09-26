@@ -3,6 +3,7 @@
 #include "Block/BlockClassRegistry.h"
 #include "Block/Blocks/PlantGrowthHelpers.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -92,7 +93,7 @@ void VineBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
             if (randomBoolean() || !isSolidAt(level, above(side(position, horizontal))))
                 bits &= ~vineBit(horizontal);
         }
-        putVineOnHorizontalFace(level, target, bits);
+        putVineOnHorizontalFace(level, position, target, bits);
         return;
     }
 
@@ -103,7 +104,7 @@ void VineBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
         const BlockState targetState = stateAt(level, target);
         if (!DecorationSupport::isAir(targetState)) {
             if (!DecorationSupport::isTransparent(targetState))
-                putVine(level, position, bits | vineBit(face));
+                putVine(level, position, position, bits | vineBit(face));
             return;
         }
 
@@ -115,16 +116,16 @@ void VineBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
         const bool onCounterClockwise = (bits & vineBit(counterClockwise)) == vineBit(counterClockwise);
 
         if (onClockwise && isSolidAt(level, clockwiseTarget))
-            putVine(level, target, vineBit(clockwise));
+            putVine(level, position, target, vineBit(clockwise));
         else if (onCounterClockwise && isSolidAt(level, counterClockwiseTarget))
-            putVine(level, target, vineBit(counterClockwise));
+            putVine(level, position, target, vineBit(counterClockwise));
         else if (onClockwise && isAirAt(level, clockwiseTarget) && isSolidAt(level, side(position, clockwise)))
-            putVine(level, clockwiseTarget, vineBit(opposite(face)));
+            putVine(level, position, clockwiseTarget, vineBit(opposite(face)));
         else if (onCounterClockwise && isAirAt(level, counterClockwiseTarget)
                  && isSolidAt(level, side(position, counterClockwise)))
-            putVine(level, counterClockwiseTarget, vineBit(opposite(face)));
+            putVine(level, position, counterClockwiseTarget, vineBit(opposite(face)));
         else if (isSolidAt(level, above(target)))
-            putVine(level, target, 0);
+            putVine(level, position, target, 0);
         return;
     }
 
@@ -143,7 +144,7 @@ void VineBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
     }
 
     const int32_t underBits = underIsVine ? underState.mStates.getInt(VINE_BITS, 0) : 0;
-    putVineOnHorizontalFace(level, under, underBits | bits);
+    putVineOnHorizontalFace(level, position, under, underBits | bits);
 }
 
 bool VineBlock::canSpread(Level &level, const Vector3i &position) {
@@ -160,19 +161,21 @@ bool VineBlock::canSpread(Level &level, const Vector3i &position) {
     return true;
 }
 
-void VineBlock::putVine(Level &level, const Vector3i &position, int32_t bits) {
+void VineBlock::putVine(Level &level, const Vector3i &source, const Vector3i &position, int32_t bits) {
     const BlockState existing = stateAt(level, position);
     if (matches(existing.mName) && existing.mStates.getInt(VINE_BITS, 0) == bits)
         return;
 
-    level.setBlock(position, DecorationSupport::withState(VanillaBlocks::VINE().toBlockState(), VINE_BITS, bits),
-                   true);
+    BlockChangeSystem::spread(level, source, position,
+                              DecorationSupport::withState(VanillaBlocks::VINE().toBlockState(), VINE_BITS, bits),
+                              true);
 }
 
-void VineBlock::putVineOnHorizontalFace(Level &level, const Vector3i &position, int32_t bits) {
+void VineBlock::putVineOnHorizontalFace(Level &level, const Vector3i &source, const Vector3i &position,
+                                        int32_t bits) {
     for (int32_t horizontal: HORIZONTAL_FACES) {
         if ((bits & vineBit(horizontal)) == vineBit(horizontal)) {
-            putVine(level, position, bits);
+            putVine(level, source, position, bits);
             return;
         }
     }

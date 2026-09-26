@@ -1,7 +1,9 @@
 #include "Actor/Actor.h"
 
+#include "Actor/ServerPlayer.h"
 #include "Item/EnchantmentData.h"
 #include "Item/ItemEnchantments.h"
+#include "Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -99,6 +101,20 @@ void Actor::setXpAndProgress(int level, float progress) {
 }
 
 void Actor::addXp(int amount) {
+    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_EXPERIENCE_CHANGE)
+                                        : nullptr;
+    if (plugins != nullptr) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PLAYER_EXPERIENCE_CHANGE;
+        event.mCancellable = true;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(this);
+        event.mAmount = (double) amount;
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return;
+        amount = (int) event.mAmount;
+    }
+
     mExperience.addXp(amount);
     syncExperience();
 }
@@ -351,10 +367,29 @@ void Actor::exhaust(float amount) {
 
         const float food = getFood();
         if (food > 0.0f)
-            setFood(std::max(0.0f, food - 1.0f));
+            _changeFood(std::max(0.0f, food - 1.0f));
     }
 
     setExhaustion(exhaustion);
+}
+
+void Actor::_changeFood(float food) {
+    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FOOD_CHANGE)
+                                        : nullptr;
+    if (plugins != nullptr) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PLAYER_FOOD_CHANGE;
+        event.mCancellable = true;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(this);
+        event.mAmount = (double) food;
+        event.mPreviousAmount = (double) getFood();
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return;
+        food = (float) event.mAmount;
+    }
+
+    setFood(food);
 }
 
 void Actor::setFoodTickTimer(int foodTickTimer) {
@@ -362,7 +397,7 @@ void Actor::setFoodTickTimer(int foodTickTimer) {
 }
 
 void Actor::consumeFood(int nutrition, float saturation) {
-    addFood((float) nutrition);
+    _changeFood(getFood() + (float) nutrition);
     addSaturation(saturation);
 }
 

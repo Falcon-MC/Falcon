@@ -3,6 +3,7 @@
 #include "Block/BlockClassRegistry.h"
 #include "Block/Blocks/PlantGrowthHelpers.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -53,16 +54,13 @@ void BambooBlock::grow(Level &level, const Vector3i &position, const BlockState 
     const BlockState underUnder = stateAt(level, underUnderPosition);
 
     const char *leaves = "no_leaves";
+    bool shiftLeaves = false;
     if (height >= 1) {
         if (!matches(under.mName) || under.mStates.getString(LEAF_SIZE, "no_leaves") == "no_leaves") {
             leaves = "small_leaves";
         } else {
             leaves = "large_leaves";
-            if (matches(underUnder.mName)) {
-                level.setBlock(underPosition, DecorationSupport::withState(under, LEAF_SIZE, "small_leaves"), true);
-                level.setBlock(underUnderPosition, DecorationSupport::withState(underUnder, LEAF_SIZE, "no_leaves"),
-                               true);
-            }
+            shiftLeaves = matches(underUnder.mName);
         }
     }
 
@@ -74,5 +72,12 @@ void BambooBlock::grow(Level &level, const Vector3i &position, const BlockState 
     grown = DecorationSupport::withState(grown, STALK_THICKNESS, thick ? "thick" : "thin");
     grown = DecorationSupport::withState(grown, LEAF_SIZE, leaves);
     grown = DecorationSupport::withState(grown, AGE_BIT, stopped ? 1 : 0);
+    if (!BlockChangeSystem::allows(level, above(position), grown, BlockChangeCause::Grow))
+        return;
+
+    if (shiftLeaves) {
+        level.setBlock(underPosition, DecorationSupport::withState(under, LEAF_SIZE, "small_leaves"), true);
+        level.setBlock(underUnderPosition, DecorationSupport::withState(underUnder, LEAF_SIZE, "no_leaves"), true);
+    }
     level.setBlock(above(position), grown, true);
 }

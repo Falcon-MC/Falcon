@@ -4,6 +4,7 @@
 #include "Actor/ServerPlayer.h"
 #include "Block/Blocks/BedBlock.h"
 #include "Level/Level.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/AnimatePacket.h"
 
 namespace {
@@ -34,6 +35,13 @@ void ServerNetworkHandler::stopSleep(ServerPlayer &player) {
         return;
 
     const Vector3i head = player.getSleepingPosition();
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_BED_LEAVE)) {
+        PluginEvent bedEvent;
+        bedEvent.mType = FALCON_EVENT_PLAYER_BED_LEAVE;
+        bedEvent.mPlayer = &player;
+        bedEvent.mBlockPosition = head;
+        plugins->dispatch(bedEvent);
+    }
     player.clearSleeping();
     player.getFlags().set(ActorFlag::Sleeping, false);
     _sendEntityData(player);

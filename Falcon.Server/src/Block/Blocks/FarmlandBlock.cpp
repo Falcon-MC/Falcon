@@ -5,6 +5,7 @@
 #include "Block/BlockClassRegistry.h"
 #include "Block/Blocks/CropBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -65,7 +66,7 @@ void FarmlandBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, cons
     }
 
     if (!maintainsFarmland(level, position))
-        turnToDirt(level, position);
+        BlockChangeSystem::change(level, position, BlockState("minecraft:dirt"), BlockChangeCause::Fade, true);
 }
 
 void FarmlandBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

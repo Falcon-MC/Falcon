@@ -8,6 +8,8 @@
 
 #include <falcon/falcon_api.h>
 
+#include <bitset>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -17,11 +19,15 @@ class ServerNetworkHandler;
 
 class PluginManager {
 public:
+    static constexpr size_t MAX_EVENT_TYPES = 256;
+
     explicit PluginManager(ServerNetworkHandler &owner);
 
     ~PluginManager();
 
     static PluginManager &getInstance();
+
+    static PluginManager *findWithSubscribers(FalconEventType type);
 
     static LoadedPlugin *fromHandle(FalconPlugin *plugin);
 
@@ -64,7 +70,7 @@ public:
     }
 
     bool hasSubscribers(FalconEventType type) const {
-        return type < 64 && (mSubscribedTypes & ((uint64_t) 1 << type)) != 0;
+        return type < MAX_EVENT_TYPES && mSubscribedTypes.test(type);
     }
 
 private:
@@ -95,7 +101,7 @@ private:
     PluginScheduler mScheduler;
     std::unique_ptr<PluginPermissions> mPermissions;
     PluginServices mServices;
-    uint64_t mSubscribedTypes = 0;
+    std::bitset<MAX_EVENT_TYPES> mSubscribedTypes;
     std::vector<std::unique_ptr<LoadedPlugin>> mPlugins;
     std::vector<Subscription> mSubscriptions;
     uint64_t mNextSubscriptionId = 1;

@@ -36,6 +36,7 @@ struct ChunkLoadResult {
     int mNetworkSubChunkCount = 0;
     std::vector<GeneratedBlockChange> mOverflowChanges;
     bool mReplacesResident = false;
+    bool mGenerated = false;
 };
 
 class ChunkWorker {
@@ -85,7 +86,8 @@ private:
 
     void _processSave(ChunkTask &task);
 
-    void _finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident);
+    void _finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident,
+                      bool generated);
 
     size_t _queueIndexFor(int32_t chunkX, int32_t chunkZ) const;
 

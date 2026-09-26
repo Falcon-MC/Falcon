@@ -3,6 +3,8 @@
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Level/Level.h"
+#include "Plugin/PluginEvent.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
@@ -28,6 +30,20 @@ namespace {
         std::uniform_int_distribution<int32_t> distribution(0, span - 1);
         return distribution(weatherRandom()) + minimum;
     }
+
+    bool allowsWeatherChange(Level &level, FalconEventType type, bool state) {
+        PluginManager *plugins = PluginManager::findWithSubscribers(type);
+        if (plugins == nullptr)
+            return true;
+
+        PluginEvent event;
+        event.mType = type;
+        event.mCancellable = true;
+        event.mLevel = &level;
+        event.mState = state;
+        plugins->dispatch(event);
+        return !event.mCancelled;
+    }
 }
 
 void ServerNetworkHandler::sendWeatherTo(ServerPlayer &player) {
@@ -52,6 +68,9 @@ void ServerNetworkHandler::broadcastWeather() {
 }
 
 void ServerNetworkHandler::setRaining(bool raining) {
+    if (raining != mLevel.isRaining() && !allowsWeatherChange(mLevel, FALCON_EVENT_WEATHER_CHANGE, raining))
+        raining = mLevel.isRaining();
+
     mLevel.setRainingState(raining);
 
     if (raining)
@@ -63,8 +82,14 @@ void ServerNetworkHandler::setRaining(bool raining) {
 }
 
 void ServerNetworkHandler::setThundering(bool thundering) {
+    if (thundering != mLevel.isThundering()
+        && !allowsWeatherChange(mLevel, FALCON_EVENT_THUNDER_CHANGE, thundering))
+        thundering = mLevel.isThundering();
+
     if (thundering && !mLevel.isRaining())
         setRaining(true);
+    if (thundering && !mLevel.isRaining())
+        thundering = false;
 
     mLevel.setThunderingState(thundering);
 

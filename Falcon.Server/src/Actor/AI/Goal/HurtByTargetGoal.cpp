@@ -30,9 +30,8 @@ bool HurtByTargetGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &m
 }
 
 void HurtByTargetGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
-    (void) owner;
     mHandledHurtCount = mob.getHurtCount();
-    mob.setTarget(mob.getLastHurtBy());
+    mob.setTarget(owner, mob.getLastHurtBy());
 }
 
 void HurtByTargetGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {

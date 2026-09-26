@@ -33,6 +33,8 @@
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginEvent.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
@@ -178,6 +180,22 @@ namespace {
     RedstoneState &stateOf(Level &level)
     {
         return gStates[level.getDimensionId()];
+    }
+
+    int redstoneChange(Level &level, const Vector3i &position, int previousPower, int power)
+    {
+        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_REDSTONE_CHANGE);
+        if (plugins == nullptr)
+            return power;
+
+        PluginEvent event;
+        event.mType = FALCON_EVENT_REDSTONE_CHANGE;
+        event.mLevel = &level;
+        event.mBlockPosition = position;
+        event.mAmount = (double) power;
+        event.mPreviousAmount = (double) previousPower;
+        plugins->dispatch(event);
+        return std::clamp((int) event.mAmount, 0, RedstoneSystem::MAX_SIGNAL);
     }
 
     template<typename T>
@@ -481,6 +499,9 @@ namespace {
         else if (power < maxStrength && strength <= maxStrength)
             maxStrength = std::max(power, strength - 1);
 
+        if (meta != maxStrength)
+            maxStrength = redstoneChange(level, position, meta, maxStrength);
+
         if (meta != maxStrength) {
             Tag states = state.mStates;
             states.putInt("redstone_signal", maxStrength);
@@ -705,7 +726,9 @@ namespace {
         if (!isA<PressurePlateBlock>(state))
             return;
 
-        const int strength = pressurePlateComputeStrength(owner, level, position, state);
+        int strength = pressurePlateComputeStrength(owner, level, position, state);
+        if (oldStrength != strength)
+            strength = redstoneChange(level, position, oldStrength, strength);
         const bool wasPowered = oldStrength > 0;
         const bool powered = strength > 0;
 

@@ -3,6 +3,7 @@
 #include "Block/BlockClassRegistry.h"
 #include "Block/Blocks/PlantGrowthHelpers.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -58,7 +59,7 @@ void CactusBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const 
 
         const BlockState grown = flower ? VanillaBlocks::CACTUS_FLOWER().toBlockState()
                                         : VanillaBlocks::CACTUS().toBlockState();
-        level.setBlock(target, grown, true);
+        BlockChangeSystem::change(level, target, grown, BlockChangeCause::Grow, true);
         break;
     }
 
