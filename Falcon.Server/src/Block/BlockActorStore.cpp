@@ -53,6 +53,19 @@ void BlockActorStore::remove(const Vector3i &position) {
     mBlockActors.erase(packPosition(position));
 }
 
+void BlockActorStore::tick(ServerNetworkHandler &owner) {
+    std::vector<int64_t> keys;
+    keys.reserve(mBlockActors.size());
+    for (const auto &entry: mBlockActors)
+        keys.push_back(entry.first);
+
+    for (const int64_t key: keys) {
+        const auto found = mBlockActors.find(key);
+        if (found != mBlockActors.end() && !found->second->tick(owner))
+            mBlockActors.erase(key);
+    }
+}
+
 std::vector<Tag> BlockActorStore::saveChunk(int32_t chunkX, int32_t chunkZ) const {
     std::vector<Tag> saved;
 

@@ -13,6 +13,7 @@
 
 class Level;
 class PacketCodecContext;
+class ServerNetworkHandler;
 
 /** The block actors of one level. Every stored actor knows that level through BlockActor::getLevel(). */
 class BlockActorStore {
@@ -50,6 +51,8 @@ public:
     void insert(std::unique_ptr<BlockActor> blockActor);
 
     void remove(const Vector3i &position);
+
+    void tick(ServerNetworkHandler &owner);
 
     std::vector<Tag> saveChunk(int32_t chunkX, int32_t chunkZ) const;
 

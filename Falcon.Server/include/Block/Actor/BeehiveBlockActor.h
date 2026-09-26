@@ -24,8 +24,6 @@ public:
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    static void tickAll(ServerNetworkHandler &owner);
-
     bool isFull() const;
 
     bool isEmpty() const;
@@ -38,7 +36,7 @@ public:
 
     void evacuate(ServerNetworkHandler &owner, bool hiveRemains);
 
-    bool tick(ServerNetworkHandler &owner);
+    bool tick(ServerNetworkHandler &owner) override;
 
 private:
     struct Occupant {

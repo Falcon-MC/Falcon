@@ -106,16 +106,6 @@ void BeehiveBlockActor::loadNbt(const Tag &data, const PacketCodecContext &conte
     }
 }
 
-void BeehiveBlockActor::tickAll(ServerNetworkHandler &owner) {
-    for (Level *level: owner.getLevels()) {
-        for (BeehiveBlockActor *hive: level->getBlockActors().findAll<BeehiveBlockActor>()) {
-            const Vector3i position = hive->getPosition();
-            if (!hive->tick(owner))
-                level->getBlockActors().remove(position);
-        }
-    }
-}
-
 bool BeehiveBlockActor::isFull() const {
     return (int32_t) mOccupants.size() >= MAX_OCCUPANTS;
 }

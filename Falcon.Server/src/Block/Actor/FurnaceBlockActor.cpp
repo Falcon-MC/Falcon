@@ -1,5 +1,7 @@
 #include "Block/Actor/FurnaceBlockActor.h"
 
+#include "Inventory/InventoryManager.h"
+
 namespace {
     const char *TAG_KIND = "FurnaceKind";
     const char *TAG_BURN_TIME = "BurnTime";
@@ -22,4 +24,9 @@ void FurnaceBlockActor::loadNbt(const Tag &data, const PacketCodecContext &conte
     mMaxBurnTime = data.getShort(TAG_BURN_DURATION);
     mCookTime = data.getShort(TAG_COOK_TIME);
     mInventory.loadNbt(data, context);
+}
+
+bool FurnaceBlockActor::tick(ServerNetworkHandler &owner) {
+    InventoryManager::tickStoredFurnace(owner, *this);
+    return true;
 }

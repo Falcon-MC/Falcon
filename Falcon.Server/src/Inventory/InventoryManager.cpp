@@ -729,25 +729,17 @@ void InventoryManager::tickFurnace(ServerNetworkHandler &owner) {
     _storeFurnaceState(false);
 }
 
-void InventoryManager::tickStoredFurnaces(ServerNetworkHandler &owner) {
-    for (Level *level: owner.getLevels()) {
-        std::unordered_map<FurnaceKey, bool, FurnaceKeyHash> openPositions;
-        for (auto &entry: owner.getPlayers()) {
-            ServerPlayer &player = entry.second;
-            if (!player.getInventoryManager().isFurnaceOpen() || &owner.getLevelFor(player) != level)
-                continue;
-            const Vector3i &position = player.getInventoryManager().getFurnacePosition();
-            openPositions[FurnaceKey{position.x, position.y, position.z}] = true;
-        }
-
-        for (FurnaceBlockActor *furnace: level->getBlockActors().findAll<FurnaceBlockActor>()) {
-            const Vector3i &position = furnace->getPosition();
-            if (openPositions.find(FurnaceKey{position.x, position.y, position.z}) != openPositions.end())
-                continue;
-
-            tickFurnaceState(owner, position, *furnace);
-        }
+void InventoryManager::tickStoredFurnace(ServerNetworkHandler &owner, FurnaceBlockActor &furnace) {
+    const Vector3i &position = furnace.getPosition();
+    for (auto &entry: owner.getPlayers()) {
+        ServerPlayer &player = entry.second;
+        const InventoryManager &manager = player.getInventoryManager();
+        if (manager.isFurnaceOpen() && manager.getFurnacePosition() == position
+            && &owner.getLevelFor(player) == furnace.getLevel())
+            return;
     }
+
+    tickFurnaceState(owner, position, furnace);
 }
 
 void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {

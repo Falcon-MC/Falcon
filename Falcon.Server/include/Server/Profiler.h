@@ -13,7 +13,7 @@ enum class ProfilerSection : int {
     Fluids = 3,
     Players = 4,
     ChunkStreaming = 5,
-    Furnaces = 6,
+    BlockActors = 6,
     ItemActors = 7,
     Announcement = 8,
     FluidBroadcast = 9,

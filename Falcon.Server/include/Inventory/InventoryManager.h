@@ -17,6 +17,7 @@ class ServerPlayer;
 class ServerNetworkHandler;
 class BlockActorStore;
 class ChestBlockActor;
+class FurnaceBlockActor;
 class Level;
 class ContainerBlockActor;
 enum class FurnaceKind : uint8_t;
@@ -86,7 +87,7 @@ public:
 
     void tickFurnace(ServerNetworkHandler &owner);
 
-    static void tickStoredFurnaces(ServerNetworkHandler &owner);
+    static void tickStoredFurnace(ServerNetworkHandler &owner, FurnaceBlockActor &furnace);
 
     static void onFurnaceBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 

@@ -20,11 +20,9 @@ public:
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    static void tickAll(ServerNetworkHandler &owner);
-
     static bool addOne(Container &container, const ItemStack &item);
 
-    void tick(ServerNetworkHandler &owner);
+    bool tick(ServerNetworkHandler &owner) override;
 
     int mTransferCooldown = COOLDOWN_TICKS;
 

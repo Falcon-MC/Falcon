@@ -197,29 +197,22 @@ void HopperBlockActor::loadNbt(const Tag &data, const PacketCodecContext &contex
     mTransferCooldown = data.getInt(TAG_TRANSFER_COOLDOWN, COOLDOWN_TICKS);
 }
 
-void HopperBlockActor::tickAll(ServerNetworkHandler &owner) {
-    for (Level *level: owner.getLevels()) {
-        for (HopperBlockActor *hopper: level->getBlockActors().findAll<HopperBlockActor>())
-            hopper->tick(owner);
-    }
-}
-
-void HopperBlockActor::tick(ServerNetworkHandler &owner) {
+bool HopperBlockActor::tick(ServerNetworkHandler &owner) {
     if (mTransferCooldown > 0) {
         --mTransferCooldown;
-        return;
+        return true;
     }
 
     if (mLevel == nullptr)
-        return;
+        return true;
 
     Level &level = *mLevel;
     const BlockState state = level.getBlockState(mPosition.x, mPosition.y, mPosition.z);
     if (state.mName != HOPPER)
-        return;
+        return true;
 
     if (isDisabled(state))
-        return;
+        return true;
 
     bool changed = _pushItems(level, state);
     if (_pullItems(owner))
@@ -237,6 +230,7 @@ void HopperBlockActor::tick(ServerNetworkHandler &owner) {
                                                    mPosition.y + FACE_OFFSETS[facing][1],
                                                    mPosition.z + FACE_OFFSETS[facing][2]));
     }
+    return true;
 }
 
 bool HopperBlockActor::_pushItems(Level &level, const BlockState &state) {

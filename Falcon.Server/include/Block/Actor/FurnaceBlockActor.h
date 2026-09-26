@@ -15,6 +15,8 @@ public:
 
     Container *getContainer() override { return &mInventory; }
 
+    bool tick(ServerNetworkHandler &owner) override;
+
     FurnaceInventory &getInventory() { return mInventory; }
 
     const FurnaceInventory &getInventory() const { return mInventory; }

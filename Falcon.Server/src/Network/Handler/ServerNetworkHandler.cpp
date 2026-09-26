@@ -106,9 +106,6 @@
 #include "Protocol/Packets/PlayerHotbarPacket.h"
 #include "Block/Components/CreativeContentTable.h"
 #include "Block/Block.h"
-#include "Block/Actor/BeehiveBlockActor.h"
-#include "Block/Actor/HopperBlockActor.h"
-#include "Block/Systems/FurnaceSystem.h"
 #include "Block/Systems/CommandBlockSystem.h"
 #include "Block/Systems/FireSystem.h"
 #include "Block/Systems/PrecipitationSystem.h"
@@ -806,12 +803,10 @@ void ServerNetworkHandler::tick() {
         _tickPlayer(entry.second);
     mProfiler.endSection(ProfilerSection::Players);
 
-    mProfiler.beginSection(ProfilerSection::Furnaces);
-    FurnaceSystem::tickStored(*this);
-    mProfiler.endSection(ProfilerSection::Furnaces);
-
-    HopperBlockActor::tickAll(*this);
-    BeehiveBlockActor::tickAll(*this);
+    mProfiler.beginSection(ProfilerSection::BlockActors);
+    for (Level *level: getLevels())
+        level->getBlockActors().tick(*this);
+    mProfiler.endSection(ProfilerSection::BlockActors);
 
     mProfiler.beginSection(ProfilerSection::ItemActors);
     ItemActorHandler::tickItemActors(*this);
