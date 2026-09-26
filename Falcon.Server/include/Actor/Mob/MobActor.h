@@ -156,10 +156,6 @@ public:
 
     void markBorn();
 
-    void setSpawnEvent(const std::string &event) {
-        mSpawnEvent = event;
-    }
-
     void fillSpawnMetadata(EntityDataMap &metadata) const override;
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
