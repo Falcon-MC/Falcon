@@ -9,10 +9,12 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <unordered_map>
 #include <utility>
 
 #include <leveldb/db.h>
+#include <leveldb/iterator.h>
 #include <leveldb/decompress_allocator.h>
 #include <leveldb/options.h>
 #include <leveldb/write_batch.h>
@@ -30,6 +32,7 @@ namespace {
     const std::string ACTOR_DIGEST_PREFIX = "digp";
     const char *ACTOR_UNIQUE_ID_TAG = "UniqueID";
     const size_t ACTOR_STORAGE_ID_SIZE = 8;
+    const std::string TICKING_AREA_PREFIX = "tickingarea_";
 
     int64_t packBlockPosition(int32_t x, int32_t y, int32_t z) {
         return (((int64_t) (x + 30000000) & 0x3FFFFFFLL) << 37)
@@ -641,6 +644,52 @@ bool LevelStorage::loadWeather(bool &raining, int32_t &rainTime, bool &thunderin
     }
 
     return true;
+}
+
+bool LevelStorage::saveTickingArea(const std::string &id, const Tag &area) {
+    if (mDb == nullptr)
+        return false;
+
+    BinaryStream stream;
+    NbtIo::writeTag(stream, area, NbtVariant::LittleEndian);
+
+    const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), TICKING_AREA_PREFIX + id, stream.getBuffer());
+    if (!status.ok()) {
+        LOG_WARN(LogAreaID::Server, "Could not save ticking area %s: %s", id.c_str(), status.ToString().c_str());
+        return false;
+    }
+
+    return true;
+}
+
+bool LevelStorage::eraseTickingArea(const std::string &id) {
+    if (mDb == nullptr)
+        return false;
+
+    const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), TICKING_AREA_PREFIX + id);
+    return status.ok() || status.IsNotFound();
+}
+
+std::vector<std::pair<std::string, Tag>> LevelStorage::loadTickingAreas() {
+    std::vector<std::pair<std::string, Tag>> areas;
+    if (mDb == nullptr)
+        return areas;
+
+    std::unique_ptr<leveldb::Iterator> iterator(mDb->NewIterator(_readOptions()));
+    for (iterator->Seek(TICKING_AREA_PREFIX); iterator->Valid(); iterator->Next()) {
+        const std::string key = iterator->key().ToString();
+        if (key.compare(0, TICKING_AREA_PREFIX.size(), TICKING_AREA_PREFIX) != 0)
+            break;
+
+        ReadOnlyBinaryStream stream(iterator->value().ToString());
+        try {
+            areas.emplace_back(key.substr(TICKING_AREA_PREFIX.size()), NbtIo::readTag(stream, NbtVariant::LittleEndian));
+        } catch (const std::exception &exception) {
+            LOG_WARN(LogAreaID::Server, "Malformed ticking area %s: %s", key.c_str(), exception.what());
+        }
+    }
+
+    return areas;
 }
 
 bool LevelStorage::saveGameRules(const Tag &rules) {

@@ -189,6 +189,27 @@ void Level::eraseEntity(int64_t uniqueId) {
     mStorage.eraseEntity(uniqueId);
 }
 
+void Level::saveTickingArea(const std::string &id, const Tag &area) {
+    if (!mStorage.isOpen())
+        return;
+
+    mStorage.saveTickingArea(id, area);
+}
+
+void Level::eraseTickingArea(const std::string &id) {
+    if (!mStorage.isOpen())
+        return;
+
+    mStorage.eraseTickingArea(id);
+}
+
+std::vector<std::pair<std::string, Tag>> Level::loadTickingAreas() {
+    if (!mStorage.isOpen())
+        return std::vector<std::pair<std::string, Tag>>();
+
+    return mStorage.loadTickingAreas();
+}
+
 void Level::saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities) {
     if (!mStorage.isOpen())
         return;

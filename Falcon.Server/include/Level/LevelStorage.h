@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace leveldb {
@@ -75,6 +76,12 @@ public:
     bool saveWeather(bool raining, int32_t rainTime, bool thundering, int32_t thunderTime);
 
     bool loadWeather(bool &raining, int32_t &rainTime, bool &thundering, int32_t &thunderTime);
+
+    bool saveTickingArea(const std::string &id, const Tag &area);
+
+    bool eraseTickingArea(const std::string &id);
+
+    std::vector<std::pair<std::string, Tag>> loadTickingAreas();
 
     bool saveGameRules(const Tag &rules);
 

@@ -3,6 +3,7 @@
 #include "Level/BiomeRegistry.h"
 #include "Level/Level.h"
 #include "Level/PlayerDataProvider.h"
+#include "Level/TickingAreaManager.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/PacketRateLimiter.h"
 #include "Network/PingedCompatibleServer.h"
@@ -347,6 +348,10 @@ public:
     uint64_t allocateRuntimeId() { return mNextRuntimeId++; }
 
     int64_t allocateActorUniqueId();
+
+    TickingAreaManager &getTickingAreas() { return mTickingAreas; }
+
+    void markActiveColumnsDirty() { mActorPersistencePending = true; }
 
     BlockDefinitionRegistry &getBlockDefinitions() { return mBlockDefinitions; }
 
@@ -698,6 +703,7 @@ private:
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
     std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
     std::unordered_set<int64_t> mVehiclesWithPendingPassengers;
+    TickingAreaManager mTickingAreas;
     uint32_t mActorUniqueIdCounter = 0;
     std::vector<QueuedActorCommand> mQueuedActorCommands;
     NaturalSpawner mNaturalSpawner;

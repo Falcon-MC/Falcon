@@ -491,6 +491,8 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     mNetherLevel->setOwner(this);
     mTheEndLevel->setOwner(this);
 
+    mTickingAreas.load(*this);
+
     _logPackStack();
 
     switch (properties.getGameType()) {
@@ -771,6 +773,7 @@ void ServerNetworkHandler::tick() {
                 }
             }
 
+            mTickingAreas.appendColumns(DimensionType::Overworld, activeColumns);
             mLevel.setActiveColumns(activeColumns);
 
             mProfiler.beginSection(ProfilerSection::ActorPersistence);

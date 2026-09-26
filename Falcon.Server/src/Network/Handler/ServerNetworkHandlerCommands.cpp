@@ -44,6 +44,7 @@
 #include "Command/StopSoundCommand.h"
 #include "Command/SummonCommand.h"
 #include "Command/TagCommand.h"
+#include "Command/TickingAreaCommand.h"
 #include "Command/TeleportCommand.h"
 #include "Command/TellCommand.h"
 #include "Command/TellRawCommand.h"
@@ -136,6 +137,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<TestForBlockCommand>());
     mCommands.registerCommand(std::make_shared<TestForBlocksCommand>());
     mCommands.registerCommand(std::make_shared<TagCommand>(*this));
+    mCommands.registerCommand(std::make_shared<TickingAreaCommand>(*this));
 }
 
 ServerPlayer *ServerNetworkHandler::getPlayerByName(const std::string &name) {

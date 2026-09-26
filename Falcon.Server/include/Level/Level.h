@@ -136,6 +136,12 @@ public:
 
     void eraseEntity(int64_t uniqueId);
 
+    void saveTickingArea(const std::string &id, const Tag &area);
+
+    void eraseTickingArea(const std::string &id);
+
+    std::vector<std::pair<std::string, Tag>> loadTickingAreas();
+
     void saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities);
 
     std::vector<Tag> loadBlockEntities(int32_t chunkX, int32_t chunkZ);

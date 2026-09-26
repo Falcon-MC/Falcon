@@ -69,6 +69,7 @@ void ServerNetworkHandler::_tickDimension(Level &level) {
         }
     }
 
+    mTickingAreas.appendColumns(level.getDimensionType(), activeColumns);
     level.setActiveColumns(activeColumns);
     syncActorPersistence(level, activeColumns);
     level.tick();
