@@ -2,6 +2,7 @@
 
 #include "Actor/AI/Navigation/PathFinder.h"
 #include "Actor/Mob/MobActor.h"
+#include "Block/Systems/LiquidBlocksFetch.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
 namespace {
@@ -30,13 +31,15 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (!mHasTarget)
         return;
 
+    const bool direct = mFlying
+                        || (mob.canSwim() && LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition()).water);
     if (mNeedsPath) {
-        if (!mFlying && !PathFinder::tryReserveSearch(owner.getCurrentTick()))
+        if (!direct && !PathFinder::tryReserveSearch(owner.getCurrentTick()))
             return;
 
         mNeedsPath = false;
         mob.getMoveControl().stop();
-        if (mFlying) {
+        if (direct) {
             mPath.clear();
             mPath.add(mTarget);
             mPath.setReachesTarget(true);
@@ -59,13 +62,13 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
         mPath.advance();
     }
 
-    _checkStuck(mob);
+    _checkStuck(mob, direct);
 }
 
-void PathNavigation::_checkStuck(MobActor &mob) {
+void PathNavigation::_checkStuck(MobActor &mob, bool direct) {
     const Vector3f position = mob.getPosition();
     const float dx = position.x - mLastPosition.x;
-    const float dy = mFlying ? position.y - mLastPosition.y : 0.0f;
+    const float dy = direct ? position.y - mLastPosition.y : 0.0f;
     const float dz = position.z - mLastPosition.z;
     mLastPosition = position;
 

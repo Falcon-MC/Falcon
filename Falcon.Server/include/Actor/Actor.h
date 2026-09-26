@@ -113,6 +113,28 @@ public:
 
     void setOnGround(bool onGround) { mOnGround = onGround; }
 
+    bool hasHorizontalCollision() const {
+        return mHorizontalCollision;
+    }
+
+    void setHorizontalCollision(bool collision) {
+        mHorizontalCollision = collision;
+    }
+
+    void makeStuckInBlock(const Vector3f &multiplier) {
+        mStuckMultiplier = multiplier;
+        mStuck = true;
+    }
+
+    bool takeStuckMultiplier(Vector3f &multiplier) {
+        if (!mStuck)
+            return false;
+
+        multiplier = mStuckMultiplier;
+        mStuck = false;
+        return true;
+    }
+
     float getFallDistance() const { return mFallDistance; }
 
     float getHighestPosition() const { return mHighestPosition; }
@@ -300,6 +322,9 @@ protected:
     ActorFlags mFlags;
     ActorAttributes mAttributes;
     bool mOnGround = false;
+    bool mHorizontalCollision = false;
+    bool mStuck = false;
+    Vector3f mStuckMultiplier;
     int mFireTicks = 0;
     float mFallDistance = 0.0f;
     float mHighestPosition = 0.0f;

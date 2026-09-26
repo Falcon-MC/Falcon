@@ -2,15 +2,12 @@
 
 #include "Block/Block.h"
 
-class SweetBerryBushBlock : public Block {
+class CobwebBlock : public Block {
 public:
-    explicit SweetBerryBushBlock(const Block &block) : Block(block) {
+    explicit CobwebBlock(const Block &block) : Block(block) {
     }
 
     static bool matches(const std::string &identifier);
-
-    void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                      const BlockState &state) const override;
 
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                        const BlockState &state) const override;

@@ -34,7 +34,7 @@ public:
     void tick(ServerNetworkHandler &owner, MobActor &mob);
 
 private:
-    void _checkStuck(MobActor &mob);
+    void _checkStuck(MobActor &mob, bool direct);
 
     Path mPath;
     PathOptions mOptions;

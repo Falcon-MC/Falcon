@@ -35,6 +35,10 @@ private:
 
     void _tickFlying(MobActor &mob);
 
+    void _tickSwimming(MobActor &mob);
+
+    void _steerTowards(MobActor &mob, float cruise);
+
     Vector3f mWantedPosition;
     float mSpeed = 0.0f;
     bool mHasWanted = false;

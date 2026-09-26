@@ -12,6 +12,7 @@
 #include "Block/Block.h"
 #include "Block/BlockState.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/LiquidBlocksFetch.h"
 #include "Inventory/InventoryManager.h"
 #include "Inventory/PlayerInventory.h"
 #include "Item/Loot/LegacyItemMapper.h"
@@ -66,6 +67,25 @@ namespace {
     const char *const CELEBRATE_HUNT_COMPONENT = "minecraft:celebrate_hunt";
     const char *const INVENTORY_COMPONENT = "minecraft:inventory";
     const char *const EXPERIENCE_REWARD_COMPONENT = "minecraft:experience_reward";
+    const char *const NAVIGATION_COMPONENTS[] = {"minecraft:navigation.generic", "minecraft:navigation.walk",
+                                                 "minecraft:navigation.swim", "minecraft:navigation.climb"};
+    const char *const CAN_CLIMB_COMPONENT = "minecraft:can_climb";
+    const char *const BREATHABLE_COMPONENT = "minecraft:breathable";
+    const float DEFAULT_AIR_SECONDS = 15.0f;
+    const float EYE_HEIGHT_RATIO = 0.85f;
+    const int32_t AIR_REFILL_PER_TICK = 5;
+    const int32_t DROWNING_AIR = -20;
+    const float DROWNING_DAMAGE = 2.0f;
+    const float FLOP_HORIZONTAL = 0.05f;
+    const float FLOP_VERTICAL = 0.4f;
+    const char *const FLOP_SOUND = "flop";
+    const char *const TAG_AIR = "Air";
+
+    bool flagOr(const json::Value &component, const char *key, bool fallback) {
+        const json::Value *value = component.get(key);
+        return value == nullptr ? fallback : value->boolean(fallback);
+    }
+    const char *const CLIMB_NAVIGATION_COMPONENT = "minecraft:navigation.climb";
     const char *const TRANSFORMATION_COMPONENT = "minecraft:transformation";
     const char *const DAMAGE_SENSOR_COMPONENT = "minecraft:damage_sensor";
     const char *const SPELL_EFFECTS_COMPONENT = "minecraft:spell_effects";
@@ -230,6 +250,8 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     _tickSpellEffects();
     _tickTimer(owner);
     _tickAttackCooldown(owner);
+    _tickBreathing(owner);
+    _tickFlopping(owner);
     _tickShaking(owner);
     _tickCelebration(owner);
     mAnger.tick(owner, *this);
@@ -555,6 +577,71 @@ void MobActor::_tickAttackCooldown(ServerNetworkHandler &owner) {
     EntityEvents::fireTrigger(owner, *this, cooldown->get("attack_cooldown_complete_event"));
 }
 
+void MobActor::_tickBreathing(ServerNetworkHandler &owner) {
+    const json::Value *breathable = getComponent(BREATHABLE_COMPONENT);
+    if (breathable == nullptr)
+        return;
+
+    const int32_t totalSupply = secondsToTicks(numberIn(breathable, "total_supply", DEFAULT_AIR_SECONDS));
+    if (mAirSupply == UNSET_AIR_SUPPLY || mAirSupply > totalSupply)
+        mAirSupply = totalSupply;
+
+    Level &level = owner.getLevelFor(*this);
+    const Vector3f position = getPosition();
+    const Vector3f eyes(position.x, position.y + getSize().mHeight * mScale * EYE_HEIGHT_RATIO, position.z);
+    const LiquidContact eyeContact = LiquidBlocksFetch::at(level, eyes);
+
+    bool breathing;
+    if (eyeContact.water)
+        breathing = flagOr(*breathable, "breathes_water", false) || hasEffect(MobEffectId::WaterBreathing)
+                    || hasEffect(MobEffectId::ConduitPower);
+    else if (eyeContact.lava)
+        breathing = flagOr(*breathable, "breathes_lava", true);
+    else
+        breathing = flagOr(*breathable, "breathes_air", true);
+
+    _setFlag(owner, ActorFlag::Breathing, breathing);
+
+    if (breathing) {
+        mAirSupply = std::min(totalSupply, mAirSupply + AIR_REFILL_PER_TICK);
+        return;
+    }
+
+    if (--mAirSupply > DROWNING_AIR)
+        return;
+
+    mAirSupply = 0;
+    if (owner.getLevel().getGameRules().getBool("drowningdamage"))
+        hurt(owner, DROWNING_DAMAGE, ActorDamageSource::environment("death.attack.drown", getName()));
+}
+
+void MobActor::_tickFlopping(ServerNetworkHandler &owner) {
+    if (!isOnGround() || !canSwim() || canWalk())
+        return;
+
+    Level &level = owner.getLevelFor(*this);
+    if (LiquidBlocksFetch::at(level, getPosition()).water)
+        return;
+
+    std::uniform_real_distribution<float> spread(-FLOP_HORIZONTAL, FLOP_HORIZONTAL);
+    const Vector3f motion = getMotion();
+    setMotion(Vector3f(motion.x + spread(lifecycleRandom()), FLOP_VERTICAL, motion.z + spread(lifecycleRandom())));
+    setOnGround(false);
+    playDefinitionSound(owner, FLOP_SOUND);
+}
+
+bool MobActor::canWalk() const {
+    for (const char *name: NAVIGATION_COMPONENTS) {
+        const json::Value *navigation = getComponent(name);
+        if (navigation == nullptr)
+            continue;
+
+        const json::Value *walk = navigation->get("can_walk");
+        return walk == nullptr || walk->boolean(true);
+    }
+    return true;
+}
+
 void MobActor::_tickShaking(ServerNetworkHandler &owner) {
     _setFlag(owner, ActorFlag::Shaking, getComponent(IS_SHAKING_COMPONENT) != nullptr);
 }
@@ -614,6 +701,24 @@ void MobActor::_tickCelebration(ServerNetworkHandler &owner) {
     mCelebrationSoundTicks = secondsToTicks(maximum > minimum
                                             ? std::uniform_real_distribution<float>(minimum, maximum)(lifecycleRandom())
                                             : minimum);
+}
+
+bool MobActor::canSwim() const {
+    for (const char *name: NAVIGATION_COMPONENTS) {
+        const json::Value *navigation = getComponent(name);
+        const json::Value *swim = navigation == nullptr ? nullptr : navigation->get("can_swim");
+        if (swim != nullptr && swim->boolean(false))
+            return true;
+    }
+    return false;
+}
+
+PhysicsComponent MobActor::getPhysics() const {
+    PhysicsComponent physics = ServerActor::getPhysics();
+    physics.mSwims = canSwim();
+    physics.mClimbsLadders = getComponent(CAN_CLIMB_COMPONENT) != nullptr;
+    physics.mClimbsWalls = getComponent(CLIMB_NAVIGATION_COMPONENT) != nullptr;
+    return physics;
 }
 
 int MobActor::getInventoryCapacity() const {
@@ -1588,6 +1693,8 @@ Tag MobActor::saveNbt() const {
     data.putByte("Sheared", getComponent("minecraft:is_sheared") != nullptr ? 1 : 0);
     data.putInt("InLove", mLoveTicks);
     data.putInt(TAG_TEMPER, mTemper);
+    if (mAirSupply != UNSET_AIR_SUPPLY)
+        data.putShort(TAG_AIR, (int16_t) std::max(-32768, std::min(32767, mAirSupply)));
     if (mRolledMovementSpeed >= 0.0f)
         data.putFloat(TAG_MOVEMENT_SPEED, mRolledMovementSpeed);
     if (mRolledJumpStrength >= 0.0f)
@@ -1615,6 +1722,8 @@ void MobActor::loadNbt(const Tag &data) {
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
     mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);
+    if (data.contains(TAG_AIR))
+        mAirSupply = data.getShort(TAG_AIR, 0);
     mRolledMovementSpeed = data.getFloat(TAG_MOVEMENT_SPEED, attributeIn(data, "minecraft:movement", -1.0f));
     mRolledJumpStrength = data.getFloat(TAG_JUMP_STRENGTH, attributeIn(data, JUMP_STRENGTH_COMPONENT, -1.0f));
     const Tag *home = data.get(TAG_HOME);

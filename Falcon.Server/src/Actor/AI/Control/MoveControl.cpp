@@ -20,6 +20,7 @@ namespace {
     const float MAX_JUMP_HEIGHT = 1.1f;
     const float FLY_APPROACH_FACTOR = 0.25f;
     const float FLY_STEERING = 0.3f;
+    const char *const UNDERWATER_MOVEMENT_COMPONENT = "minecraft:underwater_movement";
 }
 
 void MoveControl::setWantedPosition(const Vector3f &position, float speed) {
@@ -45,6 +46,10 @@ void MoveControl::tick(ServerNetworkHandler &owner, MobActor &mob, JumpControl &
 
     const Vector3f motion = mob.getMotion();
     const bool inWater = LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition()).water;
+    if (inWater && mob.canSwim()) {
+        _tickSwimming(mob);
+        return;
+    }
     if (!jumpControl.isCoolingDown() && !mob.isOnGround() && !inWater && motion.y > 0.0f)
         return;
 
@@ -76,13 +81,25 @@ void MoveControl::tick(ServerNetworkHandler &owner, MobActor &mob, JumpControl &
         stop();
 }
 
+void MoveControl::_tickSwimming(MobActor &mob) {
+    const json::Value *underwater = mob.getComponent(UNDERWATER_MOVEMENT_COMPONENT);
+    const json::Value *value = underwater == nullptr ? nullptr : underwater->get("value");
+    const float walkSpeed = mob.getMovementSpeed();
+    const float multiplier = walkSpeed > 0.0f ? mSpeed / walkSpeed : 1.0f;
+    const float swimSpeed = value == nullptr ? mSpeed : (float) value->number(mSpeed) * multiplier;
+    _steerTowards(mob, swimSpeed * mob.getMovementSpeedMultiplier() * SPEED_FACTOR);
+}
+
 void MoveControl::_tickFlying(MobActor &mob) {
+    _steerTowards(mob, mSpeed * mob.getMovementSpeedMultiplier() * SPEED_FACTOR);
+}
+
+void MoveControl::_steerTowards(MobActor &mob, float cruise) {
     const Vector3f position = mob.getPosition();
     const float relativeX = mWantedPosition.x - position.x;
     const float relativeY = mWantedPosition.y - position.y;
     const float relativeZ = mWantedPosition.z - position.z;
     const float length = std::sqrt(relativeX * relativeX + relativeY * relativeY + relativeZ * relativeZ);
-    const float cruise = mSpeed * mob.getMovementSpeedMultiplier() * SPEED_FACTOR;
 
     if (length < std::max(cruise, PRECISION)) {
         mob.setMotion(Vector3f(0.0f, 0.0f, 0.0f));

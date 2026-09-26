@@ -43,6 +43,12 @@ public:
 
     ActorSize getSize() const override = 0;
 
+    PhysicsComponent getPhysics() const override;
+
+    bool canSwim() const;
+
+    bool canWalk() const;
+
     virtual float getDefaultMaxHealth() const = 0;
 
     virtual int getExperienceDrop() const { return 0; }
@@ -333,6 +339,10 @@ private:
 
     void _tickShaking(ServerNetworkHandler &owner);
 
+    void _tickBreathing(ServerNetworkHandler &owner);
+
+    void _tickFlopping(ServerNetworkHandler &owner);
+
     void _tickSpellEffects();
 
     void _tickTransformation(ServerNetworkHandler &owner);
@@ -448,5 +458,7 @@ private:
     int32_t mAttackCooldownTicks = 0;
     int32_t mCelebrationTicks = 0;
     int32_t mCelebrationSoundTicks = 0;
+    static constexpr int32_t UNSET_AIR_SUPPLY = INT32_MIN;
+    int32_t mAirSupply = UNSET_AIR_SUPPLY;
     const json::Value *mCelebrationComponent = nullptr;
 };

@@ -23,6 +23,7 @@
 #include "Actor/AI/Goal/LookAtPlayerGoal.h"
 #include "Actor/AI/Goal/MeleeAttackGoal.h"
 #include "Actor/AI/Goal/MoveToBlockGoal.h"
+#include "Actor/AI/Goal/MoveToWaterGoal.h"
 #include "Actor/AI/Goal/MoveTowardsHomeRestrictionGoal.h"
 #include "Actor/AI/Goal/NearestAttackableTargetGoal.h"
 #include "Actor/AI/Goal/OpenDoorGoal.h"
@@ -33,10 +34,12 @@
 #include "Actor/AI/Goal/RandomHoverGoal.h"
 #include "Actor/AI/Goal/RandomLookAroundGoal.h"
 #include "Actor/AI/Goal/RandomStrollGoal.h"
+#include "Actor/AI/Goal/RandomSwimGoal.h"
 #include "Actor/AI/Goal/RangedAttackGoal.h"
 #include "Actor/AI/Goal/RunAroundLikeCrazyGoal.h"
 #include "Actor/AI/Goal/SitGoal.h"
 #include "Actor/AI/Goal/SwellGoal.h"
+#include "Actor/AI/Goal/SwimIdleGoal.h"
 #include "Actor/AI/Goal/TemptGoal.h"
 #include "Actor/AI/Goal/TimerFlagGoal.h"
 #include "Actor/AI/Goal/UseKineticWeaponGoal.h"
@@ -111,6 +114,13 @@ namespace {
     const float TIMER_FLAG_DEFAULT_COOLDOWN = 10.0f;
     const float SOUND_DEFAULT_INTERVAL = 3.0f;
     const float PICKUP_DEFAULT_GOAL_RADIUS = 0.5f;
+    const float SWIM_DEFAULT_XZ = 10.0f;
+    const float SWIM_DEFAULT_Y = 7.0f;
+    const float SWIM_WANDER_DEFAULT_CHANCE = 0.00833f;
+    const float SWIM_WANDER_DEFAULT_LOOK_AHEAD = 5.0f;
+    const int32_t SWIM_WANDER_VERTICAL_RANGE = 2;
+    const float SWIM_IDLE_DEFAULT_TIME = 5.0f;
+    const float SWIM_IDLE_DEFAULT_RATE = 0.1f;
 
     float numberOf(const json::Value &component, const char *key, float fallback) {
         const json::Value *value = component.get(key);
@@ -565,6 +575,29 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "charge_held_item")
         return std::make_unique<ChargeHeldItemGoal>();
+
+    if (behavior == "random_swim")
+        return std::make_unique<RandomSwimGoal>(speed, (int32_t) numberOf(component, "xz_dist", SWIM_DEFAULT_XZ),
+                                                (int32_t) numberOf(component, "y_dist", SWIM_DEFAULT_Y),
+                                                (int32_t) numberOf(component, "interval", 0.0f));
+
+    if (behavior == "swim_wander") {
+        const float chance = numberOf(component, "interval", SWIM_WANDER_DEFAULT_CHANCE);
+        return std::make_unique<RandomSwimGoal>(speed, (int32_t) numberOf(component, "look_ahead",
+                                                                          SWIM_WANDER_DEFAULT_LOOK_AHEAD),
+                                                SWIM_WANDER_VERTICAL_RANGE,
+                                                chance > 0.0f ? (int32_t) std::lround(1.0f / chance) : 1);
+    }
+
+    if (behavior == "swim_idle")
+        return std::make_unique<SwimIdleGoal>(secondsToTicks(numberOf(component, "idle_time", SWIM_IDLE_DEFAULT_TIME)),
+                                              numberOf(component, "success_rate", SWIM_IDLE_DEFAULT_RATE));
+
+    if (behavior == "move_to_water" || behavior == "move_to_land")
+        return std::make_unique<MoveToWaterGoal>(speed, (int32_t) numberOf(component, "search_range", 0.0f),
+                                                 (int32_t) numberOf(component, "search_height", 0.0f),
+                                                 numberOf(component, "goal_radius", PICKUP_DEFAULT_GOAL_RADIUS),
+                                                 behavior == "move_to_water");
 
     if (behavior == "barter")
         return std::make_unique<BarterGoal>();

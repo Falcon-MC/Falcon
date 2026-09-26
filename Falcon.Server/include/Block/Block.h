@@ -109,6 +109,18 @@ public:
         return false;
     }
 
+    virtual bool isClimbable() const {
+        return false;
+    }
+
+    virtual float getSpeedFactor() const {
+        return 1.0f;
+    }
+
+    virtual float getJumpFactor() const {
+        return 1.0f;
+    }
+
     virtual bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
         (void) level;
         (void) position;

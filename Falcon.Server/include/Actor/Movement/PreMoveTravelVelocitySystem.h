@@ -20,6 +20,8 @@ public:
 
     static constexpr float LAVA_FRICTION = 0.3f;
 
+    static constexpr float SWIMMER_WATER_FRICTION = 0.9f;
+
     static constexpr float CURRENT_STRENGTH = 0.018f;
 
     static constexpr float SUBMERGED_FLOATING_FACTOR = 1.3f;
@@ -39,5 +41,5 @@ private:
 
     static void _applyGroundFriction(Level &level, const ServerActor &actor, Vector3f &motion);
 
-    static void _applyPassableFriction(Vector3f &motion, const LiquidContact &feet);
+    static void _applyPassableFriction(Vector3f &motion, const PhysicsComponent &physics, const LiquidContact &feet);
 };
