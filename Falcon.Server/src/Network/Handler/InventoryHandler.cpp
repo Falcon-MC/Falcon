@@ -765,7 +765,8 @@ void InventoryHandler::handleCraftingEvent(ServerNetworkHandler &owner, ServerPl
     const std::vector<ItemStack> &recipeOutputs = owner.getRecipeOutputs();
     const std::vector<uint32_t> &recipeSourceIndices = owner.getRecipeSourceIndices();
     if (!CraftingManager::matchResult(grid, gridWidth, packet.mOutputs.front(), recipeOutputs,
-                                      recipeSourceIndices, match)) {
+                                      recipeSourceIndices, match, output)) {
+    ItemStack output = ItemStack::air();
         return;
     }
 
@@ -797,7 +798,6 @@ void InventoryHandler::handleCraftingEvent(ServerNetworkHandler &owner, ServerPl
         }
     }
 
-    ItemStack output = packet.mOutputs.front();
     if (!working.addItem(output)) {
         return;
     }
