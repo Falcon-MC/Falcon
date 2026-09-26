@@ -39,6 +39,7 @@ namespace {
     const char *const TIMER_COMPONENT = "minecraft:timer";
     const char *const TRANSFORMATION_COMPONENT = "minecraft:transformation";
     const char *const DAMAGE_SENSOR_COMPONENT = "minecraft:damage_sensor";
+    const char *const SPELL_EFFECTS_COMPONENT = "minecraft:spell_effects";
     const char *const LEGACY_ZOMBIE_PIGMAN = "minecraft:pig_zombie";
     const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
 
@@ -176,6 +177,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
 
     _tickLifecycle(owner);
     _tickSensors(owner);
+    _tickSpellEffects();
     _tickTimer(owner);
 
     mGoalSelector.tick(owner, *this);
@@ -317,6 +319,51 @@ bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const Dam
     }
 
     return dealsDamage;
+}
+
+void MobActor::_tickSpellEffects() {
+    const json::Value *spellEffects = getComponent(SPELL_EFFECTS_COMPONENT);
+    if (spellEffects == mSpellEffectsComponent)
+        return;
+
+    mSpellEffectsComponent = spellEffects;
+    if (spellEffects == nullptr)
+        return;
+
+    std::vector<const json::Value *> removals;
+    if (const json::Value *remove = spellEffects->get("remove_effects")) {
+        if (remove->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: remove->mArray)
+                removals.push_back(entry.get());
+        } else {
+            removals.push_back(remove);
+        }
+    }
+
+    for (const json::Value *removal: removals) {
+        MobEffectId effect;
+        if (parseDefinitionMobEffect(removal->string(), effect))
+            removeEffect(effect);
+    }
+
+    const json::Value *additions = spellEffects->get("add_effects");
+    if (additions == nullptr || !additions->isArray())
+        return;
+
+    for (const std::unique_ptr<json::Value> &addition: additions->mArray) {
+        const json::Value *name = addition->get("effect");
+        MobEffectInstance instance;
+        if (name == nullptr || !parseDefinitionMobEffect(name->string(), instance.mId))
+            continue;
+
+        instance.mDuration = (int32_t) std::lround(numberIn(addition.get(), "duration", 0.0f) * TICKS_PER_SECOND);
+        instance.mAmplifier = (int32_t) numberIn(addition.get(), "amplifier", 0.0f);
+        const json::Value *ambient = addition->get("ambient");
+        instance.mAmbient = ambient != nullptr && ambient->boolean(false);
+        const json::Value *visible = addition->get("visible");
+        instance.mParticles = visible == nullptr || visible->boolean(true);
+        addEffect(instance);
+    }
 }
 
 void MobActor::_tickTimer(ServerNetworkHandler &owner) {

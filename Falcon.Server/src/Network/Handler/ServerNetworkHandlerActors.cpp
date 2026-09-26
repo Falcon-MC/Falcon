@@ -57,6 +57,17 @@
 #include <cmath>
 
 namespace {
+    const char *const UNDEAD_FAMILY = "undead";
+
+    MobEffectInstance potionEffectInstance(const PotionEffect &effect, float durationScale) {
+        MobEffectInstance instance;
+        instance.mId = effect.mId;
+        instance.mDuration = std::max(1, (int32_t) ((float) effect.mDuration * durationScale));
+        instance.mAmplifier = effect.mAmplifier;
+        instance.mParticles = true;
+        return instance;
+    }
+
     bool allowProjectileHit(ServerNetworkHandler &owner, ServerActor &projectile, Level &level,
                             const Vector3f &position, Actor *target, const Vector3i *block) {
         PluginManager &plugins = owner.getPluginManager();
@@ -581,14 +592,31 @@ void ServerNetworkHandler::applyPotionEffects(ServerPlayer &player, int32_t poti
             continue;
         }
 
-        MobEffectInstance instance;
-        instance.mId = effect.mId;
-        instance.mDuration = (int32_t) ((float) effect.mDuration * durationScale);
-        if (instance.mDuration < 1)
-            instance.mDuration = 1;
-        instance.mAmplifier = effect.mAmplifier;
-        instance.mParticles = true;
-        player.addEffect(instance);
+        player.addEffect(potionEffectInstance(effect, durationScale));
+    }
+}
+
+void ServerNetworkHandler::applyPotionEffects(ServerActor &actor, int32_t potionId, float durationScale) {
+    const MobActor *mob = dynamic_cast<const MobActor *>(&actor);
+    const std::vector<std::string> families = mob == nullptr ? std::vector<std::string>() : mob->getFamilies();
+    const bool undead = std::find(families.begin(), families.end(), UNDEAD_FAMILY) != families.end();
+
+    for (const PotionEffect &effect: getPotionEffects(potionId)) {
+        if (!effect.mInstant) {
+            actor.addEffect(potionEffectInstance(effect, durationScale));
+            continue;
+        }
+
+        if (effect.mId != MobEffectId::InstantHealth && effect.mId != MobEffectId::InstantDamage)
+            continue;
+
+        if ((effect.mId == MobEffectId::InstantHealth) != undead) {
+            actor.heal(4.0f * (float) (1 << effect.mAmplifier));
+            syncActorAttributes(actor);
+        } else {
+            damageActor(actor, 6.0f * (float) (1 << effect.mAmplifier),
+                        DamageSource::environment("death.attack.magic", actor.getName()).withoutArmor());
+        }
     }
 }
 

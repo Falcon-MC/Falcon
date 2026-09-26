@@ -182,6 +182,19 @@ bool SplashPotionActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPo
         owner.applyPotionEffects(nearby, getPotionId(), scale);
     }
 
+    for (auto &entry: owner.getActors()) {
+        ServerActor &nearby = *entry.second;
+        if (&nearby == this || !nearby.isAlive() || nearby.isProjectile() || nearby.getDimension() != getDimension())
+            continue;
+
+        const float distance = distanceSquared(nearby.getPosition(), hitPosition);
+        if (distance > SPLASH_POTION_RADIUS_SQUARED)
+            continue;
+
+        const float scale = std::max(SPLASH_POTION_MIN_SCALE, 1.0f - std::sqrt(distance) / SPLASH_POTION_RADIUS);
+        owner.applyPotionEffects(nearby, getPotionId(), scale);
+    }
+
     owner.spawnParticleEffect(owner.getLevelFor(*this), SPLASH_POTION_PARTICLE, hitPosition);
     return true;
 }

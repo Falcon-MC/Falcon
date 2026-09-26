@@ -57,6 +57,7 @@ struct MobEffectInstance {
 
 const char *getMobEffectName(MobEffectId id);
 bool parseMobEffect(const std::string &value, MobEffectId &id);
+bool parseDefinitionMobEffect(const std::string &value, MobEffectId &id);
 
 class MobEffect {
 public:

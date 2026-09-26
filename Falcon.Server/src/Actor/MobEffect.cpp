@@ -78,6 +78,19 @@ bool parseMobEffect(const std::string &value, MobEffectId &id) {
     return false;
 }
 
+bool parseDefinitionMobEffect(const std::string &value, MobEffectId &id) {
+    const std::string key = lower(value);
+    if (key == "heal") {
+        id = MobEffectId::InstantHealth;
+        return true;
+    }
+    if (key == "harm") {
+        id = MobEffectId::InstantDamage;
+        return true;
+    }
+    return parseMobEffect(key, id);
+}
+
 void AbsorptionMobEffect::onAdd(Actor &actor, const MobEffectInstance &instance) const {
     actor.getAttributes().setClamped(ABSORPTION, 4.0f * (float) instance.level());
 }

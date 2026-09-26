@@ -181,6 +181,8 @@ private:
 
     void _tickTimer(ServerNetworkHandler &owner);
 
+    void _tickSpellEffects();
+
     void _tickTransformation(ServerNetworkHandler &owner);
 
     int32_t _transformationAssist(ServerNetworkHandler &owner, const json::Value &delay);
@@ -227,6 +229,7 @@ private:
     bool mBorn = false;
     std::string mSpawnEvent;
     bool mEquipmentInherited = false;
+    const json::Value *mSpellEffectsComponent = nullptr;
     const json::Value *mTimerComponent = nullptr;
     int32_t mTimerTicks = 0;
     const json::Value *mTransformationComponent = nullptr;

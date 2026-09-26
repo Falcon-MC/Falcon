@@ -182,6 +182,8 @@ public:
 
     void applyPotionEffects(ServerPlayer &player, int32_t potionId, float durationScale);
 
+    void applyPotionEffects(ServerActor &actor, int32_t potionId, float durationScale);
+
     void spawnLingeringCloud(Level &level, const Vector3f &position, int32_t potionId);
 
     void broadcastLevelEvent(Level &level, int32_t eventId, const Vector3f &position, int32_t data);

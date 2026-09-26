@@ -21,6 +21,7 @@ namespace {
     const int64_t DAY_LENGTH = 24000;
     const int64_t DAYTIME_END = 12000;
     const float MAX_LIGHT = 15.0f;
+    const char *const EFFECT_COMPONENT_PREFIX = "minecraft:effect.";
 
     std::mt19937 &filterRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -173,6 +174,13 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         const std::vector<std::string> families = familiesOf(*target);
         const bool result = value != nullptr
                             && std::find(families.begin(), families.end(), value->string()) != families.end();
+        return isNegation(op) ? !result : result;
+    }
+
+    if (test == "has_component" && value != nullptr && value->string().rfind(EFFECT_COMPONENT_PREFIX, 0) == 0) {
+        MobEffectId effect;
+        const std::string name = value->string().substr(std::string(EFFECT_COMPONENT_PREFIX).size());
+        const bool result = parseDefinitionMobEffect(name, effect) && target->hasEffect(effect);
         return isNegation(op) ? !result : result;
     }
 
