@@ -1830,7 +1830,6 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestAbil
 
     if (packet.mBoolValue && !mayFly) {
         _disconnect(id, player->localize("falcon.disconnect.flyingDisabled"));
-        mPlayers.erase(id);
         return;
     }
 
