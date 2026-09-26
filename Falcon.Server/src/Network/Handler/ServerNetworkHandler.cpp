@@ -1724,6 +1724,10 @@ void ServerNetworkHandler::setDefaultGameType(GameType gameType) {
     mProperties.setProperty("gamemode", index >= 0 && index < 3 ? NAMES[index] : "spectator");
 }
 
+void ServerNetworkHandler::setDifficulty(const std::string &difficulty) {
+    mProperties.setProperty("difficulty", difficulty);
+}
+
 void ServerNetworkHandler::sendPacketTo(const NetworkIdentifier &id, const Packet &packet) {
     mNetworkHandler->send(id, packet, mCodecContext);
 }

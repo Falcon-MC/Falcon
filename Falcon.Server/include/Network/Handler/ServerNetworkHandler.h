@@ -426,6 +426,8 @@ public:
 
     void setDefaultGameType(GameType gameType);
 
+    void setDifficulty(const std::string &difficulty);
+
     ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
                         int pickupDelay);
 
