@@ -13,6 +13,12 @@ LootRange LootRange::parse(const json::Value *value, float fallback) {
         return range;
     }
 
+    if (value->isArray() && !value->mArray.empty()) {
+        range.mMin = (float) value->mArray.front()->number(fallback);
+        range.mMax = (float) value->mArray.back()->number(range.mMin);
+        return range;
+    }
+
     if (value->isObject()) {
         const json::Value *minimum = value->get("min");
         const json::Value *maximum = value->get("max");

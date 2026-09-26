@@ -8,6 +8,27 @@ namespace {
     PotionEffect instant(MobEffectId id, int32_t amplifier) {
         return PotionEffect{id, 0, amplifier, true};
     }
+
+    const char *const POTION_NAMES[] = {
+            "water", "mundane", "long_mundane", "thick", "awkward", "nightvision", "long_nightvision", "invisibility",
+            "long_invisibility", "leaping", "long_leaping", "strong_leaping", "fire_resistance",
+            "long_fire_resistance", "swiftness", "long_swiftness", "strong_swiftness", "slowness", "long_slowness",
+            "water_breathing", "long_water_breathing", "healing", "strong_healing", "harming", "strong_harming",
+            "poison", "long_poison", "strong_poison", "regeneration", "long_regeneration", "strong_regeneration",
+            "strength", "long_strength", "strong_strength", "weakness", "long_weakness", "wither", "turtle_master",
+            "long_turtle_master", "strong_turtle_master", "slow_falling", "long_slow_falling", "strong_slowness",
+            "wind_charged", "weaving", "oozing", "infested"
+    };
+}
+
+int32_t findPotionId(const std::string &name) {
+    const std::string key = name.rfind("minecraft:", 0) == 0 ? name.substr(10) : name;
+    const int32_t count = (int32_t) (sizeof(POTION_NAMES) / sizeof(POTION_NAMES[0]));
+    for (int32_t id = 0; id < count; ++id) {
+        if (key == POTION_NAMES[id])
+            return id;
+    }
+    return -1;
 }
 
 int32_t getPotionColor(int32_t potionId) {

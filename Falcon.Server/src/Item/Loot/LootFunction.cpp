@@ -1,7 +1,9 @@
 #include "Item/Loot/LootFunction.h"
 
+#include "Item/EnchantmentData.h"
 #include "Item/EnchantmentHelper.h"
 #include "Item/Loot/LegacyItemMapper.h"
+#include "Item/PotionEffects.h"
 
 #include <algorithm>
 #include <cmath>
@@ -75,6 +77,10 @@ std::unique_ptr<LootFunction> LootFunction::create(const json::Value &definition
         return std::make_unique<SetDataFromColorIndexFunction>(definition);
     if (name == "exploration_map")
         return std::make_unique<ExplorationMapFunction>(definition);
+    if (name == "specific_enchants")
+        return std::make_unique<SpecificEnchantsFunction>(definition);
+    if (name == "set_potion")
+        return std::make_unique<SetPotionFunction>(definition);
 
     return nullptr;
 }
@@ -198,6 +204,38 @@ SetDataFromColorIndexFunction::SetDataFromColorIndexFunction(const json::Value &
 
 void SetDataFromColorIndexFunction::apply(LootDrop &drop, const LootContext &context) const {
     drop.mData = context.mColorIndex;
+}
+
+SpecificEnchantsFunction::SpecificEnchantsFunction(const json::Value &definition) : LootFunction(definition) {
+    const json::Value *enchants = definition.get("enchants");
+    if (enchants == nullptr || !enchants->isArray())
+        return;
+
+    for (const std::unique_ptr<json::Value> &enchant: enchants->mArray) {
+        const json::Value *id = enchant->isString() ? enchant.get() : enchant->get("id");
+        const EnchantmentData *data = id == nullptr ? nullptr : EnchantmentTable::findByName(id->string());
+        if (data == nullptr)
+            continue;
+
+        mEnchants.push_back(Entry{data->mId, LootRange::parse(enchant->isString() ? nullptr : enchant->get("level"),
+                                                              1.0f)});
+    }
+}
+
+void SpecificEnchantsFunction::apply(LootDrop &drop, const LootContext &context) const {
+    for (const Entry &entry: mEnchants)
+        drop.mEnchantments.push_back(EnchantmentInstance{entry.mId, std::max(1, entry.mLevel.rollInt(context.mRandom))});
+}
+
+SetPotionFunction::SetPotionFunction(const json::Value &definition)
+        : LootFunction(definition),
+          mPotionId(definition.get("id") == nullptr ? -1 : findPotionId(definition.get("id")->string())) {
+}
+
+void SetPotionFunction::apply(LootDrop &drop, const LootContext &context) const {
+    (void) context;
+    if (mPotionId >= 0)
+        drop.mData = mPotionId;
 }
 
 ExplorationMapFunction::ExplorationMapFunction(const json::Value &definition) : LootFunction(definition) {

@@ -132,6 +132,33 @@ protected:
     void apply(LootDrop &drop, const LootContext &context) const override;
 };
 
+class SpecificEnchantsFunction final : public LootFunction {
+public:
+    explicit SpecificEnchantsFunction(const json::Value &definition);
+
+protected:
+    void apply(LootDrop &drop, const LootContext &context) const override;
+
+private:
+    struct Entry {
+        int32_t mId;
+        LootRange mLevel;
+    };
+
+    std::vector<Entry> mEnchants;
+};
+
+class SetPotionFunction final : public LootFunction {
+public:
+    explicit SetPotionFunction(const json::Value &definition);
+
+protected:
+    void apply(LootDrop &drop, const LootContext &context) const override;
+
+private:
+    int32_t mPotionId;
+};
+
 class ExplorationMapFunction final : public LootFunction {
 public:
     explicit ExplorationMapFunction(const json::Value &definition);
