@@ -1995,12 +1995,19 @@ namespace {
         return api->makeDimension(actor->getDimension());
     }
 
+    void removeActorLater(ScriptApi *api, int64_t uniqueId) {
+        ServerNetworkHandler &host = api->host();
+        host.postToMainThread([&host, uniqueId] {
+            host.removeActor(uniqueId);
+        });
+    }
+
     JSValue actorRemove(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
         ServerActor *actor = api->resolveActor(thisVal);
         if (actor == nullptr)
             return JS_UNDEFINED;
-        api->host().removeActor(actor->getUniqueId());
+        removeActorLater(api, actor->getUniqueId());
         return JS_UNDEFINED;
     }
 
@@ -2086,7 +2093,7 @@ namespace {
 
         actor->setHealth(actor->getHealth() - (float) amount);
         if (actor->getHealth() <= 0.0f)
-            api->host().removeActor(actor->getUniqueId());
+            removeActorLater(api, actor->getUniqueId());
         return JS_NewBool(ctx, true);
     }
 
@@ -2095,7 +2102,7 @@ namespace {
         ServerActor *actor = api->resolveActor(thisVal);
         if (actor == nullptr)
             return JS_NewBool(ctx, false);
-        api->host().removeActor(actor->getUniqueId());
+        removeActorLater(api, actor->getUniqueId());
         return JS_NewBool(ctx, true);
     }
 
