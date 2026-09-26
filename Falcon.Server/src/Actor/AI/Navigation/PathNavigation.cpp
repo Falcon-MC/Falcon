@@ -31,12 +31,16 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
         return;
 
     if (mNeedsPath) {
-        if (!PathFinder::tryReserveSearch(owner.getCurrentTick()))
+        if (!mFlying && !PathFinder::tryReserveSearch(owner.getCurrentTick()))
             return;
 
         mNeedsPath = false;
         mob.getMoveControl().stop();
-        if (!PathFinder::get().findPath(owner.getLevelFor(mob), mob, mTarget, mOptions, mPath)) {
+        if (mFlying) {
+            mPath.clear();
+            mPath.add(mTarget);
+            mPath.setReachesTarget(true);
+        } else if (!PathFinder::get().findPath(owner.getLevelFor(mob), mob, mTarget, mOptions, mPath)) {
             stop(mob);
             return;
         }
@@ -61,10 +65,11 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
 void PathNavigation::_checkStuck(MobActor &mob) {
     const Vector3f position = mob.getPosition();
     const float dx = position.x - mLastPosition.x;
+    const float dy = mFlying ? position.y - mLastPosition.y : 0.0f;
     const float dz = position.z - mLastPosition.z;
     mLastPosition = position;
 
-    if (dx * dx + dz * dz > STUCK_DISTANCE_SQUARED) {
+    if (dx * dx + dy * dy + dz * dz > STUCK_DISTANCE_SQUARED) {
         mStuckTicks = 0;
         return;
     }

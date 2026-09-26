@@ -9,16 +9,20 @@
 #include "Actor/AI/Goal/FloatGoal.h"
 #include "Actor/AI/Goal/FollowOwnerGoal.h"
 #include "Actor/AI/Goal/FollowParentGoal.h"
+#include "Actor/AI/Goal/GoHomeGoal.h"
 #include "Actor/AI/Goal/GoalSelector.h"
 #include "Actor/AI/Goal/HurtByTargetGoal.h"
 #include "Actor/AI/Goal/LeapAtTargetGoal.h"
 #include "Actor/AI/Goal/LookAtPlayerGoal.h"
 #include "Actor/AI/Goal/MeleeAttackGoal.h"
+#include "Actor/AI/Goal/MoveToBlockGoal.h"
+#include "Actor/AI/Goal/MoveTowardsHomeRestrictionGoal.h"
 #include "Actor/AI/Goal/NearestAttackableTargetGoal.h"
 #include "Actor/AI/Goal/OpenDoorGoal.h"
 #include "Actor/AI/Goal/OwnerTargetGoal.h"
 #include "Actor/AI/Goal/PanicGoal.h"
 #include "Actor/AI/Goal/PlaceBlockGoal.h"
+#include "Actor/AI/Goal/RandomHoverGoal.h"
 #include "Actor/AI/Goal/RandomLookAroundGoal.h"
 #include "Actor/AI/Goal/RandomStrollGoal.h"
 #include "Actor/AI/Goal/RangedAttackGoal.h"
@@ -30,6 +34,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
+#include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -69,6 +76,17 @@ namespace {
     const char *const NAVIGATION_COMPONENTS[] = {"minecraft:navigation.walk", "minecraft:navigation.generic"};
     const int32_t DOOR_GOAL_PRIORITY = 1;
     const float BREAK_DOOR_DEFAULT_SECONDS = 12.0f;
+
+    const char *const HOME_COMPONENT = "minecraft:home";
+    const char *const FLYING_NAVIGATION_COMPONENTS[] = {"minecraft:navigation.hover", "minecraft:navigation.fly"};
+    const float MOVE_TO_BLOCK_DEFAULT_INTERVAL = 20.0f;
+    const float MOVE_TO_BLOCK_DEFAULT_HEIGHT = 1.0f;
+    const float MOVE_TO_BLOCK_DEFAULT_RADIUS = 0.5f;
+    const float GO_HOME_DEFAULT_INTERVAL = 120.0f;
+    const float GO_HOME_DEFAULT_RADIUS = 0.5f;
+    const float HOVER_DEFAULT_XZ_DISTANCE = 10.0f;
+    const float HOVER_DEFAULT_Y_DISTANCE = 7.0f;
+    const float HOVER_DEFAULT_INTERVAL = 120.0f;
 
     float numberOf(const json::Value &component, const char *key, float fallback) {
         const json::Value *value = component.get(key);
@@ -199,6 +217,93 @@ namespace {
         }
         return false;
     }
+
+    bool canFly(const MobActor &mob) {
+        for (const char *name: FLYING_NAVIGATION_COMPONENTS) {
+            if (mob.getComponent(name) != nullptr)
+                return true;
+        }
+        return false;
+    }
+
+    std::shared_ptr<json::Value> cloneOf(const json::Value *value) {
+        return value == nullptr ? nullptr : std::shared_ptr<json::Value>(value->clone());
+    }
+
+    std::unordered_set<std::string> blockNames(const json::Value *list) {
+        std::unordered_set<std::string> names;
+        if (list == nullptr)
+            return names;
+
+        if (list->isString()) {
+            names.insert(BlockStateUpgrades::currentName(list->mString));
+            return names;
+        }
+
+        for (const std::unique_ptr<json::Value> &entry: list->mArray) {
+            if (entry->isString())
+                names.insert(BlockStateUpgrades::currentName(entry->mString));
+        }
+        return names;
+    }
+
+    Vector3f vectorOf(const json::Value &component, const char *key) {
+        const json::Value *value = component.get(key);
+        if (value == nullptr || !value->isArray() || value->mArray.size() < 3)
+            return Vector3f(0.0f, 0.0f, 0.0f);
+
+        return Vector3f((float) value->mArray[0]->number(0.0), (float) value->mArray[1]->number(0.0),
+                        (float) value->mArray[2]->number(0.0));
+    }
+
+    float homeRadius(const MobActor &mob) {
+        const json::Value *home = mob.getComponent(HOME_COMPONENT);
+        return home == nullptr ? 0.0f : numberOf(*home, "restriction_radius", 0.0f);
+    }
+
+    float randomMovementRadius(const MobActor &mob) {
+        const json::Value *home = mob.getComponent(HOME_COMPONENT);
+        const json::Value *type = home == nullptr ? nullptr : home->get("restriction_type");
+        if (type == nullptr || type->string() == "none")
+            return 0.0f;
+        return homeRadius(mob);
+    }
+
+    RandomHoverGoal::Settings hoverSettings(const MobActor &mob, const json::Value &component, float speed) {
+        RandomHoverGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mHorizontalRange = (int32_t) numberOf(component, "xz_dist", HOVER_DEFAULT_XZ_DISTANCE);
+        settings.mVerticalRange = (int32_t) numberOf(component, "y_dist", HOVER_DEFAULT_Y_DISTANCE);
+        settings.mVerticalOffset = (int32_t) numberOf(component, "y_offset", 0.0f);
+        settings.mInterval = (int32_t) numberOf(component, "interval", HOVER_DEFAULT_INTERVAL);
+        settings.mHomeRadius = randomMovementRadius(mob);
+
+        const json::Value *height = component.get("hover_height");
+        if (height != nullptr && height->isArray() && height->mArray.size() >= 2) {
+            settings.mMinHoverHeight = height->mArray[0]->integer(0);
+            settings.mMaxHoverHeight = height->mArray[1]->integer(0);
+        }
+        return settings;
+    }
+
+    MoveToBlockGoal::Settings moveToBlockSettings(const json::Value &component, float speed) {
+        MoveToBlockGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mTickInterval = (int32_t) numberOf(component, "tick_interval", MOVE_TO_BLOCK_DEFAULT_INTERVAL);
+        settings.mStartChance = numberOf(component, "start_chance", 1.0f);
+        settings.mSearchRange = (int32_t) numberOf(component, "search_range", 0.0f);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", MOVE_TO_BLOCK_DEFAULT_HEIGHT);
+        settings.mGoalRadius = numberOf(component, "goal_radius", MOVE_TO_BLOCK_DEFAULT_RADIUS);
+        settings.mStayTicks = (int32_t) std::lround(numberOf(component, "stay_duration", 0.0f) * TICKS_PER_SECOND);
+        const json::Value *selection = component.get("target_selection_method");
+        settings.mRandomTarget = selection != nullptr && selection->string() == "random";
+        settings.mTargetOffset = vectorOf(component, "target_offset");
+        settings.mTargetBlocks = blockNames(component.get("target_blocks"));
+        settings.mTargetFilters = cloneOf(component.get("target_block_filters"));
+        settings.mOnReach = cloneOf(component.get("on_reach"));
+        settings.mOnStayCompleted = cloneOf(component.get("on_stay_completed"));
+        return settings;
+    }
 }
 
 void BehaviorGoals::build(MobActor &mob, GoalSelector &selector) {
@@ -216,6 +321,13 @@ void BehaviorGoals::build(MobActor &mob, GoalSelector &selector) {
     PathNavigation &navigation = mob.getNavigation();
     navigation.setCanOpenDoors(canOpenDoors(mob));
     navigation.setAvoidSun(mob.getComponent(FLEE_SUN_BEHAVIOR) != nullptr);
+
+    const bool flying = canFly(mob);
+    navigation.setFlying(flying);
+    mob.getMoveControl().setFlying(flying);
+
+    if (mob.getComponent(HOME_COMPONENT) != nullptr && !mob.hasHome())
+        mob.setHomePosition(mob.getPosition());
 
     if (mob.getComponent(OPEN_DOOR_ANNOTATION) != nullptr)
         selector.addGoal(DOOR_GOAL_PRIORITY, std::make_unique<OpenDoorGoal>());
@@ -324,6 +436,24 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "place_block")
         return PlaceBlockGoal::create(component);
+
+    if (behavior == "move_to_block") {
+        MoveToBlockGoal::Settings settings = moveToBlockSettings(component, speed);
+        if (settings.mTargetBlocks.empty())
+            return nullptr;
+        return std::make_unique<MoveToBlockGoal>(std::move(settings));
+    }
+
+    if (behavior == "go_home")
+        return std::make_unique<GoHomeGoal>(speed, (int32_t) numberOf(component, "interval", GO_HOME_DEFAULT_INTERVAL),
+                                            numberOf(component, "goal_radius", GO_HOME_DEFAULT_RADIUS),
+                                            cloneOf(component.get("on_home")), cloneOf(component.get("on_failed")));
+
+    if (behavior == "random_hover")
+        return std::make_unique<RandomHoverGoal>(hoverSettings(mob, component, speed));
+
+    if (behavior == "move_towards_home_restriction")
+        return std::make_unique<MoveTowardsHomeRestrictionGoal>(speed, homeRadius(mob));
 
     if (behavior == "ranged_attack") {
         const json::Value *shooter = mob.getComponent("minecraft:shooter");

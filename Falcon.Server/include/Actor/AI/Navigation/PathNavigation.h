@@ -27,6 +27,10 @@ public:
         mOptions.mAvoidSun = avoidSun;
     }
 
+    void setFlying(bool flying) {
+        mFlying = flying;
+    }
+
     void tick(ServerNetworkHandler &owner, MobActor &mob);
 
 private:
@@ -39,6 +43,7 @@ private:
     float mSpeed = 0.0f;
     bool mHasTarget = false;
     bool mNeedsPath = false;
+    bool mFlying = false;
     int32_t mStuckTicks = 0;
     int32_t mRepaths = 0;
 };

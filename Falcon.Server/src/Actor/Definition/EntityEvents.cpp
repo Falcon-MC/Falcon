@@ -65,6 +65,26 @@ void EntityEvents::fireTrigger(ServerNetworkHandler &owner, MobActor &mob, const
         fire(owner, *receiver, event->string(), depth, receiver == &mob ? other : &mob);
 }
 
+void EntityEvents::fireTriggers(ServerNetworkHandler &owner, MobActor &mob, const json::Value *triggers,
+                                Actor *other) {
+    if (triggers == nullptr)
+        return;
+
+    const auto run = [&owner, &mob, other](const json::Value &trigger) {
+        const json::Value *filters = trigger.isObject() ? trigger.get("filters") : nullptr;
+        if (filters == nullptr || EntityFilter::test(*filters, owner, mob, other))
+            fireTrigger(owner, mob, &trigger, other);
+    };
+
+    if (!triggers->isArray()) {
+        run(*triggers);
+        return;
+    }
+
+    for (const std::unique_ptr<json::Value> &trigger: triggers->mArray)
+        run(*trigger);
+}
+
 MobActor *EntityEvents::_resolveTarget(ServerNetworkHandler &owner, MobActor &mob, const std::string &target,
                                        Actor *other) {
     if (target.empty() || target == SELF_TARGET)

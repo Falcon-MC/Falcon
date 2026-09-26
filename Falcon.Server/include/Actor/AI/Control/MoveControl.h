@@ -24,13 +24,20 @@ public:
         return mMoving;
     }
 
+    void setFlying(bool flying) {
+        mFlying = flying;
+    }
+
     void tick(ServerNetworkHandler &owner, MobActor &mob, JumpControl &jumpControl);
 
 private:
     void _tryJump(ServerNetworkHandler &owner, MobActor &mob, JumpControl &jumpControl, float dx, float dz) const;
 
+    void _tickFlying(MobActor &mob);
+
     Vector3f mWantedPosition;
     float mSpeed = 0.0f;
     bool mHasWanted = false;
     bool mMoving = false;
+    bool mFlying = false;
 };

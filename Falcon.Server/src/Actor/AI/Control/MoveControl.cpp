@@ -18,6 +18,8 @@ namespace {
     const float SATURATED_SPEED_RATIO = 0.4756f;
     const float MIN_JUMP_HEIGHT = 0.01f;
     const float MAX_JUMP_HEIGHT = 1.1f;
+    const float FLY_APPROACH_FACTOR = 0.25f;
+    const float FLY_STEERING = 0.3f;
 }
 
 void MoveControl::setWantedPosition(const Vector3f &position, float speed) {
@@ -35,6 +37,11 @@ void MoveControl::tick(ServerNetworkHandler &owner, MobActor &mob, JumpControl &
 
     if (!mHasWanted)
         return;
+
+    if (mFlying) {
+        _tickFlying(mob);
+        return;
+    }
 
     const Vector3f motion = mob.getMotion();
     const bool inWater = LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition()).water;
@@ -67,6 +74,28 @@ void MoveControl::tick(ServerNetworkHandler &owner, MobActor &mob, JumpControl &
 
     if (length < speed)
         stop();
+}
+
+void MoveControl::_tickFlying(MobActor &mob) {
+    const Vector3f position = mob.getPosition();
+    const float relativeX = mWantedPosition.x - position.x;
+    const float relativeY = mWantedPosition.y - position.y;
+    const float relativeZ = mWantedPosition.z - position.z;
+    const float length = std::sqrt(relativeX * relativeX + relativeY * relativeY + relativeZ * relativeZ);
+    const float cruise = mSpeed * mob.getMovementSpeedMultiplier() * SPEED_FACTOR;
+
+    if (length < std::max(cruise, PRECISION)) {
+        mob.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+        stop();
+        return;
+    }
+
+    const float wanted = std::min(cruise, length * FLY_APPROACH_FACTOR) / length;
+    const Vector3f motion = mob.getMotion();
+    mob.setMotion(Vector3f(motion.x + (relativeX * wanted - motion.x) * FLY_STEERING,
+                           motion.y + (relativeY * wanted - motion.y) * FLY_STEERING,
+                           motion.z + (relativeZ * wanted - motion.z) * FLY_STEERING));
+    mMoving = true;
 }
 
 void MoveControl::_tryJump(ServerNetworkHandler &owner, MobActor &mob, JumpControl &jumpControl, float dx,

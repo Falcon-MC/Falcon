@@ -17,6 +17,9 @@ public:
     static void fireTrigger(ServerNetworkHandler &owner, MobActor &mob, const json::Value *trigger,
                             Actor *other = nullptr, int32_t depth = 0);
 
+    static void fireTriggers(ServerNetworkHandler &owner, MobActor &mob, const json::Value *triggers,
+                             Actor *other = nullptr);
+
 private:
     static bool _run(ServerNetworkHandler &owner, MobActor &mob, const json::Value &node, int32_t depth,
                      Actor *other);
