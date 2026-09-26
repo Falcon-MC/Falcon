@@ -1,5 +1,5 @@
 #include "Inventory/InventoryManager.h"
-#include "Actor/ItemActor.h"
+#include "Actor/Misc/ItemActor.h"
 #include "Block/Actor/ChestBlockActor.h"
 #include "Block/Actor/ContainerBlockActor.h"
 #include "Block/Actor/EnderChestBlockActor.h"

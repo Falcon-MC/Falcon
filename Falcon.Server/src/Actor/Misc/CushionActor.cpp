@@ -1,4 +1,4 @@
-#include "Actor/CushionActor.h"
+#include "Actor/Misc/CushionActor.h"
 
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/RideSystem.h"

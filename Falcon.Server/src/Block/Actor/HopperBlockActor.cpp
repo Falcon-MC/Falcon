@@ -1,6 +1,6 @@
 #include "Block/Actor/HopperBlockActor.h"
 
-#include "Actor/ItemActor.h"
+#include "Actor/Misc/ItemActor.h"
 #include "Block/Actor/FurnaceBlockActor.h"
 #include "Block/BlockActorStore.h"
 #include "Inventory/PlayerInventory.h"

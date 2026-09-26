@@ -1,4 +1,4 @@
-#include "Actor/PrimedTntActor.h"
+#include "Actor/Misc/PrimedTntActor.h"
 
 #include "Actor/ActorFlags.h"
 #include "Level/Explosion.h"

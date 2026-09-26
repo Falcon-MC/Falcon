@@ -1,6 +1,6 @@
 #include "Block/Systems/FallingBlockSystem.h"
 
-#include "Actor/FallingBlockActor.h"
+#include "Actor/Misc/FallingBlockActor.h"
 #include "Block/BlockData.h"
 #include "Block/Systems/BlockChangeSystem.h"
 #include "Level/Level.h"

@@ -1,6 +1,6 @@
 #include "Item/Items/BucketItem.h"
 
-#include "Actor/ItemActor.h"
+#include "Actor/Misc/ItemActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
 #include "Block/Blocks/CauldronBlock.h"

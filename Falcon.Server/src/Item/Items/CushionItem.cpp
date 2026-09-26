@@ -1,6 +1,6 @@
 #include "Item/Items/CushionItem.h"
 
-#include "Actor/CushionActor.h"
+#include "Actor/Misc/CushionActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockSupport.h"

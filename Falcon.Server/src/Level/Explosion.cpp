@@ -1,7 +1,7 @@
 #include "Level/Explosion.h"
 
 #include "Actor/ActorClassRegistry.h"
-#include "Actor/ItemActor.h"
+#include "Actor/Misc/ItemActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"

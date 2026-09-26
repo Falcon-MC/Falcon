@@ -1,4 +1,4 @@
-#include "Actor/EndCrystalActor.h"
+#include "Actor/Misc/EndCrystalActor.h"
 
 #include "Actor/ActorClassRegistry.h"
 #include "Level/Explosion.h"

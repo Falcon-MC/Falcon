@@ -1,4 +1,4 @@
-#include "Actor/FallingBlockActor.h"
+#include "Actor/Misc/FallingBlockActor.h"
 
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/ServerPlayer.h"

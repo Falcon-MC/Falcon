@@ -3,7 +3,7 @@
 #include "Block/Actor/ChestBlockActor.h"
 #include "Block/BlockActorStore.h"
 #include "Block/BlockData.h"
-#include "Actor/PrimedTntActor.h"
+#include "Actor/Misc/PrimedTntActor.h"
 #include "Block/Blocks/ButtonBlock.h"
 #include "Block/Blocks/CommandBlock.h"
 #include "Block/Blocks/DaylightDetectorBlock.h"

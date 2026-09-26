@@ -1,7 +1,7 @@
 #include "Network/Handler/ItemActorHandler.h"
 
 #include "Actor/ActorFlags.h"
-#include "Actor/ItemActor.h"
+#include "Actor/Misc/ItemActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Blocks/ContainerBlock.h"
 #include "Block/Blocks/FireBlock.h"

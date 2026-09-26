@@ -2,7 +2,7 @@
 
 #include "Actor/ActorClassRegistry.h"
 #include "Core/Math/AxisAlignedBB.h"
-#include "Actor/EndCrystalActor.h"
+#include "Actor/Misc/EndCrystalActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Item/ItemClassRegistry.h"
