@@ -761,15 +761,15 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
     }
 
     for (const std::unique_ptr<BundleView> &view: context.mBundles) {
-        FullContainerName ownerName;
-        ownerName.mContainer = view->mOwnerContainer;
-
-        ItemStack *owner = resolveSlot(working, context, ownerName, view->mOwnerSlot);
-        if (owner == nullptr || !BundleInventory::isBundle(*owner)
-            || BundleInventory::getBundleId(*owner) != view->mId) {
-            continue;
+        ItemStack *owner = findBundleOwner(working, context, view->mId, view->mOwnerContainer, view->mOwnerSlot);
+        if (owner == nullptr) {
+            entry.mResult = RESULT_ERROR;
+            entry.mContainers.clear();
+            return entry;
         }
 
+        FullContainerName ownerName;
+        ownerName.mContainer = view->mOwnerContainer;
         BundleInventory::writeContents(*owner, view->mContents);
         markTouched(touched, ownerName, view->mOwnerSlot);
 
