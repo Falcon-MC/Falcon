@@ -1,5 +1,6 @@
 #include "Actor/AI/Goal/RangedAttackGoal.h"
 
+#include "Actor/AI/Goal/ChargeHeldItemGoal.h"
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/Mob/MobActor.h"
 #include "Actor/ServerPlayer.h"
@@ -72,7 +73,17 @@ void RangedAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
 
     if (--mCooldown > 0 || !inRange)
         return;
+
+    const bool crossbow = mob.getComponent("minecraft:behavior.charge_held_item") != nullptr
+                          && ChargeHeldItemGoal::holdsCrossbow(mob);
+    if (crossbow && !mob.getFlags().get(ActorFlag::Charged))
+        return;
     mCooldown = _nextInterval();
+
+    if (crossbow) {
+        mob.getFlags().set(ActorFlag::Charged, false);
+        owner.syncActorFlags(mob);
+    }
 
     const Vector3f position = mob.getPosition();
     const Vector3f origin(position.x, position.y + mob.getSize().mHeight * EYE_RATIO, position.z);

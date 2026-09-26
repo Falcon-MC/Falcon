@@ -151,6 +151,10 @@ public:
 
     InventoryManager &getInventoryManager() { return mInventoryManager; }
 
+    const InventoryManager &getInventoryManager() const {
+        return mInventoryManager;
+    }
+
     PacketSender *getPacketSender() const { return mSender; }
 
     void setEffectsNetworkReady(bool ready) { mEffectsNetworkReady = ready; }

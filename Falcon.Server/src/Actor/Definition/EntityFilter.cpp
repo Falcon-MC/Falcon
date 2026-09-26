@@ -447,6 +447,14 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         return isNegation(op) ? !result : result;
     }
 
+    if (test == "in_nether")
+        return applyBoolean(target->getDimension() == DimensionType::Nether, value, op);
+
+    if (test == "has_container_open") {
+        const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(target);
+        return applyBoolean(player != nullptr && player->getInventoryManager().isContainerOpen(), value, op);
+    }
+
     if (test == "has_silk_touch") {
         const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(target);
         const bool result = player != nullptr && ItemEnchantments::getLevel(player->getInventory().getItemInHand(),

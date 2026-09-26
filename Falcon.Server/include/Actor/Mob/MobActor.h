@@ -10,6 +10,8 @@
 #include "Actor/ActorFlags.h"
 #include "Actor/ActorSize.h"
 #include "Actor/Definition/LookedAtSensor.h"
+#include "Actor/Mob/Component/MobAdmiration.h"
+#include "Actor/Mob/Component/MobAnger.h"
 #include "Actor/Mob/MobEntitySpawner.h"
 #include "Actor/Mob/MobEquipment.h"
 #include "Actor/Movement/RideControlSystem.h"
@@ -230,6 +232,32 @@ public:
         return mEquipment;
     }
 
+    const MobEquipment &getEquipment() const {
+        return mEquipment;
+    }
+
+    MobAdmiration &getAdmiration() {
+        return mAdmiration;
+    }
+
+    const MobAdmiration &getAdmiration() const {
+        return mAdmiration;
+    }
+
+    MobAnger &getAnger() {
+        return mAnger;
+    }
+
+    int getInventoryCapacity() const;
+
+    std::vector<ItemStack> rollLoot(ServerNetworkHandler &owner, const std::string &path);
+
+    void onKilledActor(ServerNetworkHandler &owner, Actor &victim);
+
+    bool isCelebrating() const {
+        return mCelebrationTicks > 0;
+    }
+
     Vector3f getSeatOffset(size_t index, size_t passengerCount) const override;
 
     Vector3f getDismountPosition(size_t index, size_t passengerCount) const override;
@@ -291,6 +319,14 @@ private:
 
     void _tickTimer(ServerNetworkHandler &owner);
 
+    void _tickAttackCooldown(ServerNetworkHandler &owner);
+
+    void _tickCelebration(ServerNetworkHandler &owner);
+
+    void _startCelebration(ServerNetworkHandler &owner, const json::Value &component);
+
+    void _tickShaking(ServerNetworkHandler &owner);
+
     void _tickSpellEffects();
 
     void _tickTransformation(ServerNetworkHandler &owner);
@@ -334,8 +370,6 @@ private:
     void _dropEquipmentSlot(ServerNetworkHandler &owner, const std::string &slotName, float yOffset);
 
     void _spawnLoot(ServerNetworkHandler &owner, Level &level, const std::string &path);
-
-    std::vector<ItemStack> _rollLoot(ServerNetworkHandler &owner, const std::string &path);
 
     void _givePlayerItem(ServerNetworkHandler &owner, ServerPlayer &player, ItemStack item);
 
@@ -402,4 +436,11 @@ private:
     mutable float mRolledMovementSpeed = -1.0f;
     mutable float mRolledJumpStrength = -1.0f;
     RideControlState mRideControl;
+    MobAnger mAnger;
+    MobAdmiration mAdmiration;
+    const json::Value *mAttackCooldownComponent = nullptr;
+    int32_t mAttackCooldownTicks = 0;
+    int32_t mCelebrationTicks = 0;
+    int32_t mCelebrationSoundTicks = 0;
+    const json::Value *mCelebrationComponent = nullptr;
 };

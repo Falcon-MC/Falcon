@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <vector>
 
+class Actor;
 class ServerNetworkHandler;
 class ServerPlayer;
 class ItemActor;
@@ -23,6 +24,10 @@ public:
 
     static ItemActor *dropItem(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
                                const ItemStack &item, const Vector3f &motion, int pickupDelay);
+
+    static void collect(ServerNetworkHandler &owner, ItemActor &item, const Actor &collector);
+
+    static void refresh(ServerNetworkHandler &owner, const ItemActor &item);
 
     static void sendItemActorsTo(ServerNetworkHandler &owner, ServerPlayer &player);
 

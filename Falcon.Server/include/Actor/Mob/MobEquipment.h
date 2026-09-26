@@ -55,6 +55,10 @@ public:
 
     void dropAll(ServerNetworkHandler &owner, Level &level, const Vector3f &position);
 
+    void dropInventory(ServerNetworkHandler &owner, Level &level, const Vector3f &position);
+
+    bool addInventoryItem(const ItemStack &item, int capacity);
+
     bool dropSlot(ServerNetworkHandler &owner, Level &level, const Vector3f &position, const std::string &slotName);
 
     float absorbDamage(float amount, const ActorDamageSource &source) const;

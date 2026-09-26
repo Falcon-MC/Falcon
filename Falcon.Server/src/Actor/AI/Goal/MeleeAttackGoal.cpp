@@ -83,6 +83,8 @@ void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor 
     if (target.getHealth() >= healthBefore)
         return;
 
+    mob.getAnger().onAttack(owner, mob, target);
+
     const Vector3f mobPosition = mob.getPosition();
     const Vector3f targetPosition = target.getPosition();
     owner.knockBack(target, targetPosition.x - mobPosition.x, targetPosition.z - mobPosition.z, ATTACK_KNOCKBACK);

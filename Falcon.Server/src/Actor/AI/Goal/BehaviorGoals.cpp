@@ -1,10 +1,14 @@
 #include "Actor/AI/Goal/BehaviorGoals.h"
 
+#include "Actor/AI/Goal/AdmireItemGoal.h"
+#include "Actor/AI/Goal/AvoidBlockGoal.h"
 #include "Actor/AI/Goal/AvoidMobTypeGoal.h"
 #include "Actor/AI/Goal/BehaviorItems.h"
 #include "Actor/AI/Goal/BreakDoorGoal.h"
 #include "Actor/AI/Goal/BreedGoal.h"
+#include "Actor/AI/Goal/ChargeHeldItemGoal.h"
 #include "Actor/AI/Goal/EatBlockGoal.h"
+#include "Actor/AI/Goal/FindMountGoal.h"
 #include "Actor/AI/Goal/FleeSunGoal.h"
 #include "Actor/AI/Goal/FloatGoal.h"
 #include "Actor/AI/Goal/FollowMobGoal.h"
@@ -22,6 +26,7 @@
 #include "Actor/AI/Goal/OpenDoorGoal.h"
 #include "Actor/AI/Goal/OwnerTargetGoal.h"
 #include "Actor/AI/Goal/PanicGoal.h"
+#include "Actor/AI/Goal/PickupItemsGoal.h"
 #include "Actor/AI/Goal/PlaceBlockGoal.h"
 #include "Actor/AI/Goal/RandomHoverGoal.h"
 #include "Actor/AI/Goal/RandomLookAroundGoal.h"
@@ -101,6 +106,8 @@ namespace {
     const ActorFlag TIMER_FLAGS[] = {ActorFlag::TimerFlag1, ActorFlag::TimerFlag2, ActorFlag::TimerFlag3};
     const float TIMER_FLAG_DEFAULT_DURATION = 2.0f;
     const float TIMER_FLAG_DEFAULT_COOLDOWN = 10.0f;
+    const float SOUND_DEFAULT_INTERVAL = 3.0f;
+    const float PICKUP_DEFAULT_GOAL_RADIUS = 0.5f;
 
     float numberOf(const json::Value &component, const char *key, float fallback) {
         const json::Value *value = component.get(key);
@@ -178,6 +185,8 @@ namespace {
             entry.mWalkSpeed = movement * numberOf(*type, "walk_speed_multiplier", 1.0f);
             entry.mSprintSpeed = movement * numberOf(*type, "sprint_speed_multiplier", 1.0f);
             entry.mSprintDistance = numberOf(*type, "sprint_distance", AVOID_DEFAULT_SPRINT_DISTANCE);
+            const json::Value *outnumbered = type->get("check_if_outnumbered");
+            entry.mCheckIfOutnumbered = outnumbered != nullptr && outnumbered->boolean(false);
             entries.push_back(std::move(entry));
         }
         return entries;
@@ -280,21 +289,43 @@ namespace {
         return value == nullptr ? nullptr : std::shared_ptr<json::Value>(value->clone());
     }
 
+    std::string blockName(const std::string &name) {
+        const std::string itemPrefix = "minecraft:item.";
+        if (name.rfind(itemPrefix, 0) == 0)
+            return BlockStateUpgrades::currentName("minecraft:" + name.substr(itemPrefix.size()));
+        return BlockStateUpgrades::currentName(name);
+    }
+
     std::unordered_set<std::string> blockNames(const json::Value *list) {
         std::unordered_set<std::string> names;
         if (list == nullptr)
             return names;
 
         if (list->isString()) {
-            names.insert(BlockStateUpgrades::currentName(list->mString));
+            names.insert(blockName(list->mString));
             return names;
         }
 
         for (const std::unique_ptr<json::Value> &entry: list->mArray) {
             if (entry->isString())
-                names.insert(BlockStateUpgrades::currentName(entry->mString));
+                names.insert(blockName(entry->mString));
         }
         return names;
+    }
+
+    std::string stringOf(const json::Value &component, const char *key) {
+        const json::Value *value = component.get(key);
+        return value == nullptr ? std::string() : value->string();
+    }
+
+    int32_t soundIntervalTicks(const json::Value &component, bool minimum) {
+        const json::Value *interval = component.get("sound_interval");
+        if (interval == nullptr || !interval->isObject())
+            return secondsToTicks(SOUND_DEFAULT_INTERVAL);
+
+        const float low = numberOf(*interval, "range_min", numberOf(*interval, "min", SOUND_DEFAULT_INTERVAL));
+        const float high = numberOf(*interval, "range_max", numberOf(*interval, "max", low));
+        return secondsToTicks(minimum ? low : high);
     }
 
     Vector3f vectorOf(const json::Value &component, const char *key) {
@@ -488,8 +519,54 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         std::vector<AvoidMobTypeGoal::Entry> entries = avoidEntries(mob, component);
         if (entries.empty())
             return nullptr;
-        return std::make_unique<AvoidMobTypeGoal>(std::move(entries));
+
+        AvoidMobTypeGoal::Options options;
+        options.mRemoveTarget = isFlagSet(component, "remove_target");
+        options.mOnEscape = cloneOf(component.get("on_escape_event"));
+        options.mSound = stringOf(component, "avoid_mob_sound");
+        options.mMinSoundInterval = soundIntervalTicks(component, true);
+        options.mMaxSoundInterval = soundIntervalTicks(component, false);
+        return std::make_unique<AvoidMobTypeGoal>(std::move(entries), std::move(options));
     }
+
+    if (behavior == "avoid_block") {
+        AvoidBlockGoal::Settings settings;
+        settings.mTickInterval = (int32_t) numberOf(component, "tick_interval", 1.0f);
+        settings.mSearchRange = (int32_t) numberOf(component, "search_range", 0.0f);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", 0.0f);
+        settings.mSprintSpeed = mob.getMovementSpeed() * numberOf(component, "sprint_speed_modifier", 1.0f);
+        const json::Value *selection = component.get("target_selection_method");
+        settings.mRandomTarget = selection != nullptr && selection->string() == "random";
+        settings.mBlocks = blockNames(component.get("target_blocks"));
+        settings.mSound = stringOf(component, "avoid_block_sound");
+        settings.mMinSoundInterval = soundIntervalTicks(component, true);
+        settings.mMaxSoundInterval = soundIntervalTicks(component, false);
+        settings.mOnEscape = cloneOf(component.get("on_escape"));
+        if (settings.mBlocks.empty() || settings.mSearchRange <= 0)
+            return nullptr;
+        return std::make_unique<AvoidBlockGoal>(std::move(settings));
+    }
+
+    if (behavior == "admire_item")
+        return std::make_unique<AdmireItemGoal>(stringOf(component, "admire_item_sound"),
+                                                soundIntervalTicks(component, true),
+                                                soundIntervalTicks(component, false),
+                                                cloneOf(component.get("on_admire_item_start")),
+                                                cloneOf(component.get("on_admire_item_stop")));
+
+    if (behavior == "pickup_items")
+        return std::make_unique<PickupItemsGoal>(speed, numberOf(component, "max_dist", 0.0f),
+                                                 numberOf(component, "goal_radius", PICKUP_DEFAULT_GOAL_RADIUS),
+                                                 secondsToTicks(numberOf(component, "cooldown_after_being_attacked",
+                                                                         0.0f)));
+
+    if (behavior == "charge_held_item")
+        return std::make_unique<ChargeHeldItemGoal>();
+
+    if (behavior == "find_mount")
+        return std::make_unique<FindMountGoal>(speed, numberOf(component, "within_radius", 0.0f),
+                                               (int32_t) numberOf(component, "start_delay", 0.0f),
+                                               (int32_t) numberOf(component, "max_failed_attempts", 0.0f));
 
     if (behavior == "leap_at_target") {
         const json::Value *onGround = component.get("must_be_on_ground");

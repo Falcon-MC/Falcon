@@ -103,6 +103,29 @@ void MobEquipment::setInventoryItem(int slot, ItemStack item) {
     mInventory[(size_t) slot] = std::move(item);
 }
 
+bool MobEquipment::addInventoryItem(const ItemStack &item, int capacity) {
+    if (item.isAir() || capacity <= 0)
+        return false;
+
+    ensureInventorySize(capacity);
+    for (int slot = 0; slot < capacity; ++slot) {
+        ItemStack &stored = mInventory[(size_t) slot];
+        if (!stored.isAir() && PlayerInventory::canStack(stored, item)
+            && stored.mCount + item.mCount <= PlayerInventory::getMaxStackSize(stored)) {
+            stored.mCount += item.mCount;
+            return true;
+        }
+    }
+
+    for (int slot = 0; slot < capacity; ++slot) {
+        if (mInventory[(size_t) slot].isAir()) {
+            mInventory[(size_t) slot] = item;
+            return true;
+        }
+    }
+    return false;
+}
+
 void MobEquipment::ensureInventorySize(int size) {
     if (size > (int) mInventory.size())
         mInventory.resize((size_t) size, ItemStack::air());
@@ -271,6 +294,10 @@ void MobEquipment::dropAll(ServerNetworkHandler &owner, Level &level, const Vect
                            ItemActorHandler::DROP_PICKUP_DELAY);
     }
 
+    dropInventory(owner, level, position);
+}
+
+void MobEquipment::dropInventory(ServerNetworkHandler &owner, Level &level, const Vector3f &position) {
     for (ItemStack &slot: mInventory) {
         ItemStack item = std::move(slot);
         slot = ItemStack::air();

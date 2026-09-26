@@ -97,6 +97,11 @@ bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
     return true;
 }
 
+int32_t CrossbowItem::getChargeTicks(const ItemStack &item) {
+    const int32_t quickCharge = ItemEnchantments::getLevel(item, EnchantmentIds::QUICK_CHARGE);
+    return CROSSBOW_LOAD_TICKS - quickCharge * CROSSBOW_QUICK_CHARGE_TICKS;
+}
+
 bool CrossbowItem::onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     if (isCrossbowLoaded(item))
         return false;
@@ -117,9 +122,7 @@ void CrossbowItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player
     if (isCrossbowLoaded(item))
         return;
 
-    const int32_t quickCharge = ItemEnchantments::getLevel(item, EnchantmentIds::QUICK_CHARGE);
-    const int32_t requiredTicks = CROSSBOW_LOAD_TICKS - quickCharge * CROSSBOW_QUICK_CHARGE_TICKS;
-    if (elapsedTicks < requiredTicks)
+    if (elapsedTicks < getChargeTicks(item))
         return;
 
     const bool finiteResources = hasFiniteResources(player);

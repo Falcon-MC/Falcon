@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <random>
 
 namespace {
@@ -59,6 +60,10 @@ namespace {
     const char *const LOOT_TABLE_PREFIX = "loot_tables/";
     const int64_t OWNER_SYNC_INTERVAL = 20;
     const char *const TIMER_COMPONENT = "minecraft:timer";
+    const char *const ATTACK_COOLDOWN_COMPONENT = "minecraft:attack_cooldown";
+    const char *const IS_SHAKING_COMPONENT = "minecraft:is_shaking";
+    const char *const CELEBRATE_HUNT_COMPONENT = "minecraft:celebrate_hunt";
+    const char *const INVENTORY_COMPONENT = "minecraft:inventory";
     const char *const TRANSFORMATION_COMPONENT = "minecraft:transformation";
     const char *const DAMAGE_SENSOR_COMPONENT = "minecraft:damage_sensor";
     const char *const SPELL_EFFECTS_COMPONENT = "minecraft:spell_effects";
@@ -222,6 +227,11 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     _tickSensors(owner);
     _tickSpellEffects();
     _tickTimer(owner);
+    _tickAttackCooldown(owner);
+    _tickShaking(owner);
+    _tickCelebration(owner);
+    mAnger.tick(owner, *this);
+    mAdmiration.tick(owner, *this);
 
     if (RideControlSystem::tick(owner, *this)) {
         ServerActor::tick(owner);
@@ -520,6 +530,94 @@ void MobActor::_tickTimer(ServerNetworkHandler &owner) {
     EntityEvents::fireTrigger(owner, *this, timer->get("time_down_event"));
 }
 
+void MobActor::_tickAttackCooldown(ServerNetworkHandler &owner) {
+    const json::Value *cooldown = getComponent(ATTACK_COOLDOWN_COMPONENT);
+    if (cooldown != mAttackCooldownComponent) {
+        mAttackCooldownComponent = cooldown;
+        const json::Value *time = cooldown == nullptr ? nullptr : cooldown->get("attack_cooldown_time");
+        float seconds = 0.0f;
+        if (time != nullptr && time->isArray() && !time->mArray.empty()) {
+            const float minimum = (float) time->mArray.front()->number(0.0);
+            const float maximum = (float) time->mArray.back()->number(minimum);
+            seconds = maximum > minimum ? std::uniform_real_distribution<float>(minimum, maximum)(lifecycleRandom())
+                                        : minimum;
+        } else if (time != nullptr) {
+            seconds = (float) time->number(0.0);
+        }
+        mAttackCooldownTicks = cooldown == nullptr ? 0 : secondsToTicks(seconds);
+    }
+
+    if (cooldown == nullptr || mAttackCooldownTicks <= 0 || --mAttackCooldownTicks > 0)
+        return;
+
+    EntityEvents::fireTrigger(owner, *this, cooldown->get("attack_cooldown_complete_event"));
+}
+
+void MobActor::_tickShaking(ServerNetworkHandler &owner) {
+    _setFlag(owner, ActorFlag::Shaking, getComponent(IS_SHAKING_COMPONENT) != nullptr);
+}
+
+void MobActor::onKilledActor(ServerNetworkHandler &owner, Actor &victim) {
+    const json::Value *celebrate = getComponent(CELEBRATE_HUNT_COMPONENT);
+    const json::Value *targets = celebrate == nullptr ? nullptr : celebrate->get("celebration_targets");
+    const MobActor *victimMob = dynamic_cast<const MobActor *>(&victim);
+    if (celebrate == nullptr
+        || (targets != nullptr && (victimMob == nullptr || !EntityFilter::test(*targets, owner, *victimMob, this))))
+        return;
+
+    _startCelebration(owner, *celebrate);
+    const json::Value *broadcast = celebrate->get("broadcast");
+    if (broadcast == nullptr || !broadcast->boolean(false))
+        return;
+
+    const float radius = numberIn(celebrate, "radius", 0.0f);
+    for (auto &entry: owner.getActors()) {
+        MobActor *ally = dynamic_cast<MobActor *>(entry.second.get());
+        if (ally == nullptr || ally == this || !ally->isAlive() || ally->getDimension() != getDimension()
+            || distanceSquaredTo(*ally) > radius * radius || std::strcmp(ally->getIdentifier(), getIdentifier()) != 0)
+            continue;
+
+        const json::Value *allyCelebrate = ally->getComponent(CELEBRATE_HUNT_COMPONENT);
+        if (allyCelebrate != nullptr)
+            ally->_startCelebration(owner, *allyCelebrate);
+    }
+}
+
+void MobActor::_startCelebration(ServerNetworkHandler &owner, const json::Value &component) {
+    mCelebrationComponent = &component;
+    mCelebrationTicks = secondsToTicks(numberIn(&component, "duration", 0.0f));
+    mCelebrationSoundTicks = 0;
+    _setFlag(owner, ActorFlag::Celebrating, true);
+}
+
+void MobActor::_tickCelebration(ServerNetworkHandler &owner) {
+    if (mCelebrationTicks <= 0)
+        return;
+
+    if (getComponent(CELEBRATE_HUNT_COMPONENT) != mCelebrationComponent || --mCelebrationTicks <= 0) {
+        mCelebrationTicks = 0;
+        mCelebrationComponent = nullptr;
+        _setFlag(owner, ActorFlag::Celebrating, false);
+        return;
+    }
+
+    const json::Value *sound = mCelebrationComponent->get("celebrate_sound");
+    if (sound == nullptr || --mCelebrationSoundTicks > 0)
+        return;
+
+    playDefinitionSound(owner, sound->string());
+    const json::Value *interval = mCelebrationComponent->get("sound_interval");
+    const float minimum = numberIn(interval, "range_min", 0.0f);
+    const float maximum = numberIn(interval, "range_max", minimum);
+    mCelebrationSoundTicks = secondsToTicks(maximum > minimum
+                                            ? std::uniform_real_distribution<float>(minimum, maximum)(lifecycleRandom())
+                                            : minimum);
+}
+
+int MobActor::getInventoryCapacity() const {
+    return (int) numberIn(getComponent(INVENTORY_COMPONENT), "inventory_size", 0.0f);
+}
+
 void MobActor::_tickTransformation(ServerNetworkHandler &owner) {
     const json::Value *transformation = getComponent(TRANSFORMATION_COMPONENT);
     if (transformation != mTransformationComponent) {
@@ -644,6 +742,8 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
 
     if (flagIn(transformation, "drop_equipment"))
         mEquipment.dropAll(owner, level, getPosition());
+    else if (flagIn(transformation, "drop_inventory"))
+        mEquipment.dropInventory(owner, level, getPosition());
 
     const json::Value *sound = transformation.get("transformation_sound");
     if (sound != nullptr)
@@ -849,9 +949,25 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         if (filters != nullptr && !EntityFilter::test(*filters, owner, *this, &player))
             continue;
 
+        const int64_t hurtCooldown = (int64_t) (numberIn(interaction, "cooldown_after_being_attacked", 0.0f)
+                                                * TICKS_PER_SECOND);
+        if (hurtCooldown > 0 && owner.getCurrentTick() - mLastHurtTick < hurtCooldown)
+            continue;
+
+        const json::Value *admire = interaction->get("admire");
+        const bool admires = admire != nullptr && admire->boolean(false);
+        if (admires && !mAdmiration.canAdmire(owner, *this))
+            continue;
+
         const json::Value *equipSlot = interaction->get("equip_item_slot");
         if (equipSlot != nullptr && !_equipFromHand(owner, player, equipSlot->string()))
             continue;
+
+        if (admires) {
+            const json::Value *barter = interaction->get("barter");
+            mAdmiration.start(owner, *this, player.getInventory().getItemInHand(),
+                              barter != nullptr && barter->boolean(false));
+        }
 
         Level &level = owner.getLevelFor(*this);
         const json::Value *spawnItems = interaction->get("spawn_items");
@@ -883,7 +999,7 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         const json::Value *addItems = interaction->get("add_items");
         const json::Value *addTable = addItems == nullptr ? nullptr : addItems->get("table");
         if (addTable != nullptr) {
-            for (ItemStack &stack: _rollLoot(owner, addTable->string()))
+            for (ItemStack &stack: rollLoot(owner, addTable->string()))
                 _givePlayerItem(owner, player, std::move(stack));
         }
 
@@ -991,7 +1107,7 @@ void MobActor::_dropEquipmentSlot(ServerNetworkHandler &owner, const std::string
         EntityEvents::fireTrigger(owner, *this, slot->get("on_unequip"));
 }
 
-std::vector<ItemStack> MobActor::_rollLoot(ServerNetworkHandler &owner, const std::string &path) {
+std::vector<ItemStack> MobActor::rollLoot(ServerNetworkHandler &owner, const std::string &path) {
     std::vector<ItemStack> stacks;
     const std::string prefix = LOOT_TABLE_PREFIX;
     const std::string key = path.rfind(prefix, 0) == 0 ? path.substr(prefix.size()) : path;
@@ -1014,7 +1130,7 @@ std::vector<ItemStack> MobActor::_rollLoot(ServerNetworkHandler &owner, const st
 
 void MobActor::_spawnLoot(ServerNetworkHandler &owner, Level &level, const std::string &path) {
     const Vector3f position = getPosition();
-    for (const ItemStack &stack: _rollLoot(owner, path))
+    for (const ItemStack &stack: rollLoot(owner, path))
         owner.dropItem(level, position, stack, ItemActorHandler::randomDropMotion(),
                        ItemActorHandler::DROP_PICKUP_DELAY);
 }
@@ -1537,6 +1653,8 @@ void MobActor::onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
     mLastHurtTick = owner.getCurrentTick();
     mLastHurtBy = attacker != nullptr && attacker != this ? attacker->getRuntimeId() : 0;
     mHurtCount++;
+    mAdmiration.abort(owner, *this);
+    mAnger.onHurt(owner, *this, attacker != this ? attacker : nullptr);
 }
 
 bool MobActor::setTarget(ServerNetworkHandler &owner, uint64_t runtimeId) {
@@ -1648,6 +1766,10 @@ int MobActor::randomRange(int minimum, int maximum) {
 void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t lootingLevel) {
     if (isDead())
         return;
+
+    MobActor *killer = mLastHurtBy == 0 ? nullptr : dynamic_cast<MobActor *>(findActor(owner, mLastHurtBy));
+    if (killer != nullptr)
+        killer->onKilledActor(owner, *this);
 
     if (owner.getLevel().getGameRules().getBool("domobloot")) {
         Level &level = owner.getLevelFor(*this);

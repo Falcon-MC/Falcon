@@ -286,19 +286,10 @@ namespace {
                 owner.getEventBus().after().mEntityItemPickup.emit(pickupEvent);
             }
 
-            TakeItemActorPacket take;
-    take.mItemRuntimeActorId = actor.getRuntimeId();
-    take.mRuntimeActorId = player.getRuntimeId();
-
-            for (auto &viewer: owner.getPlayers()) {
-                if (viewer.second.isSpawned() && viewer.second.getDimension() == actor.getDimension())
-                    owner.getNetworkHandler().send(viewer.second.getNetworkIdentifier(), take, owner.getCodecContext());
-            }
-
             for (int slot: touchedSlots)
                 player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
 
-            actor.setRemoved(true);
+            ItemActorHandler::collect(owner, actor, player);
             return;
         }
     }
@@ -324,6 +315,24 @@ ItemActor *ItemActorHandler::dropItem(ServerNetworkHandler &owner, Level &level,
 
     broadcastItemActorSpawn(owner, *result);
     return result;
+}
+
+void ItemActorHandler::collect(ServerNetworkHandler &owner, ItemActor &item, const Actor &collector) {
+    TakeItemActorPacket take;
+    take.mItemRuntimeActorId = item.getRuntimeId();
+    take.mRuntimeActorId = collector.getRuntimeId();
+
+    for (auto &viewer: owner.getPlayers()) {
+        if (viewer.second.isSpawned() && viewer.second.getDimension() == item.getDimension())
+            owner.getNetworkHandler().send(viewer.second.getNetworkIdentifier(), take, owner.getCodecContext());
+    }
+
+    item.setRemoved(true);
+}
+
+void ItemActorHandler::refresh(ServerNetworkHandler &owner, const ItemActor &item) {
+    broadcastItemActorRemove(owner, item);
+    broadcastItemActorSpawn(owner, item);
 }
 
 void ItemActorHandler::sendItemActorsTo(ServerNetworkHandler &owner, ServerPlayer &player) {
