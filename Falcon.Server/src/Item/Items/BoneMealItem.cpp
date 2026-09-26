@@ -11,6 +11,7 @@ FALCON_REGISTER_ITEM(BoneMealItem, 100);
 #include "Block/Blocks/SaplingBlock.h"
 #include "Block/Blocks/StemBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Block/Systems/RandomTickSystem.h"
 #include "Inventory/InventoryManager.h"
 #include "Inventory/PlayerInventory.h"
@@ -53,9 +54,12 @@ namespace {
 
     class TrackingBlockManager : public BlockManager {
     public:
-        explicit TrackingBlockManager(Level &level) : BlockManager(level) {}
+        explicit TrackingBlockManager(Level &level) : BlockManager(level), mLevel(level) {}
 
         void setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockState &state) override {
+            if (!BlockChangeSystem::allows(mLevel, Vector3i(x, y, z), state, BlockChangeCause::Grow))
+                return;
+
             BlockManager::setBlockStateAt(x, y, z, state);
             mChanged.push_back(Vector3i(x, y, z));
         }
@@ -63,6 +67,7 @@ namespace {
         const std::vector<Vector3i> &getChanged() const { return mChanged; }
 
     private:
+        Level &mLevel;
         std::vector<Vector3i> mChanged;
     };
 
@@ -103,8 +108,8 @@ bool BoneMealItem::applyToCrop(ServerNetworkHandler &owner, Level &level, const 
 
     Tag states = state.mStates;
     states.putInt(growthState, grown);
-    level.setBlock(position, BlockState(state.mName, states), false);
-    return true;
+    return BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow,
+                                     false);
 }
 
 bool BoneMealItem::applyToSapling(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -112,8 +117,8 @@ bool BoneMealItem::applyToSapling(ServerNetworkHandler &owner, Level &level, con
     if (state.mStates.getByte("age_bit") == 0) {
         Tag states = state.mStates;
         states.putByte("age_bit", 1);
-        level.setBlock(position, BlockState(state.mName, states), false);
-        return true;
+        return BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow,
+                                         false);
     }
 
     const Block *block = VanillaBlocks::fromIdentifier(state.mName);
@@ -150,8 +155,7 @@ bool BoneMealItem::applyToNylium(ServerNetworkHandler &owner, Level &level, cons
     else
         grown = crimson ? "minecraft:crimson_roots" : "minecraft:warped_roots";
 
-    level.setBlock(above, BlockState(grown), false);
-    return true;
+    return BlockChangeSystem::change(level, above, BlockState(grown), BlockChangeCause::Grow, false);
 }
 
 bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
