@@ -27,6 +27,10 @@ namespace {
         std::vector<CraftingOutputData> mOutputs;
         std::vector<CraftingRecipeData> mRecipes;
         std::vector<FurnaceRecipeData> mFurnaceRecipes;
+        std::vector<FurnaceRecipeData> mCampfireRecipes;
+        std::vector<FurnaceRecipeData> mSoulCampfireRecipes;
+        std::vector<BrewingMixData> mPotionMixes;
+        std::vector<BrewingMixData> mContainerMixes;
         std::deque<std::string> mStrings;
         bool mLoaded = false;
 
@@ -226,7 +230,8 @@ namespace {
         addVariants(storage, source, 0, 0, choices);
     }
 
-    void loadFurnaceRecipe(RecipeStorage &storage, const json::Value &source, const TagMap &tags) {
+    void loadFurnaceRecipe(RecipeStorage &storage, std::vector<FurnaceRecipeData> &target,
+                           const json::Value &source, const TagMap &tags) {
         const json::Value *inputData = source.get("input");
         const json::Value *outputData = source.get("output");
         if (inputData == nullptr || inputData->mType != json::Value::Type::Array || inputData->mArray.empty()
@@ -259,10 +264,35 @@ namespace {
                 continue;
             }
             const std::string recipeId = index == 0 ? baseId : baseId + "#" + std::to_string(index);
-            storage.mFurnaceRecipes.push_back({storage.store(recipeId), storage.store(choice.mItemId),
-                                               choice.mAuxValue, choice.mCount, storage.store(output->mString),
-                                               outputCount, priority});
+            target.push_back({storage.store(recipeId), storage.store(choice.mItemId), choice.mAuxValue,
+                              choice.mCount, storage.store(output->mString), outputCount, priority});
         }
+    }
+
+    void loadBrewingMixes(RecipeStorage &storage, std::vector<BrewingMixData> &target, const json::Value *mixes) {
+        if (mixes == nullptr || mixes->mType != json::Value::Type::Array)
+            return;
+
+        for (const std::unique_ptr<json::Value> &mix: mixes->mArray) {
+            const json::Value *input = mix->get("inputId");
+            const json::Value *reagent = mix->get("reagentId");
+            const json::Value *output = mix->get("outputId");
+            if (input == nullptr || reagent == nullptr || output == nullptr)
+                continue;
+
+            const json::Value *inputMeta = mix->get("inputMeta");
+            const json::Value *reagentMeta = mix->get("reagentMeta");
+            const json::Value *outputMeta = mix->get("outputMeta");
+            target.push_back({storage.store(input->string()), inputMeta == nullptr ? -1 : inputMeta->integer(-1),
+                              storage.store(reagent->string()),
+                              reagentMeta == nullptr ? -1 : reagentMeta->integer(-1),
+                              storage.store(output->string()),
+                              outputMeta == nullptr ? -1 : outputMeta->integer(-1)});
+        }
+    }
+
+    bool metaMatches(int32_t expected, int32_t actual) {
+        return expected < 0 || expected == actual;
     }
 
     RecipeStorage &getStorage() {
@@ -278,6 +308,9 @@ namespace {
         if (recipes == nullptr || recipes->mType != json::Value::Type::Array)
             return storage;
 
+        loadBrewingMixes(storage, storage.mPotionMixes, root->get("potionMixes"));
+        loadBrewingMixes(storage, storage.mContainerMixes, root->get("containerMixes"));
+
         const TagMap tags = loadTags();
         for (const std::unique_ptr<json::Value> &recipe: recipes->mArray) {
             const json::Value *type = recipe->get("type");
@@ -285,10 +318,17 @@ namespace {
             if (type == nullptr || block == nullptr)
                 continue;
 
-            if (block->string() == "furnace") {
-                if (type->integer(-1) == 1) {
-                    loadFurnaceRecipe(storage, *recipe, tags);
-                }
+            const std::string blockName = block->string();
+            if (blockName == "furnace" || blockName == "campfire" || blockName == "soul_campfire") {
+                if (type->integer(-1) != 1)
+                    continue;
+
+                std::vector<FurnaceRecipeData> &target = blockName == "furnace"
+                                                         ? storage.mFurnaceRecipes
+                                                         : (blockName == "campfire"
+                                                            ? storage.mCampfireRecipes
+                                                            : storage.mSoulCampfireRecipes);
+                loadFurnaceRecipe(storage, target, *recipe, tags);
                 continue;
             }
 
@@ -333,6 +373,47 @@ const FurnaceRecipeData *CraftingRecipeTable::getFurnaceRecipes() {
 
 size_t CraftingRecipeTable::getFurnaceRecipeCount() {
     return getStorage().mFurnaceRecipes.size();
+}
+
+const FurnaceRecipeData *CraftingRecipeTable::findCampfireRecipe(const std::string &inputId, int32_t inputMeta,
+                                                                 bool soul) {
+    const RecipeStorage &storage = getStorage();
+    const std::vector<FurnaceRecipeData> &recipes = soul ? storage.mSoulCampfireRecipes : storage.mCampfireRecipes;
+    for (const FurnaceRecipeData &recipe: recipes) {
+        if (inputId == recipe.mInputItemId && metaMatches(recipe.mInputAuxValue, inputMeta))
+            return &recipe;
+    }
+    return nullptr;
+}
+
+const BrewingMixData *CraftingRecipeTable::findBrewingMix(const std::string &inputId, int32_t inputMeta,
+                                                          const std::string &reagentId, int32_t reagentMeta) {
+    const RecipeStorage &storage = getStorage();
+    for (const BrewingMixData &mix: storage.mPotionMixes) {
+        if (inputId == mix.mInputId && metaMatches(mix.mInputMeta, inputMeta) && reagentId == mix.mReagentId
+            && metaMatches(mix.mReagentMeta, reagentMeta))
+            return &mix;
+    }
+
+    for (const BrewingMixData &mix: storage.mContainerMixes) {
+        if (inputId == mix.mInputId && reagentId == mix.mReagentId)
+            return &mix;
+    }
+    return nullptr;
+}
+
+bool CraftingRecipeTable::isBrewingReagent(const std::string &reagentId, int32_t reagentMeta) {
+    const RecipeStorage &storage = getStorage();
+    for (const BrewingMixData &mix: storage.mPotionMixes) {
+        if (reagentId == mix.mReagentId && metaMatches(mix.mReagentMeta, reagentMeta))
+            return true;
+    }
+
+    for (const BrewingMixData &mix: storage.mContainerMixes) {
+        if (reagentId == mix.mReagentId)
+            return true;
+    }
+    return false;
 }
 
 const std::vector<std::string> &CraftingRecipeTable::getItemTags(const std::string &identifier) {

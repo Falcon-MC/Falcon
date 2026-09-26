@@ -38,6 +38,15 @@ struct FurnaceRecipeData {
     int32_t mPriority;
 };
 
+struct BrewingMixData {
+    const char *mInputId;
+    int32_t mInputMeta;
+    const char *mReagentId;
+    int32_t mReagentMeta;
+    const char *mOutputId;
+    int32_t mOutputMeta;
+};
+
 class CraftingRecipeTable {
 public:
     static const CraftingRecipeData *getRecipes();
@@ -47,6 +56,13 @@ public:
 
     static const FurnaceRecipeData *getFurnaceRecipes();
     static size_t getFurnaceRecipeCount();
+
+    static const FurnaceRecipeData *findCampfireRecipe(const std::string &inputId, int32_t inputMeta, bool soul);
+
+    static const BrewingMixData *findBrewingMix(const std::string &inputId, int32_t inputMeta,
+                                                const std::string &reagentId, int32_t reagentMeta);
+
+    static bool isBrewingReagent(const std::string &reagentId, int32_t reagentMeta);
 
     static const std::vector<std::string> &getItemTags(const std::string &identifier);
 };

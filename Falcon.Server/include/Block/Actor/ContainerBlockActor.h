@@ -98,10 +98,39 @@ public:
 
     static const int SLOT_INGREDIENT = 0;
     static const int SLOT_FUEL = 4;
+    static const int FIRST_POTION_SLOT = 1;
+    static const int POTION_SLOTS = 3;
+    static const int MAX_BREW_TIME = 400;
+    static const int FUEL_PER_BLAZE_POWDER = 20;
 
     BrewingStandBlockActor() : ContainerBlockActor(SIZE) {}
 
     const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+
+    Tag saveNbt() const override;
+
+    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    Tag getSpawnCompound() const override;
+
+    bool tick(ServerNetworkHandler &owner) override;
+
+private:
+    bool _hasMix() const;
+
+    void _restockFuel(ServerNetworkHandler &owner);
+
+    void _brew(ServerNetworkHandler &owner);
+
+    void _stopBrewing(ServerNetworkHandler &owner);
+
+    void _sendProperty(ServerNetworkHandler &owner, int property, int value) const;
+
+    void _updateSlotStates(ServerNetworkHandler &owner);
+
+    int mBrewTime = MAX_BREW_TIME;
+    int mFuelAmount = 0;
+    int mFuelTotal = 0;
 };
 
 class BeaconBlockActor final : public ContainerBlockActor {
@@ -138,10 +167,26 @@ public:
     static constexpr const char *BLOCK_ACTOR_ID = "Campfire";
 
     static const int SIZE = 4;
+    static const int COOK_TIME = 600;
 
     CampfireBlockActor() : ContainerBlockActor(SIZE) {}
 
     const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+
+    Tag saveNbt() const override;
+
+    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    Tag getSpawnCompound() const override;
+
+    bool tick(ServerNetworkHandler &owner) override;
+
+    bool addFood(const ItemStack &item);
+
+private:
+    bool _isSoul() const;
+
+    int mCookTimes[SIZE] = {};
 };
 
 class ShelfBlockActor final : public ContainerBlockActor {

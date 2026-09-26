@@ -11,9 +11,13 @@ FALCON_REGISTER_BLOCK(ContainerBlock, 50);
 #include "Block/BlockActorStore.h"
 #include "Block/Components/PlacementOrientation.h"
 #include "Inventory/Container/BlockContainerManagerModel.h"
+#include "Inventory/InventoryManager.h"
+#include "Inventory/PlayerInventory.h"
 #include "Level/Level.h"
+#include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Types/StartGameTypes.h"
 
 #include <utility>
 
@@ -123,6 +127,30 @@ namespace {
 
         return false;
     }
+
+    bool placeCampfireFood(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
+        PlayerInventory &inventory = player.getInventory();
+        ItemStack held = inventory.getItemInHand();
+        if (held.isAir() || held.mCount <= 0)
+            return false;
+
+        Level &level = owner.getLevelFor(player);
+        CampfireBlockActor &campfire = level.getBlockActors().getOrCreate<CampfireBlockActor>(position);
+        if (!campfire.addFood(held))
+            return false;
+
+        if (player.getGameType() != (int32_t) GameType::Creative) {
+            --held.mCount;
+            if (held.mCount <= 0)
+                held = ItemStack::air();
+            inventory.setItemInHand(std::move(held));
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
+                                                  inventory.getSelectedSlot());
+        }
+
+        BlockActionHandler::broadcastBlockActorData(owner, level, campfire);
+        return true;
+    }
 }
 
 ContainerBlock::ContainerBlock(const Block &base) : Block(base) {
@@ -183,7 +211,13 @@ std::unique_ptr<BlockActor> ContainerBlock::createBlockActor(ContainerBlockKind 
 bool ContainerBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                 const BlockState &state) const {
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
-    if (definition == nullptr || !definition->mOpensWindow)
+    if (definition == nullptr)
+        return false;
+
+    if (definition->mKind == ContainerBlockKind::Campfire)
+        return placeCampfireFood(owner, player, position);
+
+    if (!definition->mOpensWindow)
         return false;
 
     BlockActorStore &blockActors = owner.getLevelFor(player).getBlockActors();
