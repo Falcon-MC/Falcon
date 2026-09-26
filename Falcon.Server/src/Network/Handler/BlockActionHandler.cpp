@@ -11,6 +11,7 @@
 #include "Block/BlockPickItem.h"
 #include "Core/Math/MathConstants.h"
 #include "Actor/ActorClassRegistry.h"
+#include "Actor/Definition/BlockSensor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Actor/ExperienceValues.h"
@@ -450,6 +451,7 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     const ItemStack heldItem = player.getInventory().getItemInHand();
 
     destroyBlock(owner, level, position, brokenState, !creative, heldItem);
+    BlockSensor::onBlockBroken(owner, level, position, brokenState, player);
     PluginBlock::brokenBy(player, position, brokenIdentifier);
 
     PlayerBreakBlockAfterEvent brokenEvent(player, position, brokenIdentifier);

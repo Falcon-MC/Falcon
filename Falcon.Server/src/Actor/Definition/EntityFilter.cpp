@@ -6,6 +6,8 @@
 #include "Actor/ServerPlayer.h"
 #include "Block/Blocks/LiquidView.h"
 #include "Core/Math/Vector3i.h"
+#include "Item/EnchantmentData.h"
+#include "Item/ItemEnchantments.h"
 #include "Level/Generator/Biome/BiomeChunkGenDataRegistry.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
@@ -295,8 +297,29 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         return isNegation(op) ? !result : result;
     }
 
+    if (test == "has_silk_touch") {
+        const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(target);
+        const bool result = player != nullptr && ItemEnchantments::getLevel(player->getInventory().getItemInHand(),
+                                                                            EnchantmentIds::SILK_TOUCH) > 0;
+        return applyBoolean(result, value, op);
+    }
+
     Level &level = owner.getLevelFor(*target);
     const Vector3i position = blockPosition(*target);
+
+    if (test == "weather") {
+        const std::string weather = value == nullptr ? std::string() : value->string();
+        bool result = false;
+        if (weather == "clear")
+            result = !level.isRaining();
+        else if (weather == "precipitation")
+            result = level.isRaining();
+        else if (weather == "thunderstorm")
+            result = level.isThundering();
+        else
+            return false;
+        return isNegation(op) ? !result : result;
+    }
 
     if (test == "has_biome_tag") {
         LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
