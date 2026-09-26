@@ -111,6 +111,7 @@ namespace {
     const char *const TAG_TEMPER = "Temper";
     const char *const TAG_MOVEMENT_SPEED = "RolledMovementSpeed";
     const char *const TAG_JUMP_STRENGTH = "RolledJumpStrength";
+    const char *const TAG_CARRIED_BLOCK = "carriedBlock";
 
     std::mt19937 &lifecycleRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -1474,6 +1475,8 @@ void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
         pushInt(ActorFlags::VARIANT_DATA_ID, (int32_t) numberIn(variant, "value", 0.0f));
     if (const json::Value *mark = getComponent("minecraft:mark_variant"))
         pushInt(ActorFlags::MARK_VARIANT_DATA_ID, (int32_t) numberIn(mark, "value", 0.0f));
+    if (mHasCarriedBlock)
+        pushInt(ActorFlags::CARRIED_BLOCK_DATA_ID, mCarriedBlock.getHash());
 
     if (const json::Value *color = getComponent("minecraft:color")) {
         EntityDataEntry entry;
@@ -1661,6 +1664,15 @@ bool MobActor::fireBlockEvent(ServerNetworkHandler &owner, const Vector3i &posit
     return block != nullptr && block->onActorEvent(owner, level, position, copy, event, *this);
 }
 
+void MobActor::setCarriedBlock(ServerNetworkHandler &owner, const BlockState &state) {
+    mCarriedBlock = state;
+    mHasCarriedBlock = true;
+
+    EntityDataMap metadata;
+    _appendDefinitionData(metadata);
+    owner.sendActorMetadata(*this, metadata);
+}
+
 void MobActor::fireEvent(ServerNetworkHandler &owner, const std::string &event, Actor *other) {
     EntityEvents::fire(owner, *this, event, 0, other);
 }
@@ -1719,6 +1731,8 @@ Tag MobActor::saveNbt() const {
         home.addToList(Tag::ofFloat(mHomePosition.z));
         data.put(TAG_HOME, home);
     }
+    if (mHasCarriedBlock)
+        data.put(TAG_CARRIED_BLOCK, mCarriedBlock.toNbt());
     mEquipment.saveNbt(data);
     mEntitySpawner.saveNbt(data);
 
@@ -1743,6 +1757,13 @@ void MobActor::loadNbt(const Tag &data) {
     if (home != nullptr && home->isList() && home->getList().size() == 3) {
         const std::vector<Tag> &values = home->getList();
         setHomePosition(Vector3f(values[0].asFloat(), values[1].asFloat(), values[2].asFloat()));
+    }
+    const Tag *carried = data.get(TAG_CARRIED_BLOCK);
+    if (carried != nullptr && carried->isCompound()) {
+        const std::string name = carried->getString("name", mCarriedBlock.mName);
+        const Tag *states = carried->get("states");
+        mCarriedBlock = states != nullptr && states->isCompound() ? BlockState(name, *states) : BlockState(name);
+        mHasCarriedBlock = true;
     }
     getFlags().set(ActorFlag::Tamed, isTamed());
     getFlags().set(ActorFlag::Sitting, mSitting);

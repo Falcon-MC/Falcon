@@ -5,11 +5,13 @@
 
 #include <cstdint>
 
-class TemptGoal : public Goal {
+class BegGoal : public Goal {
 public:
-    TemptGoal(float speed, float range, BehaviorItems items, float stopDistance);
+    BegGoal(BehaviorItems items, float lookDistance, int32_t minLookTicks, int32_t maxLookTicks);
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
+
+    bool canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
     void start(ServerNetworkHandler &owner, MobActor &mob) override;
 
@@ -18,9 +20,11 @@ public:
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
-    float mSpeed;
-    float mRange;
+    static void _setInterested(ServerNetworkHandler &owner, MobActor &mob, bool interested);
+
     BehaviorItems mItems;
-    float mStopDistanceSquared;
-    int32_t mTicksUntilRepath = 0;
+    float mLookDistance;
+    int32_t mMinLookTicks;
+    int32_t mMaxLookTicks;
+    int32_t mLookTicks = 0;
 };

@@ -1,13 +1,12 @@
 #pragma once
 
-#include "Actor/AI/Goal/BehaviorItems.h"
 #include "Actor/AI/Goal/Goal.h"
 
 #include <cstdint>
 
-class TemptGoal : public Goal {
+class GuardianAttackGoal : public Goal {
 public:
-    TemptGoal(float speed, float range, BehaviorItems items, float stopDistance);
+    GuardianAttackGoal();
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
@@ -18,9 +17,9 @@ public:
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
-    float mSpeed;
-    float mRange;
-    BehaviorItems mItems;
-    float mStopDistanceSquared;
-    int32_t mTicksUntilRepath = 0;
+    static void _setBeamTarget(ServerNetworkHandler &owner, MobActor &mob, int64_t uniqueId);
+
+    int32_t mCoolDownTicks = 0;
+    int32_t mChargeTicks = 0;
+    bool mCharging = false;
 };

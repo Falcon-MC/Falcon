@@ -13,8 +13,8 @@ namespace {
 }
 
 MeleeAttackGoal::MeleeAttackGoal(float speed, float maxRange, int32_t coolDown, float attackRangeSquared)
-        : mSpeed(speed), mMaxRangeSquared(maxRange * maxRange), mCoolDown(coolDown),
-          mAttackRangeSquared(attackRangeSquared) {
+        : mCoolDown(coolDown), mAttackRangeSquared(attackRangeSquared), mSpeed(speed),
+          mMaxRangeSquared(maxRange * maxRange) {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move | (uint8_t) GoalControlFlag::Look);
 }
 
@@ -57,9 +57,12 @@ void MeleeAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     }
 
     mob.getLookControl().setLookAt(targetPosition);
+    _tryAttack(owner, mob, *target);
+}
 
-    if (mTicksSinceAttack > mCoolDown && mob.distanceSquaredTo(*target) <= mAttackRangeSquared)
-        _attack(owner, mob, *target);
+void MeleeAttackGoal::_tryAttack(ServerNetworkHandler &owner, MobActor &mob, Actor &target) {
+    if (mTicksSinceAttack > mCoolDown && mob.distanceSquaredTo(target) <= mAttackRangeSquared)
+        _attack(owner, mob, target);
 }
 
 void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor &target) {

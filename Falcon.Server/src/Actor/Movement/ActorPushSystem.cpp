@@ -26,6 +26,13 @@ AxisAlignedBB ActorPushSystem::boundingBoxOf(const ServerActor &actor) {
     return boxAround(actor.getPosition(), size.mWidth, size.mHeight);
 }
 
+AxisAlignedBB ActorPushSystem::boundingBoxOf(const Actor &actor) {
+    if (const ServerActor *serverActor = dynamic_cast<const ServerActor *>(&actor))
+        return boundingBoxOf(*serverActor);
+
+    return boxAround(actor.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
+}
+
 Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, const ServerActor &actor, const Vector3f &motion) {
     const AxisAlignedBB self = boundingBoxOf(actor).offset(motion.x, motion.y, motion.z);
 

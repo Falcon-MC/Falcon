@@ -18,14 +18,18 @@ public:
 
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
-private:
+protected:
+    virtual void _tryAttack(ServerNetworkHandler &owner, MobActor &mob, Actor &target);
+
     void _attack(ServerNetworkHandler &owner, MobActor &mob, Actor &target);
 
-    float mSpeed;
-    float mMaxRangeSquared;
     int32_t mCoolDown;
     float mAttackRangeSquared;
     int32_t mTicksSinceAttack = 0;
+
+private:
+    float mSpeed;
+    float mMaxRangeSquared;
     int32_t mLastTargetX = 0;
     int32_t mLastTargetY = 0;
     int32_t mLastTargetZ = 0;

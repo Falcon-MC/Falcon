@@ -4,21 +4,26 @@
 #include "Actor/AI/Goal/AvoidBlockGoal.h"
 #include "Actor/AI/Goal/AvoidMobTypeGoal.h"
 #include "Actor/AI/Goal/BarterGoal.h"
+#include "Actor/AI/Goal/BegGoal.h"
 #include "Actor/AI/Goal/BehaviorItems.h"
 #include "Actor/AI/Goal/BreakDoorGoal.h"
 #include "Actor/AI/Goal/BreedGoal.h"
 #include "Actor/AI/Goal/ChargeHeldItemGoal.h"
+#include "Actor/AI/Goal/CircleAroundAnchorGoal.h"
 #include "Actor/AI/Goal/EatBlockGoal.h"
 #include "Actor/AI/Goal/EquipItemGoal.h"
 #include "Actor/AI/Goal/FindMountGoal.h"
 #include "Actor/AI/Goal/FleeSunGoal.h"
 #include "Actor/AI/Goal/FloatGoal.h"
+#include "Actor/AI/Goal/FollowCaravanGoal.h"
 #include "Actor/AI/Goal/FollowMobGoal.h"
 #include "Actor/AI/Goal/FollowOwnerGoal.h"
 #include "Actor/AI/Goal/FollowParentGoal.h"
 #include "Actor/AI/Goal/GoHomeGoal.h"
 #include "Actor/AI/Goal/GoalSelector.h"
+#include "Actor/AI/Goal/GuardianAttackGoal.h"
 #include "Actor/AI/Goal/HurtByTargetGoal.h"
+#include "Actor/AI/Goal/JumpToBlockGoal.h"
 #include "Actor/AI/Goal/LeapAtTargetGoal.h"
 #include "Actor/AI/Goal/LookAtEntityGoal.h"
 #include "Actor/AI/Goal/LookAtPlayerGoal.h"
@@ -33,18 +38,23 @@
 #include "Actor/AI/Goal/PanicGoal.h"
 #include "Actor/AI/Goal/PickupItemsGoal.h"
 #include "Actor/AI/Goal/PlaceBlockGoal.h"
+#include "Actor/AI/Goal/RamAttackGoal.h"
 #include "Actor/AI/Goal/RandomHoverGoal.h"
 #include "Actor/AI/Goal/RandomLookAroundGoal.h"
 #include "Actor/AI/Goal/RandomStrollGoal.h"
 #include "Actor/AI/Goal/RandomSwimGoal.h"
 #include "Actor/AI/Goal/RangedAttackGoal.h"
 #include "Actor/AI/Goal/RunAroundLikeCrazyGoal.h"
+#include "Actor/AI/Goal/SilverfishGoals.h"
 #include "Actor/AI/Goal/SitGoal.h"
 #include "Actor/AI/Goal/SlimeGoals.h"
 #include "Actor/AI/Goal/SquidMovementGoal.h"
+#include "Actor/AI/Goal/StompAttackGoal.h"
 #include "Actor/AI/Goal/StompTurtleEggGoal.h"
 #include "Actor/AI/Goal/SwellGoal.h"
 #include "Actor/AI/Goal/SwimIdleGoal.h"
+#include "Actor/AI/Goal/SwoopAttackGoal.h"
+#include "Actor/AI/Goal/TakeBlockGoal.h"
 #include "Actor/AI/Goal/TemptGoal.h"
 #include "Actor/AI/Goal/TeleportToOwnerGoal.h"
 #include "Actor/AI/Goal/TimerFlagGoal.h"
@@ -130,6 +140,34 @@ namespace {
     const int32_t SWIM_WANDER_VERTICAL_RANGE = 2;
     const float SWIM_IDLE_DEFAULT_TIME = 5.0f;
     const float SWIM_IDLE_DEFAULT_RATE = 0.1f;
+    const char *const GLIDE_MOVEMENT_COMPONENT = "minecraft:movement.glide";
+    const float CIRCLE_DEFAULT_GOAL_RADIUS = 0.5f;
+    const float CIRCLE_DEFAULT_MIN_RADIUS = 5.0f;
+    const float CIRCLE_DEFAULT_MAX_RADIUS = 15.0f;
+    const float CIRCLE_DEFAULT_RADIUS_CHANGE = 1.0f;
+    const float CIRCLE_DEFAULT_RADIUS_CHANCE = 0.004f;
+    const float CIRCLE_DEFAULT_HEIGHT_CHANCE = 0.002857f;
+    const float CIRCLE_DEFAULT_ANGLE_CHANGE = 15.0f;
+    const float SWOOP_DEFAULT_DAMAGE_REACH = 0.2f;
+    const float SWOOP_DEFAULT_MIN_DELAY = 10.0f;
+    const float SWOOP_DEFAULT_MAX_DELAY = 20.0f;
+    const int32_t JUMP_DEFAULT_SEARCH_WIDTH = 8;
+    const int32_t JUMP_DEFAULT_SEARCH_HEIGHT = 10;
+    const float JUMP_DEFAULT_MINIMUM_DISTANCE = 2.0f;
+    const float JUMP_DEFAULT_MAX_VELOCITY = 1.5f;
+    const float JUMP_DEFAULT_SCALE_FACTOR = 0.7f;
+    const float JUMP_DEFAULT_MIN_COOLDOWN = 10.0f;
+    const float JUMP_DEFAULT_MAX_COOLDOWN = 20.0f;
+    const float BEG_DEFAULT_MIN_LOOK_TICKS = 2.0f;
+    const float BEG_DEFAULT_MAX_LOOK_TICKS = 4.0f;
+    const float CARAVAN_DEFAULT_ENTITY_COUNT = 1.0f;
+    const float TAKE_DEFAULT_CHANCE = 0.05f;
+    const float TAKE_DEFAULT_MIN_XZ = -1.0f;
+    const float TAKE_DEFAULT_MAX_XZ = 1.0f;
+    const float TAKE_DEFAULT_MIN_Y = 0.0f;
+    const float TAKE_DEFAULT_MAX_Y = 2.0f;
+    const float STOMP_DEFAULT_RANGE_MULTIPLIER = 2.0f;
+    const float STOMP_DEFAULT_NO_DAMAGE_MULTIPLIER = 2.0f;
 
     float numberOf(const json::Value &component, const char *key, float fallback) {
         const json::Value *value = component.get(key);
@@ -185,6 +223,12 @@ namespace {
             return fallback;
         if (range->isObject())
             return numberOf(*range, field, fallback);
+        if (range->isArray()) {
+            if (range->mArray.empty())
+                return fallback;
+            const bool minimum = std::string(field) == "min";
+            return (float) (minimum ? range->mArray.front() : range->mArray.back())->number(fallback);
+        }
         return (float) range->number(fallback);
     }
 
@@ -304,7 +348,20 @@ namespace {
             if (mob.getComponent(name) != nullptr)
                 return true;
         }
-        return false;
+        return mob.getComponent(GLIDE_MOVEMENT_COMPONENT) != nullptr;
+    }
+
+    float followRange(const MobActor &mob) {
+        const json::Value *follow = mob.getComponent("minecraft:follow_range");
+        return follow == nullptr ? TARGET_DEFAULT_RANGE : numberOf(*follow, "value", TARGET_DEFAULT_RANGE);
+    }
+
+    float attackReachSquared(const MobActor &mob) {
+        return mob.getComponent("minecraft:attack") != nullptr ? MELEE_ATTACK_RANGE_SQUARED : MELEE_NO_ATTACK;
+    }
+
+    int32_t meleeCoolDown(const json::Value &component) {
+        return (int32_t) std::lround(numberOf(component, "cooldown_time", 1.0f) * TICKS_PER_SECOND);
     }
 
     std::shared_ptr<json::Value> cloneOf(const json::Value *value) {
@@ -329,8 +386,9 @@ namespace {
         }
 
         for (const std::unique_ptr<json::Value> &entry: list->mArray) {
-            if (entry->isString())
-                names.insert(blockName(entry->mString));
+            const json::Value *name = entry->isObject() ? entry->get("name") : entry.get();
+            if (name != nullptr && name->isString())
+                names.insert(blockName(name->mString));
         }
         return names;
     }
@@ -496,13 +554,114 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "owner_hurt_target")
         return std::make_unique<OwnerTargetGoal>(OwnerTargetGoal::Mode::OwnerHurt);
 
-    if (behavior == "melee_attack" || behavior == "melee_box_attack") {
-        const int32_t coolDown = (int32_t) std::lround(numberOf(component, "cooldown_time", 1.0f) * TICKS_PER_SECOND);
-        const float reach = mob.getComponent("minecraft:attack") != nullptr ? MELEE_ATTACK_RANGE_SQUARED
-                                                                           : MELEE_NO_ATTACK;
-        const json::Value *follow = mob.getComponent("minecraft:follow_range");
-        const float range = follow == nullptr ? TARGET_DEFAULT_RANGE : numberOf(*follow, "value", TARGET_DEFAULT_RANGE);
-        return std::make_unique<MeleeAttackGoal>(speed, range, coolDown, reach);
+    if (behavior == "melee_attack" || behavior == "melee_box_attack")
+        return std::make_unique<MeleeAttackGoal>(speed, followRange(mob), meleeCoolDown(component),
+                                                 attackReachSquared(mob));
+
+    if (behavior == "stomp_attack") {
+        const float stompMultiplier = numberOf(component, "stomp_range_multiplier", STOMP_DEFAULT_RANGE_MULTIPLIER);
+        const float noDamageMultiplier = numberOf(component, "no_damage_range_multiplier",
+                                                  STOMP_DEFAULT_NO_DAMAGE_MULTIPLIER);
+        const float stompRangeSquared = attackReachSquared(mob) * stompMultiplier * stompMultiplier;
+        return std::make_unique<StompAttackGoal>(speed, followRange(mob), meleeCoolDown(component), stompRangeSquared,
+                                                 stompRangeSquared * noDamageMultiplier * noDamageMultiplier);
+    }
+
+    if (behavior == "guardian_attack")
+        return std::make_unique<GuardianAttackGoal>();
+
+    if (behavior == "circle_around_anchor") {
+        CircleAroundAnchorGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mGoalRadius = numberOf(component, "goal_radius", CIRCLE_DEFAULT_GOAL_RADIUS);
+        settings.mMinRadius = rangeValue(component, "radius_range", "min", CIRCLE_DEFAULT_MIN_RADIUS);
+        settings.mMaxRadius = rangeValue(component, "radius_range", "max", CIRCLE_DEFAULT_MAX_RADIUS);
+        settings.mRadiusChange = numberOf(component, "radius_change", CIRCLE_DEFAULT_RADIUS_CHANGE);
+        settings.mRadiusAdjustmentChance = numberOf(component, "radius_adjustment_chance",
+                                                    CIRCLE_DEFAULT_RADIUS_CHANCE);
+        settings.mHeightAdjustmentChance = numberOf(component, "height_adjustment_chance",
+                                                    CIRCLE_DEFAULT_HEIGHT_CHANCE);
+        settings.mAngleChange = numberOf(component, "angle_change", CIRCLE_DEFAULT_ANGLE_CHANGE);
+        settings.mMinHeightOffset = rangeValue(component, "height_offset_range", "min", 0.0f);
+        settings.mMaxHeightOffset = rangeValue(component, "height_offset_range", "max", 0.0f);
+        settings.mMinHeightAboveTarget = rangeValue(component, "height_above_target_range", "min", 0.0f);
+        settings.mMaxHeightAboveTarget = rangeValue(component, "height_above_target_range", "max", 0.0f);
+        return std::make_unique<CircleAroundAnchorGoal>(settings);
+    }
+
+    if (behavior == "swoop_attack")
+        return std::make_unique<SwoopAttackGoal>(speed, numberOf(component, "damage_reach", SWOOP_DEFAULT_DAMAGE_REACH),
+                                                 secondsToTicks(rangeValue(component, "delay_range", "min",
+                                                                           SWOOP_DEFAULT_MIN_DELAY)),
+                                                 secondsToTicks(rangeValue(component, "delay_range", "max",
+                                                                           SWOOP_DEFAULT_MAX_DELAY)));
+
+    if (behavior == "ram_attack") {
+        RamAttackGoal::Settings settings;
+        settings.mRunSpeed = mob.getMovementSpeed() * numberOf(component, "run_speed", 1.0f);
+        settings.mRamSpeed = mob.getMovementSpeed() * numberOf(component, "ram_speed", 1.0f);
+        settings.mMinRamDistance = numberOf(component, "min_ram_distance", 0.0f);
+        settings.mRamDistance = numberOf(component, "ram_distance", 0.0f);
+        settings.mKnockbackForce = numberOf(component, "knockback_force", 0.0f);
+        settings.mKnockbackHeight = numberOf(component, "knockback_height", 0.0f);
+        settings.mMinCooldownTicks = secondsToTicks(rangeValue(component, "cooldown_range", "min", 0.0f));
+        settings.mMaxCooldownTicks = secondsToTicks(rangeValue(component, "cooldown_range", "max", 0.0f));
+        settings.mPreRamSound = stringOf(component, "pre_ram_sound");
+        settings.mRamImpactSound = stringOf(component, "ram_impact_sound");
+        settings.mOnStart = cloneOf(component.get("on_start"));
+        if (settings.mRamDistance <= 0.0f)
+            return nullptr;
+        return std::make_unique<RamAttackGoal>(std::move(settings));
+    }
+
+    if (behavior == "jump_to_block") {
+        JumpToBlockGoal::Settings settings;
+        settings.mSearchWidth = (int32_t) numberOf(component, "search_width", (float) JUMP_DEFAULT_SEARCH_WIDTH);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", (float) JUMP_DEFAULT_SEARCH_HEIGHT);
+        settings.mMinimumDistance = numberOf(component, "minimum_distance", JUMP_DEFAULT_MINIMUM_DISTANCE);
+        settings.mMaxVelocity = numberOf(component, "max_velocity", JUMP_DEFAULT_MAX_VELOCITY);
+        settings.mScaleFactor = numberOf(component, "scale_factor", JUMP_DEFAULT_SCALE_FACTOR);
+        settings.mMinCooldownTicks = secondsToTicks(rangeValue(component, "cooldown_range", "min",
+                                                               JUMP_DEFAULT_MIN_COOLDOWN));
+        settings.mMaxCooldownTicks = secondsToTicks(rangeValue(component, "cooldown_range", "max",
+                                                               JUMP_DEFAULT_MAX_COOLDOWN));
+        settings.mPreferredBlocks = blockNames(component.get("preferred_blocks"));
+        settings.mPreferredBlocksChance = numberOf(component, "preferred_blocks_chance", 1.0f);
+        settings.mForbiddenBlocks = blockNames(component.get("forbidden_blocks"));
+        return std::make_unique<JumpToBlockGoal>(std::move(settings));
+    }
+
+    if (behavior == "silverfish_merge_with_stone")
+        return std::make_unique<SilverfishMergeWithStoneGoal>();
+
+    if (behavior == "silverfish_wake_up_friends")
+        return std::make_unique<SilverfishWakeUpFriendsGoal>();
+
+    if (behavior == "beg")
+        return std::make_unique<BegGoal>(BehaviorItems(component.get("items")),
+                                         numberOf(component, "look_distance", LOOK_DEFAULT_DISTANCE),
+                                         (int32_t) rangeValue(component, "look_time", "min", BEG_DEFAULT_MIN_LOOK_TICKS),
+                                         (int32_t) rangeValue(component, "look_time", "max",
+                                                              BEG_DEFAULT_MAX_LOOK_TICKS));
+
+    if (behavior == "follow_caravan")
+        return std::make_unique<FollowCaravanGoal>(mob.getMovementSpeed(),
+                                                   numberOf(component, "speed_multiplier", 1.0f),
+                                                   (int32_t) numberOf(component, "entity_count",
+                                                                      CARAVAN_DEFAULT_ENTITY_COUNT),
+                                                   firstFilters(component));
+
+    if (behavior == "take_block") {
+        TakeBlockGoal::Settings settings;
+        settings.mBlocks = blockNames(component.get("blocks"));
+        settings.mChance = numberOf(component, "chance", TAKE_DEFAULT_CHANCE);
+        settings.mMinXz = (int32_t) rangeValue(component, "xz_range", "min", TAKE_DEFAULT_MIN_XZ);
+        settings.mMaxXz = (int32_t) rangeValue(component, "xz_range", "max", TAKE_DEFAULT_MAX_XZ);
+        settings.mMinY = (int32_t) rangeValue(component, "y_range", "min", TAKE_DEFAULT_MIN_Y);
+        settings.mMaxY = (int32_t) rangeValue(component, "y_range", "max", TAKE_DEFAULT_MAX_Y);
+        if (settings.mBlocks.empty())
+            return nullptr;
+        return std::make_unique<TakeBlockGoal>(std::move(settings));
     }
 
     if (behavior == "swell")
@@ -721,7 +880,7 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                                             numberOf(component, "goal_radius", GO_HOME_DEFAULT_RADIUS),
                                             cloneOf(component.get("on_home")), cloneOf(component.get("on_failed")));
 
-    if (behavior == "random_hover")
+    if (behavior == "random_hover" || behavior == "random_fly")
         return std::make_unique<RandomHoverGoal>(hoverSettings(mob, component, speed));
 
     if (behavior == "move_towards_home_restriction")

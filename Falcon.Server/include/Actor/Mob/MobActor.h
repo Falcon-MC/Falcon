@@ -16,6 +16,7 @@
 #include "Actor/Mob/MobEquipment.h"
 #include "Actor/Movement/RideControlSystem.h"
 #include "Actor/ServerActor.h"
+#include "Block/BlockState.h"
 #include "Core/Json/Json.h"
 #include "Core/Math/Vector3i.h"
 #include "Server/PropertiesSettings.h"
@@ -169,6 +170,12 @@ public:
     }
 
     bool fireBlockEvent(ServerNetworkHandler &owner, const Vector3i &position, const std::string &event);
+
+    bool hasCarriedBlock() const {
+        return mHasCarriedBlock;
+    }
+
+    void setCarriedBlock(ServerNetworkHandler &owner, const BlockState &state);
 
     void markBorn();
 
@@ -436,6 +443,8 @@ private:
     bool mHasHome = false;
     Vector3i mEventBlock;
     bool mHasEventBlock = false;
+    BlockState mCarriedBlock;
+    bool mHasCarriedBlock = false;
     bool mDespawned = false;
     LookedAtSensor mLookedAtSensor;
     std::vector<std::string> mComponentGroups;

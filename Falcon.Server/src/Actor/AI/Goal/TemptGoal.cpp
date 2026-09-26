@@ -3,7 +3,6 @@
 #include "Actor/Mob/MobActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Network/Handler/ServerNetworkHandler.h"
-#include "Protocol/Types/StartGameTypes.h"
 
 #include <utility>
 
@@ -17,7 +16,7 @@ TemptGoal::TemptGoal(float speed, float range, BehaviorItems items, float stopDi
 }
 
 bool TemptGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
-    return !mItems.isEmpty() && _findTempter(owner, mob) != nullptr;
+    return !mItems.isEmpty() && mItems.findNearestHolder(owner, mob, mRange) != nullptr;
 }
 
 void TemptGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
@@ -34,7 +33,7 @@ void TemptGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
 }
 
 void TemptGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
-    const ServerPlayer *tempter = _findTempter(owner, mob);
+    const ServerPlayer *tempter = mItems.findNearestHolder(owner, mob, mRange);
     if (tempter == nullptr)
         return;
 
@@ -49,24 +48,4 @@ void TemptGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
 
     mTicksUntilRepath = REPATH_INTERVAL;
     mob.getNavigation().moveTo(tempter->getPosition(), mSpeed);
-}
-
-ServerPlayer *TemptGoal::_findTempter(ServerNetworkHandler &owner, const MobActor &mob) const {
-    ServerPlayer *nearest = nullptr;
-    float nearestDistance = mRange * mRange;
-
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead() || player.getDimension() != mob.getDimension()
-            || player.getGameType() == (int32_t) GameType::Spectator)
-            continue;
-
-        const float distance = mob.distanceSquaredTo(player);
-        if (distance > nearestDistance || !mItems.contains(player.getInventory().getItemInHand()))
-            continue;
-
-        nearest = &player;
-        nearestDistance = distance;
-    }
-    return nearest;
 }

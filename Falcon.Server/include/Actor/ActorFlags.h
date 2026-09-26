@@ -18,8 +18,10 @@ enum class ActorFlag : int {
     CanWalk = 22,
     Sitting = 24,
     Angry = 25,
+    Interested = 26,
     Tamed = 28,
     Charged = 27,
+    Leashed = 30,
     Sheared = 31,
     Gliding = 32,
     Moving = 34,
@@ -65,6 +67,8 @@ public:
     static const int32_t VARIANT_DATA_ID = 2;
     static const int32_t COLOR_DATA_ID = 3;
     static const int32_t OWNER_DATA_ID = 5;
+    static const int32_t TARGET_DATA_ID = 6;
+    static const int32_t CARRIED_BLOCK_DATA_ID = 23;
     static const int32_t SCALE_DATA_ID = 38;
     static const int32_t MARK_VARIANT_DATA_ID = 43;
     static const int32_t PLAYER_FLAGS_DATA_ID = 26;
