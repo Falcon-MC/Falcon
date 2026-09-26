@@ -127,6 +127,10 @@ target_include_directories(FalconServer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/inclu
 target_link_libraries(FalconServer PRIVATE FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic
         Falcon::PluginAPI ${CMAKE_DL_LIBS})
 
+if(WIN32)
+    target_compile_definitions(FalconServer PRIVATE WIN32_LEAN_AND_MEAN)
+endif()
+
 if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_options(FalconServer PRIVATE -static -fuse-ld=lld)
     target_link_libraries(FalconServer PRIVATE z ssl crypto ws2_32 crypt32)
