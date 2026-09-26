@@ -179,6 +179,10 @@ public:
         return false;
     }
 
+    virtual bool bindsHomeActors() const {
+        return false;
+    }
+
     virtual void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                               const BlockState &state) const {
         (void) owner;

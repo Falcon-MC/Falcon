@@ -4,7 +4,9 @@
 #include "Actor/Definition/EntityDefinitions.h"
 #include "Actor/Mob/MobActor.h"
 #include "Actor/ServerPlayer.h"
+#include "Block/Block.h"
 #include "Block/Blocks/LiquidView.h"
+#include "Block/Blocks/VanillaBlocks.h"
 #include "Core/Math/Vector3i.h"
 #include "Item/EnchantmentData.h"
 #include "Item/ItemEnchantments.h"
@@ -104,6 +106,22 @@ namespace {
         const Vector3f position = actor.getPosition();
         return Vector3i((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                         (int32_t) std::floor(position.z));
+    }
+
+    bool isBoundToHomeBlock(ServerNetworkHandler &owner, const MobActor &mob) {
+        if (!mob.hasHome())
+            return false;
+
+        const Vector3f &home = mob.getHomePosition();
+        const int32_t x = (int32_t) std::floor(home.x);
+        const int32_t y = (int32_t) std::floor(home.y);
+        const int32_t z = (int32_t) std::floor(home.z);
+        const BlockState *state = owner.getLevelFor(mob).peekBlockPtr(x, y, z);
+        if (state == nullptr)
+            return true;
+
+        const Block *block = VanillaBlocks::fromIdentifier(state->mName);
+        return block != nullptr && block->bindsHomeActors();
     }
 
     bool hasEquipmentIn(const ServerPlayer &player, const std::string &domain, const BehaviorItems &items) {
@@ -306,6 +324,11 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         const float dy = position.y - home.y;
         const float dz = position.z - home.z;
         return compareFloats(std::sqrt(dx * dx + dy * dy + dz * dz), (float) value->number(0.0), op);
+    }
+
+    if (test == "is_bound_to_creaking_heart") {
+        const MobActor *mob = dynamic_cast<const MobActor *>(target);
+        return applyBoolean(mob != nullptr && isBoundToHomeBlock(owner, *mob), value, op);
     }
 
     if (test == "has_component" && value != nullptr && value->string().rfind(EFFECT_COMPONENT_PREFIX, 0) == 0) {

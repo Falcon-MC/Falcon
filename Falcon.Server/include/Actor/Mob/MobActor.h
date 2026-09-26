@@ -118,6 +118,10 @@ public:
         return mParentRuntimeId;
     }
 
+    void setSpawnEvent(const std::string &event) {
+        mSpawnEvent = event;
+    }
+
     void setHomePosition(const Vector3f &position) {
         mHomePosition = position;
         mHasHome = true;
