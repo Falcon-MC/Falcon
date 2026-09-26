@@ -53,6 +53,16 @@ void BlockActorStore::remove(const Vector3i &position) {
     mBlockActors.erase(packPosition(position));
 }
 
+std::unique_ptr<BlockActor> BlockActorStore::take(const Vector3i &position) {
+    const auto found = mBlockActors.find(packPosition(position));
+    if (found == mBlockActors.end())
+        return nullptr;
+
+    std::unique_ptr<BlockActor> taken = std::move(found->second);
+    mBlockActors.erase(found);
+    return taken;
+}
+
 void BlockActorStore::tick(ServerNetworkHandler &owner) {
     std::vector<int64_t> keys;
     keys.reserve(mBlockActors.size());

@@ -6,6 +6,7 @@
 #include "Block/BlockData.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/RedstoneSystem.h"
+#include "Inventory/InventoryManager.h"
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -15,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
 #include <unordered_set>
 
 namespace {
@@ -60,9 +62,24 @@ namespace {
 
     struct PendingMove {
         Vector3i mPiston;
+        std::vector<Vector3i> mSources;
         std::vector<BlockState> mMoved;
+        std::vector<std::unique_ptr<BlockActor>> mActors;
         int mDirection;
     };
+
+    void closeViewersAt(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+        for (auto &entry: owner.getPlayers()) {
+            if (&owner.getLevelFor(entry.second) != &level)
+                continue;
+
+            InventoryManager &manager = entry.second.getInventoryManager();
+            if (manager.isContainerOpen() && manager.getContainerPosition() == position)
+                manager.onClientRemoveWindow(manager.getContainerWindowId());
+            if (manager.isFurnaceOpen() && manager.getFurnacePosition() == position)
+                manager.onClientRemoveWindow(manager.getFurnaceWindowId());
+        }
+    }
 
     std::array<std::vector<PendingMove>, Dimension::DIMENSION_COUNT> gPendingMoves;
 
@@ -315,9 +332,14 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     }
 
     std::vector<BlockState> moved;
+    std::vector<std::unique_ptr<BlockActor>> movedActors;
     moved.reserve(toMove.size());
-    for (const Vector3i &source: toMove)
+    movedActors.reserve(toMove.size());
+    for (const Vector3i &source: toMove) {
         moved.push_back(stateAt(level, source));
+        closeViewersAt(owner, level, source);
+        movedActors.push_back(level.getBlockActors().take(source));
+    }
 
     PistonArmBlockActor &arm = level.getBlockActors().getOrCreate<PistonArmBlockActor>(position);
     arm.setSticky(sticky);
@@ -327,7 +349,8 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     for (size_t index = toMove.size(); index > 0; --index)
         level.setBlock(toMove[index - 1], BlockState(AIR), false);
 
-    gPendingMoves[level.getDimensionId()].push_back(PendingMove{position, moved, moveDirection});
+    gPendingMoves[level.getDimensionId()].push_back(
+            PendingMove{position, toMove, std::move(moved), std::move(movedActors), moveDirection});
     BlockActionHandler::broadcastBlockActorData(owner, level, arm);
 
     if (extending) {
@@ -356,29 +379,41 @@ void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
 
     for (PendingMove &move: pending) {
         PistonArmBlockActor *arm = level.getBlockActors().find<PistonArmBlockActor>(move.mPiston);
-        if (arm == nullptr)
-            continue;
+        if (arm != nullptr) {
+            arm->advance();
 
-        arm->advance();
-
-        const bool done = arm->isExtending() ? arm->getProgress() >= 1.0f : arm->getProgress() <= 0.0f;
-        if (!done) {
-            BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
-            pendingMoves.push_back(std::move(move));
-            continue;
+            const bool done = arm->isExtending() ? arm->getProgress() >= 1.0f : arm->getProgress() <= 0.0f;
+            if (!done) {
+                BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
+                pendingMoves.push_back(std::move(move));
+                continue;
+            }
         }
 
-        const std::vector<Vector3i> attached = arm->getAttachedBlocks();
-        for (size_t index = 0; index < attached.size() && index < move.mMoved.size(); ++index)
-            level.setBlock(relative(attached[index], move.mDirection), move.mMoved[index], false);
+        for (size_t index = 0; index < move.mSources.size() && index < move.mMoved.size(); ++index) {
+            const Vector3i destination = relative(move.mSources[index], move.mDirection);
+            level.setBlock(destination, move.mMoved[index], false);
 
-        arm->finish();
-        BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
+            std::unique_ptr<BlockActor> &blockActor = move.mActors[index];
+            if (blockActor == nullptr)
+                continue;
 
-        for (const Vector3i &source: attached) {
+            blockActor->setPosition(destination);
+            const BlockActor &inserted = *blockActor;
+            level.getBlockActors().insert(std::move(blockActor));
+            BlockActionHandler::broadcastBlockActorData(owner, level, inserted);
+        }
+
+        for (const Vector3i &source: move.mSources) {
             RedstoneSystem::updateAroundRedstone(owner, level, source);
             RedstoneSystem::updateAroundRedstone(owner, level, relative(source, move.mDirection));
         }
+
+        if (arm == nullptr)
+            continue;
+
+        arm->finish();
+        BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
         RedstoneSystem::updateAroundRedstone(owner, level, relative(move.mPiston, arm->getFacing()));
     }
 }

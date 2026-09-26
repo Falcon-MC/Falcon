@@ -52,6 +52,8 @@ public:
 
     void remove(const Vector3i &position);
 
+    std::unique_ptr<BlockActor> take(const Vector3i &position);
+
     void tick(ServerNetworkHandler &owner);
 
     std::vector<Tag> saveChunk(int32_t chunkX, int32_t chunkZ) const;
