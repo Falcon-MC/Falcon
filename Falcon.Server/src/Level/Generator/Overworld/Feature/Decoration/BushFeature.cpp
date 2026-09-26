@@ -1,7 +1,6 @@
 #include "Level/Generator/Overworld/Feature/Decoration/BushFeature.h"
 
 #include "Block/Blocks/VanillaBlocks.h"
-#include "Level/Generator/Feature/BlockManager.h"
 
 namespace {
 
@@ -16,14 +15,35 @@ const char *BushFeature::name() const {
     return "minecraft:scatter_bush_feature";
 }
 
+BlockState BushFeature::getSourceBlock() const {
+    return bushState();
+}
+
+int32_t BushFeature::getMinRadius() const {
+    return 1;
+}
+
+int32_t BushFeature::getMaxRadius() const {
+    return 1;
+}
+
+double BushFeature::getProbability() const {
+    return 0.5;
+}
+
 int32_t BushFeature::getBase() const {
-    return 8;
+    return -3;
 }
 
 int32_t BushFeature::getRandom() const {
-    return 0;
+    return 4;
 }
 
-void BushFeature::place(BlockManager &manager, int32_t x, int32_t y, int32_t z) {
-    manager.setBlockStateAt(x, y, z, bushState());
+bool BushFeature::isSupportValid(const BlockState &support, Level &level, int32_t x, int32_t y, int32_t z) const {
+    (void) level;
+    (void) x;
+    (void) y;
+    (void) z;
+
+    return IFeature::isSupportDirt(support);
 }
