@@ -1568,7 +1568,7 @@ void ServerNetworkHandler::tickActors() {
         LingeringCloud &cloud = entry.second;
         cloud.mAge += 1;
 
-        if (cloud.mAge > cloud.mWaitTime + cloud.mDuration) {
+        if (mActors.find(entry.first) == mActors.end() || cloud.mAge > cloud.mWaitTime + cloud.mDuration) {
             expiredClouds.push_back(entry.first);
             continue;
         }
