@@ -18,6 +18,7 @@
 #include "Actor/AI/Goal/OpenDoorGoal.h"
 #include "Actor/AI/Goal/OwnerTargetGoal.h"
 #include "Actor/AI/Goal/PanicGoal.h"
+#include "Actor/AI/Goal/PlaceBlockGoal.h"
 #include "Actor/AI/Goal/RandomLookAroundGoal.h"
 #include "Actor/AI/Goal/RandomStrollGoal.h"
 #include "Actor/AI/Goal/RangedAttackGoal.h"
@@ -320,6 +321,9 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                                                                       EAT_DEFAULT_SECONDS)),
                                               eventName(component.get("on_eat")));
     }
+
+    if (behavior == "place_block")
+        return PlaceBlockGoal::create(component);
 
     if (behavior == "ranged_attack") {
         const json::Value *shooter = mob.getComponent("minecraft:shooter");
