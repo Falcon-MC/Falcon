@@ -1,7 +1,7 @@
 #include "Block/Blocks/BedBlock.h"
 
-#include "Actor/ActorCategory.h"
 #include "Actor/ActorClassRegistry.h"
+#include "Actor/Mob/MobActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
@@ -54,8 +54,8 @@ namespace {
                 .addCoord((float) footOffset.x, 0.0f, (float) footOffset.z);
 
         for (const auto &entry: owner.getActors()) {
-            const ServerActor *actor = entry.second.get();
-            if (actor == nullptr || !actor->isAlive() || !ActorCategories::isPreventingSleep(*actor) ||
+            const MobActor *actor = dynamic_cast<const MobActor *>(entry.second.get());
+            if (actor == nullptr || !actor->isAlive() || !actor->preventsSleep() ||
                 actor->getDimension() != level.getDimensionType())
                 continue;
 

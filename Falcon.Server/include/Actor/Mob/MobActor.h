@@ -35,6 +35,10 @@ public:
 
     virtual ActorCategory getCategory() const = 0;
 
+    virtual bool preventsSleep() const {
+        return false;
+    }
+
     ActorSize getSize() const override = 0;
 
     virtual float getDefaultMaxHealth() const = 0;

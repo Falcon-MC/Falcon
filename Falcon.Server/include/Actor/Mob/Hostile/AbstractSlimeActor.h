@@ -14,6 +14,10 @@ public:
 
     using HostileActor::HostileActor;
 
+    bool preventsSleep() const override {
+        return false;
+    }
+
     int getSizeVariant() const { return mSizeVariant; }
 
     void setSizeVariant(int variant);

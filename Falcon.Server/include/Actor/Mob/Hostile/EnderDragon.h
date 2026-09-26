@@ -12,6 +12,10 @@ public:
 
     float getDefaultMaxHealth() const override { return 200.0f; }
 
+    bool preventsSleep() const override {
+        return false;
+    }
+
     int getExperienceDrop() const override { return 12000; }
 
     bool hasGravity() const override {
