@@ -99,7 +99,30 @@ public:
 
     void removeComponentGroup(const std::string &group);
 
-    void fireEvent(ServerNetworkHandler &owner, const std::string &event);
+    void fireEvent(ServerNetworkHandler &owner, const std::string &event, Actor *other = nullptr);
+
+    void playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound);
+
+    void setParent(uint64_t runtimeId) {
+        mParentRuntimeId = runtimeId;
+    }
+
+    uint64_t getParentRuntimeId() const {
+        return mParentRuntimeId;
+    }
+
+    void setHomePosition(const Vector3f &position) {
+        mHomePosition = position;
+        mHasHome = true;
+    }
+
+    bool hasHome() const {
+        return mHasHome;
+    }
+
+    const Vector3f &getHomePosition() const {
+        return mHomePosition;
+    }
 
     void markBorn();
 
@@ -189,8 +212,6 @@ private:
 
     void _transform(ServerNetworkHandler &owner, const json::Value &transformation);
 
-    void _playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound);
-
     void _fireComponentEvent(ServerNetworkHandler &owner, const char *component);
 
     void _setFlag(ServerNetworkHandler &owner, ActorFlag flag, bool value);
@@ -235,6 +256,9 @@ private:
     const json::Value *mTransformationComponent = nullptr;
     int32_t mTransformationTicks = 0;
     bool mTransformed = false;
+    uint64_t mParentRuntimeId = 0;
+    Vector3f mHomePosition;
+    bool mHasHome = false;
     std::vector<std::string> mComponentGroups;
     std::vector<std::string> mGoalGroups;
     std::vector<std::string> mBodyGroups;

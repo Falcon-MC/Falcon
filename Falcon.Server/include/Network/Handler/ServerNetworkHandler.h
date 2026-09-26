@@ -61,6 +61,13 @@ class Item;
 class NetherNetInstance;
 class PluginManager;
 
+struct QueuedActorCommand {
+    Level *mLevel = nullptr;
+    Vector3f mPosition;
+    Vector3f mRotation;
+    std::string mCommand;
+};
+
 class ServerNetworkHandler : public NetworkHandler::Listener,
                              public NetworkPacketHandler,
                              public RakPeerHelper::IPSupportInterface,
@@ -219,6 +226,10 @@ public:
     void broadcastActorMove(ServerActor &actor);
 
     void syncActorProperties(ServerActor &actor);
+
+    void queueActorCommand(ServerActor &actor, const std::string &command);
+
+    void runQueuedActorCommands();
 
     void syncActorFlags(ServerActor &actor);
 
@@ -673,6 +684,7 @@ private:
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
+    std::vector<QueuedActorCommand> mQueuedActorCommands;
     NaturalSpawner mNaturalSpawner;
     std::unordered_map<NetworkIdentifier, PacketRateLimiter, NetworkIdentifier::Hasher> mRateLimiters;
 

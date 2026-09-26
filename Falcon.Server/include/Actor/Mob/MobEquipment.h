@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 class Actor;
 class DamageSource;
@@ -35,6 +36,8 @@ public:
                      int32_t lootingLevel);
 
     void dropAll(ServerNetworkHandler &owner, Level &level, const Vector3f &position);
+
+    bool dropSlot(ServerNetworkHandler &owner, Level &level, const Vector3f &position, const std::string &slotName);
 
     float absorbDamage(float amount, const DamageSource &source) const;
 

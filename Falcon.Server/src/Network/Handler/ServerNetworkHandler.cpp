@@ -816,6 +816,7 @@ void ServerNetworkHandler::tick() {
     mProfiler.endSection(ProfilerSection::ItemActors);
 
     tickActors();
+    runQueuedActorCommands();
     updateActorVisibility();
     updatePlayerVisibility();
 

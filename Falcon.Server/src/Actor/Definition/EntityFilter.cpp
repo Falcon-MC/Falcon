@@ -204,6 +204,19 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
                                                   (int64_t) value->number(0.0), op);
     }
 
+    if (test == "home_distance") {
+        const MobActor *mob = dynamic_cast<const MobActor *>(target);
+        if (mob == nullptr || !mob->hasHome() || value == nullptr)
+            return false;
+
+        const Vector3f position = mob->getPosition();
+        const Vector3f &home = mob->getHomePosition();
+        const float dx = position.x - home.x;
+        const float dy = position.y - home.y;
+        const float dz = position.z - home.z;
+        return compareFloats(std::sqrt(dx * dx + dy * dy + dz * dz), (float) value->number(0.0), op);
+    }
+
     if (test == "has_component" && value != nullptr && value->string().rfind(EFFECT_COMPONENT_PREFIX, 0) == 0) {
         MobEffectId effect;
         const std::string name = value->string().substr(std::string(EFFECT_COMPONENT_PREFIX).size());

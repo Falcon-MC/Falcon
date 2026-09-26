@@ -214,6 +214,21 @@ void MobEquipment::dropAll(ServerNetworkHandler &owner, Level &level, const Vect
     }
 }
 
+bool MobEquipment::dropSlot(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
+                            const std::string &slotName) {
+    for (int slot = 0; slot < SLOT_COUNT; ++slot) {
+        if (slotName != SLOT_NAMES[slot] || mSlots[(size_t) slot].isAir())
+            continue;
+
+        ItemStack item = std::move(mSlots[(size_t) slot]);
+        mSlots[(size_t) slot] = ItemStack::air();
+        owner.dropItem(level, position, item, ItemActorHandler::randomDropMotion(),
+                       ItemActorHandler::DROP_PICKUP_DELAY);
+        return true;
+    }
+    return false;
+}
+
 float MobEquipment::absorbDamage(float amount, const DamageSource &source) const {
     return ArmorProtection::apply(&mSlots[HEAD], FEET - HEAD + 1, amount, source.mDeathMessageKey,
                                   source.mArmorEfficiency);

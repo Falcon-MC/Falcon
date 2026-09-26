@@ -9,19 +9,60 @@
 
 namespace {
     const int32_t MAX_DEPTH = 16;
+    const char *const SELF_TARGET = "self";
 
     std::mt19937 &eventRandom() {
         static std::mt19937 generator(std::random_device{}());
         return generator;
     }
+
+    bool flagOr(const json::Value &options, const char *key, bool fallback) {
+        const json::Value *value = options.get(key);
+        return value == nullptr ? fallback : value->boolean(fallback);
+    }
 }
 
-void EntityEvents::fire(ServerNetworkHandler &owner, MobActor &mob, const std::string &event, int32_t depth) {
+void EntityEvents::fire(ServerNetworkHandler &owner, MobActor &mob, const std::string &event, int32_t depth,
+                        Actor *other) {
     const json::Value *definition = mob.getDefinition();
     const json::Value *events = definition == nullptr ? nullptr : definition->get("events");
     const json::Value *node = events == nullptr ? nullptr : events->get(event);
     if (node != nullptr)
-        _run(owner, mob, *node, depth);
+        _run(owner, mob, *node, depth, other);
+}
+
+void EntityEvents::fireTrigger(ServerNetworkHandler &owner, MobActor &mob, const json::Value *trigger, Actor *other,
+                               int32_t depth) {
+    if (trigger == nullptr)
+        return;
+
+    if (trigger->isString()) {
+        if (!trigger->mString.empty())
+            fire(owner, mob, trigger->mString, depth, other);
+        return;
+    }
+
+    const json::Value *event = trigger->get("event");
+    if (event == nullptr || event->string().empty())
+        return;
+
+    const json::Value *target = trigger->get("target");
+    MobActor *receiver = _resolveTarget(owner, mob, target == nullptr ? SELF_TARGET : target->string(), other);
+    if (receiver != nullptr)
+        fire(owner, *receiver, event->string(), depth, receiver == &mob ? other : &mob);
+}
+
+MobActor *EntityEvents::_resolveTarget(ServerNetworkHandler &owner, MobActor &mob, const std::string &target,
+                                       Actor *other) {
+    if (target.empty() || target == SELF_TARGET)
+        return &mob;
+    if (target == "other")
+        return dynamic_cast<MobActor *>(other);
+    if (target == "target")
+        return dynamic_cast<MobActor *>(mob.getTarget(owner));
+    if (target == "parent" && mob.getParentRuntimeId() != 0)
+        return dynamic_cast<MobActor *>(MobActor::findActor(owner, mob.getParentRuntimeId()));
+    return nullptr;
 }
 
 void EntityEvents::_applyGroups(MobActor &mob, const json::Value &change, bool add) {
@@ -53,12 +94,42 @@ void EntityEvents::_setProperties(ServerNetworkHandler &owner, MobActor &mob, co
         owner.syncActorProperties(mob);
 }
 
-bool EntityEvents::_run(ServerNetworkHandler &owner, MobActor &mob, const json::Value &node, int32_t depth) {
+void EntityEvents::_stopMovement(MobActor &mob, const json::Value &options) {
+    mob.getNavigation().stop(mob);
+
+    Vector3f motion = mob.getMotion();
+    if (flagOr(options, "stop_horizontal_movement", true)) {
+        motion.x = 0.0f;
+        motion.z = 0.0f;
+    }
+    if (flagOr(options, "stop_vertical_movement", true))
+        motion.y = 0.0f;
+    mob.setMotion(motion);
+}
+
+void EntityEvents::_queueCommands(ServerNetworkHandler &owner, MobActor &mob, const json::Value &queue) {
+    const json::Value *command = queue.get("command");
+    if (command == nullptr)
+        return;
+
+    if (command->isString()) {
+        owner.queueActorCommand(mob, command->mString);
+        return;
+    }
+
+    for (const std::unique_ptr<json::Value> &entry: command->mArray) {
+        if (entry->isString())
+            owner.queueActorCommand(mob, entry->mString);
+    }
+}
+
+bool EntityEvents::_run(ServerNetworkHandler &owner, MobActor &mob, const json::Value &node, int32_t depth,
+                        Actor *other) {
     if (depth > MAX_DEPTH || !node.isObject())
         return false;
 
     if (const json::Value *filters = node.get("filters")) {
-        if (!EntityFilter::test(*filters, owner, mob))
+        if (!EntityFilter::test(*filters, owner, mob, other))
             return false;
     }
 
@@ -69,14 +140,37 @@ bool EntityEvents::_run(ServerNetworkHandler &owner, MobActor &mob, const json::
     if (const json::Value *properties = node.get("set_property"))
         _setProperties(owner, mob, *properties);
 
+    if (node.get("reset_target") != nullptr)
+        mob.clearTarget();
+    if (const json::Value *stop = node.get("stop_movement"))
+        _stopMovement(mob, *stop);
+    if (node.get("set_home_position") != nullptr)
+        mob.setHomePosition(mob.getPosition());
+
+    if (const json::Value *drop = node.get("drop_item")) {
+        const json::Value *slot = drop->get("slot");
+        if (slot != nullptr && mob.getEquipment().dropSlot(owner, owner.getLevelFor(mob), mob.getPosition(),
+                                                            slot->string()))
+            mob.getEquipment().broadcast(owner, mob);
+    }
+
+    if (const json::Value *sound = node.get("play_sound")) {
+        const json::Value *name = sound->get("sound");
+        if (name != nullptr)
+            mob.playDefinitionSound(owner, name->string());
+    }
+
+    if (const json::Value *queue = node.get("queue_command"))
+        _queueCommands(owner, mob, *queue);
+
     if (const json::Value *sequence = node.get("sequence")) {
         for (const std::unique_ptr<json::Value> &entry: sequence->mArray)
-            _run(owner, mob, *entry, depth + 1);
+            _run(owner, mob, *entry, depth + 1, other);
     }
 
     if (const json::Value *firstValid = node.get("first_valid")) {
         for (const std::unique_ptr<json::Value> &entry: firstValid->mArray) {
-            if (_run(owner, mob, *entry, depth + 1))
+            if (_run(owner, mob, *entry, depth + 1, other))
                 break;
         }
     }
@@ -91,21 +185,15 @@ bool EntityEvents::_run(ServerNetworkHandler &owner, MobActor &mob, const json::
             for (const std::unique_ptr<json::Value> &entry: randomize->mArray) {
                 roll -= entry->get("weight") != nullptr ? std::max(0, entry->get("weight")->integer(1)) : 1;
                 if (roll < 0) {
-                    _run(owner, mob, *entry, depth + 1);
+                    _run(owner, mob, *entry, depth + 1, other);
                     break;
                 }
             }
         }
     }
 
-    if (const json::Value *trigger = node.get("trigger")) {
-        const std::string event = trigger->isString() ? trigger->mString
-                                                      : (trigger->get("event") != nullptr
-                                                         ? trigger->get("event")->string() : std::string());
-        const json::Value *target = trigger->isObject() ? trigger->get("target") : nullptr;
-        if (!event.empty() && (target == nullptr || target->string() == "self"))
-            fire(owner, mob, event, depth + 1);
-    }
+    if (const json::Value *trigger = node.get("trigger"))
+        fireTrigger(owner, mob, trigger, other, depth + 1);
 
     return true;
 }

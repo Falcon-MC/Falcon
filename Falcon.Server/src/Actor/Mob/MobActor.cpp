@@ -28,6 +28,7 @@ namespace {
     const char *const TAG_BREED_COOLDOWN = "BreedCooldown";
     const char *const TAG_TAMED_BY = "TamedBy";
     const char *const TAG_SITTING = "Sitting";
+    const char *const TAG_HOME = "HomePos";
     const float DEFAULT_MOVEMENT_SPEED = 0.25f;
     const int32_t LOVE_TICKS = 600;
     const int32_t BREED_COOLDOWN_TICKS = 6000;
@@ -46,20 +47,6 @@ namespace {
     std::mt19937 &lifecycleRandom() {
         static std::mt19937 generator(std::random_device{}());
         return generator;
-    }
-
-    std::string eventOf(const json::Value *trigger) {
-        if (trigger == nullptr)
-            return std::string();
-        if (trigger->isString())
-            return trigger->mString;
-        const json::Value *event = trigger->get("event");
-        return event == nullptr ? std::string() : event->string();
-    }
-
-    bool targetsSelf(const json::Value *trigger) {
-        const json::Value *target = trigger == nullptr || !trigger->isObject() ? nullptr : trigger->get("target");
-        return target == nullptr || target->string() == "self";
     }
 
     float numberIn(const json::Value *component, const char *key, float fallback) {
@@ -233,15 +220,11 @@ void MobActor::_tickLifecycle(ServerNetworkHandler &owner) {
         return;
 
     mAgeTicks = 0;
-    const std::string event = eventOf(ageable->get("grow_up"));
-    if (!event.empty())
-        fireEvent(owner, event);
+    EntityEvents::fireTrigger(owner, *this, ageable->get("grow_up"));
 }
 
 void MobActor::_fireComponentEvent(ServerNetworkHandler &owner, const char *component) {
-    const std::string event = eventOf(getComponent(component));
-    if (!event.empty())
-        fireEvent(owner, event);
+    EntityEvents::fireTrigger(owner, *this, getComponent(component), getTarget(owner));
 }
 
 void MobActor::_tickSensors(ServerNetworkHandler &owner) {
@@ -261,10 +244,9 @@ void MobActor::_tickSensors(ServerNetworkHandler &owner) {
         return;
 
     const auto run = [this, &owner](const json::Value &trigger) {
-        const std::string event = eventOf(&trigger);
         const json::Value *filters = trigger.get("filters");
-        if (!event.empty() && (filters == nullptr || EntityFilter::test(*filters, owner, *this)))
-            fireEvent(owner, event);
+        if (filters == nullptr || EntityFilter::test(*filters, owner, *this))
+            EntityEvents::fireTrigger(owner, *this, &trigger);
     };
 
     if (!triggers->isArray()) {
@@ -290,7 +272,7 @@ bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const Dam
         entries.push_back(triggers);
     }
 
-    const Actor *other = source.mAttacker != nullptr ? source.mAttacker : source.mDamager;
+    Actor *other = source.mAttacker != nullptr ? source.mAttacker : source.mDamager;
     bool dealsDamage = true;
     for (const json::Value *trigger: entries) {
         const json::Value *cause = trigger->get("cause");
@@ -311,11 +293,9 @@ bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const Dam
 
         const json::Value *sound = trigger->get("on_damage_sound_event");
         if (sound != nullptr)
-            _playDefinitionSound(owner, sound->string());
+            playDefinitionSound(owner, sound->string());
 
-        const std::string event = eventOf(onDamage);
-        if (!event.empty() && targetsSelf(onDamage))
-            fireEvent(owner, event);
+        EntityEvents::fireTrigger(owner, *this, onDamage, other);
     }
 
     return dealsDamage;
@@ -379,10 +359,7 @@ void MobActor::_tickTimer(ServerNetworkHandler &owner) {
     const json::Value *looping = timer->get("looping");
     mTimerTicks = looping == nullptr || looping->boolean(true) ? timerTicks(*timer) : -1;
 
-    const json::Value *trigger = timer->get("time_down_event");
-    const std::string event = eventOf(trigger);
-    if (!event.empty() && targetsSelf(trigger))
-        fireEvent(owner, event);
+    EntityEvents::fireTrigger(owner, *this, timer->get("time_down_event"));
 }
 
 void MobActor::_tickTransformation(ServerNetworkHandler &owner) {
@@ -395,7 +372,7 @@ void MobActor::_tickTransformation(ServerNetworkHandler &owner) {
         mTransformationTicks = transformationTicks(*transformation);
         const json::Value *sound = transformation->get("begin_transform_sound");
         if (sound != nullptr)
-            _playDefinitionSound(owner, sound->string());
+            playDefinitionSound(owner, sound->string());
     }
 
     if (transformation == nullptr)
@@ -489,12 +466,12 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
 
     const json::Value *sound = transformation.get("transformation_sound");
     if (sound != nullptr)
-        _playDefinitionSound(owner, sound->string());
+        playDefinitionSound(owner, sound->string());
 
     mTransformed = true;
 }
 
-void MobActor::_playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound) {
+void MobActor::playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound) {
     if (sound.empty())
         return;
 
@@ -554,9 +531,7 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
 
         mInteractCooldown = (int32_t) (numberIn(interaction, "cooldown", 0.0f) * TICKS_PER_SECOND);
 
-        const std::string event = eventOf(onInteract);
-        if (!event.empty())
-            fireEvent(owner, event);
+        EntityEvents::fireTrigger(owner, *this, onInteract, &player);
         return true;
     }
     return false;
@@ -601,9 +576,7 @@ bool MobActor::_tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const
     _syncOwner(owner);
     owner.broadcastActorEvent(*this, EntityEventType::TamingSucceeded);
 
-    const std::string event = eventOf(tameable->get("tame_event"));
-    if (!event.empty())
-        fireEvent(owner, event);
+    EntityEvents::fireTrigger(owner, *this, tameable->get("tame_event"), &player);
     return true;
 }
 
@@ -849,8 +822,8 @@ void MobActor::markBorn() {
     mBorn = true;
 }
 
-void MobActor::fireEvent(ServerNetworkHandler &owner, const std::string &event) {
-    EntityEvents::fire(owner, *this, event);
+void MobActor::fireEvent(ServerNetworkHandler &owner, const std::string &event, Actor *other) {
+    EntityEvents::fire(owner, *this, event, 0, other);
 }
 
 float MobActor::getAttackDamage(Difficulty difficulty) const {
@@ -879,6 +852,13 @@ Tag MobActor::saveNbt() const {
     data.putInt(TAG_BREED_COOLDOWN, mBreedCooldown);
     data.putString(TAG_TAMED_BY, mTamedBy);
     data.putByte(TAG_SITTING, mSitting ? 1 : 0);
+    if (mHasHome) {
+        Tag home = Tag::ofList(Tag::Type::Float);
+        home.addToList(Tag::ofFloat(mHomePosition.x));
+        home.addToList(Tag::ofFloat(mHomePosition.y));
+        home.addToList(Tag::ofFloat(mHomePosition.z));
+        data.put(TAG_HOME, home);
+    }
     mEquipment.saveNbt(data);
 
     return data;
@@ -891,6 +871,11 @@ void MobActor::loadNbt(const Tag &data) {
     mBreedCooldown = data.getInt(TAG_BREED_COOLDOWN, 0);
     mTamedBy = data.getString(TAG_TAMED_BY, std::string());
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
+    const Tag *home = data.get(TAG_HOME);
+    if (home != nullptr && home->isList() && home->getList().size() == 3) {
+        const std::vector<Tag> &values = home->getList();
+        setHomePosition(Vector3f(values[0].asFloat(), values[1].asFloat(), values[2].asFloat()));
+    }
     getFlags().set(ActorFlag::Tamed, !mTamedBy.empty());
     getFlags().set(ActorFlag::Sitting, mSitting);
 

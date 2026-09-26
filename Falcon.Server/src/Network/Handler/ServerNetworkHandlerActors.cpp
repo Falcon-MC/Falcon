@@ -8,6 +8,8 @@
 #include "Actor/RideSystem.h"
 #include "Actor/ServerActor.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Command/ExecuteCommandOrigin.h"
+#include "Command/ServerCommandOrigin.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Math/MathConstants.h"
 #include "Protocol/Packets/AddActorPacket.h"
@@ -868,6 +870,29 @@ void ServerNetworkHandler::syncActorProperties(ServerActor &actor) {
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned())
             mNetworkHandler->send(entry.first, packet, mCodecContext);
+    }
+}
+
+void ServerNetworkHandler::queueActorCommand(ServerActor &actor, const std::string &command) {
+    QueuedActorCommand queued;
+    queued.mLevel = &getLevelFor(actor);
+    queued.mPosition = actor.getPosition();
+    queued.mRotation = actor.getRotation();
+    queued.mCommand = !command.empty() && command[0] == '/' ? command.substr(1) : command;
+    mQueuedActorCommands.push_back(std::move(queued));
+}
+
+void ServerNetworkHandler::runQueuedActorCommands() {
+    if (mQueuedActorCommands.empty())
+        return;
+
+    std::vector<QueuedActorCommand> queued;
+    queued.swap(mQueuedActorCommands);
+
+    ServerCommandOrigin base(this);
+    for (const QueuedActorCommand &entry: queued) {
+        ExecuteCommandOrigin origin(base, nullptr, entry.mPosition, entry.mRotation, entry.mLevel);
+        mCommands.dispatch(origin, entry.mCommand);
     }
 }
 
