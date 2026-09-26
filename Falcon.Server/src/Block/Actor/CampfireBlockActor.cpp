@@ -1,5 +1,6 @@
 #include "Block/Actor/ContainerBlockActor.h"
 
+#include "Block/Blocks/ContainerBlock.h"
 #include "Inventory/ItemStackNbt.h"
 #include "Item/CraftingRecipeTable.h"
 #include "Level/Level.h"
@@ -88,6 +89,10 @@ bool CampfireBlockActor::tick(ServerNetworkHandler &owner) {
     const BlockState *state = mLevel->peekBlockPtr(mPosition.x, mPosition.y, mPosition.z);
     if (state == nullptr)
         return true;
+
+    const ContainerBlockDefinition *definition = ContainerBlock::findDefinition(state->mName);
+    if (definition == nullptr || definition->mKind != ContainerBlockKind::Campfire)
+        return false;
 
     const bool lit = state->mStates.getByte(EXTINGUISHED_STATE) == 0;
     bool changed = false;

@@ -1,6 +1,8 @@
 #include "Block/Actor/FurnaceBlockActor.h"
 
+#include "Block/Blocks/FurnaceBlock.h"
 #include "Inventory/InventoryManager.h"
+#include "Level/Level.h"
 
 #include <cmath>
 #include <random>
@@ -38,6 +40,16 @@ void FurnaceBlockActor::loadNbt(const Tag &data, const PacketCodecContext &conte
 }
 
 bool FurnaceBlockActor::tick(ServerNetworkHandler &owner) {
+    if (mLevel == nullptr)
+        return true;
+
+    const BlockState *state = mLevel->peekBlockPtr(mPosition.x, mPosition.y, mPosition.z);
+    if (state == nullptr)
+        return true;
+
+    if (!FurnaceBlock::matches(*state))
+        return false;
+
     InventoryManager::tickStoredFurnace(owner, *this);
     return true;
 }

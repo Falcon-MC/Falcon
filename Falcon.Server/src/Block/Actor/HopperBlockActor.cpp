@@ -207,9 +207,14 @@ bool HopperBlockActor::tick(ServerNetworkHandler &owner) {
         return true;
 
     Level &level = *mLevel;
-    const BlockState state = level.getBlockState(mPosition.x, mPosition.y, mPosition.z);
-    if (state.mName != HOPPER)
+    const BlockState *current = level.peekBlockPtr(mPosition.x, mPosition.y, mPosition.z);
+    if (current == nullptr)
         return true;
+
+    if (current->mName != HOPPER)
+        return false;
+
+    const BlockState state = *current;
 
     if (isDisabled(state))
         return true;

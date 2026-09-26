@@ -1,6 +1,7 @@
 #include "Block/Actor/ContainerBlockActor.h"
 
 #include "Actor/ServerPlayer.h"
+#include "Block/Blocks/ContainerBlock.h"
 #include "Inventory/InventoryManager.h"
 #include "Item/CraftingRecipeTable.h"
 #include "Level/Level.h"
@@ -70,8 +71,16 @@ Tag BrewingStandBlockActor::getSpawnCompound() const {
 }
 
 bool BrewingStandBlockActor::tick(ServerNetworkHandler &owner) {
-    if (mLevel == nullptr || mLevel->peekBlockPtr(mPosition.x, mPosition.y, mPosition.z) == nullptr)
+    if (mLevel == nullptr)
         return true;
+
+    const BlockState *state = mLevel->peekBlockPtr(mPosition.x, mPosition.y, mPosition.z);
+    if (state == nullptr)
+        return true;
+
+    const ContainerBlockDefinition *definition = ContainerBlock::findDefinition(state->mName);
+    if (definition == nullptr || definition->mKind != ContainerBlockKind::BrewingStand)
+        return false;
 
     _updateSlotStates(owner);
     _restockFuel(owner);
