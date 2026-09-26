@@ -163,6 +163,8 @@ private:
 
     void _storeFurnaceState(bool clearLocal);
 
+    static void _releaseFurnaceExperience(ServerNetworkHandler &owner, FurnaceBlockActor &furnace);
+
     /** Block actors of the level the player is in, where any container they open lives. */
     BlockActorStore *_blockActors() const;
 

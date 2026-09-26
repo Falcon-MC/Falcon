@@ -16,6 +16,7 @@
 #include "Block/Inventory/FurnaceInventory.h"
 #include "Inventory/BundleInventory.h"
 #include "Item/CraftingRecipeTable.h"
+#include "Item/FurnaceExperience.h"
 #include "Inventory/CraftingManager.h"
 #include "Level/Level.h"
 #include "Block/Inventory/CraftingTableInventory.h"
@@ -395,14 +396,30 @@ void InventoryManager::_storeFurnaceState(bool clearLocal) {
     state.mKind = mFurnaceKind;
     for (int slot = 0; slot < FurnaceInventory::SIZE; ++slot) {
         const ItemStack &local = mPlayer->getInventory().getFurnaceItem(slot);
-        if (!furnaceItemsEqual(local, mFurnaceObservedItems[(size_t) slot]))
+        const ItemStack &observed = mFurnaceObservedItems[(size_t) slot];
+        if (!furnaceItemsEqual(local, observed)) {
             state.mInventory.mItems[(size_t) slot] = local;
+            if (slot == FurnaceInventory::SLOT_OUTPUT && !observed.isAir()
+                && (local.isAir() || local.mCount < observed.mCount))
+                _releaseFurnaceExperience(*mOwner, state);
+        }
         mFurnaceObservedItems[(size_t) slot] = local;
         if (clearLocal) {
             mPlayer->getInventory().setFurnaceItem(slot, ItemStack::air());
             mFurnaceObservedItems[(size_t) slot] = ItemStack::air();
         }
     }
+}
+
+void InventoryManager::_releaseFurnaceExperience(ServerNetworkHandler &owner, FurnaceBlockActor &furnace) {
+    Level *level = furnace.getLevel();
+    const int32_t experience = furnace.takeStoredExperience();
+    if (level == nullptr || experience <= 0)
+        return;
+
+    const Vector3i &position = furnace.getPosition();
+    owner.spawnExperienceOrbs(*level, Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
+                                               (float) position.z + 0.5f), experience);
 }
 
 namespace {
@@ -608,6 +625,9 @@ namespace {
                     }
 
                     if (allowed) {
+                        if (input.mDefinition != nullptr)
+                            state.mStoredExperience += FurnaceExperience::get(input.mDefinition->getIdentifier());
+
                         ItemStack produced = smelted;
                         if (!currentOutput.isAir())
                             produced.mCount += currentOutput.mCount;
@@ -761,6 +781,7 @@ void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, Level &level
         if (!item.isAir() && item.mCount > 0)
             owner.dropItem(level, dropPosition, item, Vector3f(0.0f, 0.2f, 0.0f), ItemActor::DEFAULT_PICKUP_DELAY);
     }
+    _releaseFurnaceExperience(owner, *furnace);
     level.getBlockActors().remove(position);
     furnaceLastTick.erase(key);
 }

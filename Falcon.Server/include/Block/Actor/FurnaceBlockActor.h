@@ -21,9 +21,12 @@ public:
 
     const FurnaceInventory &getInventory() const { return mInventory; }
 
+    int32_t takeStoredExperience();
+
     FurnaceInventory mInventory;
     FurnaceKind mKind = FurnaceKind::Furnace;
     int mBurnTime = 0;
     int mMaxBurnTime = 0;
     int mCookTime = 0;
+    float mStoredExperience = 0.0f;
 };
