@@ -442,11 +442,7 @@ void ServerNetworkHandler::broadcastLevelEvent(Level &level, int32_t eventId, co
     event.mEventId = eventId;
     event.mPosition = position;
     event.mData = data;
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned() && entry.second.getDimension() == level.getDimensionType())
-            mNetworkHandler->send(entry.first, event, mCodecContext);
-    }
+    BlockActionHandler::broadcastToViewers(*this, level, position, event);
 }
 
 void ServerNetworkHandler::dropProjectileItem(ServerActor &projectile, const Vector3f &position) {
