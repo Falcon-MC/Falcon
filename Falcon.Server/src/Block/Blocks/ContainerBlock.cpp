@@ -17,6 +17,7 @@ FALCON_REGISTER_BLOCK(ContainerBlock, 50);
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <utility>
@@ -167,6 +168,14 @@ const ContainerBlockDefinition *ContainerBlock::findDefinition(const std::string
         return nullptr;
 
     return &definitionOf(kind);
+}
+
+bool ContainerBlock::isShulkerBoxItem(const ItemStack &item) {
+    if (item.isAir() || item.mDefinition == nullptr)
+        return false;
+
+    const ContainerBlockDefinition *definition = findDefinition(std::string(item.mDefinition->getIdentifier()));
+    return definition != nullptr && definition->mKind == ContainerBlockKind::ShulkerBox;
 }
 
 std::unique_ptr<BlockActor> ContainerBlock::createBlockActor(ContainerBlockKind kind) {

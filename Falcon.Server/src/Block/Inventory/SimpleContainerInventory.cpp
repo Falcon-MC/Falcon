@@ -1,5 +1,6 @@
 #include "Block/Inventory/SimpleContainerInventory.h"
 
+#include "Block/Blocks/ContainerBlock.h"
 #include "Inventory/ItemStackNbt.h"
 #include "Inventory/PlayerInventory.h"
 
@@ -23,6 +24,10 @@ const ItemStack &SimpleContainerInventory::getContainerItem(int slot) const {
         return emptyItem();
 
     return mItems[(size_t) slot];
+}
+
+bool SimpleContainerInventory::canHold(const ItemStack &item) const {
+    return !mRejectsShulkerBoxes || !ContainerBlock::isShulkerBoxItem(item);
 }
 
 void SimpleContainerInventory::setContainerItem(int slot, ItemStack item) {

@@ -50,7 +50,9 @@ public:
 
     static const int SIZE = 27;
 
-    ShulkerBoxBlockActor() : ContainerBlockActor(SIZE) {}
+    ShulkerBoxBlockActor() : ContainerBlockActor(SIZE) {
+        mInventory.setRejectsShulkerBoxes(true);
+    }
 
     const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
 

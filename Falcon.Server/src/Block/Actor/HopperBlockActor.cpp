@@ -98,6 +98,9 @@ namespace {
     }
 
     bool addOneWithin(Container &container, const SlotRange &range, const ItemStack &item) {
+        if (!container.canHold(item))
+            return false;
+
         const int maxStackSize = PlayerInventory::getMaxStackSize(item);
 
         for (int slot = range.mFirst; slot < range.mLast; ++slot) {
@@ -129,6 +132,9 @@ namespace {
     }
 
     int addItemsWithin(Container &container, const SlotRange &range, const ItemStack &item) {
+        if (!container.canHold(item))
+            return 0;
+
         int remaining = item.mCount;
         const int maxStackSize = PlayerInventory::getMaxStackSize(item);
 

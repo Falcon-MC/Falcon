@@ -301,6 +301,18 @@ namespace {
         return acceptsBundleWeight(context, projected);
     }
 
+    bool acceptsInOpenContainer(const RequestContext &context, const ItemStack *slot, const ItemStack &item) {
+        if (context.mOpenContainer == nullptr || context.mContainerSlots.empty() || item.isAir())
+            return true;
+
+        const ItemStack *first = context.mContainerSlots.data();
+        const ItemStack *last = first + context.mContainerSlots.size();
+        if (slot < first || slot >= last)
+            return true;
+
+        return context.mOpenContainer->canHold(item);
+    }
+
     bool moveItems(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                    std::vector<TouchedSlot> &touched) {
         ItemStack *source = resolveSlot(inventory, context, action.mSource.mContainerName,
@@ -323,6 +335,10 @@ namespace {
         }
 
         if (!destination->isAir() && !PlayerInventory::canStack(*source, *destination)) {
+            return false;
+        }
+
+        if (!acceptsInOpenContainer(context, destination, *source)) {
             return false;
         }
 
@@ -380,6 +396,11 @@ namespace {
         if (!checkBundleSwap(inventory, context, action.mSource.mContainerName, action.mSource.mSlot, *destination)
             || !checkBundleSwap(inventory, context, action.mDestination.mContainerName, action.mDestination.mSlot,
                                 *source)) {
+            return false;
+        }
+
+        if (!acceptsInOpenContainer(context, destination, *source)
+            || !acceptsInOpenContainer(context, source, *destination)) {
             return false;
         }
 

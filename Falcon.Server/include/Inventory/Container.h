@@ -11,4 +11,9 @@ public:
     virtual const ItemStack &getContainerItem(int slot) const = 0;
 
     virtual void setContainerItem(int slot, ItemStack item) = 0;
+
+    virtual bool canHold(const ItemStack &item) const {
+        (void) item;
+        return true;
+    }
 };

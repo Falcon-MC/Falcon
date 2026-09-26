@@ -17,6 +17,12 @@ public:
 
     void setContainerItem(int slot, ItemStack item) override;
 
+    bool canHold(const ItemStack &item) const override;
+
+    void setRejectsShulkerBoxes(bool rejects) {
+        mRejectsShulkerBoxes = rejects;
+    }
+
     bool isEmpty() const;
 
     bool isFull() const;
@@ -33,4 +39,5 @@ public:
 
 private:
     std::vector<ItemStack> mItems;
+    bool mRejectsShulkerBoxes = false;
 };
