@@ -2332,9 +2332,7 @@ namespace {
             return JS_UNDEFINED;
 
         const std::string name = toStdString(ctx, argv[0]);
-        const CustomActorDefinition *definition = actor->getDefinition();
-        const ActorPropertyDescription *descriptor = definition == nullptr ? nullptr
-                                                                           : definition->findProperty(name);
+        const ActorPropertyDescription *descriptor = actor->findPropertyDescription(name);
         if (descriptor == nullptr)
             return JS_UNDEFINED;
 
@@ -2358,9 +2356,7 @@ namespace {
             return JS_UNDEFINED;
 
         const std::string name = toStdString(ctx, argv[0]);
-        const CustomActorDefinition *definition = actor->getDefinition();
-        const ActorPropertyDescription *descriptor = definition == nullptr ? nullptr
-                                                                           : definition->findProperty(name);
+        const ActorPropertyDescription *descriptor = actor->findPropertyDescription(name);
         if (descriptor == nullptr)
             return JS_UNDEFINED;
 

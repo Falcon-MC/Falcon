@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Actor/ActorPropertySchema.h"
 #include "Core/NBT/Tag.h"
 #include "Protocol/Types/StartGameTypes.h"
 
@@ -59,28 +60,6 @@ struct CustomBlockDefinition {
     bool mHasFriction = false;
     CustomBlockBox mCollision;
     CustomBlockBox mSelection;
-};
-
-struct ActorPropertyDescription {
-    enum class Type {
-        Int,
-        Float,
-        Bool,
-        Enum
-    };
-
-    std::string mName;
-    Type mType = Type::Int;
-    int32_t mIndex = 0;
-    int32_t mMinInt = 0;
-    int32_t mMaxInt = 0;
-    int32_t mDefaultInt = 0;
-    float mMinFloat = 0.0f;
-    float mMaxFloat = 0.0f;
-    float mDefaultFloat = 0.0f;
-    bool mDefaultBool = false;
-    bool mClientSync = false;
-    std::vector<std::string> mEnumValues;
 };
 
 struct CustomActorDefinition {

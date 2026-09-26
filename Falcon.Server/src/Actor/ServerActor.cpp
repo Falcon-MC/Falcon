@@ -1,5 +1,7 @@
 #include "Actor/ServerActor.h"
 
+#include "Actor/Definition/EntityDefinitions.h"
+#include "Actor/Definition/Molang.h"
 #include "Actor/DynamicPropertyStore.h"
 #include "Actor/Mob/MobActor.h"
 #include "Actor/Movement/ActorMovementSystem.h"
@@ -14,7 +16,9 @@
 #include "Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -243,6 +247,87 @@ int32_t ServerActor::getIntProperty(const std::string &name, int32_t fallback) c
 float ServerActor::getFloatProperty(const std::string &name, float fallback) const {
     const auto it = mFloatProperties.find(name);
     return it == mFloatProperties.end() ? fallback : it->second;
+}
+
+const std::vector<ActorPropertyDescription> *ServerActor::getPropertySchema() const {
+    if (mDefinition != nullptr)
+        return &mDefinition->mProperties;
+    return EntityDefinitions::findProperties(mIdentifier);
+}
+
+const ActorPropertyDescription *ServerActor::findPropertyDescription(const std::string &name) const {
+    const std::vector<ActorPropertyDescription> *schema = getPropertySchema();
+    return schema == nullptr ? nullptr : ActorPropertySchema::find(*schema, name);
+}
+
+void ServerActor::initializeProperties() {
+    const std::vector<ActorPropertyDescription> *schema = getPropertySchema();
+    if (schema == nullptr)
+        return;
+
+    for (const ActorPropertyDescription &descriptor: *schema) {
+        const bool computed = !descriptor.mDefaultExpression.empty();
+        if (descriptor.mType == ActorPropertyDescription::Type::Float) {
+            if (!hasFloatProperty(descriptor.mName))
+                setFloatProperty(descriptor.mName, computed
+                                                   ? (float) Molang::evaluate(descriptor.mDefaultExpression,
+                                                                              *this).mNumber
+                                                   : descriptor.mDefaultFloat);
+            continue;
+        }
+
+        if (hasIntProperty(descriptor.mName))
+            continue;
+
+        int32_t value = descriptor.mDefaultInt;
+        if (computed) {
+            const MolangValue result = Molang::evaluate(descriptor.mDefaultExpression, *this);
+            value = descriptor.mType == ActorPropertyDescription::Type::Bool ? (result.isTrue() ? 1 : 0)
+                                                                             : (int32_t) std::lround(result.mNumber);
+        }
+        setIntProperty(descriptor.mName, value);
+    }
+}
+
+bool ServerActor::assignProperty(const ActorPropertyDescription &descriptor, const json::Value &value) {
+    const std::string &name = descriptor.mName;
+    const bool expression = value.isString();
+
+    if (descriptor.mType == ActorPropertyDescription::Type::Float) {
+        float result = expression ? (float) Molang::evaluate(value.mString, *this).mNumber : (float) value.number();
+        if (descriptor.mMaxFloat > descriptor.mMinFloat)
+            result = std::min(std::max(result, descriptor.mMinFloat), descriptor.mMaxFloat);
+
+        const bool changed = !hasFloatProperty(name) || getFloatProperty(name) != result;
+        setFloatProperty(name, result);
+        return changed;
+    }
+
+    int32_t result = 0;
+    if (descriptor.mType == ActorPropertyDescription::Type::Enum) {
+        result = descriptor.findEnumIndex(value.string());
+        if (result < 0 && expression) {
+            const MolangValue evaluated = Molang::evaluate(value.mString, *this);
+            result = evaluated.mIsString ? descriptor.findEnumIndex(evaluated.mString)
+                                         : (int32_t) std::lround(evaluated.mNumber);
+        }
+        if (result < 0 || result >= (int32_t) descriptor.mEnumValues.size())
+            return false;
+    } else if (descriptor.mType == ActorPropertyDescription::Type::Bool) {
+        if (value.mType == json::Value::Type::Boolean)
+            result = value.mBoolean ? 1 : 0;
+        else
+            result = (expression ? Molang::evaluate(value.mString, *this).isTrue() : value.number() != 0.0) ? 1 : 0;
+    } else {
+        const double number = expression ? Molang::evaluate(value.mString, *this).mNumber : value.number();
+        result = (int32_t) std::lround(number);
+        if (descriptor.mMaxInt > descriptor.mMinInt)
+            result = std::min(std::max(result, descriptor.mMinInt), descriptor.mMaxInt);
+    }
+
+    const bool changed = !hasIntProperty(name) || getIntProperty(name) != result;
+    setIntProperty(name, result);
+    return changed;
 }
 
 Tag ServerActor::saveNbt() const {

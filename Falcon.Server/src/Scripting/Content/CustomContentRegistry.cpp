@@ -97,11 +97,7 @@ bool CustomContentRegistry::isCustomBlock(const std::string &identifier) const {
 }
 
 const ActorPropertyDescription *CustomActorDefinition::findProperty(const std::string &name) const {
-    for (const ActorPropertyDescription &property: mProperties) {
-        if (property.mName == name)
-            return &property;
-    }
-    return nullptr;
+    return ActorPropertySchema::find(mProperties, name);
 }
 
 int32_t CustomContentRegistry::getItemMaxStackSize(const std::string &identifier) const {
@@ -394,67 +390,8 @@ void CustomContentRegistry::_loadPackActors(const std::string &packPath) {
         }
 
         const json::Value *properties = description->get("properties");
-        if (properties != nullptr && properties->isObject()) {
-            std::vector<std::string> names;
-            for (const auto &pair: properties->mObject)
-                names.push_back(pair.first);
-            std::sort(names.begin(), names.end());
-
-            int32_t index = 0;
-            for (const std::string &name: names) {
-                const json::Value *property = properties->get(name);
-                ActorPropertyDescription descriptor;
-                descriptor.mName = name;
-                descriptor.mIndex = index++;
-
-                const std::string type = property->get("type") != nullptr ? property->get("type")->string() : "int";
-                const json::Value *range = property->get("range");
-                const json::Value *defaultValue = property->get("default");
-                descriptor.mClientSync = property->get("client_sync") != nullptr &&
-                                         property->get("client_sync")->boolean(false);
-
-                if (type == "bool") {
-                    descriptor.mType = ActorPropertyDescription::Type::Bool;
-                    descriptor.mDefaultBool = defaultValue != nullptr && defaultValue->boolean(false);
-                    descriptor.mDefaultInt = descriptor.mDefaultBool ? 1 : 0;
-                    descriptor.mMinInt = 0;
-                    descriptor.mMaxInt = 1;
-                } else if (type == "float") {
-                    descriptor.mType = ActorPropertyDescription::Type::Float;
-                    if (range != nullptr && range->isArray() && range->mArray.size() >= 2) {
-                        descriptor.mMinFloat = (float) range->mArray[0]->number(0.0);
-                        descriptor.mMaxFloat = (float) range->mArray[1]->number(0.0);
-                    }
-                    descriptor.mDefaultFloat = defaultValue != nullptr ? (float) defaultValue->number(0.0) : 0.0f;
-                } else if (type == "enum") {
-                    descriptor.mType = ActorPropertyDescription::Type::Enum;
-                    const json::Value *values = property->get("values");
-                    if (values != nullptr && values->isArray()) {
-                        for (const std::unique_ptr<json::Value> &value: values->mArray) {
-                            if (value->isString())
-                                descriptor.mEnumValues.push_back(value->string());
-                        }
-                    }
-                    descriptor.mMinInt = 0;
-                    descriptor.mMaxInt = (int32_t) descriptor.mEnumValues.size() - 1;
-                    if (defaultValue != nullptr && defaultValue->isString()) {
-                        for (size_t i = 0; i < descriptor.mEnumValues.size(); ++i) {
-                            if (descriptor.mEnumValues[i] == defaultValue->string())
-                                descriptor.mDefaultInt = (int32_t) i;
-                        }
-                    }
-                } else {
-                    descriptor.mType = ActorPropertyDescription::Type::Int;
-                    if (range != nullptr && range->isArray() && range->mArray.size() >= 2) {
-                        descriptor.mMinInt = range->mArray[0]->integer(0);
-                        descriptor.mMaxInt = range->mArray[1]->integer(0);
-                    }
-                    descriptor.mDefaultInt = defaultValue != nullptr ? defaultValue->integer(0) : 0;
-                }
-
-                definition.mProperties.push_back(descriptor);
-            }
-        }
+        if (properties != nullptr)
+            definition.mProperties = ActorPropertySchema::parse(*properties);
 
         bool duplicate = false;
         for (const CustomActorDefinition &existing: mActors) {

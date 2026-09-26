@@ -2,6 +2,7 @@
 
 #include "Actor/Definition/EntityFilter.h"
 #include "Actor/Mob/MobActor.h"
+#include "Network/Handler/ServerNetworkHandler.h"
 
 #include <algorithm>
 #include <random>
@@ -36,6 +37,22 @@ void EntityEvents::_applyGroups(MobActor &mob, const json::Value &change, bool a
     }
 }
 
+void EntityEvents::_setProperties(ServerNetworkHandler &owner, MobActor &mob, const json::Value &properties) {
+    if (!properties.isObject())
+        return;
+
+    bool changed = false;
+    for (const std::string &name: properties.mKeys) {
+        const ActorPropertyDescription *descriptor = mob.findPropertyDescription(name);
+        const json::Value *value = properties.get(name);
+        if (descriptor != nullptr && value != nullptr && mob.assignProperty(*descriptor, *value))
+            changed = true;
+    }
+
+    if (changed)
+        owner.syncActorProperties(mob);
+}
+
 bool EntityEvents::_run(ServerNetworkHandler &owner, MobActor &mob, const json::Value &node, int32_t depth) {
     if (depth > MAX_DEPTH || !node.isObject())
         return false;
@@ -49,6 +66,8 @@ bool EntityEvents::_run(ServerNetworkHandler &owner, MobActor &mob, const json::
         _applyGroups(mob, *remove, false);
     if (const json::Value *add = node.get("add"))
         _applyGroups(mob, *add, true);
+    if (const json::Value *properties = node.get("set_property"))
+        _setProperties(owner, mob, *properties);
 
     if (const json::Value *sequence = node.get("sequence")) {
         for (const std::unique_ptr<json::Value> &entry: sequence->mArray)

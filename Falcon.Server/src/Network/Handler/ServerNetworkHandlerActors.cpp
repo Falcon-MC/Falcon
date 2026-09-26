@@ -135,11 +135,11 @@ namespace {
     EntityProperties buildActorProperties(ServerActor &actor) {
         EntityProperties properties;
 
-        const CustomActorDefinition *definition = actor.getDefinition();
-        if (definition == nullptr)
+        const std::vector<ActorPropertyDescription> *schema = actor.getPropertySchema();
+        if (schema == nullptr)
             return properties;
 
-        for (const ActorPropertyDescription &descriptor: definition->mProperties) {
+        for (const ActorPropertyDescription &descriptor: *schema) {
             if (descriptor.mType == ActorPropertyDescription::Type::Float) {
                 FloatEntityProperty property;
                 property.mIndex = descriptor.mIndex;
@@ -182,14 +182,9 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     if (definition != nullptr) {
         actor->setDefinition(definition);
         actor->setProjectile(definition->mIsProjectile);
-
-        for (const ActorPropertyDescription &descriptor: definition->mProperties) {
-            if (descriptor.mType == ActorPropertyDescription::Type::Float)
-                actor->setFloatProperty(descriptor.mName, descriptor.mDefaultFloat);
-            else
-                actor->setIntProperty(descriptor.mName, descriptor.mDefaultInt);
-        }
     }
+
+    actor->initializeProperties();
 
     ServerActor *result = actor.get();
     mActors[uniqueId] = std::move(actor);

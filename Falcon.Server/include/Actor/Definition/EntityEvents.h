@@ -16,4 +16,6 @@ private:
     static bool _run(ServerNetworkHandler &owner, MobActor &mob, const json::Value &node, int32_t depth);
 
     static void _applyGroups(MobActor &mob, const json::Value &change, bool add);
+
+    static void _setProperties(ServerNetworkHandler &owner, MobActor &mob, const json::Value &properties);
 };

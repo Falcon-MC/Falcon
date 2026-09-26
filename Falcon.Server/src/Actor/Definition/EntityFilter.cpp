@@ -177,6 +177,33 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         return isNegation(op) ? !result : result;
     }
 
+    if (test == "bool_property" || test == "enum_property" || test == "int_property" || test == "float_property") {
+        const ServerActor *actor = dynamic_cast<const ServerActor *>(target);
+        const json::Value *domain = filter.get("domain");
+        const ActorPropertyDescription *descriptor = actor == nullptr || domain == nullptr
+                                                     ? nullptr : actor->findPropertyDescription(domain->string());
+        if (descriptor == nullptr)
+            return false;
+
+        const std::string &name = descriptor->mName;
+        if (test == "bool_property")
+            return applyBoolean(actor->getIntProperty(name, descriptor->mDefaultInt) != 0, value, op);
+
+        if (test == "enum_property") {
+            const int32_t index = actor->getIntProperty(name, descriptor->mDefaultInt);
+            const bool result = descriptor->mType == ActorPropertyDescription::Type::Enum && value != nullptr
+                                && index == descriptor->findEnumIndex(value->string());
+            return isNegation(op) ? !result : result;
+        }
+
+        if (test == "float_property")
+            return value != nullptr && compareFloats(actor->getFloatProperty(name, descriptor->mDefaultFloat),
+                                                     (float) value->number(0.0), op);
+
+        return value != nullptr && compareNumbers(actor->getIntProperty(name, descriptor->mDefaultInt),
+                                                  (int64_t) value->number(0.0), op);
+    }
+
     if (test == "has_component" && value != nullptr && value->string().rfind(EFFECT_COMPONENT_PREFIX, 0) == 0) {
         MobEffectId effect;
         const std::string name = value->string().substr(std::string(EFFECT_COMPONENT_PREFIX).size());

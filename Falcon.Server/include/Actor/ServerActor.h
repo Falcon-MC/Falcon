@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Actor/Actor.h"
+#include "Actor/ActorPropertySchema.h"
 #include "Actor/ActorSize.h"
 #include "Actor/DamageSource.h"
 #include "Actor/DynamicPropertyValue.h"
@@ -166,6 +167,14 @@ public:
     int32_t getIntProperty(const std::string &name, int32_t fallback = 0) const;
 
     float getFloatProperty(const std::string &name, float fallback = 0.0f) const;
+
+    const std::vector<ActorPropertyDescription> *getPropertySchema() const;
+
+    const ActorPropertyDescription *findPropertyDescription(const std::string &name) const;
+
+    void initializeProperties();
+
+    bool assignProperty(const ActorPropertyDescription &descriptor, const json::Value &value);
 
     std::unordered_map<std::string, int32_t> &getIntProperties() { return mIntProperties; }
 
