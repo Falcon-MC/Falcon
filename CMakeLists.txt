@@ -16,7 +16,7 @@ set(LEVELDB_TCMALLOC OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     leveldb
     GIT_REPOSITORY https://github.com/Falcon-MC/leveldb.git
-    GIT_TAG 266fd83aa60ccf62a990addc48f88c29fb688a9f
+    GIT_TAG 836fe999d3013be3901ab9880d0b3cfb9be9ddc0
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )

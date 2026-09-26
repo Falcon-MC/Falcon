@@ -11,6 +11,8 @@
 
 namespace leveldb {
     class DB;
+    class DecompressAllocator;
+    struct ReadOptions;
 }
 
 enum class LevelDbTag : unsigned char {
@@ -91,7 +93,10 @@ private:
 
     static void _appendLInt(std::string &out, int32_t value);
 
+    leveldb::ReadOptions _readOptions() const;
+
     std::shared_ptr<leveldb::DB> mDb;
+    std::shared_ptr<leveldb::DecompressAllocator> mDecompressAllocator;
     std::string mPath;
     int mDimensionId;
 };

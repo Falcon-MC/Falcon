@@ -13,6 +13,7 @@
 #include <utility>
 
 #include <leveldb/db.h>
+#include <leveldb/decompress_allocator.h>
 #include <leveldb/options.h>
 #include <leveldb/write_batch.h>
 #include <leveldb/filter_policy.h>
@@ -52,8 +53,10 @@ LevelStorage::~LevelStorage() {
 }
 
 LevelStorage::LevelStorage(LevelStorage &&other) noexcept
-        : mDb(std::move(other.mDb)), mPath(std::move(other.mPath)), mDimensionId(other.mDimensionId) {
+        : mDb(std::move(other.mDb)), mDecompressAllocator(std::move(other.mDecompressAllocator)),
+          mPath(std::move(other.mPath)), mDimensionId(other.mDimensionId) {
     other.mDb.reset();
+    other.mDecompressAllocator.reset();
 }
 
 LevelStorage &LevelStorage::operator=(LevelStorage &&other) noexcept {
@@ -63,9 +66,11 @@ LevelStorage &LevelStorage::operator=(LevelStorage &&other) noexcept {
     close();
 
     mDb = std::move(other.mDb);
+    mDecompressAllocator = std::move(other.mDecompressAllocator);
     mPath = std::move(other.mPath);
     mDimensionId = other.mDimensionId;
     other.mDb.reset();
+    other.mDecompressAllocator.reset();
 
     return *this;
 }
@@ -77,6 +82,7 @@ bool LevelStorage::attach(const LevelStorage &source, int dimensionId) {
     close();
 
     mDb = source.mDb;
+    mDecompressAllocator = source.mDecompressAllocator;
     mPath = source.mPath;
     mDimensionId = dimensionId;
 
@@ -151,6 +157,7 @@ bool LevelStorage::open(const std::string &worldsDirectory, const std::string &l
     }
 
     mDb.reset(db);
+    mDecompressAllocator = std::make_shared<leveldb::DecompressAllocator>();
 
     const std::filesystem::path nameFile = root / "levelname.txt";
     if (!std::filesystem::exists(nameFile, error)) {
@@ -167,6 +174,13 @@ void LevelStorage::close() {
         return;
 
     mDb.reset();
+    mDecompressAllocator.reset();
+}
+
+leveldb::ReadOptions LevelStorage::_readOptions() const {
+    leveldb::ReadOptions options;
+    options.decompress_allocator = mDecompressAllocator.get();
+    return options;
 }
 
 void LevelStorage::compact() {
@@ -226,11 +240,11 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
         return false;
 
     std::string version;
-    leveldb::Status status = mDb->Get(leveldb::ReadOptions(),
+    leveldb::Status status = mDb->Get(_readOptions(),
                                       _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::Version), &version);
 
     if (!status.ok()) {
-        status = mDb->Get(leveldb::ReadOptions(),
+        status = mDb->Get(_readOptions(),
                           _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::LegacyVersion), &version);
     }
 
@@ -244,7 +258,7 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
         const int8_t subY = (int8_t) (LevelChunk::LOWEST_SUB_CHUNK_Y + i);
 
         std::string data;
-        if (!mDb->Get(leveldb::ReadOptions(), _makeSubChunkKey(chunk.getX(), chunk.getZ(), subY), &data).ok())
+        if (!mDb->Get(_readOptions(), _makeSubChunkKey(chunk.getX(), chunk.getZ(), subY), &data).ok())
             continue;
 
         ReadOnlyBinaryStream stream(data);
@@ -260,7 +274,7 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
     }
 
     std::string heightAndBiomes;
-    if (mDb->Get(leveldb::ReadOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::Data3D),
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::Data3D),
                  &heightAndBiomes).ok()) {
         ReadOnlyBinaryStream stream(heightAndBiomes);
 
@@ -276,7 +290,7 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
     }
 
     std::string finalized;
-    if (mDb->Get(leveldb::ReadOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::FinalizedState),
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::FinalizedState),
                  &finalized).ok() && finalized.size() >= 4) {
         const int32_t state = (int32_t) ((unsigned char) finalized[0]
                                          | ((unsigned char) finalized[1] << 8)
@@ -358,7 +372,7 @@ std::vector<GeneratedBlockChange> LevelStorage::loadPendingBlockChanges(int32_t 
         return changes;
 
     std::string data;
-    if (!mDb->Get(leveldb::ReadOptions(), _makePendingChangesKey(chunkX, chunkZ), &data).ok())
+    if (!mDb->Get(_readOptions(), _makePendingChangesKey(chunkX, chunkZ), &data).ok())
         return changes;
 
     ReadOnlyBinaryStream stream(data);
@@ -437,7 +451,7 @@ std::vector<Tag> LevelStorage::loadEntities(int32_t chunkX, int32_t chunkZ) {
         return entities;
 
     std::string data;
-    const leveldb::Status status = mDb->Get(leveldb::ReadOptions(),
+    const leveldb::Status status = mDb->Get(_readOptions(),
                                             _makeKey(chunkX, chunkZ, LevelDbTag::Entities), &data);
 
     if (!status.ok())
@@ -489,7 +503,7 @@ std::vector<Tag> LevelStorage::loadBlockEntities(int32_t chunkX, int32_t chunkZ)
         return blockEntities;
 
     std::string data;
-    const leveldb::Status status = mDb->Get(leveldb::ReadOptions(),
+    const leveldb::Status status = mDb->Get(_readOptions(),
                                             _makeKey(chunkX, chunkZ, LevelDbTag::BlockEntities), &data);
 
     if (!status.ok())
@@ -536,7 +550,7 @@ bool LevelStorage::loadWeather(bool &raining, int32_t &rainTime, bool &thunderin
         return false;
 
     std::string data;
-    if (!mDb->Get(leveldb::ReadOptions(), WEATHER_KEY, &data).ok())
+    if (!mDb->Get(_readOptions(), WEATHER_KEY, &data).ok())
         return false;
 
     ReadOnlyBinaryStream stream(data);
@@ -576,7 +590,7 @@ bool LevelStorage::loadGameRules(Tag &rules) {
         return false;
 
     std::string data;
-    if (!mDb->Get(leveldb::ReadOptions(), GAME_RULES_KEY, &data).ok())
+    if (!mDb->Get(_readOptions(), GAME_RULES_KEY, &data).ok())
         return false;
 
     ReadOnlyBinaryStream stream(data);
