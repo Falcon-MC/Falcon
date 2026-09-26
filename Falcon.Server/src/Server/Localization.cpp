@@ -1,9 +1,12 @@
 #include "Server/Localization.h"
 
+#include "CommandTranslationsJson.h"
+#include "Core/Json/Json.h"
 #include "LanguageFiles.h"
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
 
 namespace {
     std::string trim(const std::string &value) {
@@ -70,6 +73,19 @@ std::string Localization::getLanguageName(const std::string &locale) const {
 Localization::Localization() {
     for (const FalconLanguageData::EmbeddedLanguage &language: FalconLanguageData::kLanguages)
         mLanguages[language.mLocale] = _parse(language.mContent);
+
+    const std::unique_ptr<json::Value> vanilla = json::parse(FalconLanguageData::kCommandTranslationsJson);
+    if (vanilla == nullptr || !vanilla->isObject())
+        return;
+
+    for (auto &language: mLanguages) {
+        const json::Value *texts = vanilla->get(language.first);
+        if (texts == nullptr || !texts->isObject())
+            continue;
+
+        for (const std::string &key: texts->mKeys)
+            language.second.emplace(key, texts->get(key)->string());
+    }
 }
 
 std::string Localization::translate(const std::string &locale, const std::string &key,
@@ -78,7 +94,27 @@ std::string Localization::translate(const std::string &locale, const std::string
     if (text == nullptr)
         text = _findText(DEFAULT_LOCALE, key);
 
-    return _format(text == nullptr ? key : *text, parameters);
+    return _format(locale, text == nullptr ? key : *text, parameters);
+}
+
+std::string Localization::_inlineKey(const std::string &locale, const std::string &text, size_t start,
+                                     size_t &end) const {
+    end = start;
+    while (end < text.size() && (std::isalnum((unsigned char) text[end]) || text[end] == '.' || text[end] == '_'
+                                 || text[end] == '-'))
+        ++end;
+
+    while (end > start && text[end - 1] == '.')
+        --end;
+
+    if (end == start)
+        return std::string();
+
+    const std::string key = text.substr(start, end - start);
+    const std::string *found = _findText(locale, key);
+    if (found == nullptr)
+        found = _findText(DEFAULT_LOCALE, key);
+    return found == nullptr ? std::string() : *found;
 }
 
 const Localization::Entries *Localization::_findEntries(const std::string &locale) const {
@@ -134,7 +170,8 @@ Localization::Entries Localization::_parse(const std::string &content) {
     return entries;
 }
 
-std::string Localization::_format(const std::string &text, const std::vector<std::string> &parameters) {
+std::string Localization::_format(const std::string &locale, const std::string &text,
+                                  const std::vector<std::string> &parameters) const {
     std::string result;
     result.reserve(text.size());
     size_t nextParameter = 0;
@@ -151,7 +188,7 @@ std::string Localization::_format(const std::string &text, const std::vector<std
             continue;
         }
 
-        if (text[index + 1] == 's') {
+        if (text[index + 1] == 's' || text[index + 1] == 'd') {
             if (nextParameter < parameters.size())
                 result += parameters[nextParameter];
             ++nextParameter;
@@ -166,11 +203,19 @@ std::string Localization::_format(const std::string &text, const std::vector<std
             ++cursor;
         }
 
-        if (cursor > index + 1 && cursor + 1 < text.size() && text[cursor] == '$' && text[cursor + 1] == 's'
-            && number >= 1) {
+        if (cursor > index + 1 && cursor + 1 < text.size() && text[cursor] == '$'
+            && (text[cursor + 1] == 's' || text[cursor + 1] == 'd') && number >= 1) {
             if (number <= parameters.size())
                 result += parameters[number - 1];
             index = cursor + 1;
+            continue;
+        }
+
+        size_t keyEnd = 0;
+        const std::string inlineText = _inlineKey(locale, text, index + 1, keyEnd);
+        if (!inlineText.empty()) {
+            result += inlineText;
+            index = keyEnd - 1;
             continue;
         }
 

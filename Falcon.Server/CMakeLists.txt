@@ -30,6 +30,9 @@ falcon_bedrock_data_embed_text(FILE entity_despawn.json NAMESPACE FalconSpawnDat
 falcon_bedrock_data_embed_text(FILE entity_definitions.json NAMESPACE FalconEntityData
         SYMBOL kEntityDefinitionsJson DELIMITER falconentities
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/EntityDefinitionsJson.h")
+falcon_bedrock_data_embed_text(FILE command_translations.json NAMESPACE FalconLanguageData
+        SYMBOL kCommandTranslationsJson DELIMITER falcontexts
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/CommandTranslationsJson.h")
 falcon_bedrock_data_embed_text(FILE r16_to_current_item_map.json NAMESPACE FalconLegacyItemData
         SYMBOL kLegacyItemMapJson DELIMITER falconlegacy
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/LegacyItemMapJson.h")

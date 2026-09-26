@@ -38,7 +38,10 @@ private:
 
     static Entries _parse(const std::string &content);
 
-    static std::string _format(const std::string &text, const std::vector<std::string> &parameters);
+    std::string _format(const std::string &locale, const std::string &text,
+                        const std::vector<std::string> &parameters) const;
+
+    std::string _inlineKey(const std::string &locale, const std::string &text, size_t start, size_t &end) const;
 
     std::unordered_map<std::string, Entries> mLanguages;
 
