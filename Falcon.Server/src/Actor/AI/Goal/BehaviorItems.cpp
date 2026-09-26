@@ -12,7 +12,7 @@ BehaviorItems::BehaviorItems(const json::Value *items) {
     const auto add = [this](const json::Value &entry) {
         const json::Value *name = entry.isObject() ? entry.get("item") : &entry;
         if (name != nullptr && name->isString())
-            mItems.push_back(LegacyItemMapper::getInstance().resolve(name->mString, 0));
+            mItems.push_back(LegacyItemMapper::getInstance().resolveWithData(name->mString));
     };
 
     if (items->isArray()) {

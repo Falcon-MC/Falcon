@@ -379,6 +379,16 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         return applyBoolean(mob != nullptr && mob->getComponent("minecraft:is_baby") != nullptr, value, op);
     }
 
+    if (test == "is_variant" || test == "is_mark_variant") {
+        const MobActor *mob = dynamic_cast<const MobActor *>(target);
+        const json::Value *component = mob == nullptr ? nullptr
+                                       : mob->getComponent(test == "is_variant" ? "minecraft:variant"
+                                                                                : "minecraft:mark_variant");
+        const json::Value *current = component == nullptr ? nullptr : component->get("value");
+        return value != nullptr && compareNumbers((int64_t) (current == nullptr ? 0 : current->integer(0)),
+                                                  (int64_t) value->number(0.0), op);
+    }
+
     if (test == "bool_property" || test == "enum_property" || test == "int_property" || test == "float_property") {
         const ServerActor *actor = dynamic_cast<const ServerActor *>(target);
         const json::Value *domain = filter.get("domain");

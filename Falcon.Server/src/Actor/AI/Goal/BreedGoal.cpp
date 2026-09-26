@@ -130,7 +130,9 @@ void BreedGoal::_breed(ServerNetworkHandler &owner, MobActor &mob, MobActor &par
 
     Level &level = owner.getLevelFor(mob);
     ServerActor *child = owner.spawnBabyActor(level, babyType, mob.getPosition(), BABY_SCALE);
-    if (MobActor *childMob = dynamic_cast<MobActor *>(child))
+    if (MobActor *childMob = dynamic_cast<MobActor *>(child)) {
         childMob->setParent(mob.getRuntimeId());
+        childMob->inheritVariant(mob, partner);
+    }
     owner.spawnExperienceOrbs(level, mob.getPosition(), MobActor::randomRange(MIN_EXPERIENCE, MAX_EXPERIENCE));
 }

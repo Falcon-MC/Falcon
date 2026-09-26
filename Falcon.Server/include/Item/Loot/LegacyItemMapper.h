@@ -10,6 +10,10 @@ public:
 
     std::string resolve(const std::string &identifier, int32_t data) const;
 
+    std::string resolveWithData(const std::string &identifierAndData) const;
+
+    static void splitData(const std::string &identifierAndData, std::string &identifier, int32_t &data);
+
 private:
     LegacyItemMapper();
 

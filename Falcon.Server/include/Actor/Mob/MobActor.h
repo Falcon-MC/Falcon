@@ -168,6 +168,12 @@ public:
 
     void finishBreeding(ServerNetworkHandler &owner);
 
+    int32_t getVariant() const;
+
+    void setVariant(int32_t variant);
+
+    void inheritVariant(const MobActor &firstParent, const MobActor &secondParent);
+
     bool isTamed() const {
         return mOwnerId != NO_OWNER || !mLegacyOwnerName.empty();
     }
@@ -324,6 +330,13 @@ private:
     void _dropEquipmentSlot(ServerNetworkHandler &owner, const std::string &slotName, float yOffset);
 
     void _spawnLoot(ServerNetworkHandler &owner, Level &level, const std::string &path);
+
+    std::vector<ItemStack> _rollLoot(ServerNetworkHandler &owner, const std::string &path);
+
+    void _givePlayerItem(ServerNetworkHandler &owner, ServerPlayer &player, ItemStack item);
+
+    void _emitInteractParticle(ServerNetworkHandler &owner, const ServerPlayer &player, const json::Value &particle,
+                               const std::string &type);
 
     void _appendDefinitionData(EntityDataMap &metadata) const;
 

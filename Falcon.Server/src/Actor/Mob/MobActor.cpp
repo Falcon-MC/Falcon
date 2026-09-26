@@ -11,6 +11,9 @@
 #include "Block/Block.h"
 #include "Block/BlockState.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Inventory/InventoryManager.h"
+#include "Inventory/PlayerInventory.h"
+#include "Item/Loot/LegacyItemMapper.h"
 #include "Item/Loot/LootItems.h"
 #include "Item/Loot/LootTableRegistry.h"
 #include "Level/Level.h"
@@ -26,6 +29,16 @@
 #include <random>
 
 namespace {
+    struct InteractParticle {
+        const char *mType;
+        const char *mEffect;
+    };
+
+    const InteractParticle INTERACT_PARTICLES[] = {
+            {"smoke", "minecraft:basic_smoke_particle"},
+            {"largeexplode", "minecraft:large_explosion"}
+    };
+
     const char *const SPAWNED_EVENT = "minecraft:entity_spawned";
     const char *const BORN_EVENT = "minecraft:entity_born";
     const char *const TAG_COMPONENT_GROUPS = "ComponentGroups";
@@ -858,6 +871,27 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         if (equipSlot == nullptr && useItem != nullptr && useItem->boolean(false))
             player.consumeOneHeldItem();
 
+        const json::Value *transform = interaction->get("transform_to_item");
+        if (transform != nullptr && transform->isString()) {
+            LootDrop drop;
+            LegacyItemMapper::splitData(transform->mString, drop.mIdentifier, drop.mData);
+            const ItemStack converted = LootItems::toItemStack(owner, drop);
+            if (!converted.isAir())
+                _givePlayerItem(owner, player, converted);
+        }
+
+        const json::Value *addItems = interaction->get("add_items");
+        const json::Value *addTable = addItems == nullptr ? nullptr : addItems->get("table");
+        if (addTable != nullptr) {
+            for (ItemStack &stack: _rollLoot(owner, addTable->string()))
+                _givePlayerItem(owner, player, std::move(stack));
+        }
+
+        const json::Value *particle = interaction->get("particle_on_start");
+        const json::Value *particleType = particle == nullptr ? nullptr : particle->get("particle_type");
+        if (particleType != nullptr)
+            _emitInteractParticle(owner, player, *particle, particleType->string());
+
         const json::Value *sound = interaction->get("play_sounds");
         if (sound != nullptr && sound->isString())
             owner.playLevelSound(level, sound->mString, getPosition(), getIdentifier());
@@ -957,25 +991,81 @@ void MobActor::_dropEquipmentSlot(ServerNetworkHandler &owner, const std::string
         EntityEvents::fireTrigger(owner, *this, slot->get("on_unequip"));
 }
 
-void MobActor::_spawnLoot(ServerNetworkHandler &owner, Level &level, const std::string &path) {
+std::vector<ItemStack> MobActor::_rollLoot(ServerNetworkHandler &owner, const std::string &path) {
+    std::vector<ItemStack> stacks;
     const std::string prefix = LOOT_TABLE_PREFIX;
     const std::string key = path.rfind(prefix, 0) == 0 ? path.substr(prefix.size()) : path;
     const LootTable *table = LootTableRegistry::getInstance().get(key);
     if (table == nullptr)
-        return;
+        return stacks;
 
     LootContext context(lootRandom());
     context.mDifficulty = (int32_t) owner.getProperties().getDifficulty();
-    const json::Value *color = getComponent("minecraft:color");
-    context.mColorIndex = (int32_t) numberIn(color, "value", 0.0f);
+    context.mColorIndex = (int32_t) numberIn(getComponent("minecraft:color"), "value", 0.0f);
+    context.mMarkVariant = (int32_t) numberIn(getComponent("minecraft:mark_variant"), "value", 0.0f);
 
-    const Vector3f position = getPosition();
     for (const LootDrop &drop: table->roll(context)) {
-        const ItemStack stack = LootItems::toItemStack(owner, drop);
+        ItemStack stack = LootItems::toItemStack(owner, drop);
         if (!stack.isAir())
-            owner.dropItem(level, position, stack, ItemActorHandler::randomDropMotion(),
-                           ItemActorHandler::DROP_PICKUP_DELAY);
+            stacks.push_back(std::move(stack));
     }
+    return stacks;
+}
+
+void MobActor::_spawnLoot(ServerNetworkHandler &owner, Level &level, const std::string &path) {
+    const Vector3f position = getPosition();
+    for (const ItemStack &stack: _rollLoot(owner, path))
+        owner.dropItem(level, position, stack, ItemActorHandler::randomDropMotion(),
+                       ItemActorHandler::DROP_PICKUP_DELAY);
+}
+
+void MobActor::_emitInteractParticle(ServerNetworkHandler &owner, const ServerPlayer &player,
+                                     const json::Value &particle, const std::string &type) {
+    const char *effect = nullptr;
+    for (const InteractParticle &entry: INTERACT_PARTICLES) {
+        if (type == entry.mType)
+            effect = entry.mEffect;
+    }
+    if (effect == nullptr)
+        return;
+
+    Vector3f position = getPosition();
+    position.y += getSize().mHeight * mScale * 0.5f + numberIn(&particle, "particle_y_offset", 0.0f);
+
+    const json::Value *towards = particle.get("particle_offset_towards_interactor");
+    if (towards != nullptr && towards->boolean(false)) {
+        const Vector3f target = player.getPosition();
+        const float dx = target.x - position.x;
+        const float dz = target.z - position.z;
+        const float length = std::sqrt(dx * dx + dz * dz);
+        const float reach = getSize().mWidth * mScale * 0.5f;
+        if (length > 0.0f) {
+            position.x += dx / length * reach;
+            position.z += dz / length * reach;
+        }
+    }
+
+    owner.spawnParticleEffect(owner.getLevelFor(*this), effect, position);
+}
+
+void MobActor::_givePlayerItem(ServerNetworkHandler &owner, ServerPlayer &player, ItemStack item) {
+    PlayerInventory &inventory = player.getInventory();
+    if (inventory.getItemInHand().isAir()) {
+        inventory.setItemInHand(std::move(item));
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
+                                              inventory.getSelectedSlot());
+        return;
+    }
+
+    std::vector<int> touched;
+    if (inventory.addItem(item, touched)) {
+        for (int slot: touched)
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
+        return;
+    }
+
+    owner.dropItem(owner.getLevelFor(player), player.getPosition(), item, ItemActorHandler::randomDropMotion(),
+                   ItemActorHandler::DROP_PICKUP_DELAY);
 }
 
 bool MobActor::_tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
@@ -1042,6 +1132,62 @@ bool MobActor::_trySit(ServerNetworkHandler &owner, ServerPlayer &player) {
     mSitting = !mSitting;
     _setFlag(owner, ActorFlag::Sitting, mSitting);
     return true;
+}
+
+int32_t MobActor::getVariant() const {
+    return (int32_t) numberIn(getComponent("minecraft:variant"), "value", 0.0f);
+}
+
+void MobActor::setVariant(int32_t variant) {
+    const json::Value *definition = getDefinition();
+    const json::Value *groups = definition == nullptr ? nullptr : definition->get("component_groups");
+    if (groups == nullptr || !groups->isObject())
+        return;
+
+    std::string match;
+    for (const std::string &name: groups->mKeys) {
+        const json::Value *component = groups->get(name)->get("minecraft:variant");
+        if (component == nullptr)
+            continue;
+
+        if ((int32_t) numberIn(component, "value", 0.0f) == variant)
+            match = name;
+        else
+            removeComponentGroup(name);
+    }
+
+    if (!match.empty())
+        addComponentGroup(match);
+}
+
+void MobActor::inheritVariant(const MobActor &firstParent, const MobActor &secondParent) {
+    const json::Value *offspring = getComponent("minecraft:offspring");
+    const json::Value *breedable = getComponent("minecraft:breedable");
+    const json::Value *deny = offspring == nullptr ? nullptr : offspring->get("deny_parents_variant");
+    if (deny == nullptr && breedable != nullptr)
+        deny = breedable->get("deny_parents_variant");
+    if (deny == nullptr)
+        return;
+
+    const int32_t firstVariant = firstParent.getVariant();
+    const int32_t secondVariant = secondParent.getVariant();
+    int32_t variant = std::uniform_int_distribution<int32_t>(0, 1)(lifecycleRandom()) == 0 ? firstVariant
+                                                                                           : secondVariant;
+
+    if (firstVariant == secondVariant
+        && std::uniform_real_distribution<float>(0.0f, 1.0f)(lifecycleRandom()) < numberIn(deny, "chance", 0.0f)) {
+        const int32_t minimum = (int32_t) numberIn(deny, "min_variant", 0.0f);
+        const int32_t maximum = (int32_t) numberIn(deny, "max_variant", 0.0f);
+        std::vector<int32_t> candidates;
+        for (int32_t candidate = minimum; candidate <= maximum; ++candidate) {
+            if (candidate != firstVariant)
+                candidates.push_back(candidate);
+        }
+        if (!candidates.empty())
+            variant = candidates[std::uniform_int_distribution<size_t>(0, candidates.size() - 1)(lifecycleRandom())];
+    }
+
+    setVariant(variant);
 }
 
 void MobActor::finishBreeding(ServerNetworkHandler &owner) {
