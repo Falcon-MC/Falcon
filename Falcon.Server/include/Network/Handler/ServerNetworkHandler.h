@@ -2,6 +2,7 @@
 
 #include "Level/BiomeRegistry.h"
 #include "Level/Level.h"
+#include "Level/PlayerDataProvider.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/PacketRateLimiter.h"
 #include "Network/PingedCompatibleServer.h"
@@ -13,7 +14,6 @@
 #include "Command/CommandMap.h"
 #include "Network/PacketSender.h"
 #include "Protocol/Types/CommandOriginData.h"
-#include "Player/PlayerDataProvider.h"
 #include "Server/AllowList.h"
 #include "Server/BanList.h"
 #include "Server/OpList.h"
