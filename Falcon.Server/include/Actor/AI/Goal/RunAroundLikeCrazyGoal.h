@@ -1,17 +1,17 @@
 #pragma once
 
-#include "Actor/AI/Goal/BehaviorItems.h"
 #include "Actor/AI/Goal/Goal.h"
+#include "Core/Math/Vector3f.h"
 
 #include <cstdint>
 
-class ServerPlayer;
-
-class TemptGoal : public Goal {
+class RunAroundLikeCrazyGoal : public Goal {
 public:
-    TemptGoal(float speed, float range, BehaviorItems items, float stopDistance);
+    explicit RunAroundLikeCrazyGoal(float speed);
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
+
+    bool canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
     void start(ServerNetworkHandler &owner, MobActor &mob) override;
 
@@ -20,11 +20,8 @@ public:
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
-    ServerPlayer *_findTempter(ServerNetworkHandler &owner, const MobActor &mob) const;
+    void _pickTarget(const MobActor &mob);
 
     float mSpeed;
-    float mRange;
-    BehaviorItems mItems;
-    float mStopDistanceSquared;
-    int32_t mTicksUntilRepath = 0;
+    Vector3f mTarget;
 };

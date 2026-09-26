@@ -8,12 +8,11 @@
 #include <utility>
 
 namespace {
-    const float STOP_DISTANCE_SQUARED = 6.25f;
     const int32_t REPATH_INTERVAL = 10;
 }
 
-TemptGoal::TemptGoal(float speed, float range, BehaviorItems items)
-        : mSpeed(speed), mRange(range), mItems(std::move(items)) {
+TemptGoal::TemptGoal(float speed, float range, BehaviorItems items, float stopDistance)
+        : mSpeed(speed), mRange(range), mItems(std::move(items)), mStopDistanceSquared(stopDistance * stopDistance) {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move | (uint8_t) GoalControlFlag::Look);
 }
 
@@ -40,7 +39,7 @@ void TemptGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         return;
 
     mob.getLookControl().setLookAt(tempter->getPosition());
-    if (mob.distanceSquaredTo(*tempter) <= STOP_DISTANCE_SQUARED) {
+    if (mob.distanceSquaredTo(*tempter) <= mStopDistanceSquared) {
         mob.getNavigation().stop(mob);
         return;
     }

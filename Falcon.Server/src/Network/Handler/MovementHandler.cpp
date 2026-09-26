@@ -1,6 +1,7 @@
 #include "Network/Handler/MovementHandler.h"
 
 #include "Actor/ActorFlags.h"
+#include "Actor/Movement/RideControlSystem.h"
 #include "Actor/RideSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
@@ -318,6 +319,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
                                 packet.mPosition.z);
     player.queueMove(feetPosition, packet.mRotation);
     player.setMotion(packet.mDelta);
+    if (player.isRiding())
+        RideControlSystem::receiveInput(owner, player, packet);
 
     if (player.isSpawned()) {
         const int32_t chunkX = (int32_t) std::floor(feetPosition.x) >> 4;

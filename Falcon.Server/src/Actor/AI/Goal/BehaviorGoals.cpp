@@ -7,6 +7,7 @@
 #include "Actor/AI/Goal/EatBlockGoal.h"
 #include "Actor/AI/Goal/FleeSunGoal.h"
 #include "Actor/AI/Goal/FloatGoal.h"
+#include "Actor/AI/Goal/FollowMobGoal.h"
 #include "Actor/AI/Goal/FollowOwnerGoal.h"
 #include "Actor/AI/Goal/FollowParentGoal.h"
 #include "Actor/AI/Goal/GoHomeGoal.h"
@@ -26,6 +27,7 @@
 #include "Actor/AI/Goal/RandomLookAroundGoal.h"
 #include "Actor/AI/Goal/RandomStrollGoal.h"
 #include "Actor/AI/Goal/RangedAttackGoal.h"
+#include "Actor/AI/Goal/RunAroundLikeCrazyGoal.h"
 #include "Actor/AI/Goal/SitGoal.h"
 #include "Actor/AI/Goal/SwellGoal.h"
 #include "Actor/AI/Goal/TemptGoal.h"
@@ -63,6 +65,12 @@ namespace {
     const float MELEE_NO_ATTACK = -1.0f;
 
     const float TEMPT_DEFAULT_RANGE = 10.0f;
+    const float TEMPT_DEFAULT_STOP_DISTANCE = 2.5f;
+    const float FOLLOW_MOB_DEFAULT_RANGE = 0.0f;
+    const float FOLLOW_MOB_DEFAULT_STOP_DISTANCE = 2.0f;
+    const float FLOAT_WANDER_DEFAULT_XZ_DISTANCE = 10.0f;
+    const float FLOAT_WANDER_DEFAULT_Y_DISTANCE = 7.0f;
+    const float FLOAT_WANDER_DEFAULT_DURATION = 5.0f;
     const float AVOID_DEFAULT_DISTANCE = 3.0f;
     const float AVOID_DEFAULT_SPRINT_DISTANCE = 7.0f;
     const float EAT_DEFAULT_SECONDS = 1.8f;
@@ -79,7 +87,8 @@ namespace {
     const float BREAK_DOOR_DEFAULT_SECONDS = 12.0f;
 
     const char *const HOME_COMPONENT = "minecraft:home";
-    const char *const FLYING_NAVIGATION_COMPONENTS[] = {"minecraft:navigation.hover", "minecraft:navigation.fly"};
+    const char *const FLYING_NAVIGATION_COMPONENTS[] = {"minecraft:navigation.hover", "minecraft:navigation.fly",
+                                                        "minecraft:navigation.float"};
     const float MOVE_TO_BLOCK_DEFAULT_INTERVAL = 20.0f;
     const float MOVE_TO_BLOCK_DEFAULT_HEIGHT = 1.0f;
     const float MOVE_TO_BLOCK_DEFAULT_RADIUS = 0.5f;
@@ -327,6 +336,25 @@ namespace {
         return settings;
     }
 
+    RandomHoverGoal::Settings floatWanderSettings(const MobActor &mob, const json::Value &component, float speed) {
+        RandomHoverGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mHorizontalRange = (int32_t) numberOf(component, "surface_xz_dist", FLOAT_WANDER_DEFAULT_XZ_DISTANCE);
+        settings.mVerticalRange = (int32_t) numberOf(component, "surface_y_dist", FLOAT_WANDER_DEFAULT_Y_DISTANCE);
+        settings.mHomeRadius = isFlagSet(component, "use_home_position_restriction") ? randomMovementRadius(mob) : 0.0f;
+
+        float minimum = FLOAT_WANDER_DEFAULT_DURATION;
+        float maximum = FLOAT_WANDER_DEFAULT_DURATION;
+        const json::Value *duration = component.get("float_duration");
+        if (duration != nullptr && duration->isArray() && duration->mArray.size() >= 2) {
+            minimum = (float) duration->mArray[0]->number(minimum);
+            maximum = (float) duration->mArray[1]->number(maximum);
+        }
+        settings.mMinDurationTicks = secondsToTicks(minimum);
+        settings.mMaxDurationTicks = secondsToTicks(maximum);
+        return settings;
+    }
+
     MoveToBlockGoal::Settings moveToBlockSettings(const json::Value &component, float speed) {
         MoveToBlockGoal::Settings settings;
         settings.mSpeed = speed;
@@ -430,11 +458,28 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "random_look_around")
         return std::make_unique<RandomLookAroundGoal>();
 
-    if (behavior == "tempt") {
+    if (behavior == "tempt" || behavior == "float_tempt") {
         const float range = numberOf(component, "within_radius", 0.0f);
         return std::make_unique<TemptGoal>(speed, range > 0.0f ? range : TEMPT_DEFAULT_RANGE,
-                                           BehaviorItems(component.get("items")));
+                                           BehaviorItems(component.get("items")),
+                                           numberOf(component, "stop_distance", TEMPT_DEFAULT_STOP_DISTANCE));
     }
+
+    if (behavior == "follow_mob") {
+        const float range = numberOf(component, "search_range", FOLLOW_MOB_DEFAULT_RANGE);
+        if (range <= 0.0f)
+            return nullptr;
+
+        return std::make_unique<FollowMobGoal>(speed, range,
+                                               numberOf(component, "stop_distance", FOLLOW_MOB_DEFAULT_STOP_DISTANCE),
+                                               cloneOf(component.get("filters")));
+    }
+
+    if (behavior == "float_wander")
+        return std::make_unique<RandomHoverGoal>(floatWanderSettings(mob, component, speed));
+
+    if (behavior == "run_around_like_crazy")
+        return std::make_unique<RunAroundLikeCrazyGoal>(speed);
 
     if (behavior == "follow_parent")
         return std::make_unique<FollowParentGoal>(speed);

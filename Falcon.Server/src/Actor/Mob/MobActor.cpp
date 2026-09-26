@@ -6,6 +6,7 @@
 #include "Actor/Definition/EntityDefinitions.h"
 #include "Actor/Definition/EntityEvents.h"
 #include "Actor/Definition/EntityFilter.h"
+#include "Actor/RideSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
 #include "Block/BlockState.h"
@@ -21,6 +22,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <random>
 
 namespace {
@@ -50,6 +52,21 @@ namespace {
     const char *const KNOCKBACK_RESISTANCE_ATTRIBUTE = "minecraft:knockback_resistance";
     const char *const LEGACY_ZOMBIE_PIGMAN = "minecraft:pig_zombie";
     const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
+    const char *const EQUIPPABLE_COMPONENT = "minecraft:equippable";
+    const char *const ENTITY_SENSOR_COMPONENT = "minecraft:entity_sensor";
+    const float ENTITY_SENSOR_DEFAULT_RANGE = 10.0f;
+    const char *const RIDEABLE_COMPONENT = "minecraft:rideable";
+    const char *const TAMEMOUNT_COMPONENT = "minecraft:tamemount";
+    const char *const JUMP_STRENGTH_COMPONENT = "minecraft:horse.jump_strength";
+    const char *const DISMOUNT_ON_TOP_CENTER = "on_top_center";
+    const char *const PLAYER_FAMILY = "player";
+    const char *const MAD_SOUND = "mad";
+    const int32_t DEFAULT_TEMPER_ATTEMPT_MOD = 5;
+    const int32_t TAME_FAILED_REARING_TICKS = 20;
+    const float DEFAULT_JUMP_STRENGTH = 0.7f;
+    const char *const TAG_TEMPER = "Temper";
+    const char *const TAG_MOVEMENT_SPEED = "RolledMovementSpeed";
+    const char *const TAG_JUMP_STRENGTH = "RolledJumpStrength";
 
     std::mt19937 &lifecycleRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -177,6 +194,12 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     _tickSpellEffects();
     _tickTimer(owner);
 
+    if (RideControlSystem::tick(owner, *this)) {
+        ServerActor::tick(owner);
+        RideSystem::syncPassengerPositions(owner, *this);
+        return;
+    }
+
     mGoalSelector.tick(owner, *this);
     if (_tickInstantDespawn(owner))
         return;
@@ -184,6 +207,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     mNavigation.tick(owner, *this);
     tickControls(owner);
     ServerActor::tick(owner);
+    RideSystem::syncPassengerPositions(owner, *this);
 }
 
 void MobActor::_registerGoals(ServerNetworkHandler &owner) {
@@ -252,6 +276,7 @@ void MobActor::_tickSensors(ServerNetworkHandler &owner) {
     }
 
     mLookedAtSensor.tick(owner, *this);
+    _tickEntitySensor(owner);
 
     const json::Value *sensor = getComponent("minecraft:environment_sensor");
     const json::Value *triggers = sensor == nullptr ? nullptr : sensor->get("triggers");
@@ -271,6 +296,94 @@ void MobActor::_tickSensors(ServerNetworkHandler &owner) {
 
     for (const std::unique_ptr<json::Value> &trigger: triggers->mArray)
         run(*trigger);
+}
+
+void MobActor::_tickEntitySensor(ServerNetworkHandler &owner) {
+    const json::Value *sensor = getComponent(ENTITY_SENSOR_COMPONENT);
+    const json::Value *subsensors = sensor == nullptr ? nullptr : sensor->get("subsensors");
+    if (subsensors == nullptr || !subsensors->isArray()) {
+        mEntitySensorCooldowns.clear();
+        return;
+    }
+
+    mEntitySensorCooldowns.resize(subsensors->mArray.size(), 0);
+    const bool playersOnly = flagIn(*sensor, "find_players_only");
+    const json::Value *relative = sensor->get("relative_range");
+    const bool relativeRange = relative == nullptr || relative->boolean(true);
+
+    for (size_t index = 0; index < subsensors->mArray.size(); ++index) {
+        if (mEntitySensorCooldowns[index] > 0) {
+            mEntitySensorCooldowns[index]--;
+            continue;
+        }
+
+        const json::Value &subsensor = *subsensors->mArray[index];
+        const int32_t count = _countSensedEntities(owner, subsensor, playersOnly, relativeRange);
+        const int32_t minimum = (int32_t) numberIn(&subsensor, "minimum_count", 1.0f);
+        const int32_t maximum = (int32_t) numberIn(&subsensor, "maximum_count", -1.0f);
+        if (count < minimum || (maximum >= 0 && count > maximum))
+            continue;
+
+        const float cooldown = numberIn(&subsensor, "cooldown", -1.0f);
+        if (cooldown > 0.0f)
+            mEntitySensorCooldowns[index] = secondsToTicks(cooldown);
+
+        const json::Value *event = subsensor.get("event");
+        if (event != nullptr)
+            fireEvent(owner, event->string());
+    }
+}
+
+int32_t MobActor::_countSensedEntities(ServerNetworkHandler &owner, const json::Value &subsensor, bool playersOnly,
+                                      bool relativeRange) {
+    float horizontal = ENTITY_SENSOR_DEFAULT_RANGE;
+    float vertical = ENTITY_SENSOR_DEFAULT_RANGE;
+    const json::Value *range = subsensor.get("range");
+    if (range != nullptr && range->isArray() && range->mArray.size() >= 2) {
+        horizontal = (float) range->mArray[0]->number(horizontal);
+        vertical = (float) range->mArray[1]->number(vertical);
+    } else if (range != nullptr) {
+        horizontal = (float) range->number(horizontal);
+        vertical = horizontal;
+    }
+
+    if (relativeRange) {
+        const ActorSize size = getSize();
+        horizontal += size.mWidth * 0.5f;
+        vertical += size.mHeight * 0.5f;
+    }
+
+    const Vector3f position = getPosition();
+    const Vector3f center(position.x, position.y + numberIn(&subsensor, "y_offset", 0.0f), position.z);
+    const json::Value *filters = subsensor.get("event_filters");
+
+    const auto senses = [&](const Actor &actor) {
+        if (&actor == this || !actor.isAlive() || actor.getDimension() != getDimension())
+            return false;
+
+        const Vector3f other = actor.getPosition();
+        const float dx = other.x - center.x;
+        const float dz = other.z - center.z;
+        if (dx * dx + dz * dz > horizontal * horizontal || std::fabs(other.y - center.y) > vertical)
+            return false;
+
+        return filters == nullptr || EntityFilter::test(*filters, owner, *this, &actor);
+    };
+
+    int32_t count = 0;
+    for (auto &entry: owner.getPlayers()) {
+        if (entry.second.isSpawned() && senses(entry.second))
+            count++;
+    }
+
+    if (playersOnly)
+        return count;
+
+    for (auto &entry: owner.getActors()) {
+        if (dynamic_cast<MobActor *>(entry.second.get()) != nullptr && senses(*entry.second))
+            count++;
+    }
+    return count;
 }
 
 bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
@@ -524,10 +637,166 @@ void MobActor::playDefinitionSound(ServerNetworkHandler &owner, const std::strin
 bool MobActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack held = player.getInventory().getItemInHand();
     if (_tryInteract(owner, player) || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held)
-        || _tryStartLove(owner, player, held) || _trySit(owner, player))
+        || _tryStartLove(owner, player, held) || _trySit(owner, player) || _tryFeedMount(owner, player, held)
+        || _tryMount(owner, player))
         return true;
 
     return ServerActor::onInteract(owner, player);
+}
+
+bool MobActor::_tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+    const json::Value *tamemount = getComponent(TAMEMOUNT_COMPONENT);
+    if (tamemount == nullptr || held.isAir())
+        return false;
+
+    const json::Value *rejected = tamemount->get("auto_reject_items");
+    if (rejected != nullptr && rejected->isArray()) {
+        for (const std::unique_ptr<json::Value> &entry: rejected->mArray) {
+            const json::Value *item = entry->isObject() ? entry->get("item") : entry.get();
+            if (item == nullptr || !BehaviorItems(item).contains(held))
+                continue;
+
+            owner.playLevelSound(owner.getLevelFor(*this), MAD_SOUND, getPosition(), getIdentifier());
+            return true;
+        }
+    }
+
+    const json::Value *feedItems = tamemount->get("feed_items");
+    if (feedItems == nullptr || !feedItems->isArray())
+        return false;
+
+    for (const std::unique_ptr<json::Value> &entry: feedItems->mArray) {
+        const json::Value *item = entry->isObject() ? entry->get("item") : entry.get();
+        if (item == nullptr || !BehaviorItems(item).contains(held))
+            continue;
+
+        const int32_t maximum = (int32_t) numberIn(tamemount, "max_temper", 100.0f);
+        mTemper = std::min(maximum, mTemper + (int32_t) numberIn(entry.get(), "temper_mod", 0.0f));
+        player.consumeOneHeldItem();
+        owner.playLevelSound(owner.getLevelFor(*this), "eat", getPosition(), getIdentifier());
+        return true;
+    }
+    return false;
+}
+
+bool MobActor::_tryMount(ServerNetworkHandler &owner, ServerPlayer &player) {
+    const json::Value *rideable = getComponent(RIDEABLE_COMPONENT);
+    if (rideable == nullptr || player.isRiding() || !isAlive())
+        return false;
+
+    const json::Value *skip = rideable->get("crouching_skip_interact");
+    if ((skip == nullptr || skip->boolean(true)) && player.getFlags().get(ActorFlag::Sneaking))
+        return false;
+
+    const json::Value *families = rideable->get("family_types");
+    bool accepted = families == nullptr;
+    if (families != nullptr && families->isArray()) {
+        for (const std::unique_ptr<json::Value> &family: families->mArray) {
+            if (family->string() == PLAYER_FAMILY)
+                accepted = true;
+        }
+    }
+    if (!accepted)
+        return false;
+
+    const size_t seats = (size_t) std::max(1, (int32_t) numberIn(rideable, "seat_count", 1.0f));
+    if (getPassengers().size() >= seats)
+        return false;
+
+    return RideSystem::mount(owner, player, *this, true);
+}
+
+const json::Value *MobActor::_seatFor(size_t index, size_t passengerCount) const {
+    const json::Value *rideable = getComponent(RIDEABLE_COMPONENT);
+    const json::Value *seats = rideable == nullptr ? nullptr : rideable->get("seats");
+    if (seats == nullptr)
+        return nullptr;
+
+    if (!seats->isArray())
+        return seats;
+
+    size_t applicable = 0;
+    for (const std::unique_ptr<json::Value> &seat: seats->mArray) {
+        const int32_t minimum = (int32_t) numberIn(seat.get(), "min_rider_count", 0.0f);
+        const int32_t maximum = (int32_t) numberIn(seat.get(), "max_rider_count", (float) passengerCount);
+        if ((int32_t) passengerCount < minimum || (int32_t) passengerCount > maximum)
+            continue;
+
+        if (applicable == index)
+            return seat.get();
+        applicable++;
+    }
+    return nullptr;
+}
+
+Vector3f MobActor::getSeatOffset(size_t index, size_t passengerCount) const {
+    const json::Value *seat = _seatFor(index, passengerCount);
+    const json::Value *position = seat == nullptr ? nullptr : seat->get("position");
+    if (position == nullptr || !position->isArray() || position->mArray.size() < 3)
+        return ServerActor::getSeatOffset(index, passengerCount);
+
+    return Vector3f((float) position->mArray[0]->number(0.0) * mScale,
+                    (float) position->mArray[1]->number(0.0) * mScale,
+                    (float) position->mArray[2]->number(0.0) * mScale);
+}
+
+Vector3f MobActor::getDismountPosition(size_t index, size_t passengerCount) const {
+    const json::Value *rideable = getComponent(RIDEABLE_COMPONENT);
+    const json::Value *mode = rideable == nullptr ? nullptr : rideable->get("dismount_mode");
+    if (mode == nullptr || mode->string() != DISMOUNT_ON_TOP_CENTER)
+        return ServerActor::getDismountPosition(index, passengerCount);
+
+    const Vector3f position = getPosition();
+    return Vector3f(position.x, position.y + getSize().mHeight * mScale, position.z);
+}
+
+void MobActor::onPassengerAdded(ServerNetworkHandler &owner, Actor &passenger) {
+    RideControlSystem::reset(*this);
+    mNavigation.stop(*this);
+
+    const json::Value *rideable = getComponent(RIDEABLE_COMPONENT);
+    const json::Value *event = rideable == nullptr ? nullptr : rideable->get("on_rider_enter_event");
+    if (event != nullptr)
+        fireEvent(owner, event->string(), &passenger);
+}
+
+void MobActor::onPassengerRemoved(ServerNetworkHandler &owner, Actor &passenger) {
+    RideControlSystem::reset(*this);
+    _setFlag(owner, ActorFlag::Rearing, false);
+
+    const json::Value *rideable = getComponent(RIDEABLE_COMPONENT);
+    const json::Value *event = rideable == nullptr ? nullptr : rideable->get("on_rider_exit_event");
+    if (event != nullptr)
+        fireEvent(owner, event->string(), &passenger);
+}
+
+bool MobActor::isMountTaming() const {
+    return getComponent(TAMEMOUNT_COMPONENT) != nullptr && !isTamed();
+}
+
+void MobActor::attemptMountTame(ServerNetworkHandler &owner, ServerPlayer &rider) {
+    const json::Value *tamemount = getComponent(TAMEMOUNT_COMPONENT);
+    if (tamemount == nullptr || isTamed())
+        return;
+
+    const int32_t maximum = (int32_t) numberIn(tamemount, "max_temper", 100.0f);
+    if (maximum > 0 && std::uniform_int_distribution<int32_t>(0, maximum - 1)(lifecycleRandom()) < mTemper) {
+        mTamedBy = rider.getName();
+        setPersistent(true);
+        _setFlag(owner, ActorFlag::Tamed, true);
+        _syncOwner(owner);
+        owner.broadcastActorEvent(*this, EntityEventType::TamingSucceeded);
+        EntityEvents::fireTrigger(owner, *this, tamemount->get("tame_event"), &rider);
+        return;
+    }
+
+    const int32_t modifier = (int32_t) numberIn(tamemount, "attempt_temper_mod", (float) DEFAULT_TEMPER_ATTEMPT_MOD);
+    mTemper = std::min(maximum, mTemper + modifier);
+    RideSystem::dismount(owner, rider, false);
+    mRideControl.mRearingTicks = TAME_FAILED_REARING_TICKS;
+    _setFlag(owner, ActorFlag::Rearing, true);
+    owner.broadcastActorEvent(*this, EntityEventType::TamingFailed);
+    owner.playLevelSound(owner.getLevelFor(*this), MAD_SOUND, getPosition(), getIdentifier());
 }
 
 bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -550,18 +819,26 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         if (filters != nullptr && !EntityFilter::test(*filters, owner, *this, &player))
             continue;
 
+        const json::Value *equipSlot = interaction->get("equip_item_slot");
+        if (equipSlot != nullptr && !_equipFromHand(owner, player, equipSlot->string()))
+            continue;
+
         Level &level = owner.getLevelFor(*this);
         const json::Value *spawnItems = interaction->get("spawn_items");
         const json::Value *table = spawnItems == nullptr ? nullptr : spawnItems->get("table");
         if (table != nullptr)
             _spawnLoot(owner, level, table->string());
 
+        const json::Value *dropSlot = interaction->get("drop_item_slot");
+        if (dropSlot != nullptr)
+            _dropEquipmentSlot(owner, dropSlot->string(), numberIn(interaction, "drop_item_y_offset", 0.0f));
+
         const int32_t hurtItem = (int32_t) numberIn(interaction, "hurt_item", 0.0f);
         if (hurtItem > 0)
             owner.damagePlayerHeldItem(player, hurtItem);
 
         const json::Value *useItem = interaction->get("use_item");
-        if (useItem != nullptr && useItem->boolean(false))
+        if (equipSlot == nullptr && useItem != nullptr && useItem->boolean(false))
             player.consumeOneHeldItem();
 
         const json::Value *sound = interaction->get("play_sounds");
@@ -574,6 +851,78 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         return true;
     }
     return false;
+}
+
+const json::Value *MobActor::_equippableSlot(int32_t index) const {
+    const json::Value *equippable = getComponent(EQUIPPABLE_COMPONENT);
+    const json::Value *slots = equippable == nullptr ? nullptr : equippable->get("slots");
+    if (slots == nullptr || !slots->isArray())
+        return nullptr;
+
+    for (const std::unique_ptr<json::Value> &slot: slots->mArray) {
+        const json::Value *number = slot->get("slot");
+        if (number != nullptr && number->integer(-1) == index)
+            return slot.get();
+    }
+    return nullptr;
+}
+
+bool MobActor::_equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &slotName) {
+    ItemStack held = player.getInventory().getItemInHand();
+    if (held.isAir() || held.mCount <= 0)
+        return false;
+
+    held.mCount = 1;
+    const int32_t equipmentSlot = MobEquipment::slotIndexOf(slotName);
+    if (equipmentSlot >= 0) {
+        if (!mEquipment.getSlot(equipmentSlot).isAir())
+            return false;
+
+        mEquipment.setSlot(equipmentSlot, std::move(held));
+        player.consumeOneHeldItem();
+        mEquipment.broadcast(owner, *this);
+        return true;
+    }
+
+    const int32_t inventorySlot = (int32_t) std::strtol(slotName.c_str(), nullptr, 10);
+    const json::Value *slot = _equippableSlot(inventorySlot);
+    if (slot == nullptr || !mEquipment.getInventoryItem(inventorySlot).isAir())
+        return false;
+
+    const json::Value *accepted = slot->get("accepted_items");
+    if (accepted != nullptr && !BehaviorItems(accepted).contains(held))
+        return false;
+
+    mEquipment.setInventoryItem(inventorySlot, std::move(held));
+    player.consumeOneHeldItem();
+    EntityEvents::fireTrigger(owner, *this, slot->get("on_equip"), &player);
+    return true;
+}
+
+void MobActor::_dropEquipmentSlot(ServerNetworkHandler &owner, const std::string &slotName, float yOffset) {
+    Level &level = owner.getLevelFor(*this);
+    const Vector3f position = getPosition();
+    const Vector3f dropPosition(position.x, position.y + yOffset, position.z);
+
+    const int32_t equipmentSlot = MobEquipment::slotIndexOf(slotName);
+    if (equipmentSlot >= 0) {
+        if (mEquipment.dropSlot(owner, level, dropPosition, slotName))
+            mEquipment.broadcast(owner, *this);
+        return;
+    }
+
+    const int32_t inventorySlot = (int32_t) std::strtol(slotName.c_str(), nullptr, 10);
+    ItemStack item = mEquipment.getInventoryItem(inventorySlot);
+    if (item.isAir())
+        return;
+
+    mEquipment.setInventoryItem(inventorySlot, ItemStack::air());
+    owner.dropItem(level, dropPosition, item, ItemActorHandler::randomDropMotion(),
+                   ItemActorHandler::DROP_PICKUP_DELAY);
+
+    const json::Value *slot = _equippableSlot(inventorySlot);
+    if (slot != nullptr)
+        EntityEvents::fireTrigger(owner, *this, slot->get("on_unequip"));
 }
 
 void MobActor::_spawnLoot(ServerNetworkHandler &owner, Level &level, const std::string &path) {
@@ -681,6 +1030,7 @@ void MobActor::_syncBody(ServerNetworkHandler &owner) {
     _setFlag(owner, ActorFlag::Baby, getComponent("minecraft:is_baby") != nullptr);
     _setFlag(owner, ActorFlag::Sheared, getComponent("minecraft:is_sheared") != nullptr);
     _setFlag(owner, ActorFlag::BodyRotationBlocked, getComponent(BODY_ROTATION_BLOCKED_COMPONENT) != nullptr);
+    RideControlSystem::syncFlags(owner, *this);
     getAttributes().setClamped(KNOCKBACK_RESISTANCE_ATTRIBUTE,
                                numberIn(getComponent(KNOCKBACK_RESISTANCE_COMPONENT), "value", 0.0f));
 
@@ -828,9 +1178,28 @@ std::vector<std::string> MobActor::getFamilies() const {
 }
 
 float MobActor::getMovementSpeed() const {
-    const json::Value *movement = getComponent("minecraft:movement");
-    const json::Value *value = movement == nullptr ? nullptr : movement->get("value");
-    return value == nullptr ? DEFAULT_MOVEMENT_SPEED : (float) value->number(DEFAULT_MOVEMENT_SPEED);
+    return _rolledValue(getComponent("minecraft:movement"), mRolledMovementSpeed, DEFAULT_MOVEMENT_SPEED);
+}
+
+float MobActor::getJumpStrength() const {
+    return _rolledValue(getComponent(JUMP_STRENGTH_COMPONENT), mRolledJumpStrength, DEFAULT_JUMP_STRENGTH);
+}
+
+float MobActor::_rolledValue(const json::Value *component, float &rolled, float fallback) const {
+    const json::Value *value = component == nullptr ? nullptr : component->get("value");
+    if (value == nullptr)
+        return fallback;
+
+    if (!value->isObject())
+        return (float) value->number(fallback);
+
+    if (rolled >= 0.0f)
+        return rolled;
+
+    const float minimum = numberIn(value, "range_min", fallback);
+    const float maximum = numberIn(value, "range_max", minimum);
+    rolled = maximum > minimum ? std::uniform_real_distribution<float>(minimum, maximum)(lifecycleRandom()) : minimum;
+    return rolled;
 }
 
 bool MobActor::hasComponentGroup(const std::string &group) const {
@@ -905,6 +1274,11 @@ Tag MobActor::saveNbt() const {
     data.putInt(TAG_BREED_COOLDOWN, mBreedCooldown);
     data.putString(TAG_TAMED_BY, mTamedBy);
     data.putByte(TAG_SITTING, mSitting ? 1 : 0);
+    data.putInt(TAG_TEMPER, mTemper);
+    if (mRolledMovementSpeed >= 0.0f)
+        data.putFloat(TAG_MOVEMENT_SPEED, mRolledMovementSpeed);
+    if (mRolledJumpStrength >= 0.0f)
+        data.putFloat(TAG_JUMP_STRENGTH, mRolledJumpStrength);
     if (mHasHome) {
         Tag home = Tag::ofList(Tag::Type::Float);
         home.addToList(Tag::ofFloat(mHomePosition.x));
@@ -925,6 +1299,9 @@ void MobActor::loadNbt(const Tag &data) {
     mBreedCooldown = data.getInt(TAG_BREED_COOLDOWN, 0);
     mTamedBy = data.getString(TAG_TAMED_BY, std::string());
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
+    mTemper = data.getInt(TAG_TEMPER, 0);
+    mRolledMovementSpeed = data.getFloat(TAG_MOVEMENT_SPEED, -1.0f);
+    mRolledJumpStrength = data.getFloat(TAG_JUMP_STRENGTH, -1.0f);
     const Tag *home = data.get(TAG_HOME);
     if (home != nullptr && home->isList() && home->getList().size() == 3) {
         const std::vector<Tag> &values = home->getList();

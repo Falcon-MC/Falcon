@@ -8,6 +8,12 @@ public:
 
     using PassiveActor::PassiveActor;
 
+    static constexpr float RIDE_SPRINT_MULTIPLIER = 2.5f;
+
+    float getRideSprintMultiplier() const override {
+        return RIDE_SPRINT_MULTIPLIER;
+    }
+
     ActorSize getSize() const override { return ActorSize{1.7f, 2.375f}; }
 
     float getDefaultMaxHealth() const override { return 32.0f; }

@@ -6,6 +6,7 @@
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
+#include <algorithm>
 #include <cmath>
 #include <random>
 
@@ -39,12 +40,27 @@ bool RandomHoverGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 
 bool RandomHoverGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
     (void) owner;
+    if (mSettings.mMaxDurationTicks > 0 && mRemainingTicks <= 0)
+        return false;
+
     return !mob.getNavigation().isDone();
 }
 
 void RandomHoverGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     (void) owner;
+    mRemainingTicks = 0;
+    if (mSettings.mMaxDurationTicks > 0) {
+        const int32_t minimum = std::min(mSettings.mMinDurationTicks, mSettings.mMaxDurationTicks);
+        mRemainingTicks = std::uniform_int_distribution<int32_t>(minimum, mSettings.mMaxDurationTicks)(hoverRandom());
+    }
     mob.getNavigation().moveTo(mTarget, mSettings.mSpeed);
+}
+
+void RandomHoverGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
+    (void) owner;
+    (void) mob;
+    if (mRemainingTicks > 0)
+        mRemainingTicks--;
 }
 
 void RandomHoverGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {

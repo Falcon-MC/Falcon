@@ -27,10 +27,17 @@ namespace {
     const char *const TAG_MAINHAND = "Mainhand";
     const char *const TAG_OFFHAND = "Offhand";
     const char *const TAG_ARMOR = "Armor";
+    const char *const TAG_BODY = "Body";
+    const char *const TAG_INVENTORY = "EquippableItems";
     const char *const SLOT_NAMES[MobEquipment::SLOT_COUNT] = {
             "slot.weapon.mainhand", "slot.weapon.offhand", "slot.armor.head", "slot.armor.chest", "slot.armor.legs",
-            "slot.armor.feet"
+            "slot.armor.feet", "slot.armor.body"
     };
+
+    const ItemStack &emptyItem() {
+        static const ItemStack air = ItemStack::air();
+        return air;
+    }
     const float DEFAULT_DROP_CHANCE = 0.085f;
     const float LOOTING_DROP_BONUS = 0.01f;
     const int32_t DAMAGE_SPREAD_MARGIN = 3;
@@ -56,6 +63,48 @@ namespace {
             return nullptr;
         return &list->getList();
     }
+}
+
+int MobEquipment::slotIndexOf(const std::string &slotName) {
+    for (int slot = 0; slot < SLOT_COUNT; ++slot) {
+        if (slotName == SLOT_NAMES[slot])
+            return slot;
+    }
+    return -1;
+}
+
+const ItemStack &MobEquipment::getSlot(int slot) const {
+    if (slot < 0 || slot >= SLOT_COUNT)
+        return emptyItem();
+
+    return mSlots[(size_t) slot];
+}
+
+void MobEquipment::setSlot(int slot, ItemStack item) {
+    if (slot < 0 || slot >= SLOT_COUNT)
+        return;
+
+    mSlots[(size_t) slot] = std::move(item);
+}
+
+const ItemStack &MobEquipment::getInventoryItem(int slot) const {
+    if (slot < 0 || slot >= (int) mInventory.size())
+        return emptyItem();
+
+    return mInventory[(size_t) slot];
+}
+
+void MobEquipment::setInventoryItem(int slot, ItemStack item) {
+    if (slot < 0)
+        return;
+
+    ensureInventorySize(slot + 1);
+    mInventory[(size_t) slot] = std::move(item);
+}
+
+void MobEquipment::ensureInventorySize(int size) {
+    if (size > (int) mInventory.size())
+        mInventory.resize((size_t) size, ItemStack::air());
 }
 
 void MobEquipment::equipFromTable(ServerNetworkHandler &owner, const MobActor &mob) {
@@ -140,7 +189,7 @@ void MobEquipment::sendTo(ServerNetworkHandler &owner, const ServerPlayer &playe
     armor.mChestplate = mSlots[CHEST];
     armor.mLeggings = mSlots[LEGS];
     armor.mBoots = mSlots[FEET];
-    armor.mBody = ItemStack::air();
+    armor.mBody = mSlots[BODY];
     owner.getNetworkHandler().send(id, armor, owner.getCodecContext());
 }
 
@@ -187,7 +236,7 @@ void MobEquipment::dropOnDeath(ServerNetworkHandler &owner, Level &level, const 
         if (item.isAir())
             continue;
 
-        const float chance = _dropChance(mob, slot);
+        const float chance = slot == BODY ? 1.0f : _dropChance(mob, slot);
         const bool guaranteed = chance >= 1.0f;
         if (!guaranteed && !killedByPlayer)
             continue;
@@ -202,10 +251,26 @@ void MobEquipment::dropOnDeath(ServerNetworkHandler &owner, Level &level, const 
         owner.dropItem(level, mob.getPosition(), item, ItemActorHandler::randomDropMotion(),
                        ItemActorHandler::DROP_PICKUP_DELAY);
     }
+
+    for (ItemStack &slot: mInventory) {
+        ItemStack item = std::move(slot);
+        slot = ItemStack::air();
+        if (!item.isAir())
+            owner.dropItem(level, mob.getPosition(), item, ItemActorHandler::randomDropMotion(),
+                           ItemActorHandler::DROP_PICKUP_DELAY);
+    }
 }
 
 void MobEquipment::dropAll(ServerNetworkHandler &owner, Level &level, const Vector3f &position) {
     for (ItemStack &slot: mSlots) {
+        ItemStack item = std::move(slot);
+        slot = ItemStack::air();
+        if (!item.isAir())
+            owner.dropItem(level, position, item, ItemActorHandler::randomDropMotion(),
+                           ItemActorHandler::DROP_PICKUP_DELAY);
+    }
+
+    for (ItemStack &slot: mInventory) {
         ItemStack item = std::move(slot);
         slot = ItemStack::air();
         if (!item.isAir())
@@ -242,6 +307,16 @@ void MobEquipment::saveNbt(Tag &data) const {
     for (int slot = HEAD; slot <= FEET; ++slot)
         armor.push_back(ItemStackNbt::write(mSlots[(size_t) slot]));
     data.put(TAG_ARMOR, Tag::ofList(Tag::Type::Compound, std::move(armor)));
+    data.put(TAG_BODY, singleItemList(mSlots[BODY]));
+
+    std::vector<Tag> inventory;
+    for (size_t slot = 0; slot < mInventory.size(); ++slot) {
+        if (mInventory[slot].isAir())
+            continue;
+
+        inventory.push_back(ItemStackNbt::write(mInventory[slot], (int) slot));
+    }
+    data.put(TAG_INVENTORY, Tag::ofList(Tag::Type::Compound, std::move(inventory)));
 }
 
 void MobEquipment::loadNbt(const Tag &data, const PacketCodecContext &context) {
@@ -255,6 +330,20 @@ void MobEquipment::loadNbt(const Tag &data, const PacketCodecContext &context) {
     const std::vector<Tag> *offhand = itemList(data, TAG_OFFHAND);
     if (offhand != nullptr && !offhand->empty())
         mSlots[OFFHAND] = ItemStackNbt::read(offhand->front(), context);
+
+    const std::vector<Tag> *body = itemList(data, TAG_BODY);
+    if (body != nullptr && !body->empty())
+        mSlots[BODY] = ItemStackNbt::read(body->front(), context);
+
+    mInventory.clear();
+    const std::vector<Tag> *inventory = itemList(data, TAG_INVENTORY);
+    if (inventory != nullptr) {
+        for (const Tag &entry: *inventory) {
+            const int slot = ItemStackNbt::readSlot(entry);
+            if (slot >= 0)
+                setInventoryItem(slot, ItemStackNbt::read(entry, context));
+        }
+    }
 
     const std::vector<Tag> *armor = itemList(data, TAG_ARMOR);
     if (armor == nullptr)

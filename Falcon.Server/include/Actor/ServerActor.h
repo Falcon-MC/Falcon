@@ -79,6 +79,28 @@ public:
         return Vector3f(0.0f, 0.0f, 0.0f);
     }
 
+    virtual Vector3f getSeatOffset(size_t index, size_t passengerCount) const {
+        (void) index;
+        (void) passengerCount;
+        return getSeatOffset();
+    }
+
+    virtual Vector3f getDismountPosition(size_t index, size_t passengerCount) const {
+        const Vector3f seat = getSeatOffset(index, passengerCount);
+        const Vector3f position = getPosition();
+        return Vector3f(position.x + seat.x, position.y + seat.y, position.z + seat.z);
+    }
+
+    virtual void onPassengerAdded(ServerNetworkHandler &owner, Actor &passenger) {
+        (void) owner;
+        (void) passenger;
+    }
+
+    virtual void onPassengerRemoved(ServerNetworkHandler &owner, Actor &passenger) {
+        (void) owner;
+        (void) passenger;
+    }
+
     virtual bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         (void) owner;
         (void) player;

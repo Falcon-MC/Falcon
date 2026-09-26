@@ -3,17 +3,20 @@
 #include "Actor/AI/Goal/BehaviorItems.h"
 #include "Actor/Definition/EntityDefinitions.h"
 #include "Actor/Mob/MobActor.h"
+#include "Actor/RideSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
 #include "Block/Blocks/LiquidView.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Core/Math/Vector3i.h"
+#include "Item/CraftingRecipeTable.h"
 #include "Item/EnchantmentData.h"
 #include "Item/ItemEnchantments.h"
 #include "Level/Generator/Biome/BiomeChunkGenDataRegistry.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Types/ItemDefinition.h"
 
 #include <algorithm>
 #include <cmath>
@@ -124,28 +127,95 @@ namespace {
         return block != nullptr && block->bindsHomeActors();
     }
 
-    bool hasEquipmentIn(const ServerPlayer &player, const std::string &domain, const BehaviorItems &items) {
-        const PlayerInventory &inventory = player.getInventory();
-        if (domain == "head")
-            return items.contains(inventory.getArmor(PlayerInventory::ARMOR_HEAD));
-        if (domain == "torso")
-            return items.contains(inventory.getArmor(PlayerInventory::ARMOR_TORSO));
-        if (domain == "leg")
-            return items.contains(inventory.getArmor(PlayerInventory::ARMOR_LEGS));
-        if (domain == "feet")
-            return items.contains(inventory.getArmor(PlayerInventory::ARMOR_FEET));
-        if (domain == "offhand")
-            return items.contains(inventory.getOffhand());
-
-        if (domain == "armor") {
-            for (const ItemStack &armor: inventory.getArmorContents()) {
-                if (items.contains(armor))
-                    return true;
+    std::vector<const ItemStack *> equipmentOf(const Actor &actor, const std::string &domain) {
+        std::vector<const ItemStack *> items;
+        if (const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(&actor)) {
+            const PlayerInventory &inventory = player->getInventory();
+            const bool any = domain == "any";
+            if (any || domain == "hand")
+                items.push_back(&inventory.getItemInHand());
+            if (any || domain == "offhand")
+                items.push_back(&inventory.getOffhand());
+            if (domain == "head")
+                items.push_back(&inventory.getArmor(PlayerInventory::ARMOR_HEAD));
+            if (domain == "torso")
+                items.push_back(&inventory.getArmor(PlayerInventory::ARMOR_TORSO));
+            if (domain == "leg")
+                items.push_back(&inventory.getArmor(PlayerInventory::ARMOR_LEGS));
+            if (domain == "feet")
+                items.push_back(&inventory.getArmor(PlayerInventory::ARMOR_FEET));
+            if (any || domain == "armor") {
+                for (const ItemStack &armor: inventory.getArmorContents())
+                    items.push_back(&armor);
             }
-            return false;
+            return items;
         }
 
-        return (domain == "hand" || domain == "any") && items.contains(inventory.getItemInHand());
+        const MobActor *mob = dynamic_cast<const MobActor *>(&actor);
+        if (mob == nullptr)
+            return items;
+
+        MobEquipment &equipment = const_cast<MobActor *>(mob)->getEquipment();
+        const bool any = domain == "any";
+        if (any || domain == "hand")
+            items.push_back(&equipment.getSlot(MobEquipment::MAINHAND));
+        if (any || domain == "offhand")
+            items.push_back(&equipment.getSlot(MobEquipment::OFFHAND));
+        if (domain == "head")
+            items.push_back(&equipment.getSlot(MobEquipment::HEAD));
+        if (domain == "torso")
+            items.push_back(&equipment.getSlot(MobEquipment::CHEST));
+        if (domain == "leg")
+            items.push_back(&equipment.getSlot(MobEquipment::LEGS));
+        if (domain == "feet")
+            items.push_back(&equipment.getSlot(MobEquipment::FEET));
+        if (any || domain == "body")
+            items.push_back(&equipment.getSlot(MobEquipment::BODY));
+        if (any || domain == "armor") {
+            for (int slot = MobEquipment::HEAD; slot <= MobEquipment::BODY; ++slot)
+                items.push_back(&equipment.getSlot(slot));
+        }
+        if (any || domain == "inventory") {
+            for (int slot = 0; slot < equipment.getInventorySize(); ++slot)
+                items.push_back(&equipment.getInventoryItem(slot));
+        }
+        return items;
+    }
+
+    bool hasEquipmentIn(const Actor &actor, const std::string &domain, const BehaviorItems &items) {
+        for (const ItemStack *item: equipmentOf(actor, domain)) {
+            if (items.contains(*item))
+                return true;
+        }
+        return false;
+    }
+
+    bool hasEquipmentTagIn(const Actor &actor, const std::string &domain, const std::string &tag) {
+        for (const ItemStack *item: equipmentOf(actor, domain)) {
+            if (item->isAir() || item->mDefinition == nullptr)
+                continue;
+
+            const std::vector<std::string> &tags = CraftingRecipeTable::getItemTags(
+                    std::string(item->mDefinition->getIdentifier()));
+            if (std::find(tags.begin(), tags.end(), tag) != tags.end())
+                return true;
+        }
+        return false;
+    }
+
+    std::vector<std::string> vehicleFamiliesOf(ServerNetworkHandler &owner, const Actor &actor) {
+        const Actor *vehicle = RideSystem::resolve(owner, actor.getVehicleId());
+        return vehicle == nullptr ? std::vector<std::string>() : familiesOf(*vehicle);
+    }
+
+    std::vector<std::string> controllerFamiliesOf(ServerNetworkHandler &owner, const Actor &actor) {
+        const std::vector<int64_t> &passengers = actor.getPassengers();
+        const Actor *controller = passengers.empty() ? nullptr : RideSystem::resolve(owner, passengers.front());
+        return controller == nullptr ? std::vector<std::string>() : familiesOf(*controller);
+    }
+
+    bool containsFamily(const std::vector<std::string> &families, const json::Value *value) {
+        return value != nullptr && std::find(families.begin(), families.end(), value->string()) != families.end();
     }
 }
 
@@ -225,7 +295,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     const json::Value *subjectValue = filter.get("subject");
     const std::string subject = subjectValue == nullptr ? "self" : subjectValue->string();
     const Actor *target = &self;
-    if (subject == "other" || subject == "damager")
+    if (subject == "other" || subject == "damager" || subject == "player")
         target = other;
     else if (subject == "target")
         target = self.getTarget(owner);
@@ -280,10 +350,32 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     }
 
     if (test == "is_family") {
-        const std::vector<std::string> families = familiesOf(*target);
-        const bool result = value != nullptr
-                            && std::find(families.begin(), families.end(), value->string()) != families.end();
+        const bool result = containsFamily(familiesOf(*target), value);
         return isNegation(op) ? !result : result;
+    }
+
+    if (test == "is_vehicle_family") {
+        const bool result = containsFamily(vehicleFamiliesOf(owner, *target), value);
+        return isNegation(op) ? !result : result;
+    }
+
+    if (test == "is_controlling_passenger_family") {
+        const bool result = containsFamily(controllerFamiliesOf(owner, *target), value);
+        return isNegation(op) ? !result : result;
+    }
+
+    if (test == "is_sneak_held" || test == "is_sneaking")
+        return applyBoolean(target->getFlags().get(ActorFlag::Sneaking), value, op);
+
+    if (test == "is_sitting") {
+        const MobActor *mob = dynamic_cast<const MobActor *>(target);
+        return applyBoolean(mob != nullptr && (mob->isSitting() || mob->getFlags().get(ActorFlag::Sitting)), value,
+                            op);
+    }
+
+    if (test == "is_baby") {
+        const MobActor *mob = dynamic_cast<const MobActor *>(target);
+        return applyBoolean(mob != nullptr && mob->getComponent("minecraft:is_baby") != nullptr, value, op);
     }
 
     if (test == "bool_property" || test == "enum_property" || test == "int_property" || test == "float_property") {
@@ -398,11 +490,18 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         return applyBoolean(position.y < level.getHeightAt(position.x, position.z), value, op);
 
     if (test == "has_equipment") {
-        const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(target);
         const json::Value *domain = filter.get("domain");
-        const bool result = player != nullptr && value != nullptr
-                            && hasEquipmentIn(*player, domain == nullptr ? "hand" : domain->string(),
+        const bool result = value != nullptr
+                            && hasEquipmentIn(*target, domain == nullptr ? "any" : domain->string(),
                                               BehaviorItems(value));
+        return isNegation(op) ? !result : result;
+    }
+
+    if (test == "has_equipment_tag") {
+        const json::Value *domain = filter.get("domain");
+        const bool result = value != nullptr
+                            && hasEquipmentTagIn(*target, domain == nullptr ? "any" : domain->string(),
+                                                 value->string());
         return isNegation(op) ? !result : result;
     }
 

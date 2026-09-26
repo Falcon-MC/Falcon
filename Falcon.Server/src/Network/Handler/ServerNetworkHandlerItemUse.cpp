@@ -1,6 +1,7 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include "Actor/ActorFlags.h"
+#include "Actor/Movement/RideControlSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Core/Event/GameEvents.h"
 #include "Inventory/InventoryManager.h"
@@ -175,6 +176,9 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
     const ItemStack &heldItem = player.getInventory().getItemInHand();
 
     emitItemUse(player);
+
+    if (player.isRiding() && RideControlSystem::tryBoost(*this, player))
+        return;
 
     if (!heldItem.isAir() && heldItem.mDefinition != nullptr) {
         const Item *itemType = VanillaItems::fromIdentifier(heldItem.mDefinition->getIdentifier());

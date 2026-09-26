@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 class Actor;
 class ActorDamageSource;
@@ -24,7 +25,24 @@ public:
     static const int CHEST = 3;
     static const int LEGS = 4;
     static const int FEET = 5;
-    static const int SLOT_COUNT = 6;
+    static const int BODY = 6;
+    static const int SLOT_COUNT = 7;
+
+    static int slotIndexOf(const std::string &slotName);
+
+    const ItemStack &getSlot(int slot) const;
+
+    void setSlot(int slot, ItemStack item);
+
+    const ItemStack &getInventoryItem(int slot) const;
+
+    void setInventoryItem(int slot, ItemStack item);
+
+    int getInventorySize() const {
+        return (int) mInventory.size();
+    }
+
+    void ensureInventorySize(int size);
 
     void equipFromTable(ServerNetworkHandler &owner, const MobActor &mob);
 
@@ -55,4 +73,5 @@ private:
     static void _damageForDrop(ItemStack &item);
 
     std::array<ItemStack, SLOT_COUNT> mSlots;
+    std::vector<ItemStack> mInventory;
 };

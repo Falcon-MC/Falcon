@@ -18,6 +18,8 @@ public:
         int32_t mMinHoverHeight = 0;
         int32_t mMaxHoverHeight = 0;
         float mHomeRadius = 0.0f;
+        int32_t mMinDurationTicks = 0;
+        int32_t mMaxDurationTicks = 0;
     };
 
     explicit RandomHoverGoal(const Settings &settings);
@@ -30,6 +32,8 @@ public:
 
     void stop(ServerNetworkHandler &owner, MobActor &mob) override;
 
+    void tick(ServerNetworkHandler &owner, MobActor &mob) override;
+
 private:
     bool _pickTarget(Level &level, const MobActor &mob);
 
@@ -37,4 +41,5 @@ private:
 
     Settings mSettings;
     Vector3f mTarget;
+    int32_t mRemainingTicks = 0;
 };

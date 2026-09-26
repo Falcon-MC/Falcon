@@ -12,6 +12,7 @@
 #include "Actor/Definition/LookedAtSensor.h"
 #include "Actor/Mob/MobEntitySpawner.h"
 #include "Actor/Mob/MobEquipment.h"
+#include "Actor/Movement/RideControlSystem.h"
 #include "Actor/ServerActor.h"
 #include "Core/Json/Json.h"
 #include "Core/Math/Vector3i.h"
@@ -212,6 +213,28 @@ public:
         return mEquipment;
     }
 
+    Vector3f getSeatOffset(size_t index, size_t passengerCount) const override;
+
+    Vector3f getDismountPosition(size_t index, size_t passengerCount) const override;
+
+    void onPassengerAdded(ServerNetworkHandler &owner, Actor &passenger) override;
+
+    void onPassengerRemoved(ServerNetworkHandler &owner, Actor &passenger) override;
+
+    bool isMountTaming() const;
+
+    void attemptMountTame(ServerNetworkHandler &owner, ServerPlayer &rider);
+
+    float getJumpStrength() const;
+
+    virtual float getRideSprintMultiplier() const {
+        return 1.0f;
+    }
+
+    RideControlState &getRideControl() {
+        return mRideControl;
+    }
+
 protected:
     virtual void registerGoals(GoalSelector &goalSelector) {
         (void) goalSelector;
@@ -220,6 +243,8 @@ protected:
     void tickControls(ServerNetworkHandler &owner);
 
 private:
+    friend class RideControlSystem;
+
     void _rebuildComponents() const;
 
     void _registerGoals(ServerNetworkHandler &owner);
@@ -231,6 +256,11 @@ private:
     void _tickLifecycle(ServerNetworkHandler &owner);
 
     void _tickSensors(ServerNetworkHandler &owner);
+
+    void _tickEntitySensor(ServerNetworkHandler &owner);
+
+    int32_t _countSensedEntities(ServerNetworkHandler &owner, const json::Value &subsensor, bool playersOnly,
+                                 bool relativeRange);
 
     void _tickTimer(ServerNetworkHandler &owner);
 
@@ -257,6 +287,20 @@ private:
     bool _trySit(ServerNetworkHandler &owner, ServerPlayer &player);
 
     bool _tryInteract(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    bool _tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _tryMount(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    const json::Value *_seatFor(size_t index, size_t passengerCount) const;
+
+    float _rolledValue(const json::Value *component, float &rolled, float fallback) const;
+
+    const json::Value *_equippableSlot(int32_t index) const;
+
+    bool _equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &slotName);
+
+    void _dropEquipmentSlot(ServerNetworkHandler &owner, const std::string &slotName, float yOffset);
 
     void _spawnLoot(ServerNetworkHandler &owner, Level &level, const std::string &path);
 
@@ -314,4 +358,9 @@ private:
     BodyControl mBodyControl;
     MobEquipment mEquipment;
     MobEntitySpawner mEntitySpawner;
+    std::vector<int32_t> mEntitySensorCooldowns;
+    int32_t mTemper = 0;
+    mutable float mRolledMovementSpeed = -1.0f;
+    mutable float mRolledJumpStrength = -1.0f;
+    RideControlState mRideControl;
 };
