@@ -16,6 +16,7 @@ class Actor;
 class BlockBehavior;
 class ItemStack;
 class Level;
+class MobActor;
 class ServerActor;
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -165,6 +166,17 @@ public:
         (void) actor;
         (void) position;
         (void) state;
+    }
+
+    virtual bool onActorEvent(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state, const std::string &event, MobActor &source) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        (void) event;
+        (void) source;
+        return false;
     }
 
     virtual void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

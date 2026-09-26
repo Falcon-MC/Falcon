@@ -12,6 +12,7 @@
 #include "Actor/Mob/MobEquipment.h"
 #include "Actor/ServerActor.h"
 #include "Core/Json/Json.h"
+#include "Core/Math/Vector3i.h"
 #include "Server/PropertiesSettings.h"
 
 #include <cstdint>
@@ -37,7 +38,7 @@ public:
     virtual int getExperienceDrop() const { return 0; }
 
     bool isExpired() const override {
-        return mTransformed;
+        return mTransformed || mDespawned;
     }
 
     virtual const LootTable *getLootTable() const;
@@ -123,6 +124,25 @@ public:
     const Vector3f &getHomePosition() const {
         return mHomePosition;
     }
+
+    void setEventBlock(const Vector3i &position) {
+        mEventBlock = position;
+        mHasEventBlock = true;
+    }
+
+    void clearEventBlock() {
+        mHasEventBlock = false;
+    }
+
+    bool hasEventBlock() const {
+        return mHasEventBlock;
+    }
+
+    const Vector3i &getEventBlock() const {
+        return mEventBlock;
+    }
+
+    bool fireBlockEvent(ServerNetworkHandler &owner, const Vector3i &position, const std::string &event);
 
     void markBorn();
 
@@ -259,6 +279,9 @@ private:
     uint64_t mParentRuntimeId = 0;
     Vector3f mHomePosition;
     bool mHasHome = false;
+    Vector3i mEventBlock;
+    bool mHasEventBlock = false;
+    bool mDespawned = false;
     std::vector<std::string> mComponentGroups;
     std::vector<std::string> mGoalGroups;
     std::vector<std::string> mBodyGroups;

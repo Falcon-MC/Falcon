@@ -142,6 +142,32 @@ bool EntityFilter::_testAny(const json::Value &filters, ServerNetworkHandler &ow
     return false;
 }
 
+bool EntityFilter::_testBlock(const std::string &test, const std::string &op, const json::Value *value,
+                              ServerNetworkHandler &owner, const MobActor &self) {
+    if (!self.hasEventBlock())
+        return false;
+
+    Level &level = owner.getLevelFor(self);
+    const Vector3i &position = self.getEventBlock();
+    const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
+    if (state == nullptr)
+        return false;
+
+    if (test == "is_block") {
+        const std::string expected = value == nullptr ? std::string() : value->string();
+        const bool result = !expected.empty()
+                            && (state->mName == expected || state->mName == "minecraft:" + expected);
+        return isNegation(op) ? !result : result;
+    }
+
+    if (test == "is_waterlogged") {
+        const BlockState *liquid = level.peekBlockPtr(position.x, position.y, position.z, 1);
+        return applyBoolean(liquid != nullptr && LiquidView(*liquid).isWater(), value, op);
+    }
+
+    return false;
+}
+
 bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &owner, const MobActor &self,
                                const Actor *other) {
     const json::Value *testValue = filter.get("test");
@@ -154,7 +180,14 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     const json::Value *value = filter.get("value");
     const json::Value *subjectValue = filter.get("subject");
     const std::string subject = subjectValue == nullptr ? "self" : subjectValue->string();
-    const Actor *target = subject == "other" || subject == "target" || subject == "damager" ? other : &self;
+    const Actor *target = &self;
+    if (subject == "other" || subject == "damager")
+        target = other;
+    else if (subject == "target")
+        target = self.getTarget(owner);
+
+    if (subject == "block")
+        return _testBlock(test, op, value, owner, self);
 
     if (test == "is_difficulty") {
         const int32_t expected = value == nullptr ? -1 : difficultyOf(value->string());
@@ -167,8 +200,36 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         return applyBoolean(result, nullptr, op);
     }
 
+    if (test == "hourly_clock_time") {
+        const int64_t timeOfDay = ((owner.getLevelFor(self).getTime() % DAY_LENGTH) + DAY_LENGTH) % DAY_LENGTH;
+        return value != nullptr && compareNumbers(timeOfDay, (int64_t) value->number(0.0), op);
+    }
+
+    if (test == "has_target")
+        return applyBoolean(self.getTarget(owner) != nullptr, value, op);
+
+    if (test == "target_distance") {
+        const Actor *mobTarget = self.getTarget(owner);
+        return mobTarget != nullptr && value != nullptr
+               && compareFloats(std::sqrt(self.distanceSquaredTo(*mobTarget)), (float) value->number(0.0), op);
+    }
+
+    if (test == "y_rotation") {
+        const float yaw = std::remainder(self.getRotation().y, 360.0f);
+        return value != nullptr && compareFloats(yaw, (float) value->number(0.0), op);
+    }
+
     if (target == nullptr)
         return false;
+
+    if (test == "actor_health")
+        return value != nullptr && compareNumbers((int64_t) std::ceil(target->getHealth()),
+                                                  (int64_t) value->number(0.0), op);
+
+    if (test == "has_nametag") {
+        const ServerActor *named = dynamic_cast<const ServerActor *>(target);
+        return applyBoolean(named != nullptr && !named->getNameTag().empty(), value, op);
+    }
 
     if (test == "is_family") {
         const std::vector<std::string> families = familiesOf(*target);

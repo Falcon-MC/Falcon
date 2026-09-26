@@ -7,7 +7,9 @@
 #include "Actor/Definition/EntityEvents.h"
 #include "Actor/Definition/EntityFilter.h"
 #include "Actor/ServerPlayer.h"
+#include "Block/Block.h"
 #include "Block/BlockState.h"
+#include "Block/Blocks/VanillaBlocks.h"
 #include "Level/Level.h"
 #include "Loot/LootItems.h"
 #include "Loot/LootTableRegistry.h"
@@ -41,6 +43,7 @@ namespace {
     const char *const TRANSFORMATION_COMPONENT = "minecraft:transformation";
     const char *const DAMAGE_SENSOR_COMPONENT = "minecraft:damage_sensor";
     const char *const SPELL_EFFECTS_COMPONENT = "minecraft:spell_effects";
+    const char *const INSTANT_DESPAWN_COMPONENT = "minecraft:instant_despawn";
     const char *const LEGACY_ZOMBIE_PIGMAN = "minecraft:pig_zombie";
     const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
 
@@ -155,6 +158,11 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     _tickTransformation(owner);
     if (mTransformed)
         return;
+
+    if (getComponent(INSTANT_DESPAWN_COMPONENT) != nullptr) {
+        mDespawned = true;
+        return;
+    }
 
     if (!mGoalsRegistered || mGoalsDirty)
         _registerGoals(owner);
@@ -820,6 +828,17 @@ void MobActor::_markComponentsChanged() {
 
 void MobActor::markBorn() {
     mBorn = true;
+}
+
+bool MobActor::fireBlockEvent(ServerNetworkHandler &owner, const Vector3i &position, const std::string &event) {
+    Level &level = owner.getLevelFor(*this);
+    const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
+    if (state == nullptr)
+        return false;
+
+    const BlockState copy = *state;
+    const Block *block = VanillaBlocks::fromIdentifier(copy.mName);
+    return block != nullptr && block->onActorEvent(owner, level, position, copy, event, *this);
 }
 
 void MobActor::fireEvent(ServerNetworkHandler &owner, const std::string &event, Actor *other) {

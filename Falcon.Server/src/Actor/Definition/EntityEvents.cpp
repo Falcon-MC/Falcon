@@ -5,11 +5,18 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include <algorithm>
+#include <cmath>
 #include <random>
 
 namespace {
     const int32_t MAX_DEPTH = 16;
     const char *const SELF_TARGET = "self";
+    const char *const BLOCK_TARGET = "block";
+
+    Vector3i blockAt(const Vector3f &position) {
+        return Vector3i((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
+                        (int32_t) std::floor(position.z));
+    }
 
     std::mt19937 &eventRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -47,6 +54,12 @@ void EntityEvents::fireTrigger(ServerNetworkHandler &owner, MobActor &mob, const
         return;
 
     const json::Value *target = trigger->get("target");
+    if (target != nullptr && target->string() == BLOCK_TARGET) {
+        if (mob.hasEventBlock())
+            mob.fireBlockEvent(owner, mob.getEventBlock(), event->string());
+        return;
+    }
+
     MobActor *receiver = _resolveTarget(owner, mob, target == nullptr ? SELF_TARGET : target->string(), other);
     if (receiver != nullptr)
         fire(owner, *receiver, event->string(), depth, receiver == &mob ? other : &mob);
@@ -162,6 +175,12 @@ bool EntityEvents::_run(ServerNetworkHandler &owner, MobActor &mob, const json::
 
     if (const json::Value *queue = node.get("queue_command"))
         _queueCommands(owner, mob, *queue);
+
+    if (const json::Value *homeEvent = node.get("execute_event_on_home_block")) {
+        const json::Value *name = homeEvent->get("event");
+        if (name != nullptr && mob.hasHome())
+            mob.fireBlockEvent(owner, blockAt(mob.getHomePosition()), name->string());
+    }
 
     if (const json::Value *sequence = node.get("sequence")) {
         for (const std::unique_ptr<json::Value> &entry: sequence->mArray)
