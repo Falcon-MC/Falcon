@@ -37,6 +37,16 @@
 #include <utility>
 
 namespace {
+    void returnToInventory(ServerPlayer &player, ItemStack &item) {
+        std::vector<int> touchedSlots;
+        item.mCount = player.getInventory().addItemPartial(item, touchedSlots);
+        if (item.mCount <= 0)
+            item = ItemStack::air();
+
+        for (int slot: touchedSlots)
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
+    }
+
     bool isBlockContainer(ContainerSlotType type) {
         return type == ContainerSlotType::LevelEntity || type == ContainerSlotType::Barrel
                || type == ContainerSlotType::ShulkerBox || type == ContainerSlotType::CrafterBlockContainer;
@@ -715,9 +725,7 @@ void InventoryHandler::handleContainerClose(ServerPlayer &player, const Containe
             continue;
         }
 
-        std::vector<int> touchedSlots;
-        const int remaining = inventory.addItemPartial(item, touchedSlots);
-        item.mCount = remaining;
+        returnToInventory(player, item);
         if (craftingTable) {
             inventory.setCraftingTableItem(slot, std::move(item));
         } else if (furnace) {
@@ -726,28 +734,46 @@ void InventoryHandler::handleContainerClose(ServerPlayer &player, const Containe
             inventory.setCraftingItem(slot, std::move(item));
         }
 
-        for (int touchedSlot: touchedSlots)
-            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, touchedSlot);
-
         manager.syncSlot(craftingTable ? InventoryManager::InventoryId::CraftingTableInput
                        : furnace ? InventoryManager::InventoryId::FurnaceInput
                                  : InventoryManager::InventoryId::CraftingInput, slot);
     }
 
     if (!inventory.getCursor().isAir()) {
-        std::vector<int> touchedSlots;
         ItemStack cursor = inventory.getCursor();
-        const int remaining = inventory.addItemPartial(cursor, touchedSlots);
-        cursor.mCount = remaining;
+        returnToInventory(player, cursor);
         inventory.setCursor(std::move(cursor));
-
-        for (int slot: touchedSlots)
-            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
-
         manager.syncSlot(InventoryManager::InventoryId::Cursor, 0);
     }
 
     manager.onClientRemoveWindow(windowId);
+}
+
+void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer &player) {
+    PlayerInventory &inventory = player.getInventory();
+    std::vector<ItemStack> returned;
+
+    for (int slot = 0; slot < PlayerInventory::CRAFTING_SIZE; ++slot) {
+        if (!inventory.getCraftingItem(slot).isAir())
+            returned.push_back(inventory.getCraftingItem(slot));
+        inventory.setCraftingItem(slot, ItemStack::air());
+    }
+
+    for (int slot = 0; slot < PlayerInventory::CRAFTING_TABLE_SIZE; ++slot) {
+        if (!inventory.getCraftingTableItem(slot).isAir())
+            returned.push_back(inventory.getCraftingTableItem(slot));
+        inventory.setCraftingTableItem(slot, ItemStack::air());
+    }
+
+    if (!inventory.getCursor().isAir())
+        returned.push_back(inventory.getCursor());
+    inventory.setCursor(ItemStack::air());
+
+    for (ItemStack &item: returned) {
+        returnToInventory(player, item);
+        if (item.mCount > 0)
+            owner._throwItem(player, item);
+    }
 }
 
 void InventoryHandler::handleCraftingEvent(ServerNetworkHandler &owner, ServerPlayer &player,

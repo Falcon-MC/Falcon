@@ -36,6 +36,8 @@ public:
 
     static void handleContainerClose(ServerPlayer &player, const ContainerClosePacket &packet);
 
+    static void resetInventory(ServerNetworkHandler &owner, ServerPlayer &player);
+
     static void handleCraftingEvent(ServerNetworkHandler &owner, ServerPlayer &player,
                                      const CraftingEventPacket &packet);
 

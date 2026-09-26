@@ -913,6 +913,8 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
         if (player->isRiding())
             RideSystem::dismount(*this, *player, false);
         RideSystem::ejectAll(*this, *player);
+        if (player->isSpawned())
+            InventoryHandler::resetInventory(*this, *player);
         _savePlayerData(*player);
         EnderChestInventoryStore::getInstance().remove(player->getUniqueId());
 
