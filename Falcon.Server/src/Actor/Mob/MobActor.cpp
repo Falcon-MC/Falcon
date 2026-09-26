@@ -309,6 +309,7 @@ bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const Dam
             playDefinitionSound(owner, sound->string());
 
         EntityEvents::fireTrigger(owner, *this, onDamage, other);
+        break;
     }
 
     return dealsDamage;
