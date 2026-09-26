@@ -473,6 +473,13 @@ namespace {
 
         ItemStack enchanted = *input;
         enchanted.mCount = 1;
+        if (context.mCodecContext != nullptr && enchanted.mDefinition != nullptr
+            && enchanted.mDefinition->getIdentifier() == "minecraft:book") {
+            std::shared_ptr<ItemDefinition> enchantedBook =
+                    context.mCodecContext->getItemDefinitions().getDefinition("minecraft:enchanted_book");
+            if (enchantedBook != nullptr)
+                enchanted.mDefinition = std::move(enchantedBook);
+        }
         ItemEnchantments::write(enchanted, enchantments);
 
         context.mCreatedOutput = std::move(enchanted);
