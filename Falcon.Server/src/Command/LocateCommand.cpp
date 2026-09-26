@@ -6,6 +6,7 @@
 #include "Level/LevelChunk.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
+#include <atomic>
 #include <cmath>
 #include <string>
 #include <thread>
@@ -14,6 +15,8 @@ namespace {
     const int32_t SEA_LEVEL = 63;
     const int32_t HEIGHT_STEP = 8;
     const int32_t TELEPORT_HEIGHT_OFFSET = 16;
+
+    std::atomic<bool> gSearchRunning{false};
 
     bool parseBoolean(const std::string &value, bool &out) {
         if (value == "true") {
@@ -131,10 +134,16 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
             return false;
         }
 
-        if (maxRadius <= 0) {
+        if (maxRadius <= 0 || maxRadius > DEFAULT_BIOME_RADIUS) {
             sender.sendTranslation("commands.generic.num.invalid", {arguments[3]});
             return false;
         }
+    }
+
+    bool expected = false;
+    if (!gSearchRunning.compare_exchange_strong(expected, true)) {
+        sender.sendMessage("A biome search is already running");
+        return false;
     }
 
     int32_t searchType = SEARCH_SPIRAL;
@@ -163,6 +172,7 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
         const bool located = searchType == SEARCH_X_AXIS
                              ? _findBiomeXAxis(level, originX, originZ, biomeId, maxRadius, found)
                              : _findBiomeSpiral(level, originX, originZ, biomeId, maxRadius, found);
+        gSearchRunning = false;
 
         handler.postToMainThread([&handler, &level, requesterId, biomeName, teleport, located, found,
                                   originX, originY, originZ]() {
