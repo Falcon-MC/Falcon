@@ -44,6 +44,8 @@ public:
 
     void ensureInventorySize(int size);
 
+    int getArmorCount() const;
+
     void equipFromTable(ServerNetworkHandler &owner, const MobActor &mob);
 
     void sendTo(ServerNetworkHandler &owner, const ServerPlayer &player, const Actor &actor) const;

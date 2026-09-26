@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 class ServerActor;
@@ -16,7 +17,14 @@ struct MolangValue {
     bool isTrue() const;
 };
 
+struct MolangContext {
+    bool mLastHitByPlayer = false;
+    int32_t mPlayerLevel = 0;
+};
+
 class Molang {
 public:
     static MolangValue evaluate(const std::string &expression, const ServerActor &actor);
+
+    static MolangValue evaluate(const std::string &expression, const ServerActor &actor, const MolangContext &context);
 };

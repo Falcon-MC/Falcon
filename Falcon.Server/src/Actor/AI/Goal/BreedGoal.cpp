@@ -134,5 +134,7 @@ void BreedGoal::_breed(ServerNetworkHandler &owner, MobActor &mob, MobActor &par
         childMob->setParent(mob.getRuntimeId());
         childMob->inheritVariant(mob, partner);
     }
-    owner.spawnExperienceOrbs(level, mob.getPosition(), MobActor::randomRange(MIN_EXPERIENCE, MAX_EXPERIENCE));
+    const int experience = mob.getBreedingExperience();
+    owner.spawnExperienceOrbs(level, mob.getPosition(),
+                              experience >= 0 ? experience : MobActor::randomRange(MIN_EXPERIENCE, MAX_EXPERIENCE));
 }

@@ -103,6 +103,15 @@ void MobEquipment::setInventoryItem(int slot, ItemStack item) {
     mInventory[(size_t) slot] = std::move(item);
 }
 
+int MobEquipment::getArmorCount() const {
+    int count = 0;
+    for (int slot = HEAD; slot <= FEET; ++slot) {
+        if (!mSlots[(size_t) slot].isAir())
+            ++count;
+    }
+    return count;
+}
+
 bool MobEquipment::addInventoryItem(const ItemStack &item, int capacity) {
     if (item.isAir() || capacity <= 0)
         return false;

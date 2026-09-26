@@ -34,7 +34,8 @@ namespace {
 
     class Parser {
     public:
-        Parser(const std::string &source, const ServerActor &actor) : mSource(source), mActor(actor) {
+        Parser(const std::string &source, const ServerActor &actor, const MolangContext &context)
+                : mSource(source), mActor(actor), mContext(context) {
         }
 
         MolangValue parse() {
@@ -270,6 +271,15 @@ namespace {
                                                          : std::uniform_real_distribution<double>(low, high)(
                                                                  molangRandom()));
             }
+            if (name == "math.die_roll") {
+                const int64_t rolls = (int64_t) std::round(_argument(arguments, 0));
+                const double low = _argument(arguments, 1);
+                const double high = _argument(arguments, 2);
+                double total = 0.0;
+                for (int64_t roll = 0; roll < rolls; ++roll)
+                    total += high <= low ? low : std::uniform_real_distribution<double>(low, high)(molangRandom());
+                return MolangValue::ofNumber(total);
+            }
             if (name == "math.random_integer") {
                 const int64_t low = (int64_t) std::round(_argument(arguments, 0));
                 const int64_t high = (int64_t) std::round(_argument(arguments, 1));
@@ -290,10 +300,25 @@ namespace {
             if (query == "has_property")
                 return MolangValue::ofNumber(mActor.findPropertyDescription(argument) != nullptr ? 1.0 : 0.0);
 
-            if (query == "had_component_group") {
-                const MobActor *mob = dynamic_cast<const MobActor *>(&mActor);
+            const MobActor *mob = dynamic_cast<const MobActor *>(&mActor);
+            if (query == "had_component_group")
                 return MolangValue::ofNumber(mob != nullptr && mob->hasComponentGroup(argument) ? 1.0 : 0.0);
-            }
+
+            if (query == "last_hit_by_player")
+                return MolangValue::ofNumber(mContext.mLastHitByPlayer ? 1.0 : 0.0);
+
+            if (query == "player_level")
+                return MolangValue::ofNumber((double) mContext.mPlayerLevel);
+
+            if (query == "is_baby")
+                return MolangValue::ofNumber(mob != nullptr && mob->getComponent("minecraft:is_baby") != nullptr
+                                             ? 1.0 : 0.0);
+
+            if (query == "variant")
+                return MolangValue::ofNumber(mob == nullptr ? 0.0 : (double) mob->getVariant());
+
+            if (query == "equipment_count")
+                return MolangValue::ofNumber(mob == nullptr ? 0.0 : (double) mob->getEquipment().getArmorCount());
 
             return MolangValue::ofNumber(0.0);
         }
@@ -317,6 +342,7 @@ namespace {
 
         const std::string &mSource;
         const ServerActor &mActor;
+        const MolangContext &mContext;
         size_t mPosition = 0;
     };
 }
@@ -339,6 +365,10 @@ bool MolangValue::isTrue() const {
 }
 
 MolangValue Molang::evaluate(const std::string &expression, const ServerActor &actor) {
-    Parser parser(expression, actor);
+    return evaluate(expression, actor, MolangContext());
+}
+
+MolangValue Molang::evaluate(const std::string &expression, const ServerActor &actor, const MolangContext &context) {
+    Parser parser(expression, actor, context);
     return parser.parse();
 }
