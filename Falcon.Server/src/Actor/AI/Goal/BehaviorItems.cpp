@@ -1,6 +1,6 @@
 #include "Actor/AI/Goal/BehaviorItems.h"
 
-#include "Loot/LegacyItemMapper.h"
+#include "Item/Loot/LegacyItemMapper.h"
 #include "Protocol/Types/ItemStack.h"
 
 #include <algorithm>

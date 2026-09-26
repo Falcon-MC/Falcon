@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Core/Json/Json.h"
-#include "Loot/LootCondition.h"
-#include "Loot/LootContext.h"
-#include "Loot/LootRange.h"
+#include "Item/Loot/LootCondition.h"
+#include "Item/Loot/LootContext.h"
+#include "Item/Loot/LootRange.h"
 
 #include <memory>
 #include <vector>

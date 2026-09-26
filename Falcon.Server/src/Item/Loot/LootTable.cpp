@@ -1,7 +1,7 @@
-#include "Loot/LootTable.h"
+#include "Item/Loot/LootTable.h"
 
-#include "Loot/LegacyItemMapper.h"
-#include "Loot/LootTableRegistry.h"
+#include "Item/Loot/LegacyItemMapper.h"
+#include "Item/Loot/LootTableRegistry.h"
 
 #include <algorithm>
 #include <random>

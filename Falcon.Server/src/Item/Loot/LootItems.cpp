@@ -1,8 +1,8 @@
-#include "Loot/LootItems.h"
+#include "Item/Loot/LootItems.h"
 
 #include "Inventory/Container.h"
 #include "Item/ItemData.h"
-#include "Loot/LegacyItemMapper.h"
+#include "Item/Loot/LegacyItemMapper.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include <cmath>

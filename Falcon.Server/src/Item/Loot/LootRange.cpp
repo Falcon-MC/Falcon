@@ -1,4 +1,4 @@
-#include "Loot/LootRange.h"
+#include "Item/Loot/LootRange.h"
 
 #include <cmath>
 

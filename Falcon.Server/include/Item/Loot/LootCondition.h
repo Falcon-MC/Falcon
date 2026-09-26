@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Core/Json/Json.h"
-#include "Loot/LootContext.h"
+#include "Item/Loot/LootContext.h"
 
 #include <memory>
 #include <string>

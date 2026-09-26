@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Loot/LootTable.h"
+#include "Item/Loot/LootTable.h"
 
 #include <memory>
 #include <string>

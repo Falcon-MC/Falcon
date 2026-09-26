@@ -1,4 +1,4 @@
-#include "Loot/LootTableRegistry.h"
+#include "Item/Loot/LootTableRegistry.h"
 
 #include "Core/Json/Json.h"
 #include "EntityLootTablesJson.h"

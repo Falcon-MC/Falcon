@@ -1,7 +1,7 @@
-#include "Loot/LootFunction.h"
+#include "Item/Loot/LootFunction.h"
 
 #include "Item/EnchantmentHelper.h"
-#include "Loot/LegacyItemMapper.h"
+#include "Item/Loot/LegacyItemMapper.h"
 
 #include <algorithm>
 #include <cmath>

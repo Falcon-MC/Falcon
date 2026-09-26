@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Loot/LootContext.h"
+#include "Item/Loot/LootContext.h"
 #include "Protocol/Types/ItemStack.h"
 
 #include <random>

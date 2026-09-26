@@ -1,4 +1,4 @@
-#include "Loot/LegacyItemMapper.h"
+#include "Item/Loot/LegacyItemMapper.h"
 
 #include "Core/Json/Json.h"
 #include "LegacyItemMapJson.h"
