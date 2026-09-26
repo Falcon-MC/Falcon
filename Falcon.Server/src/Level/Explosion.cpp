@@ -6,6 +6,7 @@
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
 #include "Block/BlockShape.h"
+#include "Block/Blocks/ContainerBlock.h"
 #include "Block/Blocks/LiquidView.h"
 #include "Block/Blocks/TntBlock.h"
 #include "Level/Level.h"
@@ -336,7 +337,10 @@ void Explosion::_destroyBlocks() {
         if (!isAir(mLevel.getBlockStateAtLayer(position.x, position.y, position.z, 1)))
             mLevel.setBlockStateAtLayer(position.x, position.y, position.z, 1, BlockState());
 
-        BlockActionHandler::destroyBlock(mOwner, mLevel, position, state, nextDouble() * 100.0 < yield, noTool);
+        const ContainerBlockDefinition *container = ContainerBlock::findDefinition(state.mName);
+        const bool keepsContents = container != nullptr && container->mKind == ContainerBlockKind::ShulkerBox;
+        BlockActionHandler::destroyBlock(mOwner, mLevel, position, state,
+                                         keepsContents || nextDouble() * 100.0 < yield, noTool);
     }
 }
 
