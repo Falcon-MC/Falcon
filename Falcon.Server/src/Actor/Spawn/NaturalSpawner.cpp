@@ -1,6 +1,7 @@
 #include "Actor/Spawn/NaturalSpawner.h"
 
 #include "Actor/ActorClassRegistry.h"
+#include "Actor/Mob/MobActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
@@ -374,7 +375,9 @@ void NaturalSpawner::_attempt(ServerNetworkHandler &owner, Level &level, const V
     std::vector<Candidate> candidates;
     int32_t totalWeight = 0;
     for (const SpawnRule &rule: SpawnRules::getRules()) {
-        if (rule.mPopulation != category.mName || ActorClassRegistry::getMobPrototype(rule.mIdentifier) == nullptr)
+        const MobActor *prototype = ActorClassRegistry::getMobPrototype(rule.mIdentifier);
+        if (rule.mPopulation != category.mName || prototype == nullptr
+            || !prototype->canSpawnNaturally(level, site.mPosition, site.mBiome, site.mLight, mRandom))
             continue;
 
         for (const SpawnCondition &condition: rule.mConditions) {

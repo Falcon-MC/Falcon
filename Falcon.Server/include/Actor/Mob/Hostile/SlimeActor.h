@@ -11,4 +11,9 @@ public:
     float getContactDamage() const override;
 
     const LootTable *getLootTable() const override;
+
+    bool canSpawnNaturally(Level &level, const Vector3i &position, int32_t biomeId, int32_t light,
+                           std::mt19937 &random) const override;
+
+    static bool isSlimeChunk(int32_t chunkX, int32_t chunkZ);
 };
