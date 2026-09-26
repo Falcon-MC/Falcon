@@ -1,14 +1,23 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "Item/Item.h"
 
 class ItemStack;
 class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
 
-class ChorusFruitItem {
+class ChorusFruitItem : public Item {
 public:
+    explicit ChorusFruitItem(const Item &base);
+
+    static bool matches(const std::string &identifier);
+
+    bool canAlwaysEat() const override {
+        return true;
+    }
+
     static bool isChorusFruit(const ItemStack &item);
 
     static bool canConsume(ServerNetworkHandler &owner, ServerPlayer &player);

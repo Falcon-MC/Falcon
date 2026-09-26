@@ -2,8 +2,6 @@
 
 #include "Item/ItemTypeIds.h"
 #include "Item/ItemCooldowns.h"
-#include "Item/Items/EnchantedGoldenAppleItem.h"
-
 #include <unordered_map>
 
 namespace {
@@ -714,15 +712,6 @@ const ItemComponents &ItemDataTable::getComponents(const std::string &identifier
         auto &food = value.emplace<FoodItemComponent>();
         food.mNutrition = data->mNutrition;
         food.mSaturation = data->mSaturation;
-        if (identifier == "minecraft:chorus_fruit") {
-            food.mCanAlwaysEat = true;
-        } else if (identifier == "minecraft:golden_apple") {
-            food.mCanAlwaysEat = true;
-            food.addEffect({22, 0, 2400, 1.0f});
-            food.addEffect({10, 1, 100, 1.0f});
-        } else if (EnchantedGoldenAppleItem::matches(identifier)) {
-            EnchantedGoldenAppleItem::applyFoodComponent(food);
-        }
     }
 
     const int cooldown = ItemCooldowns::getDuration(identifier);

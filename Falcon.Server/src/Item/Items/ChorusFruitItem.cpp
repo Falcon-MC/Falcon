@@ -4,6 +4,7 @@
 #include "Block/BlockData.h"
 #include "Block/Blocks/LiquidBlock.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
+#include "Item/ItemClassRegistry.h"
 #include "Level/LevelChunk.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -24,6 +25,15 @@ namespace {
         static std::mt19937 generator(std::random_device{}());
         return generator;
     }
+}
+
+FALCON_REGISTER_ITEM(ChorusFruitItem, 100);
+
+ChorusFruitItem::ChorusFruitItem(const Item &base) : Item(base) {
+}
+
+bool ChorusFruitItem::matches(const std::string &identifier) {
+    return identifier == CHORUS_FRUIT_IDENTIFIER;
 }
 
 bool ChorusFruitItem::isChorusFruit(const ItemStack &item) {

@@ -7,6 +7,7 @@
 #include "Inventory/InventoryManager.h"
 #include "Item/Item.h"
 #include "Item/ItemData.h"
+#include "Item/ItemNetworkIdTable.h"
 #include "Item/Items/ChorusFruitItem.h"
 #include "Item/VanillaItems.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -51,19 +52,40 @@ namespace {
         return food;
     }
 
-    void applyFoodEffects(EventBus &bus, ServerPlayer &player, const FoodItemComponent &food) {
-        for (const FoodEffect &effect: food.getEffects()) {
-            MobEffectInstance instance;
-            instance.mId = (MobEffectId) effect.mEffectId;
-            instance.mAmplifier = effect.mAmplifier;
-            instance.mDuration = effect.mDurationTicks;
+    bool canAlwaysEat(const ItemStack &item, const FoodItemComponent &food) {
+        if (food.canAlwaysEat())
+            return true;
 
-            if (player.addEffect(instance)) {
-                EffectAddAfterEvent event(player, effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
-                bus.after().mEffectAdd.emit(event);
-            }
-        }
+        const Item *itemType = VanillaItems::fromIdentifier(item.mDefinition->getIdentifier());
+        return itemType != nullptr && itemType->canAlwaysEat();
     }
+
+    std::string usingConvertsTo(const ItemStack &item) {
+        if (item.mDefinition == nullptr)
+            return std::string();
+
+        const ItemNetworkIdEntry *entry = ItemNetworkIdTable::find(item.mDefinition->getIdentifier());
+        const Tag *components = entry == nullptr ? nullptr : entry->mComponents.get("components");
+        const Tag *food = components == nullptr ? nullptr : components->get("minecraft:food");
+        const std::string name = food == nullptr ? std::string() : food->getString("using_converts_to");
+        if (name.empty() || name.find(':') != std::string::npos)
+            return name;
+        return "minecraft:" + name;
+    }
+
+}
+
+void ServerNetworkHandler::addEffect(Actor &actor, MobEffectId effect, int32_t amplifier, int32_t durationTicks) {
+    MobEffectInstance instance;
+    instance.mId = effect;
+    instance.mAmplifier = amplifier;
+    instance.mDuration = durationTicks;
+
+    if (!actor.addEffect(instance) || !actor.isPlayer())
+        return;
+
+    EffectAddAfterEvent event(static_cast<ServerPlayer &>(actor), (int32_t) effect, amplifier, durationTicks);
+    mEventBus.after().mEffectAdd.emit(event);
 }
 
 void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
@@ -218,7 +240,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
 
     const bool usingItem = player.getFlags().get(ActorFlag::UsingItem);
 
-    if (!isMilk && !isPotion && !food->canAlwaysEat() && !player.canEat()) {
+    if (!isMilk && !isPotion && !canAlwaysEat(heldItem, *food) && !player.canEat()) {
         if (usingItem) {
             player.getFlags().set(ActorFlag::UsingItem, false);
             _sendEntityData(player);
@@ -277,7 +299,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         return;
     }
 
-    if (!isMilk && !isPotion && !food->canAlwaysEat() && !player.canEat()) {
+    if (!isMilk && !isPotion && !canAlwaysEat(usedItem, *food) && !player.canEat()) {
         player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
         _sendAttributes(player);
         return;
@@ -313,7 +335,11 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
             ChorusFruitItem::onEaten(*this, player);
 
         player.consumeFood(food->getNutrition(), food->getSaturation());
-        applyFoodEffects(mEventBus, player, *food);
+        for (const FoodEffect &effect: food->getEffects())
+            addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
+
+        if (const Item *itemType = VanillaItems::fromIdentifier(usedItem.mDefinition->getIdentifier()))
+            itemType->onConsumed(*this, player, usedItem);
 
         playLevelSound(getLevelFor(player), LevelSoundEvent::BURP, player.getPosition());
     }
@@ -321,13 +347,12 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
     ItemStack remaining = inventory.getItemInHand();
     remaining.mCount -= 1;
     if (remaining.mCount <= 0) {
-        if (isMilk) {
-            remaining = ItemStack::air();
-            remaining.mDefinition = mItemDefinitions.getDefinition("minecraft:bucket");
-            remaining.mBlockDefinition = mBlockDefinitions.getDefinition("minecraft:bucket");
+        const std::string convertsTo = isMilk ? std::string("minecraft:bucket") : usingConvertsTo(usedItem);
+        remaining = ItemStack::air();
+        if (!convertsTo.empty()) {
+            remaining.mDefinition = mItemDefinitions.getDefinition(convertsTo);
+            remaining.mBlockDefinition = mBlockDefinitions.getDefinition(convertsTo);
             remaining.mCount = remaining.mDefinition == nullptr ? 0 : 1;
-        } else {
-            remaining = ItemStack::air();
         }
     }
 

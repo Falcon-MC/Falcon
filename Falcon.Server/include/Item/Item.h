@@ -5,7 +5,6 @@
 #include "Item/ItemData.h"
 #include "Item/ItemCooldowns.h"
 #include "Item/ItemTypes.h"
-#include "Item/Items/EnchantedGoldenAppleItem.h"
 
 #include <cstdint>
 #include <string>
@@ -86,6 +85,16 @@ public:
         (void) item;
         (void) elapsedTicks;
         return false;
+    }
+
+    virtual bool canAlwaysEat() const {
+        return false;
+    }
+
+    virtual void onConsumed(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
+        (void) owner;
+        (void) player;
+        (void) item;
     }
 
     Item() : mTypeId(0), mIdentifier("minecraft:air"), mName("Air"), mMaxStackSize(64), mIsBlock(false) {
@@ -229,15 +238,6 @@ private:
             auto &food = mComponents.emplace<FoodItemComponent>();
             food.mNutrition = mNutrition;
             food.mSaturation = mSaturation;
-            if (mIdentifier == "minecraft:chorus_fruit") {
-                food.mCanAlwaysEat = true;
-            } else if (mIdentifier == "minecraft:golden_apple") {
-                food.mCanAlwaysEat = true;
-                food.addEffect({22, 0, 2400, 1.0f});
-                food.addEffect({10, 1, 100, 1.0f});
-            } else if (EnchantedGoldenAppleItem::matches(mIdentifier)) {
-                EnchantedGoldenAppleItem::applyFoodComponent(food);
-            }
         }
 
         const int cooldown = ItemCooldowns::getDuration(mIdentifier);
