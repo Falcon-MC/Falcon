@@ -798,6 +798,10 @@ void ServerNetworkHandler::changeActorDimension(Actor &actor, DimensionType dime
     if (traveller == nullptr)
         return;
 
+    const MobActor *mob = dynamic_cast<const MobActor *>(traveller);
+    if (mob != nullptr && mob->getComponent("minecraft:dimension_bound") != nullptr)
+        return;
+
     broadcastActorRemove(*traveller);
     traveller->setDimension(dimension);
     traveller->setPosition(position);

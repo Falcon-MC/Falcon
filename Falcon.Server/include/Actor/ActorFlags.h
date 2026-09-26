@@ -35,6 +35,7 @@ enum class ActorFlag : int {
     TimerFlag1 = 115,
     TimerFlag2 = 116,
     TimerFlag3 = 117,
+    BodyRotationBlocked = 118,
 };
 
 class ActorFlags {

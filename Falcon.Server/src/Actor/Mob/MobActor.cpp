@@ -45,6 +45,9 @@ namespace {
     const char *const DAMAGE_SENSOR_COMPONENT = "minecraft:damage_sensor";
     const char *const SPELL_EFFECTS_COMPONENT = "minecraft:spell_effects";
     const char *const INSTANT_DESPAWN_COMPONENT = "minecraft:instant_despawn";
+    const char *const BODY_ROTATION_BLOCKED_COMPONENT = "minecraft:body_rotation_blocked";
+    const char *const KNOCKBACK_RESISTANCE_COMPONENT = "minecraft:knockback_resistance";
+    const char *const KNOCKBACK_RESISTANCE_ATTRIBUTE = "minecraft:knockback_resistance";
     const char *const LEGACY_ZOMBIE_PIGMAN = "minecraft:pig_zombie";
     const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
 
@@ -674,6 +677,9 @@ void MobActor::_syncBody(ServerNetworkHandler &owner) {
 
     _setFlag(owner, ActorFlag::Baby, getComponent("minecraft:is_baby") != nullptr);
     _setFlag(owner, ActorFlag::Sheared, getComponent("minecraft:is_sheared") != nullptr);
+    _setFlag(owner, ActorFlag::BodyRotationBlocked, getComponent(BODY_ROTATION_BLOCKED_COMPONENT) != nullptr);
+    getAttributes().setClamped(KNOCKBACK_RESISTANCE_ATTRIBUTE,
+                               numberIn(getComponent(KNOCKBACK_RESISTANCE_COMPONENT), "value", 0.0f));
 
     const float scale = numberIn(getComponent("minecraft:scale"), "value", 1.0f);
     if (scale != mScale) {
@@ -1014,7 +1020,8 @@ ServerPlayer *MobActor::findPlayer(ServerNetworkHandler &owner, uint64_t runtime
 }
 
 void MobActor::tickControls(ServerNetworkHandler &owner) {
-    mBodyControl.tick(*this, mMoveControl, mLookControl);
+    if (!getFlags().get(ActorFlag::BodyRotationBlocked))
+        mBodyControl.tick(*this, mMoveControl, mLookControl);
     mMoveControl.tick(owner, *this, mJumpControl);
     mJumpControl.tick(owner, *this);
     mLookControl.tick(*this);
