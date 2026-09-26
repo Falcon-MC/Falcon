@@ -31,7 +31,6 @@ namespace {
     const int32_t HERD_SPREAD = 4;
     const int32_t UNDERGROUND_SEARCH = 16;
     const int32_t TICKS_PER_SECOND = 20;
-    const float TWO_PI = 6.2831855f;
 
     bool isSolid(const BlockState &state) {
         const BlockData *data = BlockDataTable::find(state.mName.c_str());
@@ -172,8 +171,17 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
                     ++count;
             }
 
-            if (count < category.mCap)
-                _attempt(owner, level, player, category, difficulty, players, nearby);
+            if (count >= category.mCap)
+                continue;
+
+            const int32_t minChunkX = (int32_t) std::floor((player.x - SPAWN_MAX_DISTANCE) / 16.0f);
+            const int32_t maxChunkX = (int32_t) std::floor((player.x + SPAWN_MAX_DISTANCE) / 16.0f);
+            const int32_t minChunkZ = (int32_t) std::floor((player.z - SPAWN_MAX_DISTANCE) / 16.0f);
+            const int32_t maxChunkZ = (int32_t) std::floor((player.z + SPAWN_MAX_DISTANCE) / 16.0f);
+            for (int32_t chunkX = minChunkX; chunkX <= maxChunkX && count < category.mCap; ++chunkX) {
+                for (int32_t chunkZ = minChunkZ; chunkZ <= maxChunkZ && count < category.mCap; ++chunkZ)
+                    count += _attempt(owner, level, player, chunkX, chunkZ, category, difficulty, players, nearby);
+            }
         }
     }
 }
@@ -336,16 +344,24 @@ bool NaturalSpawner::_matches(Level &level, const SpawnSite &site, const SpawnCo
     return true;
 }
 
-void NaturalSpawner::_attempt(ServerNetworkHandler &owner, Level &level, const Vector3f &player,
-                              const Category &category, int32_t difficulty, const std::vector<Vector3f> &players,
-                              const std::vector<NearbyActor> &nearby) {
-    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-    const float angle = unit(mRandom) * TWO_PI;
-    const float distance = SPAWN_MIN_DISTANCE + unit(mRandom) * (SPAWN_MAX_DISTANCE - SPAWN_MIN_DISTANCE);
-    const int32_t x = (int32_t) std::floor(player.x + std::cos(angle) * distance);
-    const int32_t z = (int32_t) std::floor(player.z + std::sin(angle) * distance);
-    if (!level.isChunkResident(x >> 4, z >> 4))
-        return;
+int32_t NaturalSpawner::_attempt(ServerNetworkHandler &owner, Level &level, const Vector3f &player, int32_t chunkX,
+                                 int32_t chunkZ, const Category &category, int32_t difficulty,
+                                 const std::vector<Vector3f> &players, const std::vector<NearbyActor> &nearby) {
+    if (!level.isChunkResident(chunkX, chunkZ))
+        return 0;
+
+    const int32_t x = chunkX * 16 + _nextInt(16);
+    const int32_t z = chunkZ * 16 + _nextInt(16);
+    const Vector3f column((float) x + 0.5f, player.y, (float) z + 0.5f);
+    const float distanceSquared = horizontalDistanceSquared(column, player);
+    if (distanceSquared < SPAWN_MIN_DISTANCE * SPAWN_MIN_DISTANCE
+        || distanceSquared > SPAWN_MAX_DISTANCE * SPAWN_MAX_DISTANCE)
+        return 0;
+
+    for (const Vector3f &other: players) {
+        if (horizontalDistanceSquared(column, other) < SPAWN_MIN_DISTANCE * SPAWN_MIN_DISTANCE)
+            return 0;
+    }
 
     const bool water = std::string(category.mName) == "water_animal";
     const int32_t height = level.getHeightAt(x, z);
@@ -365,7 +381,7 @@ void NaturalSpawner::_attempt(ServerNetworkHandler &owner, Level &level, const V
 
     SpawnSite site;
     if (!_makeSite(level, Vector3i(x, y, z), players, water, site))
-        return;
+        return 0;
 
     struct Candidate {
         const SpawnRule *mRule;
@@ -390,7 +406,7 @@ void NaturalSpawner::_attempt(ServerNetworkHandler &owner, Level &level, const V
         }
     }
     if (totalWeight <= 0)
-        return;
+        return 0;
 
     int32_t roll = _nextInt(totalWeight);
     const Candidate *chosen = &candidates.back();
@@ -406,6 +422,7 @@ void NaturalSpawner::_attempt(ServerNetworkHandler &owner, Level &level, const V
     const SpawnHerd &herd = condition.mHerds[(size_t) _nextInt((int32_t) condition.mHerds.size())];
     const int32_t size = herd.mMinSize + _nextInt(herd.mMaxSize - herd.mMinSize + 1);
 
+    int32_t spawned = 0;
     for (int32_t member = 0; member < size; ++member) {
         SpawnSite memberSite = site;
         if (member > 0) {
@@ -426,8 +443,10 @@ void NaturalSpawner::_attempt(ServerNetworkHandler &owner, Level &level, const V
                                                 _nextInt(permutationWeight(condition)));
         const Vector3f position((float) memberSite.mPosition.x + 0.5f, (float) memberSite.mPosition.y,
                                 (float) memberSite.mPosition.z + 0.5f);
-        owner.spawnActor(level, identifier, position, [](ServerActor &actor) {
+        if (owner.spawnActor(level, identifier, position, [](ServerActor &actor) {
             actor.setPersistent(false);
-        });
+        }) != nullptr)
+            ++spawned;
     }
+    return spawned;
 }
