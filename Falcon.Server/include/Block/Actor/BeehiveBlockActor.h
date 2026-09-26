@@ -49,7 +49,7 @@ private:
 
     bool _isFireNearby(Level &level) const;
 
-    void _release(ServerNetworkHandler &owner, Level &level, const Occupant &occupant, int face,
+    bool _release(ServerNetworkHandler &owner, Level &level, const Occupant &occupant, int face,
                   const std::string &event, bool deliverNectar);
 
     std::vector<Occupant> mOccupants;

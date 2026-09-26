@@ -149,11 +149,14 @@ void BeehiveBlockActor::evacuate(ServerNetworkHandler &owner, bool hiveRemains) 
 
     std::vector<Occupant> occupants;
     occupants.swap(mOccupants);
-    for (const Occupant &occupant: occupants) {
+    for (Occupant &occupant: occupants) {
         const int face = faces.empty()
                          ? -1
                          : faces[std::uniform_int_distribution<size_t>(0, faces.size() - 1)(hiveRandom())];
-        _release(owner, level, occupant, face, event, false);
+        if (!_release(owner, level, occupant, face, event, false) && hiveRemains) {
+            occupant.mTicksLeftToStay = BLOCKED_EXIT_RETRY_TICKS;
+            mOccupants.push_back(std::move(occupant));
+        }
     }
 }
 
@@ -183,6 +186,7 @@ bool BeehiveBlockActor::tick(ServerNetworkHandler &owner) {
     const bool sheltered = level.isRaining() || level.isNight();
     std::vector<int> faces;
     bool facesResolved = false;
+    std::vector<Occupant> refused;
 
     for (size_t index = 0; index < mOccupants.size();) {
         Occupant &occupant = mOccupants[index];
@@ -207,11 +211,17 @@ bool BeehiveBlockActor::tick(ServerNetworkHandler &owner) {
             continue;
         }
 
-        const Occupant released = std::move(occupant);
+        Occupant released = std::move(occupant);
         mOccupants.erase(mOccupants.begin() + (std::ptrdiff_t) index);
         const int face = faces[std::uniform_int_distribution<size_t>(0, faces.size() - 1)(hiveRandom())];
-        _release(owner, level, released, face, EXITED_HIVE_EVENT, true);
+        if (!_release(owner, level, released, face, EXITED_HIVE_EVENT, true)) {
+            released.mTicksLeftToStay = BLOCKED_EXIT_RETRY_TICKS;
+            refused.push_back(std::move(released));
+        }
     }
+
+    for (Occupant &occupant: refused)
+        mOccupants.push_back(std::move(occupant));
 
     return true;
 }
@@ -249,11 +259,11 @@ bool BeehiveBlockActor::_isFireNearby(Level &level) const {
     return false;
 }
 
-void BeehiveBlockActor::_release(ServerNetworkHandler &owner, Level &level, const Occupant &occupant, int face,
+bool BeehiveBlockActor::_release(ServerNetworkHandler &owner, Level &level, const Occupant &occupant, int face,
                                  const std::string &event, bool deliverNectar) {
     const std::string identifier = storedIdentifier(occupant.mActorIdentifier);
     if (identifier.empty())
-        return;
+        return true;
 
     const Vector3i hive = mPosition;
     ServerActor *actor = owner.spawnActor(level, identifier, blockCenter(hive),
@@ -273,11 +283,14 @@ void BeehiveBlockActor::_release(ServerNetworkHandler &owner, Level &level, cons
         spawned.setRotation(Vector3f(0.0f, LookControl::yawTowards(position, ahead), 0.0f));
     });
 
+    if (actor == nullptr)
+        return false;
+
     owner.playLevelSound(level, EXIT_SOUND, blockCenter(hive));
 
     MobActor *mob = dynamic_cast<MobActor *>(actor);
     if (mob == nullptr)
-        return;
+        return true;
 
     mob->setHealth(occupant.mSaveData.getFloat(TAG_HEALTH, mob->getHealth()));
 
@@ -292,4 +305,5 @@ void BeehiveBlockActor::_release(ServerNetworkHandler &owner, Level &level, cons
         mob->setHomePosition(blockCenter(hive));
 
     mob->fireEvent(owner, event);
+    return true;
 }
