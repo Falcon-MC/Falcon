@@ -50,6 +50,86 @@ namespace {
 
         return values[index].asFloat();
     }
+
+    const char *const HEALTH_ATTRIBUTE = "minecraft:health";
+
+    Tag attributesTag(const ActorAttributes &attributes) {
+        std::vector<Tag> list;
+        for (const AttributeData &attribute: attributes.getAll()) {
+            Tag entry = Tag::ofCompound();
+            entry.putString("Name", attribute.mName);
+            entry.putFloat("Base", attribute.mName == HEALTH_ATTRIBUTE ? attribute.mMaximum : attribute.mValue);
+            entry.putFloat("Current", attribute.mValue);
+            entry.putFloat("Min", attribute.mMinimum);
+            entry.putFloat("Max", attribute.mMaximum);
+            entry.putFloat("DefaultMin", attribute.mDefaultMinimum);
+            entry.putFloat("DefaultMax", attribute.mDefaultMaximum);
+            list.push_back(std::move(entry));
+        }
+        return Tag::ofList(Tag::Type::Compound, std::move(list));
+    }
+
+    Tag propertiesTag(const ServerActor &actor) {
+        Tag properties = Tag::ofCompound();
+        const std::vector<ActorPropertyDescription> *schema = actor.getPropertySchema();
+        if (schema == nullptr)
+            return properties;
+
+        for (const ActorPropertyDescription &descriptor: *schema) {
+            switch (descriptor.mType) {
+                case ActorPropertyDescription::Type::Int:
+                    properties.putInt(descriptor.mName, actor.getIntProperty(descriptor.mName, descriptor.mDefaultInt));
+                    break;
+                case ActorPropertyDescription::Type::Float:
+                    properties.putFloat(descriptor.mName,
+                                        actor.getFloatProperty(descriptor.mName, descriptor.mDefaultFloat));
+                    break;
+                case ActorPropertyDescription::Type::Bool:
+                    properties.putByte(descriptor.mName,
+                                       actor.getIntProperty(descriptor.mName, descriptor.mDefaultBool ? 1 : 0) != 0
+                                       ? 1 : 0);
+                    break;
+                case ActorPropertyDescription::Type::Enum: {
+                    const int32_t index = actor.getIntProperty(descriptor.mName, descriptor.mDefaultInt);
+                    if (index >= 0 && index < (int32_t) descriptor.mEnumValues.size())
+                        properties.putString(descriptor.mName, descriptor.mEnumValues[(size_t) index]);
+                    break;
+                }
+            }
+        }
+        return properties;
+    }
+
+    void loadProperties(ServerActor &actor, const Tag &properties) {
+        const std::vector<ActorPropertyDescription> *schema = actor.getPropertySchema();
+        if (schema == nullptr)
+            return;
+
+        for (const ActorPropertyDescription &descriptor: *schema) {
+            const Tag *value = properties.get(descriptor.mName);
+            if (value == nullptr)
+                continue;
+
+            switch (descriptor.mType) {
+                case ActorPropertyDescription::Type::Int:
+                    actor.setIntProperty(descriptor.mName, properties.getInt(descriptor.mName, descriptor.mDefaultInt));
+                    break;
+                case ActorPropertyDescription::Type::Float:
+                    actor.setFloatProperty(descriptor.mName,
+                                           properties.getFloat(descriptor.mName, descriptor.mDefaultFloat));
+                    break;
+                case ActorPropertyDescription::Type::Bool:
+                    actor.setIntProperty(descriptor.mName, properties.getByte(descriptor.mName, 0) != 0 ? 1 : 0);
+                    break;
+                case ActorPropertyDescription::Type::Enum: {
+                    const int32_t index = descriptor.findEnumIndex(properties.getString(descriptor.mName, std::string()));
+                    if (index >= 0)
+                        actor.setIntProperty(descriptor.mName, index);
+                    break;
+                }
+            }
+        }
+    }
 }
 
 ServerActor::ServerActor(uint64_t runtimeId, const std::string &identifier)
@@ -334,27 +414,37 @@ Tag ServerActor::saveNbt() const {
     Tag data = Tag::ofCompound();
 
     data.putString("identifier", mIdentifier);
+    data.putLong("UniqueID", getUniqueId());
     data.putLong(FalconDataVersion::TAG, FalconDataVersion::CURRENT);
     data.put("Pos", floatList3(mPosition.x, mPosition.y, mPosition.z));
-    data.put("Rotation", floatList3(mRotation.x, mRotation.y, mRotation.z));
+    Tag rotation = Tag::ofList(Tag::Type::Float);
+    rotation.addToList(Tag::ofFloat(mRotation.y));
+    rotation.addToList(Tag::ofFloat(mRotation.x));
+    data.put("Rotation", rotation);
     data.put("Motion", floatList3(mMotion.x, mMotion.y, mMotion.z));
 
-    data.putFloat("Health", getHealth());
-    data.putFloat("MaxHealth", getMaxHealth());
-    data.putString("NameTag", mNameTag);
+    data.put("Attributes", attributesTag(getAttributes()));
+    if (!mNameTag.empty())
+        data.putString("CustomName", mNameTag);
     data.putByte("Persistent", mPersistent ? 1 : 0);
     data.putLong("OwnerUniqueId", mOwnerUniqueId);
     saveTags(data);
 
-    Tag intProperties = Tag::ofCompound();
-    for (const auto &entry: mIntProperties)
-        intProperties.putInt(entry.first, entry.second);
-    data.put("IntProperties", intProperties);
+    if (hasPassengers()) {
+        std::vector<Tag> links;
+        const std::vector<int64_t> &passengers = getPassengers();
+        for (size_t index = 0; index < passengers.size(); ++index) {
+            Tag link = Tag::ofCompound();
+            link.putLong("entityID", passengers[index]);
+            link.putInt("linkID", (int32_t) index);
+            links.push_back(std::move(link));
+        }
+        data.put("LinksTag", Tag::ofList(Tag::Type::Compound, std::move(links)));
+    }
 
-    Tag floatProperties = Tag::ofCompound();
-    for (const auto &entry: mFloatProperties)
-        floatProperties.putFloat(entry.first, entry.second);
-    data.put("FloatProperties", floatProperties);
+    const Tag properties = propertiesTag(*this);
+    if (!properties.getKeys().empty())
+        data.put("properties", properties);
 
     data.put("DynamicProperties", serializeDynamicProperties(mDynamicProperties));
 
@@ -365,25 +455,63 @@ void ServerActor::loadNbt(const Tag &data) {
     if (!data.isCompound())
         return;
 
+    if (data.contains("UniqueID"))
+        setUniqueId(data.getLong("UniqueID"));
+
     mPosition = Vector3f(listValue(data, "Pos", 0, mPosition.x),
                          listValue(data, "Pos", 1, mPosition.y),
                          listValue(data, "Pos", 2, mPosition.z));
 
-    mRotation = Vector3f(listValue(data, "Rotation", 0, 0.0f),
-                         listValue(data, "Rotation", 1, 0.0f),
-                         listValue(data, "Rotation", 2, 0.0f));
+    if (data.contains(FalconDataVersion::TAG) && !data.contains("Attributes")) {
+        mRotation = Vector3f(listValue(data, "Rotation", 0, 0.0f),
+                             listValue(data, "Rotation", 1, 0.0f),
+                             listValue(data, "Rotation", 2, 0.0f));
+    } else {
+        const float yaw = listValue(data, "Rotation", 0, 0.0f);
+        mRotation = Vector3f(listValue(data, "Rotation", 1, 0.0f), yaw, yaw);
+    }
 
     mMotion = Vector3f(listValue(data, "Motion", 0, 0.0f),
                        listValue(data, "Motion", 1, 0.0f),
                        listValue(data, "Motion", 2, 0.0f));
 
-    setMaxHealth(data.getFloat("MaxHealth", getMaxHealth()));
-    setHealth(data.getFloat("Health", getHealth()));
-    mNameTag = data.getString("NameTag", mNameTag);
+    const Tag *attributes = data.get("Attributes");
+    if (attributes != nullptr && attributes->isList()) {
+        for (const Tag &attribute: attributes->getList()) {
+            if (!attribute.isCompound())
+                continue;
+
+            const std::string name = attribute.getString("Name", std::string());
+            if (name == HEALTH_ATTRIBUTE) {
+                setMaxHealth(attribute.getFloat("Max", getMaxHealth()));
+                setHealth(attribute.getFloat("Current", getHealth()));
+            } else if (!name.empty()) {
+                getAttributes().setClamped(name, attribute.getFloat("Current", getAttributes().get(name)));
+            }
+        }
+    } else {
+        setMaxHealth(data.getFloat("MaxHealth", getMaxHealth()));
+        setHealth(data.getFloat("Health", getHealth()));
+    }
+
+    mNameTag = data.getString("CustomName", data.getString("NameTag", mNameTag));
     mPersistent = data.getByte("Persistent", 1) != 0;
     mOwnerUniqueId = data.getLong("OwnerUniqueId", mOwnerUniqueId);
 
     loadTags(data);
+
+    mPendingPassengers.clear();
+    const Tag *links = data.get("LinksTag");
+    if (links != nullptr && links->isList()) {
+        for (const Tag &link: links->getList()) {
+            if (link.isCompound() && link.contains("entityID"))
+                mPendingPassengers.push_back(link.getLong("entityID"));
+        }
+    }
+
+    const Tag *properties = data.get("properties");
+    if (properties != nullptr && properties->isCompound())
+        loadProperties(*this, *properties);
 
     const Tag *intProperties = data.get("IntProperties");
     if (intProperties != nullptr && intProperties->isCompound()) {

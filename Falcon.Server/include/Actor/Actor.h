@@ -34,7 +34,11 @@ public:
 
     uint64_t getRuntimeId() const { return mRuntimeId; }
 
-    int64_t getUniqueId() const { return (int64_t) mRuntimeId; }
+    int64_t getUniqueId() const { return mUniqueId; }
+
+    void setUniqueId(int64_t uniqueId) { mUniqueId = uniqueId; }
+
+    bool hasAssignedUniqueId() const { return mUniqueId != (int64_t) mRuntimeId; }
 
     const Vector3f &getPosition() const { return mPosition; }
 
@@ -281,6 +285,7 @@ protected:
     static const int FOOD_TICK_PERIOD = 80;
 
     uint64_t mRuntimeId;
+    int64_t mUniqueId;
     int64_t mVehicleId = 0;
     std::vector<int64_t> mPassengers;
     Vector3f mPosition;

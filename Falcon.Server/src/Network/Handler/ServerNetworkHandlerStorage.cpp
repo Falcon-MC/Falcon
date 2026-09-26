@@ -1,11 +1,13 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include "Actor/ActorClassRegistry.h"
+#include "Actor/Misc/ItemActor.h"
 #include "Actor/Mob/MobActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockActorStore.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Level/Level.h"
+#include "Network/Handler/ItemActorHandler.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include <chrono>
@@ -25,6 +27,8 @@ void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player) {
 void ServerNetworkHandler::_loadPlayerData(ServerPlayer &player) {
     player.setPosition(mLevel.getSpawnPositionForPlayer());
     player.setOp(mOps.isOp(player.getName()));
+
+    player.setUniqueId(allocateActorUniqueId());
 
     Tag data;
     if (!mPlayerData.loadData(player.getName(), data)) {
@@ -51,8 +55,15 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
         if (identifier.empty())
             continue;
 
+        if (identifier == ItemActor::IDENTIFIER) {
+            ItemActorHandler::restoreItem(*this, level, tag);
+            continue;
+        }
+
+        if (tag.contains("UniqueID") && mActors.count(tag.getLong("UniqueID")) != 0)
+            continue;
+
         const uint64_t runtimeId = allocateRuntimeId();
-        const int64_t uniqueId = (int64_t) runtimeId;
 
         std::unique_ptr<ServerActor> actor;
         if (identifier == FallingBlock::IDENTIFIER)
@@ -80,12 +91,13 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
             mob->getEquipment().loadNbt(tag, mCodecContext);
         actor->setDimension(level.getDimensionType());
 
-        ServerActor *result = actor.get();
-        mActors[uniqueId] = std::move(actor);
+        ServerActor *result = _registerActor(std::move(actor));
 
         broadcastActorSpawn(*result);
         mScriptEngine.onEntityLoad(*result);
     }
+
+    _resolvePendingRides();
 }
 
 void ServerNetworkHandler::loadBlockActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ) {
@@ -119,6 +131,7 @@ void ServerNetworkHandler::saveActorsForChunk(Level &level, int32_t chunkX, int3
             culled.push_back(entry.first);
     }
 
+    ItemActorHandler::saveItemsInChunk(*this, level, chunkX, chunkZ, entities, cull);
     level.saveEntities(chunkX, chunkZ, entities);
 
     for (const int64_t uniqueId: culled) {
@@ -132,7 +145,7 @@ void ServerNetworkHandler::saveActorsForChunk(Level &level, int32_t chunkX, int3
             continue;
 
         broadcastActorRemove(*it->second);
-        mActors.erase(it);
+        _unregisterActor(uniqueId);
     }
 }
 

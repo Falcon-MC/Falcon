@@ -26,6 +26,10 @@ namespace {
     const int32_t FINALIZED_STATE_NEEDS_POPULATION = 1;
     const int32_t FINALIZED_STATE_DONE = 2;
     const char *PENDING_BLOCK_CHANGES_PREFIX = "falcon_pending_block_changes";
+    const std::string ACTOR_PREFIX = "actorprefix";
+    const std::string ACTOR_DIGEST_PREFIX = "digp";
+    const char *ACTOR_UNIQUE_ID_TAG = "UniqueID";
+    const size_t ACTOR_STORAGE_ID_SIZE = 8;
 
     int64_t packBlockPosition(int32_t x, int32_t y, int32_t z) {
         return (((int64_t) (x + 30000000) & 0x3FFFFFFLL) << 37)
@@ -434,22 +438,54 @@ bool LevelStorage::erasePendingBlockChanges(int32_t chunkX, int32_t chunkZ) {
     return status.ok() || status.IsNotFound();
 }
 
+std::string LevelStorage::_makeActorDigestKey(int32_t chunkX, int32_t chunkZ) const {
+    std::string key = ACTOR_DIGEST_PREFIX;
+    _appendLInt(key, chunkX);
+    _appendLInt(key, chunkZ);
+
+    if (mDimensionId != 0)
+        _appendLInt(key, mDimensionId);
+
+    return key;
+}
+
+std::string LevelStorage::_makeActorStorageId(int64_t uniqueId) {
+    const uint32_t startCount = (uint32_t) ((uint64_t) uniqueId >> 32);
+    const uint32_t counter = (uint32_t) uniqueId;
+    const uint32_t storedStart = 0u - startCount;
+
+    std::string id;
+    for (int shift = 24; shift >= 0; shift -= 8)
+        id.push_back((char) ((storedStart >> shift) & 0xff));
+    for (int shift = 24; shift >= 0; shift -= 8)
+        id.push_back((char) ((counter >> shift) & 0xff));
+    return id;
+}
+
 bool LevelStorage::saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities) {
     if (mDb == nullptr)
         return false;
 
-    const std::string key = _makeKey(chunkX, chunkZ, LevelDbTag::Entities);
+    leveldb::WriteBatch batch;
+    std::string digest;
 
-    if (entities.empty()) {
-        const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), key);
-        return status.ok() || status.IsNotFound();
+    for (const Tag &entity: entities) {
+        if (!entity.contains(ACTOR_UNIQUE_ID_TAG)) {
+            LOG_WARN(LogAreaID::Server, "Skipped an entity without a unique id in chunk %d %d", chunkX, chunkZ);
+            continue;
+        }
+
+        const std::string storageId = _makeActorStorageId(entity.getLong(ACTOR_UNIQUE_ID_TAG));
+        BinaryStream stream;
+        NbtIo::writeTag(stream, entity, NbtVariant::LittleEndian);
+        batch.Put(ACTOR_PREFIX + storageId, stream.getBuffer());
+        digest += storageId;
     }
 
-    BinaryStream stream;
-    for (const Tag &entity: entities)
-        NbtIo::writeTag(stream, entity, NbtVariant::LittleEndian);
+    batch.Put(_makeActorDigestKey(chunkX, chunkZ), digest);
+    batch.Delete(_makeKey(chunkX, chunkZ, LevelDbTag::LegacyEntities));
 
-    const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), key, stream.getBuffer());
+    const leveldb::Status status = mDb->Write(leveldb::WriteOptions(), &batch);
     if (!status.ok()) {
         LOG_WARN(LogAreaID::Server, "Could not save entities for chunk %d %d: %s", chunkX, chunkZ,
                  status.ToString().c_str());
@@ -459,27 +495,50 @@ bool LevelStorage::saveEntities(int32_t chunkX, int32_t chunkZ, const std::vecto
     return true;
 }
 
+bool LevelStorage::eraseEntity(int64_t uniqueId) {
+    if (mDb == nullptr)
+        return false;
+
+    const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), ACTOR_PREFIX + _makeActorStorageId(uniqueId));
+    return status.ok() || status.IsNotFound();
+}
+
 std::vector<Tag> LevelStorage::loadEntities(int32_t chunkX, int32_t chunkZ) {
     std::vector<Tag> entities;
 
     if (mDb == nullptr)
         return entities;
 
-    std::string data;
-    const leveldb::Status status = mDb->Get(_readOptions(),
-                                            _makeKey(chunkX, chunkZ, LevelDbTag::Entities), &data);
+    std::string digest;
+    if (mDb->Get(_readOptions(), _makeActorDigestKey(chunkX, chunkZ), &digest).ok()) {
+        for (size_t offset = 0; offset + ACTOR_STORAGE_ID_SIZE <= digest.size(); offset += ACTOR_STORAGE_ID_SIZE) {
+            std::string data;
+            if (!mDb->Get(_readOptions(), ACTOR_PREFIX + digest.substr(offset, ACTOR_STORAGE_ID_SIZE), &data).ok())
+                continue;
 
-    if (!status.ok())
+            ReadOnlyBinaryStream stream(data);
+            stream.setEncodingSettings(_storageEncodingSettings());
+
+            try {
+                entities.push_back(NbtIo::readTag(stream, NbtVariant::LittleEndian));
+            } catch (const std::exception &exception) {
+                LOG_WARN(LogAreaID::Server, "Malformed entity in chunk %d %d: %s", chunkX, chunkZ, exception.what());
+            }
+        }
+    }
+
+    std::string legacy;
+    if (!mDb->Get(_readOptions(), _makeKey(chunkX, chunkZ, LevelDbTag::LegacyEntities), &legacy).ok())
         return entities;
 
-    ReadOnlyBinaryStream stream(data);
+    ReadOnlyBinaryStream stream(legacy);
     stream.setEncodingSettings(_storageEncodingSettings());
 
     try {
         while (!stream.feof())
             entities.push_back(NbtIo::readTag(stream, NbtVariant::LittleEndian));
     } catch (const std::exception &exception) {
-        LOG_WARN(LogAreaID::Server, "Malformed entities for chunk %d %d: %s", chunkX, chunkZ,
+        LOG_WARN(LogAreaID::Server, "Malformed legacy entities for chunk %d %d: %s", chunkX, chunkZ,
                  exception.what());
     }
 
@@ -622,7 +681,7 @@ bool LevelStorage::loadGameRules(Tag &rules) {
 
 void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ,
                                  int32_t gameType, int32_t difficulty, int64_t seed, int64_t time,
-                                 bool bonusChestEnabled, bool bonusChestSpawned) const {
+                                 bool bonusChestEnabled, bool bonusChestSpawned, int64_t worldStartCount) const {
     if (mPath.empty())
         return;
 
@@ -646,6 +705,7 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
     data.putInt("limitedWorldOriginY", spawnY);
     data.putInt("limitedWorldOriginZ", spawnZ);
     data.putLong("LastPlayed", 0);
+    data.putLong("worldStartCount", worldStartCount);
 
     BinaryStream body;
     NbtIo::writeTag(body, data, NbtVariant::LittleEndian);

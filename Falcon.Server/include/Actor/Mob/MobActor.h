@@ -19,6 +19,7 @@
 #include "Server/PropertiesSettings.h"
 
 #include <cstdint>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -168,12 +169,18 @@ public:
     void finishBreeding(ServerNetworkHandler &owner);
 
     bool isTamed() const {
-        return !mTamedBy.empty();
+        return mOwnerId != NO_OWNER || !mLegacyOwnerName.empty();
     }
 
-    const std::string &getTamedBy() const {
-        return mTamedBy;
+    int64_t getOwnerId() const {
+        return mOwnerId;
     }
+
+    bool isOwnedBy(const Actor &actor) const {
+        return mOwnerId != NO_OWNER && actor.getUniqueId() == mOwnerId;
+    }
+
+    static constexpr int64_t NO_OWNER = -1;
 
     bool isSitting() const {
         return mSitting;
@@ -229,6 +236,16 @@ public:
 
     virtual float getRideSprintMultiplier() const {
         return 1.0f;
+    }
+
+    virtual bool canSpawnNaturally(Level &level, const Vector3i &position, int32_t biomeId, int32_t light,
+                                   std::mt19937 &random) const {
+        (void) level;
+        (void) position;
+        (void) biomeId;
+        (void) light;
+        (void) random;
+        return true;
     }
 
     RideControlState &getRideControl() {
@@ -298,6 +315,10 @@ private:
 
     const json::Value *_equippableSlot(int32_t index) const;
 
+    const ItemStack &_equippableItem(int32_t index) const;
+
+    void _setEquippableItem(int32_t index, ItemStack item);
+
     bool _equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &slotName);
 
     void _dropEquipmentSlot(ServerNetworkHandler &owner, const std::string &slotName, float yOffset);
@@ -315,8 +336,9 @@ private:
     int32_t mBreedCooldown = 0;
     int32_t mInteractCooldown = 0;
     int32_t mAgeTicks = 0;
-    std::string mTamedBy;
-    uint64_t mOwnerRuntimeId = 0;
+    int64_t mOwnerId = NO_OWNER;
+    std::string mLegacyOwnerName;
+    int64_t mSyncedOwnerId = NO_OWNER;
     bool mSitting = false;
     bool mGoalsRegistered = false;
     bool mGoalsDirty = false;

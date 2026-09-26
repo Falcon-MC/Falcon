@@ -31,7 +31,7 @@ bool FollowParentGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (parent == nullptr || mob.distanceSquaredTo(*parent) < CLOSE_DISTANCE_SQUARED)
         return false;
 
-    mParentId = (int64_t) parent->getRuntimeId();
+    mParentId = parent->getUniqueId();
     return true;
 }
 

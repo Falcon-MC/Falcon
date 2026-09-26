@@ -267,6 +267,8 @@ public:
         mFarFromPlayerTicks = ticks;
     }
 
+    std::vector<int64_t> &getPendingPassengers() { return mPendingPassengers; }
+
     virtual bool shouldSave() const { return isAlive() && !mIsProjectile && !hasOwnerPlayer(); }
 
     virtual Tag saveNbt() const;
@@ -290,6 +292,7 @@ private:
     std::string mNameTag;
     bool mPersistent = true;
     int32_t mFarFromPlayerTicks = 0;
+    std::vector<int64_t> mPendingPassengers;
 
     std::unordered_map<std::string, int32_t> mIntProperties;
     std::unordered_map<std::string, float> mFloatProperties;

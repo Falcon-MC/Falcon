@@ -162,9 +162,9 @@ namespace {
 ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                                               const std::function<void(ServerActor &)> &configure) {
     const uint64_t runtimeId = allocateRuntimeId();
-    const int64_t uniqueId = (int64_t) runtimeId;
 
     std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(runtimeId, identifier);
+    actor->setUniqueId(allocateActorUniqueId());
     actor->getAttributes() = ActorAttributes::createActorDefaults();
     actor->setDimension(level.getDimensionType());
     actor->setPosition(position);
@@ -200,8 +200,7 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
             return nullptr;
     }
 
-    ServerActor *result = actor.get();
-    mActors[uniqueId] = std::move(actor);
+    ServerActor *result = _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
     mScriptEngine.onEntitySpawn(*result);
@@ -243,7 +242,6 @@ ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::strin
 FallingBlock *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockState &state,
                                                            const Vector3f &position) {
     const uint64_t runtimeId = allocateRuntimeId();
-    const int64_t uniqueId = (int64_t) runtimeId;
 
     std::unique_ptr<FallingBlock> actor(new FallingBlock(runtimeId, state));
     actor->getAttributes() = ActorAttributes::createActorDefaults();
@@ -252,7 +250,7 @@ FallingBlock *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockS
     actor->setHighestPosition(position.y);
 
     FallingBlock *result = actor.get();
-    mActors[uniqueId] = std::move(actor);
+    _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
     mScriptEngine.onEntitySpawn(*result);
@@ -262,7 +260,6 @@ FallingBlock *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockS
 PrimedTntActor *ServerNetworkHandler::spawnPrimedTnt(Level &level, const Vector3f &position, const Vector3f &motion,
                                                      int32_t fuse) {
     const uint64_t runtimeId = allocateRuntimeId();
-    const int64_t uniqueId = (int64_t) runtimeId;
 
     std::unique_ptr<PrimedTntActor> actor(new PrimedTntActor(runtimeId, fuse));
     actor->getAttributes() = ActorAttributes::createActorDefaults();
@@ -271,7 +268,7 @@ PrimedTntActor *ServerNetworkHandler::spawnPrimedTnt(Level &level, const Vector3
     actor->setMotion(motion);
 
     PrimedTntActor *result = actor.get();
-    mActors[uniqueId] = std::move(actor);
+    _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
     mScriptEngine.onEntitySpawn(*result);
@@ -301,6 +298,67 @@ void ServerNetworkHandler::spawnExperienceOrbs(Level &level, const Vector3f &pos
 ServerActor *ServerNetworkHandler::getActor(int64_t uniqueId) {
     auto it = mActors.find(uniqueId);
     return it == mActors.end() ? nullptr : it->second.get();
+}
+
+ServerActor *ServerNetworkHandler::getActorByRuntimeId(uint64_t runtimeId) {
+    auto it = mActorUniqueIdsByRuntimeId.find(runtimeId);
+    return it == mActorUniqueIdsByRuntimeId.end() ? nullptr : getActor(it->second);
+}
+
+int64_t ServerNetworkHandler::allocateActorUniqueId() {
+    return (int64_t) (((uint64_t) mLevel.getWorldStartCount() << 32) | ++mActorUniqueIdCounter);
+}
+
+ServerActor *ServerNetworkHandler::_registerActor(std::unique_ptr<ServerActor> actor) {
+    if (!actor->hasAssignedUniqueId() || mActors.count(actor->getUniqueId()) != 0)
+        actor->setUniqueId(allocateActorUniqueId());
+
+    ServerActor *result = actor.get();
+    mActorUniqueIdsByRuntimeId[result->getRuntimeId()] = result->getUniqueId();
+    mActors[result->getUniqueId()] = std::move(actor);
+    if (!result->getPendingPassengers().empty())
+        mVehiclesWithPendingPassengers.insert(result->getUniqueId());
+    return result;
+}
+
+void ServerNetworkHandler::_unregisterActor(int64_t uniqueId) {
+    auto it = mActors.find(uniqueId);
+    if (it == mActors.end())
+        return;
+
+    mVehiclesWithPendingPassengers.erase(uniqueId);
+    mActorUniqueIdsByRuntimeId.erase(it->second->getRuntimeId());
+    mActors.erase(it);
+}
+
+void ServerNetworkHandler::_resolvePendingRides() {
+    std::vector<int64_t> resolved;
+
+    for (const int64_t vehicleId: mVehiclesWithPendingPassengers) {
+        ServerActor *vehicle = getActor(vehicleId);
+        if (vehicle == nullptr) {
+            resolved.push_back(vehicleId);
+            continue;
+        }
+
+        std::vector<int64_t> &pending = vehicle->getPendingPassengers();
+        for (auto it = pending.begin(); it != pending.end();) {
+            ServerActor *passenger = getActor(*it);
+            if (passenger == nullptr) {
+                ++it;
+                continue;
+            }
+
+            RideSystem::mount(*this, *passenger, *vehicle, false);
+            it = pending.erase(it);
+        }
+
+        if (pending.empty())
+            resolved.push_back(vehicleId);
+    }
+
+    for (const int64_t vehicleId: resolved)
+        mVehiclesWithPendingPassengers.erase(vehicleId);
 }
 
 ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
@@ -658,7 +716,8 @@ void ServerNetworkHandler::removeActor(int64_t uniqueId) {
         RideSystem::dismount(*this, *it->second, false);
 
     broadcastActorRemove(*it->second);
-    mActors.erase(it);
+    getLevelFor(*it->second).eraseEntity(uniqueId);
+    _unregisterActor(uniqueId);
 }
 
 bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &actor) const {
@@ -817,7 +876,7 @@ void ServerNetworkHandler::changeActorDimension(Actor &actor, DimensionType dime
         destination.saveEntities(chunkX, chunkZ, entities);
     }
 
-    mDetachedActors.push_back((int64_t) traveller->getRuntimeId());
+    mDetachedActors.push_back(traveller->getUniqueId());
     destination.releaseChunkIfUnused(chunkX, chunkZ);
 }
 
@@ -1659,6 +1718,6 @@ void ServerNetworkHandler::tickActors() {
         removeActor(uniqueId);
 
     for (const int64_t uniqueId: mDetachedActors)
-        mActors.erase(uniqueId);
+        _unregisterActor(uniqueId);
     mDetachedActors.clear();
 }

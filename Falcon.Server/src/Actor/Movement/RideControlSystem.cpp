@@ -31,6 +31,7 @@ namespace {
     const char *const UNDERWATER_MOVEMENT = "minecraft:underwater_movement";
     const char *const FLYING_SPEED = "minecraft:flying_speed";
     const char *const IS_SADDLED = "minecraft:is_saddled";
+    const char *const IS_TAMED = "minecraft:is_tamed";
     const char *const IS_CHESTED = "minecraft:is_chested";
     const char *const CAN_POWER_JUMP = "minecraft:can_power_jump";
     const char *const DASH_ACTION = "minecraft:dash_action";
@@ -857,6 +858,7 @@ void RideControlSystem::syncFlags(ServerNetworkHandler &owner, MobActor &mob) {
     const bool air = type == RideControlType::Air;
     const bool water = type == RideControlType::Water;
 
+    setRideFlag(owner, mob, ActorFlag::Tamed, mob.isTamed() || mob.getComponent(IS_TAMED) != nullptr);
     setRideFlag(owner, mob, ActorFlag::Saddled, mob.getComponent(IS_SADDLED) != nullptr);
     setRideFlag(owner, mob, ActorFlag::Chested, mob.getComponent(IS_CHESTED) != nullptr);
     setRideFlag(owner, mob, ActorFlag::CanPowerJump, mob.getComponent(CAN_POWER_JUMP) != nullptr);

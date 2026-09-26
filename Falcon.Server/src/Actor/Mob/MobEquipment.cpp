@@ -29,6 +29,7 @@ namespace {
     const char *const TAG_ARMOR = "Armor";
     const char *const TAG_BODY = "Body";
     const char *const TAG_INVENTORY = "EquippableItems";
+    const char *const TAG_CHEST_ITEMS = "ChestItems";
     const char *const SLOT_NAMES[MobEquipment::SLOT_COUNT] = {
             "slot.weapon.mainhand", "slot.weapon.offhand", "slot.armor.head", "slot.armor.chest", "slot.armor.legs",
             "slot.armor.feet", "slot.armor.body"
@@ -304,19 +305,17 @@ void MobEquipment::saveNbt(Tag &data) const {
     data.put(TAG_OFFHAND, singleItemList(mSlots[OFFHAND]));
 
     std::vector<Tag> armor;
-    for (int slot = HEAD; slot <= FEET; ++slot)
+    for (int slot = HEAD; slot <= BODY; ++slot)
         armor.push_back(ItemStackNbt::write(mSlots[(size_t) slot]));
     data.put(TAG_ARMOR, Tag::ofList(Tag::Type::Compound, std::move(armor)));
-    data.put(TAG_BODY, singleItemList(mSlots[BODY]));
+
+    if (mInventory.empty())
+        return;
 
     std::vector<Tag> inventory;
-    for (size_t slot = 0; slot < mInventory.size(); ++slot) {
-        if (mInventory[slot].isAir())
-            continue;
-
+    for (size_t slot = 0; slot < mInventory.size(); ++slot)
         inventory.push_back(ItemStackNbt::write(mInventory[slot], (int) slot));
-    }
-    data.put(TAG_INVENTORY, Tag::ofList(Tag::Type::Compound, std::move(inventory)));
+    data.put(TAG_CHEST_ITEMS, Tag::ofList(Tag::Type::Compound, std::move(inventory)));
 }
 
 void MobEquipment::loadNbt(const Tag &data, const PacketCodecContext &context) {
@@ -336,7 +335,9 @@ void MobEquipment::loadNbt(const Tag &data, const PacketCodecContext &context) {
         mSlots[BODY] = ItemStackNbt::read(body->front(), context);
 
     mInventory.clear();
-    const std::vector<Tag> *inventory = itemList(data, TAG_INVENTORY);
+    const std::vector<Tag> *inventory = itemList(data, TAG_CHEST_ITEMS);
+    if (inventory == nullptr)
+        inventory = itemList(data, TAG_INVENTORY);
     if (inventory != nullptr) {
         for (const Tag &entry: *inventory) {
             const int slot = ItemStackNbt::readSlot(entry);
@@ -349,7 +350,10 @@ void MobEquipment::loadNbt(const Tag &data, const PacketCodecContext &context) {
     if (armor == nullptr)
         return;
 
-    const size_t count = std::min(armor->size(), (size_t) (FEET - HEAD + 1));
-    for (size_t index = 0; index < count; ++index)
-        mSlots[(size_t) HEAD + index] = ItemStackNbt::read((*armor)[index], context);
+    const size_t count = std::min(armor->size(), (size_t) (BODY - HEAD + 1));
+    for (size_t index = 0; index < count; ++index) {
+        const ItemStack item = ItemStackNbt::read((*armor)[index], context);
+        if (!item.isAir() || HEAD + (int) index != BODY)
+            mSlots[(size_t) HEAD + index] = item;
+    }
 }

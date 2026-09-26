@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Actor/Actor.h"
+#include "Core/NBT/Tag.h"
+#include "Protocol/PacketCodecContext.h"
 #include "Protocol/Types/ItemStack.h"
 
 class ItemActor : public Actor {
@@ -8,10 +10,11 @@ public:
     static const int DEFAULT_PICKUP_DELAY = 10;
     static const int LIFETIME_TICKS = 6000;
     static const int MAX_HEALTH = 5;
+    static constexpr const char *IDENTIFIER = "minecraft:item";
 
     ItemActor(uint64_t runtimeId, const ItemStack &item);
 
-    const char *getIdentifier() const override { return "minecraft:item"; }
+    const char *getIdentifier() const override { return IDENTIFIER; }
 
     const ItemStack &getItem() const { return mItem; }
 
@@ -34,6 +37,10 @@ public:
     void setRemoved(bool removed) { mRemoved = removed; }
 
     void tick();
+
+    Tag saveNbt() const;
+
+    void loadNbt(const Tag &data, const PacketCodecContext &context);
 
 private:
     ItemStack mItem;

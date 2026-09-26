@@ -199,6 +199,8 @@ public:
 
     ServerActor *getActor(int64_t uniqueId);
 
+    ServerActor *getActorByRuntimeId(uint64_t runtimeId);
+
     void removeActor(int64_t uniqueId);
 
     void broadcastActorSpawn(ServerActor &actor);
@@ -344,6 +346,8 @@ public:
 
     uint64_t allocateRuntimeId() { return mNextRuntimeId++; }
 
+    int64_t allocateActorUniqueId();
+
     BlockDefinitionRegistry &getBlockDefinitions() { return mBlockDefinitions; }
 
     ItemDefinitionRegistry &getItemDefinitions() { return mItemDefinitions; }
@@ -456,6 +460,12 @@ public:
     void _sendActorSpawn(ServerPlayer &player, ServerActor &actor);
 
     void _sendActorRemove(ServerPlayer &player, const ServerActor &actor);
+
+    ServerActor *_registerActor(std::unique_ptr<ServerActor> actor);
+
+    void _unregisterActor(int64_t uniqueId);
+
+    void _resolvePendingRides();
 
     bool _equipHeldArmor(ServerPlayer &player, const Item &itemType);
 
@@ -686,6 +696,9 @@ private:
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
+    std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
+    std::unordered_set<int64_t> mVehiclesWithPendingPassengers;
+    uint32_t mActorUniqueIdCounter = 0;
     std::vector<QueuedActorCommand> mQueuedActorCommands;
     NaturalSpawner mNaturalSpawner;
     std::unordered_map<NetworkIdentifier, PacketRateLimiter, NetworkIdentifier::Hasher> mRateLimiters;

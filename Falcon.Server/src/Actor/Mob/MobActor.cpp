@@ -29,9 +29,12 @@ namespace {
     const char *const SPAWNED_EVENT = "minecraft:entity_spawned";
     const char *const BORN_EVENT = "minecraft:entity_born";
     const char *const TAG_COMPONENT_GROUPS = "ComponentGroups";
+    const char *const TAG_DEFINITIONS = "definitions";
+    const std::string DEFINITION_ADDED_PREFIX = "+";
     const char *const TAG_AGE = "AgeTicks";
     const char *const TAG_BREED_COOLDOWN = "BreedCooldown";
     const char *const TAG_TAMED_BY = "TamedBy";
+    const char *const TAG_OWNER = "OwnerNew";
     const char *const TAG_SITTING = "Sitting";
     const char *const TAG_HOME = "HomePos";
     const float DEFAULT_MOVEMENT_SPEED = 0.25f;
@@ -53,6 +56,7 @@ namespace {
     const char *const LEGACY_ZOMBIE_PIGMAN = "minecraft:pig_zombie";
     const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
     const char *const EQUIPPABLE_COMPONENT = "minecraft:equippable";
+    const int32_t EQUIPPABLE_BODY_SLOT = 1;
     const char *const ENTITY_SENSOR_COMPONENT = "minecraft:entity_sensor";
     const float ENTITY_SENSOR_DEFAULT_RANGE = 10.0f;
     const char *const RIDEABLE_COMPONENT = "minecraft:rideable";
@@ -76,6 +80,18 @@ namespace {
     float numberIn(const json::Value *component, const char *key, float fallback) {
         const json::Value *value = component == nullptr ? nullptr : component->get(key);
         return value == nullptr ? fallback : (float) value->number(fallback);
+    }
+
+    float attributeIn(const Tag &data, const std::string &name, float fallback) {
+        const Tag *attributes = data.get("Attributes");
+        if (attributes == nullptr || !attributes->isList())
+            return fallback;
+
+        for (const Tag &attribute: attributes->getList()) {
+            if (attribute.isCompound() && attribute.getString("Name", std::string()) == name)
+                return attribute.getFloat("Base", fallback);
+        }
+        return fallback;
     }
 
     bool flagIn(const json::Value &component, const char *key) {
@@ -781,7 +797,8 @@ void MobActor::attemptMountTame(ServerNetworkHandler &owner, ServerPlayer &rider
 
     const int32_t maximum = (int32_t) numberIn(tamemount, "max_temper", 100.0f);
     if (maximum > 0 && std::uniform_int_distribution<int32_t>(0, maximum - 1)(lifecycleRandom()) < mTemper) {
-        mTamedBy = rider.getName();
+        mOwnerId = rider.getUniqueId();
+        mLegacyOwnerName.clear();
         setPersistent(true);
         _setFlag(owner, ActorFlag::Tamed, true);
         _syncOwner(owner);
@@ -886,17 +903,31 @@ bool MobActor::_equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player,
 
     const int32_t inventorySlot = (int32_t) std::strtol(slotName.c_str(), nullptr, 10);
     const json::Value *slot = _equippableSlot(inventorySlot);
-    if (slot == nullptr || !mEquipment.getInventoryItem(inventorySlot).isAir())
+    if (slot == nullptr || !_equippableItem(inventorySlot).isAir())
         return false;
 
     const json::Value *accepted = slot->get("accepted_items");
     if (accepted != nullptr && !BehaviorItems(accepted).contains(held))
         return false;
 
-    mEquipment.setInventoryItem(inventorySlot, std::move(held));
+    _setEquippableItem(inventorySlot, std::move(held));
     player.consumeOneHeldItem();
+    mEquipment.broadcast(owner, *this);
     EntityEvents::fireTrigger(owner, *this, slot->get("on_equip"), &player);
     return true;
+}
+
+const ItemStack &MobActor::_equippableItem(int32_t index) const {
+    if (index == EQUIPPABLE_BODY_SLOT)
+        return mEquipment.getSlot(MobEquipment::BODY);
+    return mEquipment.getInventoryItem(index);
+}
+
+void MobActor::_setEquippableItem(int32_t index, ItemStack item) {
+    if (index == EQUIPPABLE_BODY_SLOT)
+        mEquipment.setSlot(MobEquipment::BODY, std::move(item));
+    else
+        mEquipment.setInventoryItem(index, std::move(item));
 }
 
 void MobActor::_dropEquipmentSlot(ServerNetworkHandler &owner, const std::string &slotName, float yOffset) {
@@ -912,11 +943,12 @@ void MobActor::_dropEquipmentSlot(ServerNetworkHandler &owner, const std::string
     }
 
     const int32_t inventorySlot = (int32_t) std::strtol(slotName.c_str(), nullptr, 10);
-    ItemStack item = mEquipment.getInventoryItem(inventorySlot);
+    ItemStack item = _equippableItem(inventorySlot);
     if (item.isAir())
         return;
 
-    mEquipment.setInventoryItem(inventorySlot, ItemStack::air());
+    _setEquippableItem(inventorySlot, ItemStack::air());
+    mEquipment.broadcast(owner, *this);
     owner.dropItem(level, dropPosition, item, ItemActorHandler::randomDropMotion(),
                    ItemActorHandler::DROP_PICKUP_DELAY);
 
@@ -958,7 +990,8 @@ bool MobActor::_tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const
         return true;
     }
 
-    mTamedBy = player.getName();
+    mOwnerId = player.getUniqueId();
+    mLegacyOwnerName.clear();
     setPersistent(true);
     _setFlag(owner, ActorFlag::Tamed, true);
     _syncOwner(owner);
@@ -1003,7 +1036,7 @@ bool MobActor::_tryStartLove(ServerNetworkHandler &owner, ServerPlayer &player, 
 }
 
 bool MobActor::_trySit(ServerNetworkHandler &owner, ServerPlayer &player) {
-    if (getComponent("minecraft:sittable") == nullptr || !isTamed() || mTamedBy != player.getName())
+    if (getComponent("minecraft:sittable") == nullptr || !isOwnedBy(player))
         return false;
 
     mSitting = !mSitting;
@@ -1068,11 +1101,11 @@ void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
         metadata.mEntries.push_back(entry);
     }
 
-    if (mOwnerRuntimeId != 0) {
+    if (mOwnerId != NO_OWNER) {
         EntityDataEntry entry;
         entry.mId = ActorFlags::OWNER_DATA_ID;
         entry.mFormat = EntityDataFormat::Long;
-        entry.mLongValue = (int64_t) mOwnerRuntimeId;
+        entry.mLongValue = mOwnerId;
         metadata.mEntries.push_back(entry);
     }
 }
@@ -1098,23 +1131,25 @@ void MobActor::fillSpawnMetadata(EntityDataMap &metadata) const {
 }
 
 void MobActor::_syncOwner(ServerNetworkHandler &owner) {
-    uint64_t runtimeId = 0;
-    if (isTamed()) {
+    if (mOwnerId == NO_OWNER && !mLegacyOwnerName.empty()) {
         for (auto &entry: owner.getPlayers()) {
-            if (entry.second.getName() == mTamedBy)
-                runtimeId = entry.second.getRuntimeId();
+            if (entry.second.isSpawned() && entry.second.getName() == mLegacyOwnerName) {
+                mOwnerId = entry.second.getUniqueId();
+                mLegacyOwnerName.clear();
+                break;
+            }
         }
     }
 
-    if (runtimeId == mOwnerRuntimeId)
+    if (mOwnerId == mSyncedOwnerId)
         return;
 
-    mOwnerRuntimeId = runtimeId;
+    mSyncedOwnerId = mOwnerId;
     EntityDataMap metadata;
     EntityDataEntry entry;
     entry.mId = ActorFlags::OWNER_DATA_ID;
     entry.mFormat = EntityDataFormat::Long;
-    entry.mLongValue = runtimeId == 0 ? -1 : (int64_t) runtimeId;
+    entry.mLongValue = mOwnerId;
     metadata.mEntries.push_back(entry);
     owner.sendActorMetadata(*this, metadata);
 }
@@ -1266,14 +1301,28 @@ float MobActor::getAttackDamage(Difficulty difficulty) const {
 Tag MobActor::saveNbt() const {
     Tag data = ServerActor::saveNbt();
 
-    std::vector<Tag> groups;
+    std::vector<Tag> definitions;
+    definitions.push_back(Tag::ofString(DEFINITION_ADDED_PREFIX + getTypeId()));
     for (const std::string &group: mComponentGroups)
-        groups.push_back(Tag::ofString(group));
-    data.put(TAG_COMPONENT_GROUPS, Tag::ofList(Tag::Type::String, std::move(groups)));
+        definitions.push_back(Tag::ofString(DEFINITION_ADDED_PREFIX + group));
+    data.put(TAG_DEFINITIONS, Tag::ofList(Tag::Type::String, std::move(definitions)));
     data.putInt(TAG_AGE, mAgeTicks);
     data.putInt(TAG_BREED_COOLDOWN, mBreedCooldown);
-    data.putString(TAG_TAMED_BY, mTamedBy);
+    data.putLong(TAG_OWNER, mOwnerId);
+    if (!mLegacyOwnerName.empty())
+        data.putString(TAG_TAMED_BY, mLegacyOwnerName);
     data.putByte(TAG_SITTING, mSitting ? 1 : 0);
+    data.putInt("Variant", (int32_t) numberIn(getComponent("minecraft:variant"), "value", 0.0f));
+    data.putInt("MarkVariant", (int32_t) numberIn(getComponent("minecraft:mark_variant"), "value", 0.0f));
+    data.putInt("SkinID", (int32_t) numberIn(getComponent("minecraft:skin_id"), "value", 0.0f));
+    data.putByte("Color", (int8_t) numberIn(getComponent("minecraft:color"), "value", 0.0f));
+    data.putByte("Color2", (int8_t) numberIn(getComponent("minecraft:color2"), "value", 0.0f));
+    data.putByte("IsBaby", getComponent("minecraft:is_baby") != nullptr ? 1 : 0);
+    data.putByte("IsTamed", getComponent("minecraft:is_tamed") != nullptr ? 1 : 0);
+    data.putByte("Saddled", getComponent("minecraft:is_saddled") != nullptr ? 1 : 0);
+    data.putByte("Chested", getComponent("minecraft:is_chested") != nullptr ? 1 : 0);
+    data.putByte("Sheared", getComponent("minecraft:is_sheared") != nullptr ? 1 : 0);
+    data.putInt("InLove", mLoveTicks);
     data.putInt(TAG_TEMPER, mTemper);
     if (mRolledMovementSpeed >= 0.0f)
         data.putFloat(TAG_MOVEMENT_SPEED, mRolledMovementSpeed);
@@ -1297,27 +1346,42 @@ void MobActor::loadNbt(const Tag &data) {
 
     mAgeTicks = data.getInt(TAG_AGE, 0);
     mBreedCooldown = data.getInt(TAG_BREED_COOLDOWN, 0);
-    mTamedBy = data.getString(TAG_TAMED_BY, std::string());
+    mOwnerId = data.getLong(TAG_OWNER, NO_OWNER);
+    mLegacyOwnerName = mOwnerId == NO_OWNER ? data.getString(TAG_TAMED_BY, std::string()) : std::string();
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
+    mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);
-    mRolledMovementSpeed = data.getFloat(TAG_MOVEMENT_SPEED, -1.0f);
-    mRolledJumpStrength = data.getFloat(TAG_JUMP_STRENGTH, -1.0f);
+    mRolledMovementSpeed = data.getFloat(TAG_MOVEMENT_SPEED, attributeIn(data, "minecraft:movement", -1.0f));
+    mRolledJumpStrength = data.getFloat(TAG_JUMP_STRENGTH, attributeIn(data, JUMP_STRENGTH_COMPONENT, -1.0f));
     const Tag *home = data.get(TAG_HOME);
     if (home != nullptr && home->isList() && home->getList().size() == 3) {
         const std::vector<Tag> &values = home->getList();
         setHomePosition(Vector3f(values[0].asFloat(), values[1].asFloat(), values[2].asFloat()));
     }
-    getFlags().set(ActorFlag::Tamed, !mTamedBy.empty());
+    getFlags().set(ActorFlag::Tamed, isTamed());
     getFlags().set(ActorFlag::Sitting, mSitting);
     mEntitySpawner.loadNbt(data);
 
-    const Tag *groups = data.get(TAG_COMPONENT_GROUPS);
-    if (groups == nullptr || groups->getType() != Tag::Type::List)
-        return;
+    const Tag *definitions = data.get(TAG_DEFINITIONS);
+    const Tag *legacyGroups = data.get(TAG_COMPONENT_GROUPS);
+    if (definitions != nullptr && definitions->getType() == Tag::Type::List) {
+        mComponentGroups.clear();
+        for (const Tag &entry: definitions->getList()) {
+            const std::string definition = entry.asString();
+            if (definition.size() < 2 || definition[0] != DEFINITION_ADDED_PREFIX[0])
+                continue;
 
-    mComponentGroups.clear();
-    for (const Tag &group: groups->getList())
-        mComponentGroups.push_back(group.asString());
+            const std::string group = definition.substr(1);
+            if (group != getTypeId())
+                mComponentGroups.push_back(group);
+        }
+    } else if (legacyGroups != nullptr && legacyGroups->getType() == Tag::Type::List) {
+        mComponentGroups.clear();
+        for (const Tag &group: legacyGroups->getList())
+            mComponentGroups.push_back(group.asString());
+    } else {
+        return;
+    }
 
     mDefinitionStarted = true;
     _markComponentsChanged();
@@ -1379,7 +1443,7 @@ bool MobActor::canTarget(const Actor &actor) const {
 Actor *MobActor::findActor(ServerNetworkHandler &owner, uint64_t runtimeId) {
     if (ServerPlayer *player = findPlayer(owner, runtimeId))
         return player;
-    return owner.getActor((int64_t) runtimeId);
+    return owner.getActorByRuntimeId(runtimeId);
 }
 
 float MobActor::distanceSquaredTo(const Actor &other) const {

@@ -53,7 +53,7 @@ namespace {
 const float Actor::EXHAUSTION_PER_UNIT = 4.0f;
 const float Actor::FALL_DAMAGE_THRESHOLD = 3.0f;
 
-Actor::Actor(uint64_t runtimeId) : mRuntimeId(runtimeId), mEffects(*this) {}
+Actor::Actor(uint64_t runtimeId) : mRuntimeId(runtimeId), mUniqueId((int64_t) runtimeId), mEffects(*this) {}
 
 void Actor::setOnFire(bool onFire) {
     if (onFire)

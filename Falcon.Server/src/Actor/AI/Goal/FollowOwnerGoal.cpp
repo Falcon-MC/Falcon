@@ -20,7 +20,7 @@ ServerPlayer *FollowOwnerGoal::_findOwner(ServerNetworkHandler &owner, const Mob
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if (player.getName() == mob.getTamedBy() && player.isSpawned() && !player.isDead()
+        if (mob.isOwnedBy(player) && player.isSpawned() && !player.isDead()
             && player.getDimension() == mob.getDimension()
             && player.getGameType() != (int32_t) GameType::Spectator)
             return &player;

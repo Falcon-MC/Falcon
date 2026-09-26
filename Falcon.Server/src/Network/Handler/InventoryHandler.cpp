@@ -571,9 +571,9 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
         }
 
         if (packet.mActionType == 0) {
-            ServerActor *target = owner.getActor((int64_t) packet.mRuntimeActorId);
+            ServerActor *target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
             if (target != nullptr && !owner.getScriptEngine().beforePlayerInteractWithEntity(player, *target)) {
-                target = owner.getActor((int64_t) packet.mRuntimeActorId);
+                target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
                 if (target == nullptr)
                     return;
 
@@ -586,7 +586,7 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
                 if (event.mCancelled)
                     return;
 
-                target = owner.getActor((int64_t) packet.mRuntimeActorId);
+                target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
                 if (target != nullptr)
                     target->onInteract(owner, player);
             }

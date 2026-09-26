@@ -613,7 +613,7 @@ void ServerPlayer::teleport(ServerNetworkHandler &owner, const Vector3f &positio
     clearPendingMove();
 
     MovePlayerPacket packet;
-    packet.mRuntimeActorId = getUniqueId();
+    packet.mRuntimeActorId = (int64_t) getRuntimeId();
     packet.mPosition = Vector3f(getPosition().x, getPosition().y + 1.62f, getPosition().z);
     packet.mRotation = getRotation();
     packet.mMode = MovePlayerMode::Teleport;
@@ -845,6 +845,8 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
     Tag data = Tag::ofCompound();
 
     data.putLong(FalconDataVersion::TAG, FalconDataVersion::CURRENT);
+    data.putString("identifier", "minecraft:player");
+    data.putLong("UniqueID", getUniqueId());
     data.put(TAG_POS, floatList(mPosition.x, mPosition.y, mPosition.z));
     data.put(TAG_MOTION, floatList(mMotion.x, mMotion.y, mMotion.z));
     data.put(TAG_ROTATION, floatList(mRotation.x, mRotation.y, mRotation.z));
@@ -925,6 +927,9 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
 
     if (data.getType() != Tag::Type::Compound)
         return;
+
+    if (data.contains("UniqueID"))
+        setUniqueId(data.getLong("UniqueID"));
 
     loadTags(data);
 

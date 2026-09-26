@@ -81,7 +81,7 @@ bool BreedGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (partner == nullptr)
         return false;
 
-    mPartnerId = (int64_t) partner->getRuntimeId();
+    mPartnerId = partner->getUniqueId();
     return true;
 }
 

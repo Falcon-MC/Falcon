@@ -310,6 +310,7 @@ ItemActor *ItemActorHandler::dropItem(ServerNetworkHandler &owner, Level &level,
         return nullptr;
 
     std::unique_ptr<ItemActor> actor(new ItemActor(owner.allocateRuntimeId(), item));
+    actor->setUniqueId(owner.allocateActorUniqueId());
     actor->setDimension(level.getDimensionType());
     actor->getItem().mUsingNetId = false;
     actor->getItem().mNetId = 0;
@@ -353,10 +354,60 @@ void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
 
         if (actor.isRemoved() || actor.isExpired()) {
             broadcastItemActorRemove(owner, actor);
+            owner.getLevelFor(actor).eraseEntity(actor.getUniqueId());
             it = actors.erase(it);
             continue;
         }
 
         ++it;
+    }
+}
+
+ItemActor *ItemActorHandler::restoreItem(ServerNetworkHandler &owner, Level &level, const Tag &data) {
+    std::unique_ptr<ItemActor> actor(new ItemActor(owner.allocateRuntimeId(), ItemStack::air()));
+    actor->loadNbt(data, owner.getCodecContext());
+    if (actor->getItem().isAir() || actor->getItem().mCount <= 0)
+        return nullptr;
+
+    for (const std::unique_ptr<ItemActor> &existing: owner.getItemEntities()) {
+        if (existing->getUniqueId() == actor->getUniqueId())
+            return nullptr;
+    }
+
+    if (!actor->hasAssignedUniqueId())
+        actor->setUniqueId(owner.allocateActorUniqueId());
+
+    actor->setDimension(level.getDimensionType());
+    actor->getItem().mUsingNetId = false;
+    actor->getItem().mNetId = 0;
+
+    ItemActor *result = actor.get();
+    owner.getItemEntities().push_back(std::move(actor));
+
+    broadcastItemActorSpawn(owner, *result);
+    return result;
+}
+
+void ItemActorHandler::saveItemsInChunk(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ,
+                                        std::vector<Tag> &out, bool cull) {
+    std::vector<std::unique_ptr<ItemActor>> &actors = owner.getItemEntities();
+
+    for (auto it = actors.begin(); it != actors.end();) {
+        ItemActor &actor = **it;
+        const Vector3f &position = actor.getPosition();
+        if (actor.isRemoved() || actor.getDimension() != level.getDimensionType()
+            || ((int32_t) std::floor(position.x) >> 4) != chunkX || ((int32_t) std::floor(position.z) >> 4) != chunkZ) {
+            ++it;
+            continue;
+        }
+
+        out.push_back(actor.saveNbt());
+        if (!cull) {
+            ++it;
+            continue;
+        }
+
+        broadcastItemActorRemove(owner, actor);
+        it = actors.erase(it);
     }
 }

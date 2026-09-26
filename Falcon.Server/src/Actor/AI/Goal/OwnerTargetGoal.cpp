@@ -11,7 +11,7 @@ OwnerTargetGoal::OwnerTargetGoal(Mode mode) : mMode(mode) {
 ServerPlayer *OwnerTargetGoal::_findOwner(ServerNetworkHandler &owner, const MobActor &mob) const {
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if (player.getName() == mob.getTamedBy() && player.isSpawned() && player.getDimension() == mob.getDimension())
+        if (mob.isOwnedBy(player) && player.isSpawned() && player.getDimension() == mob.getDimension())
             return &player;
     }
     return nullptr;
@@ -33,7 +33,7 @@ bool OwnerTargetGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 
     const Actor *target = MobActor::findActor(owner, runtimeId);
     const MobActor *pet = dynamic_cast<const MobActor *>(target);
-    if (target == nullptr || !mob.canTarget(*target) || (pet != nullptr && pet->getTamedBy() == mob.getTamedBy())) {
+    if (target == nullptr || !mob.canTarget(*target) || (pet != nullptr && pet->getOwnerId() != MobActor::NO_OWNER && pet->getOwnerId() == mob.getOwnerId())) {
         mHandledTick = tick;
         return false;
     }

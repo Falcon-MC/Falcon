@@ -176,6 +176,7 @@ namespace {
                 items.push_back(&equipment.getSlot(slot));
         }
         if (any || domain == "inventory") {
+            items.push_back(&equipment.getSlot(MobEquipment::BODY));
             for (int slot = 0; slot < equipment.getInventorySize(); ++slot)
                 items.push_back(&equipment.getInventoryItem(slot));
         }
