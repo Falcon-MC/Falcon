@@ -123,7 +123,7 @@ void ServerActor::tickFire(ServerNetworkHandler &owner) {
     }
 
     if (getFireTicks() % 20 == 0)
-        hurt(owner, FIRE_TICK_DAMAGE, nullptr);
+        hurt(owner, FIRE_TICK_DAMAGE, DamageSource::environment("death.attack.inFire", getName()));
 
     setFireTicks(getFireTicks() - 1);
 
@@ -134,6 +134,16 @@ void ServerActor::tickFire(ServerNetworkHandler &owner) {
 }
 
 bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel) {
+    DamageSource source;
+    source.mDeathMessageKey = attacker == nullptr ? "death.attack.generic"
+                                                  : attacker->isPlayer() ? "death.attack.player" : "death.attack.mob";
+    source.mAttacker = attacker;
+    return hurt(owner, amount, source, lootingLevel);
+}
+
+bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const DamageSource &damageSource,
+                       int32_t lootingLevel) {
+    Actor *attacker = damageSource.mAttacker;
     if (!isAlive() || amount < 0.0f || isInvulnerable())
         return false;
 
@@ -150,8 +160,7 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, Actor *attacke
     damageEvent.mEntity = this;
     damageEvent.mAttacker = attacker;
     damageEvent.mAmount = amount;
-    damageEvent.mCause = attacker == nullptr ? "death.attack.generic"
-                                             : attacker->isPlayer() ? "death.attack.player" : "death.attack.mob";
+    damageEvent.mCause = damageSource.mDeathMessageKey;
     PluginManager::getInstance().dispatch(damageEvent);
     if (damageEvent.mCancelled)
         return false;
@@ -164,12 +173,16 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, Actor *attacke
     if (source != nullptr)
         source->recordAttacked(getRuntimeId(), owner.getCurrentTick());
 
+    const float rawAmount = amount;
+    if (damageSource.mApplyArmor)
+        amount = absorbDamage(amount, damageSource);
+
     if (onHurt(owner, amount, source))
         return true;
 
     setHealth(getHealth() - amount);
     setNoDamageTicks(INVULNERABILITY_TICKS);
-    setLastDamageAmount(amount);
+    setLastDamageAmount(rawAmount);
     onDamaged(owner, attacker);
 
     if (attacker != nullptr && getHealth() > 0.0f && catchFireFrom(*attacker, owner.getProperties().getDifficulty()))

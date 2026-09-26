@@ -499,8 +499,11 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         }
     } else {
         ServerActor *victimActor = dynamic_cast<ServerActor *>(&target);
-        if (victimActor != nullptr)
-            damageActor(*victimActor, damage, shooter, data.mLootingLevel);
+        if (victimActor != nullptr) {
+            DamageSource source = DamageSource::environment("death.attack.arrow", victimActor->getName());
+            source.mAttacker = shooter;
+            damageActor(*victimActor, damage, source.asProjectile(), data.mLootingLevel);
+        }
     }
 
     const Vector3f targetPosition = target.getPosition();
@@ -917,6 +920,11 @@ bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, Actor *
     return actor.hurt(*this, amount, attacker, lootingLevel);
 }
 
+bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, const DamageSource &source,
+                                       int32_t lootingLevel) {
+    return actor.hurt(*this, amount, source, lootingLevel);
+}
+
 void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::string &deathMessageKey) {
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor)) {
         hurt(*player, amount, DamageSource::environment(deathMessageKey, player->getName()));
@@ -924,7 +932,7 @@ void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::stri
     }
 
     if (ServerActor *target = dynamic_cast<ServerActor *>(&actor))
-        target->hurt(*this, amount, nullptr);
+        target->hurt(*this, amount, DamageSource::environment(deathMessageKey, target->getName()));
 }
 
 void ServerNetworkHandler::broadcastActorMove(ServerActor &actor) {
@@ -1218,7 +1226,8 @@ void ServerNetworkHandler::tickActors() {
         if (!actor.isProjectile()) {
             const ActorSize size = actor.getSize();
             if (_isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
-                actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE, nullptr);
+                actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE,
+                           DamageSource::environment("death.attack.inWall", actor.getName()));
 
             BlockContactSystem::tick(*this, actor);
             if (!actor.isAlive() || &getLevelFor(actor) != &level)

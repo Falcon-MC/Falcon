@@ -117,7 +117,8 @@ void ServerNetworkHandler::strikeLightning(Level &level, const Vector3f &positio
             continue;
 
         actor.onStruckByLightning(*this);
-        damageActor(actor, (float) LIGHTNING_DAMAGE, nullptr);
+        damageActor(actor, (float) LIGHTNING_DAMAGE,
+                    DamageSource::environment("death.attack.lightningBolt", actor.getName()).withoutArmor());
         actor.setFireTicks((int) LIGHTNING_FIRE_TICKS);
         actor.setOnFire(true);
     }

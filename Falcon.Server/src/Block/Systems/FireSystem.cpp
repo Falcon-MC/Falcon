@@ -270,7 +270,8 @@ namespace {
         if (!FireSystem::matches(stateAt(level, block).mName))
             return;
 
-        actor.hurt(owner, FireSystem::CONTACT_DAMAGE, nullptr);
+        actor.hurt(owner, FireSystem::CONTACT_DAMAGE,
+                   DamageSource::environment("death.attack.inFire", actor.getName()));
 
         if (actor.getFireTicks() < FireSystem::COMBUST_TICKS) {
             actor.setFireTicks(FireSystem::COMBUST_TICKS);

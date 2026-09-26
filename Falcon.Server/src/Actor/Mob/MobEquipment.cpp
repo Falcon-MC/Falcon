@@ -1,5 +1,7 @@
 #include "Actor/Mob/MobEquipment.h"
 
+#include "Actor/ArmorProtection.h"
+#include "Actor/DamageSource.h"
 #include "Actor/Mob/MobActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Inventory/ItemStackNbt.h"
@@ -200,6 +202,11 @@ void MobEquipment::dropOnDeath(ServerNetworkHandler &owner, Level &level, const 
         owner.dropItem(level, mob.getPosition(), item, ItemActorHandler::randomDropMotion(),
                        ItemActorHandler::DROP_PICKUP_DELAY);
     }
+}
+
+float MobEquipment::absorbDamage(float amount, const DamageSource &source) const {
+    return ArmorProtection::apply(&mSlots[HEAD], FEET - HEAD + 1, amount, source.mDeathMessageKey,
+                                  source.mArmorEfficiency);
 }
 
 void MobEquipment::saveNbt(Tag &data) const {

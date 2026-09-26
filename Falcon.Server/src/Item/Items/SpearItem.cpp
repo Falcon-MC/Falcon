@@ -210,7 +210,10 @@ void SpearItem::applySpearDamage(ServerNetworkHandler &owner, ServerPlayer &atta
 
     ServerActor *actor = dynamic_cast<ServerActor *>(&target);
     if (actor != nullptr)
-        owner.damageActor(*actor, damage, &attacker);
+        owner.damageActor(*actor, damage,
+                          DamageSource::attack("death.attack.player", actor->getName(), attacker, attacker.getName(),
+                                               attacker.getPosition())
+                                  .withoutArmor());
 }
 
 void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {

@@ -1,5 +1,6 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 
+#include "Actor/ArmorProtection.h"
 #include "Actor/RideSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
@@ -55,70 +56,6 @@ namespace {
             return !rules.getBool("freezedamage");
 
         return false;
-    }
-
-    int protectionFactor(int level, float modifier) {
-        if (level <= 0)
-            return 0;
-        return (int) std::floor((6.0f + (float) (level * level)) * modifier / 3.0f);
-    }
-
-    float applyArmorModifiers(const ServerPlayer &player, float amount, const std::string &deathMessageKey,
-                              float efficiency) {
-        const bool fireDamage = deathMessageKey == "death.attack.lava"
-                                || deathMessageKey == "death.attack.onFire"
-                                || deathMessageKey == "death.attack.inFire";
-        const bool fallDamage = deathMessageKey == "death.fell.accident.generic";
-        const bool explosionDamage = deathMessageKey == "death.attack.explosion";
-        const bool projectileDamage = deathMessageKey == "death.attack.arrow";
-        const bool armorDamage = deathMessageKey != "death.attack.inFire"
-                                 && deathMessageKey != "death.attack.drown"
-                                 && !fallDamage
-                                 && deathMessageKey != "death.attack.outOfWorld"
-                                 && deathMessageKey != "death.attack.thorns"
-                                 && deathMessageKey != "death.attack.suicide";
-
-        int armorPoints = 0;
-        int enchantmentProtectionFactor = 0;
-        for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot) {
-            const ItemStack &armor = player.getInventory().getArmor(slot);
-            if (armor.isAir() || armor.mDefinition == nullptr)
-                continue;
-
-            const ItemData *data = ItemDataTable::find(armor.mDefinition->getIdentifier());
-            if (data != nullptr)
-                armorPoints += data->mArmorPoints;
-
-            enchantmentProtectionFactor += protectionFactor(
-                    ItemEnchantments::getLevel(armor, EnchantmentIds::PROTECTION), 0.75f);
-            if (fireDamage)
-                enchantmentProtectionFactor += protectionFactor(
-                        ItemEnchantments::getLevel(armor, EnchantmentIds::FIRE_PROTECTION), 1.25f);
-            if (fallDamage)
-                enchantmentProtectionFactor += protectionFactor(
-                        ItemEnchantments::getLevel(armor, EnchantmentIds::FEATHER_FALLING), 2.5f);
-            if (explosionDamage)
-                enchantmentProtectionFactor += protectionFactor(
-                        ItemEnchantments::getLevel(armor, EnchantmentIds::BLAST_PROTECTION), 1.5f);
-            if (projectileDamage)
-                enchantmentProtectionFactor += protectionFactor(
-                        ItemEnchantments::getLevel(armor, EnchantmentIds::PROJECTILE_PROTECTION), 1.5f);
-        }
-
-        const float effectivePoints = (float) armorPoints * efficiency;
-        const float effectiveFactor = (float) enchantmentProtectionFactor * efficiency;
-
-        if (armorDamage)
-            amount *= std::max(0.0f, 1.0f - std::min(1.0f, effectivePoints * 0.04f));
-
-        if (effectiveFactor > 0.0f) {
-            const int scaledProtection = std::min(
-                    (int) std::ceil(std::min(effectiveFactor, 25.0f) *
-                                    (50.0f + (float) (rand() % 51)) / 100.0f), 20);
-            amount *= std::max(0.0f, 1.0f - (float) scaledProtection * 0.04f);
-        }
-
-        return amount;
     }
 }
 
@@ -258,8 +195,10 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
         player.setLastDamageAmount(rawAmount);
     }
 
-    if (source.mApplyArmor)
-        amount = applyArmorModifiers(player, amount, key, source.mArmorEfficiency);
+    if (source.mApplyArmor) {
+        const std::vector<ItemStack> &armor = player.getInventory().getArmorContents();
+        amount = ArmorProtection::apply(armor.data(), armor.size(), amount, key, source.mArmorEfficiency);
+    }
 
     if (key != "death.attack.outOfWorld" && key != "death.attack.suicide") {
         if (const MobEffectInstance *resistance = player.getEffect(MobEffectId::Resistance))

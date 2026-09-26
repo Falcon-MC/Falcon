@@ -8,6 +8,7 @@
 #include <cstdint>
 
 class Actor;
+class DamageSource;
 class Level;
 class MobActor;
 class ServerNetworkHandler;
@@ -31,6 +32,8 @@ public:
 
     void dropOnDeath(ServerNetworkHandler &owner, Level &level, const MobActor &mob, bool killedByPlayer,
                      int32_t lootingLevel);
+
+    float absorbDamage(float amount, const DamageSource &source) const;
 
     void saveNbt(Tag &data) const;
 

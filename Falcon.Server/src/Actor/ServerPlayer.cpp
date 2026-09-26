@@ -292,7 +292,11 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             const bool critical = _isCriticalHit();
             const bool magic = target.getMeleeEnchantmentBonus(weapon) > 0.0f;
             const float healthBefore = target.getHealth();
-            owner.damageActor(target, attackDamage, this);
+            const float armorEfficiency = weaponType == nullptr ? 1.0f : weaponType->getArmorEfficiency(weapon);
+            owner.damageActor(target, attackDamage,
+                              DamageSource::attack("death.attack.player", target.getName(), *this, getName(),
+                                                   getPosition())
+                                      .withArmorEfficiency(armorEfficiency));
             const bool hurt = target.getHealth() < healthBefore;
             if (hurt && critical)
                 broadcastAnimation(owner, target, AnimatePacket::Action::CriticalHit);
@@ -597,7 +601,10 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
 
         const ActorSize size = target.getSize();
         if (reaches(target.getPosition(), size.mWidth, size.mHeight))
-            owner.damageActor(target, SPIN_ATTACK_DAMAGE, this);
+            owner.damageActor(target, SPIN_ATTACK_DAMAGE,
+                              DamageSource::attack("death.attack.player", target.getName(), *this, getName(),
+                                                   position)
+                                      .withoutArmor());
     }
 
     for (auto &entry: owner.getPlayers()) {

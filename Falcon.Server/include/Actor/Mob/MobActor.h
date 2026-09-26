@@ -71,6 +71,10 @@ public:
 
     void onDamaged(ServerNetworkHandler &owner, Actor *attacker) override;
 
+    float absorbDamage(float amount, const DamageSource &source) const override {
+        return mEquipment.absorbDamage(amount, source);
+    }
+
     virtual float getAttackDamage(Difficulty difficulty) const;
 
     const json::Value *getDefinition() const;

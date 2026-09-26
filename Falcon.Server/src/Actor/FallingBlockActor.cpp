@@ -297,7 +297,7 @@ void FallingBlockActor::_damageEntitiesAt(ServerNetworkHandler &owner, const Vec
         if (actorPosition.z + halfWidth < minZ || actorPosition.z - halfWidth > maxZ)
             continue;
 
-        owner.damageActor(*actor, damage, nullptr);
+        owner.damageActor(*actor, damage, DamageSource::environment(deathKey, actor->getName()));
     }
 }
 

@@ -276,7 +276,8 @@ void Explosion::_damageEntities() {
         const float density = getBlockDensity(mLevel, mSource, boundingBoxOf(position, actor->getSize()));
         const double impact = (1.0 - distance) * density;
 
-        mOwner.damageActor(*actor, _calculateEntityDamage(explosionSize, impact), nullptr);
+        mOwner.damageActor(*actor, _calculateEntityDamage(explosionSize, impact),
+                           DamageSource::environment(DEATH_KEY, actor->getName()));
 
         const Vector3f current = actor->getMotion();
         actor->setMotion(Vector3f(current.x + motion.x * (float) impact, current.y + motion.y * (float) impact,

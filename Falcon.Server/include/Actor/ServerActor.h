@@ -2,6 +2,7 @@
 
 #include "Actor/Actor.h"
 #include "Actor/ActorSize.h"
+#include "Actor/DamageSource.h"
 #include "Actor/DynamicPropertyValue.h"
 #include "Actor/Movement/PhysicsComponent.h"
 #include "Core/Math/Vector3f.h"
@@ -107,6 +108,13 @@ public:
      * captured when it is launched.
      */
     bool hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel = -1);
+
+    bool hurt(ServerNetworkHandler &owner, float amount, const DamageSource &damageSource, int32_t lootingLevel = -1);
+
+    virtual float absorbDamage(float amount, const DamageSource &source) const {
+        (void) source;
+        return amount;
+    }
 
     virtual void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0);
 
