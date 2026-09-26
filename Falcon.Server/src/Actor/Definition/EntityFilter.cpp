@@ -226,6 +226,10 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         return value != nullptr && compareNumbers((int64_t) std::ceil(target->getHealth()),
                                                   (int64_t) value->number(0.0), op);
 
+    if (test == "rider_count")
+        return value != nullptr && compareNumbers((int64_t) target->getPassengers().size(),
+                                                  (int64_t) value->number(0.0), op);
+
     if (test == "has_nametag") {
         const ServerActor *named = dynamic_cast<const ServerActor *>(target);
         return applyBoolean(named != nullptr && !named->getNameTag().empty(), value, op);

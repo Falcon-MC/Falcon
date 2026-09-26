@@ -160,10 +160,8 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     if (mTransformed)
         return;
 
-    if (getComponent(INSTANT_DESPAWN_COMPONENT) != nullptr) {
-        mDespawned = true;
+    if (_tickInstantDespawn(owner))
         return;
-    }
 
     if (!mGoalsRegistered || mGoalsDirty)
         _registerGoals(owner);
@@ -177,6 +175,9 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     _tickTimer(owner);
 
     mGoalSelector.tick(owner, *this);
+    if (_tickInstantDespawn(owner))
+        return;
+
     mNavigation.tick(owner, *this);
     tickControls(owner);
     ServerActor::tick(owner);
@@ -395,6 +396,15 @@ void MobActor::_tickTransformation(ServerNetworkHandler &owner) {
     }
 
     _transform(owner, *transformation);
+}
+
+bool MobActor::_tickInstantDespawn(ServerNetworkHandler &owner) {
+    mEntitySpawner.tick(owner, *this);
+    if (getComponent(INSTANT_DESPAWN_COMPONENT) == nullptr)
+        return false;
+
+    mDespawned = true;
+    return true;
 }
 
 int32_t MobActor::_transformationAssist(ServerNetworkHandler &owner, const json::Value &delay) {
@@ -894,6 +904,7 @@ Tag MobActor::saveNbt() const {
         data.put(TAG_HOME, home);
     }
     mEquipment.saveNbt(data);
+    mEntitySpawner.saveNbt(data);
 
     return data;
 }
@@ -912,6 +923,7 @@ void MobActor::loadNbt(const Tag &data) {
     }
     getFlags().set(ActorFlag::Tamed, !mTamedBy.empty());
     getFlags().set(ActorFlag::Sitting, mSitting);
+    mEntitySpawner.loadNbt(data);
 
     const Tag *groups = data.get(TAG_COMPONENT_GROUPS);
     if (groups == nullptr || groups->getType() != Tag::Type::List)

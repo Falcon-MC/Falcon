@@ -9,6 +9,7 @@
 #include "Actor/ActorCategory.h"
 #include "Actor/ActorFlags.h"
 #include "Actor/ActorSize.h"
+#include "Actor/Mob/MobEntitySpawner.h"
 #include "Actor/Mob/MobEquipment.h"
 #include "Actor/ServerActor.h"
 #include "Core/Json/Json.h"
@@ -146,6 +147,10 @@ public:
 
     void markBorn();
 
+    void setSpawnEvent(const std::string &event) {
+        mSpawnEvent = event;
+    }
+
     void fillSpawnMetadata(EntityDataMap &metadata) const override;
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
@@ -228,6 +233,8 @@ private:
 
     void _tickTransformation(ServerNetworkHandler &owner);
 
+    bool _tickInstantDespawn(ServerNetworkHandler &owner);
+
     int32_t _transformationAssist(ServerNetworkHandler &owner, const json::Value &delay);
 
     void _transform(ServerNetworkHandler &owner, const json::Value &transformation);
@@ -300,4 +307,5 @@ private:
     JumpControl mJumpControl;
     BodyControl mBodyControl;
     MobEquipment mEquipment;
+    MobEntitySpawner mEntitySpawner;
 };
