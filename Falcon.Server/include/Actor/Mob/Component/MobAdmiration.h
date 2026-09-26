@@ -20,9 +20,16 @@ public:
 
     void abort(ServerNetworkHandler &owner, MobActor &mob);
 
+    bool isReadyToBarter() const {
+        return mReadyToBarter;
+    }
+
+    void barter(ServerNetworkHandler &owner, MobActor &mob);
+
 private:
     void _finish(ServerNetworkHandler &owner, MobActor &mob);
 
     int32_t mTicks = 0;
     bool mBarter = false;
+    bool mReadyToBarter = false;
 };

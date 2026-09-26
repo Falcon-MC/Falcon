@@ -21,6 +21,12 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    float getKineticDamage(float speed) const;
+
+    const std::string &getTierName() const {
+        return mTierName;
+    }
+
 private:
     void stab(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const;
 

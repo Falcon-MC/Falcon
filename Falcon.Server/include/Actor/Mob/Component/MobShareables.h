@@ -20,6 +20,10 @@ public:
 
     static bool isBarterCurrency(const MobActor &mob, const ItemStack &item);
 
+    static int findEquippableInventorySlot(const MobActor &mob);
+
+    static void equipFromInventory(ServerNetworkHandler &owner, MobActor &mob, int inventorySlot);
+
 private:
     static int _equipmentSlotFor(const ItemStack &item);
 

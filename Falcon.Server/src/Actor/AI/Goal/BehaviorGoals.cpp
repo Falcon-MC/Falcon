@@ -3,11 +3,13 @@
 #include "Actor/AI/Goal/AdmireItemGoal.h"
 #include "Actor/AI/Goal/AvoidBlockGoal.h"
 #include "Actor/AI/Goal/AvoidMobTypeGoal.h"
+#include "Actor/AI/Goal/BarterGoal.h"
 #include "Actor/AI/Goal/BehaviorItems.h"
 #include "Actor/AI/Goal/BreakDoorGoal.h"
 #include "Actor/AI/Goal/BreedGoal.h"
 #include "Actor/AI/Goal/ChargeHeldItemGoal.h"
 #include "Actor/AI/Goal/EatBlockGoal.h"
+#include "Actor/AI/Goal/EquipItemGoal.h"
 #include "Actor/AI/Goal/FindMountGoal.h"
 #include "Actor/AI/Goal/FleeSunGoal.h"
 #include "Actor/AI/Goal/FloatGoal.h"
@@ -37,6 +39,7 @@
 #include "Actor/AI/Goal/SwellGoal.h"
 #include "Actor/AI/Goal/TemptGoal.h"
 #include "Actor/AI/Goal/TimerFlagGoal.h"
+#include "Actor/AI/Goal/UseKineticWeaponGoal.h"
 #include "Actor/Mob/MobActor.h"
 #include "Level/BlockStateUpgrades.h"
 
@@ -562,6 +565,31 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "charge_held_item")
         return std::make_unique<ChargeHeldItemGoal>();
+
+    if (behavior == "barter")
+        return std::make_unique<BarterGoal>();
+
+    if (behavior == "equip_item")
+        return std::make_unique<EquipItemGoal>();
+
+    if (behavior == "use_kinetic_weapon") {
+        UseKineticWeaponGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mApproachDistance = numberOf(component, "approach_distance", settings.mApproachDistance);
+        settings.mMinRepositionDistance = rangeValue(component, "reposition_distance", "min",
+                                                     settings.mMinRepositionDistance);
+        settings.mMaxRepositionDistance = rangeValue(component, "reposition_distance", "max",
+                                                     settings.mMinRepositionDistance);
+        settings.mMinCooldownDistance = rangeValue(component, "cooldown_distance", "min",
+                                                   settings.mMinCooldownDistance);
+        settings.mMaxCooldownDistance = rangeValue(component, "cooldown_distance", "max",
+                                                   settings.mMinCooldownDistance);
+        settings.mReachMultiplier = numberOf(component, "weapon_reach_multiplier", settings.mReachMultiplier);
+        settings.mMinSpeedMultiplier = numberOf(component, "weapon_min_speed_multiplier",
+                                                settings.mMinSpeedMultiplier);
+        settings.mHijackMountNavigation = isFlagSet(component, "hijack_mount_navigation");
+        return std::make_unique<UseKineticWeaponGoal>(settings);
+    }
 
     if (behavior == "find_mount")
         return std::make_unique<FindMountGoal>(speed, numberOf(component, "within_radius", 0.0f),

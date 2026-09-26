@@ -71,6 +71,10 @@ bool SpearItem::matches(const std::string &identifier) {
            identifier.compare(identifier.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+float SpearItem::getKineticDamage(float speed) const {
+    return (float) getAttackDamage() * 1.5f + speed * 3.0f;
+}
+
 float SpearItem::getJabDamage(const ItemStack &item) const {
     const int32_t lungeLevel = ItemEnchantments::getLevel(item, EnchantmentIds::LUNGE);
     return (float) getAttackDamage() + (float) lungeLevel * 1.5f;
@@ -299,8 +303,7 @@ void SpearItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player, c
     if (target == nullptr)
         return;
 
-    const float damage = (float) getAttackDamage() * 1.5f + speed * 3.0f;
-    applySpearDamage(owner, player, *target, damage);
+    applySpearDamage(owner, player, *target, getKineticDamage(speed));
     owner.playLevelSound(owner.getLevelFor(player), "item." + mTierName + ".attack_hit", player.getPosition(),
                          "minecraft:player");
 }

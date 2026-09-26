@@ -40,7 +40,8 @@ namespace {
 
 bool MobAdmiration::canAdmire(ServerNetworkHandler &owner, const MobActor &mob) const {
     const json::Value *component = mob.getComponent(ADMIRE_ITEM_COMPONENT);
-    if (component == nullptr || isAdmiring() || !mob.getEquipment().getSlot(MobEquipment::OFFHAND).isAir())
+    if (component == nullptr || isAdmiring() || mReadyToBarter
+        || !mob.getEquipment().getSlot(MobEquipment::OFFHAND).isAir())
         return false;
 
     const int64_t cooldown = (int64_t) std::lround(numberIn(component, "cooldown_after_being_attacked", 0.0f)
@@ -58,7 +59,8 @@ void MobAdmiration::start(ServerNetworkHandler &owner, MobActor &mob, const Item
 
     const float seconds = numberIn(mob.getComponent(ADMIRE_ITEM_COMPONENT), "duration", DEFAULT_ADMIRE_SECONDS);
     mTicks = std::max(1, (int32_t) std::lround(seconds * (float) TICKS_PER_SECOND));
-    mBarter = barter && mob.getComponent(BARTER_COMPONENT) != nullptr;
+    mBarter = barter && mob.getComponent(BARTER_COMPONENT) != nullptr
+              && mob.getComponent("minecraft:behavior.barter") != nullptr;
     mob.getNavigation().stop(mob);
     setAdmiringFlag(owner, mob, true);
 }
@@ -78,10 +80,12 @@ void MobAdmiration::tick(ServerNetworkHandler &owner, MobActor &mob) {
 }
 
 void MobAdmiration::abort(ServerNetworkHandler &owner, MobActor &mob) {
-    if (mTicks <= 0)
+    if (mTicks <= 0 && !mReadyToBarter)
         return;
 
     mTicks = 0;
+    mReadyToBarter = false;
+    mBarter = false;
     setAdmiringFlag(owner, mob, false);
 
     const ItemStack item = takeOffhand(owner, mob);
@@ -92,16 +96,24 @@ void MobAdmiration::abort(ServerNetworkHandler &owner, MobActor &mob) {
 
 void MobAdmiration::_finish(ServerNetworkHandler &owner, MobActor &mob) {
     setAdmiringFlag(owner, mob, false);
-    const ItemStack item = takeOffhand(owner, mob);
-    if (item.isAir())
-        return;
-
-    const json::Value *barter = mob.getComponent(BARTER_COMPONENT);
-    const json::Value *table = barter == nullptr ? nullptr : barter->get("barter_table");
-    if (!mBarter || table == nullptr || mob.getComponent("minecraft:is_baby") != nullptr) {
-        MobShareables::store(owner, mob, item);
+    if (mBarter) {
+        mReadyToBarter = true;
         return;
     }
+
+    const ItemStack item = takeOffhand(owner, mob);
+    if (!item.isAir())
+        MobShareables::store(owner, mob, item);
+}
+
+void MobAdmiration::barter(ServerNetworkHandler &owner, MobActor &mob) {
+    mReadyToBarter = false;
+    mBarter = false;
+    const ItemStack item = takeOffhand(owner, mob);
+    const json::Value *component = mob.getComponent(BARTER_COMPONENT);
+    const json::Value *table = component == nullptr ? nullptr : component->get("barter_table");
+    if (item.isAir() || table == nullptr)
+        return;
 
     Level &level = owner.getLevelFor(mob);
     const Vector3f position = mob.getPosition();

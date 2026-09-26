@@ -6,6 +6,7 @@
 #include "Actor/Definition/EntityDefinitions.h"
 #include "Actor/Definition/EntityEvents.h"
 #include "Actor/Definition/EntityFilter.h"
+#include "Actor/Definition/Molang.h"
 #include "Actor/RideSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
@@ -64,6 +65,7 @@ namespace {
     const char *const IS_SHAKING_COMPONENT = "minecraft:is_shaking";
     const char *const CELEBRATE_HUNT_COMPONENT = "minecraft:celebrate_hunt";
     const char *const INVENTORY_COMPONENT = "minecraft:inventory";
+    const char *const EXPERIENCE_REWARD_COMPONENT = "minecraft:experience_reward";
     const char *const TRANSFORMATION_COMPONENT = "minecraft:transformation";
     const char *const DAMAGE_SENSOR_COMPONENT = "minecraft:damage_sensor";
     const char *const SPELL_EFFECTS_COMPONENT = "minecraft:spell_effects";
@@ -1773,15 +1775,41 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
 
     if (owner.getLevel().getGameRules().getBool("domobloot")) {
         Level &level = owner.getLevelFor(*this);
+        const int experience = _deathExperience(source);
         dropLoot(owner, level, source, lootingLevel);
         mEquipment.dropOnDeath(owner, level, *this, source != nullptr, lootingLevel);
 
-        const int experience = getExperienceDrop();
-        if (experience > 0 && source != nullptr)
+        if (experience > 0)
             owner.spawnExperienceOrbs(level, getPosition(), experience);
     }
 
     ServerActor::kill(owner, source, lootingLevel);
+}
+
+int MobActor::_experienceReward(const char *key, const ServerPlayer *player) const {
+    const json::Value *reward = getComponent(EXPERIENCE_REWARD_COMPONENT);
+    const json::Value *formula = reward == nullptr ? nullptr : reward->get(key);
+    if (formula == nullptr)
+        return -1;
+
+    if (!formula->isString())
+        return std::max(0, (int) std::lround(formula->number(0.0)));
+
+    MolangContext context;
+    context.mLastHitByPlayer = player != nullptr;
+    context.mPlayerLevel = player == nullptr ? 0 : player->getExperience().getXpLevel();
+    return std::max(0, (int) std::lround(Molang::evaluate(formula->mString, *this, context).mNumber));
+}
+
+int MobActor::_deathExperience(const ServerPlayer *killer) const {
+    const int reward = _experienceReward("on_death", killer);
+    if (reward >= 0)
+        return reward;
+    return killer == nullptr ? 0 : getExperienceDrop();
+}
+
+int MobActor::getBreedingExperience() const {
+    return _experienceReward("on_bred", nullptr);
 }
 
 void MobActor::dropLoot(ServerNetworkHandler &owner, Level &level, const ServerPlayer *killer,

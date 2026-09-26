@@ -47,6 +47,8 @@ public:
 
     virtual int getExperienceDrop() const { return 0; }
 
+    int getBreedingExperience() const;
+
     bool isExpired() const override {
         return mTransformed || mDespawned;
     }
@@ -320,6 +322,10 @@ private:
     void _tickTimer(ServerNetworkHandler &owner);
 
     void _tickAttackCooldown(ServerNetworkHandler &owner);
+
+    int _experienceReward(const char *key, const ServerPlayer *player) const;
+
+    int _deathExperience(const ServerPlayer *killer) const;
 
     void _tickCelebration(ServerNetworkHandler &owner);
 

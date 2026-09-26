@@ -13,6 +13,7 @@
 namespace {
     const char *const SHAREABLES_COMPONENT = "minecraft:shareables";
     const char *const EQUIP_ITEM_COMPONENT = "minecraft:equip_item";
+    const char *const EQUIP_BEHAVIOR = "minecraft:behavior.equip_item";
     const int32_t UNLISTED_PRIORITY = 1000;
 
     bool flagIn(const json::Value &entry, const char *key) {
@@ -95,12 +96,39 @@ bool MobShareables::take(ServerNetworkHandler &owner, MobActor &mob, const ItemS
         return true;
 
     if (_equipmentSlotFor(item) >= 0 && _isBetterEquipment(mob, item)) {
+        if (mob.getComponent(EQUIP_BEHAVIOR) != nullptr
+            && mob.getEquipment().addInventoryItem(item, mob.getInventoryCapacity()))
+            return true;
+
         _equip(owner, mob, item);
         return true;
     }
 
     return flagIn(*entry, "stored_in_inventory") && mob.getEquipment().addInventoryItem(item,
                                                                                          mob.getInventoryCapacity());
+}
+
+int MobShareables::findEquippableInventorySlot(const MobActor &mob) {
+    const MobEquipment &equipment = mob.getEquipment();
+    for (int slot = 0; slot < equipment.getInventorySize(); ++slot) {
+        const ItemStack &item = equipment.getInventoryItem(slot);
+        if (!item.isAir() && findEntry(mob, item) != nullptr && !_isExcluded(mob, item)
+            && _isBetterEquipment(mob, item))
+            return slot;
+    }
+    return -1;
+}
+
+void MobShareables::equipFromInventory(ServerNetworkHandler &owner, MobActor &mob, int inventorySlot) {
+    MobEquipment &equipment = mob.getEquipment();
+    ItemStack item = equipment.getInventoryItem(inventorySlot);
+    if (item.isAir())
+        return;
+
+    ItemStack remaining = item;
+    remaining.mCount -= 1;
+    equipment.setInventoryItem(inventorySlot, remaining.mCount > 0 ? remaining : ItemStack::air());
+    _equip(owner, mob, item);
 }
 
 bool MobShareables::store(ServerNetworkHandler &owner, MobActor &mob, const ItemStack &item) {
