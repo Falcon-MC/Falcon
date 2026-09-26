@@ -381,6 +381,19 @@ void BlockActionHandler::broadcastBlockUpdate(ServerNetworkHandler &owner, Level
                        update);
 }
 
+void BlockActionHandler::broadcastBlockActorData(ServerNetworkHandler &owner, Level &level,
+                                                 const BlockActor &blockActor) {
+    const Vector3i &position = blockActor.getPosition();
+    BlockActorDataPacket data;
+    data.mBlockPosition = position;
+    data.mData = blockActor.getSpawnCompound();
+    broadcastToViewers(owner, level,
+                       Vector3f((float) position.x + 0.5f,
+                                (float) position.y + 0.5f,
+                                (float) position.z + 0.5f),
+                       data);
+}
+
 int32_t BlockActionHandler::breakSpeedEventData(double speed) {
     return (int32_t) std::clamp(65535.0 * speed, 0.0, 65535.0);
 }

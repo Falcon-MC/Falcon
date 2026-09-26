@@ -6,7 +6,6 @@
 #include "Block/Systems/RandomTickSystem.h"
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
-#include "Protocol/Packets/BlockActorDataPacket.h"
 
 #include <cstdlib>
 #include <vector>
@@ -139,13 +138,8 @@ BlockState CopperSystem::replaceWithPair(ServerNetworkHandler &owner, Level &lev
     BlockActionHandler::broadcastBlockUpdate(owner, level, position, result);
 
     const BlockActor *blockActor = level.getBlockActors().find(position);
-    if (blockActor != nullptr) {
-        BlockActorDataPacket data;
-        data.mBlockPosition = position;
-        data.mData = blockActor->getSpawnCompound();
-        const Vector3f centre((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-        BlockActionHandler::broadcastToViewers(owner, level, centre, data);
-    }
+    if (blockActor != nullptr)
+        BlockActionHandler::broadcastBlockActorData(owner, level, *blockActor);
 
     if (!source.mStates.contains(UPPER_BLOCK_BIT))
         return result;

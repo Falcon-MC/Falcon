@@ -340,14 +340,7 @@ void CommandBlockSystem::trigger(ServerNetworkHandler &owner, Level &level, cons
 void CommandBlockSystem::broadcastData(ServerNetworkHandler &owner, Level &level, const CommandBlockActor &actor)
 {
     const Vector3i actorPosition = actor.getPosition();
-
-    BlockActorDataPacket data;
-    data.mBlockPosition = actorPosition;
-    data.mData = actor.getSpawnCompound();
-
-    const Vector3f center((float) actorPosition.x + 0.5f, (float) actorPosition.y + 0.5f,
-                          (float) actorPosition.z + 0.5f);
-    BlockActionHandler::broadcastToViewers(owner, level, center, data);
+    BlockActionHandler::broadcastBlockActorData(owner, level, actor);
 
     const int64_t key = packPosition(actorPosition);
     const int32_t chunkX = actorPosition.x >> 4;

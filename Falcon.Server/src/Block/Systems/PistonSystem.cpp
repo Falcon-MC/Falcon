@@ -11,7 +11,6 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Plugin/PluginEvent.h"
 #include "Plugin/PluginManager.h"
-#include "Protocol/Packets/BlockActorDataPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
 #include <algorithm>
@@ -66,17 +65,6 @@ namespace {
     };
 
     std::array<std::vector<PendingMove>, Dimension::DIMENSION_COUNT> gPendingMoves;
-
-    void broadcastArmData(ServerNetworkHandler &owner, Level &level, const PistonArmBlockActor &arm) {
-        const Vector3i &position = arm.getPosition();
-
-        BlockActorDataPacket packet;
-        packet.mBlockPosition = position;
-        packet.mData = arm.getSpawnCompound();
-
-        const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-        BlockActionHandler::broadcastToViewers(owner, level, center, packet);
-    }
 
     bool contains(const std::unordered_set<std::string> &set, const std::string &value) {
         return set.find(value) != set.end();
@@ -340,7 +328,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
         level.setBlock(toMove[index - 1], BlockState(AIR), false);
 
     gPendingMoves[level.getDimensionId()].push_back(PendingMove{position, moved, moveDirection});
-    broadcastArmData(owner, level, arm);
+    BlockActionHandler::broadcastBlockActorData(owner, level, arm);
 
     if (extending) {
         BlockState arm(sticky ? STICKY_PISTON_ARM_COLLISION : PISTON_ARM_COLLISION);
@@ -375,7 +363,7 @@ void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
 
         const bool done = arm->isExtending() ? arm->getProgress() >= 1.0f : arm->getProgress() <= 0.0f;
         if (!done) {
-            broadcastArmData(owner, level, *arm);
+            BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
             pendingMoves.push_back(std::move(move));
             continue;
         }
@@ -385,7 +373,7 @@ void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
             level.setBlock(relative(attached[index], move.mDirection), move.mMoved[index], false);
 
         arm->finish();
-        broadcastArmData(owner, level, *arm);
+        BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
 
         for (const Vector3i &source: attached) {
             RedstoneSystem::updateAroundRedstone(owner, level, source);

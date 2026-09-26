@@ -13,7 +13,6 @@
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
-#include "Protocol/Packets/BlockActorDataPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 
 #include <random>
@@ -33,17 +32,6 @@ namespace {
     std::mt19937 &poseRandom() {
         static std::mt19937 generator(std::random_device{}());
         return generator;
-    }
-
-    void broadcastStatue(ServerNetworkHandler &owner, Level &level, const CopperGolemStatueBlockActor &statue) {
-        const Vector3i &position = statue.getPosition();
-
-        BlockActorDataPacket data;
-        data.mBlockPosition = position;
-        data.mData = statue.getSpawnCompound();
-
-        const Vector3f centre((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-        BlockActionHandler::broadcastToViewers(owner, level, centre, data);
     }
 
     bool isAxe(const ItemStack &item) {
@@ -102,7 +90,7 @@ bool CopperGolemStatueBlock::onInteract(ServerNetworkHandler &owner, ServerPlaye
         CopperGolemStatueBlockActor &statue =
                 level.getBlockActors().getOrCreate<CopperGolemStatueBlockActor>(position);
         statue.setPose((statue.getPose() + 1) % CopperGolemStatueBlockActor::POSE_COUNT);
-        broadcastStatue(owner, level, statue);
+        BlockActionHandler::broadcastBlockActorData(owner, level, statue);
         return true;
     }
 
@@ -149,7 +137,7 @@ bool CopperGolemStatueBlock::onActorEvent(ServerNetworkHandler &owner, Level &le
     CopperGolemStatueBlockActor &statue = level.getBlockActors().getOrCreate<CopperGolemStatueBlockActor>(position);
     std::uniform_int_distribution<int32_t> poses(0, CopperGolemStatueBlockActor::POSE_COUNT - 1);
     statue.setPose(poses(poseRandom()));
-    broadcastStatue(owner, level, statue);
+    BlockActionHandler::broadcastBlockActorData(owner, level, statue);
     return true;
 }
 

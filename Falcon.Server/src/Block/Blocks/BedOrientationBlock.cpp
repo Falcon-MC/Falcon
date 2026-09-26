@@ -9,7 +9,6 @@
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
-#include "Protocol/Packets/BlockActorDataPacket.h"
 
 #include <algorithm>
 #include <memory>
@@ -61,14 +60,9 @@ void BedOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &pl
         created->setState(state);
         static_cast<BedBlockActor *>(created.get())->setColor(color);
 
-        BlockActorDataPacket data;
-        data.mBlockPosition = half;
-        data.mData = created->getSpawnCompound();
-
+        const BlockActor &inserted = *created;
         level.getBlockActors().insert(std::move(created));
-
-        const Vector3f centre((float) half.x + 0.5f, (float) half.y + 0.5f, (float) half.z + 0.5f);
-        BlockActionHandler::broadcastToViewers(owner, level, centre, data);
+        BlockActionHandler::broadcastBlockActorData(owner, level, inserted);
     }
 }
 
