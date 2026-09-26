@@ -36,14 +36,8 @@ bool ChorusFruitItem::matches(const std::string &identifier) {
     return identifier == CHORUS_FRUIT_IDENTIFIER;
 }
 
-bool ChorusFruitItem::isChorusFruit(const ItemStack &item) {
-    return item.mDefinition != nullptr && item.mDefinition->getIdentifier() == CHORUS_FRUIT_IDENTIFIER;
-}
 
-bool ChorusFruitItem::canConsume(ServerNetworkHandler &owner, ServerPlayer &player) {
-    if (!isChorusFruit(player.getInventory().getItemInHand()))
-        return false;
-
+bool ChorusFruitItem::canConsume(ServerNetworkHandler &owner, ServerPlayer &player) const {
     return !LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition()).water;
 }
 
@@ -106,14 +100,14 @@ bool ChorusFruitItem::findTeleportPosition(ServerNetworkHandler &owner, ServerPl
     return false;
 }
 
-bool ChorusFruitItem::onEaten(ServerNetworkHandler &owner, ServerPlayer &player) {
+void ChorusFruitItem::onConsumed(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
+    (void) item;
     Vector3f destination;
     if (!findTeleportPosition(owner, player, destination))
-        return true;
+        return;
 
     Level &level = owner.getLevelFor(player);
     owner.playLevelSound(level, LevelSoundEvent::TELEPORT, player.getPosition(), player.getIdentifier());
     player.teleport(owner, destination, MovePlayerTeleportationCause::ChorusFruit);
     owner.playLevelSound(level, LevelSoundEvent::TELEPORT, destination, player.getIdentifier());
-    return true;
 }

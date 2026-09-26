@@ -8,7 +8,6 @@
 #include "Item/Item.h"
 #include "Item/ItemData.h"
 #include "Item/ItemNetworkIdTable.h"
-#include "Item/Items/ChorusFruitItem.h"
 #include "Item/VanillaItems.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/InventoryHandler.h"
@@ -19,25 +18,31 @@
 #include <string>
 
 namespace {
-    const int64_t FOOD_USE_DURATION_TICKS = 32;
-    const int64_t DRIED_KELP_USE_DURATION_TICKS = 16;
+    const int64_t DEFAULT_USE_DURATION_TICKS = 32;
     const int64_t EARLY_CONSUMABLE_RELEASE_BLOCK_TICKS = 10;
     const int64_t ITEM_USE_DEBOUNCE_TICKS = 4;
     const int64_t EATING_EVENT_INTERVAL_TICKS = 4;
 
-    int64_t useDurationTicksFor(const ItemStack &item) {
+    const Tag *vanillaComponents(const ItemStack &item) {
         if (item.isAir() || item.mDefinition == nullptr)
-            return FOOD_USE_DURATION_TICKS;
+            return nullptr;
 
-        if (item.mDefinition->getIdentifier() == "minecraft:dried_kelp")
-            return DRIED_KELP_USE_DURATION_TICKS;
-
-        return FOOD_USE_DURATION_TICKS;
+        const ItemNetworkIdEntry *entry = ItemNetworkIdTable::find(item.mDefinition->getIdentifier());
+        return entry == nullptr ? nullptr : entry->mComponents.get("components");
     }
 
-    bool isHeldIdentifier(const ItemStack &item, const char *identifier) {
-        return !item.isAir() && item.mDefinition != nullptr
-               && std::string(item.mDefinition->getIdentifier()) == identifier;
+    const Item *itemTypeOf(const ItemStack &item) {
+        if (item.isAir() || item.mDefinition == nullptr)
+            return nullptr;
+        return VanillaItems::fromIdentifier(item.mDefinition->getIdentifier());
+    }
+
+    int64_t useDurationTicksFor(const ItemStack &item) {
+        const Tag *components = vanillaComponents(item);
+        const Tag *duration = components == nullptr ? nullptr : components->get("minecraft:use_duration");
+        if (duration != nullptr && duration->asInt() > 0)
+            return duration->asInt();
+        return DEFAULT_USE_DURATION_TICKS;
     }
 
     const FoodItemComponent *findFoodComponent(const ItemStack &item) {
@@ -52,22 +57,32 @@ namespace {
         return food;
     }
 
-    bool canAlwaysEat(const ItemStack &item, const FoodItemComponent &food) {
-        if (food.canAlwaysEat())
+    bool isConsumable(const ItemStack &item) {
+        if (findFoodComponent(item) != nullptr)
             return true;
 
-        const Item *itemType = VanillaItems::fromIdentifier(item.mDefinition->getIdentifier());
+        const Item *itemType = itemTypeOf(item);
+        return itemType != nullptr && itemType->isConsumable();
+    }
+
+    bool canAlwaysConsume(const ItemStack &item) {
+        const FoodItemComponent *food = findFoodComponent(item);
+        if (food == nullptr || food->canAlwaysEat())
+            return true;
+
+        const Item *itemType = itemTypeOf(item);
         return itemType != nullptr && itemType->canAlwaysEat();
     }
 
     std::string usingConvertsTo(const ItemStack &item) {
-        if (item.mDefinition == nullptr)
-            return std::string();
-
-        const ItemNetworkIdEntry *entry = ItemNetworkIdTable::find(item.mDefinition->getIdentifier());
-        const Tag *components = entry == nullptr ? nullptr : entry->mComponents.get("components");
+        const Tag *components = vanillaComponents(item);
         const Tag *food = components == nullptr ? nullptr : components->get("minecraft:food");
-        const std::string name = food == nullptr ? std::string() : food->getString("using_converts_to");
+        std::string name = food == nullptr ? std::string() : food->getString("using_converts_to");
+        if (name.empty()) {
+            const Item *itemType = itemTypeOf(item);
+            name = itemType == nullptr ? std::string() : itemType->getUsingConvertsTo();
+        }
+
         if (name.empty() || name.find(':') != std::string::npos)
             return name;
         return "minecraft:" + name;
@@ -94,7 +109,7 @@ void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
 
     const int64_t itemUseTicks = mCurrentTick - player.getItemUseStartTick();
     const ItemStack &item = player.getInventory().getItemInHand();
-    const bool consumable = isHeldIdentifier(item, "minecraft:milk_bucket") || findFoodComponent(item) != nullptr;
+    const bool consumable = isConsumable(item);
 
     if (consumable && itemUseTicks >= useDurationTicksFor(item)) {
         _consumeHeldItem(player);
@@ -219,14 +234,11 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
         }
     }
 
-    const bool isMilk = isHeldIdentifier(heldItem, "minecraft:milk_bucket");
-    const bool isPotion = isHeldIdentifier(heldItem, "minecraft:potion");
-    const FoodItemComponent *food = findFoodComponent(heldItem);
-    if (food == nullptr && !isMilk && !isPotion)
+    if (!isConsumable(heldItem))
         return;
 
-    if (!isMilk && !isPotion && ChorusFruitItem::isChorusFruit(heldItem)
-        && !ChorusFruitItem::canConsume(*this, player))
+    const Item *consumedType = itemTypeOf(heldItem);
+    if (consumedType != nullptr && !consumedType->canConsume(*this, player))
         return;
 
     if (player.isAwaitingConsumableRelease())
@@ -240,7 +252,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
 
     const bool usingItem = player.getFlags().get(ActorFlag::UsingItem);
 
-    if (!isMilk && !isPotion && !canAlwaysEat(heldItem, *food) && !player.canEat()) {
+    if (!canAlwaysConsume(heldItem) && !player.canEat()) {
         if (usingItem) {
             player.getFlags().set(ActorFlag::UsingItem, false);
             _sendEntityData(player);
@@ -270,10 +282,9 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
     const int slot = inventory.getSelectedSlot();
 
     const ItemStack &heldItem = inventory.getItemInHand();
-    const bool isMilk = isHeldIdentifier(heldItem, "minecraft:milk_bucket");
-    const bool isPotion = isHeldIdentifier(heldItem, "minecraft:potion");
     const FoodItemComponent *food = findFoodComponent(heldItem);
-    const bool consumable = food != nullptr || isMilk || isPotion;
+    const Item *itemType = itemTypeOf(heldItem);
+    const bool consumable = isConsumable(heldItem);
 
     if (wasUsing && consumable && heldTicks < useDurationTicksFor(heldItem))
         return;
@@ -286,8 +297,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
     if (!consumable)
         return;
 
-    if (!isMilk && ChorusFruitItem::isChorusFruit(heldItem)
-        && !ChorusFruitItem::canConsume(*this, player)) {
+    if (itemType != nullptr && !itemType->canConsume(*this, player)) {
         player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
         return;
     }
@@ -299,7 +309,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         return;
     }
 
-    if (!isMilk && !isPotion && !canAlwaysEat(usedItem, *food) && !player.canEat()) {
+    if (!canAlwaysConsume(usedItem) && !player.canEat()) {
         player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
         _sendAttributes(player);
         return;
@@ -326,28 +336,22 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         mEventBus.after().mItemCompleteUse.emit(completeEvent);
     }
 
-    if (isMilk) {
-        player.getEffects().clear();
-    } else if (isPotion) {
-        applyPotionEffects(player, usedItem.mDamage, 1.0f);
-    } else {
-        if (ChorusFruitItem::isChorusFruit(usedItem))
-            ChorusFruitItem::onEaten(*this, player);
-
+    if (food != nullptr) {
         player.consumeFood(food->getNutrition(), food->getSaturation());
         for (const FoodEffect &effect: food->getEffects())
             addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
-
-        if (const Item *itemType = VanillaItems::fromIdentifier(usedItem.mDefinition->getIdentifier()))
-            itemType->onConsumed(*this, player, usedItem);
-
-        playLevelSound(getLevelFor(player), LevelSoundEvent::BURP, player.getPosition());
     }
+
+    if (itemType != nullptr)
+        itemType->onConsumed(*this, player, usedItem);
+
+    if (food != nullptr)
+        playLevelSound(getLevelFor(player), LevelSoundEvent::BURP, player.getPosition());
 
     ItemStack remaining = inventory.getItemInHand();
     remaining.mCount -= 1;
     if (remaining.mCount <= 0) {
-        const std::string convertsTo = isMilk ? std::string("minecraft:bucket") : usingConvertsTo(usedItem);
+        const std::string convertsTo = usingConvertsTo(usedItem);
         remaining = ItemStack::air();
         if (!convertsTo.empty()) {
             remaining.mDefinition = mItemDefinitions.getDefinition(convertsTo);

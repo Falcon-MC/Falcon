@@ -87,8 +87,22 @@ public:
         return false;
     }
 
+    virtual bool isConsumable() const {
+        return false;
+    }
+
     virtual bool canAlwaysEat() const {
         return false;
+    }
+
+    virtual bool canConsume(ServerNetworkHandler &owner, ServerPlayer &player) const {
+        (void) owner;
+        (void) player;
+        return true;
+    }
+
+    virtual std::string getUsingConvertsTo() const {
+        return std::string();
     }
 
     virtual void onConsumed(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {

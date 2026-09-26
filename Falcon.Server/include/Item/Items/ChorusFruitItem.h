@@ -3,7 +3,6 @@
 #include "Core/Math/Vector3f.h"
 #include "Item/Item.h"
 
-class ItemStack;
 class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -18,11 +17,9 @@ public:
         return true;
     }
 
-    static bool isChorusFruit(const ItemStack &item);
+    bool canConsume(ServerNetworkHandler &owner, ServerPlayer &player) const override;
 
-    static bool canConsume(ServerNetworkHandler &owner, ServerPlayer &player);
-
-    static bool onEaten(ServerNetworkHandler &owner, ServerPlayer &player);
+    void onConsumed(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const override;
 
 private:
     static bool isSolid(Level &level, int x, int y, int z);
