@@ -371,7 +371,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mAnnouncement.mServerName = serverName;
     mAnnouncement.mSubName = subName;
     mAnnouncement.mGameMode = "Survival";
-    mAnnouncement.mGameModeId = 1;
+    mAnnouncement.mServerAvailability = 1;
     mAnnouncement.mMaxPlayers = maxPlayers;
 
     _registerCommands();
@@ -507,7 +507,7 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
             break;
     }
 
-    mAnnouncement.mGameModeId = (int) properties.getGameType();
+    mAnnouncement.mServerAvailability = 1;
 
     if (mIsListening)
         _updateServerAnnouncement();
