@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <random>
 
 namespace {
     const float SYNC_POSITION_EPSILON = 0.0001f;
@@ -27,7 +28,16 @@ namespace {
     const float ATTACK_KNOCKBACK = 0.4f;
     const float FIRE_TICK_DAMAGE = 1.0f;
     const int32_t SUNLIGHT_BURN_TICKS = 8 * 20;
-    const int32_t DAYLIGHT_SUBTRACTED_THRESHOLD = 4;
+    const float SUNLIGHT_MIN_BRIGHTNESS = 0.5f;
+    const float SUNLIGHT_BRIGHTNESS_OFFSET = 0.4f;
+    const float SUNLIGHT_CHANCE_SCALE = 30.0f;
+    const float MAX_LIGHT = 15.0f;
+    const float EYE_HEIGHT_RATIO = 0.85f;
+
+    std::mt19937 &sunlightRandom() {
+        static std::mt19937 generator(std::random_device{}());
+        return generator;
+    }
 }
 
 namespace {
@@ -176,18 +186,30 @@ void ServerActor::tickSunlightBurn(ServerNetworkHandler &owner) {
         return;
 
     Level &level = owner.getLevelFor(*this);
-    if (!level.hasSkyLight() || level.isRaining() || level.getSkyLightSubtracted() >= DAYLIGHT_SUBTRACTED_THRESHOLD)
+    if (!level.hasSkyLight() || level.isRaining())
         return;
 
     const Vector3f position = getPosition();
-    const int32_t headY = (int32_t) std::floor(position.y) + 1;
+    const int32_t eyeY = (int32_t) std::floor(position.y + getSize().mHeight * EYE_HEIGHT_RATIO);
     const int32_t blockX = (int32_t) std::floor(position.x);
     const int32_t blockZ = (int32_t) std::floor(position.z);
 
-    if (level.getHeightAt(blockX, blockZ) > headY)
+    const float brightness = (float) std::max(0, level.getSkyLightAt(blockX, eyeY, blockZ)
+                                                 - level.getSkyLightSubtracted()) / MAX_LIGHT;
+    if (brightness <= SUNLIGHT_MIN_BRIGHTNESS)
+        return;
+
+    const float roll = std::uniform_real_distribution<float>(0.0f, 1.0f)(sunlightRandom()) * SUNLIGHT_CHANCE_SCALE;
+    if (roll >= (brightness - SUNLIGHT_BRIGHTNESS_OFFSET) * 2.0f)
+        return;
+
+    if (level.getHeightAt(blockX, blockZ) > eyeY)
         return;
 
     if (LiquidBlocksFetch::at(level, position).water)
+        return;
+
+    if (shieldFromSunlight(owner))
         return;
 
     setFireTicks(SUNLIGHT_BURN_TICKS);

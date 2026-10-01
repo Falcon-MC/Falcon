@@ -15,6 +15,7 @@
 #include "Block/Systems/LiquidBlocksFetch.h"
 #include "Inventory/InventoryManager.h"
 #include "Inventory/PlayerInventory.h"
+#include "Item/ItemDurability.h"
 #include "Item/Loot/LegacyItemMapper.h"
 #include "Item/Loot/LootItems.h"
 #include "Item/Loot/LootTableRegistry.h"
@@ -71,6 +72,8 @@ namespace {
                                                  "minecraft:navigation.swim", "minecraft:navigation.climb"};
     const char *const CAN_CLIMB_COMPONENT = "minecraft:can_climb";
     const char *const BREATHABLE_COMPONENT = "minecraft:breathable";
+    const char *const BURNS_IN_DAYLIGHT_COMPONENT = "minecraft:burns_in_daylight";
+    const int32_t SUNLIGHT_HELMET_DAMAGE_BOUND = 2;
     const float DEFAULT_AIR_SECONDS = 15.0f;
     const float EYE_HEIGHT_RATIO = 0.85f;
     const int32_t AIR_REFILL_PER_TICK = 5;
@@ -1584,6 +1587,23 @@ const json::Value *MobActor::getComponent(const std::string &name) const {
     const std::unordered_map<std::string, const json::Value *> &components = getComponents();
     const auto found = components.find(name);
     return found == components.end() ? nullptr : found->second;
+}
+
+bool MobActor::burnsInDaylight() const {
+    return getComponent(BURNS_IN_DAYLIGHT_COMPONENT) != nullptr;
+}
+
+bool MobActor::shieldFromSunlight(ServerNetworkHandler &owner) {
+    ItemStack helmet = mEquipment.getSlot(MobEquipment::HEAD);
+    if (helmet.isAir())
+        return false;
+
+    const int32_t damage = std::uniform_int_distribution<int32_t>(0, SUNLIGHT_HELMET_DAMAGE_BOUND - 1)(lifecycleRandom());
+    if (ItemDurability::apply(nullptr, helmet, damage)) {
+        mEquipment.setSlot(MobEquipment::HEAD, helmet);
+        mEquipment.broadcast(owner, *this);
+    }
+    return true;
 }
 
 std::vector<std::string> MobActor::getFamilies() const {

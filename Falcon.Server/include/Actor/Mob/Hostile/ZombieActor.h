@@ -12,9 +12,5 @@ public:
 
     float getDefaultMaxHealth() const override { return 20.0f; }
 
-    bool burnsInDaylight() const override {
-        return true;
-    }
-
     float getAttackDamage(Difficulty difficulty) const override;
 };

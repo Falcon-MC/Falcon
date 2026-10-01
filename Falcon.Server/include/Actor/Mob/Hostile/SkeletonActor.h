@@ -10,9 +10,4 @@ public:
 
     ActorSize getSize() const override { return ActorSize{0.6f, 1.9f}; }
 
-    float getDefaultMaxHealth() const override { return 20.0f; }
-
-    bool burnsInDaylight() const override {
-        return true;
-    }
-};
+    float getDefaultMaxHealth() const override { return 20.0f; }};

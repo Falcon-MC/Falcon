@@ -16,9 +16,4 @@ public:
         return false;
     }
 
-    int getExperienceDrop() const override { return randomRange(1, 3); }
-
-    bool burnsInDaylight() const override {
-        return true;
-    }
-};
+    int getExperienceDrop() const override { return randomRange(1, 3); }};

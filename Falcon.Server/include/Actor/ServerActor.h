@@ -166,6 +166,11 @@ public:
         return false;
     }
 
+    virtual bool shieldFromSunlight(ServerNetworkHandler &owner) {
+        (void) owner;
+        return false;
+    }
+
     bool needsMovementSync() const;
 
     void markMovementSynced();

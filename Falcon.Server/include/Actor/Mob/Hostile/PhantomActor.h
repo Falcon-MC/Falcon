@@ -14,9 +14,4 @@ public:
 
     bool hasGravity() const override {
         return false;
-    }
-
-    bool burnsInDaylight() const override {
-        return true;
-    }
-};
+    }};

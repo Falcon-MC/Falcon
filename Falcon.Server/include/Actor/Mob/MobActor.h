@@ -105,6 +105,10 @@ public:
         return mEquipment.absorbDamage(amount, source);
     }
 
+    bool burnsInDaylight() const override;
+
+    bool shieldFromSunlight(ServerNetworkHandler &owner) override;
+
     virtual float getAttackDamage(Difficulty difficulty) const;
 
     const json::Value *getDefinition() const;
