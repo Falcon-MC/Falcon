@@ -400,6 +400,13 @@ namespace {
 
 void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                     const PlayerAuthInputPacket &packet, Vector3f &feetPosition) {
+    // Temporary: the movement simulation only runs when server-authoritative-movement-strict is true, until it is
+    // reliable enough to run for every player.
+    if (!owner.getProperties().getServerAuthoritativeMovementStrict()) {
+        player.clearMovementSimulation();
+        return;
+    }
+
     const int32_t gameType = player.getGameType();
     const bool skip = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator
                       || player.isRiding() || player.isFlying() || player.isSleeping() || player.hasPendingMovementChange()
