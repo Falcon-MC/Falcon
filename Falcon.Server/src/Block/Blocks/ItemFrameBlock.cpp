@@ -13,8 +13,7 @@ FALCON_REGISTER_BLOCK(ItemFrameBlock, 60);
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
-#include "Protocol/Packets/BlockActorDataPacket.h"
-#include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
 
@@ -63,13 +62,6 @@ namespace {
         const BlockState updated(state.mName, states);
         level.setBlockState(position.x, position.y, position.z, updated);
         BlockActionHandler::broadcastBlockUpdate(owner, level, position, updated);
-    }
-
-    void broadcastFrame(ServerNetworkHandler &owner, Level &level, const ItemFrameBlockActor &frame) {
-        BlockActorDataPacket data;
-        data.mBlockPosition = frame.getPosition();
-        data.mData = frame.getSpawnCompound();
-        BlockActionHandler::broadcastToViewers(owner, level, centreOf(frame.getPosition()), data);
     }
 
     void dropFramedItem(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -178,14 +170,14 @@ bool ItemFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
         }
 
         setStoringMap(owner, level, position, state, isFilledMap(held));
-        owner.playLevelSound(level, LevelSoundEvent::ITEM_FRAME_ADD_ITEM, centreOf(position));
+        owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameAddItem, centreOf(position), 0);
     } else {
         frame->setRotation(frame->getRotation() + 1);
         setStoringMap(owner, level, position, state, false);
-        owner.playLevelSound(level, LevelSoundEvent::ITEM_FRAME_ROTATE_ITEM, centreOf(position));
+        owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameRotateItem, centreOf(position), 0);
     }
 
-    broadcastFrame(owner, level, *frame);
+    BlockActionHandler::broadcastBlockActorData(owner, level, *frame);
     return true;
 }
 
@@ -204,11 +196,12 @@ bool ItemFrameBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, 
     frame->setRotation(0);
     setStoringMap(owner, level, position, state, false);
 
-    owner.playLevelSound(level,
-                         creative ? LevelSoundEvent::ITEM_FRAME_REMOVE_ITEM : LevelSoundEvent::ITEM_FRAME_BREAK,
-                         centreOf(position));
+    owner.broadcastLevelEvent(level,
+                              creative ? LevelEventPacket::SoundItemFrameRemoveItem
+                                       : LevelEventPacket::SoundItemFrameBreak,
+                              centreOf(position), 0);
 
-    broadcastFrame(owner, level, *frame);
+    BlockActionHandler::broadcastBlockActorData(owner, level, *frame);
     return true;
 }
 
@@ -226,7 +219,7 @@ void ItemFrameBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
     created->setState(state);
     blockActors.insert(std::move(created));
 
-    owner.playLevelSound(level, LevelSoundEvent::ITEM_FRAME_PLACE, centreOf(position));
+    owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFramePlace, centreOf(position), 0);
 }
 
 void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -240,5 +233,5 @@ void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, Level &level, const V
     dropFramedItem(owner, level, position, *frame);
     level.getBlockActors().remove(position);
 
-    owner.playLevelSound(level, LevelSoundEvent::ITEM_FRAME_BREAK, centreOf(position));
+    owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameBreak, centreOf(position), 0);
 }

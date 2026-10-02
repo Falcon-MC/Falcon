@@ -1,12 +1,15 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include "Actor/ActorClassRegistry.h"
+#include "Actor/ActorFlags.h"
 #include "Actor/DynamicPropertyStore.h"
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/Mob/MobActor.h"
 #include "Actor/RideSystem.h"
 #include "Actor/ServerActor.h"
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Command/ExecuteCommandOrigin.h"
+#include "Command/ServerCommandOrigin.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Math/MathConstants.h"
 #include "Protocol/Packets/AddActorPacket.h"
@@ -39,8 +42,6 @@
 #include "Actor/Misc/ExperienceOrbActor.h"
 #include "Actor/Projectile/ProjectileActor.h"
 #include "Item/Items/FireworkRocketItem.h"
-#include "Item/Items/RangedWeaponItems.h"
-#include "Item/Items/ThrowableItems.h"
 #include "Item/PotionEffects.h"
 #include "Item/StringToItemParser.h"
 #include "Actor/ExperienceValues.h"
@@ -49,6 +50,7 @@
 #include <random>
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
@@ -57,6 +59,45 @@
 #include <cmath>
 
 namespace {
+    const char *const UNDEAD_FAMILY = "undead";
+
+    MobEffectInstance potionEffectInstance(const PotionEffect &effect, float durationScale) {
+        MobEffectInstance instance;
+        instance.mId = effect.mId;
+        instance.mDuration = std::max(1, (int32_t) ((float) effect.mDuration * durationScale));
+        instance.mAmplifier = effect.mAmplifier;
+        instance.mParticles = true;
+        return instance;
+    }
+
+    bool allowProjectileHit(ServerNetworkHandler &owner, ServerActor &projectile, Level &level,
+                            const Vector3f &position, Actor *target, const Vector3i *block) {
+        PluginManager &plugins = owner.getPluginManager();
+        if (!plugins.hasSubscribers(FALCON_EVENT_PROJECTILE_HIT))
+            return true;
+
+        PluginEvent hitEvent;
+        hitEvent.mType = FALCON_EVENT_PROJECTILE_HIT;
+        hitEvent.mCancellable = true;
+        hitEvent.mEntity = &projectile;
+        hitEvent.mTarget = target;
+        hitEvent.mLevel = &level;
+        hitEvent.mPosition = position;
+        if (block != nullptr) {
+            hitEvent.mBlockPosition = *block;
+            hitEvent.mBlockName = level.getBlockState(block->x, block->y, block->z).mName;
+        }
+
+        for (auto &entry: owner.getPlayers()) {
+            if ((int64_t) entry.second.getRuntimeId() == projectile.getOwnerUniqueId())
+                hitEvent.mAttacker = &entry.second;
+        }
+
+        plugins.dispatch(hitEvent);
+        return !hitEvent.mCancelled;
+    }
+
+    const int32_t ACTOR_DATA_SCALE = 38;
     const float ARROW_KNOCKBACK = 0.3f;
     const float PUNCH_KNOCKBACK_PER_LEVEL = 0.5f;
     const float IMPALING_DAMAGE_PER_LEVEL = 2.5f;
@@ -96,11 +137,11 @@ namespace {
     EntityProperties buildActorProperties(ServerActor &actor) {
         EntityProperties properties;
 
-        const CustomActorDefinition *definition = actor.getDefinition();
-        if (definition == nullptr)
+        const std::vector<ActorPropertyDescription> *schema = actor.getPropertySchema();
+        if (schema == nullptr)
             return properties;
 
-        for (const ActorPropertyDescription &descriptor: definition->mProperties) {
+        for (const ActorPropertyDescription &descriptor: *schema) {
             if (descriptor.mType == ActorPropertyDescription::Type::Float) {
                 FloatEntityProperty property;
                 property.mIndex = descriptor.mIndex;
@@ -121,9 +162,9 @@ namespace {
 ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                                               const std::function<void(ServerActor &)> &configure) {
     const uint64_t runtimeId = allocateRuntimeId();
-    const int64_t uniqueId = (int64_t) runtimeId;
 
     std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(runtimeId, identifier);
+    actor->setUniqueId(allocateActorUniqueId());
     actor->getAttributes() = ActorAttributes::createActorDefaults();
     actor->setDimension(level.getDimensionType());
     actor->setPosition(position);
@@ -143,44 +184,82 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     if (definition != nullptr) {
         actor->setDefinition(definition);
         actor->setProjectile(definition->mIsProjectile);
-
-        for (const ActorPropertyDescription &descriptor: definition->mProperties) {
-            if (descriptor.mType == ActorPropertyDescription::Type::Float)
-                actor->setFloatProperty(descriptor.mName, descriptor.mDefaultFloat);
-            else
-                actor->setIntProperty(descriptor.mName, descriptor.mDefaultInt);
-        }
     }
 
-    ServerActor *result = actor.get();
-    mActors[uniqueId] = std::move(actor);
+    actor->initializeProperties();
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_SPAWN)) {
+        PluginEvent spawnEvent;
+        spawnEvent.mType = FALCON_EVENT_ENTITY_SPAWN;
+        spawnEvent.mCancellable = true;
+        spawnEvent.mEntity = actor.get();
+        spawnEvent.mLevel = &level;
+        spawnEvent.mPosition = actor->getPosition();
+        plugins->dispatch(spawnEvent);
+        if (spawnEvent.mCancelled)
+            return nullptr;
+    }
+
+    ServerActor *result = _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
+    mScriptEngine.onEntitySpawn(*result);
     return result;
 }
 
-FallingBlockActor *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockState &state,
+ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::string &identifier,
+                                                  const Vector3f &position, float scale) {
+    ServerActor *baby = spawnActor(level, identifier, position);
+    if (baby == nullptr)
+        return nullptr;
+
+    if (MobActor *mob = dynamic_cast<MobActor *>(baby))
+        mob->markBorn();
+
+    baby->getFlags().set(ActorFlag::Baby, true);
+
+    EntityDataMap metadata;
+    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID};
+    const int64_t flagValues[] = {baby->getFlags().getLowBits(), baby->getFlags().getHighBits()};
+    for (int index = 0; index < 2; index++) {
+        EntityDataEntry entry;
+        entry.mId = flagIds[index];
+        entry.mFormat = EntityDataFormat::Long;
+        entry.mLongValue = flagValues[index];
+        metadata.mEntries.push_back(entry);
+    }
+
+    EntityDataEntry scaleEntry;
+    scaleEntry.mId = ACTOR_DATA_SCALE;
+    scaleEntry.mFormat = EntityDataFormat::Float;
+    scaleEntry.mFloatValue = scale;
+    metadata.mEntries.push_back(scaleEntry);
+
+    sendActorMetadata(*baby, metadata);
+    return baby;
+}
+
+FallingBlock *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockState &state,
                                                            const Vector3f &position) {
     const uint64_t runtimeId = allocateRuntimeId();
-    const int64_t uniqueId = (int64_t) runtimeId;
 
-    std::unique_ptr<FallingBlockActor> actor(new FallingBlockActor(runtimeId, state));
+    std::unique_ptr<FallingBlock> actor(new FallingBlock(runtimeId, state));
     actor->getAttributes() = ActorAttributes::createActorDefaults();
     actor->setDimension(level.getDimensionType());
     actor->setPosition(position);
     actor->setHighestPosition(position.y);
 
-    FallingBlockActor *result = actor.get();
-    mActors[uniqueId] = std::move(actor);
+    FallingBlock *result = actor.get();
+    _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
+    mScriptEngine.onEntitySpawn(*result);
     return result;
 }
 
 PrimedTntActor *ServerNetworkHandler::spawnPrimedTnt(Level &level, const Vector3f &position, const Vector3f &motion,
                                                      int32_t fuse) {
     const uint64_t runtimeId = allocateRuntimeId();
-    const int64_t uniqueId = (int64_t) runtimeId;
 
     std::unique_ptr<PrimedTntActor> actor(new PrimedTntActor(runtimeId, fuse));
     actor->getAttributes() = ActorAttributes::createActorDefaults();
@@ -189,9 +268,10 @@ PrimedTntActor *ServerNetworkHandler::spawnPrimedTnt(Level &level, const Vector3
     actor->setMotion(motion);
 
     PrimedTntActor *result = actor.get();
-    mActors[uniqueId] = std::move(actor);
+    _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
+    mScriptEngine.onEntitySpawn(*result);
     return result;
 }
 
@@ -220,6 +300,67 @@ ServerActor *ServerNetworkHandler::getActor(int64_t uniqueId) {
     return it == mActors.end() ? nullptr : it->second.get();
 }
 
+ServerActor *ServerNetworkHandler::getActorByRuntimeId(uint64_t runtimeId) {
+    auto it = mActorUniqueIdsByRuntimeId.find(runtimeId);
+    return it == mActorUniqueIdsByRuntimeId.end() ? nullptr : getActor(it->second);
+}
+
+int64_t ServerNetworkHandler::allocateActorUniqueId() {
+    return (int64_t) (((uint64_t) mLevel.getWorldStartCount() << 32) | ++mActorUniqueIdCounter);
+}
+
+ServerActor *ServerNetworkHandler::_registerActor(std::unique_ptr<ServerActor> actor) {
+    if (!actor->hasAssignedUniqueId() || mActors.count(actor->getUniqueId()) != 0)
+        actor->setUniqueId(allocateActorUniqueId());
+
+    ServerActor *result = actor.get();
+    mActorUniqueIdsByRuntimeId[result->getRuntimeId()] = result->getUniqueId();
+    mActors[result->getUniqueId()] = std::move(actor);
+    if (!result->getPendingPassengers().empty())
+        mVehiclesWithPendingPassengers.insert(result->getUniqueId());
+    return result;
+}
+
+void ServerNetworkHandler::_unregisterActor(int64_t uniqueId) {
+    auto it = mActors.find(uniqueId);
+    if (it == mActors.end())
+        return;
+
+    mVehiclesWithPendingPassengers.erase(uniqueId);
+    mActorUniqueIdsByRuntimeId.erase(it->second->getRuntimeId());
+    mActors.erase(it);
+}
+
+void ServerNetworkHandler::_resolvePendingRides() {
+    std::vector<int64_t> resolved;
+
+    for (const int64_t vehicleId: mVehiclesWithPendingPassengers) {
+        ServerActor *vehicle = getActor(vehicleId);
+        if (vehicle == nullptr) {
+            resolved.push_back(vehicleId);
+            continue;
+        }
+
+        std::vector<int64_t> &pending = vehicle->getPendingPassengers();
+        for (auto it = pending.begin(); it != pending.end();) {
+            ServerActor *passenger = getActor(*it);
+            if (passenger == nullptr) {
+                ++it;
+                continue;
+            }
+
+            RideSystem::mount(*this, *passenger, *vehicle, false);
+            it = pending.erase(it);
+        }
+
+        if (pending.empty())
+            resolved.push_back(vehicleId);
+    }
+
+    for (const int64_t vehicleId: resolved)
+        mVehiclesWithPendingPassengers.erase(vehicleId);
+}
+
 ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
                                                    float verticalOffset) {
     const Vector3f &rotation = player.getRotation();
@@ -240,7 +381,25 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     projectile->getProjectileData().mLootingLevel =
             ItemEnchantments::getLevel(player.getInventory().getItemInHand(), EnchantmentIds::LOOTING);
     projectile->setMotion(Vector3f(direction.x * speed, direction.y * speed, direction.z * speed));
-    return projectile;
+    return allowProjectileLaunch(*projectile, &player) ? projectile : nullptr;
+}
+
+bool ServerNetworkHandler::allowProjectileLaunch(ServerActor &projectile, Actor *shooter) {
+    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PROJECTILE_LAUNCH);
+    if (plugins == nullptr)
+        return true;
+
+    PluginEvent launchEvent;
+    launchEvent.mType = FALCON_EVENT_PROJECTILE_LAUNCH;
+    launchEvent.mCancellable = true;
+    launchEvent.mEntity = &projectile;
+    launchEvent.mAttacker = shooter;
+    plugins->dispatch(launchEvent);
+    if (!launchEvent.mCancelled)
+        return true;
+
+    removeActor((int64_t) projectile.getRuntimeId());
+    return false;
 }
 
 bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const Vector3f &hitPosition,
@@ -341,11 +500,7 @@ void ServerNetworkHandler::broadcastLevelEvent(Level &level, int32_t eventId, co
     event.mEventId = eventId;
     event.mPosition = position;
     event.mData = data;
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned() && entry.second.getDimension() == level.getDimensionType())
-            mNetworkHandler->send(entry.first, event, mCodecContext);
-    }
+    BlockActionHandler::broadcastToViewers(*this, level, position, event);
 }
 
 void ServerNetworkHandler::dropProjectileItem(ServerActor &projectile, const Vector3f &position) {
@@ -412,13 +567,35 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
 
     ServerPlayer *victimPlayer = dynamic_cast<ServerPlayer *>(&target);
     if (victimPlayer != nullptr) {
-        applyDamage(*victimPlayer, damage, "death.attack.arrow",
-                    {victimPlayer->getName(), shooter == nullptr ? std::string() : shooter->getName()},
-                    false, false);
+        const Vector3f motion = projectile.getMotion();
+        const Vector3f origin(hitPosition.x - motion.x, hitPosition.y - motion.y, hitPosition.z - motion.z);
+
+        ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimPlayer->getName());
+        source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
+        source.mAttacker = shooter;
+        source.fromOrigin(origin).asProjectile();
+
+        if (hurt(*victimPlayer, damage, source) == DamageResult::Blocked) {
+            if (!isTrident)
+                return true;
+
+            data.mHadCollision = true;
+            if (data.mLoyaltyLevel > 0 && shooter != nullptr) {
+                data.mReturning = true;
+                playLevelSound(getLevelFor(projectile), LevelSoundEvent::TRIDENT_RETURN, hitPosition);
+                return false;
+            }
+
+            dropProjectileItem(projectile, hitPosition);
+            return true;
+        }
     } else {
         ServerActor *victimActor = dynamic_cast<ServerActor *>(&target);
-        if (victimActor != nullptr)
-            damageActor(*victimActor, damage, shooter, data.mLootingLevel);
+        if (victimActor != nullptr) {
+            ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimActor->getName());
+            source.mAttacker = shooter;
+            damageActor(*victimActor, damage, source.asProjectile(), data.mLootingLevel);
+        }
     }
 
     const Vector3f targetPosition = target.getPosition();
@@ -488,20 +665,39 @@ void ServerNetworkHandler::applyPotionEffects(ServerPlayer &player, int32_t poti
             if (effect.mId == MobEffectId::InstantHealth) {
                 player.heal(4.0f * (float) (1 << effect.mAmplifier));
             } else if (effect.mId == MobEffectId::InstantDamage) {
-                applyDamage(player, 6.0f * (float) (1 << effect.mAmplifier), "death.attack.magic",
-                            {player.getName()}, false, false);
+                hurt(player, 6.0f * (float) (1 << effect.mAmplifier),
+                     ActorDamageSource::environment("death.attack.magic", player.getName())
+                             .withoutArmor()
+                             .withoutCooldown());
             }
             continue;
         }
 
-        MobEffectInstance instance;
-        instance.mId = effect.mId;
-        instance.mDuration = (int32_t) ((float) effect.mDuration * durationScale);
-        if (instance.mDuration < 1)
-            instance.mDuration = 1;
-        instance.mAmplifier = effect.mAmplifier;
-        instance.mParticles = true;
-        player.addEffect(instance);
+        player.addEffect(potionEffectInstance(effect, durationScale));
+    }
+}
+
+void ServerNetworkHandler::applyPotionEffects(ServerActor &actor, int32_t potionId, float durationScale) {
+    const MobActor *mob = dynamic_cast<const MobActor *>(&actor);
+    const std::vector<std::string> families = mob == nullptr ? std::vector<std::string>() : mob->getFamilies();
+    const bool undead = std::find(families.begin(), families.end(), UNDEAD_FAMILY) != families.end();
+
+    for (const PotionEffect &effect: getPotionEffects(potionId)) {
+        if (!effect.mInstant) {
+            actor.addEffect(potionEffectInstance(effect, durationScale));
+            continue;
+        }
+
+        if (effect.mId != MobEffectId::InstantHealth && effect.mId != MobEffectId::InstantDamage)
+            continue;
+
+        if ((effect.mId == MobEffectId::InstantHealth) != undead) {
+            actor.heal(4.0f * (float) (1 << effect.mAmplifier));
+            syncActorAttributes(actor);
+        } else {
+            damageActor(actor, 6.0f * (float) (1 << effect.mAmplifier),
+                        ActorDamageSource::environment("death.attack.magic", actor.getName()).withoutArmor());
+        }
     }
 }
 
@@ -510,12 +706,18 @@ void ServerNetworkHandler::removeActor(int64_t uniqueId) {
     if (it == mActors.end())
         return;
 
+    mScriptEngine.onEntityRemove(*it->second);
+    it = mActors.find(uniqueId);
+    if (it == mActors.end())
+        return;
+
     RideSystem::ejectAll(*this, *it->second);
     if (it->second->isRiding())
         RideSystem::dismount(*this, *it->second, false);
 
     broadcastActorRemove(*it->second);
-    mActors.erase(it);
+    getLevelFor(*it->second).eraseEntity(uniqueId);
+    _unregisterActor(uniqueId);
 }
 
 bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &actor) const {
@@ -555,6 +757,9 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
     }
 
     mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
+
+    if (MobActor *mob = dynamic_cast<MobActor *>(&actor))
+        mob->getEquipment().sendTo(*this, player, actor);
 }
 
 void ServerNetworkHandler::_sendActorRemove(ServerPlayer &player, const ServerActor &actor) {
@@ -648,6 +853,10 @@ void ServerNetworkHandler::changeActorDimension(Actor &actor, DimensionType dime
     if (traveller == nullptr)
         return;
 
+    const MobActor *mob = dynamic_cast<const MobActor *>(traveller);
+    if (mob != nullptr && mob->getComponent("minecraft:dimension_bound") != nullptr)
+        return;
+
     broadcastActorRemove(*traveller);
     traveller->setDimension(dimension);
     traveller->setPosition(position);
@@ -667,7 +876,7 @@ void ServerNetworkHandler::changeActorDimension(Actor &actor, DimensionType dime
         destination.saveEntities(chunkX, chunkZ, entities);
     }
 
-    mDetachedActors.push_back((int64_t) traveller->getRuntimeId());
+    mDetachedActors.push_back(traveller->getUniqueId());
     destination.releaseChunkIfUnused(chunkX, chunkZ);
 }
 
@@ -681,6 +890,16 @@ void ServerNetworkHandler::syncActorAttributes(ServerActor &actor) {
         if (entry.second.isSpawned())
             mNetworkHandler->send(entry.first, packet, mCodecContext);
     }
+}
+
+void ServerNetworkHandler::syncActorScale(ServerActor &actor, float scale) {
+    EntityDataMap metadata;
+    EntityDataEntry entry;
+    entry.mId = ACTOR_DATA_SCALE;
+    entry.mFormat = EntityDataFormat::Float;
+    entry.mFloatValue = scale;
+    metadata.mEntries.push_back(entry);
+    sendActorMetadata(actor, metadata);
 }
 
 void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {
@@ -743,6 +962,29 @@ void ServerNetworkHandler::syncActorProperties(ServerActor &actor) {
     }
 }
 
+void ServerNetworkHandler::queueActorCommand(ServerActor &actor, const std::string &command) {
+    QueuedActorCommand queued;
+    queued.mLevel = &getLevelFor(actor);
+    queued.mPosition = actor.getPosition();
+    queued.mRotation = actor.getRotation();
+    queued.mCommand = !command.empty() && command[0] == '/' ? command.substr(1) : command;
+    mQueuedActorCommands.push_back(std::move(queued));
+}
+
+void ServerNetworkHandler::runQueuedActorCommands() {
+    if (mQueuedActorCommands.empty())
+        return;
+
+    std::vector<QueuedActorCommand> queued;
+    queued.swap(mQueuedActorCommands);
+
+    ServerCommandOrigin base(this);
+    for (const QueuedActorCommand &entry: queued) {
+        ExecuteCommandOrigin origin(base, nullptr, entry.mPosition, entry.mRotation, entry.mLevel);
+        mCommands.dispatch(origin, entry.mCommand);
+    }
+}
+
 void ServerNetworkHandler::sendActorNameTag(ServerActor &actor) {
     const int32_t ENTITY_DATA_NAME = 4;
 
@@ -795,6 +1037,8 @@ void ServerNetworkHandler::pushFrom(Actor &actor, const Vector3f &origin, float 
     motion.z = motion.z * 0.5f - (origin.z - position.z) * strength;
 
     actor.setMotion(motion);
+    if (actor.isPlayer())
+        static_cast<ServerPlayer &>(actor).scheduleKnockback(motion);
     sendActorMotion(actor);
 }
 
@@ -815,14 +1059,19 @@ bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, Actor *
     return actor.hurt(*this, amount, attacker, lootingLevel);
 }
 
+bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, const ActorDamageSource &source,
+                                       int32_t lootingLevel) {
+    return actor.hurt(*this, amount, source, lootingLevel);
+}
+
 void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::string &deathMessageKey) {
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor)) {
-        applyDamage(*player, amount, deathMessageKey, {player->getName()});
+        hurt(*player, amount, ActorDamageSource::environment(deathMessageKey, player->getName()));
         return;
     }
 
     if (ServerActor *target = dynamic_cast<ServerActor *>(&actor))
-        target->hurt(*this, amount, nullptr);
+        target->hurt(*this, amount, ActorDamageSource::environment(deathMessageKey, target->getName()));
 }
 
 void ServerNetworkHandler::broadcastActorMove(ServerActor &actor) {
@@ -1116,7 +1365,8 @@ void ServerNetworkHandler::tickActors() {
         if (!actor.isProjectile()) {
             const ActorSize size = actor.getSize();
             if (_isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
-                actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE, nullptr);
+                actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE,
+                           ActorDamageSource::environment("death.attack.inWall", actor.getName()));
 
             BlockContactSystem::tick(*this, actor);
             if (!actor.isAlive() || &getLevelFor(actor) != &level)
@@ -1244,6 +1494,11 @@ void ServerNetworkHandler::tickActors() {
             if (actor.getLifetimeTicks() > 1 && level.isSolidAt(blockX, blockY, blockZ)) {
                 const Vector3f hitPosition((float) blockX + 0.5f, (float) blockY + 0.5f, (float) blockZ + 0.5f);
                 const Vector3i hitBlock(blockX, blockY, blockZ);
+                if (!allowProjectileHit(*this, actor, level, hitPosition, nullptr, &hitBlock)) {
+                    expired.push_back(actorId);
+                    continue;
+                }
+
                 const BlockState hitState = level.getBlockState(blockX, blockY, blockZ);
                 const Block *block = VanillaBlocks::fromIdentifier(hitState.mName);
                 if (block != nullptr && block->onProjectileHit(*this, level, hitBlock, hitState, actor)) {
@@ -1324,12 +1579,24 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 if (hitPlayer != nullptr) {
+                    if (!allowProjectileHit(*this, actor, level, contactPosition, hitPlayer, nullptr)) {
+                        expired.push_back(actorId);
+                        continue;
+                    }
+
+                    mScriptEngine.onProjectileHitEntity(actor, *hitPlayer, contactPosition);
                     onThrownProjectileHit(actor, contactPosition, hitPlayer);
                     expired.push_back(actorId);
                     continue;
                 }
 
                 if (hitActor != nullptr) {
+                    if (!allowProjectileHit(*this, actor, level, contactPosition, hitActor, nullptr)) {
+                        expired.push_back(actorId);
+                        continue;
+                    }
+
+                    mScriptEngine.onProjectileHitEntity(actor, *hitActor, contactPosition);
                     onThrownProjectileHitActor(actor, contactPosition, *hitActor);
                     expired.push_back(actorId);
                     continue;
@@ -1362,7 +1629,7 @@ void ServerNetworkHandler::tickActors() {
         LingeringCloud &cloud = entry.second;
         cloud.mAge += 1;
 
-        if (cloud.mAge > cloud.mWaitTime + cloud.mDuration) {
+        if (mActors.find(entry.first) == mActors.end() || cloud.mAge > cloud.mWaitTime + cloud.mDuration) {
             expiredClouds.push_back(entry.first);
             continue;
         }
@@ -1453,6 +1720,6 @@ void ServerNetworkHandler::tickActors() {
         removeActor(uniqueId);
 
     for (const int64_t uniqueId: mDetachedActors)
-        mActors.erase(uniqueId);
+        _unregisterActor(uniqueId);
     mDetachedActors.clear();
 }

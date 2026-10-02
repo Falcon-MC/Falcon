@@ -1,5 +1,6 @@
 #include "Inventory/ItemStackNbt.h"
 
+#include "Block/BlockState.h"
 #include "Core/Debug/BedrockLog.h"
 
 namespace {
@@ -7,8 +8,10 @@ namespace {
     const char *TAG_NAME = "Name";
     const char *TAG_COUNT = "Count";
     const char *TAG_DAMAGE = "Damage";
+    const char *TAG_WAS_PICKED_UP = "WasPickedUp";
     const char *TAG_USER_DATA = "tag";
     const char *TAG_BLOCK_NAME = "BlockName";
+    const char *TAG_BLOCK = "Block";
     const char *TAG_CAN_PLACE = "CanPlaceOn";
     const char *TAG_CAN_BREAK = "CanDestroy";
 
@@ -40,22 +43,25 @@ Tag ItemStackNbt::write(const ItemStack &item) {
     Tag data = Tag::ofCompound();
 
     if (item.isAir() || item.mCount <= 0) {
-        data.putString(TAG_NAME, AIR_IDENTIFIER);
+        data.putString(TAG_NAME, std::string());
         data.putByte(TAG_COUNT, 0);
         data.putShort(TAG_DAMAGE, 0);
+        data.putByte(TAG_WAS_PICKED_UP, 0);
         return data;
     }
 
     data.putString(TAG_NAME, item.mDefinition->getIdentifier());
     data.putByte(TAG_COUNT, (int8_t) item.mCount);
     data.putShort(TAG_DAMAGE, (int16_t) item.mDamage);
+    data.putByte(TAG_WAS_PICKED_UP, 0);
 
     if (item.mTag.getType() == Tag::Type::Compound && !item.mTag.isEmpty()) {
         data.put(TAG_USER_DATA, item.mTag);
     }
 
     if (item.mBlockDefinition != nullptr) {
-        data.putString(TAG_BLOCK_NAME, item.mBlockDefinition->getIdentifier());
+        data.put(TAG_BLOCK, BlockState(item.mBlockDefinition->getIdentifier(),
+                                       item.mBlockDefinition->getState()).toNbt());
     }
 
     if (!item.mCanPlace.empty()) {
@@ -113,8 +119,17 @@ ItemStack ItemStackNbt::read(const Tag &data, const PacketCodecContext &context)
         item.mTag = *userData;
     }
 
+    const Tag *block = data.get(TAG_BLOCK);
     const std::string blockName = data.getString(TAG_BLOCK_NAME);
-    if (!blockName.empty()) {
+    if (block != nullptr && block->isCompound() && !block->getString("name", std::string()).empty()) {
+        const Tag *states = block->get("states");
+        const std::string name = block->getString("name", std::string());
+        item.mBlockDefinition = context.getBlockDefinitions().getDefinition(
+                BlockStateHasher::hash(name, states != nullptr && states->isCompound() ? *states : Tag::ofCompound()));
+
+        if (item.mBlockDefinition == nullptr)
+            item.mBlockDefinition = context.getBlockDefinitions().getDefinition(name);
+    } else if (!blockName.empty()) {
         item.mBlockDefinition = context.getBlockDefinitions().getDefinition(blockName);
 
         if (item.mBlockDefinition == nullptr)

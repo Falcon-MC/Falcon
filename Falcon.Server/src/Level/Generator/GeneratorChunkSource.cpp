@@ -48,7 +48,8 @@ void GeneratorChunkSource::_trim() {
     }
 }
 
-void GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow) {
+void GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow,
+                                    std::vector<Tag> &blockActors) {
     const int32_t chunkX = chunk.getX();
     const int32_t chunkZ = chunk.getZ();
 
@@ -66,8 +67,12 @@ void GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBloc
 
     chunk = mScratch.extractChunk(chunkX, chunkZ);
 
+    BlockActorStore &generatedActors = mScratch.getBlockActors();
+    blockActors = generatedActors.saveChunk(chunkX, chunkZ);
+
     for (int32_t offsetX = -1; offsetX <= 1; offsetX++) {
         for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++) {
+            generatedActors.unloadChunk(chunkX + offsetX, chunkZ + offsetZ);
             if (offsetX == 0 && offsetZ == 0)
                 continue;
 

@@ -13,13 +13,13 @@ namespace {
 }
 
 MeleeAttackGoal::MeleeAttackGoal(float speed, float maxRange, int32_t coolDown, float attackRangeSquared)
-        : mSpeed(speed), mMaxRangeSquared(maxRange * maxRange), mCoolDown(coolDown),
-          mAttackRangeSquared(attackRangeSquared) {
+        : mCoolDown(coolDown), mAttackRangeSquared(attackRangeSquared), mSpeed(speed),
+          mMaxRangeSquared(maxRange * maxRange) {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move | (uint8_t) GoalControlFlag::Look);
 }
 
 bool MeleeAttackGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
-    const ServerPlayer *target = mob.getTarget(owner);
+    const Actor *target = mob.getTarget(owner);
     return target != nullptr && mob.distanceSquaredTo(*target) <= mMaxRangeSquared;
 }
 
@@ -40,7 +40,7 @@ void MeleeAttackGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
 void MeleeAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     mTicksSinceAttack++;
 
-    ServerPlayer *target = mob.getTarget(owner);
+    Actor *target = mob.getTarget(owner);
     if (target == nullptr)
         return;
 
@@ -57,20 +57,36 @@ void MeleeAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     }
 
     mob.getLookControl().setLookAt(targetPosition);
-
-    if (mTicksSinceAttack > mCoolDown && mob.distanceSquaredTo(*target) <= mAttackRangeSquared)
-        _attack(owner, mob, *target);
+    _tryAttack(owner, mob, *target);
 }
 
-void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, ServerPlayer &target) {
+void MeleeAttackGoal::_tryAttack(ServerNetworkHandler &owner, MobActor &mob, Actor &target) {
+    if (mTicksSinceAttack > mCoolDown && mob.distanceSquaredTo(target) <= mAttackRangeSquared)
+        _attack(owner, mob, target);
+}
+
+void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor &target) {
     const float damage = mob.getAttackDamage(owner.getProperties().getDifficulty());
     if (damage <= 0.0f)
         return;
 
     const float healthBefore = target.getHealth();
-    owner.applyDamage(target, damage, DEATH_MESSAGE, {target.getName(), mob.getName()}, true, true, &mob);
+    if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&target)) {
+        const ActorDamageSource source = ActorDamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(),
+                                                         mob.getPosition());
+        if (owner.hurt(*player, damage, source) == DamageResult::Blocked) {
+            owner.broadcastActorEvent(mob, EntityEventType::ArmSwing);
+            mTicksSinceAttack = 0;
+            return;
+        }
+    } else if (ServerActor *actor = dynamic_cast<ServerActor *>(&target)) {
+        owner.damageActor(*actor, damage, &mob);
+    }
+
     if (target.getHealth() >= healthBefore)
         return;
+
+    mob.getAnger().onAttack(owner, mob, target);
 
     const Vector3f mobPosition = mob.getPosition();
     const Vector3f targetPosition = target.getPosition();

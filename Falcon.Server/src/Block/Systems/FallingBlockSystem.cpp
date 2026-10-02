@@ -1,7 +1,8 @@
 #include "Block/Systems/FallingBlockSystem.h"
 
-#include "Actor/FallingBlockActor.h"
+#include "Actor/Misc/FallingBlock.h"
 #include "Block/BlockData.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -171,12 +172,8 @@ void FallingBlockSystem::setBlockState(ServerNetworkHandler &owner, Level &level
 
 void FallingBlockSystem::spawnDestroyParticle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                               const BlockState &state) {
-    LevelEventPacket destroy;
-    destroy.mEventId = LevelEventPacket::Event::ParticleDestroy;
-    destroy.mPosition = centerOf(position);
-    destroy.mData = BlockStateHasher::hash(state.mName, state.mStates);
-
-    BlockActionHandler::broadcastToViewers(owner, level, destroy.mPosition, destroy);
+    owner.broadcastLevelEvent(level, LevelEventPacket::Event::ParticleDestroy, centerOf(position),
+                              (int32_t) BlockStateHasher::hash(state.mName, state.mStates));
 }
 
 void FallingBlockSystem::spawnFallingBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -188,7 +185,7 @@ void FallingBlockSystem::spawnFallingBlock(ServerNetworkHandler &owner, Level &l
 
     const Vector3f spawnPosition((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
 
-    FallingBlockActor *actor = owner.spawnFallingBlock(level, state, spawnPosition);
+    FallingBlock *actor = owner.spawnFallingBlock(level, state, spawnPosition);
     if (actor == nullptr)
         return;
 
@@ -204,8 +201,16 @@ void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &leve
         return;
 
     if (isConcretePowder(state.mName) && isTouchingWater(level, position)) {
-        setBlockState(owner, level, position, BlockState(getConcreteFor(state.mName)));
+        const BlockState concrete(getConcreteFor(state.mName));
+        if (BlockChangeSystem::allows(level, position, concrete, BlockChangeCause::Form))
+            setBlockState(owner, level, position, concrete);
         return;
+    }
+
+    if (state.mName == "minecraft:pointed_dripstone" && state.mStates.getBool("hanging", false)) {
+        const BlockState above = level.getBlockState(position.x, position.y + 1, position.z);
+        if (level.isSolidAt(position.x, position.y + 1, position.z) || above.mName == "minecraft:pointed_dripstone")
+            return;
     }
 
     const Vector3i below(position.x, position.y - 1, position.z);

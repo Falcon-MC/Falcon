@@ -2,6 +2,8 @@
 
 #include "Level/BiomeRegistry.h"
 #include "Level/Level.h"
+#include "Level/PlayerDataProvider.h"
+#include "Level/TickingAreaManager.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/PacketRateLimiter.h"
 #include "Network/PingedCompatibleServer.h"
@@ -13,7 +15,6 @@
 #include "Command/CommandMap.h"
 #include "Network/PacketSender.h"
 #include "Protocol/Types/CommandOriginData.h"
-#include "Player/PlayerDataProvider.h"
 #include "Server/AllowList.h"
 #include "Server/BanList.h"
 #include "Server/OpList.h"
@@ -23,11 +24,13 @@
 #include "Server/Profiler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ResourcePackManager.h"
-#include "Actor/FallingBlockActor.h"
-#include "Actor/PrimedTntActor.h"
-#include "Actor/ItemActor.h"
+#include "Actor/ActorDamageSource.h"
+#include "Actor/Misc/FallingBlock.h"
+#include "Actor/Misc/PrimedTntActor.h"
+#include "Actor/Misc/ItemActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
+#include "Actor/Spawn/NaturalSpawner.h"
 #include "Protocol/Types/ContainerSlotType.h"
 #include "Protocol/Types/EntityDataMap.h"
 #include "Protocol/Packets/ActorEventPacket.h"
@@ -57,6 +60,14 @@ class CraftingEventPacket;
 class CommandBlockUpdatePacket;
 class Item;
 class NetherNetInstance;
+class PluginManager;
+
+struct QueuedActorCommand {
+    Level *mLevel = nullptr;
+    Vector3f mPosition;
+    Vector3f mRotation;
+    std::string mCommand;
+};
 
 class ServerNetworkHandler : public NetworkHandler::Listener,
                              public NetworkPacketHandler,
@@ -102,6 +113,8 @@ public:
 
     ScriptEngine &getScriptEngine() { return mScriptEngine; }
 
+    PluginManager &getPluginManager() { return *mPluginManager; }
+
     std::string &getCraftingDataBytes() { return mCraftingDataBytes; }
 
     std::string &getCreativeContentBytes() { return mCreativeContentBytes; }
@@ -136,7 +149,10 @@ public:
     ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                             const std::function<void(ServerActor &)> &configure = nullptr);
 
-    FallingBlockActor *spawnFallingBlock(Level &level, const BlockState &state, const Vector3f &position);
+    ServerActor *spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position,
+                                float scale);
+
+    FallingBlock *spawnFallingBlock(Level &level, const BlockState &state, const Vector3f &position);
 
     PrimedTntActor *spawnPrimedTnt(Level &level, const Vector3f &position, const Vector3f &motion, int32_t fuse);
 
@@ -147,6 +163,8 @@ public:
 
     ServerActor *spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
                                  float verticalOffset = 0.0f);
+
+    bool allowProjectileLaunch(ServerActor &projectile, Actor *shooter);
 
     bool onThrownProjectileHit(ServerActor &projectile, const Vector3f &hitPosition, ServerPlayer *hitPlayer);
 
@@ -174,11 +192,17 @@ public:
 
     void applyPotionEffects(ServerPlayer &player, int32_t potionId, float durationScale);
 
+    void addEffect(Actor &actor, MobEffectId effect, int32_t amplifier, int32_t durationTicks);
+
+    void applyPotionEffects(ServerActor &actor, int32_t potionId, float durationScale);
+
     void spawnLingeringCloud(Level &level, const Vector3f &position, int32_t potionId);
 
     void broadcastLevelEvent(Level &level, int32_t eventId, const Vector3f &position, int32_t data);
 
     ServerActor *getActor(int64_t uniqueId);
+
+    ServerActor *getActorByRuntimeId(uint64_t runtimeId);
 
     void removeActor(int64_t uniqueId);
 
@@ -210,7 +234,13 @@ public:
 
     void syncActorProperties(ServerActor &actor);
 
+    void queueActorCommand(ServerActor &actor, const std::string &command);
+
+    void runQueuedActorCommands();
+
     void syncActorFlags(ServerActor &actor);
+
+    void syncActorScale(ServerActor &actor, float scale);
 
     void syncActorAttributes(ServerActor &actor);
 
@@ -223,6 +253,8 @@ public:
     void broadcastActorEvent(ServerActor &actor, EntityEventType eventType);
 
     bool damageActor(ServerActor &actor, float amount, Actor *attacker, int32_t lootingLevel = -1);
+
+    bool damageActor(ServerActor &actor, float amount, const ActorDamageSource &source, int32_t lootingLevel = -1);
 
     void hurtActor(Actor &actor, float amount, const std::string &deathMessageKey);
 
@@ -317,6 +349,12 @@ public:
 
     uint64_t allocateRuntimeId() { return mNextRuntimeId++; }
 
+    int64_t allocateActorUniqueId();
+
+    TickingAreaManager &getTickingAreas() { return mTickingAreas; }
+
+    void markActiveColumnsDirty() { mActorPersistencePending = true; }
+
     BlockDefinitionRegistry &getBlockDefinitions() { return mBlockDefinitions; }
 
     ItemDefinitionRegistry &getItemDefinitions() { return mItemDefinitions; }
@@ -388,12 +426,12 @@ public:
 
     void setDefaultGameType(GameType gameType);
 
+    void setDifficulty(const std::string &difficulty);
+
     ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
                         int pickupDelay);
 
-    void applyDamage(ServerPlayer &player, float amount, const std::string &deathMessageKey,
-                     const std::vector<std::string> &deathMessageParameters = {},
-                     bool applyArmor = true, bool respectCooldown = true, const Actor *attacker = nullptr);
+    DamageResult hurt(ServerPlayer &player, float amount, const ActorDamageSource &source);
 
     void killPlayer(ServerPlayer &player, const std::string &deathMessageKey,
                     const std::vector<std::string> &deathMessageParameters = {});
@@ -403,6 +441,10 @@ public:
     void _useHeldItem(ServerPlayer &player);
 
     void _consumeHeldItem(ServerPlayer &player);
+
+    void _tickItemUse(ServerPlayer &player);
+
+    void _completeItemUse(ServerPlayer &player, int32_t itemId);
 
     void _sendInventory(ServerPlayer &player);
 
@@ -427,6 +469,12 @@ public:
     void _sendActorSpawn(ServerPlayer &player, ServerActor &actor);
 
     void _sendActorRemove(ServerPlayer &player, const ServerActor &actor);
+
+    ServerActor *_registerActor(std::unique_ptr<ServerActor> actor);
+
+    void _unregisterActor(int64_t uniqueId);
+
+    void _resolvePendingRides();
 
     bool _equipHeldArmor(ServerPlayer &player, const Item &itemType);
 
@@ -527,6 +575,8 @@ private:
 
     void handle(const NetworkIdentifier &id, const SetLocalPlayerAsInitializedPacket &packet) override;
 
+    void handle(const NetworkIdentifier &id, const NetworkStackLatencyPacket &packet) override;
+
     void handle(const NetworkIdentifier &id, const PlayerAuthInputPacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const CompletedUsingItemPacket &packet) override;
@@ -605,6 +655,10 @@ private:
 
     void _tickSleep();
 
+    void _tickPlayer(ServerPlayer &player);
+
+    void _registerCommands();
+
     void onReceiveIPSupport(RakPeerHelper::IPSupport support) override;
 
     void _updateServerAnnouncement();
@@ -653,6 +707,12 @@ private:
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
+    std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
+    std::unordered_set<int64_t> mVehiclesWithPendingPassengers;
+    TickingAreaManager mTickingAreas;
+    uint32_t mActorUniqueIdCounter = 0;
+    std::vector<QueuedActorCommand> mQueuedActorCommands;
+    NaturalSpawner mNaturalSpawner;
     std::unordered_map<NetworkIdentifier, PacketRateLimiter, NetworkIdentifier::Hasher> mRateLimiters;
 
     struct LingeringCloud {
@@ -704,4 +764,6 @@ private:
 
     std::mutex mMainThreadTaskMutex;
     std::vector<std::function<void()>> mMainThreadTasks;
+
+    std::unique_ptr<PluginManager> mPluginManager;
 };

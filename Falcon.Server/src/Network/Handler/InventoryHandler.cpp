@@ -18,6 +18,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/ContainerClosePacket.h"
 #include "Protocol/Packets/CraftingEventPacket.h"
 #include "Protocol/Packets/InventoryTransactionPacket.h"
@@ -31,9 +32,201 @@
 #include "Protocol/Types/InventoryActionData.h"
 #include "Protocol/Types/InventorySource.h"
 
+#include <algorithm>
+#include <string>
 #include <utility>
 
 namespace {
+    void returnToInventory(ServerPlayer &player, ItemStack &item) {
+        std::vector<int> touchedSlots;
+        item.mCount = player.getInventory().addItemPartial(item, touchedSlots);
+        if (item.mCount <= 0)
+            item = ItemStack::air();
+
+        for (int slot: touchedSlots)
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
+    }
+
+    bool isBlockContainer(ContainerSlotType type) {
+        return type == ContainerSlotType::LevelEntity || type == ContainerSlotType::Barrel
+               || type == ContainerSlotType::ShulkerBox || type == ContainerSlotType::CrafterBlockContainer;
+    }
+
+    std::string containerName(ContainerSlotType type) {
+        if (isBlockContainer(type))
+            return "container";
+
+        switch (type) {
+            case ContainerSlotType::Hotbar:
+                return "hotbar";
+            case ContainerSlotType::Inventory:
+                return "inventory";
+            case ContainerSlotType::HotbarAndInventory:
+                return "hotbar_and_inventory";
+            case ContainerSlotType::Armor:
+                return "armor";
+            case ContainerSlotType::Offhand:
+                return "offhand";
+            case ContainerSlotType::Cursor:
+                return "cursor";
+            case ContainerSlotType::CraftingInput:
+                return "crafting_input";
+            case ContainerSlotType::CraftingOutput:
+            case ContainerSlotType::CreatedOutput:
+                return "crafting_output";
+            case ContainerSlotType::FurnaceIngredient:
+            case ContainerSlotType::BlastFurnaceIngredient:
+            case ContainerSlotType::SmokerIngredient:
+                return "furnace_ingredient";
+            case ContainerSlotType::FurnaceFuel:
+                return "furnace_fuel";
+            case ContainerSlotType::FurnaceResult:
+                return "furnace_result";
+            case ContainerSlotType::EnchantingInput:
+                return "enchanting_input";
+            case ContainerSlotType::EnchantingMaterial:
+                return "enchanting_material";
+            case ContainerSlotType::DynamicContainer:
+                return "bundle";
+            default:
+                return "other";
+        }
+    }
+
+    const char *transactionName(ItemStackRequestActionType type) {
+        switch (type) {
+            case ItemStackRequestActionType::Take:
+                return "take";
+            case ItemStackRequestActionType::Place:
+                return "place";
+            case ItemStackRequestActionType::Swap:
+                return "swap";
+            case ItemStackRequestActionType::Drop:
+                return "drop";
+            case ItemStackRequestActionType::Destroy:
+                return "destroy";
+            case ItemStackRequestActionType::Consume:
+                return "consume";
+            default:
+                return nullptr;
+        }
+    }
+
+    bool hasDestination(ItemStackRequestActionType type) {
+        return type == ItemStackRequestActionType::Take || type == ItemStackRequestActionType::Place
+               || type == ItemStackRequestActionType::Swap;
+    }
+
+    ItemStack itemAt(const PlayerInventory &inventory, Container *openContainer, ContainerSlotType type, int slot) {
+        if (isBlockContainer(type)) {
+            if (openContainer == nullptr || slot < 0 || slot >= openContainer->getContainerSize())
+                return ItemStack::air();
+            return openContainer->getContainerItem(slot);
+        }
+
+        const ItemStack *item = inventory.resolveSlot(type, slot);
+        return item == nullptr ? ItemStack::air() : *item;
+    }
+
+    bool isCraft(const ItemStackRequestAction &action) {
+        if (action.mType == ItemStackRequestActionType::CraftCreative)
+            return true;
+
+        return (action.mType == ItemStackRequestActionType::CraftRecipe
+                || action.mType == ItemStackRequestActionType::CraftRecipeAuto)
+               && action.mRecipeNetworkId < EnchantmentHelper::RECIPE_ID_BASE;
+    }
+
+    ItemStack craftResult(ServerNetworkHandler &owner, const ItemStackRequestAction &action) {
+        if (action.mType == ItemStackRequestActionType::CraftCreative) {
+            for (const CreativeItemData &entry: owner.getCreativeItems()) {
+                if (entry.mNetId == action.mCreativeItemNetworkId)
+                    return entry.mItem;
+            }
+            return ItemStack::air();
+        }
+
+        const std::vector<ItemStack> &outputs = owner.getRecipeOutputs();
+        const int32_t netId = action.mRecipeNetworkId;
+        if (netId <= 0 || (size_t) netId > outputs.size())
+            return ItemStack::air();
+
+        return outputs[(size_t) netId - 1];
+    }
+
+    bool allowRequest(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStackRequest &request) {
+        PluginManager &plugins = owner.getPluginManager();
+        const bool transactions = plugins.hasSubscribers(FALCON_EVENT_INVENTORY_TRANSACTION);
+        const bool crafts = plugins.hasSubscribers(FALCON_EVENT_CRAFT_ITEM);
+        const bool enchants = plugins.hasSubscribers(FALCON_EVENT_ITEM_ENCHANT);
+        if (!transactions && !crafts && !enchants)
+            return true;
+
+        const PlayerInventory &inventory = player.getInventory();
+        Container *openContainer = player.getInventoryManager().getContainer();
+
+        for (const ItemStackRequestAction &action: request.mActions) {
+            int32_t enchantCost = 0;
+            if (enchants && action.mType == ItemStackRequestActionType::CraftRecipe
+                && action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE
+                && EnchantmentHelper::peekOptionCost(action.mRecipeNetworkId, enchantCost)) {
+                ItemStack enchanted = itemAt(inventory, openContainer, ContainerSlotType::EnchantingInput, 0);
+                PluginEvent enchantEvent;
+                enchantEvent.mType = FALCON_EVENT_ITEM_ENCHANT;
+                enchantEvent.mCancellable = true;
+                enchantEvent.mPlayer = &player;
+                enchantEvent.mItem = &enchanted;
+                enchantEvent.mAmount = (double) enchantCost;
+                plugins.dispatch(enchantEvent);
+                if (enchantEvent.mCancelled)
+                    return false;
+                continue;
+            }
+
+            if (isCraft(action)) {
+                if (!crafts)
+                    continue;
+
+                ItemStack result = craftResult(owner, action);
+                PluginEvent craftEvent;
+                craftEvent.mType = FALCON_EVENT_CRAFT_ITEM;
+                craftEvent.mCancellable = true;
+                craftEvent.mPlayer = &player;
+                craftEvent.mItem = &result;
+                craftEvent.mAmount = (double) std::max(1, action.mNumberOfRequestedCrafts);
+                plugins.dispatch(craftEvent);
+                if (craftEvent.mCancelled)
+                    return false;
+                continue;
+            }
+
+            const char *name = transactionName(action.mType);
+            if (!transactions || name == nullptr)
+                continue;
+
+            const ContainerSlotType sourceType = action.mSource.mContainerName.mContainer;
+            ItemStack item = itemAt(inventory, openContainer, sourceType, action.mSource.mSlot);
+            PluginEvent transactionEvent;
+            transactionEvent.mType = FALCON_EVENT_INVENTORY_TRANSACTION;
+            transactionEvent.mCancellable = true;
+            transactionEvent.mPlayer = &player;
+            transactionEvent.mCause = name;
+            transactionEvent.mItem = &item;
+            transactionEvent.mAmount = (double) action.mCount;
+            transactionEvent.mSourceContainer = containerName(sourceType);
+            transactionEvent.mSourceSlot = action.mSource.mSlot;
+            if (hasDestination(action.mType)) {
+                transactionEvent.mDestinationContainer = containerName(action.mDestination.mContainerName.mContainer);
+                transactionEvent.mDestinationSlot = action.mDestination.mSlot;
+            }
+
+            plugins.dispatch(transactionEvent);
+            if (transactionEvent.mCancelled)
+                return false;
+        }
+        return true;
+    }
+
     void playBundleSounds(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStackRequest &request,
                           bool succeeded) {
         bool inserted = false;
@@ -142,6 +335,25 @@ void InventoryHandler::handleMobEquipment(ServerNetworkHandler &owner, ServerPla
 
     const int previousSlot = inventory.getSelectedSlot();
 
+    if (packet.mHotbarSlot != previousSlot && packet.mHotbarSlot >= 0
+        && packet.mHotbarSlot < PlayerInventory::HOTBAR_SIZE) {
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ITEM_HELD)) {
+            ItemStack next = inventory.getItem(packet.mHotbarSlot);
+            PluginEvent heldEvent;
+            heldEvent.mType = FALCON_EVENT_PLAYER_ITEM_HELD;
+            heldEvent.mCancellable = true;
+            heldEvent.mPlayer = &player;
+            heldEvent.mSourceSlot = previousSlot;
+            heldEvent.mDestinationSlot = packet.mHotbarSlot;
+            heldEvent.mItem = &next;
+            plugins->dispatch(heldEvent);
+            if (heldEvent.mCancelled) {
+                sendHeldItem(owner, player);
+                return;
+            }
+        }
+    }
+
     player.getInventoryManager().onClientSelectHotbarSlot(packet.mHotbarSlot);
     inventory.setSelectedSlot(packet.mHotbarSlot);
 
@@ -190,6 +402,7 @@ void InventoryHandler::handleOpenInventory(ServerNetworkHandler &owner, ServerPl
 void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                               ServerPlayer &player, const ItemStackRequestPacket &packet) {
     PlayerInventory &inventory = player.getInventory();
+    const ItemStack offhandBefore = inventory.getOffhand();
 
     ItemStackResponsePacket response;
     bool needsResync = false;
@@ -210,11 +423,22 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         player.getInventoryManager().syncBundles();
     }
 
+    player.getInventoryManager().loadFurnaceView();
+
     for (const ItemStackRequest &request: packet.mRequests) {
         const int32_t gameType = player.getGameType();
         const bool creativeMode = gameType == (int32_t) GameType::Creative
                                   || gameType == (int32_t) GameType::Spectator;
         int32_t enchantLevelsConsumed = 0;
+
+        if (!allowRequest(owner, player, request)) {
+            ItemStackResponseEntry rejected;
+            rejected.mRequestId = request.mRequestId;
+            rejected.mResult = ItemStackRequestHandler::RESULT_ERROR;
+            needsResync = true;
+            response.mEntries.push_back(std::move(rejected));
+            continue;
+        }
 
         ItemStackResponseEntry entry = ItemStackRequestHandler::execute(inventory, request, owner.getCreativeItems(),
                                                                        owner.getRecipeOutputs(),
@@ -245,6 +469,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         response.mEntries.push_back(std::move(entry));
     }
 
+    player.getInventoryManager().storeFurnaceView(owner);
+
     for (const BundleSyncData &bundle: bundles) {
         const ItemStack *owned = inventory.resolveSlot(bundle.mOwnerContainer, bundle.mOwnerSlot);
         if (owned == nullptr)
@@ -260,8 +486,30 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Offhand, 0);
     }
 
-    for (const ItemStack &dropped: droppedItems)
-        owner._throwItem(player, dropped);
+    for (const ItemStack &dropped: droppedItems) {
+        ItemStack droppedCopy = dropped;
+        PluginEvent dropEvent;
+        dropEvent.mType = FALCON_EVENT_PLAYER_DROP_ITEM;
+        dropEvent.mCancellable = true;
+        dropEvent.mPlayer = &player;
+        dropEvent.mItem = &droppedCopy;
+        PluginManager::getInstance().dispatch(dropEvent);
+
+        if (!dropEvent.mCancelled) {
+            owner._throwItem(player, dropped);
+            continue;
+        }
+
+        std::vector<int> touched;
+        const int remaining = inventory.addItemPartial(dropped, touched);
+        needsResync = true;
+        if (remaining <= 0)
+            continue;
+
+        ItemStack rest = dropped;
+        rest.mCount = remaining;
+        owner._throwItem(player, rest);
+    }
 
     player.getInventoryManager().syncCraftingPreview(owner.getRecipeOutputs(), owner.getRecipeSourceIndices());
     if (player.getInventoryManager().isFurnaceOpen()) {
@@ -269,6 +517,11 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     }
 
     _updateEnchantOptions(owner, player);
+
+    const ItemStack &offhandAfter = inventory.getOffhand();
+    if (offhandAfter.mDefinition != offhandBefore.mDefinition || offhandAfter.mCount != offhandBefore.mCount
+        || offhandAfter.mDamage != offhandBefore.mDamage || !(offhandAfter.mTag == offhandBefore.mTag))
+        sendOffhandContent(owner, player);
 
     if (player.getInventoryManager().isContainerOpen())
         owner.refreshContainerViewers(player.getInventoryManager().getContainerPosition(), &player);
@@ -318,9 +571,25 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
         }
 
         if (packet.mActionType == 0) {
-            ServerActor *target = owner.getActor((int64_t) packet.mRuntimeActorId);
-            if (target != nullptr)
-                target->onInteract(owner, player);
+            ServerActor *target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
+            if (target != nullptr && !owner.getScriptEngine().beforePlayerInteractWithEntity(player, *target)) {
+                target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
+                if (target == nullptr)
+                    return;
+
+                PluginEvent event;
+                event.mType = FALCON_EVENT_PLAYER_INTERACT_ENTITY;
+                event.mCancellable = true;
+                event.mPlayer = &player;
+                event.mEntity = target;
+                PluginManager::getInstance().dispatch(event);
+                if (event.mCancelled)
+                    return;
+
+                target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
+                if (target != nullptr)
+                    target->onInteract(owner, player);
+            }
         }
         return;
     }
@@ -410,6 +679,18 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
     thrown.mUsingNetId = false;
     thrown.mNetId = 0;
 
+    ItemStack eventItem = thrown;
+    PluginEvent dropEvent;
+    dropEvent.mType = FALCON_EVENT_PLAYER_DROP_ITEM;
+    dropEvent.mCancellable = true;
+    dropEvent.mPlayer = &player;
+    dropEvent.mItem = &eventItem;
+    PluginManager::getInstance().dispatch(dropEvent);
+    if (dropEvent.mCancelled) {
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, sourceSlot);
+        return;
+    }
+
     item->mCount -= droppedCount;
     if (item->mCount <= 0)
         *item = ItemStack::air();
@@ -423,6 +704,7 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
 void InventoryHandler::handleContainerClose(ServerPlayer &player, const ContainerClosePacket &packet) {
     PlayerInventory &inventory = player.getInventory();
     InventoryManager &manager = player.getInventoryManager();
+    manager.dispatchPluginClose();
     int windowId = (int) packet.mWindowId;
     if (windowId == InventoryManager::CONTAINER_ID_NONE) {
         windowId = manager.getCurrentWindowId();
@@ -443,9 +725,7 @@ void InventoryHandler::handleContainerClose(ServerPlayer &player, const Containe
             continue;
         }
 
-        std::vector<int> touchedSlots;
-        const int remaining = inventory.addItemPartial(item, touchedSlots);
-        item.mCount = remaining;
+        returnToInventory(player, item);
         if (craftingTable) {
             inventory.setCraftingTableItem(slot, std::move(item));
         } else if (furnace) {
@@ -454,28 +734,46 @@ void InventoryHandler::handleContainerClose(ServerPlayer &player, const Containe
             inventory.setCraftingItem(slot, std::move(item));
         }
 
-        for (int touchedSlot: touchedSlots)
-            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, touchedSlot);
-
         manager.syncSlot(craftingTable ? InventoryManager::InventoryId::CraftingTableInput
                        : furnace ? InventoryManager::InventoryId::FurnaceInput
                                  : InventoryManager::InventoryId::CraftingInput, slot);
     }
 
     if (!inventory.getCursor().isAir()) {
-        std::vector<int> touchedSlots;
         ItemStack cursor = inventory.getCursor();
-        const int remaining = inventory.addItemPartial(cursor, touchedSlots);
-        cursor.mCount = remaining;
+        returnToInventory(player, cursor);
         inventory.setCursor(std::move(cursor));
-
-        for (int slot: touchedSlots)
-            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
-
         manager.syncSlot(InventoryManager::InventoryId::Cursor, 0);
     }
 
     manager.onClientRemoveWindow(windowId);
+}
+
+void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer &player) {
+    PlayerInventory &inventory = player.getInventory();
+    std::vector<ItemStack> returned;
+
+    for (int slot = 0; slot < PlayerInventory::CRAFTING_SIZE; ++slot) {
+        if (!inventory.getCraftingItem(slot).isAir())
+            returned.push_back(inventory.getCraftingItem(slot));
+        inventory.setCraftingItem(slot, ItemStack::air());
+    }
+
+    for (int slot = 0; slot < PlayerInventory::CRAFTING_TABLE_SIZE; ++slot) {
+        if (!inventory.getCraftingTableItem(slot).isAir())
+            returned.push_back(inventory.getCraftingTableItem(slot));
+        inventory.setCraftingTableItem(slot, ItemStack::air());
+    }
+
+    if (!inventory.getCursor().isAir())
+        returned.push_back(inventory.getCursor());
+    inventory.setCursor(ItemStack::air());
+
+    for (ItemStack &item: returned) {
+        returnToInventory(player, item);
+        if (item.mCount > 0)
+            owner._throwItem(player, item);
+    }
 }
 
 void InventoryHandler::handleCraftingEvent(ServerNetworkHandler &owner, ServerPlayer &player,
@@ -494,10 +792,11 @@ void InventoryHandler::handleCraftingEvent(ServerNetworkHandler &owner, ServerPl
     }
 
     CraftingRecipeMatch match;
+    ItemStack output = ItemStack::air();
     const std::vector<ItemStack> &recipeOutputs = owner.getRecipeOutputs();
     const std::vector<uint32_t> &recipeSourceIndices = owner.getRecipeSourceIndices();
     if (!CraftingManager::matchResult(grid, gridWidth, packet.mOutputs.front(), recipeOutputs,
-                                      recipeSourceIndices, match)) {
+                                      recipeSourceIndices, match, output)) {
         return;
     }
 
@@ -529,7 +828,6 @@ void InventoryHandler::handleCraftingEvent(ServerNetworkHandler &owner, ServerPl
         }
     }
 
-    ItemStack output = packet.mOutputs.front();
     if (!working.addItem(output)) {
         return;
     }

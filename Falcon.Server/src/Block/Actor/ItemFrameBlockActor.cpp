@@ -1,15 +1,11 @@
 #include "Block/Actor/ItemFrameBlockActor.h"
 
 #include "Inventory/ItemStackNbt.h"
-#include "Protocol/Types/BlockDefinition.h"
-
-#include <utility>
 
 namespace {
     const char *TAG_ITEM = "Item";
     const char *TAG_ITEM_ROTATION = "ItemRotation";
     const char *TAG_ITEM_DROP_CHANCE = "ItemDropChance";
-    const char *TAG_BLOCK = "Block";
 }
 
 void ItemFrameBlockActor::setRotation(int rotation) {
@@ -38,13 +34,7 @@ Tag ItemFrameBlockActor::getSpawnCompound() const {
     if (isEmpty())
         return data;
 
-    Tag item = ItemStackNbt::write(mItem);
-    if (mItem.mBlockDefinition != nullptr) {
-        item.put(TAG_BLOCK, BlockState(mItem.mBlockDefinition->getIdentifier(),
-                                       mItem.mBlockDefinition->getState()).toNbt());
-    }
-
-    data.put(TAG_ITEM, std::move(item));
+    data.put(TAG_ITEM, ItemStackNbt::write(mItem));
     data.putByte(TAG_ITEM_ROTATION, mRotation);
     return data;
 }

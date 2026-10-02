@@ -1,17 +1,19 @@
 #include "Level/Explosion.h"
 
 #include "Actor/ActorClassRegistry.h"
-#include "Actor/ItemActor.h"
+#include "Actor/Misc/ItemActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
 #include "Block/BlockShape.h"
+#include "Block/Blocks/ContainerBlock.h"
 #include "Block/Blocks/LiquidView.h"
 #include "Block/Blocks/TntBlock.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Level/Particle/BlockExplodeParticle.h"
 #include "Level/Particle/ExplodeParticle.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
@@ -101,7 +103,42 @@ bool Explosion::explode() {
     return false;
 }
 
+bool Explosion::explodeWithoutBlocks() {
+    if (!_allowByPlugins())
+        return false;
+
+    return explodeB();
+}
+
 bool Explosion::explodeA() {
+    if (!_findAffectedBlocks())
+        return false;
+
+    return _allowByPlugins();
+}
+
+bool Explosion::_allowByPlugins() {
+    PluginManager &plugins = mOwner.getPluginManager();
+    if (!plugins.hasSubscribers(FALCON_EVENT_EXPLOSION))
+        return true;
+
+    PluginEvent explosionEvent;
+    explosionEvent.mType = FALCON_EVENT_EXPLOSION;
+    explosionEvent.mCancellable = true;
+    explosionEvent.mEntity = const_cast<ServerActor *>(mSourceActor);
+    explosionEvent.mLevel = &mLevel;
+    explosionEvent.mPosition = mSource;
+    explosionEvent.mAmount = mSize;
+    explosionEvent.mBlocks = &mAffectedBlocks;
+    plugins.dispatch(explosionEvent);
+    if (explosionEvent.mCancelled)
+        return false;
+
+    mSize = std::max(explosionEvent.mAmount, 0.0);
+    return true;
+}
+
+bool Explosion::_findAffectedBlocks() {
     if (mSourceActor != nullptr) {
         const Vector3i floor((int32_t) std::floor(mSource.x), (int32_t) std::floor(mSource.y),
                              (int32_t) std::floor(mSource.z));
@@ -212,7 +249,7 @@ void Explosion::_damageEntities() {
         const double impact = (1.0 - distance) * density;
         const float damage = _scaleDamageForDifficulty(_calculateEntityDamage(explosionSize, impact));
 
-        mOwner.applyDamage(player, damage, DEATH_KEY, {player.getName()});
+        mOwner.hurt(player, damage, ActorDamageSource::environment(DEATH_KEY, player.getName()).fromOrigin(mSource));
 
         const Vector3f current = player.getMotion();
         player.setMotion(Vector3f(current.x + motion.x * (float) impact, current.y + motion.y * (float) impact,
@@ -240,7 +277,8 @@ void Explosion::_damageEntities() {
         const float density = getBlockDensity(mLevel, mSource, boundingBoxOf(position, actor->getSize()));
         const double impact = (1.0 - distance) * density;
 
-        mOwner.damageActor(*actor, _calculateEntityDamage(explosionSize, impact), nullptr);
+        mOwner.damageActor(*actor, _calculateEntityDamage(explosionSize, impact),
+                           ActorDamageSource::environment(DEATH_KEY, actor->getName()));
 
         const Vector3f current = actor->getMotion();
         actor->setMotion(Vector3f(current.x + motion.x * (float) impact, current.y + motion.y * (float) impact,
@@ -299,7 +337,10 @@ void Explosion::_destroyBlocks() {
         if (!isAir(mLevel.getBlockStateAtLayer(position.x, position.y, position.z, 1)))
             mLevel.setBlockStateAtLayer(position.x, position.y, position.z, 1, BlockState());
 
-        BlockActionHandler::destroyBlock(mOwner, mLevel, position, state, nextDouble() * 100.0 < yield, noTool);
+        const ContainerBlockDefinition *container = ContainerBlock::findDefinition(state.mName);
+        const bool keepsContents = container != nullptr && container->mKind == ContainerBlockKind::ShulkerBox;
+        BlockActionHandler::destroyBlock(mOwner, mLevel, position, state,
+                                         keepsContents || nextDouble() * 100.0 < yield, noTool);
     }
 }
 

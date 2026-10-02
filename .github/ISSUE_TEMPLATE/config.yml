@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Falcon-MC/Falcon/security/advisories/new
+    about: Report vulnerabilities privately. Never open a public issue for them.
+  - name: Roadmap
+    url: https://github.com/orgs/Falcon-MC/projects/1
+    about: See what is planned and what is already being worked on.
+  - name: Website
+    url: https://falcon-mc.github.io
+    about: Downloads and documentation.

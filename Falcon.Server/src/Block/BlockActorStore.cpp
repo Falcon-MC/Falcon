@@ -1,8 +1,10 @@
 #include "Block/BlockActorStore.h"
 
+#include "Block/Actor/BeehiveBlockActor.h"
 #include "Block/Actor/ChestBlockActor.h"
 #include "Block/Actor/CommandBlockActor.h"
 #include "Block/Actor/ContainerBlockActor.h"
+#include "Block/Actor/CopperGolemStatueBlockActor.h"
 #include "Block/Actor/BedBlockActor.h"
 #include "Block/Actor/EnderChestBlockActor.h"
 #include "Block/BlockActorClassRegistry.h"
@@ -49,6 +51,29 @@ void BlockActorStore::insert(std::unique_ptr<BlockActor> blockActor) {
 
 void BlockActorStore::remove(const Vector3i &position) {
     mBlockActors.erase(packPosition(position));
+}
+
+std::unique_ptr<BlockActor> BlockActorStore::take(const Vector3i &position) {
+    const auto found = mBlockActors.find(packPosition(position));
+    if (found == mBlockActors.end())
+        return nullptr;
+
+    std::unique_ptr<BlockActor> taken = std::move(found->second);
+    mBlockActors.erase(found);
+    return taken;
+}
+
+void BlockActorStore::tick(ServerNetworkHandler &owner) {
+    std::vector<int64_t> keys;
+    keys.reserve(mBlockActors.size());
+    for (const auto &entry: mBlockActors)
+        keys.push_back(entry.first);
+
+    for (const int64_t key: keys) {
+        const auto found = mBlockActors.find(key);
+        if (found != mBlockActors.end() && !found->second->tick(owner))
+            mBlockActors.erase(key);
+    }
 }
 
 std::vector<Tag> BlockActorStore::saveChunk(int32_t chunkX, int32_t chunkZ) const {
@@ -169,6 +194,7 @@ FALCON_REGISTER_BLOCK_ACTOR(BarrelBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(ShulkerBoxBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(EnderChestBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BedBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(CopperGolemStatueBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(HopperBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(DispenserBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(DropperBlockActor);
@@ -184,6 +210,7 @@ FALCON_REGISTER_BLOCK_ACTOR(JukeboxBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(ShelfBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(ItemFrameBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(GlowItemFrameBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(BeehiveBlockActor);
 
 std::unique_ptr<BlockActor> BlockActorStore::create(const std::string &blockActorId) {
     return BlockActorClassRegistry::create(blockActorId);

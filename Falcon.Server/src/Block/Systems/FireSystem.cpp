@@ -7,13 +7,14 @@
 #include "Block/BlockState.h"
 #include "Block/BlockSupport.h"
 #include "Block/Blocks/FireBlock.h"
-#include "Block/Blocks/PlacementRuleBlocks.h"
+#include "Block/Blocks/SlabBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/RedstoneSystem.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
-#include "Block/Blocks/PortalBlocks.h"
+#include "Block/Blocks/ObsidianBlock.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <algorithm>
@@ -218,12 +219,32 @@ namespace {
         return chance;
     }
 
+    bool allowFire(ServerNetworkHandler &owner, Level &level, FalconEventType type, const Vector3i &position,
+                   const Vector3i &source) {
+        PluginManager &plugins = owner.getPluginManager();
+        if (!plugins.hasSubscribers(type))
+            return true;
+
+        PluginEvent fireEvent;
+        fireEvent.mType = type;
+        fireEvent.mCancellable = true;
+        fireEvent.mLevel = &level;
+        fireEvent.mBlockPosition = position;
+        fireEvent.mBlockName = stateAt(level, position).mName;
+        fireEvent.mPosition = Vector3f((float) source.x + 0.5f, (float) source.y + 0.5f, (float) source.z + 0.5f);
+        plugins.dispatch(fireEvent);
+        return !fireEvent.mCancelled;
+    }
+
     void tryToCatchBlockOnFire(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int bound,
-                               int age) {
+                               int age, const Vector3i &source) {
         const BlockState state = stateAt(level, position);
         const int burnAbility = FireSystem::getBurnAbility(state.mName);
 
         if (nextInt(bound) >= burnAbility)
+            return;
+
+        if (!allowFire(owner, level, FALCON_EVENT_BLOCK_BURN, position, source))
             return;
 
         if (nextInt(age + 10) < 5) {
@@ -249,7 +270,8 @@ namespace {
         if (!FireSystem::matches(stateAt(level, block).mName))
             return;
 
-        actor.hurt(owner, FireSystem::CONTACT_DAMAGE, nullptr);
+        actor.hurt(owner, FireSystem::CONTACT_DAMAGE,
+                   ActorDamageSource::environment("death.attack.inFire", actor.getName()));
 
         if (actor.getFireTicks() < FireSystem::COMBUST_TICKS) {
             actor.setFireTicks(FireSystem::COMBUST_TICKS);
@@ -275,7 +297,8 @@ namespace {
         if (!FireSystem::matches(stateAt(level, block).mName))
             return;
 
-        owner.applyDamage(player, FireSystem::CONTACT_DAMAGE, "death.attack.inFire", {player.getName()});
+        owner.hurt(player, FireSystem::CONTACT_DAMAGE,
+                   ActorDamageSource::environment("death.attack.inFire", player.getName()));
 
         if (player.getFireTicks() < FireSystem::COMBUST_TICKS)
             player.setFireTicks(FireSystem::COMBUST_TICKS);
@@ -392,12 +415,12 @@ void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, co
         return;
     }
 
-    tryToCatchBlockOnFire(owner, level, relative(position, 1, 0, 0), NEIGHBOUR_BOUND_HORIZONTAL, age);
-    tryToCatchBlockOnFire(owner, level, relative(position, -1, 0, 0), NEIGHBOUR_BOUND_HORIZONTAL, age);
-    tryToCatchBlockOnFire(owner, level, below, NEIGHBOUR_BOUND_VERTICAL, age);
-    tryToCatchBlockOnFire(owner, level, relative(position, 0, 1, 0), NEIGHBOUR_BOUND_VERTICAL, age);
-    tryToCatchBlockOnFire(owner, level, relative(position, 0, 0, 1), NEIGHBOUR_BOUND_HORIZONTAL, age);
-    tryToCatchBlockOnFire(owner, level, relative(position, 0, 0, -1), NEIGHBOUR_BOUND_HORIZONTAL, age);
+    tryToCatchBlockOnFire(owner, level, relative(position, 1, 0, 0), NEIGHBOUR_BOUND_HORIZONTAL, age, position);
+    tryToCatchBlockOnFire(owner, level, relative(position, -1, 0, 0), NEIGHBOUR_BOUND_HORIZONTAL, age, position);
+    tryToCatchBlockOnFire(owner, level, below, NEIGHBOUR_BOUND_VERTICAL, age, position);
+    tryToCatchBlockOnFire(owner, level, relative(position, 0, 1, 0), NEIGHBOUR_BOUND_VERTICAL, age, position);
+    tryToCatchBlockOnFire(owner, level, relative(position, 0, 0, 1), NEIGHBOUR_BOUND_HORIZONTAL, age, position);
+    tryToCatchBlockOnFire(owner, level, relative(position, 0, 0, -1), NEIGHBOUR_BOUND_HORIZONTAL, age, position);
 
     const int difficulty = (int) owner.getProperties().getDifficulty();
 
@@ -419,6 +442,9 @@ void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, co
                 const int threshold = (chance + SPREAD_CHANCE_BONUS + difficulty * SPREAD_DIFFICULTY_FACTOR)
                                       / (age + SPREAD_AGE_OFFSET);
                 if (threshold <= 0 || nextInt(bound) > threshold)
+                    continue;
+
+                if (!allowFire(owner, level, FALCON_EVENT_FIRE_SPREAD, target, position))
                     continue;
 
                 setFire(owner, level, target, "minecraft:fire", std::min(age + nextInt(5) / 4, MAX_AGE));

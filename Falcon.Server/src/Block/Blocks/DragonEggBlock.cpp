@@ -59,13 +59,11 @@ void DragonEggBlock::teleport(ServerNetworkHandler &owner, Level &level, const V
         const int32_t diffY = position.y - destination.y;
         const int32_t diffZ = position.z - destination.z;
 
-        LevelEventPacket effect;
-        effect.mEventId = PARTICLE_DRAGON_EGG_EVENT;
-        effect.mPosition = Vector3f((float) position.x, (float) position.y, (float) position.z);
-        effect.mData = (std::abs(diffX) << 16) | (std::abs(diffY) << 8) | std::abs(diffZ)
-                       | ((diffX < 0 ? 1 : 0) << 24) | ((diffY < 0 ? 1 : 0) << 25) | ((diffZ < 0 ? 1 : 0) << 26);
-
-        BlockActionHandler::broadcastToViewers(owner, level, effect.mPosition, effect);
+        const int32_t data = (std::abs(diffX) << 16) | (std::abs(diffY) << 8) | std::abs(diffZ)
+                             | ((diffX < 0 ? 1 : 0) << 24) | ((diffY < 0 ? 1 : 0) << 25)
+                             | ((diffZ < 0 ? 1 : 0) << 26);
+        owner.broadcastLevelEvent(level, PARTICLE_DRAGON_EGG_EVENT,
+                                  Vector3f((float) position.x, (float) position.y, (float) position.z), data);
 
         level.setBlock(position, BlockState("minecraft:air"), false);
         level.onBlockBroken(position, state);

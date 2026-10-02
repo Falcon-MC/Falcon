@@ -23,6 +23,24 @@ void CommandMap::registerCommand(std::shared_ptr<Command> command) {
     mCommands.push_back(std::move(command));
 }
 
+void CommandMap::unregisterCommand(const std::string &name) {
+    Command *command = getCommand(name);
+    if (command == nullptr)
+        return;
+
+    for (auto it = mByName.begin(); it != mByName.end();) {
+        if (it->second == command)
+            it = mByName.erase(it);
+        else
+            ++it;
+    }
+
+    mCommands.erase(std::remove_if(mCommands.begin(), mCommands.end(),
+                                   [command](const std::shared_ptr<Command> &entry) {
+                                       return entry.get() == command;
+                                   }), mCommands.end());
+}
+
 Command *CommandMap::getCommand(const std::string &name) const {
     auto it = mByName.find(toLowerCase(name));
     return it == mByName.end() ? nullptr : it->second;

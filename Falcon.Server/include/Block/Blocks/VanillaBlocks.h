@@ -2975,4 +2975,6 @@ public:
     }
 
     static const Block *fromTypeId(int32_t typeId);
+
+    static void refreshOverrides();
 };

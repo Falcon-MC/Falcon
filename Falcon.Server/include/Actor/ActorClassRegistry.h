@@ -24,6 +24,12 @@ public:
     static const MobActor *getMobPrototype(const std::string &identifier);
 
     static ActorSize getSize(const std::string &identifier);
+
+    static void activate(const void *owner);
+
+    static void remove(const void *owner);
+
+    static void resetPrototypes();
 };
 
 #define FALCON_REGISTER_SIZED_ACTOR(tag, identifier, width, height, projectile)          \

@@ -20,7 +20,7 @@ public:
 
     static bool tryReserveSearch(int64_t tick);
 
-    bool findPath(Level &level, const MobActor &mob, const Vector3f &target, Path &path);
+    bool findPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options, Path &path);
 
 private:
     struct Node {

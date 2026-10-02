@@ -9,8 +9,10 @@ struct ServerSettings {
     std::string motd = "Falcon Server";
     std::string subMotd = "Falcon";
     std::string gameVersion = "1.26.60";
-    int protocolVersion = 2216;
+    int protocolVersion = 2223;
     bool runSetupWizard = true;
+    bool acceptLicense = false;
+    std::string language;
 };
 
 void startServer(const ServerSettings &settings = ServerSettings());

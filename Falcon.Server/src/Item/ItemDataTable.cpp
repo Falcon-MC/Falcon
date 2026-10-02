@@ -2,8 +2,6 @@
 
 #include "Item/ItemTypeIds.h"
 #include "Item/ItemCooldowns.h"
-#include "Item/Items/EnchantedGoldenAppleItem.h"
-
 #include <unordered_map>
 
 namespace {
@@ -618,6 +616,13 @@ const ItemData gItemDataTable[] = {
 
 const size_t gItemDataCount = sizeof(gItemDataTable) / sizeof(gItemDataTable[0]);
 
+bool allowsOffHand(const std::string &identifier) {
+    return identifier == "minecraft:arrow" || identifier == "minecraft:shield"
+           || identifier == "minecraft:totem_of_undying" || identifier == "minecraft:firework_rocket"
+           || identifier == "minecraft:filled_map" || identifier == "minecraft:empty_map"
+           || identifier == "minecraft:nautilus_shell";
+}
+
 }
 
 const ItemData *ItemDataTable::getAll() {
@@ -707,15 +712,6 @@ const ItemComponents &ItemDataTable::getComponents(const std::string &identifier
         auto &food = value.emplace<FoodItemComponent>();
         food.mNutrition = data->mNutrition;
         food.mSaturation = data->mSaturation;
-        if (identifier == "minecraft:chorus_fruit") {
-            food.mCanAlwaysEat = true;
-        } else if (identifier == "minecraft:golden_apple") {
-            food.mCanAlwaysEat = true;
-            food.addEffect({22, 0, 2400, 1.0f});
-            food.addEffect({10, 1, 100, 1.0f});
-        } else if (EnchantedGoldenAppleItem::matches(identifier)) {
-            EnchantedGoldenAppleItem::applyFoodComponent(food);
-        }
     }
 
     const int cooldown = ItemCooldowns::getDuration(identifier);
@@ -727,6 +723,9 @@ const ItemComponents &ItemDataTable::getComponents(const std::string &identifier
 
     if (identifier.find("netherite") != std::string::npos || identifier == "minecraft:ancient_debris")
         value.emplace<FireResistantItemComponent>();
+
+    if (allowsOffHand(identifier))
+        value.emplace<AllowOffHandItemComponent>();
 
     auto result = components.emplace(identifier, std::move(value));
     return result.first->second;

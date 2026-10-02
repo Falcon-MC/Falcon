@@ -16,6 +16,14 @@ namespace {
         return BlockState(state.mName, state.mStates);
     }
 
+    BlockState naturalCreakingHeartState() {
+        BlockState state = VanillaBlocks::CREAKING_HEART().toBlockState();
+        state.mStates.putString("pillar_axis", "y");
+        state.mStates.putString("creaking_heart_state", "dormant");
+        state.mStates.putByte("natural", 1);
+        return BlockState(state.mName, state.mStates);
+    }
+
 }
 
 bool PaleOakTree::generate(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z) {
@@ -153,7 +161,7 @@ void PaleOakTree::_placeLogAt(BlockManager &manager, int32_t x, int32_t y, int32
         return;
 
     if (creaking)
-        manager.setBlockStateAt(x, y, z, withPillarAxis(VanillaBlocks::CREAKING_HEART().toBlockState(), "y"));
+        manager.setBlockStateAt(x, y, z, naturalCreakingHeartState());
     else
         manager.setBlockStateAt(x, y, z, withPillarAxis(VanillaBlocks::PALE_OAK_LOG().toBlockState(), "y"));
 }

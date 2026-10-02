@@ -1,7 +1,7 @@
 #include "Network/Handler/ItemActorHandler.h"
 
 #include "Actor/ActorFlags.h"
-#include "Actor/ItemActor.h"
+#include "Actor/Misc/ItemActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Blocks/ContainerBlock.h"
 #include "Block/Blocks/FireBlock.h"
@@ -14,6 +14,7 @@
 #include "Level/Level.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/AddItemActorPacket.h"
 #include "Protocol/Packets/MoveActorAbsolutePacket.h"
 #include "Protocol/Packets/RemoveActorPacket.h"
@@ -263,6 +264,18 @@ namespace {
 
             const ItemStack pickedItem = actor.getItem();
 
+            ItemStack eventItem = pickedItem;
+            PluginEvent pluginEvent;
+            pluginEvent.mType = FALCON_EVENT_PLAYER_PICKUP_ITEM;
+            pluginEvent.mCancellable = true;
+            pluginEvent.mPlayer = &player;
+            pluginEvent.mItem = &eventItem;
+            PluginManager::getInstance().dispatch(pluginEvent);
+            if (actor.isRemoved())
+                return;
+            if (pluginEvent.mCancelled)
+                continue;
+
             std::vector<int> touchedSlots;
             if (!inventory.addItem(actor.getItem(), touchedSlots))
                 continue;
@@ -273,19 +286,10 @@ namespace {
                 owner.getEventBus().after().mEntityItemPickup.emit(pickupEvent);
             }
 
-            TakeItemActorPacket take;
-    take.mItemRuntimeActorId = actor.getRuntimeId();
-    take.mRuntimeActorId = player.getRuntimeId();
-
-            for (auto &viewer: owner.getPlayers()) {
-                if (viewer.second.isSpawned() && viewer.second.getDimension() == actor.getDimension())
-                    owner.getNetworkHandler().send(viewer.second.getNetworkIdentifier(), take, owner.getCodecContext());
-            }
-
             for (int slot: touchedSlots)
                 player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
 
-            actor.setRemoved(true);
+            ItemActorHandler::collect(owner, actor, player);
             return;
         }
     }
@@ -297,6 +301,7 @@ ItemActor *ItemActorHandler::dropItem(ServerNetworkHandler &owner, Level &level,
         return nullptr;
 
     std::unique_ptr<ItemActor> actor(new ItemActor(owner.allocateRuntimeId(), item));
+    actor->setUniqueId(owner.allocateActorUniqueId());
     actor->setDimension(level.getDimensionType());
     actor->getItem().mUsingNetId = false;
     actor->getItem().mNetId = 0;
@@ -310,6 +315,24 @@ ItemActor *ItemActorHandler::dropItem(ServerNetworkHandler &owner, Level &level,
 
     broadcastItemActorSpawn(owner, *result);
     return result;
+}
+
+void ItemActorHandler::collect(ServerNetworkHandler &owner, ItemActor &item, const Actor &collector) {
+    TakeItemActorPacket take;
+    take.mItemRuntimeActorId = item.getRuntimeId();
+    take.mRuntimeActorId = collector.getRuntimeId();
+
+    for (auto &viewer: owner.getPlayers()) {
+        if (viewer.second.isSpawned() && viewer.second.getDimension() == item.getDimension())
+            owner.getNetworkHandler().send(viewer.second.getNetworkIdentifier(), take, owner.getCodecContext());
+    }
+
+    item.setRemoved(true);
+}
+
+void ItemActorHandler::refresh(ServerNetworkHandler &owner, const ItemActor &item) {
+    broadcastItemActorRemove(owner, item);
+    broadcastItemActorSpawn(owner, item);
 }
 
 void ItemActorHandler::sendItemActorsTo(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -340,10 +363,60 @@ void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
 
         if (actor.isRemoved() || actor.isExpired()) {
             broadcastItemActorRemove(owner, actor);
+            owner.getLevelFor(actor).eraseEntity(actor.getUniqueId());
             it = actors.erase(it);
             continue;
         }
 
         ++it;
+    }
+}
+
+ItemActor *ItemActorHandler::restoreItem(ServerNetworkHandler &owner, Level &level, const Tag &data) {
+    std::unique_ptr<ItemActor> actor(new ItemActor(owner.allocateRuntimeId(), ItemStack::air()));
+    actor->loadNbt(data, owner.getCodecContext());
+    if (actor->getItem().isAir() || actor->getItem().mCount <= 0)
+        return nullptr;
+
+    for (const std::unique_ptr<ItemActor> &existing: owner.getItemEntities()) {
+        if (existing->getUniqueId() == actor->getUniqueId())
+            return nullptr;
+    }
+
+    if (!actor->hasAssignedUniqueId())
+        actor->setUniqueId(owner.allocateActorUniqueId());
+
+    actor->setDimension(level.getDimensionType());
+    actor->getItem().mUsingNetId = false;
+    actor->getItem().mNetId = 0;
+
+    ItemActor *result = actor.get();
+    owner.getItemEntities().push_back(std::move(actor));
+
+    broadcastItemActorSpawn(owner, *result);
+    return result;
+}
+
+void ItemActorHandler::saveItemsInChunk(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ,
+                                        std::vector<Tag> &out, bool cull) {
+    std::vector<std::unique_ptr<ItemActor>> &actors = owner.getItemEntities();
+
+    for (auto it = actors.begin(); it != actors.end();) {
+        ItemActor &actor = **it;
+        const Vector3f &position = actor.getPosition();
+        if (actor.isRemoved() || actor.getDimension() != level.getDimensionType()
+            || ((int32_t) std::floor(position.x) >> 4) != chunkX || ((int32_t) std::floor(position.z) >> 4) != chunkZ) {
+            ++it;
+            continue;
+        }
+
+        out.push_back(actor.saveNbt());
+        if (!cull) {
+            ++it;
+            continue;
+        }
+
+        broadcastItemActorRemove(owner, actor);
+        it = actors.erase(it);
     }
 }

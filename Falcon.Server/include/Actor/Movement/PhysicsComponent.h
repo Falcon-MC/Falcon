@@ -9,6 +9,9 @@ struct PhysicsComponent {
     bool mHasCollision = true;
     bool mPushable = true;
     bool mFloatsInLiquid = true;
+    bool mSwims = false;
+    bool mClimbsLadders = false;
+    bool mClimbsWalls = false;
     float mGravity = DEFAULT_GRAVITY;
     float mStepHeight = LIVING_STEP_HEIGHT;
 };

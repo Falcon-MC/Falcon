@@ -1,17 +1,10 @@
 #pragma once
 
-#include <cstdint>
-#include <string>
+#include "Item/Item.h"
 
-class FoodItemComponent;
-class ItemStack;
-
-class EnchantedGoldenAppleItem {
+class EnchantedGoldenAppleItem : public Item {
 public:
     static constexpr const char *IDENTIFIER = "minecraft:enchanted_golden_apple";
-
-    static constexpr int32_t NUTRITION = 4;
-    static constexpr float SATURATION = 9.6f;
 
     static constexpr int32_t REGENERATION_DURATION_TICKS = 600;
     static constexpr int32_t REGENERATION_AMPLIFIER = 1;
@@ -20,9 +13,13 @@ public:
     static constexpr int32_t RESISTANCE_DURATION_TICKS = 6000;
     static constexpr int32_t FIRE_RESISTANCE_DURATION_TICKS = 6000;
 
+    explicit EnchantedGoldenAppleItem(const Item &base);
+
     static bool matches(const std::string &identifier);
 
-    static bool matches(const ItemStack &item);
+    bool canAlwaysEat() const override {
+        return true;
+    }
 
-    static void applyFoodComponent(FoodItemComponent &food);
+    void onConsumed(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const override;
 };

@@ -10,6 +10,7 @@ class ItemUseTransaction;
 class Level;
 class Packet;
 class BlockState;
+class BlockActor;
 
 class BlockActionHandler {
 public:
@@ -17,7 +18,11 @@ public:
                                    const Packet &packet, const ServerPlayer *except = nullptr);
 
     static void broadcastBlockUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                     const BlockState &state);
+                                     const BlockState &state, uint32_t layer = 0);
+
+    static void broadcastBlockActorData(ServerNetworkHandler &owner, Level &level, const BlockActor &blockActor);
+
+    static int32_t breakSpeedEventData(double speed);
 
     static void breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 

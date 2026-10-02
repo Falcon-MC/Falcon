@@ -62,9 +62,7 @@ bool DifficultyCommand::execute(CommandOrigin &sender, const std::vector<std::st
         return false;
     }
 
-    PropertiesSettings properties = mHandler.getProperties();
-    properties.setProperty("difficulty", DIFFICULTY_NAMES[(size_t) difficulty]);
-    mHandler.setProperties(properties);
+    mHandler.setDifficulty(DIFFICULTY_NAMES[(size_t) difficulty]);
 
     SetDifficultyPacket packet;
     packet.mDifficulty = (uint32_t) difficulty;

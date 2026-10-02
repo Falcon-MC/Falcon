@@ -83,6 +83,10 @@ public:
     // typed access, named after the properties they map to
     std::string getServerName() const { return getString("server-name"); }
 
+    std::string getLanguage() const {
+        return getString("language");
+    }
+
     GameType getGameType() const;
 
     bool getForceGameType() const { return getBool("force-gamemode"); }
@@ -168,13 +172,8 @@ public:
         return getFloat("player-position-acceptance-threshold");
     }
 
-    float getPlayerPositionAcceptanceThresholdScaled() const {
-        return getPlayerPositionAcceptanceThreshold() / 100.0f;
-    }
-
-    float getPlayerPositionAcceptanceThresholdSquared() const {
-        const float scaled = getPlayerPositionAcceptanceThresholdScaled();
-        return scaled * scaled;
+    bool getServerAuthoritativeMovementStrict() const {
+        return getBool("server-authoritative-movement-strict");
     }
 
     float getPlayerMovementActionDirectionThreshold() const {

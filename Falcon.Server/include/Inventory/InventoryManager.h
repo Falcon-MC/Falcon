@@ -17,6 +17,7 @@ class ServerPlayer;
 class ServerNetworkHandler;
 class BlockActorStore;
 class ChestBlockActor;
+class FurnaceBlockActor;
 class Level;
 class ContainerBlockActor;
 enum class FurnaceKind : uint8_t;
@@ -86,7 +87,11 @@ public:
 
     void tickFurnace(ServerNetworkHandler &owner);
 
-    static void tickStoredFurnaces(ServerNetworkHandler &owner);
+    void loadFurnaceView();
+
+    void storeFurnaceView(ServerNetworkHandler &owner);
+
+    static void tickStoredFurnace(ServerNetworkHandler &owner, FurnaceBlockActor &furnace);
 
     static void onFurnaceBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
@@ -120,6 +125,8 @@ public:
 
     void onClientRemoveWindow(int windowId);
 
+    void dispatchPluginClose();
+
     int getCurrentWindowId() const {
         return mFurnaceWindowId != CONTAINER_ID_NONE
                ? mFurnaceWindowId
@@ -134,6 +141,8 @@ public:
 
 private:
     int _getNewWindowId();
+
+    bool _allowPluginOpen(const Vector3i &position);
 
     int _getWindowId(InventoryId inventory) const;
 
@@ -157,6 +166,8 @@ private:
     void _sendOutputPacket(const ItemStack &item);
 
     void _storeFurnaceState(bool clearLocal);
+
+    static void _releaseFurnaceExperience(ServerNetworkHandler &owner, FurnaceBlockActor &furnace);
 
     /** Block actors of the level the player is in, where any container they open lives. */
     BlockActorStore *_blockActors() const;
@@ -187,4 +198,6 @@ private:
     bool mHasPendingCloseWindow;
     int mPendingCloseWindowId;
     bool mHasPendingOpenMainInventory;
+    bool mPluginOpen = false;
+    Vector3i mPluginOpenPosition;
 };

@@ -10,5 +10,11 @@ public:
 
     float getContactDamage() const override;
 
+    float getHopPower() const override {
+        return BASE_HOP_POWER + (float) getSizeVariant() * SIZE_HOP_BONUS;
+    }
+
+    static constexpr float SIZE_HOP_BONUS = 0.1f;
+
     const LootTable *getLootTable() const override;
 };

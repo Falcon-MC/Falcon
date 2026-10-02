@@ -12,6 +12,16 @@ bool PanicGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     return owner.getCurrentTick() - mob.getLastHurtTick() <= mDuration;
 }
 
+void PanicGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
+    RandomStrollGoal::start(owner, mob);
+    mob.setPanicking(true);
+}
+
+void PanicGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
+    RandomStrollGoal::stop(owner, mob);
+    mob.setPanicking(false);
+}
+
 bool PanicGoal::shouldPickTarget(MobActor &mob) const {
     return getTicksSinceTarget() >= getInterval() || mob.getNavigation().isDone();
 }

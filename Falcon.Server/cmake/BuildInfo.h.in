@@ -1,5 +1,9 @@
 #pragma once
 
+#define FALCON_BUILD_GUARD @FALCON_BUILD_GUARD@
+#define FALCON_BUILD_COMMIT_ID "@FALCON_BUILD_COMMIT@"
+#define FALCON_BUILD_NUMBER "@FALCON_BUILD_ID@"
+
 namespace FalconBuildInfo {
     inline constexpr const char kVersion[] = "@FALCON_BUILD_VERSION@";
     inline constexpr const char kBuildId[] = "@FALCON_BUILD_ID@";

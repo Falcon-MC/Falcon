@@ -4,6 +4,8 @@
 #include "Inventory/BundleInventory.h"
 #include "Item/EnchantmentData.h"
 #include "Item/EnchantmentHelper.h"
+#include "Item/Components/ItemComponentTypes.h"
+#include "Item/ItemData.h"
 #include "Item/ItemEnchantments.h"
 
 #include <algorithm>
@@ -49,6 +51,10 @@ namespace {
         int32_t mPlayerXpLevel = 0;
         bool mCreativeMode = false;
         int32_t mEnchantLevelsConsumed = 0;
+        bool mEnchantActive = false;
+        int32_t mEnchantMaterialRequired = 0;
+        int32_t mEnchantInputConsumed = 0;
+        int32_t mEnchantMaterialConsumed = 0;
     };
 
     ItemStack *findBundleOwner(PlayerInventory &inventory, RequestContext &context, int32_t bundleId,
@@ -295,6 +301,18 @@ namespace {
         return acceptsBundleWeight(context, projected);
     }
 
+    bool acceptsInOpenContainer(const RequestContext &context, const ItemStack *slot, const ItemStack &item) {
+        if (context.mOpenContainer == nullptr || context.mContainerSlots.empty() || item.isAir())
+            return true;
+
+        const ItemStack *first = context.mContainerSlots.data();
+        const ItemStack *last = first + context.mContainerSlots.size();
+        if (slot < first || slot >= last)
+            return true;
+
+        return context.mOpenContainer->canHold(item);
+    }
+
     bool moveItems(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                    std::vector<TouchedSlot> &touched) {
         ItemStack *source = resolveSlot(inventory, context, action.mSource.mContainerName,
@@ -317,6 +335,10 @@ namespace {
         }
 
         if (!destination->isAir() && !PlayerInventory::canStack(*source, *destination)) {
+            return false;
+        }
+
+        if (!acceptsInOpenContainer(context, destination, *source)) {
             return false;
         }
 
@@ -377,6 +399,11 @@ namespace {
             return false;
         }
 
+        if (!acceptsInOpenContainer(context, destination, *source)
+            || !acceptsInOpenContainer(context, source, *destination)) {
+            return false;
+        }
+
         std::swap(*source, *destination);
 
         inventory.assignNetId(*source);
@@ -408,6 +435,14 @@ namespace {
                 return false;
             }
             context.mCraftingConsumed[(size_t) gridSlot] += action.mCount;
+        }
+
+        if (context.mEnchantActive && action.mType == ItemStackRequestActionType::Consume) {
+            const ContainerSlotType container = action.mSource.mContainerName.mContainer;
+            if (container == ContainerSlotType::EnchantingInput)
+                context.mEnchantInputConsumed += action.mCount;
+            else if (container == ContainerSlotType::EnchantingMaterial)
+                context.mEnchantMaterialConsumed += action.mCount;
         }
 
         if (dropped && context.mDroppedItems != nullptr) {
@@ -471,10 +506,19 @@ namespace {
 
         ItemStack enchanted = *input;
         enchanted.mCount = 1;
+        if (context.mCodecContext != nullptr && enchanted.mDefinition != nullptr
+            && enchanted.mDefinition->getIdentifier() == "minecraft:book") {
+            std::shared_ptr<ItemDefinition> enchantedBook =
+                    context.mCodecContext->getItemDefinitions().getDefinition("minecraft:enchanted_book");
+            if (enchantedBook != nullptr)
+                enchanted.mDefinition = std::move(enchantedBook);
+        }
         ItemEnchantments::write(enchanted, enchantments);
 
         context.mCreatedOutput = std::move(enchanted);
         context.mCreatedOutputActive = true;
+        context.mEnchantActive = true;
+        context.mEnchantMaterialRequired = context.mCreativeMode ? 0 : consumeCost;
 
         if (!context.mCreativeMode)
             context.mEnchantLevelsConsumed = consumeCost;
@@ -564,8 +608,44 @@ namespace {
         return item != nullptr && ItemEnchantments::getLevel(*item, EnchantmentIds::BINDING) > 0;
     }
 
+    bool rejectedByOffhand(PlayerInventory &inventory, RequestContext &context, const FullContainerName &destination,
+                           const FullContainerName &source, int sourceSlot) {
+        if (destination.mContainer != ContainerSlotType::Offhand)
+            return false;
+
+        const ItemStack *item = resolveSlot(inventory, context, source, sourceSlot);
+        if (item == nullptr || item->isAir() || item->mDefinition == nullptr)
+            return false;
+
+        const std::string &identifier = item->mDefinition->getIdentifier();
+        if (ItemDataTable::find(identifier) == nullptr)
+            return false;
+
+        return ItemDataTable::getComponents(identifier).get<AllowOffHandItemComponent>() == nullptr;
+    }
+
     bool applyAction(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched) {
+        switch (action.mType) {
+            case ItemStackRequestActionType::Take:
+            case ItemStackRequestActionType::Place:
+                if (rejectedByOffhand(inventory, context, action.mDestination.mContainerName,
+                                      action.mSource.mContainerName, action.mSource.mSlot))
+                    return false;
+                break;
+
+            case ItemStackRequestActionType::Swap:
+                if (rejectedByOffhand(inventory, context, action.mDestination.mContainerName,
+                                      action.mSource.mContainerName, action.mSource.mSlot)
+                    || rejectedByOffhand(inventory, context, action.mSource.mContainerName,
+                                         action.mDestination.mContainerName, action.mDestination.mSlot))
+                    return false;
+                break;
+
+            default:
+                break;
+        }
+
         switch (action.mType) {
             case ItemStackRequestActionType::Take:
             case ItemStackRequestActionType::Place:
@@ -687,6 +767,14 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
         }
     }
 
+    if (context.mEnchantActive
+        && (context.mEnchantInputConsumed != 1
+            || context.mEnchantMaterialConsumed < context.mEnchantMaterialRequired)) {
+        entry.mResult = RESULT_ERROR;
+        entry.mContainers.clear();
+        return entry;
+    }
+
     if (context.mCreatedOutputActive && !context.mCreatedOutput.isAir()) {
         entry.mResult = RESULT_ERROR;
         entry.mContainers.clear();
@@ -694,15 +782,15 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
     }
 
     for (const std::unique_ptr<BundleView> &view: context.mBundles) {
-        FullContainerName ownerName;
-        ownerName.mContainer = view->mOwnerContainer;
-
-        ItemStack *owner = resolveSlot(working, context, ownerName, view->mOwnerSlot);
-        if (owner == nullptr || !BundleInventory::isBundle(*owner)
-            || BundleInventory::getBundleId(*owner) != view->mId) {
-            continue;
+        ItemStack *owner = findBundleOwner(working, context, view->mId, view->mOwnerContainer, view->mOwnerSlot);
+        if (owner == nullptr) {
+            entry.mResult = RESULT_ERROR;
+            entry.mContainers.clear();
+            return entry;
         }
 
+        FullContainerName ownerName;
+        ownerName.mContainer = view->mOwnerContainer;
         BundleInventory::writeContents(*owner, view->mContents);
         markTouched(touched, ownerName, view->mOwnerSlot);
 

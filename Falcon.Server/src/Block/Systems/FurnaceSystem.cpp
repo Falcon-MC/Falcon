@@ -6,7 +6,3 @@
 void FurnaceSystem::tick(ServerNetworkHandler &owner, ServerPlayer &player) {
     player.getInventoryManager().tickFurnace(owner);
 }
-
-void FurnaceSystem::tickStored(ServerNetworkHandler &owner) {
-    InventoryManager::tickStoredFurnaces(owner);
-}

@@ -11,4 +11,8 @@ public:
     ActorCategory getCategory() const override { return ActorCategory::Hostile; }
 
     int getExperienceDrop() const override { return DEFAULT_EXPERIENCE; }
+
+    bool preventsSleep() const override {
+        return true;
+    }
 };

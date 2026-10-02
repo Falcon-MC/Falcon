@@ -16,6 +16,7 @@ class Actor;
 class BlockBehavior;
 class ItemStack;
 class Level;
+class MobActor;
 class ServerActor;
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -48,6 +49,12 @@ enum class PlacementMergeResult {
     None,
     Merged,
     Rejected
+};
+
+enum class BlockTraversal {
+    None,
+    Scaffolding,
+    PowderSnow
 };
 
 enum class PistonMoveReaction {
@@ -85,6 +92,15 @@ public:
         (void) state;
     }
 
+    virtual void onFallOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                          const BlockState &state, float fallDistance) const {
+        (void) owner;
+        (void) actor;
+        (void) position;
+        (void) state;
+        (void) fallDistance;
+    }
+
     virtual bool onPunch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                          const BlockState &state) const {
         (void) owner;
@@ -96,6 +112,32 @@ public:
 
     virtual bool canBeReplaced(const BlockState &state) const {
         (void) state;
+        return false;
+    }
+
+    virtual bool isClimbable() const {
+        return false;
+    }
+
+    virtual float getSpeedFactor() const {
+        return 1.0f;
+    }
+
+    virtual float getJumpFactor() const {
+        return 1.0f;
+    }
+
+    virtual float getAccelerationFrictionMultiplier() const {
+        return 1.0f;
+    }
+
+    virtual BlockTraversal getTraversal() const {
+        return BlockTraversal::None;
+    }
+
+    virtual bool getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const {
+        (void) actor;
+        (void) multiplier;
         return false;
     }
 
@@ -156,6 +198,21 @@ public:
         (void) actor;
         (void) position;
         (void) state;
+    }
+
+    virtual bool onActorEvent(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state, const std::string &event, MobActor &source) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        (void) event;
+        (void) source;
+        return false;
+    }
+
+    virtual bool bindsHomeActors() const {
+        return false;
     }
 
     virtual void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

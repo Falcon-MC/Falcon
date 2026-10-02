@@ -3,17 +3,27 @@
 #include "Block/Actor/ChestBlockActor.h"
 #include "Block/BlockActorStore.h"
 #include "Block/BlockData.h"
-#include "Actor/PrimedTntActor.h"
+#include "Actor/Misc/PrimedTntActor.h"
 #include "Block/Blocks/ButtonBlock.h"
 #include "Block/Blocks/CommandBlock.h"
 #include "Block/Blocks/DaylightDetectorBlock.h"
 #include "Block/Blocks/DoorBlock.h"
 #include "Block/Blocks/LeverBlock.h"
 #include "Block/Blocks/OpenableBlock.h"
-#include "Block/Blocks/OrientationBlocks.h"
-#include "Block/Blocks/PlacementRuleBlocks.h"
-#include "Block/Blocks/RedstoneBlocks.h"
+#include "Block/Blocks/DoorOrientationBlock.h"
+#include "Block/Blocks/FenceGateBlock.h"
+#include "Block/Blocks/TrapDoorBlock.h"
+#include "Block/Blocks/PressurePlateBlock.h"
+#include "Block/Blocks/RedStoneWireBlock.h"
+#include "Block/Blocks/ObserverBlock.h"
+#include "Block/Blocks/RedstoneBlock.h"
+#include "Block/Blocks/RedstoneComparatorBlock.h"
 #include "Block/Blocks/RedstoneDiodeBlock.h"
+#include "Block/Blocks/RedstoneLampBlock.h"
+#include "Block/Blocks/RedstoneRepeaterBlock.h"
+#include "Block/Blocks/RedstoneTorchBlock.h"
+#include "Block/Blocks/TrappedChestBlock.h"
+#include "Block/Blocks/SlabBlock.h"
 #include "Block/Blocks/TntBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Systems/CommandBlockSystem.h"
@@ -23,6 +33,8 @@
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginEvent.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
@@ -168,6 +180,22 @@ namespace {
     RedstoneState &stateOf(Level &level)
     {
         return gStates[level.getDimensionId()];
+    }
+
+    int redstoneChange(Level &level, const Vector3i &position, int previousPower, int power)
+    {
+        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_REDSTONE_CHANGE);
+        if (plugins == nullptr)
+            return power;
+
+        PluginEvent event;
+        event.mType = FALCON_EVENT_REDSTONE_CHANGE;
+        event.mLevel = &level;
+        event.mBlockPosition = position;
+        event.mAmount = (double) power;
+        event.mPreviousAmount = (double) previousPower;
+        plugins->dispatch(event);
+        return std::clamp((int) event.mAmount, 0, RedstoneSystem::MAX_SIGNAL);
     }
 
     template<typename T>
@@ -471,6 +499,9 @@ namespace {
         else if (power < maxStrength && strength <= maxStrength)
             maxStrength = std::max(power, strength - 1);
 
+        if (meta != maxStrength)
+            maxStrength = redstoneChange(level, position, meta, maxStrength);
+
         if (meta != maxStrength) {
             Tag states = state.mStates;
             states.putInt("redstone_signal", maxStrength);
@@ -695,7 +726,9 @@ namespace {
         if (!isA<PressurePlateBlock>(state))
             return;
 
-        const int strength = pressurePlateComputeStrength(owner, level, position, state);
+        int strength = pressurePlateComputeStrength(owner, level, position, state);
+        if (oldStrength != strength)
+            strength = redstoneChange(level, position, oldStrength, strength);
         const bool wasPowered = oldStrength > 0;
         const bool powered = strength > 0;
 
@@ -1140,8 +1173,8 @@ void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
     } else if (dynamic_cast<const DoorOrientationBlock *>(block) != nullptr) {
         if (type == BlockUpdateType::Redstone)
             DoorBlock::onRedstoneUpdate(owner, level, position, state);
-    } else if (dynamic_cast<const TrapdoorOrientationBlock *>(block) != nullptr
-               || dynamic_cast<const FenceGateOrientationBlock *>(block) != nullptr) {
+    } else if (dynamic_cast<const TrapDoorBlock *>(block) != nullptr
+               || dynamic_cast<const FenceGateBlock *>(block) != nullptr) {
         if (type == BlockUpdateType::Redstone)
             OpenableBlock::onRedstoneUpdate(owner, level, position, state);
     } else if (dynamic_cast<const TntBlock *>(block) != nullptr) {

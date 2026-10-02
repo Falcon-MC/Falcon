@@ -7,12 +7,25 @@
 #include "Actor/AI/Goal/GoalSelector.h"
 #include "Actor/AI/Navigation/PathNavigation.h"
 #include "Actor/ActorCategory.h"
+#include "Actor/ActorFlags.h"
 #include "Actor/ActorSize.h"
+#include "Actor/Definition/LookedAtSensor.h"
+#include "Actor/Mob/Component/MobAdmiration.h"
+#include "Actor/Mob/Component/MobAnger.h"
+#include "Actor/Mob/MobEntitySpawner.h"
+#include "Actor/Mob/MobEquipment.h"
+#include "Actor/Movement/RideControlSystem.h"
 #include "Actor/ServerActor.h"
+#include "Block/BlockState.h"
+#include "Core/Json/Json.h"
+#include "Core/Math/Vector3i.h"
 #include "Server/PropertiesSettings.h"
 
 #include <cstdint>
+#include <random>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 class Level;
 class LootTable;
@@ -25,11 +38,31 @@ public:
 
     virtual ActorCategory getCategory() const = 0;
 
+    virtual bool preventsSleep() const {
+        return false;
+    }
+
     ActorSize getSize() const override = 0;
+
+    PhysicsComponent getPhysics() const override;
+
+    bool canSwim() const;
+
+    bool canWalk() const;
 
     virtual float getDefaultMaxHealth() const = 0;
 
     virtual int getExperienceDrop() const { return 0; }
+
+    int getBreedingExperience() const;
+
+    bool isExpired() const override {
+        return mTransformed || mDespawned;
+    }
+
+    void despawn() {
+        mDespawned = true;
+    }
 
     virtual const LootTable *getLootTable() const;
 
@@ -66,10 +99,137 @@ public:
 
     void onDamaged(ServerNetworkHandler &owner, Actor *attacker) override;
 
-    virtual float getAttackDamage(Difficulty difficulty) const {
-        (void) difficulty;
-        return 0.0f;
+    bool senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) override;
+
+    float absorbDamage(float amount, const ActorDamageSource &source) const override {
+        return mEquipment.absorbDamage(amount, source);
     }
+
+    bool burnsInDaylight() const override;
+
+    bool shieldFromSunlight(ServerNetworkHandler &owner) override;
+
+    virtual float getAttackDamage(Difficulty difficulty) const;
+
+    const json::Value *getDefinition() const;
+
+    const json::Value *getComponent(const std::string &name) const;
+
+    const std::unordered_map<std::string, const json::Value *> &getComponents() const;
+
+    std::vector<std::string> getFamilies() const;
+
+    float getMovementSpeed() const;
+
+    bool hasComponentGroup(const std::string &group) const;
+
+    void addComponentGroup(const std::string &group);
+
+    void removeComponentGroup(const std::string &group);
+
+    void fireEvent(ServerNetworkHandler &owner, const std::string &event, Actor *other = nullptr);
+
+    void playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound);
+
+    void setParent(uint64_t runtimeId) {
+        mParentRuntimeId = runtimeId;
+    }
+
+    uint64_t getParentRuntimeId() const {
+        return mParentRuntimeId;
+    }
+
+    void setSpawnEvent(const std::string &event) {
+        mSpawnEvent = event;
+    }
+
+    void setHomePosition(const Vector3f &position) {
+        mHomePosition = position;
+        mHasHome = true;
+    }
+
+    bool hasHome() const {
+        return mHasHome;
+    }
+
+    const Vector3f &getHomePosition() const {
+        return mHomePosition;
+    }
+
+    void setEventBlock(const Vector3i &position) {
+        mEventBlock = position;
+        mHasEventBlock = true;
+    }
+
+    void clearEventBlock() {
+        mHasEventBlock = false;
+    }
+
+    bool hasEventBlock() const {
+        return mHasEventBlock;
+    }
+
+    const Vector3i &getEventBlock() const {
+        return mEventBlock;
+    }
+
+    bool fireBlockEvent(ServerNetworkHandler &owner, const Vector3i &position, const std::string &event);
+
+    bool hasCarriedBlock() const {
+        return mHasCarriedBlock;
+    }
+
+    void setCarriedBlock(ServerNetworkHandler &owner, const BlockState &state);
+
+    void markBorn();
+
+    void fillSpawnMetadata(EntityDataMap &metadata) const override;
+
+    bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
+
+    bool isInLove() const {
+        return mLoveTicks > 0;
+    }
+
+    void finishBreeding(ServerNetworkHandler &owner);
+
+    int32_t getVariant() const;
+
+    void setVariant(int32_t variant);
+
+    void inheritVariant(const MobActor &firstParent, const MobActor &secondParent);
+
+    bool isTamed() const {
+        return mOwnerId != NO_OWNER || !mLegacyOwnerName.empty();
+    }
+
+    int64_t getOwnerId() const {
+        return mOwnerId;
+    }
+
+    bool isOwnedBy(const Actor &actor) const {
+        return mOwnerId != NO_OWNER && actor.getUniqueId() == mOwnerId;
+    }
+
+    static constexpr int64_t NO_OWNER = -1;
+
+    bool isSitting() const {
+        return mSitting;
+    }
+
+    bool isPanicking() const {
+        return mPanicking;
+    }
+
+    void setPanicking(bool panicking) {
+        mPanicking = panicking;
+    }
+
+    ServerPlayer *getOwner(ServerNetworkHandler &owner) const;
+
+    Tag saveNbt() const override;
+
+    void loadNbt(const Tag &data) override;
 
     int64_t getLastHurtTick() const {
         return mLastHurtTick;
@@ -83,21 +243,81 @@ public:
         return mHurtCount;
     }
 
-    void setTarget(uint64_t runtimeId) {
-        mTargetRuntimeId = runtimeId;
-    }
+    bool setTarget(ServerNetworkHandler &owner, uint64_t runtimeId);
 
-    void clearTarget() {
-        mTargetRuntimeId = 0;
-    }
+    void clearTarget();
 
-    ServerPlayer *getTarget(ServerNetworkHandler &owner) const;
+    Actor *getTarget(ServerNetworkHandler &owner) const;
 
-    bool canTarget(const ServerPlayer &player) const;
+    bool canTarget(const Actor &actor) const;
 
     float distanceSquaredTo(const Actor &other) const;
 
     static ServerPlayer *findPlayer(ServerNetworkHandler &owner, uint64_t runtimeId);
+
+    static Actor *findActor(ServerNetworkHandler &owner, uint64_t runtimeId);
+
+    MobEquipment &getEquipment() {
+        return mEquipment;
+    }
+
+    const MobEquipment &getEquipment() const {
+        return mEquipment;
+    }
+
+    MobAdmiration &getAdmiration() {
+        return mAdmiration;
+    }
+
+    const MobAdmiration &getAdmiration() const {
+        return mAdmiration;
+    }
+
+    MobAnger &getAnger() {
+        return mAnger;
+    }
+
+    int getInventoryCapacity() const;
+
+    std::vector<ItemStack> rollLoot(ServerNetworkHandler &owner, const std::string &path);
+
+    void onKilledActor(ServerNetworkHandler &owner, Actor &victim);
+
+    bool isCelebrating() const {
+        return mCelebrationTicks > 0;
+    }
+
+    Vector3f getSeatOffset(size_t index, size_t passengerCount) const override;
+
+    Vector3f getDismountPosition(size_t index, size_t passengerCount) const override;
+
+    void onPassengerAdded(ServerNetworkHandler &owner, Actor &passenger) override;
+
+    void onPassengerRemoved(ServerNetworkHandler &owner, Actor &passenger) override;
+
+    bool isMountTaming() const;
+
+    void attemptMountTame(ServerNetworkHandler &owner, ServerPlayer &rider);
+
+    float getJumpStrength() const;
+
+    virtual float getRideSprintMultiplier() const {
+        return 1.0f;
+    }
+
+    virtual bool canSpawnNaturally(Level &level, const Vector3i &position, int32_t biomeId, int32_t light,
+                                   std::mt19937 &random) const {
+        (void) level;
+        (void) position;
+        (void) biomeId;
+        (void) light;
+        (void) random;
+        return true;
+    }
+
+    RideControlState &getRideControl() {
+        return mRideControl;
+    }
 
 protected:
     virtual void registerGoals(GoalSelector &goalSelector) {
@@ -107,8 +327,138 @@ protected:
     void tickControls(ServerNetworkHandler &owner);
 
 private:
+    friend class RideControlSystem;
+
+    void _rebuildComponents() const;
+
+    void _registerGoals(ServerNetworkHandler &owner);
+
+    void _syncBody(ServerNetworkHandler &owner);
+
+    void _markComponentsChanged();
+
+    void _tickLifecycle(ServerNetworkHandler &owner);
+
+    void _tickSensors(ServerNetworkHandler &owner);
+
+    void _tickEntitySensor(ServerNetworkHandler &owner);
+
+    int32_t _countSensedEntities(ServerNetworkHandler &owner, const json::Value &subsensor, bool playersOnly,
+                                 bool relativeRange);
+
+    void _tickTimer(ServerNetworkHandler &owner);
+
+    void _tickAttackCooldown(ServerNetworkHandler &owner);
+
+    int _experienceReward(const char *key, const ServerPlayer *player) const;
+
+    int _deathExperience(const ServerPlayer *killer) const;
+
+    void _tickCelebration(ServerNetworkHandler &owner);
+
+    void _startCelebration(ServerNetworkHandler &owner, const json::Value &component);
+
+    void _tickShaking(ServerNetworkHandler &owner);
+
+    void _tickBreathing(ServerNetworkHandler &owner);
+
+    void _tickFlopping(ServerNetworkHandler &owner);
+
+    void _tickSpellEffects();
+
+    void _tickTransformation(ServerNetworkHandler &owner);
+
+    bool _tickInstantDespawn(ServerNetworkHandler &owner);
+
+    int32_t _transformationAssist(ServerNetworkHandler &owner, const json::Value &delay);
+
+    void _transform(ServerNetworkHandler &owner, const json::Value &transformation);
+
+    void _fireComponentEvent(ServerNetworkHandler &owner, const char *component);
+
+    void _setFlag(ServerNetworkHandler &owner, ActorFlag flag, bool value);
+
+    bool _tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _tryFeedBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _tryStartLove(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _trySit(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    bool _tryInteract(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    bool _tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _tryMount(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    const json::Value *_seatFor(size_t index, size_t passengerCount) const;
+
+    float _rolledValue(const json::Value *component, float &rolled, float fallback) const;
+
+    const json::Value *_equippableSlot(int32_t index) const;
+
+    const ItemStack &_equippableItem(int32_t index) const;
+
+    void _setEquippableItem(int32_t index, ItemStack item);
+
+    bool _equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &slotName);
+
+    void _dropEquipmentSlot(ServerNetworkHandler &owner, const std::string &slotName, float yOffset);
+
+    void _spawnLoot(ServerNetworkHandler &owner, Level &level, const std::string &path);
+
+    void _givePlayerItem(ServerNetworkHandler &owner, ServerPlayer &player, ItemStack item);
+
+    void _emitInteractParticle(ServerNetworkHandler &owner, const ServerPlayer &player, const json::Value &particle,
+                               const std::string &type);
+
+    void _appendDefinitionData(EntityDataMap &metadata) const;
+
+    void _syncOwner(ServerNetworkHandler &owner);
+
     GoalSelector mGoalSelector;
+    bool mTargetAcquired = false;
+    bool mTargetEscaped = false;
+    int32_t mLoveTicks = 0;
+    int32_t mBreedCooldown = 0;
+    int32_t mInteractCooldown = 0;
+    int32_t mAgeTicks = 0;
+    int64_t mOwnerId = NO_OWNER;
+    std::string mLegacyOwnerName;
+    int64_t mSyncedOwnerId = NO_OWNER;
+    bool mSitting = false;
     bool mGoalsRegistered = false;
+    bool mGoalsDirty = false;
+    bool mBodyDirty = true;
+    float mScale = 1.0f;
+    bool mDefinitionStarted = false;
+    bool mBorn = false;
+    std::string mSpawnEvent;
+    bool mEquipmentInherited = false;
+    const json::Value *mSpellEffectsComponent = nullptr;
+    const json::Value *mTimerComponent = nullptr;
+    int32_t mTimerTicks = 0;
+    const json::Value *mTransformationComponent = nullptr;
+    int32_t mTransformationTicks = 0;
+    bool mTransformed = false;
+    uint64_t mParentRuntimeId = 0;
+    Vector3f mHomePosition;
+    bool mHasHome = false;
+    Vector3i mEventBlock;
+    bool mHasEventBlock = false;
+    BlockState mCarriedBlock;
+    bool mHasCarriedBlock = false;
+    bool mDespawned = false;
+    LookedAtSensor mLookedAtSensor;
+    std::vector<std::string> mComponentGroups;
+    std::vector<std::string> mGoalGroups;
+    std::vector<std::string> mBodyGroups;
+    bool mBodySynced = false;
+    mutable const json::Value *mDefinition = nullptr;
+    mutable bool mDefinitionResolved = false;
+    mutable std::unordered_map<std::string, const json::Value *> mComponents;
+    mutable bool mComponentsDirty = true;
     int64_t mLastHurtTick = INT64_MIN / 2;
     uint64_t mLastHurtBy = 0;
     uint32_t mHurtCount = 0;
@@ -118,4 +468,21 @@ private:
     LookControl mLookControl;
     JumpControl mJumpControl;
     BodyControl mBodyControl;
+    MobEquipment mEquipment;
+    MobEntitySpawner mEntitySpawner;
+    std::vector<int32_t> mEntitySensorCooldowns;
+    int32_t mTemper = 0;
+    mutable float mRolledMovementSpeed = -1.0f;
+    mutable float mRolledJumpStrength = -1.0f;
+    RideControlState mRideControl;
+    MobAnger mAnger;
+    MobAdmiration mAdmiration;
+    const json::Value *mAttackCooldownComponent = nullptr;
+    int32_t mAttackCooldownTicks = 0;
+    int32_t mCelebrationTicks = 0;
+    int32_t mCelebrationSoundTicks = 0;
+    static constexpr int32_t UNSET_AIR_SUPPLY = INT32_MIN;
+    int32_t mAirSupply = UNSET_AIR_SUPPLY;
+    bool mPanicking = false;
+    const json::Value *mCelebrationComponent = nullptr;
 };

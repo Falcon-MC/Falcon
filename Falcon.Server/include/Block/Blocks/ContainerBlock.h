@@ -46,6 +46,8 @@ public:
 
     static const ContainerBlockDefinition *findDefinition(const std::string &identifier);
 
+    static bool isShulkerBoxItem(const ItemStack &item);
+
     static std::unique_ptr<BlockActor> createBlockActor(ContainerBlockKind kind);
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,

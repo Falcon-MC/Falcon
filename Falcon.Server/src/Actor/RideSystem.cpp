@@ -6,8 +6,11 @@
 #include "Protocol/Packets/SetActorDataPacket.h"
 #include "Protocol/Packets/SetActorLinkPacket.h"
 
+#include <cmath>
+
 namespace {
     constexpr int32_t RIDER_SEAT_POSITION = 56;
+    constexpr float DEGREES_TO_RADIANS = 0.017453292519943295f;
 
     EntityLinkType linkTypeFor(const Actor &vehicle, int64_t passengerId) {
         const std::vector<int64_t> &passengers = vehicle.getPassengers();
@@ -59,12 +62,39 @@ namespace {
         sendToWatchers(owner, vehicle, passenger, packet);
     }
 
-    Vector3f seatOffsetOf(const Actor &vehicle) {
+    size_t passengerIndexOf(const Actor &vehicle, int64_t passengerId) {
+        const std::vector<int64_t> &passengers = vehicle.getPassengers();
+        for (size_t index = 0; index < passengers.size(); ++index) {
+            if (passengers[index] == passengerId)
+                return index;
+        }
+        return passengers.size();
+    }
+
+    Vector3f seatOffsetOf(const Actor &vehicle, size_t index, size_t passengerCount) {
         const ServerActor *actor = dynamic_cast<const ServerActor *>(&vehicle);
         if (actor == nullptr)
             return Vector3f(0.0f, 0.0f, 0.0f);
 
-        return actor->getSeatOffset();
+        return actor->getSeatOffset(index, passengerCount);
+    }
+
+    Vector3f seatPositionOf(const Actor &vehicle, const Vector3f &seat) {
+        const float yaw = vehicle.getRotation().y * DEGREES_TO_RADIANS;
+        const float cosine = std::cos(yaw);
+        const float sine = std::sin(yaw);
+        const Vector3f position = vehicle.getPosition();
+        return Vector3f(position.x + seat.x * cosine - seat.z * sine, position.y + seat.y,
+                        position.z + seat.x * sine + seat.z * cosine);
+    }
+
+    void refreshSeats(ServerNetworkHandler &owner, Actor &vehicle) {
+        const std::vector<int64_t> passengers = vehicle.getPassengers();
+        for (size_t index = 0; index < passengers.size(); ++index) {
+            Actor *passenger = RideSystem::resolve(owner, passengers[index]);
+            if (passenger != nullptr)
+                sendSeatPosition(owner, vehicle, *passenger, seatOffsetOf(vehicle, index, passengers.size()));
+        }
     }
 }
 
@@ -85,16 +115,16 @@ bool RideSystem::mount(ServerNetworkHandler &owner, Actor &rider, ServerActor &v
     rider._setVehicleId(vehicle.getUniqueId());
     rider.getFlags().set(ActorFlag::Riding, true);
 
-    const Vector3f seat = seatOffsetOf(vehicle);
-    const Vector3f position = vehicle.getPosition();
-    rider.setPosition(Vector3f(position.x + seat.x, position.y + seat.y, position.z + seat.z));
+    const size_t count = vehicle.getPassengers().size();
+    rider.setPosition(seatPositionOf(vehicle, seatOffsetOf(vehicle, count - 1, count)));
 
     SetActorLinkPacket packet;
     packet.mActorLink = makeLink(vehicle.getUniqueId(), rider.getUniqueId(),
                                  linkTypeFor(vehicle, rider.getUniqueId()), riderInitiated);
     sendToWatchers(owner, vehicle, rider, packet);
-    sendSeatPosition(owner, vehicle, rider, seat);
+    refreshSeats(owner, vehicle);
 
+    vehicle.onPassengerAdded(owner, rider);
     return true;
 }
 
@@ -107,22 +137,29 @@ void RideSystem::dismount(ServerNetworkHandler &owner, Actor &rider, bool riderI
     if (vehicle == nullptr)
         return;
 
+    const size_t index = passengerIndexOf(*vehicle, rider.getUniqueId());
+    const size_t count = vehicle->getPassengers().size();
+    ServerActor *serverVehicle = dynamic_cast<ServerActor *>(vehicle);
+    const Vector3f standing = serverVehicle != nullptr
+                              ? serverVehicle->getDismountPosition(index, count)
+                              : seatPositionOf(*vehicle, seatOffsetOf(*vehicle, index, count));
+
     vehicle->_removePassenger(rider.getUniqueId());
 
     SetActorLinkPacket packet;
     packet.mActorLink = makeLink(vehicle->getUniqueId(), rider.getUniqueId(), EntityLinkType::Remove,
                                  riderInitiated);
     sendToWatchers(owner, *vehicle, rider, packet);
-
-    const Vector3f seat = seatOffsetOf(*vehicle);
-    const Vector3f position = vehicle->getPosition();
-    const Vector3f standing(position.x + seat.x, position.y + seat.y, position.z + seat.z);
+    refreshSeats(owner, *vehicle);
 
     ServerPlayer *playerRider = dynamic_cast<ServerPlayer *>(&rider);
     if (playerRider != nullptr)
         playerRider->teleport(owner, standing);
     else
         rider.teleport(standing);
+
+    if (serverVehicle != nullptr)
+        serverVehicle->onPassengerRemoved(owner, rider);
 }
 
 void RideSystem::ejectAll(ServerNetworkHandler &owner, Actor &vehicle) {
@@ -157,12 +194,11 @@ void RideSystem::syncPassengerPositions(ServerNetworkHandler &owner, Actor &vehi
     if (!vehicle.hasPassengers())
         return;
 
-    const Vector3f seat = seatOffsetOf(vehicle);
-    const Vector3f position = vehicle.getPosition();
+    const std::vector<int64_t> &passengers = vehicle.getPassengers();
 
-    for (const int64_t passengerId: vehicle.getPassengers()) {
-        Actor *passenger = resolve(owner, passengerId);
+    for (size_t index = 0; index < passengers.size(); ++index) {
+        Actor *passenger = resolve(owner, passengers[index]);
         if (passenger != nullptr)
-            passenger->setPosition(Vector3f(position.x + seat.x, position.y + seat.y, position.z + seat.z));
+            passenger->setPosition(seatPositionOf(vehicle, seatOffsetOf(vehicle, index, passengers.size())));
     }
 }

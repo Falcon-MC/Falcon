@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Block/BlockState.h"
+#include "Core/Math/AxisAlignedBB.h"
 #include "Core/Math/Vector3i.h"
 
 #include <string>
@@ -32,6 +33,8 @@ public:
                                  const BlockState &state);
 
     static void tick(ServerNetworkHandler &owner, Level &level);
+
+    static bool isMovingNear(const Level &level, const AxisAlignedBB &area);
 
     static void onBlockBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                               const BlockState &state);

@@ -2,9 +2,9 @@
 
 #include "Block/Actor/ChestBlockActor.h"
 #include "Block/BlockPaletteRegistry.h"
+#include "Item/Loot/LootItems.h"
+#include "Item/Loot/LootTableRegistry.h"
 #include "Level/Level.h"
-#include "Loot/LootItems.h"
-#include "Loot/LootTableRegistry.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
 

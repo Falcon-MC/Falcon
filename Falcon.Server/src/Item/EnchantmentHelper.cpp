@@ -497,6 +497,15 @@ std::vector<EnchantmentInstance> EnchantmentHelper::enchantRandomly(const std::s
     return {{chosen->mId, random.rangeInclusive(1, std::max(1, chosen->mMaxLevel))}};
 }
 
+bool EnchantmentHelper::peekOptionCost(int32_t enchantNetId, int32_t &outConsumeCost) {
+    const std::unordered_map<int32_t, StoredOption>::iterator found = recipeMap().find(enchantNetId);
+    if (found == recipeMap().end())
+        return false;
+
+    outConsumeCost = found->second.mEntry + 1;
+    return true;
+}
+
 bool EnchantmentHelper::takeOption(int32_t enchantNetId, std::vector<EnchantmentInstance> &outEnchantments,
                                    int32_t &outConsumeCost, int32_t &outRequiredLevel) {
     const std::unordered_map<int32_t, StoredOption>::iterator found = recipeMap().find(enchantNetId);

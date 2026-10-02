@@ -16,7 +16,7 @@ set(LEVELDB_TCMALLOC OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     leveldb
     GIT_REPOSITORY https://github.com/Falcon-MC/leveldb.git
-    GIT_TAG 266fd83aa60ccf62a990addc48f88c29fb688a9f
+    GIT_TAG 836fe999d3013be3901ab9880d0b3cfb9be9ddc0
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )
@@ -100,4 +100,22 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(falcon_bedrock_data)
 
+set(FALCON_PLUGIN_API_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    falcon_plugin_api
+    GIT_REPOSITORY https://github.com/Falcon-MC/PluginAPI.git
+    GIT_TAG 89fc0a9359890b34cd5052c632591048a63b1a78
+    GIT_PROGRESS TRUE
+)
+FetchContent_MakeAvailable(falcon_plugin_api)
+
 add_subdirectory(Falcon.Server)
+
+option(FALCON_BUILD_INTERNAL_PLUGINS "Build the internal example plugins against this server" OFF)
+
+if(FALCON_BUILD_INTERNAL_PLUGINS)
+    if(NOT COMMAND falcon_add_internal_plugin)
+        message(FATAL_ERROR "The pinned PluginAPI has no internal plugin support")
+    endif()
+    add_subdirectory("${falcon_plugin_api_SOURCE_DIR}/examples/internal" "${CMAKE_BINARY_DIR}/InternalPlugins")
+endif()

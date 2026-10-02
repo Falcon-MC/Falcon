@@ -1,0 +1,47 @@
+function(falcon_collect_symbols files)
+    execute_process(COMMAND "${FALCON_NM}" -g --defined-only -P ${files}
+            OUTPUT_VARIABLE output RESULT_VARIABLE result ERROR_QUIET)
+    if(NOT result EQUAL 0)
+        message(WARNING "${FALCON_NM} exited with ${result}, some server symbols may not be exported")
+    endif()
+
+    string(REGEX MATCHALL "\n(_Z|falcon_)[^ \n]* [BCDRTVW]" found "\n${output}")
+    set(FALCON_SYMBOLS ${FALCON_SYMBOLS} ${found} PARENT_SCOPE)
+endfunction()
+
+file(STRINGS "${FALCON_EXPORT_INPUTS}" inputs)
+
+set(FALCON_SYMBOLS "")
+set(batch "")
+foreach(input IN LISTS inputs)
+    list(APPEND batch "${input}")
+    list(LENGTH batch batchSize)
+    if(batchSize GREATER_EQUAL 100)
+        falcon_collect_symbols("${batch}")
+        set(batch "")
+    endif()
+endforeach()
+list(LENGTH batch batchSize)
+if(batchSize GREATER 0)
+    falcon_collect_symbols("${batch}")
+endif()
+
+list(TRANSFORM FALCON_SYMBOLS REPLACE "^\n" "")
+list(FILTER FALCON_SYMBOLS EXCLUDE REGEX "^_Z(N[rVKRO]*)?(St|9__gnu_cxx|10__cxxabiv1)")
+list(FILTER FALCON_SYMBOLS EXCLUDE REGEX "^_ZT[VIST]N?[rVK]*(St|9__gnu_cxx|10__cxxabiv1)")
+list(FILTER FALCON_SYMBOLS EXCLUDE REGEX "^_Z(GV|Z|TH|TW)")
+list(REMOVE_DUPLICATES FALCON_SYMBOLS)
+
+set(functions ${FALCON_SYMBOLS})
+list(FILTER functions INCLUDE REGEX " [TW]$")
+list(TRANSFORM functions REPLACE "^([^ ]+) [TW]$" "    \"\\1\"")
+list(REMOVE_DUPLICATES functions)
+
+set(data ${FALCON_SYMBOLS})
+list(FILTER data EXCLUDE REGEX " [TW]$")
+list(TRANSFORM data REPLACE "^([^ ]+) [A-Z]$" "    \"\\1\" DATA")
+list(REMOVE_DUPLICATES data)
+
+list(JOIN functions "\n" functionExports)
+list(JOIN data "\n" dataExports)
+file(WRITE "${FALCON_EXPORT_DEFINITION}" "EXPORTS\n${functionExports}\n${dataExports}\n")

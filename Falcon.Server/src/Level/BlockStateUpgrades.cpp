@@ -1,5 +1,6 @@
 #include "Level/BlockStateUpgrades.h"
 
+#include "Block/BlockData.h"
 #include "BlockUpgradeSchemas.h"
 #include "Core/BlockState/BlockStateUpgrader.h"
 
@@ -26,4 +27,12 @@ BlockStateData BlockStateUpgrades::upgrade(const BlockStateData &state) {
         return state;
 
     return upgrader().upgrade(state);
+}
+
+std::string BlockStateUpgrades::currentName(const std::string &name) {
+    const std::string qualified = name.find(':') == std::string::npos ? "minecraft:" + name : name;
+    if (BlockDataTable::find(qualified.c_str()) != nullptr)
+        return qualified;
+
+    return upgrade(BlockStateData(qualified, Tag::ofCompound(), 0)).getName();
 }

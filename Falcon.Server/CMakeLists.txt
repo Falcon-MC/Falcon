@@ -23,6 +23,16 @@ falcon_bedrock_data_embed_binary(FILE block_definitions.nbt NAMESPACE FalconBloc
         SYMBOL kBlockDefinitionsNbt OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockDefinitionsNbt.h")
 falcon_bedrock_data_embed_text(FILE entity_loot_tables.json NAMESPACE FalconLootData SYMBOL kEntityLootTablesJson
         DELIMITER falconentityloot OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/EntityLootTablesJson.h")
+falcon_bedrock_data_embed_text(FILE spawn_rules.json NAMESPACE FalconSpawnData SYMBOL kSpawnRulesJson
+        DELIMITER falconspawn OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/SpawnRulesJson.h")
+falcon_bedrock_data_embed_text(FILE entity_despawn.json NAMESPACE FalconSpawnData SYMBOL kEntityDespawnJson
+        DELIMITER falcondespawn OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/EntityDespawnJson.h")
+falcon_bedrock_data_embed_text(FILE entity_definitions.json NAMESPACE FalconEntityData
+        SYMBOL kEntityDefinitionsJson DELIMITER falconentities
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/EntityDefinitionsJson.h")
+falcon_bedrock_data_embed_text(FILE command_translations.json NAMESPACE FalconLanguageData
+        SYMBOL kCommandTranslationsJson DELIMITER falcontexts
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/CommandTranslationsJson.h")
 falcon_bedrock_data_embed_text(FILE r16_to_current_item_map.json NAMESPACE FalconLegacyItemData
         SYMBOL kLegacyItemMapJson DELIMITER falconlegacy
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/LegacyItemMapJson.h")
@@ -102,6 +112,7 @@ if(CMAKE_BUILD_TYPE)
 else()
     set(FALCON_BUILD_CONFIGURATION "Publish")
 endif()
+string(MAKE_C_IDENTIFIER "falcon_build_${FALCON_BUILD_COMMIT}_${FALCON_BUILD_ID}" FALCON_BUILD_GUARD)
 configure_file(cmake/BuildInfo.h.in "${FALCON_GENERATED_DIR}/BuildInfo.h" @ONLY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FALCON_BLOCK_UPGRADE_SCHEMA_FILES})
 
@@ -116,11 +127,45 @@ find_package(OpenSSL REQUIRED)
 target_include_directories(FalconServer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${FALCON_GENERATED_DIR} ${ZLIB_INCLUDE_DIRS}
         ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(FalconServer PRIVATE FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic)
+target_link_libraries(FalconServer PRIVATE FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic
+        Falcon::PluginAPI ${CMAKE_DL_LIBS})
+
+if(WIN32)
+    target_compile_definitions(FalconServer PRIVATE WIN32_LEAN_AND_MEAN)
+endif()
 
 if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_options(FalconServer PRIVATE -static -fuse-ld=lld)
     target_link_libraries(FalconServer PRIVATE z ssl crypto ws2_32 crypt32)
 else()
     target_link_libraries(FalconServer PRIVATE ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto)
+endif()
+
+option(FALCON_EXPORT_SYMBOLS "Export the server symbols so internal plugins can link against the executable" ON)
+
+if(FALCON_EXPORT_SYMBOLS)
+    set_target_properties(FalconServer PROPERTIES ENABLE_EXPORTS ON)
+
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set(FALCON_EXPORT_INPUTS "${CMAKE_CURRENT_BINARY_DIR}/FalconServerExports.txt")
+        set(FALCON_EXPORT_DEFINITION "${CMAKE_CURRENT_BINARY_DIR}/FalconServer.def")
+        set(FALCON_EXPORT_SOURCES "$<TARGET_OBJECTS:FalconServer>" "$<TARGET_FILE:FalconProtocol>"
+                "$<TARGET_FILE:FalconNetwork>" "$<TARGET_FILE:FalconNBT>" "$<TARGET_FILE:FalconBlockStateUpdater>")
+        file(GENERATE OUTPUT "${FALCON_EXPORT_INPUTS}" CONTENT "$<JOIN:${FALCON_EXPORT_SOURCES},\n>\n")
+        add_custom_command(TARGET FalconServer PRE_LINK
+                COMMAND "${CMAKE_COMMAND}" "-DFALCON_NM=${CMAKE_NM}" "-DFALCON_EXPORT_INPUTS=${FALCON_EXPORT_INPUTS}"
+                "-DFALCON_EXPORT_DEFINITION=${FALCON_EXPORT_DEFINITION}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/FalconExports.cmake"
+                VERBATIM)
+        target_link_options(FalconServer PRIVATE "${FALCON_EXPORT_DEFINITION}")
+    endif()
+
+    string(CONCAT FALCON_INTERNAL_SDK
+            "set(FALCON_INTERNAL_EXECUTABLE \"$<TARGET_FILE:FalconServer>\")\n"
+            "set(FALCON_INTERNAL_LINKER_FILE \"$<TARGET_LINKER_FILE:FalconServer>\")\n"
+            "set(FALCON_INTERNAL_INCLUDE_DIRECTORIES \"$<TARGET_PROPERTY:FalconServer,INCLUDE_DIRECTORIES>\")\n"
+            "set(FALCON_INTERNAL_COMPILE_DEFINITIONS \"$<TARGET_PROPERTY:FalconServer,COMPILE_DEFINITIONS>\")\n"
+            "set(FALCON_INTERNAL_CXX_COMPILER_ID \"${CMAKE_CXX_COMPILER_ID}\")\n"
+            "set(FALCON_INTERNAL_CXX_COMPILER_VERSION \"${CMAKE_CXX_COMPILER_VERSION}\")\n")
+    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/FalconInternalSDK.cmake" CONTENT "${FALCON_INTERNAL_SDK}")
 endif()

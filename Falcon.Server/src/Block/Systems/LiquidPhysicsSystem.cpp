@@ -2,6 +2,7 @@
 
 #include "Block/BlockData.h"
 #include "Block/Blocks/LiquidView.h"
+#include "Block/Systems/BlockChangeSystem.h"
 #include "Level/Level.h"
 
 #include <algorithm>
@@ -297,7 +298,8 @@ void LiquidPhysicsSystem::harden(const Vector3i &position) {
 
         const std::string result = liquid.isSource() ? "minecraft:obsidian"
                               : liquid.getDecay() <= 4 ? "minecraft:cobblestone" : "minecraft:stone";
-        setFluidState(position, BlockState(result));
+        if (BlockChangeSystem::allows(mLevel, position, BlockState(result), BlockChangeCause::Form))
+            setFluidState(position, BlockState(result));
         return;
     }
 }
@@ -326,7 +328,8 @@ bool LiquidPhysicsSystem::resolveFluidCollision(const Vector3i &target, const Bl
         result = downward ? "minecraft:stone" : "minecraft:cobblestone";
     }
 
-    setFluidState(target, BlockState(result));
+    if (BlockChangeSystem::allows(mLevel, target, BlockState(result), BlockChangeCause::Form))
+        setFluidState(target, BlockState(result));
     return true;
 }
 
@@ -399,15 +402,18 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
     const BlockState below = _fluidAt(belowPosition.x, belowPosition.y, belowPosition.z);
     const bool belowFlowable = isFlowable(below, lava) && !isSameFluid(below, currentState);
     if (belowFlowable) {
-        setFluidState(belowPosition, makeState(lava, 0, true));
+        const BlockState falling = makeState(lava, 0, true);
+        if (BlockChangeSystem::allowsFlow(mLevel, position, belowPosition, falling))
+            setFluidState(belowPosition, falling);
         if (!source)
             schedule(position, current.getTickRate());
         return;
     }
 
+    const bool belowSameFluid = isSameFluid(below, currentState);
     const int baseDecay = source || current.isFalling() ? 0 : current.getDecay();
     const int nextDecay = baseDecay + step;
-    if (nextDecay <= 7) {
+    if (nextDecay <= 7 && (source || !belowSameFluid)) {
         static const int offsets[4][3] = {{-1, 0, 0}, {1, 0, 0}, {0, 0, -1}, {0, 0, 1}};
 
         for (int j = 0; j < 4; ++j) {
@@ -425,7 +431,9 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
                 if (sideDecay <= nextDecay)
                     continue;
             }
-            setFluidState(side, makeState(lava, nextDecay, false));
+            const BlockState flowing = makeState(lava, nextDecay, false);
+            if (BlockChangeSystem::allowsFlow(mLevel, position, side, flowing))
+                setFluidState(side, flowing);
         }
     }
 
@@ -449,6 +457,13 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
             }
         }
 
+        const BlockState above = _fluidAt(position.x, position.y + 1, position.z);
+        if (isSameFluid(above, currentState)) {
+            if (!current.isFalling())
+                setFluidState(position, makeState(lava, 0, true));
+            return;
+        }
+
         int smallest = std::numeric_limits<int>::max();
         static const int offsets[4][3] = {{-1, 0, 0}, {1, 0, 0}, {0, 0, -1}, {0, 0, 1}};
         for (const auto &offset: offsets) {
@@ -458,13 +473,6 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
             const LiquidView sideLiquid(side);
             const int sideDecay = sideLiquid.isSource() || sideLiquid.isFalling() ? 0 : sideLiquid.getDecay();
             smallest = std::min(smallest, sideDecay);
-        }
-
-        const BlockState above = _fluidAt(position.x, position.y + 1, position.z);
-        if (isSameFluid(above, currentState)) {
-            const LiquidView aboveLiquid(above);
-            if (aboveLiquid.isSource() || aboveLiquid.isFalling())
-                smallest = 0;
         }
 
         if (smallest == std::numeric_limits<int>::max() || smallest + step > 7) {

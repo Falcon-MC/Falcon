@@ -134,6 +134,14 @@ public:
 
     std::vector<Tag> loadEntities(int32_t chunkX, int32_t chunkZ);
 
+    void eraseEntity(int64_t uniqueId);
+
+    void saveTickingArea(const std::string &id, const Tag &area);
+
+    void eraseTickingArea(const std::string &id);
+
+    std::vector<std::pair<std::string, Tag>> loadTickingAreas();
+
     void saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities);
 
     std::vector<Tag> loadBlockEntities(int32_t chunkX, int32_t chunkZ);
@@ -146,7 +154,13 @@ public:
 
     static constexpr int32_t UNSET_SPAWN_Y = 32767;
 
+    static constexpr uint32_t DEFAULT_WORLD_START_COUNT = 0xFFFFFFFFu;
+
+    uint32_t getWorldStartCount() const { return mWorldStartCount; }
+
     int32_t getMoonPhase() const;
+
+    float getMoonBrightness() const;
 
     float getRegionalDifficulty(int32_t difficulty) const;
 
@@ -319,6 +333,8 @@ private:
 
     void _replayPendingChanges(int64_t key);
 
+    void _dispatchChunkEvent(uint32_t type, int32_t chunkX, int32_t chunkZ, bool generated);
+
     void _flushPendingBlockChanges(bool includeInFlight);
 
     ServerNetworkHandler *mOwner = nullptr;
@@ -327,6 +343,7 @@ private:
     bool mHasDefaultSpawnPosition = false;
     bool mBonusChestEnabled = false;
     bool mBonusChestSpawned = false;
+    uint32_t mWorldStartCount = DEFAULT_WORLD_START_COUNT;
     bool mHasSpawnPosition = false;
     BlockUpdateScheduler mBlockUpdates;
     int mUpdateDepth = 0;

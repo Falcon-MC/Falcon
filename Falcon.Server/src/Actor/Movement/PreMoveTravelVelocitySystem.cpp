@@ -33,20 +33,20 @@ Vector3f PreMoveTravelVelocitySystem::apply(ServerNetworkHandler &owner, ServerA
     _applyFloating(motion, physics, feet, eyesInWater);
     _applyCurrent(motion, feet);
     _applyGroundFriction(owner.getLevelFor(actor), actor, motion);
-    _applyPassableFriction(motion, feet);
+    _applyPassableFriction(motion, physics, feet);
 
     return motion;
 }
 
 void PreMoveTravelVelocitySystem::_applyGravity(Vector3f &motion, const PhysicsComponent &physics,
                                                 const LiquidContact &feet) {
-    if (physics.mHasGravity && !feet.bubble)
+    if (physics.mHasGravity && !feet.bubble && !(physics.mSwims && feet.water))
         motion.y -= physics.mGravity;
 }
 
 void PreMoveTravelVelocitySystem::_applyFloating(Vector3f &motion, const PhysicsComponent &physics,
                                                  const LiquidContact &feet, bool eyesInWater) {
-    if (!physics.mHasGravity || !physics.mFloatsInLiquid || !feet.water || feet.bubble)
+    if (!physics.mHasGravity || !physics.mFloatsInLiquid || physics.mSwims || !feet.water || feet.bubble)
         return;
 
     motion.y += physics.mGravity * (eyesInWater ? SUBMERGED_FLOATING_FACTOR : SURFACE_FLOATING_FACTOR);
@@ -85,11 +85,13 @@ void PreMoveTravelVelocitySystem::_applyGroundFriction(Level &level, const Serve
     motion.z = snap(motion.z * factor);
 }
 
-void PreMoveTravelVelocitySystem::_applyPassableFriction(Vector3f &motion, const LiquidContact &feet) {
+void PreMoveTravelVelocitySystem::_applyPassableFriction(Vector3f &motion, const PhysicsComponent &physics,
+                                                         const LiquidContact &feet) {
     if (std::fabs(motion.x) < PRECISION && std::fabs(motion.y) < PRECISION && std::fabs(motion.z) < PRECISION)
         return;
 
-    const float factor = feet.lava ? LAVA_FRICTION : feet.water ? WATER_FRICTION : AIR_FRICTION;
+    const float waterFriction = physics.mSwims ? SWIMMER_WATER_FRICTION : WATER_FRICTION;
+    const float factor = feet.lava ? LAVA_FRICTION : feet.water ? waterFriction : AIR_FRICTION;
 
     motion.x = snap(motion.x * factor);
     if (!feet.bubble)

@@ -12,5 +12,9 @@ public:
 
     float getDefaultMaxHealth() const override { return 40.0f; }
 
+    bool preventsSleep() const override {
+        return getFlags().get(ActorFlag::Angry);
+    }
+
     int getExperienceDrop() const override { return 5; }
 };

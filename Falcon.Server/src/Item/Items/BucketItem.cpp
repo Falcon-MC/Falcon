@@ -1,6 +1,6 @@
 #include "Item/Items/BucketItem.h"
 
-#include "Actor/ItemActor.h"
+#include "Actor/Misc/ItemActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
 #include "Block/Blocks/CauldronBlock.h"
@@ -353,7 +353,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
     }
 
     const char *sound = content == Content::PowderSnow
-                       ? "bucket_empty_powder_snow"
+                       ? LevelSoundEvent::BUCKET_EMPTY_POWDER_SNOW
                        : content == Content::Water
                          ? WaterBlock(makeLiquidState(content)).getBucketEmptySound()
                          : LavaBlock(makeLiquidState(content)).getBucketEmptySound();

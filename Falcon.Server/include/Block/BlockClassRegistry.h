@@ -15,6 +15,12 @@ public:
     };
 
     static std::unique_ptr<Block> create(const Block &block);
+
+    static const void *findOwner(const std::string &identifier);
+
+    static void activate(const void *owner);
+
+    static void remove(const void *owner);
 };
 
 #define FALCON_REGISTER_BLOCK(type, priority)                                            \

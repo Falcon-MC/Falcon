@@ -9,6 +9,7 @@
 
 class Level;
 class PacketCodecContext;
+class ServerNetworkHandler;
 
 class BlockActor {
 public:
@@ -27,6 +28,11 @@ public:
     virtual void loadNbt(const Tag &data, const PacketCodecContext &context) = 0;
 
     virtual Container *getContainer() { return nullptr; }
+
+    virtual bool tick(ServerNetworkHandler &owner) {
+        (void) owner;
+        return true;
+    }
 
     const BlockState &getState() const noexcept { return mState; }
 

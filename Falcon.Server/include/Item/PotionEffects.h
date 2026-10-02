@@ -3,6 +3,7 @@
 #include "Actor/MobEffect.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 struct PotionEffect {
@@ -24,3 +25,5 @@ const int32_t AREA_EFFECT_CLOUD_POTION_PARTICLE = 32;
 std::vector<PotionEffect> getPotionEffects(int32_t potionId);
 
 int32_t getPotionColor(int32_t potionId);
+
+int32_t findPotionId(const std::string &name);

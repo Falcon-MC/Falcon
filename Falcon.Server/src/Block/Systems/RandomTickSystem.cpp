@@ -1,6 +1,7 @@
 #include "Block/Systems/RandomTickSystem.h"
 
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Block/Systems/CopperSystem.h"
 #include "Level/Level.h"
 #include "Level/LevelChunk.h"
 #include "Level/SubChunk.h"
@@ -51,6 +52,17 @@ int RandomTickSystem::getFullLight(Level &level, const Vector3i &position) {
 
     const int skyLight = chunk->getSkyLight(localX, position.y, localZ) - level.getSkyLightSubtracted();
     return skyLight > blockLight ? skyLight : blockLight;
+}
+
+int RandomTickSystem::getBlockLight(Level &level, const Vector3i &position) {
+    if (position.y < level.getMinY() || position.y > level.getMaxY())
+        return 0;
+
+    LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
+    if (chunk == nullptr || !chunk->hasBlockLight())
+        return 0;
+
+    return chunk->getBlockLight(position.x & 15, position.y, position.z & 15);
 }
 
 void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
@@ -104,5 +116,8 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
             continue;
 
         block->onRandomTick(owner, level, candidate.mPosition, current);
+        CopperSystem::onRandomTick(owner, level, candidate.mPosition,
+                                   level.getBlockState(candidate.mPosition.x, candidate.mPosition.y,
+                                                       candidate.mPosition.z));
     }
 }

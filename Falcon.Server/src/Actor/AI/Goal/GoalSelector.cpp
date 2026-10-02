@@ -45,6 +45,11 @@ void GoalSelector::stopAll(ServerNetworkHandler &owner, MobActor &mob) {
     }
 }
 
+void GoalSelector::clear(ServerNetworkHandler &owner, MobActor &mob) {
+    stopAll(owner, mob);
+    mGoals.clear();
+}
+
 bool GoalSelector::_canReplaceConflicts(const PrioritizedGoal &candidate) const {
     const uint8_t flags = candidate.mGoal->getRequiredControlFlags();
     for (const PrioritizedGoal &running: mGoals) {

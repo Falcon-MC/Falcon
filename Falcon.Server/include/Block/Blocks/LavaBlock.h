@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Block/Blocks/LiquidBlock.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 
 #include <string>
 
@@ -15,6 +16,6 @@ public:
     int getTickRate() const override { return 30; }
     int getFlowDecayPerBlock() const override { return 2; }
     int getMinAdjacentSourcesToFormSource() const override { return 0; }
-    const char *getBucketFillSound() const override { return "bucket_fill_lava"; }
-    const char *getBucketEmptySound() const override { return "bucket_empty_lava"; }
+    const char *getBucketFillSound() const override { return LevelSoundEvent::BUCKET_FILL_LAVA; }
+    const char *getBucketEmptySound() const override { return LevelSoundEvent::BUCKET_EMPTY_LAVA; }
 };

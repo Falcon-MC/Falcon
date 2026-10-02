@@ -12,6 +12,7 @@
 #include "Core/Utility/BinaryStream.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Actor/ActorAttributes.h"
+#include "Actor/Definition/EntityDefinitions.h"
 #include "Actor/VanillaActorTable.h"
 #include "Actor/PlayerAbility.h"
 #include "Actor/ServerPlayer.h"
@@ -52,6 +53,8 @@
 #include "Protocol/Packets/UpdateAbilitiesPacket.h"
 #include "Protocol/Packets/UpdateAttributesPacket.h"
 #include "Level/BonusChest.h"
+#include "Plugin/PluginEvent.h"
+#include "Plugin/PluginManager.h"
 #include "Server/Localization.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ResourcePackManager.h"
@@ -86,6 +89,52 @@ namespace {
         result[2] = (char) (value >> 8);
         result[3] = (char) value;
         return result;
+    }
+
+    void sendPropertySchema(ServerNetworkHandler &owner, const ServerPlayer &player, const std::string &identifier,
+                            const std::vector<ActorPropertyDescription> &schema) {
+        if (schema.empty())
+            return;
+
+        Tag properties = Tag::ofList(Tag::Type::Compound);
+        for (const ActorPropertyDescription &property: schema) {
+            Tag entry = Tag::ofCompound();
+            entry.putString("name", property.mName);
+
+            switch (property.mType) {
+                case ActorPropertyDescription::Type::Float:
+                    entry.putInt("type", 1);
+                    entry.putFloat("min", property.mMinFloat);
+                    entry.putFloat("max", property.mMaxFloat);
+                    break;
+                case ActorPropertyDescription::Type::Bool:
+                    entry.putInt("type", 2);
+                    break;
+                case ActorPropertyDescription::Type::Enum: {
+                    entry.putInt("type", 3);
+                    Tag values = Tag::ofList(Tag::Type::String);
+                    for (const std::string &value: property.mEnumValues)
+                        values.addToList(Tag::ofString(value));
+                    entry.put("enum", values);
+                    break;
+                }
+                default:
+                    entry.putInt("type", 0);
+                    entry.putInt("min", property.mMinInt);
+                    entry.putInt("max", property.mMaxInt);
+                    break;
+            }
+
+            properties.addToList(entry);
+        }
+
+        Tag data = Tag::ofCompound();
+        data.putString("type", identifier);
+        data.put("properties", properties);
+
+        SyncActorPropertyPacket packet;
+        packet.mData = data;
+        owner.getNetworkHandler().send(player.getNetworkIdentifier(), packet, owner.getCodecContext());
     }
 }
 
@@ -211,6 +260,22 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         owner._disconnect(id, "disconnectionScreen.serverFull");
         owner.getPlayers().erase(id);
         return;
+    }
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_PRE_LOGIN)) {
+        std::string kickMessage = "disconnectionScreen.noReason";
+        PluginEvent preLogin;
+        preLogin.mType = FALCON_EVENT_PLAYER_PRE_LOGIN;
+        preLogin.mCancellable = true;
+        preLogin.mPlayer = &player;
+        preLogin.mMessage = &kickMessage;
+        plugins->dispatch(preLogin);
+        if (preLogin.mCancelled) {
+            LOG_INFO(LogAreaID::Server, "Player %s was refused by a plugin", player.getName().c_str());
+            owner._disconnect(id, kickMessage);
+            owner.getPlayers().erase(id);
+            return;
+        }
     }
 
     player.setSkin(request.getSkin());
@@ -406,6 +471,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mEnchantmentSeed = 0;
     startGame.mBlockNetworkIdsHashed = owner.getProperties().getBlockNetworkIdsAreHashes();
     startGame.mInventoriesServerAuthoritative = true;
+    startGame.mRewindHistorySize = 40;
 
     startGame.mBlockProperties = DataDrivenBlockDefinitions::getAll();
     const std::vector<BlockPropertyData> &customBlocks = CustomContentRegistry::getInstance().getBlockProperties();
@@ -601,50 +667,14 @@ void LoginHandler::sendActorIdentifiers(ServerNetworkHandler &owner, ServerPlaye
 
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), identifiers, owner.getCodecContext());
 
-    for (const CustomActorDefinition &actor: CustomContentRegistry::getInstance().getActors()) {
-        if (actor.mProperties.empty())
-            continue;
-
-        Tag properties = Tag::ofList(Tag::Type::Compound);
-        for (const ActorPropertyDescription &property: actor.mProperties) {
-            Tag entry = Tag::ofCompound();
-            entry.putString("name", property.mName);
-
-            switch (property.mType) {
-                case ActorPropertyDescription::Type::Float:
-                    entry.putInt("type", 1);
-                    entry.putFloat("min", property.mMinFloat);
-                    entry.putFloat("max", property.mMaxFloat);
-                    break;
-                case ActorPropertyDescription::Type::Bool:
-                    entry.putInt("type", 2);
-                    break;
-                case ActorPropertyDescription::Type::Enum: {
-                    entry.putInt("type", 3);
-                    Tag values = Tag::ofList(Tag::Type::String);
-                    for (const std::string &value: property.mEnumValues)
-                        values.addToList(Tag::ofString(value));
-                    entry.put("enum", values);
-                    break;
-                }
-                default:
-                    entry.putInt("type", 0);
-                    entry.putInt("min", property.mMinInt);
-                    entry.putInt("max", property.mMaxInt);
-                    break;
-            }
-
-            properties.addToList(entry);
-        }
-
-        Tag schema = Tag::ofCompound();
-        schema.putString("type", actor.mIdentifier);
-        schema.put("properties", properties);
-
-        SyncActorPropertyPacket propertyPacket;
-        propertyPacket.mData = schema;
-        owner.getNetworkHandler().send(player.getNetworkIdentifier(), propertyPacket, owner.getCodecContext());
+    const CustomContentRegistry &custom = CustomContentRegistry::getInstance();
+    for (const auto &entry: EntityDefinitions::getAllProperties()) {
+        if (custom.getActorDefinition(entry.first) == nullptr)
+            sendPropertySchema(owner, player, entry.first, entry.second);
     }
+
+    for (const CustomActorDefinition &actor: custom.getActors())
+        sendPropertySchema(owner, player, actor.mIdentifier, actor.mProperties);
 }
 
 void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
@@ -1032,6 +1062,7 @@ void LoginHandler::sendAttributes(ServerNetworkHandler &owner, ServerPlayer &pla
     attributes.mAttributes = player.getAttributes().getAll();
 
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), attributes, owner.getCodecContext());
+    player.awaitMovementChange();
 }
 
 void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &player) {

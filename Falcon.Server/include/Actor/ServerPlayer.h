@@ -15,6 +15,7 @@
 #include "Protocol/Types/AdventureSettingData.h"
 #include "Protocol/Types/SerializedSkin.h"
 #include "Actor/MobEffect.h"
+#include "Actor/PlayerAcknowledgements.h"
 
 #include <chrono>
 #include <string>
@@ -95,11 +96,94 @@ public:
 
     bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId);
 
+    Vector3f getLookDirection() const;
+
     bool isOp() const { return mIsOp; }
 
     void setOp(bool isOp) { mIsOp = isOp; }
 
     bool isFlying() const { return mFlying; }
+
+    bool hasSimulatedVelocity() const { return mHasSimulatedVelocity; }
+
+    const Vector3f &getSimulatedVelocity() const { return mSimulatedVelocity; }
+
+    void setSimulatedVelocity(const Vector3f &velocity) {
+        mSimulatedVelocity = velocity;
+        mHasSimulatedVelocity = true;
+    }
+
+    void clearSimulatedVelocity() { mHasSimulatedVelocity = false; }
+
+    bool hasSimulatedPosition() const { return mHasSimulatedPosition; }
+
+    const Vector3f &getSimulatedPosition() const { return mSimulatedPosition; }
+
+    void setSimulatedPosition(const Vector3f &position) {
+        mSimulatedPosition = position;
+        mHasSimulatedPosition = true;
+    }
+
+    void clearSimulatedPosition() { mHasSimulatedPosition = false; }
+
+    void clearMovementSimulation() {
+        mHasSimulatedVelocity = false;
+        mHasSimulatedPosition = false;
+        mHasPendingKnockback = false;
+        mSimulatedSneaking = false;
+        mSimulatedCrawling = false;
+        mSlowdownTicks = 0;
+    }
+
+    int32_t getSlowdownTicks() const { return mSlowdownTicks; }
+
+    void setSlowdownTicks(int32_t ticks) { mSlowdownTicks = ticks; }
+
+    bool isSimulatedSneaking() const { return mSimulatedSneaking; }
+
+    bool isSimulatedCrawling() const { return mSimulatedCrawling; }
+
+    void setSimulatedPose(bool sneaking, bool crawling) {
+        mSimulatedSneaking = sneaking;
+        mSimulatedCrawling = crawling;
+    }
+
+    int32_t getJumpDelay() const { return mJumpDelay; }
+
+    void setJumpDelay(int32_t ticks) { mJumpDelay = ticks; }
+
+    void queueKnockback(const Vector3f &motion) {
+        mPendingKnockback = motion;
+        mHasPendingKnockback = true;
+    }
+
+    bool takeKnockback(Vector3f &out) {
+        if (!mHasPendingKnockback)
+            return false;
+        out = mPendingKnockback;
+        mHasPendingKnockback = false;
+        return true;
+    }
+
+    void clearPendingKnockback() { mHasPendingKnockback = false; }
+
+    void scheduleKnockback(const Vector3f &motion) {
+        mAcknowledgements.add([this, motion]() {
+            queueKnockback(motion);
+        });
+    }
+
+    PlayerAcknowledgements &getAcknowledgements() { return mAcknowledgements; }
+
+    void awaitMovementChange() {
+        mPendingMovementChanges++;
+        mAcknowledgements.add([this]() {
+            if (mPendingMovementChanges > 0)
+                mPendingMovementChanges--;
+        });
+    }
+
+    bool hasPendingMovementChange() const { return mPendingMovementChanges > 0; }
 
     void setFlying(bool flying) {
         if (mFlying == flying)
@@ -121,6 +205,32 @@ public:
 
     const PlayerInventory &getInventory() const { return mInventory; }
 
+    void recordHurtBy(uint64_t runtimeId, int64_t tick) {
+        mLastHurtByRuntimeId = runtimeId;
+        mLastHurtByTick = tick;
+    }
+
+    void recordAttacked(uint64_t runtimeId, int64_t tick) {
+        mLastAttackedRuntimeId = runtimeId;
+        mLastAttackedTick = tick;
+    }
+
+    uint64_t getLastHurtByRuntimeId() const {
+        return mLastHurtByRuntimeId;
+    }
+
+    int64_t getLastHurtByTick() const {
+        return mLastHurtByTick;
+    }
+
+    uint64_t getLastAttackedRuntimeId() const {
+        return mLastAttackedRuntimeId;
+    }
+
+    int64_t getLastAttackedTick() const {
+        return mLastAttackedTick;
+    }
+
     std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() { return mDynamicProperties; }
 
     int64_t getLastItemUseTick() const { return mLastItemUseTick; }
@@ -128,6 +238,10 @@ public:
     void setLastItemUseTick(int64_t tick) { mLastItemUseTick = tick; }
 
     InventoryManager &getInventoryManager() { return mInventoryManager; }
+
+    const InventoryManager &getInventoryManager() const {
+        return mInventoryManager;
+    }
 
     PacketSender *getPacketSender() const { return mSender; }
 
@@ -281,7 +395,10 @@ public:
 
     static constexpr std::chrono::milliseconds POST_TELEPORT_GRACE{1000};
 
-    void markTeleported() { mLastTeleport = std::chrono::steady_clock::now(); }
+    void markTeleported() {
+        mLastTeleport = std::chrono::steady_clock::now();
+        awaitMovementChange();
+    }
 
     /** Whether the player changed skin less than the given number of seconds ago. */
     bool changedSkinWithin(int seconds) const {
@@ -403,10 +520,29 @@ public:
         mHasChunkPosition = false;
     }
 
+    bool isBlockingWithShield() const;
+
+    void tickShield(ServerNetworkHandler &owner);
+
+    void interruptShieldForAttack(ServerNetworkHandler &owner);
+
+    bool blockWithShield(ServerNetworkHandler &owner, const Vector3f &source, float damage, Actor *attacker,
+                         bool disablesShield);
+
 private:
     float _applyAttackerModifiers(float baseDamage, float damage) const;
 
     bool _isCriticalHit() const;
+
+    bool _isFacing(ServerNetworkHandler &owner, const Vector3f &targetFeet, float width, float height) const;
+
+    bool _hasShieldReady(int64_t currentTick) const;
+
+    bool _shouldRaiseShield(int64_t currentTick) const;
+
+    void _setShieldFlags(ServerNetworkHandler &owner, bool blocking, bool transition);
+
+    void _damageShield(ServerNetworkHandler &owner, float damage);
 
     NetworkIdentifier mId;
     LoginState mLoginState;
@@ -468,9 +604,29 @@ private:
     int64_t mFirstPlayed = 0;
     bool mIsOp = false;
     bool mFlying = false;
+    bool mHasSimulatedVelocity = false;
+    Vector3f mSimulatedVelocity;
+    bool mHasSimulatedPosition = false;
+    Vector3f mSimulatedPosition;
+    int32_t mJumpDelay = 0;
+    bool mSimulatedSneaking = false;
+    bool mSimulatedCrawling = false;
+    int32_t mSlowdownTicks = 0;
+    PlayerAcknowledgements mAcknowledgements;
+    int32_t mPendingMovementChanges = 0;
+    bool mHasPendingKnockback = false;
+    Vector3f mPendingKnockback;
     PlayerInventory mInventory;
+    uint64_t mLastHurtByRuntimeId = 0;
+    int64_t mLastHurtByTick = 0;
+    uint64_t mLastAttackedRuntimeId = 0;
+    int64_t mLastAttackedTick = 0;
     InventoryManager mInventoryManager;
     PacketSender *mSender;
     bool mEffectsNetworkReady = false;
     std::unordered_map<std::string, int64_t> mItemCooldowns;
+    int32_t mShieldTransitionTicks = 0;
+    int32_t mShieldInterruptTicks = 0;
+    bool mShieldReblockAfterAttack = false;
+    int64_t mShieldDisabledUntilTick = 0;
 };

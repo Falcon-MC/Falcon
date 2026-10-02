@@ -1,6 +1,6 @@
 #include "Item/Items/CushionItem.h"
 
-#include "Actor/CushionActor.h"
+#include "Actor/Misc/CushionActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockSupport.h"
@@ -10,6 +10,7 @@
 #include "Item/ItemClassRegistry.h"
 #include "Level/Level.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <cmath>
@@ -81,7 +82,7 @@ bool CushionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player
     spawned->fillSpawnMetadata(metadata);
     owner.sendActorMetadata(*spawned, metadata);
 
-    owner.playLevelSound(level, "spawn", spawnPosition, CushionActor::IDENTIFIER, -1);
+    owner.playLevelSound(level, LevelSoundEvent::SPAWN, spawnPosition, CushionActor::IDENTIFIER, -1);
 
     if (player.getGameType() != (int32_t) GameType::Creative) {
         ItemStack remaining = item;

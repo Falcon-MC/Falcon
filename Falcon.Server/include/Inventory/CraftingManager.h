@@ -27,5 +27,6 @@ public:
 
     static bool matchResult(const std::vector<ItemStack> &grid, int gridWidth, const ItemStack &result,
                             const std::vector<ItemStack> &recipeOutputs,
-                            const std::vector<uint32_t> &recipeSourceIndices, CraftingRecipeMatch &match);
+                            const std::vector<uint32_t> &recipeSourceIndices, CraftingRecipeMatch &match,
+                            ItemStack &outOutput);
 };

@@ -1,5 +1,5 @@
 #include "Inventory/InventoryManager.h"
-#include "Actor/ItemActor.h"
+#include "Actor/Misc/ItemActor.h"
 #include "Block/Actor/ChestBlockActor.h"
 #include "Block/Actor/ContainerBlockActor.h"
 #include "Block/Actor/EnderChestBlockActor.h"
@@ -8,20 +8,22 @@
 #include "Block/Systems/RedstoneSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
-#include "Block/Blocks/FenceBlocks.h"
+#include "Block/Blocks/FenceBlock.h"
+#include "Block/Blocks/FenceGateBlock.h"
 #include "Block/Blocks/FurnaceBlock.h"
-#include "Block/Blocks/OrientationBlocks.h"
-#include "Block/Blocks/PlacementRuleBlocks.h"
+#include "Block/Blocks/SlabBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Inventory/FurnaceInventory.h"
 #include "Inventory/BundleInventory.h"
 #include "Item/CraftingRecipeTable.h"
+#include "Item/FurnaceExperience.h"
 #include "Inventory/CraftingManager.h"
 #include "Level/Level.h"
 #include "Block/Inventory/CraftingTableInventory.h"
 #include "Network/PacketSender.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/BlockActorDataPacket.h"
 #include "Protocol/Packets/ContainerClosePacket.h"
@@ -43,28 +45,7 @@
 #include <vector>
 
 namespace {
-    struct FurnaceKey {
-        int32_t x;
-        int32_t y;
-        int32_t z;
-
-        bool operator==(const FurnaceKey &other) const {
-            return x == other.x && y == other.y && z == other.z;
-        }
-    };
-
-    struct FurnaceKeyHash {
-        size_t operator()(const FurnaceKey &key) const {
-            size_t value = (size_t) (uint32_t) key.x;
-            value = value * 31u + (size_t) (uint32_t) key.y;
-            value = value * 31u + (size_t) (uint32_t) key.z;
-            return value;
-        }
-    };
-
     const int32_t CHEST_ANIMATION_EVENT_TYPE = 1;
-
-    std::unordered_map<FurnaceKey, int64_t, FurnaceKeyHash> furnaceLastTick;
 
     const ItemStack &itemAt(const PlayerInventory &inventory, InventoryManager::InventoryId id, int slot) {
         switch (id) {
@@ -394,14 +375,30 @@ void InventoryManager::_storeFurnaceState(bool clearLocal) {
     state.mKind = mFurnaceKind;
     for (int slot = 0; slot < FurnaceInventory::SIZE; ++slot) {
         const ItemStack &local = mPlayer->getInventory().getFurnaceItem(slot);
-        if (!furnaceItemsEqual(local, mFurnaceObservedItems[(size_t) slot]))
+        const ItemStack &observed = mFurnaceObservedItems[(size_t) slot];
+        if (!furnaceItemsEqual(local, observed)) {
             state.mInventory.mItems[(size_t) slot] = local;
+            if (slot == FurnaceInventory::SLOT_OUTPUT && !observed.isAir()
+                && (local.isAir() || local.mCount < observed.mCount))
+                _releaseFurnaceExperience(*mOwner, state);
+        }
         mFurnaceObservedItems[(size_t) slot] = local;
         if (clearLocal) {
             mPlayer->getInventory().setFurnaceItem(slot, ItemStack::air());
             mFurnaceObservedItems[(size_t) slot] = ItemStack::air();
         }
     }
+}
+
+void InventoryManager::_releaseFurnaceExperience(ServerNetworkHandler &owner, FurnaceBlockActor &furnace) {
+    Level *level = furnace.getLevel();
+    const int32_t experience = furnace.takeStoredExperience();
+    if (level == nullptr || experience <= 0)
+        return;
+
+    const Vector3i &position = furnace.getPosition();
+    owner.spawnExperienceOrbs(*level, Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
+                                               (float) position.z + 0.5f), experience);
 }
 
 namespace {
@@ -444,7 +441,7 @@ namespace {
         if (isWoodLike(id) && id.find("_button") != std::string::npos) return 100;
         if (isWoodLike(id) && (id.find("_trapdoor") != std::string::npos
             || VanillaBlocks::getAs<FenceBlock>(id) != nullptr
-            || VanillaBlocks::getAs<FenceGateOrientationBlock>(id) != nullptr
+            || VanillaBlocks::getAs<FenceGateBlock>(id) != nullptr
             || id.find("_pressure_plate") != std::string::npos
             || id.find("_stairs") != std::string::npos)) return 300;
         if (id.find("wooden_") != std::string::npos) return 200;
@@ -550,7 +547,21 @@ namespace {
 
         if (state.mBurnTime <= 0 && canSmelt) {
             ItemStack fuel = state.mInventory.mItems[FurnaceInventory::SLOT_FUEL];
-            const int duration = fuelTime(fuel);
+            int duration = fuelTime(fuel);
+            if (duration > 0 && fuel.mCount > 0) {
+                if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_FURNACE_BURN)) {
+                    ItemStack burning = fuel;
+                    PluginEvent burnEvent;
+                    burnEvent.mType = FALCON_EVENT_FURNACE_BURN;
+                    burnEvent.mCancellable = true;
+                    burnEvent.mLevel = level;
+                    burnEvent.mBlockPosition = position;
+                    burnEvent.mItem = &burning;
+                    burnEvent.mAmount = (double) duration;
+                    plugins->dispatch(burnEvent);
+                    duration = burnEvent.mCancelled ? 0 : std::max(0, (int) burnEvent.mAmount);
+                }
+            }
             if (duration > 0 && fuel.mCount > 0) {
                 state.mBurnTime = duration;
                 state.mMaxBurnTime = duration;
@@ -576,16 +587,37 @@ namespace {
                 ++state.mCookTime;
                 const int duration = FurnaceInventory::cookDuration(state.mKind);
                 if (state.mCookTime >= duration) {
-                    ItemStack produced = result;
-                    if (!currentOutput.isAir())
-                        produced.mCount += currentOutput.mCount;
-                    state.mInventory.mItems[FurnaceInventory::SLOT_OUTPUT] = std::move(produced);
+                    ItemStack smelted = result;
+                    bool allowed = true;
+                    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_FURNACE_SMELT)) {
+                        ItemStack source = input;
+                        PluginEvent smeltEvent;
+                        smeltEvent.mType = FALCON_EVENT_FURNACE_SMELT;
+                        smeltEvent.mCancellable = true;
+                        smeltEvent.mLevel = level;
+                        smeltEvent.mBlockPosition = position;
+                        smeltEvent.mItem = &source;
+                        smeltEvent.mResult = &smelted;
+                        plugins->dispatch(smeltEvent);
+                        allowed = !smeltEvent.mCancelled && !smelted.isAir()
+                                  && (currentOutput.isAir() || stackMatches(currentOutput, smelted));
+                    }
 
-                    ItemStack consumed = input;
-                    consumed.mCount -= recipe->mInputCount;
-                    if (consumed.mCount <= 0)
-                        consumed = ItemStack::air();
-                    state.mInventory.mItems[FurnaceInventory::SLOT_INPUT] = std::move(consumed);
+                    if (allowed) {
+                        if (input.mDefinition != nullptr)
+                            state.mStoredExperience += FurnaceExperience::get(input.mDefinition->getIdentifier());
+
+                        ItemStack produced = smelted;
+                        if (!currentOutput.isAir())
+                            produced.mCount += currentOutput.mCount;
+                        state.mInventory.mItems[FurnaceInventory::SLOT_OUTPUT] = std::move(produced);
+
+                        ItemStack consumed = input;
+                        consumed.mCount -= recipe->mInputCount;
+                        if (consumed.mCount <= 0)
+                            consumed = ItemStack::air();
+                        state.mInventory.mItems[FurnaceInventory::SLOT_INPUT] = std::move(consumed);
+                    }
                     state.mCookTime -= duration;
                 }
             } else if (state.mBurnTime <= 0) {
@@ -633,8 +665,6 @@ void InventoryManager::tickFurnace(ServerNetworkHandler &owner) {
         return;
     }
 
-    _storeFurnaceState(false);
-    const FurnaceKey key{mFurnacePosition.x, mFurnacePosition.y, mFurnacePosition.z};
     FurnaceBlockActor &state = level.getBlockActors().getOrCreate<FurnaceBlockActor>(mFurnacePosition);
     PlayerInventory &inventory = mPlayer->getInventory();
     const int previousBurn = mFurnaceBurnTime;
@@ -645,12 +675,6 @@ void InventoryManager::tickFurnace(ServerNetworkHandler &owner) {
         inventory.getFurnaceItem(FurnaceInventory::SLOT_FUEL),
         inventory.getFurnaceItem(FurnaceInventory::SLOT_OUTPUT)
     };
-    const auto lastTick = furnaceLastTick.find(key);
-    const bool processTick = lastTick == furnaceLastTick.end() || lastTick->second != owner.getCurrentTick();
-    if (processTick) {
-        tickFurnaceState(owner, mFurnacePosition, state);
-        furnaceLastTick[key] = owner.getCurrentTick();
-    }
     mFurnaceBurnTime = state.mBurnTime;
     mFurnaceMaxBurnTime = state.mMaxBurnTime;
     mFurnaceCookTime = state.mCookTime;
@@ -692,29 +716,37 @@ void InventoryManager::tickFurnace(ServerNetworkHandler &owner) {
         packet.mValue = mFurnaceMaxBurnTime;
         mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
     }
-
-    _storeFurnaceState(false);
 }
 
-void InventoryManager::tickStoredFurnaces(ServerNetworkHandler &owner) {
-    for (Level *level: owner.getLevels()) {
-        std::unordered_map<FurnaceKey, bool, FurnaceKeyHash> openPositions;
-        for (auto &entry: owner.getPlayers()) {
-            ServerPlayer &player = entry.second;
-            if (!player.getInventoryManager().isFurnaceOpen() || &owner.getLevelFor(player) != level)
-                continue;
-            const Vector3i &position = player.getInventoryManager().getFurnacePosition();
-            openPositions[FurnaceKey{position.x, position.y, position.z}] = true;
-        }
+void InventoryManager::loadFurnaceView() {
+    BlockActorStore *blockActors = _blockActors();
+    if (mPlayer == nullptr || !isFurnaceOpen() || blockActors == nullptr)
+        return;
 
-        for (FurnaceBlockActor *furnace: level->getBlockActors().findAll<FurnaceBlockActor>()) {
-            const Vector3i &position = furnace->getPosition();
-            if (openPositions.find(FurnaceKey{position.x, position.y, position.z}) != openPositions.end())
-                continue;
-
-            tickFurnaceState(owner, position, *furnace);
-        }
+    const FurnaceBlockActor &state = blockActors->getOrCreate<FurnaceBlockActor>(mFurnacePosition);
+    for (int slot = 0; slot < FurnaceInventory::SIZE; ++slot) {
+        mPlayer->getInventory().setFurnaceItem(slot, state.mInventory.mItems[(size_t) slot]);
+        mFurnaceObservedItems[(size_t) slot] = state.mInventory.mItems[(size_t) slot];
     }
+}
+
+void InventoryManager::storeFurnaceView(ServerNetworkHandler &owner) {
+    if (mPlayer == nullptr || !isFurnaceOpen())
+        return;
+
+    _storeFurnaceState(false);
+
+    Level &level = owner.getLevelFor(*mPlayer);
+    for (auto &entry: owner.getPlayers()) {
+        InventoryManager &manager = entry.second.getInventoryManager();
+        if (&manager != this && manager.isFurnaceOpen() && manager.getFurnacePosition() == mFurnacePosition
+            && &owner.getLevelFor(entry.second) == &level)
+            manager.tickFurnace(owner);
+    }
+}
+
+void InventoryManager::tickStoredFurnace(ServerNetworkHandler &owner, FurnaceBlockActor &furnace) {
+    tickFurnaceState(owner, furnace.getPosition(), furnace);
 }
 
 void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
@@ -725,7 +757,6 @@ void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, Level &level
             manager.onClientRemoveWindow(manager.getFurnaceWindowId());
     }
 
-    const FurnaceKey key{position.x, position.y, position.z};
     FurnaceBlockActor *furnace = level.getBlockActors().find<FurnaceBlockActor>(position);
     if (furnace == nullptr)
         return;
@@ -736,8 +767,8 @@ void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, Level &level
         if (!item.isAir() && item.mCount > 0)
             owner.dropItem(level, dropPosition, item, Vector3f(0.0f, 0.2f, 0.0f), ItemActor::DEFAULT_PICKUP_DELAY);
     }
+    _releaseFurnaceExperience(owner, *furnace);
     level.getBlockActors().remove(position);
-    furnaceLastTick.erase(key);
 }
 
 void InventoryManager::_sendOutputPacket(const ItemStack &item) {
@@ -843,6 +874,47 @@ void InventoryManager::onCurrentWindowRemove() {
     }
 }
 
+bool InventoryManager::_allowPluginOpen(const Vector3i &position) {
+    if (mOwner == nullptr || mPlayer == nullptr)
+        return true;
+
+    PluginManager &plugins = mOwner->getPluginManager();
+    if (!plugins.hasSubscribers(FALCON_EVENT_INVENTORY_OPEN) && !plugins.hasSubscribers(FALCON_EVENT_INVENTORY_CLOSE))
+        return true;
+
+    Level &level = mOwner->getLevelFor(*mPlayer);
+    PluginEvent openEvent;
+    openEvent.mType = FALCON_EVENT_INVENTORY_OPEN;
+    openEvent.mCancellable = true;
+    openEvent.mPlayer = mPlayer;
+    openEvent.mLevel = &level;
+    openEvent.mBlockPosition = position;
+    openEvent.mBlockName = level.getBlockState(position.x, position.y, position.z).mName;
+    plugins.dispatch(openEvent);
+    if (openEvent.mCancelled)
+        return false;
+
+    mPluginOpen = true;
+    mPluginOpenPosition = position;
+    return true;
+}
+
+void InventoryManager::dispatchPluginClose() {
+    if (!mPluginOpen || mOwner == nullptr || mPlayer == nullptr)
+        return;
+
+    mPluginOpen = false;
+    Level &level = mOwner->getLevelFor(*mPlayer);
+    PluginEvent closeEvent;
+    closeEvent.mType = FALCON_EVENT_INVENTORY_CLOSE;
+    closeEvent.mPlayer = mPlayer;
+    closeEvent.mLevel = &level;
+    closeEvent.mBlockPosition = mPluginOpenPosition;
+    closeEvent.mBlockName = level.getBlockState(mPluginOpenPosition.x, mPluginOpenPosition.y,
+                                                mPluginOpenPosition.z).mName;
+    mOwner->getPluginManager().dispatch(closeEvent);
+}
+
 bool InventoryManager::onClientOpenCraftingTable(const Vector3i &position) {
     if (mPlayer == nullptr || mSender == nullptr) {
         return false;
@@ -855,6 +927,9 @@ bool InventoryManager::onClientOpenCraftingTable(const Vector3i &position) {
     if (mMainInventoryWindowId != CONTAINER_ID_NONE || mFurnaceWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow) {
         return false;
     }
+
+    if (!_allowPluginOpen(position))
+        return false;
 
     const int windowId = _getNewWindowId();
     mCraftingTableWindowId = windowId;
@@ -874,6 +949,9 @@ bool InventoryManager::openContainer(ContainerType type, const Vector3i &positio
     if (mPlayer == nullptr || mSender == nullptr) {
         return false;
     }
+
+    if (!_allowPluginOpen(position))
+        return false;
 
     ContainerOpenPacket open;
     open.mWindowId = (int8_t) _getNewWindowId();
@@ -938,7 +1016,7 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
 
     BlockActorStore *blockActors = _blockActors();
     BlockActor *blockActor = blockActors == nullptr ? nullptr : blockActors->find(position);
-    if (blockActor == nullptr)
+    if (blockActor == nullptr || !_allowPluginOpen(position))
         return false;
 
     const int windowId = _getNewWindowId();
@@ -994,7 +1072,7 @@ bool InventoryManager::onClientOpenChest(const Vector3i &position) {
 
     BlockActorStore *blockActors = _blockActors();
     ChestBlockActor *chest = blockActors == nullptr ? nullptr : blockActors->find<ChestBlockActor>(position);
-    if (chest == nullptr)
+    if (chest == nullptr || !_allowPluginOpen(position))
         return false;
 
     const int windowId = _getNewWindowId();
@@ -1152,7 +1230,7 @@ bool InventoryManager::onClientOpenFurnace(const Vector3i &position, FurnaceKind
     }
 
     BlockActorStore *blockActors = _blockActors();
-    if (blockActors == nullptr)
+    if (blockActors == nullptr || !_allowPluginOpen(position))
         return false;
 
     const int windowId = _getNewWindowId();

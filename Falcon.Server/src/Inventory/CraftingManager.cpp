@@ -300,7 +300,8 @@ ItemStack CraftingManager::findResult(const std::vector<ItemStack> &grid, int gr
 
 bool CraftingManager::matchResult(const std::vector<ItemStack> &grid, int gridWidth, const ItemStack &result,
                                   const std::vector<ItemStack> &recipeOutputs,
-                                  const std::vector<uint32_t> &recipeSourceIndices, CraftingRecipeMatch &match) {
+                                  const std::vector<uint32_t> &recipeSourceIndices, CraftingRecipeMatch &match,
+                                  ItemStack &outOutput) {
     if (result.isAir() || result.mDefinition == nullptr) {
         return false;
     }
@@ -314,6 +315,7 @@ bool CraftingManager::matchResult(const std::vector<ItemStack> &grid, int gridWi
         }
 
         if (matchNetworkRecipe(grid, gridWidth, (int32_t) index + 1, recipeOutputs, recipeSourceIndices, match)) {
+            outOutput = candidate;
             return true;
         }
     }

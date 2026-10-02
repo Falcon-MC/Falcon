@@ -14,6 +14,10 @@ public:
 
     using HostileActor::HostileActor;
 
+    bool preventsSleep() const override {
+        return false;
+    }
+
     int getSizeVariant() const { return mSizeVariant; }
 
     void setSizeVariant(int variant);
@@ -25,6 +29,27 @@ public:
     int getExperienceDrop() const override { return mSizeVariant; }
 
     virtual float getContactDamage() const = 0;
+
+    virtual float getHopPower() const {
+        return BASE_HOP_POWER;
+    }
+
+    void setHopDirection(float yaw, bool aggressive) {
+        mHopYaw = yaw;
+        mAggressive = aggressive;
+    }
+
+    float getHopYaw() const {
+        return mHopYaw;
+    }
+
+    void setHopSpeed(float speed) {
+        mHopSpeed = speed;
+    }
+
+    void hop();
+
+    static constexpr float BASE_HOP_POWER = 0.42f;
 
     void finalizeSpawn() override;
 
@@ -43,6 +68,14 @@ private:
 
     void _attackTouchingPlayers(ServerNetworkHandler &owner);
 
+    void _tickHop(ServerNetworkHandler &owner);
+
+    int32_t _nextJumpDelay() const;
+
     int mSizeVariant = LARGE_SIZE;
     int32_t mAttackCooldown = 0;
+    float mHopYaw = 0.0f;
+    float mHopSpeed = 0.0f;
+    bool mAggressive = false;
+    int32_t mJumpDelay = 0;
 };

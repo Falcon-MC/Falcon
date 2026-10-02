@@ -1,7 +1,12 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "Core/NBT/Tag.h"
 
+#include <cstdint>
+#include <vector>
+
+class Actor;
 class ServerNetworkHandler;
 class ServerPlayer;
 class ItemActor;
@@ -20,7 +25,16 @@ public:
     static ItemActor *dropItem(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
                                const ItemStack &item, const Vector3f &motion, int pickupDelay);
 
+    static void collect(ServerNetworkHandler &owner, ItemActor &item, const Actor &collector);
+
+    static void refresh(ServerNetworkHandler &owner, const ItemActor &item);
+
     static void sendItemActorsTo(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void tickItemActors(ServerNetworkHandler &owner);
+
+    static ItemActor *restoreItem(ServerNetworkHandler &owner, Level &level, const Tag &data);
+
+    static void saveItemsInChunk(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ,
+                                 std::vector<Tag> &out, bool cull);
 };

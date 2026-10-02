@@ -4,9 +4,9 @@
 #include "Block/BlockData.h"
 #include "Block/Blocks/LiquidBlock.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
+#include "Item/ItemClassRegistry.h"
 #include "Level/LevelChunk.h"
 #include "Level/Level.h"
-#include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemStack.h"
@@ -27,14 +27,17 @@ namespace {
     }
 }
 
-bool ChorusFruitItem::isChorusFruit(const ItemStack &item) {
-    return item.mDefinition != nullptr && item.mDefinition->getIdentifier() == CHORUS_FRUIT_IDENTIFIER;
+FALCON_REGISTER_ITEM(ChorusFruitItem, 100);
+
+ChorusFruitItem::ChorusFruitItem(const Item &base) : Item(base) {
 }
 
-bool ChorusFruitItem::canConsume(ServerNetworkHandler &owner, ServerPlayer &player) {
-    if (!isChorusFruit(player.getInventory().getItemInHand()))
-        return false;
+bool ChorusFruitItem::matches(const std::string &identifier) {
+    return identifier == CHORUS_FRUIT_IDENTIFIER;
+}
 
+
+bool ChorusFruitItem::canConsume(ServerNetworkHandler &owner, ServerPlayer &player) const {
     return !LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition()).water;
 }
 
@@ -97,28 +100,14 @@ bool ChorusFruitItem::findTeleportPosition(ServerNetworkHandler &owner, ServerPl
     return false;
 }
 
-void ChorusFruitItem::sendTeleportSound(ServerNetworkHandler &owner, ServerPlayer &player,
-                                         const Vector3f &position) {
-    LevelSoundEventPacket sound;
-    sound.mSound = "teleport";
-    sound.mPosition = position;
-    sound.mExtraData = -1;
-    sound.mActorType = player.getIdentifier();
-    sound.mActorUniqueId = player.getUniqueId();
-    sound.mIsBabyMob = false;
-    sound.mDisableRelativeVolume = false;
-    sound.mHasFirePosition = false;
-    BlockActionHandler::broadcastToViewers(owner, owner.getLevelFor(player), position, sound);
-}
-
-bool ChorusFruitItem::onEaten(ServerNetworkHandler &owner, ServerPlayer &player) {
+void ChorusFruitItem::onConsumed(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
+    (void) item;
     Vector3f destination;
     if (!findTeleportPosition(owner, player, destination))
-        return true;
+        return;
 
-    const Vector3f source = player.getPosition();
-    sendTeleportSound(owner, player, source);
+    Level &level = owner.getLevelFor(player);
+    owner.playLevelSound(level, LevelSoundEvent::TELEPORT, player.getPosition(), player.getIdentifier());
     player.teleport(owner, destination, MovePlayerTeleportationCause::ChorusFruit);
-    sendTeleportSound(owner, player, destination);
-    return true;
+    owner.playLevelSound(level, LevelSoundEvent::TELEPORT, destination, player.getIdentifier());
 }

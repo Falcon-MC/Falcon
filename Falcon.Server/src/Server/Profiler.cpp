@@ -21,7 +21,7 @@ namespace {
             "Fluid physics",
             "Player tick",
             "LevelChunk streaming",
-            "Furnaces",
+            "Block actors",
             "Item actors",
             "Announcement",
             "Fluid broadcast",

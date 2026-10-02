@@ -11,6 +11,8 @@
 #include "Block/BlockShape.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Core/Debug/BedrockLog.h"
+#include "Plugin/PluginEvent.h"
+#include "Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -100,6 +102,7 @@ bool Level::openStorage(const std::string &worldsDirectory) {
                 mGenerator = DimensionFactory::createGenerator(mDimension, mSeed);
             }
 
+            mWorldStartCount = (uint32_t) levelDat.getLong("worldStartCount", DEFAULT_WORLD_START_COUNT);
             mBonusChestEnabled = levelDat.getByte("bonusChestEnabled", 0) != 0;
             mBonusChestSpawned = levelDat.getByte("bonusChestSpawned", 0) != 0;
 
@@ -120,7 +123,7 @@ bool Level::openStorage(const std::string &worldsDirectory) {
 void Level::saveLevelDat() {
     const Vector3i spawn = mHasSpawnPosition ? mSpawnPosition : Vector3i(0, UNSET_SPAWN_Y, 0);
     mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime, mBonusChestEnabled,
-                           mBonusChestSpawned);
+                           mBonusChestSpawned, (int64_t) (uint32_t) (mWorldStartCount - 1));
 }
 
 bool Level::attachStorage(Level &overworld) {
@@ -179,6 +182,34 @@ std::vector<Tag> Level::loadEntities(int32_t chunkX, int32_t chunkZ) {
     return mStorage.loadEntities(chunkX, chunkZ);
 }
 
+void Level::eraseEntity(int64_t uniqueId) {
+    if (!mStorage.isOpen())
+        return;
+
+    mStorage.eraseEntity(uniqueId);
+}
+
+void Level::saveTickingArea(const std::string &id, const Tag &area) {
+    if (!mStorage.isOpen())
+        return;
+
+    mStorage.saveTickingArea(id, area);
+}
+
+void Level::eraseTickingArea(const std::string &id) {
+    if (!mStorage.isOpen())
+        return;
+
+    mStorage.eraseTickingArea(id);
+}
+
+std::vector<std::pair<std::string, Tag>> Level::loadTickingAreas() {
+    if (!mStorage.isOpen())
+        return std::vector<std::pair<std::string, Tag>>();
+
+    return mStorage.loadTickingAreas();
+}
+
 void Level::saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities) {
     if (!mStorage.isOpen())
         return;
@@ -229,14 +260,17 @@ int32_t Level::getMoonPhase() const {
     return (int32_t) (((mTime / 24000) % 8 + 8) % 8);
 }
 
-float Level::getRegionalDifficulty(int32_t difficulty) const {
+float Level::getMoonBrightness() const {
     static const float MOON_BRIGHTNESS[] = {1.0f, 0.75f, 0.5f, 0.25f, 0.0f, 0.25f, 0.5f, 0.75f};
+    return MOON_BRIGHTNESS[getMoonPhase()];
+}
 
+float Level::getRegionalDifficulty(int32_t difficulty) const {
     if (difficulty <= 0)
         return 0.0f;
 
     const float timeFactor = std::min(std::max((float) mTime - 0.5f, 0.0f) * 0.25f, 0.25f);
-    const float moonFactor = std::min(MOON_BRIGHTNESS[getMoonPhase()] * 0.25f, timeFactor);
+    const float moonFactor = std::min(getMoonBrightness() * 0.25f, timeFactor);
 
     float bonus = moonFactor + (difficulty == 3 ? 0.5f : 0.375f);
     if (difficulty == 1)
@@ -539,11 +573,14 @@ size_t Level::processChunkUnloads() {
                 mStorage.saveChunk(chunk->second);
         }
 
+        const int32_t chunkX = chunk->second.getX();
+        const int32_t chunkZ = chunk->second.getZ();
         mChunks.erase(chunk);
         mChunkNetworkCache.erase(key);
         mRepopulatedChunks.erase(key);
         it = mUnloadQueue.erase(it);
         unloaded++;
+        _dispatchChunkEvent(FALCON_EVENT_CHUNK_UNLOAD, chunkX, chunkZ, false);
     }
 
     return unloaded;
@@ -649,6 +686,20 @@ bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
     return false;
 }
 
+void Level::_dispatchChunkEvent(uint32_t type, int32_t chunkX, int32_t chunkZ, bool generated) {
+    PluginManager *plugins = PluginManager::findWithSubscribers(type);
+    if (plugins == nullptr)
+        return;
+
+    PluginEvent event;
+    event.mType = type;
+    event.mLevel = this;
+    event.mChunkX = chunkX;
+    event.mChunkZ = chunkZ;
+    event.mState = generated;
+    plugins->dispatch(event);
+}
+
 size_t Level::drainCompletedChunks() {
     if (mChunkWorker == nullptr)
         return 0;
@@ -673,6 +724,7 @@ size_t Level::drainCompletedChunks() {
         if (result.mChunk != nullptr && (canInsert || canReplace)) {
             if (canInsert) {
                 mChunks.emplace(key, std::move(*result.mChunk));
+                _dispatchChunkEvent(FALCON_EVENT_CHUNK_LOAD, result.mX, result.mZ, result.mGenerated);
             } else {
                 resident->second = std::move(*result.mChunk);
                 mRepopulatedChunks.insert(key);

@@ -4,7 +4,7 @@
 #include "Server/Localization.h"
 
 std::string CommandOrigin::getLocale() const {
-    return Localization::DEFAULT_LOCALE;
+    return Localization::getServerLocale();
 }
 
 void CommandOrigin::sendLocalized(const std::string &key, const std::vector<std::string> &parameters) {

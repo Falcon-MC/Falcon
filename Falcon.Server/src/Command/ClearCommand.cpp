@@ -2,6 +2,7 @@
 
 #include "Actor/ServerPlayer.h"
 #include "Item/StringToItemParser.h"
+#include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemDefinition.h"
 
@@ -169,6 +170,9 @@ bool ClearCommand::execute(CommandOrigin &sender, const std::vector<std::string>
         }
 
         cleared = true;
+        InventoryHandler::sendArmorContent(mHandler, *target);
+        InventoryHandler::sendOffhandContent(mHandler, *target);
+        InventoryHandler::sendHeldItem(mHandler, *target);
         sender.sendTranslation(maxCount == COUNT_ONLY ? "commands.clear.testing" : "commands.clear.success",
                                {target->getName(), std::to_string(removed)});
     }

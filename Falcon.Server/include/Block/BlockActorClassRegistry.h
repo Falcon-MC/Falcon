@@ -14,6 +14,10 @@ public:
     };
 
     static std::unique_ptr<BlockActor> create(const std::string &blockActorId);
+
+    static void activate(const void *owner);
+
+    static void remove(const void *owner);
 };
 
 #define FALCON_REGISTER_BLOCK_ACTOR(type)                                                \

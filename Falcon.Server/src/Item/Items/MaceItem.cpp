@@ -113,12 +113,8 @@ void MaceItem::onPostAttack(ServerNetworkHandler &owner, ServerPlayer &attacker,
     if (damage >= SMASH_PARTICLE_DAMAGE) {
         const Vector3f position = victim.getPosition();
 
-        LevelEventPacket particle;
-        particle.mEventId = LevelEventPacket::Event::ParticleSmashAttackGroundDust;
-        particle.mPosition = position;
-        particle.mData = 0;
         Level &world = owner.getLevelFor(attacker);
-        BlockActionHandler::broadcastToViewers(owner, world, position, particle);
+        owner.broadcastLevelEvent(world, LevelEventPacket::Event::ParticleSmashAttackGroundDust, position, 0);
 
         owner.playLevelSound(world,
                              damage >= SMASH_HEAVY_DAMAGE ? LevelSoundEvent::MACE_HEAVY_SMASH_GROUND

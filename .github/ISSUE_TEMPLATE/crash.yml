@@ -1,0 +1,60 @@
+name: Crash
+description: Falcon stopped, froze or crashed
+title: "[Crash]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!CAUTION]
+        > If the crash can be triggered over the network (by a player or a modified client), **do not report it here**.
+        > Read the [Security Policy](https://github.com/Falcon-MC/Falcon/blob/main/SECURITY.md) first.
+
+        > [!TIP]
+        > Do not paste a long log into the issue. Upload it to [GitHub Gist](https://gist.github.com) and link it below.
+
+  - type: textarea
+    attributes:
+      label: What happened
+      description: What you were doing when the server crashed or froze.
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Link to the full server log
+      placeholder: "https://gist.github.com/..."
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Falcon version
+      description: The version and commit printed by the `/about` command, or the release you downloaded.
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Can you reproduce it?
+      options:
+        - Every time
+        - Sometimes
+        - It only happened once
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Additional comments
+      description: Behavior packs loaded, world details, or anything else that might help.

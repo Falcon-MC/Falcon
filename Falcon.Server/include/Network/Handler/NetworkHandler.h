@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
@@ -101,6 +102,8 @@ public:
         EncryptionKey mEncryptionKey{};
     };
 
+    using OutboundFilter = std::function<bool(const NetworkIdentifier &, std::string &)>;
+
     explicit NetworkHandler(std::unique_ptr<Connector> connector);
 
     ~NetworkHandler() override;
@@ -149,6 +152,8 @@ public:
 
     void setProfiler(Profiler *profiler) { mProfiler = profiler; }
 
+    void setOutboundFilter(OutboundFilter filter);
+
     void addListener(Listener *listener);
 
     void removeListener(Listener *listener);
@@ -177,6 +182,7 @@ private:
     std::vector<std::unique_ptr<Connector>> mConnectors;
     std::unordered_map<NetworkIdentifier, std::unique_ptr<Connection>, NetworkIdentifier::Hasher> mConnections;
     std::vector<Listener *> mListeners;
+    OutboundFilter mOutboundFilter;
 
     TaskQueue<InboundEvent> mInbound;
     TaskQueue<OutboundCommand> mOutbound;

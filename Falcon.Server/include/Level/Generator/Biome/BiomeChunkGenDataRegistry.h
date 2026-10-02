@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class BiomeFeatureEntry {
@@ -24,6 +25,10 @@ public:
 
     static std::vector<std::string> getBiomeNames();
 
+    static bool hasTag(int32_t biomeId, const std::string &tag);
+
 private:
     static std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>> &_featuresByBiome();
+
+    static std::unordered_map<int32_t, std::unordered_set<std::string>> &_tagsByBiome();
 };

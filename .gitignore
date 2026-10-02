@@ -4,6 +4,9 @@
 !/.github/**
 !/CMakeLists.txt
 !/README.md
+!/AGENTS.md
+!/CONTRIBUTING.md
+!/SECURITY.md
 !/LICENSE
 !/COPYING
 !/build.bat

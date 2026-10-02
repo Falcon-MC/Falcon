@@ -1,7 +1,7 @@
 #include "Block/Blocks/BedBlock.h"
 
-#include "Actor/ActorCategory.h"
 #include "Actor/ActorClassRegistry.h"
+#include "Actor/Mob/MobActor.h"
 #include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/BlockData.h"
@@ -13,6 +13,7 @@
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginManager.h"
 
 namespace {
     const char *HEAD_PIECE_BIT = "head_piece_bit";
@@ -53,8 +54,8 @@ namespace {
                 .addCoord((float) footOffset.x, 0.0f, (float) footOffset.z);
 
         for (const auto &entry: owner.getActors()) {
-            const ServerActor *actor = entry.second.get();
-            if (actor == nullptr || !actor->isAlive() || !ActorCategories::isPreventingSleep(*actor) ||
+            const MobActor *actor = dynamic_cast<const MobActor *>(entry.second.get());
+            if (actor == nullptr || !actor->isAlive() || !actor->preventsSleep() ||
                 actor->getDimension() != level.getDimensionType())
                 continue;
 
@@ -188,6 +189,17 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
     if (player.getGameType() != (int32_t) GameType::Creative && isMonsterNearby(owner, level, head, footOffset)) {
         player.sendTranslation("§7%tile.bed.notSafe", {});
         return true;
+    }
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_BED_ENTER)) {
+        PluginEvent bedEvent;
+        bedEvent.mType = FALCON_EVENT_PLAYER_BED_ENTER;
+        bedEvent.mCancellable = true;
+        bedEvent.mPlayer = &player;
+        bedEvent.mBlockPosition = head;
+        plugins->dispatch(bedEvent);
+        if (bedEvent.mCancelled)
+            return true;
     }
 
     if (!owner.sleepOn(player, head))

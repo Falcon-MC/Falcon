@@ -1,10 +1,13 @@
 #include "Network/Handler/MovementHandler.h"
 
 #include "Actor/ActorFlags.h"
+#include "Actor/Movement/PlayerMovementSimulator.h"
+#include "Actor/Movement/RideControlSystem.h"
 #include "Actor/RideSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
 #include "Block/Blocks/FrostedIceBlock.h"
+#include "Block/Systems/BlockContactSystem.h"
 #include "Block/Systems/LavaResetFallDistanceSystem.h"
 #include "Block/Systems/FireBlocksFetch.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
@@ -16,6 +19,8 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Plugin/PluginEvent.h"
+#include "Plugin/PluginManager.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -25,6 +30,18 @@
 #include <cstdlib>
 
 namespace {
+    void dispatchPlayerState(ServerPlayer &player, FalconEventType type, bool state) {
+        PluginManager *plugins = PluginManager::findWithSubscribers(type);
+        if (plugins == nullptr)
+            return;
+
+        PluginEvent event;
+        event.mType = type;
+        event.mPlayer = &player;
+        event.mState = state;
+        plugins->dispatch(event);
+    }
+
     bool consumesAir(const ServerPlayer &player) {
         const int32_t respiration = ItemEnchantments::getLevel(
                 player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD), EnchantmentIds::RESPIRATION);
@@ -211,6 +228,8 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
                                                                                  std::min(0.0f, requestedY));
             if (!landedOnSpecialBlock)
                 owner._handleFallDamage(player, hasSupport ? &supportBlock : nullptr);
+
+            BlockContactSystem::land(owner, player, player.getFallDistance());
         }
 
         player.resetFallDistance();
@@ -241,9 +260,9 @@ void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer
 
     if (!creative && !fireResistance) {
         if (contact.lava)
-            owner.applyDamage(player, 4.0f, "death.attack.lava", {player.getName()});
+            owner.hurt(player, 4.0f, ActorDamageSource::environment("death.attack.lava", player.getName()));
         if (fireContact.fire)
-            owner.applyDamage(player, fireContact.damage, "death.attack.onFire", {player.getName()});
+            owner.hurt(player, fireContact.damage, ActorDamageSource::environment("death.attack.onFire", player.getName()));
     }
 
     tickBreathing(owner, player, contact.eyeInWater);
@@ -283,7 +302,7 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
             int air = player.getAirSupply() - 1;
             if (air <= DROWNING_AIR) {
                 air = 0;
-                owner.applyDamage(player, DROWNING_DAMAGE, "death.attack.drown", {player.getName()});
+                owner.hurt(player, DROWNING_DAMAGE, ActorDamageSource::environment("death.attack.drown", player.getName()));
             }
             player.setAirSupply(air);
         }
@@ -297,10 +316,14 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
 
 void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                             ServerPlayer &player, const PlayerAuthInputPacket &packet) {
-    const Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
-                                packet.mPosition.z);
+    Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
+                          packet.mPosition.z);
+    PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition);
     player.queueMove(feetPosition, packet.mRotation);
-    player.setMotion(packet.mDelta);
+    if (!player.hasSimulatedVelocity())
+        player.setMotion(packet.mDelta);
+    if (player.isRiding())
+        RideControlSystem::receiveInput(owner, player, packet);
 
     if (player.isSpawned()) {
         const int32_t chunkX = (int32_t) std::floor(feetPosition.x) >> 4;
@@ -351,6 +374,13 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
 
     if (flags.getLowBits() != previous.getLowBits() || flags.getHighBits() != previous.getHighBits())
         owner._sendEntityData(player);
+
+    if (sneaking != previous.get(ActorFlag::Sneaking))
+        dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SNEAK, sneaking);
+    if (sprinting != previous.get(ActorFlag::Sprinting))
+        dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting);
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping))
+        dispatchPlayerState(player, FALCON_EVENT_PLAYER_JUMP, true);
 
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartUsingItem)) {
         player.clearAwaitingConsumableRelease();

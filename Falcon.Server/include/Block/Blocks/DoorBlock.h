@@ -12,6 +12,8 @@ class DoorBlock {
 public:
     static bool matches(const std::string &identifier);
 
+    static bool isOpenableByHand(const std::string &identifier);
+
     static bool isRightHinged(Level *level, const std::string &identifier, const Vector3i &position,
                               int playerFacing);
 

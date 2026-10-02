@@ -13,6 +13,8 @@ public:
 
     static void tick(ServerNetworkHandler &owner, ServerActor &actor);
 
+    static void land(ServerNetworkHandler &owner, Actor &actor, float fallDistance);
+
 private:
     static bool touchBlocks(ServerNetworkHandler &owner, Actor &actor, const ActorSize &size);
 

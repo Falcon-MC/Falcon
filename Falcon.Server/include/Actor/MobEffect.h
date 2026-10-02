@@ -39,7 +39,8 @@ enum class MobEffectId : int32_t {
     SlowFalling = 27,
     BadOmen = 28,
     VillageHero = 29,
-    Darkness = 30
+    Darkness = 30,
+    Weaving = 33
 };
 
 enum class MobEffectEvent : uint8_t { Add, Modify, Remove };
@@ -57,6 +58,9 @@ struct MobEffectInstance {
 
 const char *getMobEffectName(MobEffectId id);
 bool parseMobEffect(const std::string &value, MobEffectId &id);
+bool isKnownMobEffect(int32_t raw);
+constexpr int32_t MAX_MOB_EFFECT_ID = (int32_t) MobEffectId::Weaving;
+bool parseDefinitionMobEffect(const std::string &value, MobEffectId &id);
 
 class MobEffect {
 public:
@@ -154,8 +158,13 @@ class WindChargedMobEffect final : public MobEffect {};
 class MobEffectManager {
 public:
     using EventCallback = std::function<void(const MobEffectInstance &, MobEffectEvent)>;
+    using AddFilter = std::function<bool(Actor &, const MobEffectInstance &)>;
 
     explicit MobEffectManager(Actor &actor) : mActor(actor) {}
+
+    static void setAddFilter(AddFilter filter) {
+        sAddFilter = std::move(filter);
+    }
 
     bool add(const MobEffectInstance &instance);
     bool remove(MobEffectId id);
@@ -169,7 +178,6 @@ public:
     void setEventCallback(EventCallback callback) { mEventCallback = std::move(callback); }
 
     float movementSpeedMultiplier() const;
-    float jumpVelocityMultiplier() const;
     bool hasResistance() const { return has(MobEffectId::Resistance); }
 
     bool consumeAttributesDirty() {
@@ -183,6 +191,8 @@ private:
     const MobEffect &effect(MobEffectId id) const;
     void refreshDerivedAttributes();
     void emit(const MobEffectInstance &instance, MobEffectEvent event) const;
+
+    static inline AddFilter sAddFilter;
 
     Actor &mActor;
     std::unordered_map<int32_t, MobEffectInstance> mEffects;

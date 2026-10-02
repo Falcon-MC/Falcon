@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Actor/Actor.h"
+#include "Actor/ActorPropertySchema.h"
 #include "Actor/ActorSize.h"
+#include "Actor/ActorDamageSource.h"
 #include "Actor/DynamicPropertyValue.h"
 #include "Actor/Movement/PhysicsComponent.h"
 #include "Core/Math/Vector3f.h"
@@ -77,10 +79,36 @@ public:
         return Vector3f(0.0f, 0.0f, 0.0f);
     }
 
+    virtual Vector3f getSeatOffset(size_t index, size_t passengerCount) const {
+        (void) index;
+        (void) passengerCount;
+        return getSeatOffset();
+    }
+
+    virtual Vector3f getDismountPosition(size_t index, size_t passengerCount) const {
+        const Vector3f seat = getSeatOffset(index, passengerCount);
+        const Vector3f position = getPosition();
+        return Vector3f(position.x + seat.x, position.y + seat.y, position.z + seat.z);
+    }
+
+    virtual void onPassengerAdded(ServerNetworkHandler &owner, Actor &passenger) {
+        (void) owner;
+        (void) passenger;
+    }
+
+    virtual void onPassengerRemoved(ServerNetworkHandler &owner, Actor &passenger) {
+        (void) owner;
+        (void) passenger;
+    }
+
     virtual bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         (void) owner;
         (void) player;
         return false;
+    }
+
+    virtual void onStruckByLightning(ServerNetworkHandler &owner) {
+        (void) owner;
     }
 
     virtual bool isInvulnerable() const {
@@ -104,6 +132,20 @@ public:
      */
     bool hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel = -1);
 
+    bool hurt(ServerNetworkHandler &owner, float amount, const ActorDamageSource &damageSource, int32_t lootingLevel = -1);
+
+    virtual bool senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
+        (void) owner;
+        (void) amount;
+        (void) source;
+        return true;
+    }
+
+    virtual float absorbDamage(float amount, const ActorDamageSource &source) const {
+        (void) source;
+        return amount;
+    }
+
     virtual void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0);
 
     void tickFire(ServerNetworkHandler &owner);
@@ -121,6 +163,11 @@ public:
     }
 
     virtual bool burnsInDaylight() const {
+        return false;
+    }
+
+    virtual bool shieldFromSunlight(ServerNetworkHandler &owner) {
+        (void) owner;
         return false;
     }
 
@@ -147,6 +194,14 @@ public:
     int32_t getIntProperty(const std::string &name, int32_t fallback = 0) const;
 
     float getFloatProperty(const std::string &name, float fallback = 0.0f) const;
+
+    const std::vector<ActorPropertyDescription> *getPropertySchema() const;
+
+    const ActorPropertyDescription *findPropertyDescription(const std::string &name) const;
+
+    void initializeProperties();
+
+    bool assignProperty(const ActorPropertyDescription &descriptor, const json::Value &value);
 
     std::unordered_map<std::string, int32_t> &getIntProperties() { return mIntProperties; }
 
@@ -201,6 +256,24 @@ public:
 
     void setNameTag(const std::string &nameTag) { mNameTag = nameTag; }
 
+    bool isPersistent() const {
+        return mPersistent || !mNameTag.empty();
+    }
+
+    void setPersistent(bool persistent) {
+        mPersistent = persistent;
+    }
+
+    int32_t getFarFromPlayerTicks() const {
+        return mFarFromPlayerTicks;
+    }
+
+    void setFarFromPlayerTicks(int32_t ticks) {
+        mFarFromPlayerTicks = ticks;
+    }
+
+    std::vector<int64_t> &getPendingPassengers() { return mPendingPassengers; }
+
     virtual bool shouldSave() const { return isAlive() && !mIsProjectile && !hasOwnerPlayer(); }
 
     virtual Tag saveNbt() const;
@@ -222,6 +295,9 @@ private:
     int32_t mPickupDelay = 0;
     ProjectileData mProjectileData;
     std::string mNameTag;
+    bool mPersistent = true;
+    int32_t mFarFromPlayerTicks = 0;
+    std::vector<int64_t> mPendingPassengers;
 
     std::unordered_map<std::string, int32_t> mIntProperties;
     std::unordered_map<std::string, float> mFloatProperties;

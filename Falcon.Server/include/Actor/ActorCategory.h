@@ -2,8 +2,6 @@
 
 #include <string>
 
-class ServerActor;
-
 enum class ActorCategory {
     Other,
     Passive,
@@ -20,7 +18,5 @@ namespace ActorCategories {
     bool isNeutral(const std::string &identifier);
 
     bool isPassive(const std::string &identifier);
-
-    bool isPreventingSleep(const ServerActor &actor);
 
 }

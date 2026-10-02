@@ -49,14 +49,6 @@ namespace {
         return speed;
     }
 
-    Vector3f lookDirectionOf(const ServerPlayer &player) {
-        const Vector3f rotation = player.getRotation();
-        const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
-        const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
-
-        return Vector3f(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
-    }
-
     std::string tierNameOf(const std::string &identifier) {
         const size_t colon = identifier.find(':');
         return colon == std::string::npos ? identifier : identifier.substr(colon + 1);
@@ -71,6 +63,10 @@ bool SpearItem::matches(const std::string &identifier) {
            identifier.compare(identifier.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+float SpearItem::getKineticDamage(float speed) const {
+    return (float) getAttackDamage() * 1.5f + speed * 3.0f;
+}
+
 float SpearItem::getJabDamage(const ItemStack &item) const {
     const int32_t lungeLevel = ItemEnchantments::getLevel(item, EnchantmentIds::LUNGE);
     return (float) getAttackDamage() + (float) lungeLevel * 1.5f;
@@ -79,7 +75,7 @@ float SpearItem::getJabDamage(const ItemStack &item) const {
 Actor *SpearItem::findTarget(ServerNetworkHandler &owner, ServerPlayer &player, float maxDistance) const {
     const Vector3f playerPosition = player.getPosition();
     const Vector3f eyePosition(playerPosition.x, playerPosition.y + PLAYER_EYE_HEIGHT, playerPosition.z);
-    const Vector3f direction = lookDirectionOf(player);
+    const Vector3f direction = player.getLookDirection();
 
     Actor *best = nullptr;
     float bestScore = -1.0f;
@@ -136,7 +132,7 @@ Actor *SpearItem::findTarget(ServerNetworkHandler &owner, ServerPlayer &player, 
 }
 
 Actor *SpearItem::findSweepTarget(ServerNetworkHandler &owner, ServerPlayer &player) const {
-    const Vector3f direction = lookDirectionOf(player);
+    const Vector3f direction = player.getLookDirection();
     const Vector3f playerPosition = player.getPosition();
 
     const float minX = playerPosition.x - PLAYER_WIDTH * 0.5f - SWEEP_EXPAND_HORIZONTAL + direction.x * SWEEP_REACH;
@@ -200,14 +196,20 @@ void SpearItem::applySpearDamage(ServerNetworkHandler &owner, ServerPlayer &atta
                                  float damage) const {
     ServerPlayer *victim = dynamic_cast<ServerPlayer *>(&target);
     if (victim != nullptr) {
-        owner.applyDamage(*victim, damage, "death.attack.player", {victim->getName(), attacker.getName()},
-                          false, false);
+        owner.hurt(*victim, damage,
+                   ActorDamageSource::attack("death.attack.player", victim->getName(), attacker, attacker.getName(),
+                                        attacker.getPosition())
+                           .withoutArmor()
+                           .withoutCooldown());
         return;
     }
 
     ServerActor *actor = dynamic_cast<ServerActor *>(&target);
     if (actor != nullptr)
-        owner.damageActor(*actor, damage, &attacker);
+        owner.damageActor(*actor, damage,
+                          ActorDamageSource::attack("death.attack.player", actor->getName(), attacker, attacker.getName(),
+                                               attacker.getPosition())
+                                  .withoutArmor());
 }
 
 void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
@@ -227,7 +229,7 @@ void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, co
     if (finiteResources && player.getFood() < MINIMUM_LUNGE_FOOD)
         return;
 
-    const Vector3f direction = lookDirectionOf(player);
+    const Vector3f direction = player.getLookDirection();
     const float length = std::sqrt(direction.x * direction.x + direction.z * direction.z);
     if (length <= 0.0f)
         return;
@@ -240,8 +242,9 @@ void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, co
     player.setMotion(motion);
     owner.sendActorMotion(player);
 
-    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::SPEAR_LUNGE, player.getPosition(),
-                         "minecraft:player");
+    const char *sound = lungeLevel >= 3 ? LevelSoundEvent::LUNGE_3
+                                        : (lungeLevel == 2 ? LevelSoundEvent::LUNGE_2 : LevelSoundEvent::LUNGE_1);
+    owner.playLevelSound(owner.getLevelFor(player), sound, player.getPosition(), "minecraft:player");
 
     player.exhaust(BASE_LUNGE_EXHAUST * (float) lungeLevel);
 }
@@ -292,8 +295,7 @@ void SpearItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player, c
     if (target == nullptr)
         return;
 
-    const float damage = (float) getAttackDamage() * 1.5f + speed * 3.0f;
-    applySpearDamage(owner, player, *target, damage);
+    applySpearDamage(owner, player, *target, getKineticDamage(speed));
     owner.playLevelSound(owner.getLevelFor(player), "item." + mTierName + ".attack_hit", player.getPosition(),
                          "minecraft:player");
 }
