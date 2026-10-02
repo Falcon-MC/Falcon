@@ -25,6 +25,7 @@ falcon.disconnect.disconnected=Odpojeno od serveru
 falcon.disconnect.banned=Byl vám zamezen přístup hostitelem.
 falcon.disconnect.bannedReason=Byl vám zamezen přístup hostitelem. Důvod: %1$s
 falcon.disconnect.flyingDisabled=Létání není na tomto serveru povoleno
+falcon.disconnect.timedOut=Vypršel časový limit odpovědi klienta.
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (špička %3$s)
 falcon.commands.status.players=Hráči online: %1$s/%2$s

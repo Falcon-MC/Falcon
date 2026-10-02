@@ -25,6 +25,7 @@ falcon.disconnect.disconnected=Disconnected from Server
 falcon.disconnect.banned=You are banned by the host.
 falcon.disconnect.bannedReason=You are banned by the host. Reason: %1$s
 falcon.disconnect.flyingDisabled=Flying is not enabled on this server
+falcon.disconnect.timedOut=Timed out: the client stopped responding.
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (peak %3$s)
 falcon.commands.status.players=Players online: %1$s/%2$s

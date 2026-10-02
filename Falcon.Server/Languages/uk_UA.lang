@@ -25,6 +25,7 @@ falcon.disconnect.disconnected=Відключено від сервера
 falcon.disconnect.banned=Хост вас забанив.
 falcon.disconnect.bannedReason=Хост вас забанив. Причина: %1$s
 falcon.disconnect.flyingDisabled=Польоти на цьому сервері заборонено
+falcon.disconnect.timedOut=Час очікування вичерпано: клієнт перестав відповідати.
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (пік %3$s)
 falcon.commands.status.players=Гравців онлайн: %1$s/%2$s

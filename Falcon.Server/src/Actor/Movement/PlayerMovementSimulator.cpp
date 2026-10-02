@@ -326,7 +326,7 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
                                     const PlayerAuthInputPacket &packet, Vector3f &feetPosition) {
     const int32_t gameType = player.getGameType();
     const bool skip = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator
-                      || player.isRiding() || player.isFlying() || player.isSleeping() || player.wasRecentlyTeleported()
+                      || player.isRiding() || player.isFlying() || player.isSleeping() || player.hasPendingMovementChange()
                       || player.hasEffect(MobEffectId::Levitation)
                       || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartGliding)
                       || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSwimming)

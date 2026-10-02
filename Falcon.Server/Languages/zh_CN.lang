@@ -25,6 +25,7 @@ falcon.disconnect.disconnected=正在从服务器断开连接
 falcon.disconnect.banned=你被主机封禁了。
 falcon.disconnect.bannedReason=你被主机封禁了。原因：%1$s
 falcon.disconnect.flyingDisabled=此服务器不允许飞行
+falcon.disconnect.timedOut=超时：客户端已停止响应。
 
 falcon.commands.status.performance=TPS：%1$s，MSPT：%2$s（峰值 %3$s）
 falcon.commands.status.players=在线玩家：%1$s/%2$s

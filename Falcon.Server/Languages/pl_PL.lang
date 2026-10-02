@@ -25,6 +25,7 @@ falcon.disconnect.disconnected=Odłączono od serwera
 falcon.disconnect.banned=Gospodarz cię zbanował.
 falcon.disconnect.bannedReason=Gospodarz cię zbanował. Powód: %1$s
 falcon.disconnect.flyingDisabled=Latanie nie jest dozwolone na tym serwerze
+falcon.disconnect.timedOut=Przekroczono limit czasu: klient przestał odpowiadać.
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (szczyt %3$s)
 falcon.commands.status.players=Gracze online: %1$s/%2$s

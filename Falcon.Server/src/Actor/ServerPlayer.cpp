@@ -182,6 +182,7 @@ ServerPlayer::ServerPlayer(const NetworkIdentifier &id, uint64_t runtimeId, Pack
         packet.mTick = 0;
         packet.mAmbient = event == MobEffectEvent::Remove ? false : effect.mAmbient;
         mSender->sendPacketTo(mId, packet);
+        awaitMovementChange();
     });
 }
 

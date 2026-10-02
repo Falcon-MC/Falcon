@@ -25,6 +25,7 @@ falcon.disconnect.disconnected=Terputus dari Server
 falcon.disconnect.banned=Kamu di-ban oleh host.
 falcon.disconnect.bannedReason=Kamu di-ban oleh host. Alasan: %1$s
 falcon.disconnect.flyingDisabled=Terbang tidak diizinkan di server ini
+falcon.disconnect.timedOut=Waktu habis: klien berhenti merespons.
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (puncak %3$s)
 falcon.commands.status.players=Pemain online: %1$s/%2$s

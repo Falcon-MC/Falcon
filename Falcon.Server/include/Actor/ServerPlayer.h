@@ -15,6 +15,7 @@
 #include "Protocol/Types/AdventureSettingData.h"
 #include "Protocol/Types/SerializedSkin.h"
 #include "Actor/MobEffect.h"
+#include "Actor/PlayerAcknowledgements.h"
 
 #include <chrono>
 #include <string>
@@ -156,6 +157,24 @@ public:
     }
 
     void clearPendingKnockback() { mHasPendingKnockback = false; }
+
+    void scheduleKnockback(const Vector3f &motion) {
+        mAcknowledgements.add([this, motion]() {
+            queueKnockback(motion);
+        });
+    }
+
+    PlayerAcknowledgements &getAcknowledgements() { return mAcknowledgements; }
+
+    void awaitMovementChange() {
+        mPendingMovementChanges++;
+        mAcknowledgements.add([this]() {
+            if (mPendingMovementChanges > 0)
+                mPendingMovementChanges--;
+        });
+    }
+
+    bool hasPendingMovementChange() const { return mPendingMovementChanges > 0; }
 
     void setFlying(bool flying) {
         if (mFlying == flying)
@@ -367,7 +386,10 @@ public:
 
     static constexpr std::chrono::milliseconds POST_TELEPORT_GRACE{1000};
 
-    void markTeleported() { mLastTeleport = std::chrono::steady_clock::now(); }
+    void markTeleported() {
+        mLastTeleport = std::chrono::steady_clock::now();
+        awaitMovementChange();
+    }
 
     /** Whether the player changed skin less than the given number of seconds ago. */
     bool changedSkinWithin(int seconds) const {
@@ -579,6 +601,8 @@ private:
     int32_t mJumpDelay = 0;
     bool mSimulatedSneaking = false;
     bool mSimulatedCrawling = false;
+    PlayerAcknowledgements mAcknowledgements;
+    int32_t mPendingMovementChanges = 0;
     bool mHasPendingKnockback = false;
     Vector3f mPendingKnockback;
     PlayerInventory mInventory;

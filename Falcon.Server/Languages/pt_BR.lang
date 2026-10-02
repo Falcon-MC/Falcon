@@ -25,6 +25,7 @@ falcon.disconnect.disconnected=Desconectado do servidor
 falcon.disconnect.banned=Você foi banido pelo anfitrião.
 falcon.disconnect.bannedReason=Você foi banido pelo anfitrião. Motivo: %1$s
 falcon.disconnect.flyingDisabled=Voar não é permitido neste servidor
+falcon.disconnect.timedOut=Tempo esgotado: o cliente parou de responder.
 
 falcon.commands.status.performance=TPS: %1$s, MSPT: %2$s (pico %3$s)
 falcon.commands.status.players=Jogadores online: %1$s/%2$s

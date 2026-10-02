@@ -1060,6 +1060,7 @@ void LoginHandler::sendAttributes(ServerNetworkHandler &owner, ServerPlayer &pla
     attributes.mAttributes = player.getAttributes().getAll();
 
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), attributes, owner.getCodecContext());
+    player.awaitMovementChange();
 }
 
 void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &player) {

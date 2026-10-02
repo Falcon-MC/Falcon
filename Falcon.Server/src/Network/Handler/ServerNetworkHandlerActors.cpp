@@ -1038,7 +1038,7 @@ void ServerNetworkHandler::pushFrom(Actor &actor, const Vector3f &origin, float 
 
     actor.setMotion(motion);
     if (actor.isPlayer())
-        static_cast<ServerPlayer &>(actor).queueKnockback(motion);
+        static_cast<ServerPlayer &>(actor).scheduleKnockback(motion);
     sendActorMotion(actor);
 }
 

@@ -575,6 +575,8 @@ private:
 
     void handle(const NetworkIdentifier &id, const SetLocalPlayerAsInitializedPacket &packet) override;
 
+    void handle(const NetworkIdentifier &id, const NetworkStackLatencyPacket &packet) override;
+
     void handle(const NetworkIdentifier &id, const PlayerAuthInputPacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const CompletedUsingItemPacket &packet) override;

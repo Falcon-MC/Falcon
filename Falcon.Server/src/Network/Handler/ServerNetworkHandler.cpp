@@ -58,6 +58,7 @@
 #include "Protocol/Packets/ResourcePackChunkDataPacket.h"
 #include "Protocol/Packets/ResourcePackChunkRequestPacket.h"
 #include "Protocol/Packets/SetLocalPlayerAsInitializedPacket.h"
+#include "Protocol/Packets/NetworkStackLatencyPacket.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Protocol/Packets/CorrectPlayerMovePredictionPacket.h"
@@ -857,6 +858,15 @@ void ServerNetworkHandler::tick() {
     mProfiler.endSection(ProfilerSection::Announcement);
 
     mScriptEngine.tick(mCurrentTick);
+
+    std::vector<std::pair<NetworkIdentifier, std::string>> timedOut;
+    for (auto &entry: mPlayers) {
+        entry.second.getAcknowledgements().flush(*this, entry.first);
+        if (entry.second.getAcknowledgements().hasTimedOut(mCurrentTick))
+            timedOut.emplace_back(entry.first, entry.second.localize("falcon.disconnect.timedOut"));
+    }
+    for (const auto &entry: timedOut)
+        _disconnect(entry.first, entry.second);
 
     const ChunkWorker *chunkWorker = mLevel.getChunkWorker();
     mProfiler.endTick((uint32_t) mPlayers.size(), (uint32_t) mLevel.getLoadedChunkCount(),
@@ -1730,6 +1740,12 @@ void ServerNetworkHandler::setDifficulty(const std::string &difficulty) {
 
 void ServerNetworkHandler::sendPacketTo(const NetworkIdentifier &id, const Packet &packet) {
     mNetworkHandler->send(id, packet, mCodecContext);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const NetworkStackLatencyPacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player != nullptr)
+        player->getAcknowledgements().acknowledge(packet.mTimestamp);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerAuthInputPacket &packet) {

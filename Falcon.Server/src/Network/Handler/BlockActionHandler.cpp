@@ -50,6 +50,16 @@
 #include <utility>
 
 namespace {
+    const float MOVEMENT_BLOCK_RANGE = 3.0f;
+
+    bool isNearPlayer(const ServerPlayer &player, const Vector3f &position) {
+        const Vector3f &feet = player.getPosition();
+        const float dx = position.x - feet.x;
+        const float dy = position.y - feet.y;
+        const float dz = position.z - feet.z;
+        return dx * dx + dy * dy + dz * dz <= MOVEMENT_BLOCK_RANGE * MOVEMENT_BLOCK_RANGE;
+    }
+
     const float PLAYER_BASE_OFFSET = 1.62f;
     const double BREAK_SPEED_CHANGE_EPSILON = 0.0001;
     const double BREAK_PROGRESS_EPSILON = 0.000001;
@@ -362,8 +372,12 @@ void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, Level &
         if (&entry.second == except)
             continue;
 
-        if (&owner.getLevelFor(entry.second) == &level && entry.second.getSentChunks().count(key) != 0)
-            owner.getNetworkHandler().send(entry.first, packet, owner.getCodecContext());
+        if (&owner.getLevelFor(entry.second) != &level || entry.second.getSentChunks().count(key) == 0)
+            continue;
+
+        owner.getNetworkHandler().send(entry.first, packet, owner.getCodecContext());
+        if (packet.getId() == MinecraftPacketIds::UpdateBlock && isNearPlayer(entry.second, position))
+            entry.second.awaitMovementChange();
     }
 }
 
