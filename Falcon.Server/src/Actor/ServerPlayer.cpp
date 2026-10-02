@@ -86,8 +86,6 @@ namespace {
 
     constexpr float MAX_REACH = 8.0f;
     constexpr float PLAYER_EYE_HEIGHT = 1.62f;
-    constexpr float PLAYER_WIDTH = 0.6f;
-    constexpr float PLAYER_HEIGHT = 1.8f;
     constexpr float FACING_MIN_DISTANCE = 1.0e-4f;
     constexpr float SPIN_ATTACK_DAMAGE = 8.0f;
     constexpr float SPIN_ATTACK_REACH = 1.0f;
