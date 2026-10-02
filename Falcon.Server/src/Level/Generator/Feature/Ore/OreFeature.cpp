@@ -159,14 +159,18 @@ void OreFeature::apply(ChunkGenerateContext &context) {
         mReplacesHostBlocks = isIntrusiveDeposit()
                               && BiomeChunkGenDataRegistry::hasTag(biomeId, INTRUSIVE_DEPOSITS_TAG);
 
+        const bool readsPending = hosted || mReplacesHostBlocks;
+        if (readsPending)
+            object.readPendingFrom(mRoot);
+
         if (hosted) {
             mRandom.setSeed(level.getSeed() ^ chunkHash(chunkX, chunkZ) ^ (x + y + z));
             _spawnHost(object, mRandom, x, y, z);
         }
 
-        const BlockState *originalPtr = hosted ? nullptr : level.peekBlockPtr(x, y, z);
-        const BlockState original = hosted ? object.getBlockAt(x, y, z)
-                                           : originalPtr == nullptr ? BlockState() : *originalPtr;
+        const BlockState *originalPtr = readsPending ? nullptr : level.peekBlockPtr(x, y, z);
+        const BlockState original = readsPending ? object.getBlockAt(x, y, z)
+                                                 : originalPtr == nullptr ? BlockState() : *originalPtr;
         if (!_canReplace(original)) {
             if (hosted)
                 mRandom.setSeed(level.getSeed() ^ chunkHash(chunkX, chunkZ));

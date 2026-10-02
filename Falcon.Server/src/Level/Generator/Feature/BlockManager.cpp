@@ -27,6 +27,12 @@ const BlockState &BlockManager::getBlockAt(int32_t x, int32_t y, int32_t z) {
     if (cached != mCaches.end())
         return cached->second;
 
+    if (mPending != nullptr) {
+        const BlockState *pending = mPending->getCachedBlock(x, y, z);
+        if (pending != nullptr)
+            return *pending;
+    }
+
     if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
         return airState();
 

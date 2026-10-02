@@ -29,6 +29,10 @@ public:
 
     void setOverflowSink(int32_t centerChunkX, int32_t centerChunkZ, std::vector<GeneratedBlockChange> *sink);
 
+    void readPendingFrom(const BlockManager *pending) {
+        mPending = pending;
+    }
+
     int32_t getHeightAt(int32_t x, int32_t z);
 
     Level &getLevel() const { return *mLevel; }
@@ -40,6 +44,7 @@ protected:
     std::unordered_map<int64_t, BlockState> mCaches;
     std::unordered_map<int64_t, BlockState> mPlaces;
     std::vector<GeneratedBlockChange> *mOverflowSink = nullptr;
+    const BlockManager *mPending = nullptr;
     int32_t mCenterChunkX = 0;
     int32_t mCenterChunkZ = 0;
 };

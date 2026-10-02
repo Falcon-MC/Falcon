@@ -29,6 +29,7 @@ void IcicleClusterFeature::apply(ChunkGenerateContext &context) {
                     ^ javaStringHash(name()));
 
     BlockManager manager(level);
+    manager.readPendingFrom(mRoot);
     const int32_t attempts = MIN_ATTEMPTS + mRandom.nextBoundedInt(EXTRA_ATTEMPTS);
     for (int32_t i = 0; i < attempts; i++) {
         const int32_t baseX = (chunk.getX() << 4) + mRandom.nextBoundedInt(15);
