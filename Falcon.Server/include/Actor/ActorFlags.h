@@ -42,6 +42,7 @@ enum class ActorFlag : int {
     BlockedUsingShield = 74,
     BlockedUsingDamagedShield = 75,
     Sleeping = 76,
+    FacingTargetToRangeAttack = 88,
     Celebrating = 93,
     Admiring = 94,
     CelebratingSpecial = 95,

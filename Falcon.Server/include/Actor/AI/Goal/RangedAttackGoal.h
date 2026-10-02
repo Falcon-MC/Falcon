@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string>
 
+class Actor;
+
 class RangedAttackGoal : public Goal {
 public:
     RangedAttackGoal(float speed, float range, int32_t minInterval, int32_t maxInterval, std::string projectile);
@@ -20,6 +22,14 @@ public:
 private:
     int32_t _nextInterval() const;
 
+    void _playBowAnimation(ServerNetworkHandler &owner, MobActor &mob, const Actor &target);
+
+    void _stopBowAnimation(ServerNetworkHandler &owner, MobActor &mob);
+
+    void _setTargetId(ServerNetworkHandler &owner, MobActor &mob, int64_t uniqueId);
+
+    void _shoot(ServerNetworkHandler &owner, MobActor &mob, const Actor &target, bool crossbow);
+
     float mSpeed;
     float mRange;
     int32_t mMinInterval;
@@ -27,4 +37,5 @@ private:
     std::string mProjectile;
     int32_t mCooldown = 0;
     int32_t mTicksUntilRepath = 0;
+    int32_t mDrawTicks = 0;
 };
