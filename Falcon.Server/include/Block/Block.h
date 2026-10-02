@@ -57,6 +57,12 @@ enum class BlockTraversal {
     PowderSnow
 };
 
+enum class PathHazard {
+    None,
+    Damaging,
+    Portal
+};
+
 enum class PistonMoveReaction {
     Normal,
     Break,
@@ -133,6 +139,11 @@ public:
 
     virtual BlockTraversal getTraversal() const {
         return BlockTraversal::None;
+    }
+
+    /** How mob pathfinding treats this block: navigation options decide whether a hazard is avoided. */
+    virtual PathHazard getPathHazard() const {
+        return PathHazard::None;
     }
 
     virtual bool getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const {

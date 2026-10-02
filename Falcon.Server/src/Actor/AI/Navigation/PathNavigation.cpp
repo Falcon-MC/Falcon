@@ -31,19 +31,18 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (!mHasTarget)
         return;
 
-    const bool direct = mFlying
-                        || (mob.canSwim() && LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition()).water);
+    const bool freeMoving = mOptions.isVolumetric()
+                            || (mOptions.swimsThroughWater()
+                                && LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition()).water);
     if (mNeedsPath) {
+        Level &level = owner.getLevelFor(mob);
+        const bool direct = PathFinder::get().findDirectPath(level, mob, mTarget, mOptions, mPath);
         if (!direct && !PathFinder::tryReserveSearch(owner.getCurrentTick()))
             return;
 
         mNeedsPath = false;
         mob.getMoveControl().stop();
-        if (direct) {
-            mPath.clear();
-            mPath.add(mTarget);
-            mPath.setReachesTarget(true);
-        } else if (!PathFinder::get().findPath(owner.getLevelFor(mob), mob, mTarget, mOptions, mPath)) {
+        if (!direct && !PathFinder::get().findPath(level, mob, mTarget, mOptions, mPath)) {
             stop(mob);
             return;
         }
@@ -62,13 +61,13 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
         mPath.advance();
     }
 
-    _checkStuck(mob, direct);
+    _checkStuck(mob, freeMoving);
 }
 
-void PathNavigation::_checkStuck(MobActor &mob, bool direct) {
+void PathNavigation::_checkStuck(MobActor &mob, bool freeMoving) {
     const Vector3f position = mob.getPosition();
     const float dx = position.x - mLastPosition.x;
-    const float dy = direct ? position.y - mLastPosition.y : 0.0f;
+    const float dy = freeMoving ? position.y - mLastPosition.y : 0.0f;
     const float dz = position.z - mLastPosition.z;
     mLastPosition = position;
 

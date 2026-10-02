@@ -12,4 +12,8 @@ public:
     static bool matches(const std::string &identifier);
 
     bool canBeReplaced(const BlockState &state) const override;
+
+    PathHazard getPathHazard() const override {
+        return PathHazard::Damaging;
+    }
 };

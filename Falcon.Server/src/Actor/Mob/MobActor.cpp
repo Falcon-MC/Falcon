@@ -19,6 +19,7 @@
 #include "Item/Loot/LegacyItemMapper.h"
 #include "Item/Loot/LootItems.h"
 #include "Item/Loot/LootTableRegistry.h"
+#include "Level/Explosion.h"
 #include "Level/Level.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/ServerNetworkHandler.h"
@@ -101,6 +102,21 @@ namespace {
     const char *const EQUIPPABLE_COMPONENT = "minecraft:equippable";
     const int32_t EQUIPPABLE_BODY_SLOT = 1;
     const char *const ENTITY_SENSOR_COMPONENT = "minecraft:entity_sensor";
+    const char *const TARGET_NEARBY_SENSOR_COMPONENT = "minecraft:target_nearby_sensor";
+    const char *const HURT_ON_CONDITION_COMPONENT = "minecraft:hurt_on_condition";
+    const float TARGET_NEARBY_DEFAULT_INSIDE = 1.0f;
+    const float TARGET_NEARBY_DEFAULT_OUTSIDE = 5.0f;
+    const float INACTIVITY_PLAYER_RANGE_SQUARED = 32.0f * 32.0f;
+    const char *const MOVEMENT_COMPONENTS[] = {"minecraft:movement.basic", "minecraft:movement.amphibious",
+                                               "minecraft:movement.fly", "minecraft:movement.generic",
+                                               "minecraft:movement.hover", "minecraft:movement.jump",
+                                               "minecraft:movement.skip", "minecraft:movement.sway"};
+    const char *const STATIC_JUMP_COMPONENT = "minecraft:jump.static";
+    const float DEFAULT_MAX_TURN = 30.0f;
+    const float DEFAULT_JUMP_POWER = 0.42f;
+    const double SIGHT_STEP = 0.25;
+    const float SIGHT_EYE_RATIO = 0.85f;
+    const float PLAYER_EYE_HEIGHT = 1.62f;
     const float ENTITY_SENSOR_DEFAULT_RANGE = 10.0f;
     const char *const RIDEABLE_COMPONENT = "minecraft:rideable";
     const char *const TAMEMOUNT_COMPONENT = "minecraft:tamemount";
@@ -285,6 +301,10 @@ void MobActor::_registerGoals(ServerNetworkHandler &owner) {
         return;
 
     mGoalGroups = mComponentGroups;
+    PathOptions options = PathOptions::read(*this);
+    mMoveControl.setFlying(options.mMode == NavigationMode::Fly);
+    mNavigation.setOptions(std::move(options));
+
     mGoalSelector.clear(owner, *this);
     registerGoals(mGoalSelector);
     if (mGoalSelector.isEmpty())
@@ -344,6 +364,9 @@ void MobActor::_tickSensors(ServerNetworkHandler &owner) {
 
     mLookedAtSensor.tick(owner, *this);
     _tickEntitySensor(owner);
+    _tickTargetNearbySensor(owner);
+    _tickHurtOnCondition(owner);
+    _tickInactivity(owner);
 
     const json::Value *sensor = getComponent("minecraft:environment_sensor");
     const json::Value *triggers = sensor == nullptr ? nullptr : sensor->get("triggers");
@@ -453,6 +476,121 @@ int32_t MobActor::_countSensedEntities(ServerNetworkHandler &owner, const json::
     return count;
 }
 
+/**
+ * Fires the range events of `minecraft:target_nearby_sensor` on transitions only: entering the inside range,
+ * leaving past the outside range, and losing sight of the target while still inside. The gap between the two
+ * ranges is a hysteresis band so a target on the boundary does not toggle the events every tick.
+ */
+void MobActor::_tickTargetNearbySensor(ServerNetworkHandler &owner) {
+    const json::Value *sensor = getComponent(TARGET_NEARBY_SENSOR_COMPONENT);
+    const Actor *target = sensor == nullptr ? nullptr : getTarget(owner);
+    if (target == nullptr) {
+        mTargetInsideRange = false;
+        mTargetOutsideRange = false;
+        mTargetSeenInsideRange = false;
+        return;
+    }
+
+    const float inside = numberIn(sensor, "inside_range", TARGET_NEARBY_DEFAULT_INSIDE);
+    const float outside = numberIn(sensor, "outside_range", TARGET_NEARBY_DEFAULT_OUTSIDE);
+    const bool mustSee = flagIn(*sensor, "must_see");
+    const float distanceSquared = distanceSquaredTo(*target);
+    const bool visible = !mustSee || canSee(owner, *target);
+
+    if (distanceSquared <= inside * inside) {
+        mTargetOutsideRange = false;
+        if (visible && !mTargetSeenInsideRange) {
+            mTargetInsideRange = true;
+            mTargetSeenInsideRange = true;
+            EntityEvents::fireTrigger(owner, *this, sensor->get("on_inside_range"), getTarget(owner));
+        } else if (!visible && mTargetSeenInsideRange) {
+            mTargetSeenInsideRange = false;
+            EntityEvents::fireTrigger(owner, *this, sensor->get("on_vision_lost_inside_range"), getTarget(owner));
+        }
+        return;
+    }
+
+    if (distanceSquared > outside * outside && !mTargetOutsideRange) {
+        mTargetOutsideRange = true;
+        mTargetInsideRange = false;
+        mTargetSeenInsideRange = false;
+        EntityEvents::fireTrigger(owner, *this, sensor->get("on_outside_range"), getTarget(owner));
+    }
+}
+
+void MobActor::_tickHurtOnCondition(ServerNetworkHandler &owner) {
+    const json::Value *component = getComponent(HURT_ON_CONDITION_COMPONENT);
+    const json::Value *conditions = component == nullptr ? nullptr : component->get("damage_conditions");
+    if (conditions == nullptr || !conditions->isArray())
+        return;
+
+    for (const std::unique_ptr<json::Value> &condition: conditions->mArray) {
+        const json::Value *filters = condition->get("filters");
+        if (filters != nullptr && !EntityFilter::test(*filters, owner, *this))
+            continue;
+
+        const float damage = numberIn(condition.get(), "damage_per_tick", 1.0f);
+        const json::Value *cause = condition->get("cause");
+        const char *key = cause == nullptr ? nullptr : DamageCause::findDeathMessageKey(cause->string());
+        hurt(owner, damage, ActorDamageSource::environment(key == nullptr ? "death.attack.generic" : key, getName()));
+        if (isDead())
+            return;
+    }
+}
+
+/**
+ * Counts the ticks spent without a nearby player or recent damage, which is what the `inactivity_timer`
+ * filter measures for despawn rules.
+ */
+void MobActor::_tickInactivity(ServerNetworkHandler &owner) {
+    if (owner.getCurrentTick() - mLastHurtTick <= 1) {
+        mInactivityTicks = 0;
+        return;
+    }
+
+    const Vector3f position = getPosition();
+    for (auto &entry: owner.getPlayers()) {
+        const ServerPlayer &player = entry.second;
+        if (!player.isSpawned() || player.getDimension() != getDimension())
+            continue;
+
+        const Vector3f other = player.getPosition();
+        const float dx = other.x - position.x;
+        const float dy = other.y - position.y;
+        const float dz = other.z - position.z;
+        if (dx * dx + dy * dy + dz * dz <= INACTIVITY_PLAYER_RANGE_SQUARED) {
+            mInactivityTicks = 0;
+            return;
+        }
+    }
+    mInactivityTicks++;
+}
+
+float MobActor::getMaxTurn() const {
+    for (const char *name: MOVEMENT_COMPONENTS) {
+        const json::Value *movement = getComponent(name);
+        if (movement != nullptr)
+            return numberIn(movement, "max_turn", DEFAULT_MAX_TURN);
+    }
+    return DEFAULT_MAX_TURN;
+}
+
+float MobActor::getJumpPower() const {
+    const json::Value *jump = getComponent(STATIC_JUMP_COMPONENT);
+    return jump == nullptr ? -1.0f : numberIn(jump, "jump_power", DEFAULT_JUMP_POWER);
+}
+
+bool MobActor::canSee(ServerNetworkHandler &owner, const Actor &other) const {
+    const Vector3f from = getPosition();
+    const Vector3f to = other.getPosition();
+    const ServerActor *otherActor = dynamic_cast<const ServerActor *>(&other);
+    const float otherEyes = other.isPlayer() || otherActor == nullptr ? PLAYER_EYE_HEIGHT
+                                                                      : otherActor->getSize().mHeight * SIGHT_EYE_RATIO;
+    return !Explosion::isRayCollidingWithBlocks(owner.getLevelFor(*this), from.x,
+                                                from.y + getSize().mHeight * mScale * SIGHT_EYE_RATIO, from.z, to.x,
+                                                to.y + otherEyes, to.z, SIGHT_STEP);
+}
+
 bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
     const json::Value *sensor = getComponent(DAMAGE_SENSOR_COMPONENT);
     const json::Value *triggers = sensor == nullptr ? nullptr : sensor->get("triggers");
@@ -468,6 +606,7 @@ bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const Act
     }
 
     Actor *other = source.mAttacker != nullptr ? source.mAttacker : source.mDamager;
+    const EntityFilter::DamageScope damageScope(source, amount);
     bool dealsDamage = true;
     for (const json::Value *trigger: entries) {
         const json::Value *cause = trigger->get("cause");

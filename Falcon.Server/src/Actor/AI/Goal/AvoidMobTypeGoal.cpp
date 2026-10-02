@@ -144,12 +144,14 @@ void AvoidMobTypeGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     mSoundTicks = 0;
     if (mOptions.mRemoveTarget)
         mob.clearTarget();
+    mob.setAvoidingMobs(true);
     mob.getNavigation().moveTo(mDestination, mEntry->mWalkSpeed);
 }
 
 void AvoidMobTypeGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
     const bool escaped = mEntry != nullptr;
     mEntry = nullptr;
+    mob.setAvoidingMobs(false);
     mob.getNavigation().stop(mob);
     if (escaped)
         EntityEvents::fireTrigger(owner, mob, mOptions.mOnEscape.get());

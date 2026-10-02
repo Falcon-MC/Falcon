@@ -108,14 +108,10 @@ namespace {
 
     const char *const OPEN_DOOR_ANNOTATION = "minecraft:annotation.open_door";
     const char *const BREAK_DOOR_ANNOTATION = "minecraft:annotation.break_door";
-    const char *const FLEE_SUN_BEHAVIOR = "minecraft:behavior.flee_sun";
-    const char *const NAVIGATION_COMPONENTS[] = {"minecraft:navigation.walk", "minecraft:navigation.generic"};
     const int32_t DOOR_GOAL_PRIORITY = 1;
     const float BREAK_DOOR_DEFAULT_SECONDS = 12.0f;
 
     const char *const HOME_COMPONENT = "minecraft:home";
-    const char *const FLYING_NAVIGATION_COMPONENTS[] = {"minecraft:navigation.hover", "minecraft:navigation.fly",
-                                                        "minecraft:navigation.float"};
     const float MOVE_TO_BLOCK_DEFAULT_INTERVAL = 20.0f;
     const float MOVE_TO_BLOCK_DEFAULT_HEIGHT = 1.0f;
     const float MOVE_TO_BLOCK_DEFAULT_RADIUS = 0.5f;
@@ -140,7 +136,6 @@ namespace {
     const int32_t SWIM_WANDER_VERTICAL_RANGE = 2;
     const float SWIM_IDLE_DEFAULT_TIME = 5.0f;
     const float SWIM_IDLE_DEFAULT_RATE = 0.1f;
-    const char *const GLIDE_MOVEMENT_COMPONENT = "minecraft:movement.glide";
     const float CIRCLE_DEFAULT_GOAL_RADIUS = 0.5f;
     const float CIRCLE_DEFAULT_MIN_RADIUS = 5.0f;
     const float CIRCLE_DEFAULT_MAX_RADIUS = 15.0f;
@@ -331,26 +326,6 @@ namespace {
         return result;
     }
 
-    bool canOpenDoors(const MobActor &mob) {
-        if (mob.getComponent(OPEN_DOOR_ANNOTATION) != nullptr || mob.getComponent(BREAK_DOOR_ANNOTATION) != nullptr)
-            return true;
-
-        for (const char *name: NAVIGATION_COMPONENTS) {
-            const json::Value *navigation = mob.getComponent(name);
-            if (navigation != nullptr && isFlagSet(*navigation, "can_open_doors"))
-                return true;
-        }
-        return false;
-    }
-
-    bool canFly(const MobActor &mob) {
-        for (const char *name: FLYING_NAVIGATION_COMPONENTS) {
-            if (mob.getComponent(name) != nullptr)
-                return true;
-        }
-        return mob.getComponent(GLIDE_MOVEMENT_COMPONENT) != nullptr;
-    }
-
     float followRange(const MobActor &mob) {
         const json::Value *follow = mob.getComponent("minecraft:follow_range");
         return follow == nullptr ? TARGET_DEFAULT_RANGE : numberOf(*follow, "value", TARGET_DEFAULT_RANGE);
@@ -497,14 +472,6 @@ void BehaviorGoals::build(MobActor &mob, GoalSelector &selector) {
         if (goal != nullptr)
             selector.addGoal((int32_t) numberOf(*entry.second, "priority", 0.0f), std::move(goal));
     }
-
-    PathNavigation &navigation = mob.getNavigation();
-    navigation.setCanOpenDoors(canOpenDoors(mob));
-    navigation.setAvoidSun(mob.getComponent(FLEE_SUN_BEHAVIOR) != nullptr);
-
-    const bool flying = canFly(mob);
-    navigation.setFlying(flying);
-    mob.getMoveControl().setFlying(flying);
 
     if (mob.getComponent(HOME_COMPONENT) != nullptr && !mob.hasHome())
         mob.setHomePosition(mob.getPosition());
