@@ -4,6 +4,7 @@
 #include "Actor/Movement/PhysicsComponent.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Block.h"
+#include "Block/BlockShape.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Components/BlockBehavior.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
@@ -20,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace {
     const float AIR_FRICTION = 0.91f;
@@ -48,6 +50,7 @@ namespace {
     const float EDGE_STEP = 0.05f;
     const int32_t EDGE_MAX_ITERATIONS = 1000;
     const float SUPPORT_PROBE_DEPTH = 0.2f;
+    const float SUPPORT_PROBE_MARGIN = 1.0e-3f;
     const float MIN_BOUNCE_VELOCITY = 1.0e-4f;
     const float WALK_SLOWDOWN_LIMIT = 0.1f;
     const float WALK_SLOWDOWN_BASE = 0.4f;
@@ -263,12 +266,79 @@ namespace {
         return below == nullptr ? 1.0f : below->getJumpFactor();
     }
 
-    const BlockBehavior &behaviorUnder(Level &level, const Vector3f &feet) {
+    bool findSupportingBlock(Level &level, const AxisAlignedBB &probe, const Vector3f &feet, Vector3i &found) {
+        const float centerX = std::floor(feet.x) + 0.5f;
+        const float centerY = std::floor(feet.y) + 0.5f;
+        const float centerZ = std::floor(feet.z) + 0.5f;
+        float best = std::numeric_limits<float>::max();
+        bool any = false;
+        for (int32_t x = (int32_t) std::floor(probe.mMinX); x <= (int32_t) std::floor(probe.mMaxX); x++) {
+            for (int32_t y = (int32_t) std::floor(probe.mMinY) - 1; y <= (int32_t) std::floor(probe.mMaxY); y++) {
+                for (int32_t z = (int32_t) std::floor(probe.mMinZ); z <= (int32_t) std::floor(probe.mMaxZ); z++) {
+                    const BlockState *state = level.peekBlockPtr(x, y, z);
+                    if (state == nullptr || !BlockShape::hasCollision(*state))
+                        continue;
+                    if (!BlockShape::getShapeAt(*state, x, y, z).intersectsWith(probe))
+                        continue;
+
+                    const float dx = (float) x - centerX;
+                    const float dy = (float) y - centerY;
+                    const float dz = (float) z - centerZ;
+                    const float distance = dx * dx + dy * dy + dz * dz;
+                    if (distance < best) {
+                        best = distance;
+                        found = Vector3i(x, y, z);
+                        any = true;
+                    }
+                }
+            }
+        }
+        return any;
+    }
+
+    const BlockBehavior &behaviorAt(Level &level, int32_t x, int32_t y, int32_t z) {
         static const BlockBehavior air;
-        const BlockState *below = level.peekBlockPtr((int32_t) std::floor(feet.x),
-                                                     (int32_t) std::floor(feet.y - SUPPORT_PROBE_DEPTH),
-                                                     (int32_t) std::floor(feet.z));
-        return below == nullptr ? air : Block(*below).getBehavior();
+        const BlockState *state = level.peekBlockPtr(x, y, z);
+        return state == nullptr ? air : Block(*state).getBehavior();
+    }
+
+    const BlockBehavior &behaviorUnder(Level &level, const Vector3f &feet, const ServerPlayer &player) {
+        if (player.hasSupportingBlock()) {
+            const Vector3i &support = player.getSupportingBlock();
+            return behaviorAt(level, support.x, support.y, support.z);
+        }
+
+        const int32_t x = (int32_t) std::floor(feet.x);
+        const int32_t y = (int32_t) std::floor(feet.y - SUPPORT_PROBE_DEPTH);
+        const int32_t z = (int32_t) std::floor(feet.z);
+        const BlockState *under = level.peekBlockPtr(x, y, z);
+        if (under == nullptr || BlockShape::hasCollision(*under))
+            return behaviorAt(level, x, y, z);
+
+        const int32_t belowY = (int32_t) std::floor(feet.y) - 1;
+        const BlockState *below = level.peekBlockPtr(x, belowY, z);
+        if (below != nullptr && BlockShape::hasCollision(*below)
+            && BlockShape::getShapeAt(*below, x, belowY, z).mMaxY > (float) belowY + 1.0f)
+            return behaviorAt(level, x, belowY, z);
+        return behaviorAt(level, x, y, z);
+    }
+
+    void updateSupportingBlock(Level &level, ServerPlayer &player, const AxisAlignedBB &box, const Vector3f &feet,
+                               bool onGround, const Vector3f &requested) {
+        if (!onGround) {
+            player.clearSupportingBlock();
+            return;
+        }
+
+        AxisAlignedBB probe = box;
+        probe.mMinY -= SUPPORT_PROBE_MARGIN;
+        Vector3i found;
+        if (findSupportingBlock(level, probe, feet, found)
+            || findSupportingBlock(level, probe.offset(-requested.x, 0.0f, -requested.z), feet, found)) {
+            player.setSupportingBlock(found);
+            return;
+        }
+        player.clearSupportingBlock();
     }
 
     float landingVelocity(const BlockBehavior &under, float velocityY) {
@@ -425,7 +495,13 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     }
 
     const Block *inside = blockAt(level, start.x, start.y, start.z);
-    const BlockTraversal traversal = inside == nullptr ? BlockTraversal::None : inside->getTraversal();
+    BlockTraversal traversal = inside == nullptr ? BlockTraversal::None : inside->getTraversal();
+    if (traversal == BlockTraversal::None && player.hasSupportingBlock()) {
+        const Vector3i &support = player.getSupportingBlock();
+        const Block *supporting = blockAt(level, (float) support.x, (float) support.y, (float) support.z);
+        if (supporting != nullptr && supporting->getTraversal() == BlockTraversal::Scaffolding)
+            traversal = BlockTraversal::Scaffolding;
+    }
     bool scaffoldDescend = false;
     if (traversal == BlockTraversal::Scaffolding) {
         if (pressingSneak) {
@@ -466,7 +542,8 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     const bool wasOnGround = onGround;
     onGround = moved.mOnGround;
 
-    const BlockBehavior &under = behaviorUnder(level, simulated);
+    updateSupportingBlock(level, player, box, simulated, moved.mOnGround, velocity);
+    const BlockBehavior &under = behaviorUnder(level, simulated, player);
     if (simulated.y == start.y && onGround && !sneaking && !pressingSneak && under.slowsWalking()) {
         const float vertical = std::fabs(moved.mMoved.y);
         if (vertical < WALK_SLOWDOWN_LIMIT) {

@@ -332,6 +332,7 @@ namespace {
                 owner.getNetworkHandler().send(player.getNetworkIdentifier(), update, owner.getCodecContext());
             }
         }
+        player.awaitMovementChange();
     }
 
     bool isInSpawnProtection(ServerNetworkHandler &owner, ServerPlayer &player, Level &level,

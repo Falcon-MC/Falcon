@@ -129,7 +129,19 @@ public:
         mSimulatedSneaking = false;
         mSimulatedCrawling = false;
         mSlowdownTicks = 0;
+        mHasSupportingBlock = false;
     }
+
+    bool hasSupportingBlock() const { return mHasSupportingBlock; }
+
+    const Vector3i &getSupportingBlock() const { return mSupportingBlock; }
+
+    void setSupportingBlock(const Vector3i &position) {
+        mSupportingBlock = position;
+        mHasSupportingBlock = true;
+    }
+
+    void clearSupportingBlock() { mHasSupportingBlock = false; }
 
     int32_t getSlowdownTicks() const { return mSlowdownTicks; }
 
@@ -607,6 +619,8 @@ private:
     bool mSimulatedSneaking = false;
     bool mSimulatedCrawling = false;
     int32_t mSlowdownTicks = 0;
+    bool mHasSupportingBlock = false;
+    Vector3i mSupportingBlock;
     PlayerAcknowledgements mAcknowledgements;
     int32_t mPendingMovementChanges = 0;
     bool mHasPendingKnockback = false;
