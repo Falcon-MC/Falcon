@@ -26,6 +26,8 @@ public:
 
     const SimplexNoise &getSulfurCaveGradient() const { return *mSulfurCaveGradient; }
 
+    const SimplexNoise &getIceCaveGradient() const { return *mIceCaveGradient; }
+
 private:
     explicit FeatureNoiseHolder(IRandom &random);
 
@@ -36,4 +38,5 @@ private:
     std::shared_ptr<SimplexF> mSculkPatch;
     std::shared_ptr<SimplexNoise> mKelp;
     std::shared_ptr<SimplexNoise> mSulfurCaveGradient;
+    std::shared_ptr<SimplexNoise> mIceCaveGradient;
 };

@@ -33,6 +33,7 @@ BiomeRegistry::BiomeRegistry() {
     add("frozen_peaks");
     add("frozen_river");
     add("grove");
+    add("ice_caves");
     add("ice_spikes");
     add("jagged_peaks");
     add("jungle");

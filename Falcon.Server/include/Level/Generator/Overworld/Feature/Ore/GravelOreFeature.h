@@ -14,5 +14,9 @@ public:
 
     int32_t getMaxHeight() const override;
 
+    bool isIntrusiveDeposit() const override {
+        return true;
+    }
+
     const char *name() const override;
 };

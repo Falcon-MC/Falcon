@@ -1480,6 +1480,8 @@ public:
     static const int32_t BLACK_CONCRETE_STAIRS = 11896;
     static const int32_t SHELF_MUSHROOM = 11897;
     static const int32_t RED_SHRUB = 11898;
+    static const int32_t ICE_CRYSTAL = 11899;
+    static const int32_t ICICLE = 11900;
 
-    static const int32_t FIRST_UNUSED_BLOCK_ID = 11899;
+    static const int32_t FIRST_UNUSED_BLOCK_ID = 11901;
 };

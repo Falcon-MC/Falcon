@@ -1,6 +1,7 @@
 #include "Level/Generator/Overworld/Feature/Decoration/MultifaceFeature.h"
 
 #include "Block/Blocks/VanillaBlocks.h"
+#include "Level/Generator/Biome/BiomeChunkGenDataRegistry.h"
 #include "Level/Generator/Feature/BlockManager.h"
 #include "Level/Generator/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "Level/Level.h"
@@ -13,6 +14,7 @@ namespace {
     const int32_t MAX_ABSOLUTE_Y = 256;
     const int32_t MAX_SURFACE_RELATIVE_Y = -13;
     const int32_t NO_FACE = -1;
+    const char *const NO_GLOW_LICHEN_TAG = "no_glow_lichen";
 
     const int32_t DUSWNE_INDEX[6] = {0, 1, 4, 2, 3, 5};
 
@@ -108,6 +110,10 @@ void MultifaceFeature::populate(ChunkGenerateContext &context, IRandom &random) 
     const int32_t x = (chunk.getX() << 4) + random.nextInt(14) + 1;
     const int32_t z = (chunk.getZ() << 4) + random.nextInt(14) + 1;
     const int32_t y = random.nextInt(minY, maxY);
+
+    const int32_t biomeId = (int32_t) chunk.getBiomeAt(x & 0x0f, y, z & 0x0f);
+    if (BiomeChunkGenDataRegistry::hasTag(biomeId, NO_GLOW_LICHEN_TAG))
+        return;
 
     if (y > _getOceanFloorHeight(manager, x, z, minY, maxY) + MAX_SURFACE_RELATIVE_Y)
         return;

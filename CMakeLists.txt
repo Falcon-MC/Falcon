@@ -93,7 +93,7 @@ FetchContent_MakeAvailable(falcon_block_state_updater)
 FetchContent_Declare(
     falcon_bedrock_data
     GIT_REPOSITORY https://github.com/Falcon-MC/BedrockData.git
-    GIT_TAG main
+    GIT_TAG bedrock-1.26.60.29-preview
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
     SOURCE_SUBDIR cmake

@@ -50,6 +50,11 @@
 #include "Level/Generator/Overworld/Feature/Decoration/SulfurSpikeClusterFeature.h"
 #include "Level/Generator/Overworld/Feature/Decoration/SulfurSpikeFeature.h"
 #include "Level/Generator/Overworld/Feature/Decoration/SulfurSpringTrailToSurfaceFeature.h"
+#include "Level/Generator/Overworld/Feature/Decoration/IceCavesSnowLayerFeature.h"
+#include "Level/Generator/Overworld/Feature/Decoration/IceCavesSurfaceFeature.h"
+#include "Level/Generator/Overworld/Feature/Decoration/IceCrystalScatterFeature.h"
+#include "Level/Generator/Overworld/Feature/Decoration/IcicleClusterFeature.h"
+#include "Level/Generator/Overworld/Feature/Decoration/LargeIcicleFeature.h"
 #include "Level/Generator/Overworld/Feature/Decoration/SwampFlowerDiscFeature.h"
 #include "Level/Generator/Overworld/Feature/Decoration/SwampSeagrassFeature.h"
 #include "Level/Generator/Overworld/Feature/Decoration/SweetBerryBushFeature.h"
@@ -119,6 +124,11 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<SulfurSpikeClusterFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SulfurSpikeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SulfurSpringTrailToSurfaceFeature>());
+    GenerateFeatureRegistry::registerFeature(std::make_shared<IceCavesSurfaceFeature>());
+    GenerateFeatureRegistry::registerFeature(std::make_shared<IceCrystalScatterFeature>());
+    GenerateFeatureRegistry::registerFeature(std::make_shared<IcicleClusterFeature>());
+    GenerateFeatureRegistry::registerFeature(std::make_shared<LargeIcicleFeature>());
+    GenerateFeatureRegistry::registerFeature(std::make_shared<IceCavesSnowLayerFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SwampFlowerDiscFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SweetBerryBushFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<TaigaGrassFeature>());

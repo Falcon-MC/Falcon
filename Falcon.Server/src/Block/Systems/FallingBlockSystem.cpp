@@ -27,6 +27,7 @@ namespace {
             "minecraft:dragon_egg",
             "minecraft:scaffolding",
             "minecraft:pointed_dripstone",
+            "minecraft:icicle",
             "minecraft:white_concrete_powder",
             "minecraft:orange_concrete_powder",
             "minecraft:magenta_concrete_powder",
@@ -207,9 +208,13 @@ void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &leve
         return;
     }
 
-    if (state.mName == "minecraft:pointed_dripstone" && state.mStates.getBool("hanging", false)) {
+    if (state.mName == "minecraft:icicle" && !state.mStates.getBool("hanging", false))
+        return;
+
+    if ((state.mName == "minecraft:pointed_dripstone" || state.mName == "minecraft:icicle")
+        && state.mStates.getBool("hanging", false)) {
         const BlockState above = level.getBlockState(position.x, position.y + 1, position.z);
-        if (level.isSolidAt(position.x, position.y + 1, position.z) || above.mName == "minecraft:pointed_dripstone")
+        if (level.isSolidAt(position.x, position.y + 1, position.z) || above.mName == state.mName)
             return;
     }
 

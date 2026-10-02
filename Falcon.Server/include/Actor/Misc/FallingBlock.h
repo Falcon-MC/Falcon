@@ -71,7 +71,12 @@ private:
 
     void _onDripstoneLanded(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
 
-    void _damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i &position, const std::string &deathKey);
+    void _onIcicleLanded(ServerNetworkHandler &owner, const Vector3i &position);
+
+    float _anvilDamage() const;
+
+    void _damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i &position, const std::string &deathKey,
+                           float damage);
 
     BlockState mBlockState;
     bool mBreakOnLava = false;

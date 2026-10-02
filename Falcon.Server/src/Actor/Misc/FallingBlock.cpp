@@ -2,6 +2,7 @@
 
 #include "Actor/ActorClassRegistry.h"
 #include "Actor/ServerPlayer.h"
+#include "Block/Blocks/IcicleBlock.h"
 #include "Block/BlockData.h"
 #include "Block/BlockSupport.h"
 #include "Block/Systems/BlockChangeSystem.h"
@@ -28,6 +29,8 @@ namespace {
     const int32_t ACTOR_DATA_VARIANT = 2;
     const char *ANVIL_DEATH_KEY = "death.attack.anvil";
     const char *DRIPSTONE_DEATH_KEY = "death.attack.stalagmite";
+    const char *ICICLE_DEATH_KEY = "death.attack.fallingBlock";
+    const float ICICLE_DAMAGE_OFFSET = 1.0f;
 }
 
 FallingBlock::FallingBlock(uint64_t runtimeId, const BlockState &blockState)
@@ -171,8 +174,13 @@ void FallingBlock::_land(ServerNetworkHandler &owner, const Vector3i &position) 
         ++target.y;
     }
 
+    if (mBlockState.mName == IcicleBlock::IDENTIFIER) {
+        _onIcicleLanded(owner, target);
+        return;
+    }
+
     const BlockState existing = level.getBlockState(position.x, position.y, position.z);
-    const bool blocked = existing.mName != "minecraft:air" && FallingBlockSystem::isTransparent(existing) &&
+    const bool blocked =existing.mName != "minecraft:air" && FallingBlockSystem::isTransparent(existing) &&
                          !BlockSupport::isReplaceable(existing);
 
     if (blocked) {
@@ -216,7 +224,7 @@ void FallingBlock::_place(ServerNetworkHandler &owner, const Vector3i &position,
 
 void FallingBlock::_onAnvilLanded(ServerNetworkHandler &owner, const Vector3i &position,
                                        const BlockState &state) {
-    _damageEntitiesAt(owner, position, ANVIL_DEATH_KEY);
+    _damageEntitiesAt(owner, position, ANVIL_DEATH_KEY, _anvilDamage());
 
     Level &level = owner.getLevelFor(*this);
     if (getFallDistance() > (float) ANVIL_BREAK_FALL_DISTANCE) {
@@ -237,7 +245,7 @@ void FallingBlock::_onDripstoneLanded(ServerNetworkHandler &owner, const Vector3
                                            const BlockState &state) {
     (void) state;
 
-    _damageEntitiesAt(owner, position, DRIPSTONE_DEATH_KEY);
+    _damageEntitiesAt(owner, position, DRIPSTONE_DEATH_KEY, _anvilDamage());
 
     const Vector3f soundPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
                                  (float) position.z + 0.5f);
@@ -245,14 +253,21 @@ void FallingBlock::_onDripstoneLanded(ServerNetworkHandler &owner, const Vector3
                          ANVIL_LAND_PITCH);
 }
 
+float FallingBlock::_anvilDamage() const {
+    return std::min(ANVIL_MAX_DAMAGE, std::max(0.0f, getFallDistance() * ANVIL_DAMAGE_PER_FALL_DISTANCE));
+}
+
+void FallingBlock::_onIcicleLanded(ServerNetworkHandler &owner, const Vector3i &position) {
+    _damageEntitiesAt(owner, position, ICICLE_DEATH_KEY,
+                      std::max(0.0f, std::floor(getFallDistance()) - ICICLE_DAMAGE_OFFSET));
+    FallingBlockSystem::spawnDestroyParticle(owner, owner.getLevelFor(*this), position, mBlockState);
+}
+
 void FallingBlock::_damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i &position,
-                                          const std::string &deathKey) {
-    const float fallDistance = getFallDistance();
-    if (fallDistance <= 0.0f)
+                                          const std::string &deathKey, float damage) {
+    if (getFallDistance() <= 0.0f)
         return;
 
-    const float damage = std::min(ANVIL_MAX_DAMAGE,
-                                  std::max(0.0f, fallDistance * ANVIL_DAMAGE_PER_FALL_DISTANCE));
     if (damage <= 0.0f)
         return;
 

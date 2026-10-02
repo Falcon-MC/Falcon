@@ -116,6 +116,8 @@ namespace {
             {BlockTypeIds::OAK_LOG, "minecraft:oak_log", "Oak Log", 2.0f, 2.0f, BlockToolType::Axe, BlockToolTier::None, true, false, 0, false, true, 5, 5, 0, BlockDropKind::Self, "", 1, 1},
             {BlockTypeIds::BROWN_STAINED_GLASS_PANE, "minecraft:brown_stained_glass_pane", "Brown Stained Glass Pane", 0.3f, 1.5f, BlockToolType::None, BlockToolTier::None, true, true, 0, true, false, 0, 0, 1, BlockDropKind::Nothing, "", 0, 0},
             {BlockTypeIds::SULFUR_SPIKE, "minecraft:sulfur_spike", "Sulfur Spike", 1.5f, 3.0f, BlockToolType::Pickaxe, BlockToolTier::Wooden, false, false, 0, false, true, 0, 0, 1, BlockDropKind::Self, "", 1, 1},
+            {BlockTypeIds::ICE_CRYSTAL, "minecraft:ice_crystal", "Ice Crystal", 0.5f, 0.5f, BlockToolType::Pickaxe, BlockToolTier::None, true, false, 4, true, false, 0, 0, 0, BlockDropKind::Self, "", 1, 1},
+            {BlockTypeIds::ICICLE, "minecraft:icicle", "Icicle", 0.5f, 0.5f, BlockToolType::Pickaxe, BlockToolTier::None, true, false, 0, true, false, 0, 0, 0, BlockDropKind::Self, "", 1, 1},
             {BlockTypeIds::END_BRICKS, "minecraft:end_bricks", "End Stone Bricks", 3.0f, 9.0f, BlockToolType::Pickaxe, BlockToolTier::Wooden, false, false, 0, false, true, 0, 0, 0, BlockDropKind::Self, "", 1, 1},
             {BlockTypeIds::MAGENTA_SHULKER_BOX, "minecraft:magenta_shulker_box", "Magenta Shulker Box", 2.0f, 10.0f, BlockToolType::Pickaxe, BlockToolTier::None, false, false, 0, true, false, 0, 0, 1, BlockDropKind::Self, "", 1, 1, nullptr, 1},
             {BlockTypeIds::PACKED_ICE, "minecraft:packed_ice", "Packed Ice", 0.5f, 2.5f, BlockToolType::Pickaxe, BlockToolTier::None, true, true, 0, false, true, 0, 0, 0, BlockDropKind::Nothing, "", 0, 0},
