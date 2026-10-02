@@ -172,15 +172,6 @@ public:
         return getFloat("player-position-acceptance-threshold");
     }
 
-    float getPlayerPositionAcceptanceThresholdScaled() const {
-        return getPlayerPositionAcceptanceThreshold() / 100.0f;
-    }
-
-    float getPlayerPositionAcceptanceThresholdSquared() const {
-        const float scaled = getPlayerPositionAcceptanceThresholdScaled();
-        return scaled * scaled;
-    }
-
     float getPlayerMovementActionDirectionThreshold() const {
         return getFloat("player-movement-action-direction-threshold");
     }

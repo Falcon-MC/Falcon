@@ -1,6 +1,7 @@
 #include "Network/Handler/MovementHandler.h"
 
 #include "Actor/ActorFlags.h"
+#include "Actor/Movement/PlayerMovementSimulator.h"
 #include "Actor/Movement/RideControlSystem.h"
 #include "Actor/RideSystem.h"
 #include "Actor/ServerPlayer.h"
@@ -315,10 +316,12 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
 
 void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                             ServerPlayer &player, const PlayerAuthInputPacket &packet) {
-    const Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
-                                packet.mPosition.z);
+    Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
+                          packet.mPosition.z);
+    PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition);
     player.queueMove(feetPosition, packet.mRotation);
-    player.setMotion(packet.mDelta);
+    if (!player.hasSimulatedVelocity())
+        player.setMotion(packet.mDelta);
     if (player.isRiding())
         RideControlSystem::receiveInput(owner, player, packet);
 

@@ -9,6 +9,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    bool getStuckMultiplier(Vector3f &multiplier) const override;
+
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                        const BlockState &state) const override;
 };

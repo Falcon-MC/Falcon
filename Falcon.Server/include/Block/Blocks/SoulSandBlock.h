@@ -12,4 +12,8 @@ public:
     float getSpeedFactor() const override {
         return 0.4f;
     }
+
+    float getAccelerationFrictionMultiplier() const override {
+        return 1.225f;
+    }
 };

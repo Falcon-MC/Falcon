@@ -1,7 +1,9 @@
 #include "Block/Components/BlockBehaviorRegistry.h"
 
 #include "Block/Components/BlockBehavior.h"
+#include "Block/Blocks/BedBlockBehavior.h"
 #include "Block/Blocks/BlueIceBlockBehavior.h"
+#include "Block/Blocks/HoneyBlockBehavior.h"
 #include "Block/Blocks/IceBlockBehavior.h"
 #include "Block/Blocks/SlimeBlockBehavior.h"
 
@@ -35,9 +37,21 @@ namespace {
         return behavior;
     }
 
+    const BedBlockBehavior &bedBehavior() {
+        static const BedBlockBehavior behavior;
+        return behavior;
+    }
+
+    const HoneyBlockBehavior &honeyBehavior() {
+        static const HoneyBlockBehavior behavior;
+        return behavior;
+    }
+
     void registerVanillaBehaviors() {
         static const bool registered = [] {
             BlockBehaviorRegistry::registerBehavior("minecraft:slime", slimeBehavior());
+            BlockBehaviorRegistry::registerBehavior("minecraft:bed", bedBehavior());
+            BlockBehaviorRegistry::registerBehavior("minecraft:honey_block", honeyBehavior());
             BlockBehaviorRegistry::registerBehavior("minecraft:ice", iceBehavior());
             BlockBehaviorRegistry::registerBehavior("minecraft:packed_ice", iceBehavior());
             BlockBehaviorRegistry::registerBehavior("minecraft:frosted_ice", iceBehavior());

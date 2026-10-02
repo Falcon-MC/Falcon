@@ -188,6 +188,8 @@ void Actor::knockBack(float x, float z, float force, float verticalLimit) {
     motion.y = std::min(motion.y * 0.5f + base, verticalLimit);
     motion.z = motion.z * 0.5f + z * inverse * base;
     setMotion(motion);
+    if (isPlayer())
+        static_cast<ServerPlayer *>(this)->queueKnockback(motion);
 }
 
 float Actor::getFood() const {

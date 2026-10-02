@@ -16,6 +16,10 @@ public:
         return true;
     }
 
+    BlockTraversal getTraversal() const override {
+        return BlockTraversal::Scaffolding;
+    }
+
     Vector3i resolvePlacementPosition(Level &level, const Vector3i &position, int blockFace) const override;
 
     bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;

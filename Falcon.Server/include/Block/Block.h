@@ -51,6 +51,12 @@ enum class PlacementMergeResult {
     Rejected
 };
 
+enum class BlockTraversal {
+    None,
+    Scaffolding,
+    PowderSnow
+};
+
 enum class PistonMoveReaction {
     Normal,
     Break,
@@ -119,6 +125,19 @@ public:
 
     virtual float getJumpFactor() const {
         return 1.0f;
+    }
+
+    virtual float getAccelerationFrictionMultiplier() const {
+        return 1.0f;
+    }
+
+    virtual BlockTraversal getTraversal() const {
+        return BlockTraversal::None;
+    }
+
+    virtual bool getStuckMultiplier(Vector3f &multiplier) const {
+        (void) multiplier;
+        return false;
     }
 
     virtual bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {

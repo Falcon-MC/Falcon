@@ -21,3 +21,8 @@ void CobwebBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const
     actor.makeStuckInBlock(STUCK_MULTIPLIER);
     actor.resetFallDistance();
 }
+
+bool CobwebBlock::getStuckMultiplier(Vector3f &multiplier) const {
+    multiplier = STUCK_MULTIPLIER;
+    return true;
+}

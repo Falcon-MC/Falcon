@@ -14,7 +14,7 @@ public:
     }
 
     float getJumpFactor() const override {
-        return 0.5f;
+        return 0.6f;
     }
 
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,

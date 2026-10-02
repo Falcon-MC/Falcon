@@ -99,6 +99,64 @@ public:
 
     bool isFlying() const { return mFlying; }
 
+    bool hasSimulatedVelocity() const { return mHasSimulatedVelocity; }
+
+    const Vector3f &getSimulatedVelocity() const { return mSimulatedVelocity; }
+
+    void setSimulatedVelocity(const Vector3f &velocity) {
+        mSimulatedVelocity = velocity;
+        mHasSimulatedVelocity = true;
+    }
+
+    void clearSimulatedVelocity() { mHasSimulatedVelocity = false; }
+
+    bool hasSimulatedPosition() const { return mHasSimulatedPosition; }
+
+    const Vector3f &getSimulatedPosition() const { return mSimulatedPosition; }
+
+    void setSimulatedPosition(const Vector3f &position) {
+        mSimulatedPosition = position;
+        mHasSimulatedPosition = true;
+    }
+
+    void clearSimulatedPosition() { mHasSimulatedPosition = false; }
+
+    void clearMovementSimulation() {
+        mHasSimulatedVelocity = false;
+        mHasSimulatedPosition = false;
+        mHasPendingKnockback = false;
+        mSimulatedSneaking = false;
+        mSimulatedCrawling = false;
+    }
+
+    bool isSimulatedSneaking() const { return mSimulatedSneaking; }
+
+    bool isSimulatedCrawling() const { return mSimulatedCrawling; }
+
+    void setSimulatedPose(bool sneaking, bool crawling) {
+        mSimulatedSneaking = sneaking;
+        mSimulatedCrawling = crawling;
+    }
+
+    int32_t getJumpDelay() const { return mJumpDelay; }
+
+    void setJumpDelay(int32_t ticks) { mJumpDelay = ticks; }
+
+    void queueKnockback(const Vector3f &motion) {
+        mPendingKnockback = motion;
+        mHasPendingKnockback = true;
+    }
+
+    bool takeKnockback(Vector3f &out) {
+        if (!mHasPendingKnockback)
+            return false;
+        out = mPendingKnockback;
+        mHasPendingKnockback = false;
+        return true;
+    }
+
+    void clearPendingKnockback() { mHasPendingKnockback = false; }
+
     void setFlying(bool flying) {
         if (mFlying == flying)
             return;
@@ -514,6 +572,15 @@ private:
     int64_t mFirstPlayed = 0;
     bool mIsOp = false;
     bool mFlying = false;
+    bool mHasSimulatedVelocity = false;
+    Vector3f mSimulatedVelocity;
+    bool mHasSimulatedPosition = false;
+    Vector3f mSimulatedPosition;
+    int32_t mJumpDelay = 0;
+    bool mSimulatedSneaking = false;
+    bool mSimulatedCrawling = false;
+    bool mHasPendingKnockback = false;
+    Vector3f mPendingKnockback;
     PlayerInventory mInventory;
     uint64_t mLastHurtByRuntimeId = 0;
     int64_t mLastHurtByTick = 0;

@@ -12,6 +12,8 @@ public:
     void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
 
+    bool getStuckMultiplier(Vector3f &multiplier) const override;
+
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                        const BlockState &state) const override;
 };

@@ -469,6 +469,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mEnchantmentSeed = 0;
     startGame.mBlockNetworkIdsHashed = owner.getProperties().getBlockNetworkIdsAreHashes();
     startGame.mInventoriesServerAuthoritative = true;
+    startGame.mRewindHistorySize = 40;
 
     startGame.mBlockProperties = DataDrivenBlockDefinitions::getAll();
     const std::vector<BlockPropertyData> &customBlocks = CustomContentRegistry::getInstance().getBlockProperties();
