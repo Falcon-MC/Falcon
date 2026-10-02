@@ -1,10 +1,10 @@
 #pragma once
 
-#include "Block/Block.h"
+#include "Block/Blocks/SpeleothemBlock.h"
 
-class PointedDripstoneBlock : public Block {
+class PointedDripstoneBlock : public SpeleothemBlock {
 public:
-    explicit PointedDripstoneBlock(const Block &block) : Block(block) {
+    explicit PointedDripstoneBlock(const Block &block) : SpeleothemBlock(block) {
     }
 
     static constexpr const char *IDENTIFIER = "minecraft:pointed_dripstone";
@@ -15,17 +15,5 @@ public:
                       const BlockState &state) const override;
 
 private:
-    static bool isHanging(const BlockState &state);
-
-    static bool pointsTowards(const BlockState &state, bool hanging);
-
-    static bool findTip(Level &level, const Vector3i &root, bool hanging, Vector3i &tip);
-
-    static bool canTipGrow(Level &level, const Vector3i &tip, bool hanging);
-
-    static void grow(Level &level, const Vector3i &tip, bool hanging);
-
-    static void growStalagmiteBelow(Level &level, const Vector3i &tip);
-
-    static void refreshThickness(Level &level, const Vector3i &position, bool hanging);
+    void growStalagmiteBelow(Level &level, const Vector3i &tip) const;
 };

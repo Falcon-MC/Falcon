@@ -16,5 +16,13 @@ public:
 
     bool isRare() const override;
 
+    bool isIntrusiveDeposit() const override {
+        return true;
+    }
+
+    const char *getExcludingBiomeTag() const override {
+        return "no_granite";
+    }
+
     const char *name() const override;
 };

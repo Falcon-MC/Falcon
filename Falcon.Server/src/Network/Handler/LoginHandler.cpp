@@ -67,6 +67,18 @@ namespace {
     const int64_t RESOURCE_PACK_CHUNK_SIZE = 1024 * 1024;
     const float PLAYER_BASE_OFFSET = 1.62f;
     const size_t SPAWN_CHUNK_THRESHOLD = 56;
+    const char *const ENABLED_EXPERIMENTS[] = {"y_2026_drop_4", "data_driven_vanilla_blocks_and_items"};
+
+    std::vector<ExperimentData> enabledExperiments() {
+        std::vector<ExperimentData> experiments;
+        for (const char *name: ENABLED_EXPERIMENTS) {
+            ExperimentData experiment;
+            experiment.mName = name;
+            experiment.mEnabled = true;
+            experiments.push_back(experiment);
+        }
+        return experiments;
+    }
 
     Uuid listUuidFor(const ServerPlayer &player) {
         Uuid parsed = Uuid::fromString(player.getUuid());
@@ -378,6 +390,8 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
             ResourcePackStackPacket stack;
             stack.mForcedToAccept = owner.getProperties().getTexturePackRequired();
             stack.mGameVersion = owner.getAnnouncement().mGameVersion;
+            stack.mExperiments = enabledExperiments();
+            stack.mExperimentsPreviouslyToggled = true;
 
             for (const ResourcePack &pack: owner.getResourcePacks().getPacks()) {
                 ResourcePackStackPacket::Entry entry;
@@ -469,6 +483,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mEnchantmentSeed = 0;
     startGame.mBlockNetworkIdsHashed = owner.getProperties().getBlockNetworkIdsAreHashes();
     startGame.mInventoriesServerAuthoritative = true;
+    startGame.mExperiments = enabledExperiments();
+    startGame.mExperimentsPreviouslyToggled = true;
     startGame.mRewindHistorySize = 40;
 
     startGame.mBlockProperties = DataDrivenBlockDefinitions::getAll();

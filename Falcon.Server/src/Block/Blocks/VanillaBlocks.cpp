@@ -487,6 +487,14 @@ Block VanillaBlocks::SULFUR_SPIKE() {
     return buildFromTypeId(BlockTypeIds::SULFUR_SPIKE);
 }
 
+Block VanillaBlocks::ICE_CRYSTAL() {
+    return buildFromTypeId(BlockTypeIds::ICE_CRYSTAL);
+}
+
+Block VanillaBlocks::ICICLE() {
+    return buildFromTypeId(BlockTypeIds::ICICLE);
+}
+
 Block VanillaBlocks::END_BRICKS() {
     return buildFromTypeId(BlockTypeIds::END_BRICKS);
 }

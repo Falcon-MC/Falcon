@@ -223,6 +223,10 @@ public:
 
     static Block SULFUR_SPIKE();
 
+    static Block ICE_CRYSTAL();
+
+    static Block ICICLE();
+
     static Block END_BRICKS();
 
     static Block MAGENTA_SHULKER_BOX();

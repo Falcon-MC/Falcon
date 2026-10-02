@@ -29,6 +29,9 @@ FeatureNoiseHolder::FeatureNoiseHolder(IRandom &random) {
 
     const IRandomPtr sulfurRandom = random.fork();
     mSulfurCaveGradient = std::make_shared<SimplexNoise>(*sulfurRandom, -5, std::vector<float>{1.0f, 0.0f, 1.0f});
+
+    const IRandomPtr iceRandom = random.fork();
+    mIceCaveGradient = std::make_shared<SimplexNoise>(*iceRandom, -4, std::vector<float>{1.0f, 0.0f, 1.0f});
 }
 
 void FeatureNoiseHolder::initialize(IRandom &random) {

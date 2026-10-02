@@ -72,6 +72,7 @@ namespace {
                 {"cherry_grove",                   BiomeIds::CHERRY_GROVE},
                 {"pale_garden",                    BiomeIds::PALE_GARDEN},
                 {"sulfur_caves",                   BiomeIds::SULFUR_CAVES},
+                {"ice_caves",                      BiomeIds::ICE_CAVES},
                 {"hell",                           NetherBiomeIds::HELL},
                 {"soulsand_valley",                NetherBiomeIds::SOULSAND_VALLEY},
                 {"crimson_forest",                 NetherBiomeIds::CRIMSON_FOREST},
@@ -81,6 +82,28 @@ namespace {
         };
 
         return map;
+    }
+
+    BiomeFeatureEntry featureEntry(const char *identifier, const char *feature) {
+        BiomeFeatureEntry entry;
+        entry.mIdentifier = identifier;
+        entry.mFeature = feature;
+        entry.mEvalOrder = 1;
+        return entry;
+    }
+
+    std::vector<BiomeFeatureEntry> iceCavesFeatures() {
+        return {
+                featureEntry("minecraft:ice_caves_surface_feature_rules", "minecraft:ice_caves_surface_feature"),
+                featureEntry("minecraft:ice_caves_after_surface_ice_crystal_feature_rules",
+                             "minecraft:ice_crystal_scatter_feature"),
+                featureEntry("minecraft:ice_caves_after_surface_icicle_feature_rules",
+                             "minecraft:icicle_cluster_feature"),
+                featureEntry("minecraft:ice_caves_after_surface_large_icicle_feature_rules",
+                             "minecraft:large_icicle_feature"),
+                featureEntry("minecraft:ice_caves_after_surface_snow_layer_feature_rules",
+                             "minecraft:snow_layer_scatter_feature")
+        };
     }
 
     std::string stripNamespace(const std::string &name) {
@@ -224,6 +247,9 @@ void BiomeChunkGenDataRegistry::initialize() {
 
         _featuresByBiome()[biomeId] = features;
     }
+
+    if (_featuresByBiome().find(BiomeIds::ICE_CAVES) == _featuresByBiome().end())
+        _featuresByBiome()[BiomeIds::ICE_CAVES] = iceCavesFeatures();
 
     loaded = true;
 }
