@@ -26,7 +26,9 @@ public:
 
     const SimplexNoise &getSulfurCaveGradient() const { return *mSulfurCaveGradient; }
 
-    const SimplexNoise &getIceCaveGradient() const { return *mIceCaveGradient; }
+    const SimplexNoise &getIceCaveGradient() const {
+        return *mIceCaveGradient;
+    }
 
 private:
     explicit FeatureNoiseHolder(IRandom &random);
