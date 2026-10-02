@@ -2,6 +2,24 @@
 setlocal
 
 set LOG=build.txt
+set PARALLEL_ARGS=
+
+:parse_args
+if "%~1"=="" goto args_done
+if /i "%~1"=="--parallel" (
+    if "%~2"=="" (
+        echo [ERROR] --parallel needs a job count, for example: build.bat --parallel 4
+        exit /b 1
+    )
+    set PARALLEL_ARGS=--parallel %~2
+    shift
+    shift
+    goto parse_args
+)
+echo [ERROR] Unknown argument: %~1
+exit /b 1
+:args_done
+
 break > "%LOG%"
 
 where cmake >nul 2>nul
@@ -31,7 +49,7 @@ if errorlevel 1 (
 )
 
 echo [3/3] Building FalconServer...
-cmake --build build --config Release >> "%LOG%" 2>&1
+cmake --build build --config Release %PARALLEL_ARGS% >> "%LOG%" 2>&1
 set BUILD_RESULT=%errorlevel%
 
 type "%LOG%"
