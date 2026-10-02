@@ -107,6 +107,14 @@ repositories. Never edit their copies under `build/_deps`.
 - **Search before writing.** Look for an existing helper or system first. A duplicated helper is a review
   comment every time.
 - **Prefer early returns** over nested conditions.
+- **Comments explain why, never what.** Only comment:
+  - why the code does something unusual;
+  - complex logic that is hard to follow from the code alone;
+  - constraints or surprising behaviour of an API, the protocol or the client;
+  - performance decisions;
+  - important public classes and functions.
+
+  Do not comment code that reads clearly on its own.
 - **Fail gracefully on client input.** A malformed packet must never crash the server; reject it and move on.
 - **Know the hot paths.** Ticking, chunk streaming, fluids and packet handling run every tick. Avoid
   allocations and full scans there, and measure with `/profiler` before claiming a speedup.
