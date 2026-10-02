@@ -30,6 +30,7 @@ namespace {
     const float CONSUMING_INPUT = 0.1225f;
     const float WALK_AIR_SPEED = 0.02f;
     const float SPRINT_AIR_SPEED = 0.026f;
+    const float SPRINT_SPEED_MULTIPLIER = 1.3f;
     const float DEFAULT_MOVE_SPEED = 0.1f;
     const float DEFAULT_BLOCK_FRICTION = 0.6f;
     const float IMPULSE_SCALE = 0.98f;
@@ -382,7 +383,8 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
         const float accelerationFriction = (groundFriction * accelerationMultiplier) * AIR_FRICTION;
         const float baseFriction = AIR_FRICTION * DEFAULT_BLOCK_FRICTION;
         const float ratio = baseFriction / accelerationFriction;
-        const float movement = speed > 0.0f ? speed : DEFAULT_MOVE_SPEED;
+        const float baseMovement = speed > 0.0f ? speed : DEFAULT_MOVE_SPEED;
+        const float movement = sprinting ? baseMovement * SPRINT_SPEED_MULTIPLIER : baseMovement;
         acceleration = ((movement * ratio) * ratio) * ratio;
     }
 
