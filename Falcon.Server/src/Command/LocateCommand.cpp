@@ -68,6 +68,8 @@ std::vector<CommandOverloadData> LocateCommand::getOverloads() const {
     CommandParamData radiusParameter;
     radiusParameter.mName = "radius";
     radiusParameter.mOptional = true;
+    radiusParameter.mHasType = true;
+    radiusParameter.mType = CommandParamType::Int;
 
     CommandParamData searchParameter;
     searchParameter.mName = "search";
