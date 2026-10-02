@@ -49,14 +49,6 @@ namespace {
         return speed;
     }
 
-    Vector3f lookDirectionOf(const ServerPlayer &player) {
-        const Vector3f rotation = player.getRotation();
-        const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
-        const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
-
-        return Vector3f(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
-    }
-
     std::string tierNameOf(const std::string &identifier) {
         const size_t colon = identifier.find(':');
         return colon == std::string::npos ? identifier : identifier.substr(colon + 1);
@@ -83,7 +75,7 @@ float SpearItem::getJabDamage(const ItemStack &item) const {
 Actor *SpearItem::findTarget(ServerNetworkHandler &owner, ServerPlayer &player, float maxDistance) const {
     const Vector3f playerPosition = player.getPosition();
     const Vector3f eyePosition(playerPosition.x, playerPosition.y + PLAYER_EYE_HEIGHT, playerPosition.z);
-    const Vector3f direction = lookDirectionOf(player);
+    const Vector3f direction = player.getLookDirection();
 
     Actor *best = nullptr;
     float bestScore = -1.0f;
@@ -140,7 +132,7 @@ Actor *SpearItem::findTarget(ServerNetworkHandler &owner, ServerPlayer &player, 
 }
 
 Actor *SpearItem::findSweepTarget(ServerNetworkHandler &owner, ServerPlayer &player) const {
-    const Vector3f direction = lookDirectionOf(player);
+    const Vector3f direction = player.getLookDirection();
     const Vector3f playerPosition = player.getPosition();
 
     const float minX = playerPosition.x - PLAYER_WIDTH * 0.5f - SWEEP_EXPAND_HORIZONTAL + direction.x * SWEEP_REACH;
@@ -237,7 +229,7 @@ void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, co
     if (finiteResources && player.getFood() < MINIMUM_LUNGE_FOOD)
         return;
 
-    const Vector3f direction = lookDirectionOf(player);
+    const Vector3f direction = player.getLookDirection();
     const float length = std::sqrt(direction.x * direction.x + direction.z * direction.z);
     if (length <= 0.0f)
         return;

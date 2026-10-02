@@ -91,6 +91,8 @@ public:
 
     bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId);
 
+    Vector3f getLookDirection() const;
+
     bool isOp() const { return mIsOp; }
 
     void setOp(bool isOp) { mIsOp = isOp; }
@@ -442,6 +444,8 @@ private:
     float _applyAttackerModifiers(float baseDamage, float damage) const;
 
     bool _isCriticalHit() const;
+
+    bool _isFacing(ServerNetworkHandler &owner, const Vector3f &targetFeet, float width, float height) const;
 
     bool _hasShieldReady(int64_t currentTick) const;
 

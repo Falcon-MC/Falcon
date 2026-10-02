@@ -85,6 +85,10 @@ namespace {
     }
 
     constexpr float MAX_REACH = 8.0f;
+    constexpr float PLAYER_EYE_HEIGHT = 1.62f;
+    constexpr float PLAYER_WIDTH = 0.6f;
+    constexpr float PLAYER_HEIGHT = 1.8f;
+    constexpr float FACING_MIN_DISTANCE = 1.0e-4f;
     constexpr float SPIN_ATTACK_DAMAGE = 8.0f;
     constexpr float SPIN_ATTACK_REACH = 1.0f;
     constexpr float PLAYER_WIDTH = 0.6f;
@@ -206,6 +210,29 @@ bool ServerPlayer::_isCriticalHit() const {
            && !getFlags().get(ActorFlag::Gliding);
 }
 
+Vector3f ServerPlayer::getLookDirection() const {
+    const float pitch = getRotation().x * MathConstants::DEGREES_TO_RADIANS_F;
+    const float yaw = getRotation().y * MathConstants::DEGREES_TO_RADIANS_F;
+    return Vector3f(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
+}
+
+bool ServerPlayer::_isFacing(ServerNetworkHandler &owner, const Vector3f &targetFeet, float width,
+                             float height) const {
+    const float threshold = std::clamp(owner.getProperties().getPlayerMovementActionDirectionThreshold(), 0.0f, 1.0f);
+    const Vector3f eye(getPosition().x, getPosition().y + PLAYER_EYE_HEIGHT, getPosition().z);
+    const float half = width * 0.5f;
+    const Vector3f closest(std::clamp(eye.x, targetFeet.x - half, targetFeet.x + half),
+                           std::clamp(eye.y, targetFeet.y, targetFeet.y + height),
+                           std::clamp(eye.z, targetFeet.z - half, targetFeet.z + half));
+    const Vector3f toTarget(closest.x - eye.x, closest.y - eye.y, closest.z - eye.z);
+    const float length = std::sqrt(toTarget.x * toTarget.x + toTarget.y * toTarget.y + toTarget.z * toTarget.z);
+    if (length < FACING_MIN_DISTANCE)
+        return true;
+
+    const Vector3f look = getLookDirection();
+    return (look.x * toTarget.x + look.y * toTarget.y + look.z * toTarget.z) / length >= threshold;
+}
+
 bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId) {
     ActorEventPacket swing;
     swing.mRuntimeActorId = getRuntimeId();
@@ -242,6 +269,10 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
                                       target.getPosition().z - getPosition().z);
             if (actorDelta.x * actorDelta.x + actorDelta.y * actorDelta.y + actorDelta.z * actorDelta.z >
                 MAX_REACH * MAX_REACH)
+                return false;
+
+            const ActorSize size = target.getSize();
+            if (!_isFacing(owner, target.getPosition(), size.mWidth, size.mHeight))
                 return false;
 
             owner.getScriptEngine().onEntityHitEntity(*this, target);
@@ -303,6 +334,9 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
                          victim->getPosition().y - getPosition().y,
                          victim->getPosition().z - getPosition().z);
     if (delta.x * delta.x + delta.y * delta.y + delta.z * delta.z > MAX_REACH * MAX_REACH)
+        return false;
+
+    if (!_isFacing(owner, victim->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
         return false;
 
     owner.getScriptEngine().onEntityHitEntity(*this, *victim);
