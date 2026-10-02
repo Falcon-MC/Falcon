@@ -97,7 +97,7 @@ bool SpawnPointCommand::execute(CommandOrigin &sender, const std::vector<std::st
             return false;
         }
 
-        target->setSpawnPoint(spawn);
+        target->setSpawnPoint(spawn, level.getName());
 
         if (targets.size() == 1) {
             sender.sendTranslation("commands.spawnpoint.success.single",

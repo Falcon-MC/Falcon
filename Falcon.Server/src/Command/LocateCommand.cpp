@@ -183,7 +183,7 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
                 return;
 
             ServerPlayer *target = &entry->second;
-            if (!target->isSpawned() || target->getDimension() != level.getDimensionType())
+            if (!target->isSpawned() || !target->isIn(level))
                 return;
 
             if (!located) {

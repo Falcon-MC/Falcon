@@ -75,12 +75,11 @@ namespace {
     void entityTeleport(FalconEntity *target, FalconLevel *destination, FalconVec3 position) {
         Actor *value = entity(target);
         const Vector3f to = toVector3f(position);
-        const DimensionType dimension =
-                destination == nullptr ? value->getDimension() : level(destination)->getDimensionType();
+        Level &destinationLevel = destination == nullptr ? owner().getLevelFor(*value) : *level(destination);
 
         if (ServerPlayer *playerValue = asPlayer(value)) {
-            if (playerValue->getDimension() != dimension)
-                owner().changePlayerDimension(*playerValue, dimension, to);
+            if (!playerValue->isIn(destinationLevel))
+                owner().changePlayerLevel(*playerValue, destinationLevel, to);
             else
                 playerValue->teleport(owner(), to);
             return;
@@ -90,8 +89,8 @@ namespace {
         if (actorValue == nullptr)
             return;
 
-        if (actorValue->getDimension() != dimension) {
-            owner().changeActorDimension(*actorValue, dimension, to);
+        if (!actorValue->isIn(destinationLevel)) {
+            owner().changeActorLevel(*actorValue, destinationLevel, to);
             return;
         }
 

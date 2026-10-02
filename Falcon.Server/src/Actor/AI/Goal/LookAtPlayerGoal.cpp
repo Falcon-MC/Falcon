@@ -65,7 +65,7 @@ ServerPlayer *LookAtPlayerGoal::_findNearestPlayer(ServerNetworkHandler &owner, 
     float nearestDistance = rangeSquared;
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead() || player.getDimension() != mob.getDimension())
+        if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(mob))
             continue;
 
         const float distance = mob.distanceSquaredTo(player);

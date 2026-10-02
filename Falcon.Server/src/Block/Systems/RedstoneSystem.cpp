@@ -704,7 +704,7 @@ namespace {
 
         for (auto &entry: owner.getPlayers()) {
             ServerPlayer &player = entry.second;
-            if (!player.isSpawned() || player.isDead() || player.getDimension() != level.getDimensionType())
+            if (!player.isSpawned() || player.isDead() || !player.isIn(level))
                 continue;
 
             const Vector3f &feet = player.getPosition();
@@ -715,7 +715,7 @@ namespace {
 
         for (auto &entry: owner.getActors()) {
             ServerActor *actor = entry.second.get();
-            if (actor == nullptr || actor->isDead() || actor->getDimension() != level.getDimensionType())
+            if (actor == nullptr || actor->isDead() || !actor->isIn(level))
                 continue;
 
             const Vector3f &feet = actor->getPosition();
@@ -1443,7 +1443,7 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level)
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead() || player.getDimension() != level.getDimensionType())
+        if (!player.isSpawned() || player.isDead() || !player.isIn(level))
             continue;
 
         _touchPressurePlate(owner, level, player.getPosition(), visited);
@@ -1451,7 +1451,7 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level)
 
     for (auto &entry: owner.getActors()) {
         ServerActor *actor = entry.second.get();
-        if (actor == nullptr || actor->isDead() || actor->getDimension() != level.getDimensionType())
+        if (actor == nullptr || actor->isDead() || !actor->isIn(level))
             continue;
 
         _touchPressurePlate(owner, level, actor->getPosition(), visited);

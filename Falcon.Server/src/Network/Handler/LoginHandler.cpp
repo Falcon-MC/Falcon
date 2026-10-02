@@ -438,6 +438,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     player.setHungerEnabled(player.getGameType() == (int32_t) GameType::Survival
                             || player.getGameType() == (int32_t) GameType::Adventure);
 
+    Level &world = owner.getWorldFor(player).getOverworld();
     StartGamePacket startGame;
     startGame.mUniqueActorId = player.getUniqueId();
     startGame.mRuntimeActorId = player.getRuntimeId();
@@ -446,12 +447,12 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
                                         player.getPosition().z);
     startGame.mRotation = Vector2f(player.getRotation().x, player.getRotation().y);
 
-    startGame.mSeed = owner.getLevel().getSeed();
+    startGame.mSeed = world.getSeed();
     startGame.mDimensionId = Dimension::toId(player.getDimension());
     startGame.mGeneratorId = 1;
     startGame.mLevelGameType = owner.getProperties().getGameType();
     startGame.mDifficulty = (int32_t) owner.getProperties().getDifficulty();
-    startGame.mDefaultSpawn = owner.getLevel().getSpawnPosition();
+    startGame.mDefaultSpawn = world.getSpawnPosition();
     startGame.mCommandsEnabled = owner.getProperties().getAllowCheats();
     startGame.mTexturePacksRequired = owner.getProperties().getTexturePackRequired();
     startGame.mDefaultPlayerPermission = owner.getProperties().getDefaultPlayerPermissionLevel();
@@ -462,7 +463,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mServerChunkTickRange = owner.getProperties().getTickDistance();
     startGame.mVanillaVersion = owner.getAnnouncement().mGameVersion;
     startGame.mLevelId = "RmFsY29u";
-    startGame.mLevelName = owner.getLevel().getName();
+    startGame.mLevelName = world.getName();
     startGame.mMultiplayerCorrelationId = "";
     startGame.mServerEngine = "Falcon";
     startGame.mCurrentTick = 0;
@@ -475,7 +476,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     const std::vector<BlockPropertyData> &customBlocks = CustomContentRegistry::getInstance().getBlockProperties();
     startGame.mBlockProperties.insert(startGame.mBlockProperties.end(), customBlocks.begin(), customBlocks.end());
 
-    startGame.mGamerules = owner.getLevel().getGameRules().toNetwork();
+    startGame.mGamerules = world.getGameRules().toNetwork();
 
     JigsawStructureDataPacket jigsawStructureData;
     jigsawStructureData.mJigsawStructureData.put("processors", Tag::ofList(Tag::Type::Compound));
@@ -489,7 +490,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     owner.getNetworkHandler().send(id, startGame, owner.getCodecContext());
 
     SetTimePacket time;
-    time.mTime = (int32_t) owner.getLevel().getDayTime();
+    time.mTime = (int32_t) world.getDayTime();
     owner.getNetworkHandler().send(id, time, owner.getCodecContext());
 
     player.setLoginState(ServerPlayer::LoginState::StartGameSent);
@@ -1113,7 +1114,7 @@ void LoginHandler::removeFromPlayerList(ServerNetworkHandler &owner, ServerPlaye
 void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner, ServerPlayer &player) {
     player.setLoginState(ServerPlayer::LoginState::Spawned);
     player.grantSpawnInvulnerability();
-    BonusChest::placeIfPending(owner, owner.getLevel());
+    BonusChest::placeIfPending(owner, owner.getWorldFor(player).getOverworld());
     LOG_INFO(LogAreaID::Server, "Player %s spawned", player.getName().c_str());
 
     sendAvailableCommands(owner, player);

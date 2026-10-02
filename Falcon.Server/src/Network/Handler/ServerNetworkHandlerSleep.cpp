@@ -20,13 +20,13 @@ bool ServerNetworkHandler::sleepOn(ServerPlayer &player, const Vector3i &head) {
     }
 
     player.setSleeping(head);
-    player.setSpawnPoint(head);
+    player.setSpawnPoint(head, getWorldFor(player).getName());
     player.getFlags().set(ActorFlag::Sleeping, true);
     player.teleport(*this, Vector3f((float) head.x + 0.5f, (float) head.y + 0.5f, (float) head.z + 0.5f));
     BedBlock::setOccupied(*this, getLevelFor(player), head, true);
     _sendEntityData(player);
 
-    mSleepTicks = SLEEP_CHECK_DELAY_TICKS;
+    getWorldFor(player).mSleepTicks = SLEEP_CHECK_DELAY_TICKS;
     return true;
 }
 
@@ -54,7 +54,7 @@ void ServerNetworkHandler::stopSleep(ServerPlayer &player) {
     if (!bedStillUsed)
         BedBlock::setOccupied(*this, getLevelFor(player), head, false);
 
-    mSleepTicks = 0;
+    getWorldFor(player).mSleepTicks = 0;
 
     AnimatePacket wakeUp;
     wakeUp.mRuntimeActorId = player.getRuntimeId();
@@ -70,14 +70,20 @@ void ServerNetworkHandler::wakeSleepersAt(const Vector3i &head) {
 }
 
 void ServerNetworkHandler::_tickSleep() {
-    if (mSleepTicks <= 0 || --mSleepTicks > 0)
+    for (World *world: mWorlds.getWorlds())
+        _tickSleep(*world);
+}
+
+void ServerNetworkHandler::_tickSleep(World &world) {
+    if (world.mSleepTicks <= 0 || --world.mSleepTicks > 0)
         return;
 
+    Level &level = world.getOverworld();
     int players = 0;
     int sleeping = 0;
     for (const auto &entry: mPlayers) {
         const ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.getDimension() != DimensionType::Overworld)
+        if (!player.isSpawned() || !player.isIn(level))
             continue;
 
         players++;
@@ -85,18 +91,18 @@ void ServerNetworkHandler::_tickSleep() {
             sleeping++;
     }
 
-    const int32_t percentage = mLevel.getGameRules().getInt("playerssleepingpercentage");
+    const int32_t percentage = level.getGameRules().getInt("playerssleepingpercentage");
     if (players == 0 || sleeping == 0 || sleeping * 100 / players < percentage)
         return;
 
-    if (!mLevel.isNight() && !mLevel.isThundering())
+    if (!level.isNight() && !level.isThundering())
         return;
 
-    mLevel.setTime(mLevel.getTime() + DAY_LENGTH_TICKS - mLevel.getDayTime());
-    broadcastWorldTime();
+    level.setTime(level.getTime() + DAY_LENGTH_TICKS - level.getDayTime());
+    broadcastWorldTime(world);
 
     for (auto &entry: mPlayers) {
-        if (entry.second.isSleeping())
+        if (entry.second.isSleeping() && entry.second.isIn(level))
             stopSleep(entry.second);
     }
 }

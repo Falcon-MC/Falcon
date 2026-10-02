@@ -288,12 +288,13 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
         if (name.find(':') != std::string::npos)
             name = name.substr(name.find(':') + 1);
 
+        World &world = mHandler.getWorldOf(context.mLevel);
         if (name == "overworld")
-            context.mLevel = &mHandler.getDimension(DimensionType::Overworld);
+            context.mLevel = &world.getLevel(DimensionType::Overworld);
         else if (name == "nether")
-            context.mLevel = &mHandler.getDimension(DimensionType::Nether);
+            context.mLevel = &world.getLevel(DimensionType::Nether);
         else if (name == "the_end" || name == "end")
-            context.mLevel = &mHandler.getDimension(DimensionType::TheEnd);
+            context.mLevel = &world.getLevel(DimensionType::TheEnd);
         else {
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;

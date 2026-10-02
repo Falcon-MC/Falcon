@@ -4,6 +4,21 @@ falcon.commands.about.version=此服务器正在运行 Falcon 版本 %1$s（%3$s
 falcon.commands.about.game=Minecraft：基岩版 %1$s（协议 %2$s）
 falcon.commands.about.build=构建 %1$s，%2$s 配置
 
+falcon.commands.world.list=已加载的世界（%1$s）：%2$s
+falcon.commands.world.available=磁盘上的世界：%1$s
+falcon.commands.world.created=已创建世界 %1$s
+falcon.commands.world.exists=世界 %1$s 已存在
+falcon.commands.world.invalidName=无效的世界名称：%1$s
+falcon.commands.world.loaded=已加载世界 %1$s
+falcon.commands.world.alreadyLoaded=世界 %1$s 已加载
+falcon.commands.world.notFound=没有名为 %1$s 的世界
+falcon.commands.world.notLoaded=世界 %1$s 未加载
+falcon.commands.world.unloaded=已卸载世界 %1$s
+falcon.commands.world.unload.default=无法卸载默认世界 %1$s
+falcon.commands.world.unload.occupied=世界 %1$s 中仍有玩家
+falcon.commands.world.unload.cancelled=一个插件阻止了世界 %1$s 的卸载
+falcon.commands.world.teleported=已将 %1$s 送往世界 %2$s
+
 falcon.commands.allowlist.enabled=允许列表已启用
 falcon.commands.allowlist.disabled=允许列表已关闭
 falcon.commands.allowlist.list=允许列表（%1$s）：%2$s

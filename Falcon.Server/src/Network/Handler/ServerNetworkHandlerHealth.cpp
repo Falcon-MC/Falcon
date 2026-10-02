@@ -141,7 +141,7 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (player.isSpawnInvulnerable() && key != "death.attack.suicide")
         return DamageResult::Ignored;
 
-    if (isDamageDisabledByGameRule(getLevelFor(player).getGameRules(), key))
+    if (isDamageDisabledByGameRule(getWorldFor(player).getOverworld().getGameRules(), key))
         return DamageResult::Ignored;
 
     if (mScriptEngine.beforeEntityHurt(player, amount, key, source.mAttacker))
@@ -251,7 +251,7 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
 
     player.getInventoryManager().onCurrentWindowRemove();
 
-    const GameRules &rules = getLevelFor(player).getGameRules();
+    const GameRules &rules = getWorldFor(player).getOverworld().getGameRules();
     const bool keepInventory = rules.getBool("keepinventory");
 
     if (!keepInventory) {
@@ -291,7 +291,7 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
             broadcastSystemMessage(deathMessage);
     }
 
-    const Vector3f spawn = mLevel.getSpawnPositionForPlayer();
+    const Vector3f spawn = getWorldFor(player).getOverworld().getSpawnPositionForPlayer();
 
     // Respawn is a two-step handshake: "searching" now, then the final position with the
     // "ready" state in _respawnPlayer once the client asks to respawn.
@@ -363,14 +363,16 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
 }
 
 Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player) {
-    if (!player.hasSpawnPoint())
-        return mLevel.getSpawnPositionForPlayer();
+    World &world = getWorldFor(player);
+    Level &overworld = world.getOverworld();
+    if (!player.hasSpawnPoint() || player.getSpawnWorld() != world.getName())
+        return overworld.getSpawnPositionForPlayer();
 
     const Vector3i bed = player.getSpawnPoint();
-    if (!BedBlock::isValidAt(mLevel, bed)) {
+    if (!BedBlock::isValidAt(overworld, bed)) {
         player.clearSpawnPoint();
         player.sendTranslation("§7%tile.bed.notValid", {});
-        return mLevel.getSpawnPositionForPlayer();
+        return overworld.getSpawnPositionForPlayer();
     }
 
     return Vector3f((float) bed.x + 0.5f, (float) bed.y + BED_HEIGHT, (float) bed.z + 0.5f);
@@ -391,7 +393,7 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
         spawn = respawnEvent.mTo;
 
     if (player.getDimension() != DimensionType::Overworld)
-        changePlayerDimension(player, DimensionType::Overworld, spawn);
+        changePlayerLevel(player, getWorldFor(player).getOverworld(), spawn);
 
     player.setDead(false);
     player.grantSpawnInvulnerability();

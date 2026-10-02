@@ -155,7 +155,7 @@ void MaceItem::applyWindBurst(ServerNetworkHandler &owner, ServerPlayer &attacke
 
     for (auto &entry: owner.getActors()) {
         ServerActor &target = *entry.second;
-        if (!target.isAlive() || target.isProjectile() || target.getDimension() != attacker.getDimension())
+        if (!target.isAlive() || target.isProjectile() || !target.sharesLevelWith(attacker))
             continue;
 
         gustActor(owner, target, origin, level);
@@ -164,7 +164,7 @@ void MaceItem::applyWindBurst(ServerNetworkHandler &owner, ServerPlayer &attacke
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &target = entry.second;
         if (&target == &attacker || !target.isSpawned() || target.isDead() ||
-            target.getDimension() != attacker.getDimension())
+            !target.sharesLevelWith(attacker))
             continue;
 
         gustActor(owner, target, origin, level);

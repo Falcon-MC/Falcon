@@ -4,6 +4,21 @@ falcon.commands.about.version=Ez a szerver a Falcon %1$s verzióját futtatja (%
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokoll: %2$s)
 falcon.commands.about.build=%1$s build, %2$s konfiguráció
 
+falcon.commands.world.list=Betöltött világok (%1$s): %2$s
+falcon.commands.world.available=Világok a lemezen: %1$s
+falcon.commands.world.created=A(z) %1$s világ létrejött
+falcon.commands.world.exists=A(z) %1$s világ már létezik
+falcon.commands.world.invalidName=Érvénytelen világnév: %1$s
+falcon.commands.world.loaded=A(z) %1$s világ betöltve
+falcon.commands.world.alreadyLoaded=A(z) %1$s világ már be van töltve
+falcon.commands.world.notFound=Nincs %1$s nevű világ
+falcon.commands.world.notLoaded=A(z) %1$s világ nincs betöltve
+falcon.commands.world.unloaded=A(z) %1$s világ kirakva
+falcon.commands.world.unload.default=Az alapértelmezett %1$s világ nem rakható ki
+falcon.commands.world.unload.occupied=A(z) %1$s világban még vannak játékosok
+falcon.commands.world.unload.cancelled=Egy bővítmény megakadályozta a(z) %1$s világ kirakását
+falcon.commands.world.teleported=%1$s átküldve a(z) %2$s világba
+
 falcon.commands.allowlist.enabled=Bekapcsoltad az engedélyezési listát
 falcon.commands.allowlist.disabled=Kikapcsoltad az engedélyezési listát
 falcon.commands.allowlist.list=Engedélyezési lista (%1$s): %2$s

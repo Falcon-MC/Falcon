@@ -11,7 +11,7 @@ OwnerTargetGoal::OwnerTargetGoal(Mode mode) : mMode(mode) {
 ServerPlayer *OwnerTargetGoal::_findOwner(ServerNetworkHandler &owner, const MobActor &mob) const {
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if (mob.isOwnedBy(player) && player.isSpawned() && player.getDimension() == mob.getDimension())
+        if (mob.isOwnedBy(player) && player.isSpawned() && player.sharesLevelWith(mob))
             return &player;
     }
     return nullptr;

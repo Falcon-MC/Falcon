@@ -169,8 +169,8 @@ namespace {
         return false;
     }
 
-    bool isFireTickEnabled(ServerNetworkHandler &owner) {
-        return owner.getLevel().getGameRules().getBool("dofiretick");
+    bool isFireTickEnabled(ServerNetworkHandler &owner, const Level &level) {
+        return owner.getWorldOf(level).getOverworld().getGameRules().getBool("dofiretick");
     }
 
     void extinguish(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
@@ -263,7 +263,7 @@ namespace {
     }
 
     void touchActor(ServerNetworkHandler &owner, Level &level, ServerActor &actor) {
-        if (actor.isDead() || actor.isProjectile() || actor.getDimension() != level.getDimensionType())
+        if (actor.isDead() || actor.isProjectile() || !actor.isIn(level))
             return;
 
         if (actor.hasEffect(MobEffectId::FireResistance))
@@ -286,7 +286,7 @@ namespace {
     }
 
     void touchPlayer(ServerNetworkHandler &owner, Level &level, ServerPlayer &player) {
-        if (!player.isSpawned() || player.isDead() || player.getDimension() != level.getDimensionType())
+        if (!player.isSpawned() || player.isDead() || !player.isIn(level))
             return;
 
         const int32_t gameType = player.getGameType();
@@ -380,7 +380,7 @@ void FireSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &level, const
         return;
     }
 
-    if (isFireTickEnabled(owner) &&
+    if (isFireTickEnabled(owner, level) &&
         scheduleOf(level).mScheduled.count(RedstoneSystem::packPosition(position)) == 0)
         scheduleUpdate(level, position, TICK_RATE);
 
@@ -389,7 +389,7 @@ void FireSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &level, const
 
 void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                    const BlockState &state) {
-    if (!matches(state.mName) || !isFireTickEnabled(owner))
+    if (!matches(state.mName) || !isFireTickEnabled(owner, level))
         return;
 
     if (!canSurviveAt(level, position)) {

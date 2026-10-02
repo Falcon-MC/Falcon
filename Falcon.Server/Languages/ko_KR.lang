@@ -4,6 +4,21 @@ falcon.commands.about.version=이 서버는 Falcon 버전 %1$s(%2$s, %3$s)으로
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s(프로토콜 %2$s)
 falcon.commands.about.build=빌드 %1$s, %2$s 구성
 
+falcon.commands.world.list=불러온 월드 (%1$s): %2$s
+falcon.commands.world.available=디스크에 있는 월드: %1$s
+falcon.commands.world.created=월드 %1$s을(를) 만들었습니다
+falcon.commands.world.exists=월드 %1$s이(가) 이미 있습니다
+falcon.commands.world.invalidName=잘못된 월드 이름: %1$s
+falcon.commands.world.loaded=월드 %1$s을(를) 불러왔습니다
+falcon.commands.world.alreadyLoaded=월드 %1$s은(는) 이미 불러와져 있습니다
+falcon.commands.world.notFound=%1$s(이)라는 월드가 없습니다
+falcon.commands.world.notLoaded=월드 %1$s을(를) 불러오지 않았습니다
+falcon.commands.world.unloaded=월드 %1$s을(를) 언로드했습니다
+falcon.commands.world.unload.default=기본 월드 %1$s은(는) 언로드할 수 없습니다
+falcon.commands.world.unload.occupied=월드 %1$s에 아직 플레이어가 있습니다
+falcon.commands.world.unload.cancelled=플러그인이 월드 %1$s의 언로드를 막았습니다
+falcon.commands.world.teleported=%1$s을(를) 월드 %2$s(으)로 보냈습니다
+
 falcon.commands.allowlist.enabled=허용 목록을 켰습니다
 falcon.commands.allowlist.disabled=허용 목록을 껐습니다
 falcon.commands.allowlist.list=허용 목록(%1$s): %2$s

@@ -42,7 +42,8 @@ namespace {
     void fillBlockInteraction(JSContext *ctx, ScriptApi &api, JSValue event, ServerPlayer &player,
                               const Vector3i &position, int32_t face) {
         JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
-        JS_SetPropertyStr(ctx, event, "block", api.makeBlock(player.getDimension(), position.x, position.y, position.z));
+        JS_SetPropertyStr(ctx, event, "block", api.makeBlock(api.host().getLevelFor(player), position.x, position.y,
+                                                         position.z));
         JS_SetPropertyStr(ctx, event, "blockFace", JS_NewString(ctx, directionName(face)));
         JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(player.getInventory().getItemInHand()));
         JS_SetPropertyStr(ctx, event, "isFirstEvent", JS_NewBool(ctx, true));
@@ -345,7 +346,7 @@ void ScriptEngine::onProjectileHitEntity(ServerActor &projectile, Actor &hitEnti
     _emit("projectileHitEntity", false, [&](ScriptApi &api, JSValue event) {
         JS_SetPropertyStr(mContext, event, "projectile", api.makeActor(projectile));
         JS_SetPropertyStr(mContext, event, "location", makePoint(mContext, location.x, location.y, location.z));
-        JS_SetPropertyStr(mContext, event, "dimension", api.makeDimension(projectile.getDimension()));
+        JS_SetPropertyStr(mContext, event, "dimension", api.makeDimension(api.host().getLevelFor(projectile)));
 
         if (projectile.hasOwnerPlayer()) {
             ServerPlayer *owner = api.resolvePlayerByHandle(projectile.getOwnerPlayerHandle());
@@ -369,7 +370,7 @@ void ScriptEngine::onEntityHitBlock(Actor &damagingEntity, const Vector3i &posit
     _emit("entityHitBlock", false, [&](ScriptApi &api, JSValue event) {
         JS_SetPropertyStr(mContext, event, "damagingEntity", api.makeEntity(damagingEntity));
         JS_SetPropertyStr(mContext, event, "hitBlock",
-                          api.makeBlock(damagingEntity.getDimension(), position.x, position.y, position.z));
+                          api.makeBlock(api.host().getLevelFor(damagingEntity), position.x, position.y, position.z));
         JS_SetPropertyStr(mContext, event, "blockFace", JS_NewString(mContext, directionName(face)));
     });
 }

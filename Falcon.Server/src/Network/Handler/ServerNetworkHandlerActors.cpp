@@ -166,7 +166,7 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(runtimeId, identifier);
     actor->setUniqueId(allocateActorUniqueId());
     actor->getAttributes() = ActorAttributes::createActorDefaults();
-    actor->setDimension(level.getDimensionType());
+    actor->moveToLevel(level);
     actor->setPosition(position);
     actor->resetFallDistance();
 
@@ -245,7 +245,7 @@ FallingBlock *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockS
 
     std::unique_ptr<FallingBlock> actor(new FallingBlock(runtimeId, state));
     actor->getAttributes() = ActorAttributes::createActorDefaults();
-    actor->setDimension(level.getDimensionType());
+    actor->moveToLevel(level);
     actor->setPosition(position);
     actor->setHighestPosition(position.y);
 
@@ -263,7 +263,7 @@ PrimedTntActor *ServerNetworkHandler::spawnPrimedTnt(Level &level, const Vector3
 
     std::unique_ptr<PrimedTntActor> actor(new PrimedTntActor(runtimeId, fuse));
     actor->getAttributes() = ActorAttributes::createActorDefaults();
-    actor->setDimension(level.getDimensionType());
+    actor->moveToLevel(level);
     actor->setPosition(position);
     actor->setMotion(motion);
 
@@ -306,7 +306,7 @@ ServerActor *ServerNetworkHandler::getActorByRuntimeId(uint64_t runtimeId) {
 }
 
 int64_t ServerNetworkHandler::allocateActorUniqueId() {
-    return (int64_t) (((uint64_t) mLevel.getWorldStartCount() << 32) | ++mActorUniqueIdCounter);
+    return (int64_t) (((uint64_t) getLevel().getWorldStartCount() << 32) | ++mActorUniqueIdCounter);
 }
 
 ServerActor *ServerNetworkHandler::_registerActor(std::unique_ptr<ServerActor> actor) {
@@ -491,6 +491,7 @@ void ServerNetworkHandler::spawnLingeringCloud(Level &level, const Vector3f &pos
     state.mRadiusOnUse = LINGERING_CLOUD_RADIUS_ON_USE;
     state.mPosition = position;
     state.mDimension = cloud->getDimension();
+    state.mWorldId = cloud->getWorldId();
     mLingeringClouds[cloud->getUniqueId()] = state;
 }
 
@@ -619,7 +620,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     if (isTrident) {
         data.mHadCollision = true;
 
-        if (data.mChanneling && level.hasSkyLight() && mLevel.isThundering())
+        if (data.mChanneling && level.hasSkyLight() && getWorldOf(level).getOverworld().isThundering())
             strikeLightning(level, targetPosition);
 
         if (data.mLoyaltyLevel > 0 && shooter != nullptr) {
@@ -721,7 +722,7 @@ void ServerNetworkHandler::removeActor(int64_t uniqueId) {
 }
 
 bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &actor) const {
-    if (!player.isSpawned() || player.getDimension() != actor.getDimension())
+    if (!player.isSpawned() || !player.sharesLevelWith(actor))
         return false;
 
     const Vector3f position = actor.getPosition();
@@ -844,8 +845,12 @@ void ServerNetworkHandler::broadcastActorRemove(ServerActor &actor) {
 }
 
 void ServerNetworkHandler::changeActorDimension(Actor &actor, DimensionType dimension, const Vector3f &position) {
+    changeActorLevel(actor, getWorldFor(actor).getLevel(dimension), position);
+}
+
+void ServerNetworkHandler::changeActorLevel(Actor &actor, Level &destination, const Vector3f &position) {
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor)) {
-        changePlayerDimension(*player, dimension, position);
+        changePlayerLevel(*player, destination, position);
         return;
     }
 
@@ -858,16 +863,15 @@ void ServerNetworkHandler::changeActorDimension(Actor &actor, DimensionType dime
         return;
 
     broadcastActorRemove(*traveller);
-    traveller->setDimension(dimension);
+    traveller->moveToLevel(destination);
     traveller->setPosition(position);
     traveller->setMotion(Vector3f(0.0f, 0.0f, 0.0f));
     traveller->resetFallDistance();
 
-    Level &destination = getDimension(dimension);
     const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
     const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
     const int64_t column = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
-    if (mActorLoadedChunks[destination.getDimensionId()].count(column) != 0)
+    if (getWorldOf(destination).getActorLoadedChunks(destination.getDimensionType()).count(column) != 0)
         return;
 
     if (traveller->shouldSave() && destination.isStorageOpen()) {
@@ -1108,7 +1112,7 @@ void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &
     packet.mHasMolangVariablesJson = false;
 
     for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned() && entry.second.getDimension() == level.getDimensionType())
+        if (entry.second.isSpawned() && entry.second.isIn(level))
             mNetworkHandler->send(entry.first, packet, mCodecContext);
     }
 }
@@ -1137,7 +1141,7 @@ void ServerNetworkHandler::playNamedSound(Level &level, const std::string &sound
     packet.mPitch = pitch;
 
     for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned() && entry.second.getDimension() == level.getDimensionType())
+        if (entry.second.isSpawned() && entry.second.isIn(level))
             mNetworkHandler->send(entry.first, packet, mCodecContext);
     }
 }
@@ -1540,7 +1544,7 @@ void ServerNetworkHandler::tickActors() {
 
                     for (auto &playerEntry: mPlayers) {
                         ServerPlayer &candidate = playerEntry.second;
-                        if (!candidate.isSpawned() || candidate.getDimension() != actor.getDimension())
+                        if (!candidate.isSpawned() || !candidate.sharesLevelWith(actor))
                             continue;
                         if ((int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId() &&
                             actor.getLifetimeTicks() < 8)
@@ -1560,7 +1564,7 @@ void ServerNetworkHandler::tickActors() {
                     for (auto &actorEntry: mActors) {
                         ServerActor &candidate = *actorEntry.second;
                         if (&candidate == &actor || !candidate.isAlive() ||
-                            candidate.getDimension() != actor.getDimension())
+                            !candidate.sharesLevelWith(actor))
                             continue;
 
                         const bool candidateIsProjectile = candidate.isProjectile();
@@ -1609,7 +1613,7 @@ void ServerNetworkHandler::tickActors() {
             move.mRotation = actor.getRotation();
 
             for (auto &playerEntry: mPlayers) {
-                if (playerEntry.second.isSpawned() && playerEntry.second.getDimension() == actor.getDimension())
+                if (playerEntry.second.isSpawned() && playerEntry.second.sharesLevelWith(actor))
                     mNetworkHandler->send(playerEntry.first, move, mCodecContext);
             }
 
@@ -1648,7 +1652,8 @@ void ServerNetworkHandler::tickActors() {
 
             for (auto &playerEntry: mPlayers) {
                 ServerPlayer &nearby = playerEntry.second;
-                if (!nearby.isSpawned() || nearby.getDimension() != cloud.mDimension)
+                if (!nearby.isSpawned() || nearby.getDimension() != cloud.mDimension
+                    || nearby.getWorldId() != cloud.mWorldId)
                     continue;
 
                 const Vector3f position = nearby.getPosition();
@@ -1665,7 +1670,7 @@ void ServerNetworkHandler::tickActors() {
             for (auto &actorEntry: mActors) {
                 ServerActor &nearby = *actorEntry.second;
                 if (!nearby.isAlive() || nearby.isProjectile() || nearby.isDead() ||
-                    nearby.getDimension() != cloud.mDimension)
+                    nearby.getDimension() != cloud.mDimension || nearby.getWorldId() != cloud.mWorldId)
                     continue;
 
                 const Vector3f position = nearby.getPosition();

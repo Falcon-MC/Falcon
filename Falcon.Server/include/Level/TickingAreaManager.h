@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-class ServerNetworkHandler;
+class World;
 
 struct TickingArea {
     std::string mId;
@@ -51,7 +51,7 @@ public:
 
     static constexpr int32_t MAX_RADIUS = 4;
 
-    void load(ServerNetworkHandler &owner);
+    void load(World &world);
 
     const std::vector<TickingArea> &getAreas() const {
         return mAreas;
@@ -61,11 +61,11 @@ public:
 
     std::string nextDefaultName() const;
 
-    const TickingArea &add(ServerNetworkHandler &owner, TickingArea area);
+    const TickingArea &add(World &world, TickingArea area);
 
-    std::vector<TickingArea> remove(ServerNetworkHandler &owner, const std::function<bool(const TickingArea &)> &match);
+    std::vector<TickingArea> remove(World &world, const std::function<bool(const TickingArea &)> &match);
 
-    std::vector<TickingArea> setPreload(ServerNetworkHandler &owner,
+    std::vector<TickingArea> setPreload(World &world,
                                         const std::function<bool(const TickingArea &)> &match, bool preload);
 
     void appendColumns(DimensionType dimension, std::vector<int64_t> &columns) const;
@@ -75,9 +75,9 @@ private:
 
     static std::string _randomId();
 
-    void _attach(ServerNetworkHandler &owner, const TickingArea &area);
+    void _attach(World &world, const TickingArea &area);
 
-    void _detach(ServerNetworkHandler &owner, const TickingArea &area);
+    void _detach(World &world, const TickingArea &area);
 
     std::vector<TickingArea> mAreas;
 };

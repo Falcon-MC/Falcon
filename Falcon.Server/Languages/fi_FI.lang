@@ -4,6 +4,21 @@ falcon.commands.about.version=Tällä palvelimella on käytössä Falcon-versio 
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokolla %2$s)
 falcon.commands.about.build=Koontiversio %1$s, %2$s-määritys
 
+falcon.commands.world.list=Ladatut maailmat (%1$s): %2$s
+falcon.commands.world.available=Maailmat levyllä: %1$s
+falcon.commands.world.created=Maailma %1$s luotiin
+falcon.commands.world.exists=Maailma %1$s on jo olemassa
+falcon.commands.world.invalidName=Virheellinen maailman nimi: %1$s
+falcon.commands.world.loaded=Maailma %1$s ladattiin
+falcon.commands.world.alreadyLoaded=Maailma %1$s on jo ladattu
+falcon.commands.world.notFound=Maailmaa nimeltä %1$s ei ole
+falcon.commands.world.notLoaded=Maailmaa %1$s ei ole ladattu
+falcon.commands.world.unloaded=Maailma %1$s poistettiin muistista
+falcon.commands.world.unload.default=Oletusmaailmaa %1$s ei voi poistaa muistista
+falcon.commands.world.unload.occupied=Maailmassa %1$s on vielä pelaajia
+falcon.commands.world.unload.cancelled=Laajennus esti maailman %1$s poistamisen muistista
+falcon.commands.world.teleported=%1$s lähetettiin maailmaan %2$s
+
 falcon.commands.allowlist.enabled=Sallitut-luettelo otettu käyttöön
 falcon.commands.allowlist.disabled=Sallitut-luettelo poistettu käytöstä
 falcon.commands.allowlist.list=Sallitut-luettelo (%1$s): %2$s

@@ -46,7 +46,7 @@ void ExperienceOrbActor::tick(ServerNetworkHandler &owner) {
             continue;
         if (player.getGameType() == (int32_t) GameType::Spectator)
             continue;
-        if (player.getDimension() != getDimension())
+        if (!player.sharesLevelWith(*this))
             continue;
 
         const Vector3f playerPosition = player.getPosition();

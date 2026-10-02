@@ -309,7 +309,7 @@ namespace {
         const Vector3f position = actor.getPosition();
         for (auto &entry: owner.getPlayers()) {
             const ServerPlayer &player = entry.second;
-            if (!player.isSpawned() || &player == &actor || player.getDimension() != actor.getDimension())
+            if (!player.isSpawned() || &player == &actor || !player.sharesLevelWith(actor))
                 continue;
 
             const Vector3f other = player.getPosition();
@@ -479,7 +479,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         if (domain == nullptr)
             return false;
 
-        const GameRules &rules = owner.getLevel().getGameRules();
+        const GameRules &rules = owner.getWorldFor(self).getOverworld().getGameRules();
         if (value != nullptr && value->isNumber())
             return compareNumbers(rules.getInt(domain->string()), (int64_t) value->number(0.0), op);
         return applyBoolean(rules.getBool(domain->string()), value, op);

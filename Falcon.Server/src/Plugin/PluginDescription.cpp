@@ -2,6 +2,8 @@
 
 #include "Core/Json/Json.h"
 
+#include <falcon/falcon_api.h>
+
 #include <fstream>
 #include <iterator>
 #include <memory>
@@ -38,22 +40,43 @@ namespace {
         return true;
     }
 
-    bool parseApiVersion(const std::string &value, uint32_t &major, uint32_t &minor) {
-        const size_t dot = value.find('.');
-        const std::string majorText = dot == std::string::npos ? value : value.substr(0, dot);
-        const std::string minorText = dot == std::string::npos ? "0" : value.substr(dot + 1);
-        if (majorText.empty() || minorText.empty())
+    bool parseApiVersion(const std::string &value, uint32_t &major, uint32_t &minor, uint32_t &patch) {
+        const size_t firstDot = value.find('.');
+        const size_t secondDot = firstDot == std::string::npos ? std::string::npos : value.find('.', firstDot + 1);
+        const std::string majorText = firstDot == std::string::npos ? value : value.substr(0, firstDot);
+        const std::string minorText = firstDot == std::string::npos ? "0"
+                                      : value.substr(firstDot + 1, secondDot == std::string::npos
+                                                                   ? std::string::npos : secondDot - firstDot - 1);
+        const std::string patchText = secondDot == std::string::npos ? "0" : value.substr(secondDot + 1);
+        if (majorText.empty() || minorText.empty() || patchText.empty())
             return false;
 
-        for (const char character: majorText + minorText) {
+        for (const char character: majorText + minorText + patchText) {
             if (character < '0' || character > '9')
                 return false;
         }
 
         major = (uint32_t) std::stoul(majorText);
         minor = (uint32_t) std::stoul(minorText);
+        patch = (uint32_t) std::stoul(patchText);
         return true;
     }
+}
+
+bool PluginDescription::isApiSupported() const {
+    if (mApiMajor != FALCON_API_VERSION_MAJOR || mApiMinor > FALCON_API_VERSION_MINOR)
+        return false;
+
+    return mApiMinor < FALCON_API_VERSION_MINOR || mApiPatch <= FALCON_API_VERSION_PATCH;
+}
+
+std::string PluginDescription::apiVersionText() const {
+    return std::to_string(mApiMajor) + "." + std::to_string(mApiMinor) + "." + std::to_string(mApiPatch);
+}
+
+std::string PluginDescription::serverApiVersionText() {
+    return std::to_string(FALCON_API_VERSION_MAJOR) + "." + std::to_string(FALCON_API_VERSION_MINOR) + "."
+           + std::to_string(FALCON_API_VERSION_PATCH);
 }
 
 bool PluginDescription::load(const std::string &path, PluginDescription &out, std::string &error) {
@@ -92,7 +115,7 @@ bool PluginDescription::load(const std::string &path, PluginDescription &out, st
         return false;
     }
     const bool native = out.mRuntime == "native";
-    if (native && !parseApiVersion(readString(*root, "api-version"), out.mApiMajor, out.mApiMinor)) {
+    if (native && !parseApiVersion(readString(*root, "api-version"), out.mApiMajor, out.mApiMinor, out.mApiPatch)) {
         error = "invalid or missing api-version";
         return false;
     }
@@ -100,7 +123,7 @@ bool PluginDescription::load(const std::string &path, PluginDescription &out, st
         out.mJar = readString(*root, "jar");
         if (out.mJar.empty())
             out.mJar = out.mName + ".jar";
-        if (!parseApiVersion(readString(*root, "api-version"), out.mApiMajor, out.mApiMinor)) {
+        if (!parseApiVersion(readString(*root, "api-version"), out.mApiMajor, out.mApiMinor, out.mApiPatch)) {
             error = "invalid or missing api-version";
             return false;
         }

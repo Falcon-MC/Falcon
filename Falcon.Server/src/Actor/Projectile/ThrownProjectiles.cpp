@@ -126,7 +126,7 @@ bool WindChargeActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &nearby = entry.second;
-        if (!nearby.isSpawned() || nearby.getDimension() != getDimension())
+        if (!nearby.isSpawned() || !nearby.sharesLevelWith(*this))
             continue;
 
         if (distanceSquared(nearby.getPosition(), hitPosition) > radiusSquared)
@@ -137,7 +137,7 @@ bool WindChargeActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
 
     for (auto &entry: owner.getActors()) {
         ServerActor &nearby = *entry.second;
-        if (!nearby.isAlive() || nearby.isProjectile() || nearby.getDimension() != getDimension())
+        if (!nearby.isAlive() || nearby.isProjectile() || !nearby.sharesLevelWith(*this))
             continue;
 
         if (distanceSquared(nearby.getPosition(), hitPosition) > radiusSquared)
@@ -171,7 +171,7 @@ bool SplashPotionActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPo
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &nearby = entry.second;
-        if (!nearby.isSpawned() || nearby.getDimension() != getDimension())
+        if (!nearby.isSpawned() || !nearby.sharesLevelWith(*this))
             continue;
 
         const float distance = distanceSquared(nearby.getPosition(), hitPosition);
@@ -184,7 +184,7 @@ bool SplashPotionActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPo
 
     for (auto &entry: owner.getActors()) {
         ServerActor &nearby = *entry.second;
-        if (&nearby == this || !nearby.isAlive() || nearby.isProjectile() || nearby.getDimension() != getDimension())
+        if (&nearby == this || !nearby.isAlive() || nearby.isProjectile() || !nearby.sharesLevelWith(*this))
             continue;
 
         const float distance = distanceSquared(nearby.getPosition(), hitPosition);

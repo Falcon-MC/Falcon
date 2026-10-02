@@ -4,6 +4,21 @@ falcon.commands.about.version=Ten serwer działa na Falcon w wersji %1$s (%2$s n
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokół %2$s)
 falcon.commands.about.build=Kompilacja %1$s, konfiguracja %2$s
 
+falcon.commands.world.list=Wczytane światy (%1$s): %2$s
+falcon.commands.world.available=Światy na dysku: %1$s
+falcon.commands.world.created=Utworzono świat %1$s
+falcon.commands.world.exists=Świat %1$s już istnieje
+falcon.commands.world.invalidName=Nieprawidłowa nazwa świata: %1$s
+falcon.commands.world.loaded=Wczytano świat %1$s
+falcon.commands.world.alreadyLoaded=Świat %1$s jest już wczytany
+falcon.commands.world.notFound=Nie ma świata o nazwie %1$s
+falcon.commands.world.notLoaded=Świat %1$s nie jest wczytany
+falcon.commands.world.unloaded=Zwolniono świat %1$s
+falcon.commands.world.unload.default=Nie można zwolnić domyślnego świata %1$s
+falcon.commands.world.unload.occupied=W świecie %1$s nadal są gracze
+falcon.commands.world.unload.cancelled=Wtyczka uniemożliwiła zwolnienie świata %1$s
+falcon.commands.world.teleported=Wysłano gracza %1$s do świata %2$s
+
 falcon.commands.allowlist.enabled=Włączono listę pozwoleń
 falcon.commands.allowlist.disabled=Wyłączono listę pozwoleń
 falcon.commands.allowlist.list=Lista pozwoleń (%1$s): %2$s

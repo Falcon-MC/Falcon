@@ -13,6 +13,7 @@
 #include <quickjs.h>
 
 class Actor;
+class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
 class ServerActor;
@@ -60,7 +61,7 @@ public:
 
     bool giveItem(ServerPlayer &player, const std::string &typeId, int32_t amount);
 
-    bool setBlockType(DimensionType dimension, int32_t x, int32_t y, int32_t z, const std::string &typeId);
+    bool setBlockType(Level &level, int32_t x, int32_t y, int32_t z, const std::string &typeId);
 
     int32_t runCommandAsPlayer(ServerPlayer &player, const std::string &commandLine);
 
@@ -78,16 +79,22 @@ public:
 
     JSClassID actorClassId() const { return mActorClassId; }
 
-    JSValue makeBlock(DimensionType dimension, int32_t x, int32_t y, int32_t z);
+    JSValue makeBlock(const Level &level, int32_t x, int32_t y, int32_t z);
 
     JSValue makeItemStack(const std::string &typeId, int32_t amount);
 
     JSValue makeHeldItemStack(ServerPlayer &player, const std::string &identifier);
 
-    JSValue makeDimension(DimensionType dimension);
+    JSValue makeDimension(const Level &level);
 
-    /** The dimension a script Dimension object stands for, read from its `id`. */
-    static DimensionType dimensionOf(JSContext *ctx, JSValueConst dimension);
+    /**
+     * The level a script Dimension object stands for: its `id` names the dimension and a hidden world id,
+     * set by makeDimension, names the world. Objects built by scripts themselves resolve in the default world.
+     */
+    Level &levelOf(JSContext *ctx, JSValueConst dimension);
+
+    /** A dimension of a world by id, falling back to the default world once that world is unloaded. */
+    Level &resolveLevel(uint32_t worldId, DimensionType dimension);
 
     JSClassID blockClassId() const { return mBlockClassId; }
 

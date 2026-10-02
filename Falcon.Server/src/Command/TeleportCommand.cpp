@@ -70,8 +70,8 @@ bool TeleportCommand::teleportToPlayer(CommandOrigin &sender, const std::vector<
 
     ServerPlayer &target = *targets.front();
     for (ServerPlayer *victim: victims) {
-        if (victim->getDimension() != target.getDimension())
-            mHandler.changePlayerDimension(*victim, target.getDimension(), target.getPosition());
+        if (!victim->sharesLevelWith(target))
+            mHandler.changePlayerLevel(*victim, mHandler.getLevelFor(target), target.getPosition());
         else
             victim->teleport(mHandler, target.getPosition());
 

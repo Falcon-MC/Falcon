@@ -4,6 +4,21 @@ falcon.commands.about.version=このサーバーは Falcon バージョン %1$s 
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (プロトコル %2$s)
 falcon.commands.about.build=ビルド %1$s、%2$s 構成
 
+falcon.commands.world.list=読み込まれたワールド (%1$s): %2$s
+falcon.commands.world.available=ディスク上のワールド: %1$s
+falcon.commands.world.created=ワールド %1$s を作成しました
+falcon.commands.world.exists=ワールド %1$s は既に存在します
+falcon.commands.world.invalidName=無効なワールド名です: %1$s
+falcon.commands.world.loaded=ワールド %1$s を読み込みました
+falcon.commands.world.alreadyLoaded=ワールド %1$s は既に読み込まれています
+falcon.commands.world.notFound=%1$s という名前のワールドはありません
+falcon.commands.world.notLoaded=ワールド %1$s は読み込まれていません
+falcon.commands.world.unloaded=ワールド %1$s をアンロードしました
+falcon.commands.world.unload.default=デフォルトのワールド %1$s はアンロードできません
+falcon.commands.world.unload.occupied=ワールド %1$s にはまだプレイヤーがいます
+falcon.commands.world.unload.cancelled=プラグインがワールド %1$s のアンロードを阻止しました
+falcon.commands.world.teleported=%1$s をワールド %2$s に送りました
+
 falcon.commands.allowlist.enabled=許可リストを有効にしました
 falcon.commands.allowlist.disabled=許可リストを無効にしました
 falcon.commands.allowlist.list=許可リスト (%1$s): %2$s

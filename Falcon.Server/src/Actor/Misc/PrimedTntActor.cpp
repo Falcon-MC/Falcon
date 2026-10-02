@@ -129,7 +129,7 @@ void PrimedTntActor::tick(ServerNetworkHandler &owner) {
 }
 
 void PrimedTntActor::_explode(ServerNetworkHandler &owner) {
-    if (!owner.getLevel().getGameRules().getBool("tntexplodes"))
+    if (!owner.getWorldFor(*this).getOverworld().getGameRules().getBool("tntexplodes"))
         return;
 
     const Vector3f position = getPosition();

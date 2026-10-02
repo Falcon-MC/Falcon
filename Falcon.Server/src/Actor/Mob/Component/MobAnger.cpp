@@ -135,7 +135,7 @@ void MobAnger::_broadcast(ServerNetworkHandler &owner, MobActor &mob, const json
 
     for (auto &entry: owner.getActors()) {
         MobActor *ally = dynamic_cast<MobActor *>(entry.second.get());
-        if (ally == nullptr || ally == &mob || !ally->isAlive() || ally->getDimension() != mob.getDimension()
+        if (ally == nullptr || ally == &mob || !ally->isAlive() || !ally->sharesLevelWith(mob)
             || ally->getTarget(owner) != nullptr || !hasAnyFamily(*ally, families)
             || mob.distanceSquaredTo(*ally) > range * range || !ally->canTarget(target))
             continue;

@@ -20,7 +20,7 @@ bool ServerNetworkHandler::canPlayerSeePlayer(ServerPlayer &viewer, const Server
     if (&viewer == &target || !viewer.isSpawned() || !target.isSpawned())
         return false;
 
-    if (viewer.getDimension() != target.getDimension())
+    if (!viewer.sharesLevelWith(target))
         return false;
 
     const Vector3f position = target.getPosition();

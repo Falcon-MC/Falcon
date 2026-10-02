@@ -4,6 +4,21 @@ falcon.commands.about.version=На этом сервере работает Falc
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (протокол %2$s)
 falcon.commands.about.build=Сборка %1$s, конфигурация %2$s
 
+falcon.commands.world.list=Загруженные миры (%1$s): %2$s
+falcon.commands.world.available=Миры на диске: %1$s
+falcon.commands.world.created=Мир %1$s создан
+falcon.commands.world.exists=Мир %1$s уже существует
+falcon.commands.world.invalidName=Недопустимое название мира: %1$s
+falcon.commands.world.loaded=Мир %1$s загружен
+falcon.commands.world.alreadyLoaded=Мир %1$s уже загружен
+falcon.commands.world.notFound=Мира с названием %1$s нет
+falcon.commands.world.notLoaded=Мир %1$s не загружен
+falcon.commands.world.unloaded=Мир %1$s выгружен
+falcon.commands.world.unload.default=Мир по умолчанию %1$s нельзя выгрузить
+falcon.commands.world.unload.occupied=В мире %1$s ещё есть игроки
+falcon.commands.world.unload.cancelled=Плагин не дал выгрузить мир %1$s
+falcon.commands.world.teleported=%1$s отправлен в мир %2$s
+
 falcon.commands.allowlist.enabled=Список разрешений включен
 falcon.commands.allowlist.disabled=Список разрешений отключен
 falcon.commands.allowlist.list=Список разрешений (%1$s): %2$s

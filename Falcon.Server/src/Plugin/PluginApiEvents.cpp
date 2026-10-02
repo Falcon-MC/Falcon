@@ -240,6 +240,14 @@ namespace {
             return;
         *source->mResult = *item(result);
     }
+
+    const char *eventWorldName(FalconEvent *target) {
+        return hold(event(target)->mWorldName);
+    }
+
+    const char *eventPreviousWorldName(FalconEvent *target) {
+        return hold(event(target)->mPreviousWorldName);
+    }
 }
 
 void PluginServerApi::fillEvents(FalconServerApi &api) {
@@ -287,4 +295,6 @@ void PluginServerApi::fillEvents(FalconServerApi &api) {
     api.eventChunkZ = &eventChunkZ;
     api.eventResult = &eventResult;
     api.eventSetResult = &eventSetResult;
+    api.eventWorldName = &eventWorldName;
+    api.eventPreviousWorldName = &eventPreviousWorldName;
 }

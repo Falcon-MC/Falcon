@@ -23,7 +23,7 @@ PickupItemsGoal::PickupItemsGoal(float speed, float maxDistance, float goalRadiu
 }
 
 bool PickupItemsGoal::_isAvailable(ServerNetworkHandler &owner, const MobActor &mob, const ItemActor &item) const {
-    return !item.isRemoved() && item.canPickup() && item.getDimension() == mob.getDimension()
+    return !item.isRemoved() && item.canPickup() && item.sharesLevelWith(mob)
            && distanceSquared(item.getPosition(), mob.getPosition()) <= mMaxDistance * mMaxDistance
            && MobShareables::wants(owner, mob, item.getItem());
 }

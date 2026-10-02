@@ -2,7 +2,7 @@
 
 #include "Core/Utility/UUID.h"
 #include "Level/Level.h"
-#include "Network/Handler/ServerNetworkHandler.h"
+#include "Level/World.h"
 
 #include <algorithm>
 #include <random>
@@ -103,14 +103,14 @@ TickingArea TickingArea::circle(const Vector3i &center, int32_t radius) {
     return area;
 }
 
-void TickingAreaManager::load(ServerNetworkHandler &owner) {
+void TickingAreaManager::load(World &world) {
     for (const TickingArea &area: mAreas)
-        _detach(owner, area);
+        _detach(world, area);
     mAreas.clear();
 
-    for (const std::pair<std::string, Tag> &entry: owner.getDimension(DimensionType::Overworld).loadTickingAreas()) {
+    for (const std::pair<std::string, Tag> &entry: world.getLevel(DimensionType::Overworld).loadTickingAreas()) {
         mAreas.push_back(TickingArea::fromNbt(entry.first, entry.second));
-        _attach(owner, mAreas.back());
+        _attach(world, mAreas.back());
     }
 }
 
@@ -128,17 +128,17 @@ std::string TickingAreaManager::nextDefaultName() const {
     }
 }
 
-const TickingArea &TickingAreaManager::add(ServerNetworkHandler &owner, TickingArea area) {
+const TickingArea &TickingAreaManager::add(World &world, TickingArea area) {
     area.mId = _randomId();
     mAreas.push_back(std::move(area));
 
     const TickingArea &added = mAreas.back();
-    owner.getDimension(DimensionType::Overworld).saveTickingArea(added.mId, added.toNbt());
-    _attach(owner, added);
+    world.getLevel(DimensionType::Overworld).saveTickingArea(added.mId, added.toNbt());
+    _attach(world, added);
     return added;
 }
 
-std::vector<TickingArea> TickingAreaManager::remove(ServerNetworkHandler &owner,
+std::vector<TickingArea> TickingAreaManager::remove(World &world,
                                                     const std::function<bool(const TickingArea &)> &match) {
     std::vector<TickingArea> removed;
     for (auto it = mAreas.begin(); it != mAreas.end();) {
@@ -147,15 +147,15 @@ std::vector<TickingArea> TickingAreaManager::remove(ServerNetworkHandler &owner,
             continue;
         }
 
-        owner.getDimension(DimensionType::Overworld).eraseTickingArea(it->mId);
-        _detach(owner, *it);
+        world.getLevel(DimensionType::Overworld).eraseTickingArea(it->mId);
+        _detach(world, *it);
         removed.push_back(std::move(*it));
         it = mAreas.erase(it);
     }
     return removed;
 }
 
-std::vector<TickingArea> TickingAreaManager::setPreload(ServerNetworkHandler &owner,
+std::vector<TickingArea> TickingAreaManager::setPreload(World &world,
                                                         const std::function<bool(const TickingArea &)> &match,
                                                         bool preload) {
     std::vector<TickingArea> updated;
@@ -164,7 +164,7 @@ std::vector<TickingArea> TickingAreaManager::setPreload(ServerNetworkHandler &ow
             continue;
 
         area.mPreload = preload;
-        owner.getDimension(DimensionType::Overworld).saveTickingArea(area.mId, area.toNbt());
+        world.getLevel(DimensionType::Overworld).saveTickingArea(area.mId, area.toNbt());
         updated.push_back(area);
     }
     return updated;
@@ -193,8 +193,8 @@ std::string TickingAreaManager::_randomId() {
     return Uuid(most, least).toString();
 }
 
-void TickingAreaManager::_attach(ServerNetworkHandler &owner, const TickingArea &area) {
-    Level &level = owner.getDimension(area.mDimension);
+void TickingAreaManager::_attach(World &world, const TickingArea &area) {
+    Level &level = world.getLevel(area.mDimension);
     const uint64_t loader = _loaderId(area);
 
     for (const int64_t column: area.getColumns()) {
@@ -207,15 +207,15 @@ void TickingAreaManager::_attach(ServerNetworkHandler &owner, const TickingArea 
             level.requestChunkAsync(chunkX, chunkZ);
     }
 
-    owner.markActiveColumnsDirty();
+    world.mActorPersistencePending = true;
 }
 
-void TickingAreaManager::_detach(ServerNetworkHandler &owner, const TickingArea &area) {
-    Level &level = owner.getDimension(area.mDimension);
+void TickingAreaManager::_detach(World &world, const TickingArea &area) {
+    Level &level = world.getLevel(area.mDimension);
     const uint64_t loader = _loaderId(area);
 
     for (const int64_t column: area.getColumns())
         level.unregisterChunkLoader(loader, (int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
 
-    owner.markActiveColumnsDirty();
+    world.mActorPersistencePending = true;
 }

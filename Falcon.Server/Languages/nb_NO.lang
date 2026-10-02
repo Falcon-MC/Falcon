@@ -4,6 +4,21 @@ falcon.commands.about.version=Denne serveren kjører Falcon versjon %1$s (%2$s p
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokoll %2$s)
 falcon.commands.about.build=Build %1$s, %2$s-konfigurasjon
 
+falcon.commands.world.list=Innlastede verdener (%1$s): %2$s
+falcon.commands.world.available=Verdener på disken: %1$s
+falcon.commands.world.created=Verdenen %1$s er opprettet
+falcon.commands.world.exists=Verdenen %1$s finnes allerede
+falcon.commands.world.invalidName=Ugyldig verdensnavn: %1$s
+falcon.commands.world.loaded=Verdenen %1$s er lastet inn
+falcon.commands.world.alreadyLoaded=Verdenen %1$s er allerede lastet inn
+falcon.commands.world.notFound=Det finnes ingen verden som heter %1$s
+falcon.commands.world.notLoaded=Verdenen %1$s er ikke lastet inn
+falcon.commands.world.unloaded=Verdenen %1$s er lastet ut
+falcon.commands.world.unload.default=Standardverdenen %1$s kan ikke lastes ut
+falcon.commands.world.unload.occupied=Det er fortsatt spillere i verdenen %1$s
+falcon.commands.world.unload.cancelled=Et programtillegg hindret at verdenen %1$s ble lastet ut
+falcon.commands.world.teleported=%1$s ble sendt til verdenen %2$s
+
 falcon.commands.allowlist.enabled=Hvitelisten er slått på
 falcon.commands.allowlist.disabled=Hvitelisten er slått av
 falcon.commands.allowlist.list=Hvitelisten (%1$s): %2$s

@@ -40,7 +40,7 @@ TridentItem::TridentItem(const Item &base) : Item(base) {
 
 bool TridentItem::applyRiptide(ServerNetworkHandler &owner, ServerPlayer &player, int32_t level) const {
     Level &world = owner.getLevelFor(player);
-    const bool raining = world.hasSkyLight() && owner.getLevel().isRaining();
+    const bool raining = world.hasSkyLight() && owner.getWorldOf(world).getOverworld().isRaining();
     if (!LiquidBlocksFetch::at(world, player.getPosition()).water && !raining)
         return false;
 

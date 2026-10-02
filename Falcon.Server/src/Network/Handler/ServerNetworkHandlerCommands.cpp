@@ -52,6 +52,7 @@
 #include "Command/TestForBlocksCommand.h"
 #include "Command/TestForCommand.h"
 #include "Command/TimeCommand.h"
+#include "Command/WorldCommand.h"
 #include "Command/TitleCommand.h"
 #include "Command/TransferCommand.h"
 #include "Command/WeatherCommand.h"
@@ -104,6 +105,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<MeCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellRawCommand>(*this));
     mCommands.registerCommand(std::make_shared<TimeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<WorldCommand>(*this));
     mCommands.registerCommand(std::make_shared<WeatherCommand>(*this));
     mCommands.registerCommand(std::make_shared<GameRuleCommand>(*this));
     mCommands.registerCommand(std::make_shared<ProfilerCommand>(*this));

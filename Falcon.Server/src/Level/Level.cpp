@@ -56,6 +56,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mTime = other.mTime;
     mSeed = other.mSeed;
     mDimension = other.mDimension;
+    mWorldId = other.mWorldId;
     mSpawnPosition = other.mSpawnPosition;
     mHasSpawnPosition = other.mHasSpawnPosition;
     mGenerator = std::move(other.mGenerator);
@@ -72,6 +73,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mBlockUpdates.moveStateFrom(std::move(other.mBlockUpdates));
     mLiquidPhysics.moveStateFrom(std::move(other.mLiquidPhysics));
     mGameRules = std::move(other.mGameRules);
+    mRulesOwner = other.mRulesOwner;
     mPacketBroadcaster = std::move(other.mPacketBroadcaster);
     mBlockLightQueue = std::move(other.mBlockLightQueue);
     mBlockActors.moveStateFrom(std::move(other.mBlockActors));

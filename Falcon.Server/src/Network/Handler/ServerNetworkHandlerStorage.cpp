@@ -18,14 +18,16 @@
 #include <vector>
 
 void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player) {
-    if (mPlayerData.saveData(player.getName(), player.saveNbt(mLevel.getName())))
+    if (mPlayerData.saveData(player.getName(), player.saveNbt(getWorldFor(player).getName())))
         LOG_INFO(LogAreaID::Server, "Saved player data for %s", player.getName().c_str());
     else
         LOG_WARN(LogAreaID::Server, "Could not save player data for %s", player.getName().c_str());
 }
 
 void ServerNetworkHandler::_loadPlayerData(ServerPlayer &player) {
-    player.setPosition(mLevel.getSpawnPositionForPlayer());
+    World &defaultWorld = mWorlds.getDefault();
+    player.moveToLevel(defaultWorld.getOverworld());
+    player.setPosition(defaultWorld.getOverworld().getSpawnPositionForPlayer());
     player.setOp(mOps.isOp(player.getName()));
 
     player.setUniqueId(allocateActorUniqueId());
@@ -39,10 +41,20 @@ void ServerNetworkHandler::_loadPlayerData(ServerPlayer &player) {
     player.loadNbt(data, mCodecContext);
     player.resetFallDistance();
 
+    World *savedWorld = mWorlds.find(data.getString(ServerPlayer::TAG_LEVEL, std::string()));
+    if (savedWorld != nullptr) {
+        player.moveToLevel(savedWorld->getLevel(player.getDimension()));
+    } else {
+        player.moveToLevel(defaultWorld.getOverworld());
+        player.setPosition(defaultWorld.getOverworld().getSpawnPositionForPlayer());
+    }
+
     if (player.getHealth() <= 0.0f) {
         player.setDead(false);
         player.setHealth(player.getMaxHealth());
-        player.setPosition(mLevel.getSpawnPositionForPlayer());
+        Level &overworld = getWorldFor(player).getOverworld();
+        player.moveToLevel(overworld);
+        player.setPosition(overworld.getSpawnPositionForPlayer());
         player.resetFallDistance();
     }
 }
@@ -60,8 +72,13 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
             continue;
         }
 
-        if (tag.contains("UniqueID") && mActors.count(tag.getLong("UniqueID")) != 0)
+        const auto loaded = tag.contains("UniqueID") ? mActors.find(tag.getLong("UniqueID")) : mActors.end();
+        if (loaded != mActors.end() && loaded->second->isIn(level))
             continue;
+
+        // Unique ids are only unique within one world database, so an actor from another world can
+        // carry the id of one already loaded here; it gets a fresh id instead of being dropped.
+        const bool idTaken = loaded != mActors.end();
 
         const uint64_t runtimeId = allocateRuntimeId();
 
@@ -86,10 +103,12 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
         }
 
         actor->loadNbt(tag);
+        if (idTaken)
+            actor->setUniqueId(allocateActorUniqueId());
         actor->initializeProperties();
         if (mob != nullptr)
             mob->getEquipment().loadNbt(tag, mCodecContext);
-        actor->setDimension(level.getDimensionType());
+        actor->moveToLevel(level);
 
         ServerActor *result = _registerActor(std::move(actor));
 
@@ -117,7 +136,7 @@ void ServerNetworkHandler::saveActorsForChunk(Level &level, int32_t chunkX, int3
 
     for (auto &entry: mActors) {
         ServerActor &actor = *entry.second;
-        if (!actor.shouldSave() || actor.getDimension() != level.getDimensionType())
+        if (!actor.shouldSave() || !actor.isIn(level))
             continue;
 
         const Vector3f position = actor.getPosition();
@@ -151,7 +170,7 @@ void ServerNetworkHandler::saveActorsForChunk(Level &level, int32_t chunkX, int3
 
 void ServerNetworkHandler::saveAllActors() {
     for (Level *level: getLevels()) {
-        for (const int64_t column: mActorLoadedChunks[level->getDimensionId()]) {
+        for (const int64_t column: getWorldOf(*level).getActorLoadedChunks(level->getDimensionType())) {
             const int32_t chunkX = (int32_t) (column >> 32);
             const int32_t chunkZ = (int32_t) (column & 0xffffffff);
             saveActorsForChunk(*level, chunkX, chunkZ, false);
@@ -161,7 +180,7 @@ void ServerNetworkHandler::saveAllActors() {
 }
 
 void ServerNetworkHandler::autoSave() {
-    if (!mLevel.isStorageOpen())
+    if (!getLevel().isStorageOpen())
         return;
 
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
@@ -175,11 +194,8 @@ void ServerNetworkHandler::autoSave() {
     saveWorldDynamicProperties();
     saveAllActors();
 
-    mLevel.saveAll();
-    if (mNetherLevel != nullptr)
-        mNetherLevel->saveAll();
-    if (mTheEndLevel != nullptr)
-        mTheEndLevel->saveAll();
+    for (World *world: mWorlds.getWorlds())
+        world->saveAll();
 
     const long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - start).count();
@@ -190,7 +206,7 @@ bool ServerNetworkHandler::syncActorPersistence(Level &level, const std::vector<
     if (!level.isStorageOpen())
         return false;
 
-    std::unordered_set<int64_t> &loadedChunks = mActorLoadedChunks[level.getDimensionId()];
+    std::unordered_set<int64_t> &loadedChunks = getWorldOf(level).getActorLoadedChunks(level.getDimensionType());
     const std::unordered_set<int64_t> active(activeColumns.begin(), activeColumns.end());
     bool deferred = false;
 

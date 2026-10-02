@@ -125,6 +125,9 @@ public:
 
     std::string getLevelSeed() const { return getString("level-seed"); }
 
+    /** Extra worlds loaded at start-up, from the comma-separated `worlds-autoload` list. */
+    std::vector<std::string> getAutoloadWorlds() const;
+
     PlayerPermission getDefaultPlayerPermissionLevel() const;
 
     bool getTexturePackRequired() const { return getBool("texturepack-required"); }

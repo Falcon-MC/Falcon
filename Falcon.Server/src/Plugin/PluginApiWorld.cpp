@@ -6,6 +6,7 @@
 #include "Core/Json/Json.h"
 #include "Level/Dimension.h"
 #include "Level/Explosion.h"
+#include "Level/Generator/Overworld/OverworldGenerator.h"
 #include "Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
@@ -123,12 +124,7 @@ namespace {
         if ((uint32_t) Dimension::toId(type) != dimension)
             return nullptr;
 
-        for (Level *value: owner().getLevels()) {
-            if (value->getDimensionType() == type)
-                return toHandle(value);
-        }
-
-        return nullptr;
+        return toHandle(&owner().getDimension(type));
     }
 
     FalconDimension levelDimension(FalconLevel *handle) {
@@ -213,35 +209,34 @@ namespace {
         return value->getMinY() - 1;
     }
 
+    World &worldOf(FalconLevel *handle) {
+        return owner().getWorldOf(*level(handle));
+    }
+
     int64_t levelTime(FalconLevel *handle) {
-        (void) handle;
-        return owner().getLevel().getTime();
+        return worldOf(handle).getOverworld().getTime();
     }
 
     void levelSetTime(FalconLevel *handle, int64_t time) {
-        (void) handle;
-        owner().getLevel().setTime(time);
-        owner().broadcastWorldTime();
+        World &world = worldOf(handle);
+        world.getOverworld().setTime(time);
+        owner().broadcastWorldTime(world);
     }
 
     int levelIsRaining(FalconLevel *handle) {
-        (void) handle;
-        return owner().getLevel().isRaining() ? 1 : 0;
+        return worldOf(handle).getOverworld().isRaining() ? 1 : 0;
     }
 
     void levelSetRaining(FalconLevel *handle, int raining) {
-        (void) handle;
-        owner().setRaining(raining != 0);
+        owner().setRaining(worldOf(handle), raining != 0);
     }
 
     int levelIsThundering(FalconLevel *handle) {
-        (void) handle;
-        return owner().getLevel().isThundering() ? 1 : 0;
+        return worldOf(handle).getOverworld().isThundering() ? 1 : 0;
     }
 
     void levelSetThundering(FalconLevel *handle, int thundering) {
-        (void) handle;
-        owner().setThundering(thundering != 0);
+        owner().setThundering(worldOf(handle), thundering != 0);
     }
 
     FalconVec3 levelSpawnPosition(FalconLevel *handle) {
@@ -271,6 +266,45 @@ namespace {
 
     void levelStrikeLightning(FalconLevel *handle, FalconVec3 position) {
         owner().strikeLightning(*level(handle), toVector3f(position));
+    }
+
+    uint32_t serverWorldCount() {
+        return (uint32_t) owner().getWorlds().getWorlds().size();
+    }
+
+    const char *serverWorldName(uint32_t index) {
+        const std::vector<World *> worlds = owner().getWorlds().getWorlds();
+        return index < worlds.size() ? hold(worlds[index]->getName()) : nullptr;
+    }
+
+    const char *serverDefaultWorldName() {
+        return hold(owner().getWorlds().getDefault().getName());
+    }
+
+    FalconLevel *worldLevel(const char *name, FalconDimension dimension) {
+        World *world = name == nullptr ? nullptr : owner().getWorlds().find(std::string(name));
+        const DimensionType type = Dimension::fromId((int32_t) dimension);
+        if (world == nullptr || (uint32_t) Dimension::toId(type) != dimension)
+            return nullptr;
+
+        return toHandle(&world->getLevel(type));
+    }
+
+    int serverLoadWorld(const char *name, int create, const char *seed) {
+        if (name == nullptr)
+            return 0;
+
+        const int64_t parsed = seed == nullptr || *seed == '\0' ? ServerNetworkHandler::randomSeed()
+                                                                : OverworldGenerator::parseSeed(seed);
+        return owner().loadWorld(name, create != 0, parsed) != nullptr ? 1 : 0;
+    }
+
+    int serverUnloadWorld(const char *name) {
+        if (name == nullptr)
+            return 0;
+
+        std::string error;
+        return owner().unloadWorld(name, error) ? 1 : 0;
     }
 
     void levelCreateExplosion(FalconLevel *handle, FalconVec3 position, float power, int breakBlocks) {
@@ -306,4 +340,10 @@ void PluginServerApi::fillWorld(FalconServerApi &api) {
     api.levelDropItem = &levelDropItem;
     api.levelStrikeLightning = &levelStrikeLightning;
     api.levelCreateExplosion = &levelCreateExplosion;
+    api.serverWorldCount = &serverWorldCount;
+    api.serverWorldName = &serverWorldName;
+    api.serverDefaultWorldName = &serverDefaultWorldName;
+    api.worldLevel = &worldLevel;
+    api.serverLoadWorld = &serverLoadWorld;
+    api.serverUnloadWorld = &serverUnloadWorld;
 }

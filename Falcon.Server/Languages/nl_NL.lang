@@ -4,6 +4,21 @@ falcon.commands.about.version=Deze server draait Falcon versie %1$s (%2$s op %3$
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protocol %2$s)
 falcon.commands.about.build=Build %1$s, configuratie %2$s
 
+falcon.commands.world.list=Geladen werelden (%1$s): %2$s
+falcon.commands.world.available=Werelden op de schijf: %1$s
+falcon.commands.world.created=Wereld %1$s is aangemaakt
+falcon.commands.world.exists=Wereld %1$s bestaat al
+falcon.commands.world.invalidName=Ongeldige wereldnaam: %1$s
+falcon.commands.world.loaded=Wereld %1$s is geladen
+falcon.commands.world.alreadyLoaded=Wereld %1$s is al geladen
+falcon.commands.world.notFound=Er is geen wereld met de naam %1$s
+falcon.commands.world.notLoaded=Wereld %1$s is niet geladen
+falcon.commands.world.unloaded=Wereld %1$s is ontladen
+falcon.commands.world.unload.default=De standaardwereld %1$s kan niet worden ontladen
+falcon.commands.world.unload.occupied=Er zijn nog spelers in wereld %1$s
+falcon.commands.world.unload.cancelled=Een plug-in heeft het ontladen van wereld %1$s verhinderd
+falcon.commands.world.teleported=%1$s is naar wereld %2$s gestuurd
+
 falcon.commands.allowlist.enabled=De goedgekeurde lijst is ingeschakeld
 falcon.commands.allowlist.disabled=De goedgekeurde lijst is uitgeschakeld
 falcon.commands.allowlist.list=Goedgekeurde lijst (%1$s): %2$s

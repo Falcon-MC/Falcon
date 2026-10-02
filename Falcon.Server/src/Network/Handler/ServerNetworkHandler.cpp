@@ -8,6 +8,7 @@
 #include "Command/ServerCommandOrigin.h"
 #include "Block/BlockActorStore.h"
 #include "Block/BlockPickItem.h"
+#include "Level/AutoCompaction.h"
 #include "Level/Generator/Overworld/OverworldGenerator.h"
 #include "Block/Systems/BlockContactSystem.h"
 #include "Block/Systems/PistonSystem.h"
@@ -139,12 +140,12 @@
 #include <utility>
 #include "Protocol/Packets/UpdateAttributesPacket.h"
 
-namespace {
-    int64_t randomLevelSeed() {
-        std::random_device device;
-        return (int64_t) (((uint64_t) device() << 32) | (uint64_t) device());
-    }
+int64_t ServerNetworkHandler::randomSeed() {
+    std::random_device device;
+    return (int64_t) (((uint64_t) device() << 32) | (uint64_t) device());
+}
 
+namespace {
     class JsonValidator {
     public:
         explicit JsonValidator(const std::string &value) : mValue(value) {}
@@ -346,9 +347,10 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
                                            TransportLayer transport)
         : mRakNetInstance(nullptr), mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers),
           mIsListening(false), mNextRuntimeId(1),
-          mLevel("Bedrock level", DEFAULT_VIEW_DISTANCE),
           mPlayerData("players"), mOps("ops.txt"), mAllowList("allowlist.json"),
           mBanList("banned-players.json"), mIpBanList("banned-ips.json") {
+    mWorlds.add("Bedrock level", DEFAULT_VIEW_DISTANCE, 0);
+
     std::unique_ptr<Connector> rakNet = TransportFactory::createConnector(TransportLayer::RakNet, *this, true);
 
     if (rakNet != nullptr) {
@@ -458,41 +460,17 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     }
 
     const int64_t levelSeed = properties.getLevelSeed().empty()
-                              ? randomLevelSeed()
+                              ? randomSeed()
                               : OverworldGenerator::parseSeed(properties.getLevelSeed());
 
-    mLevel = Level(properties.getLevelName(), _getServerViewDistance(), levelSeed, DimensionType::Overworld);
-    mLevel.openStorage("worlds");
-    mLevel.initializeWeather();
-    mLevel.initializeGameRules();
-    mLevel.startWorkers(_getChunkWorkerThreadCount());
+    for (World *world: mWorlds.getWorlds())
+        mWorlds.remove(world->getId());
+    _openWorld(properties.getLevelName(), levelSeed);
 
-    mNetherLevel.reset(new Level(properties.getLevelName(), _getServerViewDistance(), mLevel.getSeed(),
-                                 DimensionType::Nether));
-    mTheEndLevel.reset(new Level(properties.getLevelName(), _getServerViewDistance(), mLevel.getSeed(),
-                                 DimensionType::TheEnd));
-
-    if (mLevel.isStorageOpen()) {
-        mNetherLevel->attachStorage(mLevel);
-        mTheEndLevel->attachStorage(mLevel);
+    for (const std::string &name: properties.getAutoloadWorlds()) {
+        if (mWorlds.find(name) == nullptr && WorldManager::isValidName(name))
+            _openWorld(name, randomSeed());
     }
-
-    mNetherLevel->startWorkers(_getChunkWorkerThreadCount());
-    mTheEndLevel->startWorkers(_getChunkWorkerThreadCount());
-
-    const Level::PacketBroadcaster broadcaster = [this](Level &level, const Vector3f &position,
-                                                        const Packet &packet) {
-        BlockActionHandler::broadcastToViewers(*this, level, position, packet);
-    };
-    mLevel.setPacketBroadcaster(broadcaster);
-    mNetherLevel->setPacketBroadcaster(broadcaster);
-    mTheEndLevel->setPacketBroadcaster(broadcaster);
-
-    mLevel.setOwner(this);
-    mNetherLevel->setOwner(this);
-    mTheEndLevel->setOwner(this);
-
-    mTickingAreas.load(*this);
 
     _logPackStack();
 
@@ -628,15 +606,11 @@ void ServerNetworkHandler::stopServerListening() {
 
     saveAllActors();
 
-    LOG_INFO(LogAreaID::Server, "Saving level %s", mLevel.getName().c_str());
-
-    if (mNetherLevel != nullptr)
-        mNetherLevel->closeStorage();
-
-    if (mTheEndLevel != nullptr)
-        mTheEndLevel->closeStorage();
-
-    mLevel.closeStorage();
+    for (World *world: mWorlds.getWorlds()) {
+        LOG_INFO(LogAreaID::Server, "Saving level %s", world->getName().c_str());
+        AutoCompaction::untrack(world->getOverworld());
+        world->close();
+    }
 
     AuthKeyProvider::getInstance().stop();
 
@@ -657,7 +631,8 @@ void ServerNetworkHandler::tick() {
         mTickStartSamples.pop_front();
 
     mCurrentTick++;
-    mLevel.tickTime();
+    for (World *world: mWorlds.getWorlds())
+        world->getOverworld().tickTime();
     _tickSleep();
 
     const int autoSaveInterval = mProperties.getAutoSaveInterval();
@@ -666,7 +641,8 @@ void ServerNetworkHandler::tick() {
     mProfiler.beginTick(mCurrentTick);
 
     mProfiler.beginSection(ProfilerSection::Weather);
-    mLevel.updateSkyLightSubtracted();
+    for (World *world: mWorlds.getWorlds())
+        world->getOverworld().updateSkyLightSubtracted();
     tickWeather();
     mProfiler.endSection(ProfilerSection::Weather);
 
@@ -717,90 +693,8 @@ void ServerNetworkHandler::tick() {
 
     mNetworkHandler->runEvents();
 
-    mProfiler.beginSection(ProfilerSection::ChunkDrain);
-    mLevel.drainCompletedChunks();
-    mProfiler.endSection(ProfilerSection::ChunkDrain);
-
-    mProfiler.beginSection(ProfilerSection::ChunkPopulation);
-    mLevel.processGeneratedChanges();
-
-    const std::vector<int64_t> repopulated = mLevel.consumeRepopulatedChunks();
-    if (!repopulated.empty()) {
-        for (auto &entry: mPlayers) {
-            ServerPlayer &player = entry.second;
-            if (!player.isSpawned() || player.getDimension() != DimensionType::Overworld)
-                continue;
-
-            for (const int64_t hash: repopulated)
-                ChunkStreamHandler::invalidateChunk(player, hash);
-        }
-    }
-    mProfiler.endSection(ProfilerSection::ChunkPopulation);
-
-    {
-        const int tickDistance = mProperties.getTickDistance();
-        std::vector<int64_t> centers;
-
-        for (auto &entry: mPlayers) {
-            ServerPlayer &player = entry.second;
-            if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent)
-                continue;
-            if (player.getDimension() != DimensionType::Overworld)
-                continue;
-
-            const int32_t centerX = (int32_t) std::floor(player.getPosition().x) >> 4;
-            const int32_t centerZ = (int32_t) std::floor(player.getPosition().z) >> 4;
-            centers.push_back(((int64_t) centerX << 32) | (uint32_t) centerZ);
-        }
-
-        std::sort(centers.begin(), centers.end());
-        centers.erase(std::unique(centers.begin(), centers.end()), centers.end());
-
-        if (mActorPersistencePending || tickDistance != mActiveTickDistance || centers != mActiveCenters) {
-            mActiveCenters = centers;
-            mActiveTickDistance = tickDistance;
-
-            const size_t span = (size_t) (2 * tickDistance + 1);
-            std::vector<int64_t> activeColumns;
-            activeColumns.reserve(centers.size() * span * span);
-
-            for (const int64_t center: centers) {
-                const int32_t centerX = (int32_t) (center >> 32);
-                const int32_t centerZ = (int32_t) (center & 0xffffffff);
-
-                for (int32_t dx = -tickDistance; dx <= tickDistance; ++dx) {
-                    for (int32_t dz = -tickDistance; dz <= tickDistance; ++dz)
-                        activeColumns.push_back(((int64_t) (centerX + dx) << 32) | (uint32_t) (centerZ + dz));
-                }
-            }
-
-            mTickingAreas.appendColumns(DimensionType::Overworld, activeColumns);
-            mLevel.setActiveColumns(activeColumns);
-
-            mProfiler.beginSection(ProfilerSection::ActorPersistence);
-            mActorPersistencePending = syncActorPersistence(mLevel, activeColumns);
-            mProfiler.endSection(ProfilerSection::ActorPersistence);
-        }
-    }
-
-    mProfiler.beginSection(ProfilerSection::Fluids);
-    mLevel.tick();
-    mProfiler.endSection(ProfilerSection::Fluids);
-
-    mProfiler.beginSection(ProfilerSection::FluidBroadcast);
-    for (const Level::FluidChange &change: mLevel.consumeFluidChanges()) {
-        UpdateBlockPacket update;
-        update.mBlockPosition = change.position;
-        update.mRuntimeId = (uint32_t) BlockStateHasher::hash(change.state.mName, change.state.mStates);
-        update.mFlags = UpdateBlockPacket::Flag::All;
-        update.mDataLayer = (uint32_t) change.layer;
-        BlockActionHandler::broadcastToViewers(*this, mLevel,
-                                               Vector3f((float) change.position.x + 0.5f,
-                                                        (float) change.position.y + 0.5f,
-                                                        (float) change.position.z + 0.5f),
-                                               update);
-    }
-    mProfiler.endSection(ProfilerSection::FluidBroadcast);
+    for (World *world: mWorlds.getWorlds())
+        _tickOverworld(*world);
 
     mProfiler.beginSection(ProfilerSection::Players);
     for (auto &entry: mPlayers)
@@ -823,13 +717,12 @@ void ServerNetworkHandler::tick() {
 
     for (auto &entry: mPlayers)
         broadcastPlayerMove(entry.second);
-    mLevel.processChunkUnloads();
 
-    if (mNetherLevel != nullptr)
-        _tickDimension(*mNetherLevel);
-
-    if (mTheEndLevel != nullptr)
-        _tickDimension(*mTheEndLevel);
+    for (World *world: mWorlds.getWorlds()) {
+        world->getOverworld().processChunkUnloads();
+        _tickDimension(*world, world->getLevel(DimensionType::Nether));
+        _tickDimension(*world, world->getLevel(DimensionType::TheEnd));
+    }
 
     const std::vector<Level *> levels = getLevels();
 
@@ -868,11 +761,19 @@ void ServerNetworkHandler::tick() {
     for (const auto &entry: timedOut)
         _disconnect(entry.first, entry.second);
 
-    const ChunkWorker *chunkWorker = mLevel.getChunkWorker();
-    mProfiler.endTick((uint32_t) mPlayers.size(), (uint32_t) mLevel.getLoadedChunkCount(),
-                      chunkWorker == nullptr ? 0 : (uint32_t) chunkWorker->getPendingTaskCount(),
-                      (uint32_t) mLevel.getLastFluidProcessedCount(),
-                      (uint32_t) mLevel.getScheduledFluidCount());
+    uint32_t loadedChunks = 0;
+    uint32_t pendingChunkTasks = 0;
+    uint32_t fluidsProcessed = 0;
+    uint32_t fluidsScheduled = 0;
+    for (World *world: mWorlds.getWorlds()) {
+        Level &overworld = world->getOverworld();
+        const ChunkWorker *chunkWorker = overworld.getChunkWorker();
+        loadedChunks += (uint32_t) overworld.getLoadedChunkCount();
+        pendingChunkTasks += chunkWorker == nullptr ? 0 : (uint32_t) chunkWorker->getPendingTaskCount();
+        fluidsProcessed += (uint32_t) overworld.getLastFluidProcessedCount();
+        fluidsScheduled += (uint32_t) overworld.getScheduledFluidCount();
+    }
+    mProfiler.endTick((uint32_t) mPlayers.size(), loadedChunks, pendingChunkTasks, fluidsProcessed, fluidsScheduled);
 
     const double elapsedMs = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - tickStart).count();
@@ -1645,7 +1546,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ActorPickRe
 
     for (const std::unique_ptr<ItemActor> &actor: mItemEntities) {
         if (actor->isRemoved() || actor->getRuntimeId() != packet.mRuntimeActorId ||
-            actor->getDimension() != player->getDimension())
+            !actor->sharesLevelWith(*player))
             continue;
 
         const Vector3f position = player->getPosition();
@@ -1709,27 +1610,47 @@ void ServerNetworkHandler::broadcastTranslation(const std::string &key,
     }
 }
 
-void ServerNetworkHandler::broadcastWorldTime() {
+void ServerNetworkHandler::broadcastWorldTime(World &world) {
     SetTimePacket packet;
-    packet.mTime = (int32_t) getLevel().getDayTime();
+    packet.mTime = (int32_t) world.getOverworld().getDayTime();
     for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
+        if (entry.second.isSpawned() && entry.second.getWorldId() == world.getId())
             mNetworkHandler->send(entry.first, packet, mCodecContext);
     }
 }
 
-bool ServerNetworkHandler::changeGameRule(const std::string &name, const std::string &value) {
-    GameRules &rules = mLevel.getGameRules();
+bool ServerNetworkHandler::changeGameRule(World &world, const std::string &name, const std::string &value) {
+    Level &overworld = world.getOverworld();
+    GameRules &rules = overworld.getGameRules();
     if (!rules.setFromString(name, value))
         return false;
 
     const GameRules::Rule *rule = rules.find(name);
     GameRulesChangedPacket changed;
     changed.mGameRules.push_back(rules.toChangedNetwork(*rule));
-    mNetworkHandler->sendToAll(changed, mCodecContext);
+    for (auto &entry: mPlayers) {
+        if (entry.second.getWorldId() == world.getId())
+            mNetworkHandler->send(entry.first, changed, mCodecContext);
+    }
 
-    mLevel.saveGameRules();
+    overworld.saveGameRules();
     return true;
+}
+
+void ServerNetworkHandler::_sendWorldState(ServerPlayer &player) {
+    World &world = getWorldFor(player);
+    const GameRules &rules = world.getOverworld().getGameRules();
+
+    SetTimePacket time;
+    time.mTime = (int32_t) world.getOverworld().getDayTime();
+    sendPacketTo(player.getNetworkIdentifier(), time);
+
+    GameRulesChangedPacket changed;
+    for (const GameRules::Rule &rule: rules.getRules())
+        changed.mGameRules.push_back(rules.toChangedNetwork(rule));
+    sendPacketTo(player.getNetworkIdentifier(), changed);
+
+    sendWeatherTo(player);
 }
 
 void ServerNetworkHandler::setDefaultGameType(GameType gameType) {

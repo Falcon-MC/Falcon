@@ -448,7 +448,7 @@ int32_t MobActor::_countSensedEntities(ServerNetworkHandler &owner, const json::
     const json::Value *filters = subsensor.get("event_filters");
 
     const auto senses = [&](const Actor &actor) {
-        if (&actor == this || !actor.isAlive() || actor.getDimension() != getDimension())
+        if (&actor == this || !actor.isAlive() || !actor.sharesLevelWith(*this))
             return false;
 
         const Vector3f other = actor.getPosition();
@@ -551,7 +551,7 @@ void MobActor::_tickInactivity(ServerNetworkHandler &owner) {
     const Vector3f position = getPosition();
     for (auto &entry: owner.getPlayers()) {
         const ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.getDimension() != getDimension())
+        if (!player.isSpawned() || !player.sharesLevelWith(*this))
             continue;
 
         const Vector3f other = player.getPosition();
@@ -754,7 +754,7 @@ void MobActor::_tickBreathing(ServerNetworkHandler &owner) {
         return;
 
     mAirSupply = 0;
-    if (owner.getLevel().getGameRules().getBool("drowningdamage"))
+    if (owner.getWorldFor(*this).getOverworld().getGameRules().getBool("drowningdamage"))
         hurt(owner, DROWNING_DAMAGE, ActorDamageSource::environment("death.attack.drown", getName()));
 }
 
@@ -805,7 +805,7 @@ void MobActor::onKilledActor(ServerNetworkHandler &owner, Actor &victim) {
     const float radius = numberIn(celebrate, "radius", 0.0f);
     for (auto &entry: owner.getActors()) {
         MobActor *ally = dynamic_cast<MobActor *>(entry.second.get());
-        if (ally == nullptr || ally == this || !ally->isAlive() || ally->getDimension() != getDimension()
+        if (ally == nullptr || ally == this || !ally->isAlive() || !ally->sharesLevelWith(*this)
             || distanceSquaredTo(*ally) > radius * radius || std::strcmp(ally->getIdentifier(), getIdentifier()) != 0)
             continue;
 
@@ -852,7 +852,7 @@ ServerPlayer *MobActor::getOwner(ServerNetworkHandler &owner) const {
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if (isOwnedBy(player) && player.isSpawned() && !player.isDead() && player.getDimension() == getDimension()
+        if (isOwnedBy(player) && player.isSpawned() && !player.isDead() && player.sharesLevelWith(*this)
             && player.getGameType() != (int32_t) GameType::Spectator)
             return &player;
     }
@@ -1996,7 +1996,7 @@ Actor *MobActor::getTarget(ServerNetworkHandler &owner) const {
 }
 
 bool MobActor::canTarget(const Actor &actor) const {
-    if (&actor == this || actor.getDimension() != getDimension() || !actor.isAlive() || actor.isDead())
+    if (&actor == this || !actor.sharesLevelWith(*this) || !actor.isAlive() || actor.isDead())
         return false;
 
     const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(&actor);
@@ -2075,7 +2075,7 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
     if (killer != nullptr)
         killer->onKilledActor(owner, *this);
 
-    if (owner.getLevel().getGameRules().getBool("domobloot")) {
+    if (owner.getWorldFor(*this).getOverworld().getGameRules().getBool("domobloot")) {
         Level &level = owner.getLevelFor(*this);
         const int experience = _deathExperience(source);
         dropLoot(owner, level, source, lootingLevel);

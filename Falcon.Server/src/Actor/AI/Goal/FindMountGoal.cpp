@@ -45,7 +45,7 @@ MobActor *FindMountGoal::_findMount(ServerNetworkHandler &owner, const MobActor 
     float nearestDistance = mRadius * mRadius;
     for (auto &entry: owner.getActors()) {
         MobActor *candidate = dynamic_cast<MobActor *>(entry.second.get());
-        if (candidate == nullptr || candidate == &mob || candidate->getDimension() != mob.getDimension()
+        if (candidate == nullptr || candidate == &mob || !candidate->sharesLevelWith(mob)
             || !_accepts(*candidate, mob))
             continue;
 

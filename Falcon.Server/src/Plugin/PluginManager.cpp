@@ -98,11 +98,10 @@ void PluginManager::loadAll(const std::string &directory) {
         }
 
         const bool native = description.mRuntime == "native";
-        if (native && (description.mApiMajor != FALCON_API_VERSION_MAJOR
-                       || description.mApiMinor > FALCON_API_VERSION_MINOR)) {
-            LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: it needs API %u.%u, the server provides %u.%u",
-                      description.mName.c_str(), description.mApiMajor, description.mApiMinor,
-                      FALCON_API_VERSION_MAJOR, FALCON_API_VERSION_MINOR);
+        if (native && !description.isApiSupported()) {
+            LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: it needs API %s, the server provides %s",
+                      description.mName.c_str(), description.apiVersionText().c_str(),
+                      PluginDescription::serverApiVersionText().c_str());
             continue;
         }
 

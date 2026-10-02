@@ -74,6 +74,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"autosave-interval", "6000", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"level-name", "Bedrock level", PropertyKind::String, 0, 0, nullptr},
             {"level-seed", "", PropertyKind::String, 0, 0, nullptr},
+            {"worlds-autoload", "", PropertyKind::String, 0, 0, nullptr},
             {"default-player-permission-level", "member", PropertyKind::Enum, 0, 0, "visitor,member,operator"},
             {"texturepack-required", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"content-log-file-enabled", "false", PropertyKind::Bool, 0, 0, nullptr},
@@ -203,6 +204,19 @@ void PropertiesSettings::_validate() {
         mInvalid.push_back(std::string(definition.mKey) + "=" + it->second);
         it->second = definition.mDefault;
     }
+}
+
+std::vector<std::string> PropertiesSettings::getAutoloadWorlds() const {
+    std::vector<std::string> names;
+    std::stringstream list(getString("worlds-autoload"));
+    std::string name;
+    while (std::getline(list, name, ',')) {
+        const size_t first = name.find_first_not_of(" \t");
+        const size_t last = name.find_last_not_of(" \t");
+        if (first != std::string::npos)
+            names.push_back(name.substr(first, last - first + 1));
+    }
+    return names;
 }
 
 TransportLayer PropertiesSettings::getTransportLayer() const {

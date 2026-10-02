@@ -4,6 +4,8 @@
 #include "Level/Level.h"
 #include "Level/PlayerDataProvider.h"
 #include "Level/TickingAreaManager.h"
+#include "Level/World.h"
+#include "Level/WorldManager.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/PacketRateLimiter.h"
 #include "Network/PingedCompatibleServer.h"
@@ -133,18 +135,41 @@ public:
 
     NetworkHandler &getNetworkHandler() { return *mNetworkHandler; }
 
-    Level &getLevel() { return mLevel; }
+    /** Overworld of the default world, the one named by `level-name`. */
+    Level &getLevel() { return mWorlds.getDefault().getOverworld(); }
 
+    /** A dimension of the default world. Code that has an actor or a level must use getLevelFor or getWorldOf. */
     Level &getDimension(DimensionType dimension);
 
     Level &getLevelFor(const Actor &actor);
 
-    /** Every loaded level: the Overworld, then the Nether and the End when they exist. */
+    WorldManager &getWorlds() { return mWorlds; }
+
+    World &getWorldFor(const Actor &actor);
+
+    World &getWorldOf(const Level &level);
+
+    /** The default world when `level` is null, as for a console sender. */
+    World &getWorldOf(const Level *level) { return level == nullptr ? mWorlds.getDefault() : getWorldOf(*level); }
+
+    /** Every dimension of every loaded world. */
     std::vector<Level *> getLevels();
+
+    World *loadWorld(const std::string &name, bool create, int64_t seed);
+
+    /** Saves and closes a world. Refuses the default world and worlds that still hold players. */
+    bool unloadWorld(const std::string &name, std::string &error);
+
+    static int64_t randomSeed();
 
     void changePlayerDimension(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
 
+    /** Moves a player to another dimension or world through the dimension change handshake. */
+    void changePlayerLevel(ServerPlayer &player, Level &destination, const Vector3f &position);
+
     void changeActorDimension(Actor &actor, DimensionType dimension, const Vector3f &position);
+
+    void changeActorLevel(Actor &actor, Level &destination, const Vector3f &position);
 
     void onPlayerDimensionChangeAck(ServerPlayer &player);
 
@@ -186,11 +211,11 @@ public:
 
     void sendWeatherTo(ServerPlayer &player);
 
-    void broadcastWeather();
+    void broadcastWeather(World &world);
 
-    void setRaining(bool raining);
+    void setRaining(World &world, bool raining);
 
-    void setThundering(bool thundering);
+    void setThundering(World &world, bool thundering);
 
     void strikeLightning(Level &level, const Vector3f &position);
 
@@ -357,9 +382,6 @@ public:
 
     int64_t allocateActorUniqueId();
 
-    TickingAreaManager &getTickingAreas() { return mTickingAreas; }
-
-    void markActiveColumnsDirty() { mActorPersistencePending = true; }
 
     BlockDefinitionRegistry &getBlockDefinitions() { return mBlockDefinitions; }
 
@@ -426,9 +448,9 @@ public:
 
     void broadcastTranslation(const std::string &key, const std::vector<std::string> &parameters = {});
 
-    void broadcastWorldTime();
+    void broadcastWorldTime(World &world);
 
-    bool changeGameRule(const std::string &name, const std::string &value);
+    bool changeGameRule(World &world, const std::string &name, const std::string &value);
 
     void setDefaultGameType(GameType gameType);
 
@@ -666,6 +688,10 @@ private:
 
     void _tickSleep();
 
+    void _tickSleep(World &world);
+
+    void _tickWeather(World &world);
+
     void _tickPlayer(ServerPlayer &player);
 
     void _registerCommands();
@@ -692,11 +718,19 @@ private:
     static const unsigned CHUNK_REQUESTS_PER_TICK = 64;
     static const size_t SPAWN_CHUNK_THRESHOLD = 56;
 
-    void _tickDimension(Level &level);
+    void _tickOverworld(World &world);
 
-    Level mLevel;
-    std::unique_ptr<Level> mNetherLevel;
-    std::unique_ptr<Level> mTheEndLevel;
+    void _tickDimension(World &world, Level &level);
+
+    void _broadcastFluidChanges(Level &level);
+
+    void _sendWorldState(ServerPlayer &player);
+
+    void _sendDimensionChange(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
+
+    World &_openWorld(const std::string &name, int64_t seed);
+
+    WorldManager mWorlds;
     BiomeRegistry mBiomes;
     std::vector<CreativeItemGroup> mCreativeGroups;
     std::vector<CreativeItemData> mCreativeItems;
@@ -720,7 +754,6 @@ private:
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
     std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
     std::unordered_set<int64_t> mVehiclesWithPendingPassengers;
-    TickingAreaManager mTickingAreas;
     uint32_t mActorUniqueIdCounter = 0;
     std::vector<QueuedActorCommand> mQueuedActorCommands;
     NaturalSpawner mNaturalSpawner;
@@ -738,14 +771,11 @@ private:
         float mRadiusOnUse;
         Vector3f mPosition;
         DimensionType mDimension = DimensionType::Overworld;
+        uint32_t mWorldId = 0;
     };
 
     std::unordered_map<int64_t, LingeringCloud> mLingeringClouds;
-    std::array<std::unordered_set<int64_t>, Dimension::DIMENSION_COUNT> mActorLoadedChunks;
     std::vector<int64_t> mDetachedActors;
-    std::vector<int64_t> mActiveCenters;
-    int mActiveTickDistance = -1;
-    bool mActorPersistencePending = true;
     std::unordered_map<std::string, DynamicPropertyValue> mWorldDynamicProperties;
     std::unordered_map<std::string, int64_t> mScoreboardIds;
     int64_t mNextScoreboardId = 1;
@@ -754,7 +784,6 @@ private:
     std::vector<std::unique_ptr<ItemActor>> mItemEntities;
     uint64_t mNextRuntimeId;
     int64_t mCurrentTick = 0;
-    int32_t mSleepTicks = 0;
     std::chrono::steady_clock::time_point mStartTime = std::chrono::steady_clock::now();
 
     Profiler mProfiler;

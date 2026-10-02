@@ -3,6 +3,7 @@
 #include "Actor/ServerPlayer.h"
 #include "Item/EnchantmentData.h"
 #include "Item/ItemEnchantments.h"
+#include "Level/Level.h"
 #include "Plugin/PluginManager.h"
 
 #include <algorithm>
@@ -86,6 +87,15 @@ bool Actor::tickFire() {
 
     mFlags.set(ActorFlag::OnFire, true);
     return mFireTicks % 20 == 0;
+}
+
+void Actor::moveToLevel(const Level &level) {
+    mDimension = level.getDimensionType();
+    mWorldId = level.getWorldId();
+}
+
+bool Actor::isIn(const Level &level) const {
+    return mDimension == level.getDimensionType() && mWorldId == level.getWorldId();
 }
 
 void Actor::teleport(const Vector3f &position) {

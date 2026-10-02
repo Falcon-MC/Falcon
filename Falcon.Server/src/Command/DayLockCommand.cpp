@@ -26,12 +26,13 @@ bool DayLockCommand::execute(CommandOrigin &sender, const std::vector<std::strin
         lock = arguments[0] == "true";
     }
 
-    mHandler.changeGameRule("dodaylightcycle", lock ? "false" : "true");
+    World &world = mHandler.getWorldOf(sender.getLevel());
+    mHandler.changeGameRule(world, "dodaylightcycle", lock ? "false" : "true");
 
     if (lock) {
-        Level &level = mHandler.getLevel();
+        Level &level = world.getOverworld();
         level.setTime(level.getTime() - level.getDayTime() + LOCKED_DAY_TIME);
-        mHandler.broadcastWorldTime();
+        mHandler.broadcastWorldTime(world);
     }
 
     sender.sendTranslation(lock ? "commands.always.day.locked" : "commands.always.day.unlocked", {});

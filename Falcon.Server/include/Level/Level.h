@@ -52,6 +52,10 @@ public:
 
     DimensionType getDimensionType() const { return mDimension; }
 
+    uint32_t getWorldId() const { return mWorldId; }
+
+    void setWorldId(uint32_t worldId) { mWorldId = worldId; }
+
     int getDimensionId() const { return Dimension::toId(mDimension); }
 
     int32_t getMinY() const { return Dimension::getMinY(mDimension); }
@@ -111,9 +115,12 @@ public:
 
     const BlockActorStore &getBlockActors() const { return mBlockActors; }
 
-    GameRules &getGameRules() { return mGameRules; }
+    GameRules &getGameRules() { return mRulesOwner == nullptr ? mGameRules : mRulesOwner->mGameRules; }
 
-    const GameRules &getGameRules() const { return mGameRules; }
+    const GameRules &getGameRules() const { return mRulesOwner == nullptr ? mGameRules : mRulesOwner->mGameRules; }
+
+    /** Game rules belong to a world, so the Nether and the End read and write the rules of its overworld. */
+    void shareGameRulesWith(Level &overworld) { mRulesOwner = &overworld; }
 
     void initializeGameRules();
 
@@ -356,6 +363,7 @@ private:
     int mViewDistance;
     int64_t mSeed;
     DimensionType mDimension;
+    uint32_t mWorldId = 0;
     std::unique_ptr<ChunkGenerator> mGenerator;
     LevelStorage mStorage;
     BlockUpdateScheduler mBlockUpdateScheduler;
@@ -381,6 +389,7 @@ private:
     int32_t mThunderTime = 0;
     int32_t mSkyLightSubtracted = 0;
     GameRules mGameRules;
+    Level *mRulesOwner = nullptr;
     BlockActorStore mBlockActors{*this};
     PacketBroadcaster mPacketBroadcaster;
     std::unordered_set<int64_t> mBlockLightQueue;

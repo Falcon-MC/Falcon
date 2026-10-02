@@ -4,6 +4,21 @@ falcon.commands.about.version=Αυτός ο διακομιστής εκτελε�
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (πρωτόκολλο %2$s)
 falcon.commands.about.build=Έκδοση κατασκευής %1$s, διαμόρφωση %2$s
 
+falcon.commands.world.list=Φορτωμένοι κόσμοι (%1$s): %2$s
+falcon.commands.world.available=Κόσμοι στον δίσκο: %1$s
+falcon.commands.world.created=Ο κόσμος %1$s δημιουργήθηκε
+falcon.commands.world.exists=Ο κόσμος %1$s υπάρχει ήδη
+falcon.commands.world.invalidName=Μη έγκυρο όνομα κόσμου: %1$s
+falcon.commands.world.loaded=Ο κόσμος %1$s φορτώθηκε
+falcon.commands.world.alreadyLoaded=Ο κόσμος %1$s είναι ήδη φορτωμένος
+falcon.commands.world.notFound=Δεν υπάρχει κόσμος με όνομα %1$s
+falcon.commands.world.notLoaded=Ο κόσμος %1$s δεν είναι φορτωμένος
+falcon.commands.world.unloaded=Ο κόσμος %1$s αποφορτώθηκε
+falcon.commands.world.unload.default=Ο προεπιλεγμένος κόσμος %1$s δεν μπορεί να αποφορτωθεί
+falcon.commands.world.unload.occupied=Υπάρχουν ακόμα παίκτες στον κόσμο %1$s
+falcon.commands.world.unload.cancelled=Ένα πρόσθετο εμπόδισε την αποφόρτωση του κόσμου %1$s
+falcon.commands.world.teleported=Ο %1$s στάλθηκε στον κόσμο %2$s
+
 falcon.commands.allowlist.enabled=Ενεργοποιήθηκε η λίστα επιτρεπόμενων
 falcon.commands.allowlist.disabled=Απενεργοποιήθηκε η λίστα επιτρεπόμενων
 falcon.commands.allowlist.list=Λίστα επιτρεπόμενων (%1$s): %2$s
