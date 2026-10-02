@@ -9,6 +9,10 @@
 #include <unordered_map>
 #include <vector>
 
+/**
+ * Delayed block updates keyed by due tick. Updates in inactive columns are parked until the
+ * column is active again, and the work done per tick is capped.
+ */
 class BlockUpdateScheduler {
 public:
     using UpdateHandler = std::function<void(const Vector3i &)>;

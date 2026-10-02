@@ -409,6 +409,10 @@ void BlockActionHandler::broadcastBlockActorData(ServerNetworkHandler &owner, Le
                        data);
 }
 
+/**
+ * The block-cracking level events carry the per-tick break progress as a fraction of
+ * 65535; the client uses it to animate the crack at the same pace as the server.
+ */
 int32_t BlockActionHandler::breakSpeedEventData(double speed) {
     return (int32_t) std::clamp(65535.0 * speed, 0.0, 65535.0);
 }
@@ -439,6 +443,8 @@ bool BlockActionHandler::canInteractWithBlock(ServerPlayer &player, const Vector
         directionZ /= length;
     }
 
+    // Besides the reach distance, reject blocks clearly behind the player: the target must
+    // not lie more than REACH_MAX_DIFF behind the plane through the eyes facing the yaw.
     const float dot = directionX * eyePosition.x + directionZ * eyePosition.z;
     const float dot1 = directionX * target.x + directionZ * target.z;
     return (dot1 - dot) >= -REACH_MAX_DIFF;
@@ -729,6 +735,8 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
             return;
         }
 
+        // A break the server timed itself must have reached full progress; one predicted by
+        // the client is still bounded by reach and spawn protection above.
         if (!clientPredicted) {
             if (!player.isBreakingBlock() || player.getBreakingBlockPosition() != position) {
                 sendCurrentBlockState(owner, player, position);
@@ -762,6 +770,7 @@ void BlockActionHandler::sendBreakingFx(ServerNetworkHandler &owner, ServerPlaye
     const int32_t blockHash = BlockStateHasher::hash(state.mName, state.mStates);
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
 
+    // The punch particle packs the hit face into the top byte of the block runtime id.
     owner.broadcastLevelEvent(level, LevelEventPacket::Event::ParticlePunchBlock, center,
                               blockHash | (player.getBreakingFace() << 24));
 
@@ -798,6 +807,10 @@ bool BlockActionHandler::matchesTransactionItem(const ItemStack &held, const Ite
            && held.mDamage == sent.mDamage;
 }
 
+/**
+ * Allow and deny blocks: the nearest one below the position in the same column decides,
+ * and deny still lets creative players build.
+ */
 bool BlockActionHandler::isBlockChangeAllowed(Level &level, const Vector3i &position, const ServerPlayer &player) {
     for (int32_t y = position.y - 1; y >= level.getMinY(); --y) {
         const std::string &identifier = level.getBlockState(position.x, y, position.z).mName;

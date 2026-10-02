@@ -69,6 +69,12 @@ struct QueuedActorCommand {
     std::string mCommand;
 };
 
+/**
+ * The server's central object: owns the players, levels and actors, receives every decoded
+ * packet and drives the game tick. Packet handling is split across the
+ * ServerNetworkHandler*.cpp files and the helpers in Network/Handler. All player damage
+ * goes through hurt().
+ */
 class ServerNetworkHandler : public NetworkHandler::Listener,
                              public NetworkPacketHandler,
                              public RakPeerHelper::IPSupportInterface,
@@ -431,6 +437,11 @@ public:
     ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
                         int pickupDelay);
 
+    /**
+     * Single entry point for player damage. Applies, in order: game mode and spawn
+     * invulnerability, damage game rules, scripts and plugins, the invulnerability window,
+     * shields, armor, Resistance and the totem, then kills the player if health runs out.
+     */
     DamageResult hurt(ServerPlayer &player, float amount, const ActorDamageSource &source);
 
     void killPlayer(ServerPlayer &player, const std::string &deathMessageKey,

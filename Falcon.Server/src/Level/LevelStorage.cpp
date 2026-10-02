@@ -113,6 +113,8 @@ void LevelStorage::_appendLInt(std::string &out, int32_t value) {
 }
 
 std::string LevelStorage::_makeKey(int32_t chunkX, int32_t chunkZ, LevelDbTag tag) const {
+    // World database key layout: x and z as little-endian ints, the dimension id only for
+    // dimensions other than the overworld, then the record tag byte.
     std::string key;
     _appendLInt(key, chunkX);
     _appendLInt(key, chunkZ);
@@ -157,6 +159,8 @@ bool LevelStorage::open(const std::string &worldsDirectory, const std::string &l
 
     leveldb::Options options;
     options.create_if_missing = true;
+    // Raw zlib is the block compression the game uses for its world databases, which keeps
+    // worlds interchangeable with it.
     options.compression = leveldb::kZlibRawCompression;
     options.block_size = 163840;
     options.write_buffer_size = 4 * 1024 * 1024;
@@ -216,6 +220,8 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
     if (mDb == nullptr)
         return false;
 
+    // All records of a chunk go in one batch so a crash mid-save never leaves a chunk with
+    // some sub-chunks from the old version and some from the new.
     leveldb::WriteBatch batch;
 
     const std::string version(1, (char) LevelChunk::STORAGE_VERSION);
@@ -239,6 +245,8 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
         batch.Put(_makeSubChunkKey(chunk.getX(), chunk.getZ(), subChunk.getY()), stream.getBuffer());
     }
 
+    // The 3D data record starts with a 256-entry 16-bit heightmap. It is written as zeros
+    // because the server never reads it back: loadChunk skips those 512 bytes.
     BinaryStream heightAndBiomes;
     for (int i = 0; i < 256; i++) {
         heightAndBiomes.putByte(0);

@@ -20,6 +20,10 @@ namespace {
         return random;
     }
 
+    /**
+     * Cheap shared LCG for picking random tick positions: one call yields x, y and z from
+     * separate byte lanes, which is far cheaper than a distribution draw per coordinate.
+     */
     uint32_t nextUpdateLcg() {
         static uint32_t state = 0x3c6ef35f;
         state = state * 3 + 0x3c6ef35f;
@@ -105,6 +109,9 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
         }
     }
 
+    // Candidates are collected first and ticked afterwards so block reactions cannot modify
+    // chunks while they are being iterated. Each one is re-read because an earlier tick in
+    // this batch may already have replaced it.
     for (const Candidate &candidate: candidates) {
         const Block *block = VanillaBlocks::fromIdentifier(candidate.mState.mName);
         if (block == nullptr)

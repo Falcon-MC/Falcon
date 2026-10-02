@@ -39,6 +39,11 @@ struct ChunkLoadResult {
     bool mGenerated = false;
 };
 
+/**
+ * Background threads that load, generate, populate, light and save chunks for one level.
+ * Results come back through drainCompleted() on the main thread; workers never touch
+ * resident chunks, only chunks handed to them by value.
+ */
 class ChunkWorker {
 public:
     static constexpr size_t MAX_THREADS = 64;

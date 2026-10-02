@@ -9,6 +9,10 @@ class BlockState;
 class Level;
 class ServerNetworkHandler;
 
+/**
+ * Fire ignition, ageing, burning and spread, plus contact damage to entities standing in
+ * fire. Spread is gated by the dofiretick game rule.
+ */
 class FireSystem {
 public:
     static constexpr int MAX_AGE = 15;

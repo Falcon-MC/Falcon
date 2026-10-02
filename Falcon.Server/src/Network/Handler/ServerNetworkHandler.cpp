@@ -1051,6 +1051,8 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
             packet->handle(id, *this);
         }
     } catch (const BinaryDataException &exception) {
+        // Any decode or handler failure ends that connection instead of propagating: a
+        // malformed packet must never take the server down.
         LOG_WARN(LogAreaID::Network, "Malformed packet from %s: %s", id.getAddress().c_str(), exception.what());
         _disconnect(id, "disconnectionScreen.unexpectedPacket");
     } catch (const std::exception &exception) {
@@ -1078,6 +1080,8 @@ bool ServerNetworkHandler::_allowPacket(const NetworkIdentifier &id, RateLimited
     if (limiter->second.tryAcquire(category))
         return true;
 
+    // Only exceeding the overall inbound budget disconnects, and only once; other categories
+    // just drop the packet so a burst of chat or commands does not kick the player.
     if (category == RateLimitedPacket::Inbound && limiter->second.markFlooded()) {
         LOG_WARN(LogAreaID::Network, "Disconnecting %s for packet flooding", id.getAddress().c_str());
         _disconnect(id, "disconnectionScreen.unexpectedPacket");

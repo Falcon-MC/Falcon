@@ -16,6 +16,8 @@ LevelChunk::LevelChunk(int32_t x, int32_t z) : mX(x), mZ(z), mBiomeId(1), mDirty
 }
 
 void LevelChunk::invalidateNetworkCaches() {
+    // Swapping with empty objects releases the memory, which clear() would keep; this runs
+    // on copies sent off for saving, where the encoded buffers are dead weight.
     for (std::string &cached: mSubChunkNetworkCache)
         std::string().swap(cached);
 
@@ -254,6 +256,9 @@ std::string LevelChunk::encodeNetwork() const {
 
     const int sectionCount = getNetworkSubChunkCount();
 
+    // Full chunk payload: the non-empty sub-chunks up to the highest one, one biome palette
+    // per sent section, then a zero byte for the border block count. Block actors are
+    // appended by the caller.
     for (int i = 0; i < sectionCount; i++)
         stream.put(encodeSubChunkNetwork(mFirstNetworkSubChunk + i));
 
@@ -274,6 +279,8 @@ const std::string &LevelChunk::encodeNetworkAnchor() const {
     for (int i = 0; i < sectionCount; i++)
         mSubChunks[mFirstNetworkSubChunk + i].writeBiomes(stream, false);
 
+    // Sections above the last non-empty one reuse the previous biome palette; 0xff is the
+    // protocol's one-byte marker for that.
     for (int i = sectionCount; i < mNetworkSubChunkLimit; i++)
         stream.putByte(BIOME_COPY_PREVIOUS);
 
@@ -285,6 +292,10 @@ const std::string &LevelChunk::encodeNetworkAnchor() const {
     return mNetworkAnchorCache;
 }
 
+/**
+ * Encoded sub-chunks are cached per section and only re-encoded after a block in that
+ * section changes, since the same data is sent to every player who loads the chunk.
+ */
 const std::string &LevelChunk::encodeSubChunkNetwork(int index) const {
     static const std::string empty;
 

@@ -44,6 +44,11 @@ void SubChunk::setBiome(int x, int y, int z, uint32_t biomeId) {
     mBiomes[_index(x, y, z)] = index;
 }
 
+/**
+ * Paletted storage: the header byte holds bits-per-entry in its upper bits and a "runtime"
+ * flag in bit 0. Disk (persistent) palettes use little-endian ints while network palettes
+ * use varints, and a single-entry palette is written with no index words at all.
+ */
 void SubChunk::writeBiomes(BinaryStream &stream, bool persistent) const {
     if (mBiomePalette.size() <= 1) {
         stream.putByte((unsigned char) ((0 << 1) | (persistent ? 0 : 1)));
@@ -123,6 +128,8 @@ bool SubChunk::readBiomes(ReadOnlyBinaryStream &stream) {
     for (uint32_t i = 0; i < paletteSize; i++)
         mBiomePalette.push_back(stream.getLInt());
 
+    // Indices are checked after reading the palette because the words come first in the
+    // stream; a corrupt index falls back to the first entry instead of reading out of bounds.
     for (uint16_t &index: mBiomes) {
         if (index >= mBiomePalette.size())
             index = 0;
@@ -131,6 +138,10 @@ bool SubChunk::readBiomes(ReadOnlyBinaryStream &stream) {
     return true;
 }
 
+/**
+ * Only the widths the format allows are used (no 7 bits, nothing between 8 and 16), since
+ * entries must pack into 32-bit words.
+ */
 int SubChunk::_bitsPerBlock(size_t paletteSize) {
     if (paletteSize <= 2)
         return 1;
@@ -160,6 +171,8 @@ const BlockState &SubChunk::getBlock(int x, int y, int z, int layer) const {
     if (layer <= 0)
         return getBlock(x, y, z);
 
+    // Layer 1 storage is only allocated once something is placed in it, so sub-chunks
+    // without waterlogged blocks pay for a single layer.
     if (mBlocks2.empty())
         return air;
 

@@ -147,6 +147,8 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (mScriptEngine.beforeEntityHurt(player, amount, key, source.mAttacker))
         return DamageResult::Ignored;
 
+    // During the 10-tick invulnerability window a new hit only lands if it is stronger than
+    // the last one, and then only the difference is dealt.
     const bool cooling = source.mRespectCooldown && key != "death.attack.suicide" && player.getNoDamageTicks() > 0;
     if (cooling && player.getLastDamageAmount() >= amount)
         return DamageResult::Ignored;
@@ -172,6 +174,7 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (amount <= 0.0f)
         return DamageResult::Ignored;
 
+    // Checked again because a plugin may have lowered the amount.
     if (cooling && player.getLastDamageAmount() >= amount)
         return DamageResult::Ignored;
 
@@ -290,6 +293,8 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
 
     const Vector3f spawn = mLevel.getSpawnPositionForPlayer();
 
+    // Respawn is a two-step handshake: "searching" now, then the final position with the
+    // "ready" state in _respawnPlayer once the client asks to respawn.
     RespawnPacket respawn;
     respawn.mPosition = Vector3f(spawn.x, spawn.y + PLAYER_BASE_OFFSET, spawn.z);
     respawn.mState = RespawnPacket::State::ServerSearching;

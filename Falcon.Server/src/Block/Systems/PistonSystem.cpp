@@ -139,6 +139,10 @@ bool PistonSystem::isArmCollision(const std::string &identifier) {
     return identifier == PISTON_ARM_COLLISION || identifier == STICKY_PISTON_ARM_COLLISION;
 }
 
+/**
+ * The stored facing_direction of a piston points the opposite way on the horizontal axes,
+ * so it is flipped here to get the face the arm actually extends towards.
+ */
 int PistonSystem::getPistonFace(const BlockState &state) {
     const int index = getStoredFacing(state);
     if (index == RedstoneFace::DOWN || index == RedstoneFace::UP)
@@ -331,6 +335,9 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
         level.setBlock(destroyed, BlockState(AIR), false);
     }
 
+    // Moved blocks are lifted out of the world now, with their block actors detached and any
+    // open container screens closed, and only placed at their destination once the arm
+    // animation completes in tick(). The client draws them in between from the arm's data.
     std::vector<BlockState> moved;
     std::vector<std::unique_ptr<BlockActor>> movedActors;
     moved.reserve(toMove.size());
@@ -418,6 +425,10 @@ void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
     }
 }
 
+/**
+ * True while a piston move touching the area is still animating. Movement checks use it to
+ * avoid judging a player against blocks that are mid-move.
+ */
 bool PistonSystem::isMovingNear(const Level &level, const AxisAlignedBB &area) {
     const auto touches = [&area](const Vector3i &position) {
         return position.x + 1.0f > area.mMinX && position.x < area.mMaxX && position.y + 1.0f > area.mMinY

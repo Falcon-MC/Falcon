@@ -139,6 +139,7 @@ bool Explosion::_allowByPlugins() {
 }
 
 bool Explosion::_findAffectedBlocks() {
+    // An actor exploding in water still hurts entities but breaks no blocks.
     if (mSourceActor != nullptr) {
         const Vector3i floor((int32_t) std::floor(mSource.x), (int32_t) std::floor(mSource.y),
                              (int32_t) std::floor(mSource.z));
@@ -154,6 +155,9 @@ bool Explosion::_findAffectedBlocks() {
     const bool incendiary = mFireChance > 0.0;
     const int lastRay = RAYS - 1;
 
+    // Rays are cast towards every point on the surface of a 16x16x16 cube (the interior is
+    // skipped). Each ray starts with a randomised force of 0.7-1.3 times the size and loses
+    // force with distance and with the blast resistance of every block it crosses.
     for (int i = 0; i < RAYS; ++i) {
         for (int j = 0; j < RAYS; ++j) {
             for (int k = 0; k < RAYS; ++k) {
@@ -182,6 +186,8 @@ bool Explosion::_findAffectedBlocks() {
                     const BlockState layer0 = mLevel.getBlockState(block.x, block.y, block.z);
                     const float layer0Resistance = resistanceOf(layer0);
 
+                    // The stronger of the two layers resists, so water held in a
+                    // waterlogged block shields it like water does.
                     if (!isAir(layer0) && layer0Resistance != -1.0f) {
                         const BlockState layer1 = mLevel.getBlockStateAtLayer(block.x, block.y, block.z, 1);
                         const double resistance = std::max(layer0Resistance, resistanceOf(layer1));

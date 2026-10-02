@@ -73,6 +73,11 @@ namespace {
             -1.1358537e-11f, 2.0875701e-9f, -2.7557314e-7f, 2.4801588e-5f, -1.3888889e-3f, 4.1666668e-2f
     };
 
+    /**
+     * Single-precision sine with the client's own range reduction and polynomial. The result
+     * feeds the sine table below, so it has to match the client bit for bit or simulated
+     * positions drift away from the client's prediction and trigger needless corrections.
+     */
     float mojangFloatSin(float value) {
         if (value == 0.0f || std::isnan(value))
             return value;
@@ -128,6 +133,10 @@ namespace {
         return table;
     }
 
+    /**
+     * The client looks movement trigonometry up in a 65536-entry table rather than calling
+     * sin/cos; 10430.378 is 65536 / 2pi, and cosine is the same table shifted a quarter turn.
+     */
     float mojangSin(float radians) {
         return mojangSineTable()[(int) (radians * 10430.378f) & 65535];
     }
@@ -352,6 +361,11 @@ namespace {
         return value > 0.0f ? value - EDGE_STEP : value + EDGE_STEP;
     }
 
+    /**
+     * Sneaking keeps the player on the block: each horizontal axis, then both together, is
+     * shortened in 0.05 steps until the box would still be standing on something after the
+     * move. The iteration cap guards against a pathological loop.
+     */
     void avoidEdge(Level &level, const AxisAlignedBB &box, Vector3f &velocity) {
         const AxisAlignedBB support = box.expand(-EDGE_INSET, 0.0f, -EDGE_INSET);
         const float drop = -STEP_HEIGHT * 1.01f;
@@ -478,6 +492,8 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
         float accelerationMultiplier = ground == nullptr ? 1.0f : ground->getAccelerationFrictionMultiplier();
         if (ItemEnchantments::getLevel(boots, EnchantmentIds::SOUL_SPEED) > 0)
             accelerationMultiplier = 1.0f;
+        // Ground acceleration scales with the cube of (default friction / block friction), so
+        // slippery blocks such as ice accelerate slowly but keep their momentum.
         const float accelerationFriction = (groundFriction * accelerationMultiplier) * AIR_FRICTION;
         const float baseFriction = AIR_FRICTION * DEFAULT_BLOCK_FRICTION;
         const float ratio = baseFriction / accelerationFriction;
@@ -593,6 +609,8 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     const float vz = packet.mDelta.z - velocity.z;
     const bool positionAccepted = dx * dx + dy * dy + dz * dz <= threshold * threshold;
     const bool velocityAccepted = vx * vx + vy * vy + vz * vz <= threshold * threshold;
+    // Within tolerance the client's own values become the new baseline, so small float
+    // differences never accumulate into a correction later on.
     if (positionAccepted && velocityAccepted) {
         player.setSimulatedPosition(feetPosition);
         player.setSimulatedVelocity(packet.mDelta);
@@ -604,6 +622,9 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     feetPosition = simulated;
     player.setMotion(velocity);
 
+    // The client rewinds to the tick named in the correction and replays its inputs from the
+    // server's position and velocity; the position is sent at eye level like other player
+    // positions.
     CorrectPlayerMovePredictionPacket correction;
     correction.mPredictionType = PredictionType::Player;
     correction.mPosition = Vector3f(simulated.x, simulated.y + PLAYER_BASE_OFFSET, simulated.z);

@@ -26,6 +26,8 @@ namespace {
             if (!level->isStorageOpen())
                 continue;
 
+            // The lock only guards the wait; it is released during compaction so stop() can
+            // still signal without blocking behind a long compaction.
             lock.unlock();
             LOG_INFO(LogAreaID::Server, "Running AutoCompaction...");
             level->compactStorage();
@@ -45,6 +47,8 @@ void AutoCompaction::stop() {
     if (!gRunning.exchange(false))
         return;
 
+    // Taking the mutex once after clearing gRunning guarantees the worker is either before
+    // its predicate check or already waiting, so the notification cannot be lost.
     {
         std::lock_guard<std::mutex> lock(gMutex);
     }

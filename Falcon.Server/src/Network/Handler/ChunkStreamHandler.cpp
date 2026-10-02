@@ -39,6 +39,11 @@ namespace {
         return dot >= cosFov;
     }
 
+    /**
+     * Send order: chunks in front of the player first, then nearest first. Chunks within a
+     * few chunks of the player always count as visible so the ground underfoot is never
+     * delayed by looking away.
+     */
     bool comesBefore(const ChunkStreamState &state, int64_t left, int64_t right) {
         const int32_t leftDx = ChunkStreamHandler::unpackChunkX(left) - state.mComparatorChunkX;
         const int32_t leftDz = ChunkStreamHandler::unpackChunkZ(left) - state.mComparatorChunkZ;
@@ -57,6 +62,10 @@ namespace {
         return leftDistance < rightDistance;
     }
 
+    /**
+     * The queues are binary heaps over a plain vector, with the comparator reversed so the
+     * best chunk is at the front.
+     */
     void makeQueue(const ChunkStreamState &state, std::vector<int64_t> &queue) {
         std::make_heap(queue.begin(), queue.end(), [&state](int64_t left, int64_t right) {
             return comesBefore(state, right, left);
@@ -193,6 +202,8 @@ namespace {
         const NetworkIdentifier &id = player.getNetworkIdentifier();
         const Vector3f position = player.getPosition();
 
+        // The client discards chunks outside the last publisher radius it received, so the
+        // publisher update has to go out before the chunks themselves.
         NetworkChunkPublisherUpdatePacket publisher;
         publisher.mPosition = Vector3i((int32_t) position.x, (int32_t) position.y, (int32_t) position.z);
         publisher.mRadius = (uint32_t) (level.getViewDistance() * 16);
@@ -276,6 +287,9 @@ void ChunkStreamHandler::handleTeleport(ServerNetworkHandler &owner, ServerPlaye
     refreshComparatorContext(state, player);
     state.mLastLoaderChunk = packChunk(state.mComparatorChunkX, state.mComparatorChunkZ);
 
+    // Shrinking the radius to 1 first drops every chunk sent around the old position; the
+    // radius is then widened to the teleport budget so the destination streams immediately
+    // instead of waiting for the next tick.
     updateInRadiusChunks(state, 1, state.mComparatorChunkX, state.mComparatorChunkZ);
     removeOutOfRadiusChunks(state, owner, player);
     updateInRadiusChunks(state, TELEPORT_LOAD_COUNT, state.mComparatorChunkX, state.mComparatorChunkZ);

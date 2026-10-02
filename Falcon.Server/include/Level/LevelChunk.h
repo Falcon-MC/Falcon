@@ -8,6 +8,11 @@
 #include <string>
 #include <vector>
 
+/**
+ * One 16x16 column of sub-chunks with its light, heightmap and biomes. Encoded network
+ * forms are cached per sub-chunk and invalidated by block changes. Owned by the main
+ * thread once resident; workers only ever see copies.
+ */
 class LevelChunk {
 public:
     static constexpr int SUB_CHUNK_COUNT = 24;

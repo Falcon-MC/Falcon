@@ -6,6 +6,10 @@
 #include <cstdint>
 #include <vector>
 
+/**
+ * A 16x16x16 section stored as palette indices, with a second, lazily allocated layer for
+ * waterlogging and per-block biome ids.
+ */
 class SubChunk {
 public:
     static const int BLOCK_COUNT = 4096;

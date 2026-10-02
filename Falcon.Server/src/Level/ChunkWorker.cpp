@@ -12,6 +12,10 @@
 #include <sched.h>
 
 namespace {
+    /**
+     * Drops the calling worker to the lower quarter of its scheduling range so chunk
+     * generation and storage never starve the main tick thread.
+     */
     void lowerCurrentThreadPriority() {
         sched_param parameters;
         int policy = 0;
@@ -86,6 +90,10 @@ void ChunkWorker::stop() {
     mCompleted.close();
 }
 
+/**
+ * Every task for a given chunk lands on the same queue, so a save and a later load of that
+ * chunk are processed in order by one thread and never race in storage.
+ */
 size_t ChunkWorker::_queueIndexFor(int32_t chunkX, int32_t chunkZ) const {
     const uint64_t key = ((uint64_t) (uint32_t) (chunkX >> 1) << 32) | (uint32_t) (chunkZ >> 1);
     return (size_t) ((key * 1099511628211ull) >> 32) % mQueues.size();
@@ -179,6 +187,8 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
         }
     }
 
+    // Features populated in a neighbouring chunk may have spilled blocks into this one while
+    // it was not loaded; those were stored and are applied now.
     if (mStorage.isOpen()) {
         const std::vector<GeneratedBlockChange> stored = mStorage.loadPendingBlockChanges(result.mX, result.mZ);
 
@@ -197,6 +207,8 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
     LightSystem::computeSkyLight(*chunk);
     LightSystem::computeBlockLight(*chunk);
 
+    // Lighting and network encoding are done here, off the main thread, so the main thread
+    // only has to swap the finished chunk in.
     chunk->buildNetworkCaches();
 
     result.mNetworkSubChunkCount = chunk->getNetworkSubChunkCount();
@@ -222,6 +234,8 @@ void ChunkWorker::_run(size_t queueIndex) {
     ChunkTask task;
 
     while (queue.waitPop(task)) {
+        // Saves are never dropped, even when pending generation is discarded, or player
+        // changes would be lost.
         if (task.mKind != ChunkTask::Kind::Save && mDiscardGeneration.load()) {
             task.mChunk.reset();
             continue;

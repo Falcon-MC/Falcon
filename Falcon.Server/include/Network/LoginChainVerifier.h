@@ -3,6 +3,11 @@
 #include <string>
 #include <vector>
 
+/**
+ * Verifies the identity a client sends at login, either the signed authentication token or
+ * the legacy certificate chain, and extracts the player's name, XUID and public key. A
+ * login that is readable but not authenticated is accepted with isSigned() false.
+ */
 class LoginChainVerifier {
 public:
     bool verify(const std::string &authJwt, const std::string &clientJwt);

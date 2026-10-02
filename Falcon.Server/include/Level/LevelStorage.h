@@ -29,6 +29,11 @@ enum class LevelDbTag : unsigned char {
     LegacyVersion = 'v'
 };
 
+/**
+ * LevelDB-backed world storage for one dimension: chunks, entities, block entities,
+ * pending generated blocks and level-wide records. Called from both the main thread and
+ * the chunk workers, relying on the database's own thread safety.
+ */
 class LevelStorage {
 public:
     LevelStorage();

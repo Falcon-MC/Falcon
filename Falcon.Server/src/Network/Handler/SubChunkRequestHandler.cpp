@@ -19,6 +19,11 @@ namespace {
     const int8_t HEIGHT_TOO_LOW = -1;
     const int8_t HEIGHT_TOO_HIGH = 16;
 
+    /**
+     * Per-column top block relative to this sub-chunk, with -1 and 16 meaning "below" and
+     * "above" it. When every column is on the same side the protocol lets us send just the
+     * type and skip the 256-byte map.
+     */
     std::string buildHeightMap(const std::vector<int32_t> &tops, int32_t baseY, HeightMapDataType &type) {
         bool allTooLow = true;
         bool allTooHigh = true;
@@ -129,6 +134,7 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
         entries.push_back(entry);
     }
 
+    // Large requests are answered in several packets to keep each one bounded in size.
     for (size_t sent = 0; sent < entries.size(); sent += MAX_ENTRIES_PER_RESPONSE) {
         const size_t end = std::min(entries.size(), sent + (size_t) MAX_ENTRIES_PER_RESPONSE);
 

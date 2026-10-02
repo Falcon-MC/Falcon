@@ -9,6 +9,11 @@ class PlayerAuthInputPacket;
 class ServerNetworkHandler;
 class ServerPlayer;
 
+/**
+ * Server-side replay of the client's walking physics for each PlayerAuthInput. When the
+ * client's reported position or velocity strays past the configured threshold, the
+ * simulated result wins and a movement correction is sent.
+ */
 class PlayerMovementSimulator {
 public:
     static constexpr float PLAYER_BASE_OFFSET = 1.62f;

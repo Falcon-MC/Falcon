@@ -13,6 +13,10 @@ class Level;
 class ServerActor;
 class ServerNetworkHandler;
 
+/**
+ * A single explosion. explodeA() ray-casts the blocks to destroy and lets plugins cancel or
+ * resize it; explodeB() applies block destruction, entity damage and effects.
+ */
 class Explosion {
 public:
     Explosion(ServerNetworkHandler &owner, Level &level, const Vector3f &center, double size,

@@ -29,6 +29,11 @@ class Packet;
 class Particle;
 class ServerNetworkHandler;
 
+/**
+ * One dimension of the world: resident chunks, block access, block updates, fluids, light,
+ * block actors and storage. Main-thread only; chunk loading and generation are delegated
+ * to a ChunkWorker and merged back through drainCompletedChunks().
+ */
 class Level {
 public:
     struct ChunkPosition {
