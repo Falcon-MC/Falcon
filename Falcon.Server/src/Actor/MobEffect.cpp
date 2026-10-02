@@ -52,17 +52,22 @@ const char *getMobEffectName(MobEffectId id) {
         case MobEffectId::BadOmen: return "bad_omen";
         case MobEffectId::VillageHero: return "village_hero";
         case MobEffectId::Darkness: return "darkness";
+        case MobEffectId::Weaving: return "weaving";
     }
     return "unknown";
+}
+
+bool isKnownMobEffect(int32_t raw) {
+    return raw >= 1 && raw <= MAX_MOB_EFFECT_ID && std::string(getMobEffectName((MobEffectId) raw)) != "unknown";
 }
 
 bool parseMobEffect(const std::string &value, MobEffectId &id) {
     std::string key = lower(value);
     if (key.rfind("minecraft:", 0) == 0)
         key.erase(0, 10);
-    for (int32_t raw = 1; raw <= 30; raw++) {
+    for (int32_t raw = 1; raw <= MAX_MOB_EFFECT_ID; raw++) {
         MobEffectId candidate = (MobEffectId) raw;
-        if (key == getMobEffectName(candidate)) {
+        if (isKnownMobEffect(raw) && key == getMobEffectName(candidate)) {
             id = candidate;
             return true;
         }
@@ -70,7 +75,7 @@ bool parseMobEffect(const std::string &value, MobEffectId &id) {
     try {
         size_t consumed = 0;
         int raw = std::stoi(key, &consumed);
-        if (consumed == key.size() && raw >= 1 && raw <= 30) {
+        if (consumed == key.size() && isKnownMobEffect(raw)) {
             id = (MobEffectId) raw;
             return true;
         }
@@ -194,6 +199,7 @@ std::unique_ptr<MobEffect> MobEffectManager::create(MobEffectId id) {
         case MobEffectId::Wither: return std::make_unique<WitherMobEffect>();
         case MobEffectId::Strength: return std::make_unique<AttackDamageMobEffect>();
         case MobEffectId::BadOmen: return std::make_unique<RaidOmenMobEffect>();
+        case MobEffectId::Weaving: return std::make_unique<WeavingMobEffect>();
         default: return std::make_unique<MobEffect>();
     }
 }
@@ -318,12 +324,6 @@ float MobEffectManager::movementSpeedMultiplier() const {
     if (const MobEffectInstance *slowness = get(MobEffectId::Slowness))
         multiplier *= std::max(0.0f, 1.0f - 0.15f * (float) slowness->level());
     return multiplier;
-}
-
-float MobEffectManager::jumpVelocityMultiplier() const {
-    if (const MobEffectInstance *jump = get(MobEffectId::JumpBoost))
-        return 1.0f + 0.1f * (float) jump->level();
-    return 1.0f;
 }
 
 void MobEffectManager::refreshDerivedAttributes() {

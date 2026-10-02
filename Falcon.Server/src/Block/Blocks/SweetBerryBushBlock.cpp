@@ -47,7 +47,8 @@ void SweetBerryBushBlock::onRandomTick(ServerNetworkHandler &owner, Level &level
                               BlockChangeCause::Grow, true);
 }
 
-bool SweetBerryBushBlock::getStuckMultiplier(Vector3f &multiplier) const {
+bool SweetBerryBushBlock::getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const {
+    (void) actor;
     multiplier = STUCK_MULTIPLIER;
     return true;
 }

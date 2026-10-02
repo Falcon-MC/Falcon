@@ -21,7 +21,8 @@ void PowderSnowBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, c
     actor.makeStuckInBlock(STUCK_MULTIPLIER);
 }
 
-bool PowderSnowBlock::getStuckMultiplier(Vector3f &multiplier) const {
+bool PowderSnowBlock::getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const {
+    (void) actor;
     multiplier = STUCK_MULTIPLIER;
     return true;
 }

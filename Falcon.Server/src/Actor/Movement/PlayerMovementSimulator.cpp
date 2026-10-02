@@ -27,6 +27,9 @@ namespace {
     const float GRAVITY_MULTIPLIER = 0.98f;
     const float STEP_HEIGHT = 0.5625f;
     const float SNEAK_INPUT = 0.3f;
+    const float SWIFT_SNEAK_PER_LEVEL = 0.15f;
+    const int32_t SWIFT_SNEAK_DELAY_TICKS = 2;
+    const float JUMP_BOOST_PER_LEVEL = 0.1f;
     const float CONSUMING_INPUT = 0.1225f;
     const float WALK_AIR_SPEED = 0.02f;
     const float SPRINT_AIR_SPEED = 0.026f;
@@ -158,7 +161,7 @@ namespace {
 
     PlayerPose resolvePose(Level &level, const Vector3f &feet, const PlayerAuthInputPacket &packet,
                            bool wasSneaking, bool wasCrawling) {
-        const bool sneakDown = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sneaking);
+        const bool sneakDown = packet.hasInputFlag((int32_t) PlayerAuthInputData::SneakDown);
         const bool startSneaking = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSneaking);
         const bool stopSneaking = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSneaking);
         const bool wantSneak = (sneakDown || startSneaking) && !stopSneaking;
@@ -211,14 +214,14 @@ namespace {
         return friction > 0.0f ? friction : DEFAULT_BLOCK_FRICTION;
     }
 
-    bool stuckMultiplier(Level &level, const AxisAlignedBB &box, Vector3f &multiplier) {
+    bool stuckMultiplier(Level &level, const Actor &actor, const AxisAlignedBB &box, Vector3f &multiplier) {
         bool stuck = false;
         for (int32_t x = (int32_t) std::floor(box.mMinX); x < (int32_t) std::ceil(box.mMaxX); x++) {
             for (int32_t y = (int32_t) std::floor(box.mMinY); y < (int32_t) std::ceil(box.mMaxY); y++) {
                 for (int32_t z = (int32_t) std::floor(box.mMinZ); z < (int32_t) std::ceil(box.mMaxZ); z++) {
                     const Block *block = blockAt(level, (float) x, (float) y, (float) z);
                     Vector3f blockMultiplier;
-                    if (block == nullptr || !block->getStuckMultiplier(blockMultiplier))
+                    if (block == nullptr || !block->getStuckMultiplier(actor, blockMultiplier))
                         continue;
                     if (!stuck) {
                         multiplier = blockMultiplier;
@@ -360,12 +363,22 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     player.setSimulatedPose(pose.mSneaking, pose.mCrawling);
     const bool sneaking = pose.mSneaking;
     const bool crawling = pose.mCrawling;
+    const bool pressingSneak = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sneaking);
 
     float maxImpulse = 1.0f;
     if (player.getFlags().get(ActorFlag::UsingItem))
         maxImpulse *= CONSUMING_INPUT;
-    if (sneaking || crawling)
-        maxImpulse *= SNEAK_INPUT;
+    const int32_t slowdownTicks = sneaking || crawling ? player.getSlowdownTicks() + 1 : 0;
+    player.setSlowdownTicks(slowdownTicks);
+    if (sneaking || crawling) {
+        float sneakMultiplier = SNEAK_INPUT;
+        if (slowdownTicks > SWIFT_SNEAK_DELAY_TICKS) {
+            const ItemStack &leggings = player.getInventory().getArmor(PlayerInventory::ARMOR_LEGS);
+            sneakMultiplier += SWIFT_SNEAK_PER_LEVEL
+                               * (float) ItemEnchantments::getLevel(leggings, EnchantmentIds::SWIFT_SNEAK);
+        }
+        maxImpulse *= std::clamp(sneakMultiplier, 0.0f, 1.0f);
+    }
     const float sideways = std::clamp(packet.mMotionX, -maxImpulse, maxImpulse) * IMPULSE_SCALE;
     const float forward = std::clamp(packet.mMotionY, -maxImpulse, maxImpulse) * IMPULSE_SCALE;
 
@@ -391,8 +404,10 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     moveRelative(velocity, sideways, forward, acceleration, packet.mRotation.y);
 
     if (startJumping && onGround && jumpDelay <= 0) {
-        const float jumpVelocity = JUMP_VELOCITY * jumpFactor(level, start);
-        velocity.y = std::max(jumpVelocity * player.getEffects().jumpVelocityMultiplier(), velocity.y);
+        const MobEffectInstance *jumpBoost = player.getEffects().get(MobEffectId::JumpBoost);
+        const float jumpBonus = jumpBoost == nullptr ? 0.0f : JUMP_BOOST_PER_LEVEL * (float) jumpBoost->level();
+        const float jumpHeight = JUMP_VELOCITY + jumpBonus;
+        velocity.y = std::max(jumpHeight * jumpFactor(level, start), velocity.y);
         jumpDelay = JUMP_DELAY_TICKS;
         if (sprinting) {
             const float direction = packet.mRotation.y * 0.017453292f;
@@ -405,14 +420,14 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     const BlockTraversal traversal = inside == nullptr ? BlockTraversal::None : inside->getTraversal();
     bool scaffoldDescend = false;
     if (traversal == BlockTraversal::Scaffolding) {
-        if (sneaking) {
+        if (pressingSneak) {
             velocity.y = -TRAVERSAL_SPEED;
             scaffoldDescend = true;
         } else if (jumpHeld) {
             velocity.y = TRAVERSAL_SPEED;
         }
     } else if (traversal == BlockTraversal::PowderSnow) {
-        if (sneaking)
+        if (pressingSneak)
             velocity.y = -TRAVERSAL_SPEED;
         else if (jumpHeld && !boots.isAir() && boots.mDefinition->getIdentifier() == LEATHER_BOOTS)
             velocity.y = POWDER_SNOW_ASCEND_SPEED;
@@ -428,7 +443,7 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
 
     AxisAlignedBB box = boxAt(start, pose.mHeight);
     Vector3f stuck;
-    const bool isStuck = stuckMultiplier(level, box, stuck);
+    const bool isStuck = stuckMultiplier(level, player, box, stuck);
     if (isStuck) {
         velocity.x *= stuck.x;
         velocity.y *= stuck.y;
@@ -444,7 +459,7 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     onGround = moved.mOnGround;
 
     const BlockBehavior &under = behaviorUnder(level, simulated);
-    if (simulated.y == start.y && onGround && !sneaking && under.slowsWalking()) {
+    if (simulated.y == start.y && onGround && !sneaking && !pressingSneak && under.slowsWalking()) {
         const float vertical = std::fabs(moved.mMoved.y);
         if (vertical < WALK_SLOWDOWN_LIMIT) {
             const float slowdown = WALK_SLOWDOWN_BASE + vertical * WALK_SLOWDOWN_PER_VELOCITY;
@@ -462,7 +477,7 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     if (moved.mCollidedZ)
         velocity.z = 0.0f;
     if (moved.mCollidedY)
-        velocity.y = wasOnGround || velocity.y >= 0.0f || sneaking ? 0.0f : landingVelocity(under, velocity.y);
+        velocity.y = wasOnGround || velocity.y >= 0.0f || pressingSneak ? 0.0f : landingVelocity(under, velocity.y);
 
     if (!scaffoldDescend) {
         const float gravity = player.hasEffect(MobEffectId::SlowFalling) && velocity.y < 0.0f ? SLOW_FALLING_GRAVITY
@@ -481,7 +496,12 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     const float dy = feetPosition.y - simulated.y;
     const float dz = feetPosition.z - simulated.z;
     const float threshold = std::max(0.0f, owner.getProperties().getPlayerPositionAcceptanceThreshold());
-    if (dx * dx + dy * dy + dz * dz <= threshold * threshold) {
+    const float vx = packet.mDelta.x - velocity.x;
+    const float vy = packet.mDelta.y - velocity.y;
+    const float vz = packet.mDelta.z - velocity.z;
+    const bool positionAccepted = dx * dx + dy * dy + dz * dz <= threshold * threshold;
+    const bool velocityAccepted = vx * vx + vy * vy + vz * vz <= threshold * threshold;
+    if (positionAccepted && velocityAccepted) {
         player.setSimulatedPosition(feetPosition);
         player.setSimulatedVelocity(packet.mDelta);
         return;

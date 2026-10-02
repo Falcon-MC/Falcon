@@ -128,7 +128,12 @@ public:
         mHasPendingKnockback = false;
         mSimulatedSneaking = false;
         mSimulatedCrawling = false;
+        mSlowdownTicks = 0;
     }
+
+    int32_t getSlowdownTicks() const { return mSlowdownTicks; }
+
+    void setSlowdownTicks(int32_t ticks) { mSlowdownTicks = ticks; }
 
     bool isSimulatedSneaking() const { return mSimulatedSneaking; }
 
@@ -601,6 +606,7 @@ private:
     int32_t mJumpDelay = 0;
     bool mSimulatedSneaking = false;
     bool mSimulatedCrawling = false;
+    int32_t mSlowdownTicks = 0;
     PlayerAcknowledgements mAcknowledgements;
     int32_t mPendingMovementChanges = 0;
     bool mHasPendingKnockback = false;

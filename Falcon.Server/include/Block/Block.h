@@ -135,7 +135,8 @@ public:
         return BlockTraversal::None;
     }
 
-    virtual bool getStuckMultiplier(Vector3f &multiplier) const {
+    virtual bool getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const {
+        (void) actor;
         (void) multiplier;
         return false;
     }

@@ -295,8 +295,6 @@ public:
 
     float getMovementSpeedMultiplier() const { return mEffects.movementSpeedMultiplier(); }
 
-    float getJumpVelocityMultiplier() const { return mEffects.jumpVelocityMultiplier(); }
-
     float computeFallDamage() const;
 
 protected:

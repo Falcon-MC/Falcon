@@ -7,6 +7,7 @@ FALCON_REGISTER_BLOCK(CobwebBlock, 185);
 
 namespace {
     const Vector3f STUCK_MULTIPLIER(0.25f, 0.05f, 0.25f);
+    const Vector3f WEAVING_STUCK_MULTIPLIER(0.5f, 0.25f, 0.5f);
 }
 
 bool CobwebBlock::matches(const std::string &identifier) {
@@ -18,11 +19,13 @@ void CobwebBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const
     (void) owner;
     (void) position;
     (void) state;
-    actor.makeStuckInBlock(STUCK_MULTIPLIER);
+    Vector3f multiplier;
+    getStuckMultiplier(actor, multiplier);
+    actor.makeStuckInBlock(multiplier);
     actor.resetFallDistance();
 }
 
-bool CobwebBlock::getStuckMultiplier(Vector3f &multiplier) const {
-    multiplier = STUCK_MULTIPLIER;
+bool CobwebBlock::getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const {
+    multiplier = actor.hasEffect(MobEffectId::Weaving) ? WEAVING_STUCK_MULTIPLIER : STUCK_MULTIPLIER;
     return true;
 }

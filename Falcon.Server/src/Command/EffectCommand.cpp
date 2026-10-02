@@ -46,8 +46,10 @@ std::vector<CommandOverloadData> EffectCommand::getOverloads() const {
     effect.mName = "effect";
     effect.mHasEnumData = true;
     effect.mEnumData.mName = "MobEffect";
-    for (int id = 1; id <= 30; id++)
-        effect.mEnumData.mValues.push_back(getMobEffectName((MobEffectId) id));
+    for (int id = 1; id <= MAX_MOB_EFFECT_ID; id++) {
+        if (isKnownMobEffect(id))
+            effect.mEnumData.mValues.push_back(getMobEffectName((MobEffectId) id));
+    }
     effect.mEnumData.mValues.push_back("clear");
 
     CommandParamData seconds;
@@ -102,7 +104,7 @@ bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string
             if (clearOne) {
                 removed += target->removeEffect(only) ? 1 : 0;
             } else {
-                for (int id = 1; id <= 30; id++)
+                for (int id = 1; id <= MAX_MOB_EFFECT_ID; id++)
                     removed += target->removeEffect((MobEffectId) id) ? 1 : 0;
             }
         }
