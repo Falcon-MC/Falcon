@@ -417,3 +417,20 @@ void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
         RedstoneSystem::updateAroundRedstone(owner, level, relative(move.mPiston, arm->getFacing()));
     }
 }
+
+bool PistonSystem::isMovingNear(const Level &level, const AxisAlignedBB &area) {
+    const auto touches = [&area](const Vector3i &position) {
+        return position.x + 1.0f > area.mMinX && position.x < area.mMaxX && position.y + 1.0f > area.mMinY
+               && position.y < area.mMaxY && position.z + 1.0f > area.mMinZ && position.z < area.mMaxZ;
+    };
+
+    for (const PendingMove &move: gPendingMoves[level.getDimensionId()]) {
+        if (touches(move.mPiston) || touches(relative(move.mPiston, move.mDirection)))
+            return true;
+        for (const Vector3i &source: move.mSources) {
+            if (touches(source) || touches(relative(source, move.mDirection)))
+                return true;
+        }
+    }
+    return false;
+}

@@ -172,6 +172,10 @@ public:
         return getFloat("player-position-acceptance-threshold");
     }
 
+    bool getServerAuthoritativeMovementStrict() const {
+        return getBool("server-authoritative-movement-strict");
+    }
+
     float getPlayerMovementActionDirectionThreshold() const {
         return getFloat("player-movement-action-direction-threshold");
     }

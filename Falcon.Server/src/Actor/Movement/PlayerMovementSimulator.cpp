@@ -7,6 +7,7 @@
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Components/BlockBehavior.h"
 #include "Block/Systems/LiquidBlocksFetch.h"
+#include "Block/Systems/PistonSystem.h"
 #include "Inventory/PlayerInventory.h"
 #include "Item/EnchantmentData.h"
 #include "Item/ItemEnchantments.h"
@@ -39,6 +40,7 @@ namespace {
     const float IMPULSE_SCALE = 0.98f;
     const float PLAYER_WIDTH = 0.6f;
     const float PLAYER_HEIGHT = 1.8f;
+    const float PISTON_RANGE = 1.0f;
     const float PLAYER_SNEAKING_HEIGHT = 1.49f;
     const float PLAYER_CRAWLING_HEIGHT = 0.6f;
     const int32_t JUMP_DELAY_TICKS = 10;
@@ -345,6 +347,12 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     }
 
     const Vector3f start = player.hasSimulatedPosition() ? player.getSimulatedPosition() : player.getPosition();
+    const AxisAlignedBB pistonArea = boxAt(start, PLAYER_HEIGHT).expand(PISTON_RANGE, PISTON_RANGE, PISTON_RANGE);
+    const bool strict = owner.getProperties().getServerAuthoritativeMovementStrict();
+    if (!strict && PistonSystem::isMovingNear(level, pistonArea)) {
+        player.clearMovementSimulation();
+        return;
+    }
     Vector3f velocity;
     if (!player.takeKnockback(velocity))
         velocity = player.hasSimulatedVelocity() ? player.getSimulatedVelocity() : packet.mDelta;
