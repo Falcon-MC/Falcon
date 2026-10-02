@@ -348,10 +348,9 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     int32_t jumpDelay = player.getJumpDelay();
     const bool jumpHeld = packet.hasInputFlag((int32_t) PlayerAuthInputData::Jumping)
                           || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping);
+    const bool startJumping = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping);
     if (!jumpHeld)
         jumpDelay = 0;
-    else if (jumpDelay > 0)
-        jumpDelay -= 1;
 
     const bool sprinting = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sprinting)
                            || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
@@ -389,7 +388,7 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
 
     moveRelative(velocity, sideways, forward, acceleration, packet.mRotation.y);
 
-    if (jumpHeld && onGround && jumpDelay <= 0) {
+    if (startJumping && onGround && jumpDelay <= 0) {
         const float jumpVelocity = JUMP_VELOCITY * jumpFactor(level, start);
         velocity.y = std::max(jumpVelocity * player.getEffects().jumpVelocityMultiplier(), velocity.y);
         jumpDelay = JUMP_DELAY_TICKS;
@@ -440,8 +439,6 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     const ActorMoveResult moved = ActorCollisionSystem::move(level, box, velocity, STEP_HEIGHT, onGround);
     Vector3f simulated(box.mMinX + PLAYER_WIDTH * 0.5f, box.mMinY, box.mMinZ + PLAYER_WIDTH * 0.5f);
     const bool wasOnGround = onGround;
-    if (!wasOnGround && moved.mOnGround)
-        jumpDelay = 0;
     onGround = moved.mOnGround;
 
     const BlockBehavior &under = behaviorUnder(level, simulated);
@@ -474,6 +471,8 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     velocity.z *= friction;
     slideAlongHoney(level, box, velocity);
 
+    if (jumpDelay > 0)
+        jumpDelay -= 1;
     player.setJumpDelay(jumpDelay);
 
     const float dx = feetPosition.x - simulated.x;
