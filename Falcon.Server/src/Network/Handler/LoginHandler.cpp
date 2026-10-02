@@ -67,13 +67,17 @@ namespace {
     const int64_t RESOURCE_PACK_CHUNK_SIZE = 1024 * 1024;
     const float PLAYER_BASE_OFFSET = 1.62f;
     const size_t SPAWN_CHUNK_THRESHOLD = 56;
-    const char *const DROP_EXPERIMENT = "y_2026_drop_4";
+    const char *const ENABLED_EXPERIMENTS[] = {"y_2026_drop_4", "data_driven_vanilla_blocks_and_items"};
 
     std::vector<ExperimentData> enabledExperiments() {
-        ExperimentData drop;
-        drop.mName = DROP_EXPERIMENT;
-        drop.mEnabled = true;
-        return {drop};
+        std::vector<ExperimentData> experiments;
+        for (const char *name: ENABLED_EXPERIMENTS) {
+            ExperimentData experiment;
+            experiment.mName = name;
+            experiment.mEnabled = true;
+            experiments.push_back(experiment);
+        }
+        return experiments;
     }
 
     Uuid listUuidFor(const ServerPlayer &player) {
