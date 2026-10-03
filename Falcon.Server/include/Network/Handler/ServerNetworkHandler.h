@@ -123,11 +123,11 @@ public:
 
     PluginManager &getPluginManager() { return *mPluginManager; }
 
-    std::string &getCraftingDataBytes() { return mCraftingDataBytes; }
+    std::string &getCraftingDataBytes(int protocol) { return mCraftingDataBytes[protocol]; }
 
-    std::string &getCreativeContentBytes() { return mCreativeContentBytes; }
+    std::string &getCreativeContentBytes(int protocol) { return mCreativeContentBytes[protocol]; }
 
-    std::string &getItemComponentsBytes() { return mItemComponentsBytes; }
+    std::string &getItemComponentsBytes(int protocol) { return mItemComponentsBytes[protocol]; }
 
     double getPeakMillisecondsPerTick() const;
 
@@ -682,6 +682,11 @@ private:
 
     ServerPlayer *_getPlayer(const NetworkIdentifier &id);
 
+    /**
+     * The vanilla translation for this protocol, with the custom items kept at their own IDs.
+     */
+    std::shared_ptr<const ItemNetworkIdMap> _itemNetworkIdsFor(int protocol) const;
+
     int _getServerViewDistance() const;
 
     void _logPackStack() const;
@@ -812,9 +817,9 @@ private:
     ScriptEngine mScriptEngine;
     BehaviorPackManager mBehaviorPacks;
 
-    std::string mCraftingDataBytes;
-    std::string mCreativeContentBytes;
-    std::string mItemComponentsBytes;
+    std::unordered_map<int, std::string> mCraftingDataBytes;
+    std::unordered_map<int, std::string> mCreativeContentBytes;
+    std::unordered_map<int, std::string> mItemComponentsBytes;
 
     static const size_t TICK_SAMPLE_COUNT = 100;
     std::deque<std::chrono::steady_clock::time_point> mTickStartSamples;

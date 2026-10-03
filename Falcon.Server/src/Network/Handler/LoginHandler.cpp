@@ -626,12 +626,30 @@ void LoginHandler::sendCameraPresets(ServerNetworkHandler &owner, ServerPlayer &
 }
 
 void LoginHandler::sendItemComponents(ServerNetworkHandler &owner, ServerPlayer &player) {
-    std::string &cached = owner.getItemComponentsBytes();
+    const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
+    std::string &cached = owner.getItemComponentsBytes(context.getCodec().getProtocolVersion());
 
     if (cached.empty()) {
         ItemRegistryPacket components;
+        const int protocol = context.getCodec().getProtocolVersion();
+        const bool translated = ItemNetworkIdTable::getNetworkIds(protocol) != nullptr;
+
+        if (translated) {
+            for (const ItemNetworkIdEntry &source: ItemNetworkIdTable::getPalette(protocol)) {
+                ItemComponentEntry entry;
+                entry.mIdentifier = source.mIdentifier;
+                entry.mRuntimeId = (int16_t) source.mNetworkId;
+                entry.mComponentBased = source.mComponentBased;
+                entry.mItemVersion = source.mVersion;
+                entry.mComponentData = source.mComponents;
+                components.mEntries.push_back(entry);
+            }
+        }
 
         for (const std::shared_ptr<ItemDefinition> &definition: owner.getItemDefinitions().getAll()) {
+            if (translated && ItemNetworkIdTable::find(definition->getIdentifier()) != nullptr)
+                continue;
+
             ItemComponentEntry entry;
             entry.mIdentifier = definition->getIdentifier();
             entry.mRuntimeId = (int16_t) definition->getRuntimeId();
@@ -645,7 +663,7 @@ void LoginHandler::sendItemComponents(ServerNetworkHandler &owner, ServerPlayer 
         }
 
         BinaryStream stream;
-        components.writeWithHeader(stream, owner.getCodecContext());
+        components.writeWithHeader(stream, context);
         cached = stream.getBuffer();
     }
 
@@ -871,13 +889,14 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
 }
 
 void LoginHandler::sendCraftingData(ServerNetworkHandler &owner, ServerPlayer &player) {
-    std::string &cached = owner.getCraftingDataBytes();
+    const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
+    std::string &cached = owner.getCraftingDataBytes(context.getCodec().getProtocolVersion());
 
     if (cached.empty()) {
         buildCraftingData(owner);
 
         BinaryStream stream;
-        owner.getCachedCraftingData().writeWithHeader(stream, owner.getCodecContext());
+        owner.getCachedCraftingData().writeWithHeader(stream, context);
         cached = stream.getBuffer();
     }
 
@@ -1036,7 +1055,8 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
 }
 
 void LoginHandler::sendCreativeContent(ServerNetworkHandler &owner, ServerPlayer &player) {
-    std::string &cached = owner.getCreativeContentBytes();
+    const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
+    std::string &cached = owner.getCreativeContentBytes(context.getCodec().getProtocolVersion());
 
     if (cached.empty()) {
         buildCreativeContent(owner);
@@ -1046,7 +1066,7 @@ void LoginHandler::sendCreativeContent(ServerNetworkHandler &owner, ServerPlayer
         creative.mItems = owner.getCreativeItemsMutable();
 
         BinaryStream stream;
-        creative.writeWithHeader(stream, owner.getCodecContext());
+        creative.writeWithHeader(stream, context);
         cached = stream.getBuffer();
     }
 

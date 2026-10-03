@@ -1061,9 +1061,24 @@ const PacketCodecContext &ServerNetworkHandler::getCodecContext(const NetworkIde
 
     const std::shared_ptr<const ProtocolCodec> &codec = player->getCodec();
     std::unique_ptr<PacketCodecContext> &context = mProtocolContexts[codec->getProtocolVersion()];
-    if (context == nullptr)
+    if (context == nullptr) {
         context = std::make_unique<PacketCodecContext>(mBlockDefinitions, mItemDefinitions, codec);
+        context->setItemNetworkIds(_itemNetworkIdsFor(codec->getProtocolVersion()));
+    }
     return *context;
+}
+
+std::shared_ptr<const ItemNetworkIdMap> ServerNetworkHandler::_itemNetworkIdsFor(int protocol) const {
+    const std::shared_ptr<const ItemNetworkIdMap> vanilla = ItemNetworkIdTable::getNetworkIds(protocol);
+    if (vanilla == nullptr)
+        return nullptr;
+
+    std::shared_ptr<ItemNetworkIdMap> map = std::make_shared<ItemNetworkIdMap>(*vanilla);
+    for (const std::shared_ptr<ItemDefinition> &definition: mItemDefinitions.getAll()) {
+        if (ItemNetworkIdTable::find(definition->getIdentifier()) == nullptr)
+            map->add(definition->getRuntimeId(), definition->getRuntimeId());
+    }
+    return map;
 }
 
 ServerPlayer *ServerNetworkHandler::_getPlayer(const NetworkIdentifier &id) {
