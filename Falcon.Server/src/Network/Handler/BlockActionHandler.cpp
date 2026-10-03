@@ -770,9 +770,12 @@ void BlockActionHandler::sendBreakingFx(ServerNetworkHandler &owner, ServerPlaye
     const int32_t blockHash = BlockStateHasher::hash(state.mName, state.mStates);
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
 
-    // The punch particle packs the hit face into the top byte of the block runtime id.
-    owner.broadcastLevelEvent(level, LevelEventPacket::Event::ParticlePunchBlock, center,
-                              blockHash | (player.getBreakingFace() << 24));
+    LevelEventPacket punch;
+    punch.mEventId = LevelEventPacket::Event::ParticlePunchBlock;
+    punch.mPosition = center;
+    punch.mData = blockHash;
+    punch.mBlockFace = player.getBreakingFace();
+    broadcastToViewers(owner, level, center, punch);
 
     owner.playBlockSound(level, LevelSoundEvent::HIT, center, blockHash);
 
