@@ -183,6 +183,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DOPENSSL_USE_STATIC_LIBS=ON \
+            -DZLIB_USE_STATIC_LIBS=ON \
             -DFALCON_BUILD_VERSION=${{ needs.prepare.outputs.version }}
           cmake --build build --parallel
           ccache --show-stats
@@ -212,7 +214,7 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DFALCON_BUILD_VERSION=${{ needs.prepare.outputs.version }}
-          cmake --build build --parallel
+          cmake --build build --parallel 4
           ccache --show-stats
 
       - name: Stage the executable
