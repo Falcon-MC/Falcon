@@ -62,6 +62,11 @@ public:
 
         virtual void onNewIncomingConnection(const NetworkIdentifier &) {}
 
+        virtual void onNewIncomingConnection(const NetworkIdentifier &id, uint16_t mtuSize) {
+            (void) mtuSize;
+            onNewIncomingConnection(id);
+        }
+
         virtual void onConnectionClosed(const NetworkIdentifier &, DisconnectFailReason, const std::string &) {}
 
         virtual void onDataReceived(const NetworkIdentifier &, const std::string &) {}
@@ -81,6 +86,7 @@ public:
         NetworkIdentifier mId;
         std::string mData;
         DisconnectFailReason mReason = DisconnectFailReason::Unknown;
+        uint16_t mMtuSize = 0;
     };
 
     struct OutboundCommand {
@@ -88,7 +94,8 @@ public:
             Data = 0,
             Flush = 1,
             EnableCompression = 2,
-            EnableEncryption = 3
+            EnableEncryption = 3,
+            Close = 4
         };
 
         Kind mKind = Kind::Data;
@@ -143,6 +150,11 @@ public:
                            unsigned short threshold);
 
     void enableEncryption(const NetworkIdentifier &id, const EncryptionKey &key);
+
+    /**
+     * Drops a connection without sending it anything, then reports it as closed.
+     */
+    void closeConnection(const NetworkIdentifier &id);
 
     size_t getConnectionCount() const { return mConnectionCount.load(); }
 

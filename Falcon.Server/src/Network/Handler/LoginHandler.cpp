@@ -267,6 +267,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         preLogin.mCancellable = true;
         preLogin.mPlayer = &player;
         preLogin.mMessage = &kickMessage;
+        preLogin.mClientData = &request.getClientData();
         plugins->dispatch(preLogin);
         if (preLogin.mCancelled) {
             LOG_INFO(LogAreaID::Server, "Player %s was refused by a plugin", player.getName().c_str());

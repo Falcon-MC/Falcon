@@ -125,6 +125,13 @@ void NetworkHandler::enableEncryption(const NetworkIdentifier &id, const Encrypt
     mOutbound.push(std::move(command));
 }
 
+void NetworkHandler::closeConnection(const NetworkIdentifier &id) {
+    OutboundCommand command;
+    command.mKind = OutboundCommand::Kind::Close;
+    command.mId = id;
+    mOutbound.push(std::move(command));
+}
+
 NetworkPeer::Reliability NetworkHandler::_toPeerReliability(const Packet &packet) {
     switch (packet.mReliability) {
         case Packet::Reliability::Reliable:
@@ -212,6 +219,15 @@ void NetworkHandler::_applyOutbound(OutboundCommand &command) {
     if (connection == nullptr)
         return;
 
+    if (command.mKind == OutboundCommand::Kind::Close) {
+        for (std::unique_ptr<Connector> &connector: mConnectors) {
+            if (connector->closeConnection(command.mId))
+                break;
+        }
+        onConnectionClosed(command.mId, DisconnectFailReason::ConnectionRefused, "");
+        return;
+    }
+
     if (command.mKind == OutboundCommand::Kind::Flush)
         connection->getBatchedPeer()->flush();
     else if (command.mKind == OutboundCommand::Kind::EnableEncryption)
@@ -274,7 +290,7 @@ void NetworkHandler::runEvents() {
             case InboundEvent::Kind::Opened: {
                 ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
                 for (Listener *listener: mListeners)
-                    listener->onNewIncomingConnection(event.mId);
+                    listener->onNewIncomingConnection(event.mId, event.mMtuSize);
                 break;
             }
 
@@ -310,12 +326,14 @@ bool NetworkHandler::onValidateIncomingConnection(const NetworkIdentifier &id) {
 }
 
 void NetworkHandler::onNewIncomingConnection(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer) {
+    const uint16_t mtuSize = peer != nullptr ? peer->getMtuSize() : 0;
     mConnections[id] = std::unique_ptr<Connection>(new Connection(id, std::move(peer)));
     mConnectionCount.store(mConnections.size());
 
     InboundEvent event;
     event.mKind = InboundEvent::Kind::Opened;
     event.mId = id;
+    event.mMtuSize = mtuSize;
     mInbound.push(std::move(event));
 }
 

@@ -587,7 +587,7 @@ public:
 private:
     bool onValidateIncomingConnection(const NetworkIdentifier &id) override;
 
-    void onNewIncomingConnection(const NetworkIdentifier &id) override;
+    void onNewIncomingConnection(const NetworkIdentifier &id, uint16_t mtuSize) override;
 
     void onConnectionClosed(const NetworkIdentifier &id, DisconnectFailReason reason,
                             const std::string &message) override;

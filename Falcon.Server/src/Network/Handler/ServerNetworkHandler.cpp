@@ -808,8 +808,24 @@ bool ServerNetworkHandler::isServerFull(const NetworkIdentifier &joining) const 
     return loggedIn >= mMaxPlayers;
 }
 
-void ServerNetworkHandler::onNewIncomingConnection(const NetworkIdentifier &id) {
+void ServerNetworkHandler::onNewIncomingConnection(const NetworkIdentifier &id, uint16_t mtuSize) {
     LOG_INFO(LogAreaID::Network, "Player connected: %s", id.toString().c_str());
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_CONNECTION_OPEN)) {
+        const bool rakNet = id.getType() == NetworkIdentifier::Type::RakNet;
+        PluginEvent open;
+        open.mType = FALCON_EVENT_CONNECTION_OPEN;
+        open.mCancellable = true;
+        open.mAddress = id.getAddress();
+        open.mTransport = rakNet ? "raknet" : "nethernet";
+        open.mClientGuid = rakNet ? id.getGuid().g : 0;
+        open.mMtuSize = mtuSize;
+        plugins->dispatch(open);
+        if (open.mCancelled) {
+            LOG_INFO(LogAreaID::Network, "Connection from %s was refused by a plugin", id.getAddress().c_str());
+            mNetworkHandler->closeConnection(id);
+        }
+    }
 }
 
 void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, DisconnectFailReason reason,
