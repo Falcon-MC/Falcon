@@ -182,8 +182,11 @@ void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, con
     owner.getNetworkHandler().send(id, settings, owner.getCodecContext());
 
     owner.getNetworkHandler().flush(id);
-    owner.getNetworkHandler().enableCompression(id, CompressedNetworkPeer::CompressionAlgorithm::ZLib,
-                                                settings.mCompressionThreshold);
+    const CompressedNetworkPeer::CompressionAlgorithm algorithm =
+            settings.mCompressionAlgorithm == NetworkSettingsPacket::CompressionAlgorithm::Snappy
+            ? CompressedNetworkPeer::CompressionAlgorithm::Snappy
+            : CompressedNetworkPeer::CompressionAlgorithm::ZLib;
+    owner.getNetworkHandler().enableCompression(id, algorithm, settings.mCompressionThreshold);
 
     owner.getPlayers().erase(id);
     auto inserted = owner.getPlayers().try_emplace(id, id, owner.allocateRuntimeId(), &owner);
