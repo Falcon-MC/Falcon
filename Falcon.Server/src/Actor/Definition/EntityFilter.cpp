@@ -814,7 +814,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
 
     if (test == "actor_has_item_with_enchantment_in_slot") {
         const EnchantmentData *enchantment = value == nullptr ? nullptr
-                                                              : EnchantmentData::findByName(value->string());
+                                                              : EnchantmentTable::findByName(value->string());
         bool result = false;
         if (enchantment != nullptr) {
             for (const ItemStack *item: equipmentOf(*target, equipmentDomain(filter.get("domain"))))
