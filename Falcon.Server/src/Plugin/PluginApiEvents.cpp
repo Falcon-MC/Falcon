@@ -274,6 +274,14 @@ namespace {
         return hold(clientData != nullptr ? *clientData : std::string());
     }
 
+    uint32_t eventFormId(FalconEvent *target) {
+        return event(target)->mFormId;
+    }
+
+    const char *eventFormResponse(FalconEvent *target) {
+        return hold(event(target)->mFormResponse);
+    }
+
     const char *eventClientDataField(FalconEvent *target, const char *key) {
         const std::string *clientData = event(target)->mClientData;
         if (clientData == nullptr || key == nullptr)
@@ -354,4 +362,6 @@ void PluginServerApi::fillEvents(FalconServerApi &api) {
     api.eventMtuSize = &eventMtuSize;
     api.eventClientData = &eventClientData;
     api.eventClientDataField = &eventClientDataField;
+    api.eventFormId = &eventFormId;
+    api.eventFormResponse = &eventFormResponse;
 }

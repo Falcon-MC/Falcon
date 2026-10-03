@@ -62,4 +62,6 @@ struct PluginEvent {
     uint64_t mClientGuid = 0;
     uint32_t mMtuSize = 0;
     const std::string *mClientData = nullptr;
+    uint32_t mFormId = 0;
+    std::string mFormResponse;
 };

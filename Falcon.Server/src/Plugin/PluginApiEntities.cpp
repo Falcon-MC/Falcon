@@ -202,6 +202,14 @@ namespace {
         return entity(target)->isOnFire() ? 1 : 0;
     }
 
+    int entityIsInvisible(FalconEntity *target) {
+        return entity(target)->getFlags().get(ActorFlag::Invisible) ? 1 : 0;
+    }
+
+    void entitySetInvisible(FalconEntity *target, int invisible) {
+        entity(target)->getFlags().set(ActorFlag::Invisible, invisible != 0);
+    }
+
     void entitySetOnFire(FalconEntity *target, uint32_t ticks) {
         Actor *value = entity(target);
         if (ticks == 0)
@@ -281,6 +289,8 @@ void PluginServerApi::fillEntities(FalconServerApi &api) {
     api.entitySetNameTag = &entitySetNameTag;
     api.entityIsOnFire = &entityIsOnFire;
     api.entitySetOnFire = &entitySetOnFire;
+    api.entityIsInvisible = &entityIsInvisible;
+    api.entitySetInvisible = &entitySetInvisible;
     api.levelEntityCount = &levelEntityCount;
     api.levelEntity = &levelEntity;
 }
