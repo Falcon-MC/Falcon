@@ -237,7 +237,8 @@ public:
     const ChunkWorker *getChunkWorker() const { return mChunkWorker.get(); }
 
     /**
-     * The chunk's network payload. Translated payloads, for clients of another version, are not cached.
+     * The chunk's network payload, translated by blockIds for clients of another version and cached per
+     * translation. Main thread only: the caches are filled here and cleared on block changes without a lock.
      */
     std::string getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds = nullptr);
 

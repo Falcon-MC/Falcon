@@ -71,6 +71,7 @@ public:
 
     /**
      * A section translated for clients of another version, cached per translation like the untranslated one.
+     * Main thread only: the cache is filled here and cleared by setBlock without a lock.
      */
     const std::string &encodeSubChunkNetwork(int index, const BlockNetworkIdMap &blockIds) const;
 
