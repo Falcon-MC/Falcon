@@ -298,3 +298,17 @@ jobs:
             against this exact release, see its `README.txt`.
 
             ${{ needs.prepare.outputs.changelog }}
+
+      - name: Refresh the website
+        if: needs.prepare.outputs.draft != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "DOWNSTREAM_DISPATCH_TOKEN is not set, skipping Falcon-MC/falcon-mc.github.io"
+            exit 0
+          fi
+
+          gh api "repos/Falcon-MC/falcon-mc.github.io/dispatches" \
+            -f event_type=falcon-release \
+            -f "client_payload[tag]=${{ needs.prepare.outputs.tag }}"
