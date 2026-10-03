@@ -37,6 +37,7 @@
 #include "Protocol/Packets/JigsawStructureDataPacket.h"
 #include "Protocol/Packets/LoginPacket.h"
 #include "Protocol/Packets/PlayerListPacket.h"
+#include "Protocol/Codec/ProtocolCodecRegistry.h"
 #include "Protocol/Packets/PlayStatusPacket.h"
 #include "Protocol/Packets/NetworkSettingsPacket.h"
 #include "Protocol/Packets/RequestNetworkSettingsPacket.h"
@@ -158,19 +159,26 @@ void LoginHandler::registerVanillaDefinitions(ServerNetworkHandler &owner) {
 
 void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                 const RequestNetworkSettingsPacket &packet) {
-    if (packet.mProtocolVersion != owner.getAnnouncement().mProtocolVersion) {
+    std::shared_ptr<const ProtocolCodec> codec = ProtocolCodecRegistry::instance().find(packet.mProtocolVersion);
+    if (codec == nullptr) {
+        const int newest = ProtocolCodecRegistry::instance().getProtocolVersions().back();
         PlayStatusPacket status;
-        status.mStatus = packet.mProtocolVersion < owner.getAnnouncement().mProtocolVersion
+        status.mStatus = packet.mProtocolVersion < newest
                          ? PlayStatusPacket::Status::LoginFailedClientOld
                          : PlayStatusPacket::Status::LoginFailedServerOld;
 
         owner.getNetworkHandler().send(id, status, owner.getCodecContext());
         owner.getNetworkHandler().flush(id);
 
-        LOG_WARN(LogAreaID::Network, "%s uses protocol %d but the server runs %d", id.getAddress().c_str(),
-                 packet.mProtocolVersion, owner.getAnnouncement().mProtocolVersion);
+        LOG_WARN(LogAreaID::Network, "%s uses protocol %d, which the server does not support",
+                 id.getAddress().c_str(), packet.mProtocolVersion);
         return;
     }
+
+    owner.getPlayers().erase(id);
+    auto inserted = owner.getPlayers().try_emplace(id, id, owner.allocateRuntimeId(), &owner);
+    ServerPlayer &player = inserted.first->second;
+    player.setCodec(std::move(codec));
 
     NetworkSettingsPacket settings;
     settings.mCompressionThreshold = owner.getProperties().getCompressionThreshold();
@@ -179,7 +187,7 @@ void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, con
     settings.mClientThrottleThreshold = 0;
     settings.mClientThrottleScalar = 0.0f;
 
-    owner.getNetworkHandler().send(id, settings, owner.getCodecContext());
+    owner.getNetworkHandler().send(id, settings, owner.getCodecContext(id));
 
     owner.getNetworkHandler().flush(id);
     const CompressedNetworkPeer::CompressionAlgorithm algorithm =
@@ -188,14 +196,19 @@ void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, con
             : CompressedNetworkPeer::CompressionAlgorithm::ZLib;
     owner.getNetworkHandler().enableCompression(id, algorithm, settings.mCompressionThreshold);
 
-    owner.getPlayers().erase(id);
-    auto inserted = owner.getPlayers().try_emplace(id, id, owner.allocateRuntimeId(), &owner);
-    ServerPlayer &player = inserted.first->second;
     player.setLoginState(ServerPlayer::LoginState::NetworkSettingsSent);
 }
 
 void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                const LoginPacket &packet) {
+    if (player.getCodec() == nullptr || packet.mProtocolVersion != player.getCodec()->getProtocolVersion()) {
+        LOG_WARN(LogAreaID::Network, "%s logged in with protocol %d after announcing another one",
+                 id.getAddress().c_str(), packet.mProtocolVersion);
+        owner._disconnect(id, "disconnectionScreen.unexpectedPacket");
+        owner.getPlayers().erase(id);
+        return;
+    }
+
     ConnectionRequest request;
     if (!request.parse(packet.mAuthJwt, packet.mClientJwt)) {
         LOG_WARN(LogAreaID::Network, "%s sent a login that could not be parsed", id.getAddress().c_str());

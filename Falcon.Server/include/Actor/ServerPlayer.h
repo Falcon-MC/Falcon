@@ -10,6 +10,7 @@
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/NetworkIdentifier.h"
 #include "Network/PacketSender.h"
+#include "Protocol/Codec/ProtocolCodec.h"
 #include "Protocol/PacketCodecContext.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Protocol/Types/AdventureSettingData.h"
@@ -18,6 +19,7 @@
 #include "Actor/PlayerAcknowledgements.h"
 
 #include <chrono>
+#include <memory>
 #include <string>
 #include <vector>
 #include <unordered_set>
@@ -54,6 +56,13 @@ public:
     LoginState getLoginState() const { return mLoginState; }
 
     void setLoginState(LoginState state) { mLoginState = state; }
+
+    /**
+     * The protocol this connection chose from the version it announced, fixed for the rest of the session.
+     */
+    const std::shared_ptr<const ProtocolCodec> &getCodec() const { return mCodec; }
+
+    void setCodec(std::shared_ptr<const ProtocolCodec> codec) { mCodec = std::move(codec); }
 
     bool isSpawned() const { return mLoginState == LoginState::Spawned; }
 
@@ -568,6 +577,7 @@ private:
 
     NetworkIdentifier mId;
     LoginState mLoginState;
+    std::shared_ptr<const ProtocolCodec> mCodec;
     std::string mName;
     std::string mUuid;
     std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;

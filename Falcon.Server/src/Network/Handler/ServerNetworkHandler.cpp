@@ -39,7 +39,7 @@
 #include "Block/BlockData.h"
 #include "Block/BlockShape.h"
 #include "Block/Inventory/EnderChestInventoryStore.h"
-#include "Protocol/MinecraftPackets.h"
+#include "Protocol/Codec/ProtocolCodec.h"
 #include "Protocol/Packets/DisconnectPacket.h"
 #include "Protocol/Packets/GameRulesChangedPacket.h"
 #include "Protocol/Packets/LevelChunkPacket.h"
@@ -956,7 +956,9 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
         if (gate == LoginGate::Ignore)
             return;
 
-        std::shared_ptr<Packet> packet = MinecraftPackets::createPacket(packetId);
+        const PacketCodecContext &context = getCodecContext(id);
+        const ProtocolCodec &codec = context.getCodec();
+        std::shared_ptr<Packet> packet = codec.createPacket(packetId);
         if (!packet) {
             LOG_TRACE(LogAreaID::Network, "Unhandled packet id %d from %s", (int) packetId, id.getAddress().c_str());
             return;
@@ -967,7 +969,7 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
 
         {
             ProfilerScopedSection decodeSection(mProfiler, ProfilerSection::NetworkDecode, true);
-            packet->read(stream, mCodecContext);
+            codec.read(*packet, stream, context);
         }
 
         {
@@ -1047,6 +1049,18 @@ ServerNetworkHandler::LoginGate ServerNetworkHandler::_checkLoginState(const Net
                                                                                             : LoginGate::Ignore;
     }
     return expected ? LoginGate::Accept : LoginGate::Reject;
+}
+
+const PacketCodecContext &ServerNetworkHandler::getCodecContext(const NetworkIdentifier &id) {
+    const ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr || player->getCodec() == nullptr)
+        return mCodecContext;
+
+    const std::shared_ptr<const ProtocolCodec> &codec = player->getCodec();
+    std::unique_ptr<PacketCodecContext> &context = mProtocolContexts[codec->getProtocolVersion()];
+    if (context == nullptr)
+        context = std::make_unique<PacketCodecContext>(mBlockDefinitions, mItemDefinitions, codec);
+    return *context;
 }
 
 ServerPlayer *ServerNetworkHandler::_getPlayer(const NetworkIdentifier &id) {

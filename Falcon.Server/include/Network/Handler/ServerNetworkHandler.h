@@ -389,6 +389,12 @@ public:
 
     const PacketCodecContext &getCodecContext() const { return mCodecContext; }
 
+    /**
+     * The context of the protocol this connection chose when it connected, or the current protocol's before it
+     * chose one.
+     */
+    const PacketCodecContext &getCodecContext(const NetworkIdentifier &id);
+
     ServerPlayer *getPlayerByName(const std::string &name);
 
     std::vector<ServerPlayer *> resolveTargets(CommandOrigin &sender, const std::string &selector);
@@ -720,6 +726,7 @@ private:
     BlockDefinitionRegistry mBlockDefinitions;
     ItemDefinitionRegistry mItemDefinitions;
     PacketCodecContext mCodecContext;
+    std::unordered_map<int, std::unique_ptr<PacketCodecContext>> mProtocolContexts;
 
     PropertiesSettings mProperties;
     static const int DEFAULT_VIEW_DISTANCE = 4;
