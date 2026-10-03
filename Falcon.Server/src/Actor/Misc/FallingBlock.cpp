@@ -54,6 +54,7 @@ void FallingBlock::fillSpawnMetadata(EntityDataMap &metadata) const {
     variant.mId = ACTOR_DATA_VARIANT;
     variant.mFormat = EntityDataFormat::Int;
     variant.mIntValue = mBlockState.getHash();
+    variant.mIsBlock = true;
     metadata.mEntries.push_back(variant);
 }
 

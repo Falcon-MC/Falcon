@@ -774,7 +774,7 @@ void BlockActionHandler::sendBreakingFx(ServerNetworkHandler &owner, ServerPlaye
     owner.broadcastLevelEvent(level, LevelEventPacket::Event::ParticlePunchBlock, center,
                               blockHash | (player.getBreakingFace() << 24));
 
-    owner.playLevelSound(level, LevelSoundEvent::HIT, center, "", blockHash);
+    owner.playBlockSound(level, LevelSoundEvent::HIT, center, blockHash);
 
     ActorEventPacket swing;
     swing.mRuntimeActorId = player.getRuntimeId();
@@ -1179,7 +1179,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         broadcastToViewers(owner, level, targetCenter, waterUpdate);
     }
 
-    owner.playLevelSound(level, LevelSoundEvent::PLACE, targetCenter, "", (int32_t) blockHash);
+    owner.playBlockSound(level, LevelSoundEvent::PLACE, targetCenter, (int32_t) blockHash);
 
     if (placedBlock != nullptr)
         placedBlock->onPlaced(owner, player, target, placedState, placedWithItem, placementFace);

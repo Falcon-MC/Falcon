@@ -1132,6 +1132,22 @@ void ServerNetworkHandler::playLevelSound(Level &level, const std::string &sound
     BlockActionHandler::broadcastToViewers(*this, level, position, packet);
 }
 
+void ServerNetworkHandler::playBlockSound(Level &level, const std::string &sound, const Vector3f &position,
+                                          int32_t blockHash, const std::string &actorType) {
+    LevelSoundEventPacket packet;
+    packet.mSound = sound;
+    packet.mPosition = position;
+    packet.mExtraData = blockHash;
+    packet.mExtraDataIsBlock = true;
+    packet.mActorType = actorType;
+    packet.mIsBabyMob = false;
+    packet.mDisableRelativeVolume = false;
+    packet.mActorUniqueId = -1;
+    packet.mHasFirePosition = false;
+
+    BlockActionHandler::broadcastToViewers(*this, level, position, packet);
+}
+
 void ServerNetworkHandler::playNamedSound(Level &level, const std::string &sound, const Vector3f &position,
                                           float volume, float pitch) {
     PlaySoundPacket packet;

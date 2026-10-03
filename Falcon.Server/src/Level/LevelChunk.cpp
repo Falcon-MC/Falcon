@@ -22,6 +22,7 @@ void LevelChunk::invalidateNetworkCaches() {
         std::string().swap(cached);
 
     mSubChunkNetworkValid.assign(SUB_CHUNK_COUNT, 0);
+    std::unordered_map<const BlockNetworkIdMap *, std::vector<std::string>>().swap(mTranslatedSubChunkCache);
     std::vector<int32_t>().swap(mTopHeightsCache);
     std::string().swap(mNetworkAnchorCache);
     mTopHeightsValid = false;
@@ -136,6 +137,8 @@ void LevelChunk::setBlock(int x, int32_t y, int z, const BlockState &state) {
     const int index = subChunkIndexFor(y);
     mSubChunks[index].setBlock(x, y & 15, z, state);
     mSubChunkNetworkValid[(size_t) index] = 0;
+    for (auto &translated: mTranslatedSubChunkCache)
+        translated.second[(size_t) index].clear();
     mTopHeightsValid = false;
     mNetworkAnchorValid = false;
     mDirty = true;
@@ -153,6 +156,8 @@ void LevelChunk::setBlock(int x, int32_t y, int z, int layer, const BlockState &
     const int index = subChunkIndexFor(y);
     mSubChunks[index].setBlock(x, y & 15, z, layer, state);
     mSubChunkNetworkValid[(size_t) index] = 0;
+    for (auto &translated: mTranslatedSubChunkCache)
+        translated.second[(size_t) index].clear();
     mDirty = true;
 }
 
@@ -319,13 +324,24 @@ const std::string &LevelChunk::encodeSubChunkNetwork(int index) const {
     return cached;
 }
 
-std::string LevelChunk::encodeSubChunkNetwork(int index, const BlockNetworkIdMap &blockIds) const {
+const std::string &LevelChunk::encodeSubChunkNetwork(int index, const BlockNetworkIdMap &blockIds) const {
+    static const std::string empty;
+
     if (index < 0 || index >= SUB_CHUNK_COUNT)
-        return "";
+        return empty;
+
+    std::vector<std::string> &sections = mTranslatedSubChunkCache[&blockIds];
+    if (sections.empty())
+        sections.resize(SUB_CHUNK_COUNT);
+
+    std::string &cached = sections[(size_t) index];
+    if (!cached.empty())
+        return cached;
 
     BinaryStream stream;
     mSubChunks[(size_t) index].writeNetwork(stream, &blockIds);
-    return stream.getBuffer();
+    cached = stream.getBuffer();
+    return cached;
 }
 
 const std::vector<int32_t> &LevelChunk::getTopBlockHeights() const {

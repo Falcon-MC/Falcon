@@ -756,9 +756,9 @@ namespace {
             const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.1f,
                                   (float) position.z + 0.5f);
             if (!powered && wasPowered)
-                owner.playLevelSound(level, SOUND_POWER_OFF, center, "", updated.getHash());
+                owner.playBlockSound(level, SOUND_POWER_OFF, center, updated.getHash());
             else if (powered && !wasPowered)
-                owner.playLevelSound(level, SOUND_POWER_ON, center, "", updated.getHash());
+                owner.playBlockSound(level, SOUND_POWER_ON, center, updated.getHash());
         }
 
         if (powered)
@@ -1185,7 +1185,7 @@ void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
             states.putByte("button_pressed_bit", 0);
             const BlockState released = BlockState(state.mName, states);
             level.setBlock(position, released, false);
-            owner.playLevelSound(level, SOUND_POWER_OFF, centerOf(position), "", released.getHash());
+            owner.playBlockSound(level, SOUND_POWER_OFF, centerOf(position), released.getHash());
 
             const int facing = buttonFacing(state);
             updateAroundRedstone(owner, level, position);
@@ -1358,8 +1358,7 @@ void RedstoneSystem::onLeverActivated(ServerNetworkHandler &owner, Level &level,
     const BlockState toggled = BlockState(state.mName, states);
     level.setBlock(position, toggled, false);
 
-    owner.playLevelSound(level, powered ? SOUND_POWER_ON : SOUND_POWER_OFF, centerOf(position), "",
-                         toggled.getHash());
+    owner.playBlockSound(level, powered ? SOUND_POWER_ON : SOUND_POWER_OFF, centerOf(position), toggled.getHash());
 
     const int facing = leverFacing(toggled);
     updateAroundRedstone(owner, level, position);
@@ -1379,7 +1378,7 @@ void RedstoneSystem::onButtonActivated(ServerNetworkHandler &owner, Level &level
     const BlockState pressed = BlockState(state.mName, states);
     level.setBlock(position, pressed, false);
 
-    owner.playLevelSound(level, SOUND_POWER_ON, centerOf(position), "", pressed.getHash());
+    owner.playBlockSound(level, SOUND_POWER_ON, centerOf(position), pressed.getHash());
 
     const int facing = buttonFacing(pressed);
     updateAroundRedstone(owner, level, position);

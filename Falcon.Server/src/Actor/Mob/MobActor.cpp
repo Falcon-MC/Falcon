@@ -1617,8 +1617,14 @@ void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
         pushInt(ActorFlags::VARIANT_DATA_ID, (int32_t) numberIn(variant, "value", 0.0f));
     if (const json::Value *mark = getComponent("minecraft:mark_variant"))
         pushInt(ActorFlags::MARK_VARIANT_DATA_ID, (int32_t) numberIn(mark, "value", 0.0f));
-    if (mHasCarriedBlock)
-        pushInt(ActorFlags::CARRIED_BLOCK_DATA_ID, mCarriedBlock.getHash());
+    if (mHasCarriedBlock) {
+        EntityDataEntry carried;
+        carried.mId = ActorFlags::CARRIED_BLOCK_DATA_ID;
+        carried.mFormat = EntityDataFormat::Int;
+        carried.mIntValue = mCarriedBlock.getHash();
+        carried.mIsBlock = true;
+        metadata.mEntries.push_back(carried);
+    }
 
     if (const json::Value *color = getComponent("minecraft:color")) {
         EntityDataEntry entry;

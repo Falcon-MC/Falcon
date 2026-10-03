@@ -63,6 +63,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mStorage = std::move(other.mStorage);
     mChunks = std::move(other.mChunks);
     mChunkNetworkCache = std::move(other.mChunkNetworkCache);
+    mTranslatedChunkNetworkCache = std::move(other.mTranslatedChunkNetworkCache);
     mPendingChunks = std::move(other.mPendingChunks);
     mActiveColumns = std::move(other.mActiveColumns);
     mCompletedChunks = std::move(other.mCompletedChunks);
@@ -467,7 +468,7 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
 
         chunk->setBlock(localX, change.mY, localZ, change.mState);
         LightSystem::onBlockChanged(*this, change.mX, change.mY, change.mZ);
-        mChunkNetworkCache.erase(key);
+        _invalidateChunkNetwork(key);
         mRepopulatedChunks.insert(key);
     }
 }
@@ -582,7 +583,7 @@ size_t Level::processChunkUnloads() {
         const int32_t chunkX = chunk->second.getX();
         const int32_t chunkZ = chunk->second.getZ();
         mChunks.erase(chunk);
-        mChunkNetworkCache.erase(key);
+        _invalidateChunkNetwork(key);
         mRepopulatedChunks.erase(key);
         it = mUnloadQueue.erase(it);
         unloaded++;
@@ -741,6 +742,7 @@ size_t Level::drainCompletedChunks() {
                 mRepopulatedChunks.insert(key);
             }
 
+            _invalidateChunkNetwork(key);
             mChunkNetworkCache[key] = std::move(result.mNetworkData);
 
             added++;
@@ -755,11 +757,26 @@ size_t Level::drainCompletedChunks() {
     return added;
 }
 
-std::string Level::getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds) {
-    if (blockIds != nullptr)
-        return getChunk(chunkX, chunkZ).encodeNetwork(blockIds);
+void Level::_invalidateChunkNetwork(int64_t key) {
+    mChunkNetworkCache.erase(key);
+    for (auto &translated: mTranslatedChunkNetworkCache)
+        translated.second.erase(key);
+}
 
+std::string Level::getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds) {
     const int64_t key = _packChunk(chunkX, chunkZ);
+
+    if (blockIds != nullptr) {
+        std::unordered_map<int64_t, std::string> &translated = mTranslatedChunkNetworkCache[blockIds];
+        auto found = translated.find(key);
+        if (found != translated.end())
+            return found->second;
+
+        std::string data = getChunk(chunkX, chunkZ).encodeNetwork(blockIds);
+        translated[key] = data;
+        return data;
+    }
+
 
     auto cached = mChunkNetworkCache.find(key);
     if (cached != mChunkNetworkCache.end())
@@ -853,7 +870,7 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
 
     chunk.setBlock(x & 15, y, z & 15, state);
     LightSystem::onBlockChanged(*this, x, y, z);
-    mChunkNetworkCache.erase(_packChunk(x >> 4, z >> 4));
+    _invalidateChunkNetwork(_packChunk(x >> 4, z >> 4));
 
     if (chunk.getBlock(x & 15, y, z & 15, 1).mName != "minecraft:air")
         mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
@@ -882,7 +899,7 @@ void Level::setBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer, con
         return;
 
     chunk.setBlock(x & 15, y, z & 15, layer, state);
-    mChunkNetworkCache.erase(_packChunk(x >> 4, z >> 4));
+    _invalidateChunkNetwork(_packChunk(x >> 4, z >> 4));
     mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
     mLiquidPhysics.onBlockChanged(x, y, z);
 }

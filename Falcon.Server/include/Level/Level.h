@@ -375,6 +375,9 @@ private:
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 8;
 
     std::unordered_map<int64_t, std::string> mChunkNetworkCache;
+    std::unordered_map<const BlockNetworkIdMap *, std::unordered_map<int64_t, std::string>> mTranslatedChunkNetworkCache;
+
+    void _invalidateChunkNetwork(int64_t key);
     std::unordered_set<int64_t> mPendingChunks;
     std::unordered_set<int64_t> mActiveColumns;
     std::deque<ChunkLoadResult> mCompletedChunks;

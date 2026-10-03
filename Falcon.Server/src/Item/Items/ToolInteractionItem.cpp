@@ -149,8 +149,8 @@ bool ToolInteractionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer
                           (float) blockPosition.z + 0.5f);
 
     if (transformation.mEffect == Effect::Sound) {
-        owner.playLevelSound(level, LevelSoundEvent::ITEM_USE_ON, center, ":",
-                             BlockStateHasher::hash(result.mName, result.mStates));
+        owner.playBlockSound(level, LevelSoundEvent::ITEM_USE_ON, center,
+                             BlockStateHasher::hash(result.mName, result.mStates), ":");
     } else {
         owner.broadcastLevelEvent(level,
                                   transformation.mEffect == Effect::WaxOff ? CopperSystem::WAX_OFF_EVENT

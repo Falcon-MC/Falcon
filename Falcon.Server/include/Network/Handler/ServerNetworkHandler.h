@@ -308,6 +308,12 @@ public:
     void playLevelSound(Level &level, const std::string &sound, const Vector3f &position,
                         const std::string &actorType = ":", int32_t extraData = -1);
 
+    /**
+     * Plays a sound whose extra data is a block state, translated for each viewer's version.
+     */
+    void playBlockSound(Level &level, const std::string &sound, const Vector3f &position, int32_t blockHash,
+                        const std::string &actorType = "");
+
     void playNamedSound(Level &level, const std::string &sound, const Vector3f &position, float volume,
                         float pitch);
 
