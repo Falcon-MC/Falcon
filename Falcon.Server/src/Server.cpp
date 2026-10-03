@@ -238,6 +238,15 @@ void startServer(const ServerSettings &settings) {
         LOG_WARN(LogAreaID::Server, "=======================================================");
     }
 
+    if (properties.getAnyVersion()) {
+        LOG_WARN(LogAreaID::Server, "================ ANY VERSION WARNING ==================");
+        LOG_WARN(LogAreaID::Server, "any-version is enabled: clients of older protocol versions can join.");
+        LOG_WARN(LogAreaID::Server, "Older versions still receive the blocks, items and recipes of the newest one, "
+                                    "so they may see missing or wrong content. This is not recommended on a "
+                                    "public server.");
+        LOG_WARN(LogAreaID::Server, "=======================================================");
+    }
+
     unsigned short port = properties.isLoaded() ? properties.getServerPort() : settings.port;
     unsigned short portV6 = properties.isLoaded() ? properties.getServerPortV6() : settings.portV6;
 
