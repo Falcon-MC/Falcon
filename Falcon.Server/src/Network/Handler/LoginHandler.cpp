@@ -159,9 +159,11 @@ void LoginHandler::registerVanillaDefinitions(ServerNetworkHandler &owner) {
 
 void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                 const RequestNetworkSettingsPacket &packet) {
+    const int newest = ProtocolCodecRegistry::instance().getProtocolVersions().back();
     std::shared_ptr<const ProtocolCodec> codec = ProtocolCodecRegistry::instance().find(packet.mProtocolVersion);
+    if (!owner.getProperties().getAnyVersion() && packet.mProtocolVersion != newest)
+        codec = nullptr;
     if (codec == nullptr) {
-        const int newest = ProtocolCodecRegistry::instance().getProtocolVersions().back();
         PlayStatusPacket status;
         status.mStatus = packet.mProtocolVersion < newest
                          ? PlayStatusPacket::Status::LoginFailedClientOld

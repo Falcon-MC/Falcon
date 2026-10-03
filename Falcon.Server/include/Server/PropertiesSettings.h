@@ -132,6 +132,11 @@ public:
 
     bool getTexturePackRequired() const { return getBool("texturepack-required"); }
 
+    /**
+     * Whether clients of every supported protocol version may join; otherwise only the newest version is accepted.
+     */
+    bool getAnyVersion() const { return getBool("any-version"); }
+
     bool getContentLogFileEnabled() const { return getBool("content-log-file-enabled"); }
 
     bool getContentLogConsoleOutputEnabled() const { return getBool("content-log-console-output-enabled"); }

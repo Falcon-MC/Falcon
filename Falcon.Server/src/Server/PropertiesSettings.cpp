@@ -82,6 +82,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"content-log-level", "info", PropertyKind::Enum, 0, 0, "error,warning,info,verbose"},
             {"compression-threshold", "1", PropertyKind::Int, 0, 65535, nullptr},
             {"compression-algorithm", "zlib", PropertyKind::Enum, 0, 0, "zlib,snappy"},
+            {"any-version", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"chat-restriction", "None", PropertyKind::Enum, 0, 0, "None,Dropped,Disabled"},
             {"disable-player-interaction", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"client-side-chunk-generation-enabled", "false", PropertyKind::Bool, 0, 0, nullptr},
