@@ -531,6 +531,20 @@ public:
 
     bool _allowPacket(const NetworkIdentifier &id, RateLimitedPacket category);
 
+    enum class LoginGate {
+        Accept,
+        Ignore,
+        Reject
+    };
+
+    /**
+     * Checks the packet against the login step the connection has reached, so a client cannot skip
+     * authentication, bans or the allowlist by sending later packets early. A login packet out of its step is
+     * rejected; any other packet arriving before the game started is ignored, since vanilla clients send a few
+     * of them during the login.
+     */
+    LoginGate _checkLoginState(const NetworkIdentifier &id, MinecraftPacketIds packetId);
+
     void _rejectBadPacket(const NetworkIdentifier &id, const std::string &reason);
 
     ResourcePackManager &getResourcePacks() { return mResourcePacks; }

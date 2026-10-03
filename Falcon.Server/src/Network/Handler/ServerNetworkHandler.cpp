@@ -948,6 +948,13 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
         unsigned char senderSubId;
         unsigned char clientSubId;
         const MinecraftPacketIds packetId = Packet::peekId(stream, senderSubId, clientSubId);
+        const LoginGate gate = _checkLoginState(id, packetId);
+        if (gate == LoginGate::Reject) {
+            _rejectBadPacket(id, "packet " + std::to_string((int) packetId) + " is not expected at this login step");
+            return;
+        }
+        if (gate == LoginGate::Ignore)
+            return;
 
         std::shared_ptr<Packet> packet = MinecraftPackets::createPacket(packetId);
         if (!packet) {
@@ -1005,6 +1012,41 @@ bool ServerNetworkHandler::_allowPacket(const NetworkIdentifier &id, RateLimited
     }
 
     return false;
+}
+
+ServerNetworkHandler::LoginGate ServerNetworkHandler::_checkLoginState(const NetworkIdentifier &id,
+                                                                     MinecraftPacketIds packetId) {
+    using LoginState = ServerPlayer::LoginState;
+
+    if (packetId == MinecraftPacketIds::PacketViolationWarning)
+        return LoginGate::Accept;
+
+    const ServerPlayer *player = _getPlayer(id);
+    if (packetId == MinecraftPacketIds::RequestNetworkSettings)
+        return player == nullptr ? LoginGate::Accept : LoginGate::Reject;
+
+    bool expected;
+    switch (packetId) {
+        case MinecraftPacketIds::Login:
+            expected = player != nullptr && player->getLoginState() == LoginState::NetworkSettingsSent;
+            break;
+        case MinecraftPacketIds::ClientToServerHandshake:
+            expected = player != nullptr && player->getLoginState() == LoginState::EncryptionHandshake;
+            break;
+        case MinecraftPacketIds::ResourcePackClientResponse:
+        case MinecraftPacketIds::ResourcePackChunkRequest:
+            expected = player != nullptr && player->getLoginState() == LoginState::ResourcePacksSent;
+            break;
+        case MinecraftPacketIds::SetLocalPlayerAsInitialized:
+            if (player != nullptr && player->getLoginState() == LoginState::Spawned)
+                return LoginGate::Ignore;
+            expected = player != nullptr && player->getLoginState() == LoginState::StartGameSent;
+            break;
+        default:
+            return player != nullptr && player->getLoginState() >= LoginState::StartGameSent ? LoginGate::Accept
+                                                                                            : LoginGate::Ignore;
+    }
+    return expected ? LoginGate::Accept : LoginGate::Reject;
 }
 
 ServerPlayer *ServerNetworkHandler::_getPlayer(const NetworkIdentifier &id) {
