@@ -19,12 +19,34 @@ falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE FalconItemData S
         DELIMITER falconitems OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ItemPaletteJson.h")
 falcon_bedrock_data_embed_binary(FILE item_components.nbt NAMESPACE FalconItemData SYMBOL kItemComponentsNbt
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ItemComponentsNbt.h")
-set(FALCON_BEDROCK_DATA_PROTOCOL 2169)
-falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE FalconItemData2169 SYMBOL kItemPaletteJson
-        DELIMITER falconitems2169 OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ItemPalette2169Json.h")
-falcon_bedrock_data_embed_binary(FILE item_components.nbt NAMESPACE FalconItemData2169 SYMBOL kItemComponentsNbt
-        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ItemComponents2169Nbt.h")
+set(FALCON_OLDER_DATA_PROTOCOLS 2169)
+set(FALCON_OLDER_DATA_INCLUDES "")
+set(FALCON_OLDER_DATA_ENTRIES "")
+foreach(olderProtocol IN LISTS FALCON_OLDER_DATA_PROTOCOLS)
+    set(FALCON_BEDROCK_DATA_PROTOCOL ${olderProtocol})
+    set(olderDir "${CMAKE_CURRENT_BINARY_DIR}/generated/older/${olderProtocol}")
+    set(olderNamespace "FalconOlderData${olderProtocol}")
+    falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE ${olderNamespace} SYMBOL kItemPaletteJson
+            DELIMITER falconitems OUTPUT "${olderDir}/ItemPaletteJson.h")
+    falcon_bedrock_data_embed_binary(FILE item_components.nbt NAMESPACE ${olderNamespace} SYMBOL kItemComponentsNbt
+            OUTPUT "${olderDir}/ItemComponentsNbt.h")
+    falcon_bedrock_data_embed_text(FILE recipes.json NAMESPACE ${olderNamespace} SYMBOL kRecipesJson
+            DELIMITER falconrecipes OUTPUT "${olderDir}/RecipesJson.h")
+    falcon_bedrock_data_embed_text(FILE creative_items.json NAMESPACE ${olderNamespace} SYMBOL kCreativeItemsJson
+            DELIMITER falconcreative OUTPUT "${olderDir}/CreativeItemsJson.h")
+    falcon_bedrock_data_embed_binary(FILE block_palette.nbt NAMESPACE ${olderNamespace} SYMBOL kBlockPaletteNbt
+            OUTPUT "${olderDir}/BlockPaletteNbt.h")
+    foreach(header ItemPaletteJson ItemComponentsNbt RecipesJson CreativeItemsJson BlockPaletteNbt)
+        string(APPEND FALCON_OLDER_DATA_INCLUDES "#include \"older/${olderProtocol}/${header}.h\"\n")
+    endforeach()
+    string(APPEND FALCON_OLDER_DATA_ENTRIES
+            "        {${olderProtocol}, ${olderNamespace}::kItemPaletteJson, ${olderNamespace}::kItemComponentsNbt, "
+            "${olderNamespace}::kItemComponentsNbtSize, ${olderNamespace}::kRecipesJson, "
+            "${olderNamespace}::kCreativeItemsJson, ${olderNamespace}::kBlockPaletteNbt, "
+            "${olderNamespace}::kBlockPaletteNbtSize},\n")
+endforeach()
 set(FALCON_BEDROCK_DATA_PROTOCOL 2193)
+configure_file(cmake/OlderProtocolData.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/OlderProtocolData.h" @ONLY)
 falcon_bedrock_data_embed_binary(FILE block_definitions.nbt NAMESPACE FalconBlockDefinitionData
         SYMBOL kBlockDefinitionsNbt OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockDefinitionsNbt.h")
 falcon_bedrock_data_embed_text(FILE entity_loot_tables.json NAMESPACE FalconLootData SYMBOL kEntityLootTablesJson

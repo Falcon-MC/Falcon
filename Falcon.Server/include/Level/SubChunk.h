@@ -2,6 +2,7 @@
 
 #include "Core/Utility/BinaryStream.h"
 #include "Block/BlockState.h"
+#include "Protocol/Types/BlockNetworkIdMap.h"
 
 #include <cstdint>
 #include <vector>
@@ -42,7 +43,10 @@ public:
 
     bool readBiomes(ReadOnlyBinaryStream &stream);
 
-    void writeNetwork(BinaryStream &stream) const;
+    /**
+     * Writes the section as a client sees it, with its block states translated by blockIds when it is set.
+     */
+    void writeNetwork(BinaryStream &stream, const BlockNetworkIdMap *blockIds = nullptr) const;
 
     void writePersistent(BinaryStream &stream) const;
 
@@ -55,9 +59,9 @@ private:
 
     void _writeStorage(BinaryStream &stream, bool persistent,
                        const std::vector<BlockState> &palette,
-                       const std::vector<uint16_t> &blocks) const;
+                       const std::vector<uint16_t> &blocks, const BlockNetworkIdMap *blockIds) const;
 
-    void _writeEmptyStorage(BinaryStream &stream, bool persistent) const;
+    void _writeEmptyStorage(BinaryStream &stream, bool persistent, const BlockNetworkIdMap *blockIds) const;
 
     bool _readStorage(ReadOnlyBinaryStream &stream, std::vector<BlockState> &palette,
                       std::vector<uint16_t> &blocks, bool *replacedUnknown);

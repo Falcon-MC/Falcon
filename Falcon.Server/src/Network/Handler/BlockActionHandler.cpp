@@ -799,11 +799,13 @@ void BlockActionHandler::stopBreakingBlock(ServerNetworkHandler &owner, ServerPl
 
 }
 
-bool BlockActionHandler::matchesTransactionItem(const ItemStack &held, const ItemStack &sent) {
+bool BlockActionHandler::matchesTransactionItem(const PacketCodecContext &context, const ItemStack &held,
+                                                const ItemStack &sent) {
     if (held.isAir() || sent.isAir())
         return held.isAir() && sent.isAir();
 
-    return held.mDefinition->getIdentifier() == sent.mDefinition->getIdentifier()
+    return context.toNetworkItemId(held.mDefinition->getRuntimeId())
+               == context.toNetworkItemId(sent.mDefinition->getRuntimeId())
            && held.mDamage == sent.mDamage;
 }
 
@@ -894,7 +896,8 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     if (canInteractWithBlock(player, transaction.mBlockPosition)) {
         if (player.getGameType() == (int32_t) GameType::Creative)
             handled = interactBlock(owner, player, transaction, selectedSlotChanged);
-        else if (matchesTransactionItem(inventory.getItemInHand(), transaction.mItemInHand))
+        else if (matchesTransactionItem(owner.getCodecContext(player.getNetworkIdentifier()),
+                                        inventory.getItemInHand(), transaction.mItemInHand))
             handled = interactBlock(owner, player, transaction, selectedSlotChanged);
     }
 

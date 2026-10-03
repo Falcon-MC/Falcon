@@ -231,7 +231,7 @@ namespace {
 
             chunk.mSubChunksLength = (uint32_t) level.getChunkSubChunkCount(chunkX, chunkZ);
             chunk.mRequestSubChunks = false;
-            chunk.mData = level.getChunkData(chunkX, chunkZ);
+            chunk.mData = level.getChunkData(chunkX, chunkZ, owner.getCodecContext(id).getBlockNetworkIds());
 
             BlockActorStore &blockActors = level.getBlockActors();
             if (blockActors.isChunkLoaded(chunkX, chunkZ))

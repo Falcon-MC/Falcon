@@ -258,7 +258,7 @@ bool SubChunk::isLayerEmpty(int layer) const {
 
 void SubChunk::_writeStorage(BinaryStream &stream, bool persistent,
                             const std::vector<BlockState> &palette,
-                            const std::vector<uint16_t> &blocks) const {
+                            const std::vector<uint16_t> &blocks, const BlockNetworkIdMap *blockIds) const {
     const int bitsPerBlock = _bitsPerBlock(palette.size());
     const int blocksPerWord = 32 / bitsPerBlock;
     const int wordCount = (BLOCK_COUNT + blocksPerWord - 1) / blocksPerWord;
@@ -284,23 +284,23 @@ void SubChunk::_writeStorage(BinaryStream &stream, bool persistent,
 
     stream.putVarInt((int32_t) palette.size());
     for (const BlockState &state: palette)
-        stream.putVarInt(state.getHash());
+        stream.putVarInt(blockIds == nullptr ? state.getHash() : blockIds->toClient(state.getHash()));
 }
 
-void SubChunk::writeNetwork(BinaryStream &stream) const {
+void SubChunk::writeNetwork(BinaryStream &stream, const BlockNetworkIdMap *blockIds) const {
     stream.putByte(STORAGE_VERSION);
     stream.putByte(LAYER_COUNT);
     stream.putByte((unsigned char) (signed char) mY);
 
-    _writeStorage(stream, false, mPalette, mBlocks);
+    _writeStorage(stream, false, mPalette, mBlocks, blockIds);
 
     if (isLayerEmpty(1))
-        _writeEmptyStorage(stream, false);
+        _writeEmptyStorage(stream, false, blockIds);
     else
-        _writeStorage(stream, false, mPalette2, mBlocks2);
+        _writeStorage(stream, false, mPalette2, mBlocks2, blockIds);
 }
 
-void SubChunk::_writeEmptyStorage(BinaryStream &stream, bool persistent) const {
+void SubChunk::_writeEmptyStorage(BinaryStream &stream, bool persistent, const BlockNetworkIdMap *blockIds) const {
     stream.putByte((unsigned char) ((1 << 1) | (persistent ? 0 : 1)));
 
     for (int word = 0; word < 128; word++)
@@ -315,7 +315,7 @@ void SubChunk::_writeEmptyStorage(BinaryStream &stream, bool persistent) const {
     }
 
     stream.putVarInt(1);
-    stream.putVarInt(air.getHash());
+    stream.putVarInt(blockIds == nullptr ? air.getHash() : blockIds->toClient(air.getHash()));
 }
 
 void SubChunk::writePersistent(BinaryStream &stream) const {
@@ -323,12 +323,12 @@ void SubChunk::writePersistent(BinaryStream &stream) const {
     stream.putByte(LAYER_COUNT);
     stream.putByte((unsigned char) (signed char) mY);
 
-    _writeStorage(stream, true, mPalette, mBlocks);
+    _writeStorage(stream, true, mPalette, mBlocks, nullptr);
 
     if (isLayerEmpty(1))
-        _writeEmptyStorage(stream, true);
+        _writeEmptyStorage(stream, true, nullptr);
     else
-        _writeStorage(stream, true, mPalette2, mBlocks2);
+        _writeStorage(stream, true, mPalette2, mBlocks2, nullptr);
 }
 
 bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<BlockState> &palette,

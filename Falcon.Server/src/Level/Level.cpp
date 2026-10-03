@@ -755,7 +755,10 @@ size_t Level::drainCompletedChunks() {
     return added;
 }
 
-std::string Level::getChunkData(int32_t chunkX, int32_t chunkZ) {
+std::string Level::getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds) {
+    if (blockIds != nullptr)
+        return getChunk(chunkX, chunkZ).encodeNetwork(blockIds);
+
     const int64_t key = _packChunk(chunkX, chunkZ);
 
     auto cached = mChunkNetworkCache.find(key);

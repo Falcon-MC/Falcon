@@ -1064,6 +1064,7 @@ const PacketCodecContext &ServerNetworkHandler::getCodecContext(const NetworkIde
     if (context == nullptr) {
         context = std::make_unique<PacketCodecContext>(mBlockDefinitions, mItemDefinitions, codec);
         context->setItemNetworkIds(_itemNetworkIdsFor(codec->getProtocolVersion()));
+        context->setBlockNetworkIds(BlockNetworkIdTable::getNetworkIds(codec->getProtocolVersion()));
     }
     return *context;
 }
@@ -1074,9 +1075,22 @@ std::shared_ptr<const ItemNetworkIdMap> ServerNetworkHandler::_itemNetworkIdsFor
         return nullptr;
 
     std::shared_ptr<ItemNetworkIdMap> map = std::make_shared<ItemNetworkIdMap>(*vanilla);
+    std::vector<int32_t> colliding;
     for (const std::shared_ptr<ItemDefinition> &definition: mItemDefinitions.getAll()) {
-        if (ItemNetworkIdTable::find(definition->getIdentifier()) == nullptr)
+        if (ItemNetworkIdTable::find(definition->getIdentifier()) != nullptr)
+            continue;
+
+        if (map->toCurrent(definition->getRuntimeId()) == 0)
             map->add(definition->getRuntimeId(), definition->getRuntimeId());
+        else
+            colliding.push_back(definition->getRuntimeId());
+    }
+
+    int32_t freeId = 1;
+    for (const int32_t runtimeId: colliding) {
+        while (map->toCurrent(freeId) != 0)
+            ++freeId;
+        map->add(runtimeId, freeId);
     }
     return map;
 }

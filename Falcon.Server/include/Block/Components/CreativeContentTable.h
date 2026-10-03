@@ -26,4 +26,9 @@ public:
     static const CreativeEntry *getEntries();
 
     static size_t getEntryCount();
+
+    /**
+     * Whether the creative inventory of a client of this protocol holds the entry at this index.
+     */
+    static bool isKnownBy(size_t index, int32_t protocol);
 };

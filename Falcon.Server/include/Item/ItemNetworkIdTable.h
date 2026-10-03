@@ -26,6 +26,12 @@ public:
     static const ItemNetworkIdEntry *find(const std::string &identifier);
 
     /**
+     * The block a slab, double slab or stairs is made of, or an empty string for any other identifier. An older
+     * client lacking such a variant shows it as this block.
+     */
+    static std::string getVariantBase(const std::string &identifier);
+
+    /**
      * The item palette a client of this protocol knows, sent to it in its item registry.
      */
     static const std::vector<ItemNetworkIdEntry> &getPalette(int32_t protocol);

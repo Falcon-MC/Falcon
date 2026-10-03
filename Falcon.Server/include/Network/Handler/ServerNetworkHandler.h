@@ -499,6 +499,16 @@ public:
 
     std::vector<uint32_t> &getRecipeSourceIndicesMutable() { return mRecipeSourceIndices; }
 
+    /**
+     * The vanilla recipe each recipe network ID was built from. Custom recipes are absent.
+     */
+    std::unordered_map<int32_t, std::string> &getVanillaRecipeIdsMutable() { return mVanillaRecipeIds; }
+
+    /**
+     * The creative content table index of each creative item, or -1 for a custom one.
+     */
+    std::vector<int32_t> &getCreativeSourceIndicesMutable() { return mCreativeSourceIndices; }
+
     CraftingDataPacket &getCachedCraftingData() { return mCachedCraftingData; }
 
     void _loadPlayerData(ServerPlayer &player);
@@ -683,7 +693,8 @@ private:
     ServerPlayer *_getPlayer(const NetworkIdentifier &id);
 
     /**
-     * The vanilla translation for this protocol, with the custom items kept at their own IDs.
+     * The vanilla translation for this protocol, with the custom items kept at their own IDs. A custom item whose
+     * ID the client already uses for a vanilla item gets the first ID the client leaves free.
      */
     std::shared_ptr<const ItemNetworkIdMap> _itemNetworkIdsFor(int protocol) const;
 
@@ -763,6 +774,8 @@ private:
     CraftingDataPacket mCachedCraftingData;
     std::vector<ItemStack> mRecipeOutputs;
     std::vector<uint32_t> mRecipeSourceIndices;
+    std::unordered_map<int32_t, std::string> mVanillaRecipeIds;
+    std::vector<int32_t> mCreativeSourceIndices;
     PlayerDataProvider mPlayerData;
     OpList mOps;
     AllowList mAllowList;

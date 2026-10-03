@@ -59,11 +59,16 @@ public:
 
     uint32_t getColumnBiome(int x, int z) const;
 
-    std::string encodeNetwork() const;
+    /**
+     * The chunk as a client sees it. With blockIds set, the block states are translated and nothing is cached.
+     */
+    std::string encodeNetwork(const BlockNetworkIdMap *blockIds = nullptr) const;
 
     const std::string &encodeNetworkAnchor() const;
 
     const std::string &encodeSubChunkNetwork(int index) const;
+
+    std::string encodeSubChunkNetwork(int index, const BlockNetworkIdMap &blockIds) const;
 
     const std::vector<int32_t> &getTopBlockHeights() const;
 

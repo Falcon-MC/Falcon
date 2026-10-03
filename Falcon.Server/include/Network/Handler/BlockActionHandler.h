@@ -11,6 +11,7 @@ class Level;
 class Packet;
 class BlockState;
 class BlockActor;
+class PacketCodecContext;
 
 class BlockActionHandler {
 public:
@@ -56,7 +57,11 @@ private:
     static bool interactBlock(ServerNetworkHandler &owner, ServerPlayer &player,
                               const ItemUseTransaction &transaction, bool selectedSlotChanged);
 
-    static bool matchesTransactionItem(const ItemStack &held, const ItemStack &sent);
+    /**
+     * Compares the items as the client sees them, so an item it only knows under another one still matches.
+     */
+    static bool matchesTransactionItem(const PacketCodecContext &context, const ItemStack &held,
+                                       const ItemStack &sent);
 
     static bool isBlockChangeAllowed(Level &level, const Vector3i &position, const ServerPlayer &player);
 

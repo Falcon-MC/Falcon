@@ -130,7 +130,9 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
 
         entry.mResult = SubChunkRequestResult::Success;
         entry.mHasData = true;
-        entry.mData = chunk->encodeSubChunkNetwork(index) + blockEntities;
+        const BlockNetworkIdMap *blockIds = owner.getCodecContext(id).getBlockNetworkIds();
+        entry.mData = (blockIds == nullptr ? chunk->encodeSubChunkNetwork(index)
+                                           : chunk->encodeSubChunkNetwork(index, *blockIds)) + blockEntities;
         entries.push_back(entry);
     }
 

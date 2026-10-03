@@ -60,6 +60,7 @@
 #include "Server/PropertiesSettings.h"
 #include "Server/ResourcePackManager.h"
 
+#include <algorithm>
 #include <cstring>
 #include <unordered_map>
 #include <vector>
@@ -652,7 +653,7 @@ void LoginHandler::sendItemComponents(ServerNetworkHandler &owner, ServerPlayer 
 
             ItemComponentEntry entry;
             entry.mIdentifier = definition->getIdentifier();
-            entry.mRuntimeId = (int16_t) definition->getRuntimeId();
+            entry.mRuntimeId = (int16_t) context.toNetworkItemId(definition->getRuntimeId());
             entry.mComponentBased = definition->isComponentBased();
 
             const ItemNetworkIdEntry *source = ItemNetworkIdTable::find(definition->getIdentifier());
@@ -789,6 +790,7 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
 
         recipeOutputs.push_back(resolvedOutput);
         recipeSourceIndices.push_back((uint32_t) index);
+        owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = source.mRecipeId;
     }
 
     const std::vector<CustomRecipe> &customRecipes = CustomContentRegistry::getInstance().getRecipes();
@@ -881,6 +883,7 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
             output.mBlockRuntimeId = blockDefinition == nullptr ? 0 : blockDefinition->getRuntimeId();
             output.mIsShield = std::string(source.mOutputItemId) == "minecraft:shield";
             entry.mOutputs.push_back(output);
+            owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = source.mRecipeId;
             cached.mShapelessRecipes.push_back(std::move(entry));
         }
     }
@@ -895,8 +898,23 @@ void LoginHandler::sendCraftingData(ServerNetworkHandler &owner, ServerPlayer &p
     if (cached.empty()) {
         buildCraftingData(owner);
 
+        const int protocol = context.getCodec().getProtocolVersion();
+        const std::unordered_map<int32_t, std::string> &vanillaIds = owner.getVanillaRecipeIdsMutable();
+        auto unknown = [&](const CraftingRecipeEntry &recipe) {
+            const auto it = vanillaIds.find(recipe.mRecipeNetId);
+            return it != vanillaIds.end() && !CraftingRecipeTable::isKnownBy(it->second, protocol);
+        };
+
+        CraftingDataPacket crafting = owner.getCachedCraftingData();
+        crafting.mShapedRecipes.erase(std::remove_if(crafting.mShapedRecipes.begin(),
+                                                     crafting.mShapedRecipes.end(), unknown),
+                                      crafting.mShapedRecipes.end());
+        crafting.mShapelessRecipes.erase(std::remove_if(crafting.mShapelessRecipes.begin(),
+                                                        crafting.mShapelessRecipes.end(), unknown),
+                                         crafting.mShapelessRecipes.end());
+
         BinaryStream stream;
-        owner.getCachedCraftingData().writeWithHeader(stream, context);
+        crafting.writeWithHeader(stream, context);
         cached = stream.getBuffer();
     }
 
@@ -985,6 +1003,7 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
         entry.mItem.mBlockDefinition = owner.getBlockDefinitions().getDefinition(source.mIdentifier);
 
         owner.getCreativeItemsMutable().push_back(entry);
+        owner.getCreativeSourceIndicesMutable().push_back((int32_t) index);
     }
 
     CustomContentRegistry &content = CustomContentRegistry::getInstance();
@@ -1035,6 +1054,7 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
         entry.mItem.mDefinition = definition;
         entry.mItem.mCount = 1;
         owner.getCreativeItemsMutable().push_back(entry);
+        owner.getCreativeSourceIndicesMutable().push_back(-1);
     }
 
     for (const CustomBlockDefinition &block: content.getBlocks()) {
@@ -1051,6 +1071,7 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
         entry.mItem.mBlockDefinition = blockDefinition;
         entry.mItem.mCount = 1;
         owner.getCreativeItemsMutable().push_back(entry);
+        owner.getCreativeSourceIndicesMutable().push_back(-1);
     }
 }
 
@@ -1061,9 +1082,35 @@ void LoginHandler::sendCreativeContent(ServerNetworkHandler &owner, ServerPlayer
     if (cached.empty()) {
         buildCreativeContent(owner);
 
+        const int protocol = context.getCodec().getProtocolVersion();
+        const std::vector<CreativeItemData> &items = owner.getCreativeItemsMutable();
+        const std::vector<int32_t> &sources = owner.getCreativeSourceIndicesMutable();
+        const std::vector<CreativeItemGroup> &groups = owner.getCreativeGroups();
+
         CreativeContentPacket creative;
-        creative.mGroups = owner.getCreativeGroups();
-        creative.mItems = owner.getCreativeItemsMutable();
+        std::vector<bool> groupUsed(groups.size(), false);
+        for (size_t index = 0; index < items.size(); ++index) {
+            if (sources[index] >= 0 && !CreativeContentTable::isKnownBy((size_t) sources[index], protocol))
+                continue;
+
+            creative.mItems.push_back(items[index]);
+            if (items[index].mGroupIndex >= 0)
+                groupUsed[items[index].mGroupIndex] = true;
+        }
+
+        std::vector<int32_t> groupRemap(groups.size(), -1);
+        for (size_t index = 0; index < groups.size(); ++index) {
+            if (!groupUsed[index])
+                continue;
+
+            groupRemap[index] = (int32_t) creative.mGroups.size();
+            creative.mGroups.push_back(groups[index]);
+        }
+
+        for (CreativeItemData &item: creative.mItems) {
+            if (item.mGroupIndex >= 0)
+                item.mGroupIndex = groupRemap[item.mGroupIndex];
+        }
 
         BinaryStream stream;
         creative.writeWithHeader(stream, context);

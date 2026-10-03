@@ -5,13 +5,13 @@
 #include "Core/Json/Json.h"
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
-#include "ItemComponents2169Nbt.h"
 #include "ItemComponentsNbt.h"
-#include "ItemPalette2169Json.h"
 #include "ItemPaletteJson.h"
+#include "Network/ProtocolData.h"
 
 #include <array>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -19,9 +19,6 @@ namespace {
     const char *TAG_NAME = "name";
     const char *TAG_ID = "id";
     const char *TAG_COMPONENTS = "components";
-
-    const int32_t PROTOCOL_1_26_40 = 2168;
-    const int32_t PROTOCOL_1_26_45 = 2169;
 
     /**
      * Suffixes of the items an older version lacks whose base block it has, so they show as that block.
@@ -97,11 +94,17 @@ namespace {
         return loaded;
     }
 
-    const std::vector<ItemNetworkIdEntry> &entries2169() {
-        static const std::vector<ItemNetworkIdEntry> loaded = loadEntries(
-                FalconItemData2169::kItemPaletteJson, FalconItemData2169::kItemComponentsNbt,
-                FalconItemData2169::kItemComponentsNbtSize);
-        return loaded;
+    const std::vector<ItemNetworkIdEntry> &olderEntries(const ProtocolData &data) {
+        static std::mutex mutex;
+        static std::unordered_map<int32_t, std::vector<ItemNetworkIdEntry>> loaded;
+
+        const std::lock_guard<std::mutex> lock(mutex);
+        const auto it = loaded.find(data.mProtocol);
+        if (it != loaded.end())
+            return it->second;
+
+        return loaded.emplace(data.mProtocol, loadEntries(data.mItemPalette, data.mItemComponents,
+                                                          data.mItemComponentsSize)).first->second;
     }
 
     std::unordered_map<std::string, int32_t> networkIdsByName(const std::vector<ItemNetworkIdEntry> &palette) {
@@ -109,16 +112,6 @@ namespace {
         for (const ItemNetworkIdEntry &entry: palette)
             ids[entry.mIdentifier] = entry.mNetworkId;
         return ids;
-    }
-
-    std::string baseBlockOf(const std::string &identifier) {
-        for (const char *suffix: VARIANT_SUFFIXES) {
-            const std::string ending(suffix);
-            if (identifier.size() > ending.size()
-                && identifier.compare(identifier.size() - ending.size(), ending.size(), ending) == 0)
-                return identifier.substr(0, identifier.size() - ending.size());
-        }
-        return "";
     }
 
     std::shared_ptr<const ItemNetworkIdMap> buildNetworkIds(const std::vector<ItemNetworkIdEntry> &palette) {
@@ -135,7 +128,7 @@ namespace {
         }
 
         for (const ItemNetworkIdEntry *entry: missing) {
-            const auto it = clientIds.find(baseBlockOf(entry->mIdentifier));
+            const auto it = clientIds.find(ItemNetworkIdTable::getVariantBase(entry->mIdentifier));
             if (it != clientIds.end())
                 map->add(entry->mNetworkId, it->second);
         }
@@ -168,16 +161,32 @@ const ItemNetworkIdEntry *ItemNetworkIdTable::find(const std::string &identifier
     return it->second;
 }
 
+std::string ItemNetworkIdTable::getVariantBase(const std::string &identifier) {
+    for (const char *suffix: VARIANT_SUFFIXES) {
+        const std::string ending(suffix);
+        if (identifier.size() > ending.size()
+            && identifier.compare(identifier.size() - ending.size(), ending.size(), ending) == 0)
+            return identifier.substr(0, identifier.size() - ending.size());
+    }
+    return "";
+}
+
 const std::vector<ItemNetworkIdEntry> &ItemNetworkIdTable::getPalette(int32_t protocol) {
-    if (protocol == PROTOCOL_1_26_40 || protocol == PROTOCOL_1_26_45)
-        return entries2169();
-    return entries();
+    const ProtocolData *data = ProtocolData::find(protocol);
+    return data == nullptr ? entries() : olderEntries(*data);
 }
 
 std::shared_ptr<const ItemNetworkIdMap> ItemNetworkIdTable::getNetworkIds(int32_t protocol) {
-    if (protocol != PROTOCOL_1_26_40 && protocol != PROTOCOL_1_26_45)
+    const ProtocolData *data = ProtocolData::find(protocol);
+    if (data == nullptr)
         return nullptr;
 
-    static const std::shared_ptr<const ItemNetworkIdMap> map2169 = buildNetworkIds(entries2169());
-    return map2169;
+    static std::mutex mutex;
+    static std::unordered_map<int32_t, std::shared_ptr<const ItemNetworkIdMap>> maps;
+
+    const std::lock_guard<std::mutex> lock(mutex);
+    std::shared_ptr<const ItemNetworkIdMap> &map = maps[data->mProtocol];
+    if (map == nullptr)
+        map = buildNetworkIds(olderEntries(*data));
+    return map;
 }

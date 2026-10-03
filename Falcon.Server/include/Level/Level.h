@@ -236,7 +236,10 @@ public:
 
     const ChunkWorker *getChunkWorker() const { return mChunkWorker.get(); }
 
-    std::string getChunkData(int32_t chunkX, int32_t chunkZ);
+    /**
+     * The chunk's network payload. Translated payloads, for clients of another version, are not cached.
+     */
+    std::string getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds = nullptr);
 
     int getChunkSubChunkCount(int32_t chunkX, int32_t chunkZ);
 

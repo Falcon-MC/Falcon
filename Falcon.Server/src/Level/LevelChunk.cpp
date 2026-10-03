@@ -251,7 +251,7 @@ std::string LevelChunk::encodeBiomesPersistent(int sectionCount) const {
     return stream.getBuffer();
 }
 
-std::string LevelChunk::encodeNetwork() const {
+std::string LevelChunk::encodeNetwork(const BlockNetworkIdMap *blockIds) const {
     BinaryStream stream;
 
     const int sectionCount = getNetworkSubChunkCount();
@@ -259,8 +259,12 @@ std::string LevelChunk::encodeNetwork() const {
     // Full chunk payload: the non-empty sub-chunks up to the highest one, one biome palette
     // per sent section, then a zero byte for the border block count. Block actors are
     // appended by the caller.
-    for (int i = 0; i < sectionCount; i++)
-        stream.put(encodeSubChunkNetwork(mFirstNetworkSubChunk + i));
+    for (int i = 0; i < sectionCount; i++) {
+        if (blockIds == nullptr)
+            stream.put(encodeSubChunkNetwork(mFirstNetworkSubChunk + i));
+        else
+            stream.put(encodeSubChunkNetwork(mFirstNetworkSubChunk + i, *blockIds));
+    }
 
     stream.put(encodeBiomes(sectionCount));
     stream.putByte(0);
@@ -313,6 +317,15 @@ const std::string &LevelChunk::encodeSubChunkNetwork(int index) const {
     mSubChunkNetworkValid[(size_t) index] = 1;
 
     return cached;
+}
+
+std::string LevelChunk::encodeSubChunkNetwork(int index, const BlockNetworkIdMap &blockIds) const {
+    if (index < 0 || index >= SUB_CHUNK_COUNT)
+        return "";
+
+    BinaryStream stream;
+    mSubChunks[(size_t) index].writeNetwork(stream, &blockIds);
+    return stream.getBuffer();
 }
 
 const std::vector<int32_t> &LevelChunk::getTopBlockHeights() const {
