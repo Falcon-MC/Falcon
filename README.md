@@ -40,6 +40,9 @@ check it against its `.sha256` file and run it. On the first start, a setup wiza
 |-----------|----------|
 | 1.26.52   | 2193     |
 
+Only the newest version can join by default. Set `any-version=true` in `server.properties` to let every
+supported version join.
+
 ## Related repositories
 
 - [Protocol](https://github.com/Falcon-MC/Protocol) - packets and network types
