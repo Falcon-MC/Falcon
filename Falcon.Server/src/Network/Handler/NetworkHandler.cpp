@@ -1,6 +1,7 @@
 #include "Network/Handler/NetworkHandler.h"
 
 #include "Core/Utility/BinaryStream.h"
+#include "Protocol/Codec/ProtocolCodec.h"
 #include "Protocol/Packet.h"
 
 #include <algorithm>
@@ -152,8 +153,13 @@ Compressibility NetworkHandler::_toPeerCompressibility(const Packet &packet) {
 }
 
 void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, const PacketCodecContext &context) {
+    const PacketCodecContext *own = mContextResolver ? mContextResolver(id) : nullptr;
+    const PacketCodecContext &session = own != nullptr ? *own : context;
+    if (!session.getCodec().supports(packet.getId()))
+        return;
+
     BinaryStream stream;
-    packet.writeWithHeader(stream, context);
+    packet.writeWithHeader(stream, session);
 
     if (!mOutboundFilter) {
         send(id, stream.getBuffer(), _toPeerReliability(packet), _toPeerCompressibility(packet));
@@ -171,11 +177,8 @@ void NetworkHandler::setOutboundFilter(OutboundFilter filter) {
     mOutboundFilter = std::move(filter);
 }
 
-void NetworkHandler::sendToAll(const Packet &packet, const PacketCodecContext &context) {
-    BinaryStream stream;
-    packet.writeWithHeader(stream, context);
-
-    sendToAll(stream.getBuffer(), _toPeerReliability(packet), _toPeerCompressibility(packet));
+void NetworkHandler::setContextResolver(ContextResolver resolver) {
+    mContextResolver = std::move(resolver);
 }
 
 void NetworkHandler::send(const NetworkIdentifier &id, const std::string &data, NetworkPeer::Reliability reliability,

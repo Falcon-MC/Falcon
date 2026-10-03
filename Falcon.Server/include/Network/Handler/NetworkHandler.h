@@ -111,6 +111,11 @@ public:
 
     using OutboundFilter = std::function<bool(const NetworkIdentifier &, std::string &)>;
 
+    /**
+     * Returns the codec context of the protocol a connection chose, or nullptr to keep the one the caller passed.
+     */
+    using ContextResolver = std::function<const PacketCodecContext *(const NetworkIdentifier &)>;
+
     explicit NetworkHandler(std::unique_ptr<Connector> connector);
 
     ~NetworkHandler() override;
@@ -132,8 +137,6 @@ public:
     size_t getPendingInboundCount() const { return mInbound.size(); }
 
     void send(const NetworkIdentifier &id, const Packet &packet, const PacketCodecContext &context);
-
-    void sendToAll(const Packet &packet, const PacketCodecContext &context);
 
     void send(const NetworkIdentifier &id, const std::string &data,
               NetworkPeer::Reliability reliability = NetworkPeer::Reliability::ReliableOrdered,
@@ -166,6 +169,12 @@ public:
 
     void setOutboundFilter(OutboundFilter filter);
 
+    /**
+     * Makes every packet sent to a connection use the codec of its protocol, so callers keep passing the
+     * server's context whatever version the client speaks.
+     */
+    void setContextResolver(ContextResolver resolver);
+
     void addListener(Listener *listener);
 
     void removeListener(Listener *listener);
@@ -195,6 +204,7 @@ private:
     std::unordered_map<NetworkIdentifier, std::unique_ptr<Connection>, NetworkIdentifier::Hasher> mConnections;
     std::vector<Listener *> mListeners;
     OutboundFilter mOutboundFilter;
+    ContextResolver mContextResolver;
 
     TaskQueue<InboundEvent> mInbound;
     TaskQueue<OutboundCommand> mOutbound;

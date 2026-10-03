@@ -359,6 +359,9 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
         mNetworkHandler.reset(new NetworkHandler(std::move(rakNet)));
         mNetworkHandler->setProfiler(&mProfiler);
         mNetworkHandler->addListener(this);
+        mNetworkHandler->setContextResolver([this](const NetworkIdentifier &id) {
+            return &getCodecContext(id);
+        });
 
         if (transport == TransportLayer::NetherNet) {
             std::unique_ptr<Connector> netherNet =
