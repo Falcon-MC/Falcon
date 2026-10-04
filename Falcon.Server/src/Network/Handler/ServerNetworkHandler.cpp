@@ -37,6 +37,7 @@
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Level/LevelChunk.h"
 #include "Block/BlockData.h"
+#include "Block/BlockNetworkIdTable.h"
 #include "Block/BlockShape.h"
 #include "Block/Inventory/EnderChestInventoryStore.h"
 #include "Protocol/Codec/ProtocolCodec.h"
