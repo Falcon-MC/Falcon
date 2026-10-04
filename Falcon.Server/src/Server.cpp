@@ -315,9 +315,7 @@ void startServer(const ServerSettings &settings) {
     // flushes every stream, stdin included, so it would wait on that lock forever. Leftover worker and plugin
     // host threads can block destructors the same way, so the process ends here without running them.
     std::cout.flush();
-    std::cerr.flush();
-    std::fflush(stdout);
-    std::fflush(stderr);
+    std::fflush(nullptr);
     std::_Exit(0);
 }
 
