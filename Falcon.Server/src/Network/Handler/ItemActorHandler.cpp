@@ -80,10 +80,13 @@ namespace {
         const int x = (int) std::floor(position.x);
         const int y = (int) std::floor(position.y);
         const int z = (int) std::floor(position.z);
-        Level &level = owner.getLevelFor(actor);
-        if (y < level.getMinY() || y > level.getMaxY())
-            return false;
-        return isFireBlock(level.getBlockState(x, y, z).mName);
+        const BlockState *state = owner.getLevelFor(actor).peekBlockPtr(x, y, z);
+        return state != nullptr && isFireBlock(state->mName);
+    }
+
+    bool sameBlock(const Vector3f &first, const Vector3f &second) {
+        return std::floor(first.x) == std::floor(second.x) && std::floor(first.y) == std::floor(second.y)
+               && std::floor(first.z) == std::floor(second.z);
     }
 
     int freeSpaceFor(const PlayerInventory &inventory, const ItemStack &item) {
@@ -349,15 +352,18 @@ void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
         ItemActor &actor = **it;
 
         actor.tick();
-        const bool fireResistant = isFireResistant(actor.getItem());
-        if (!fireResistant && isInFire(owner, actor))
+        if (isInFire(owner, actor) && !isFireResistant(actor.getItem()))
             actor.setRemoved(true);
 
-        if (!actor.isRemoved())
+        if (!actor.isRemoved()) {
+            const Vector3f previous = actor.getPosition();
             moveItemActor(owner, actor);
 
-        if (!fireResistant && !actor.isRemoved() && isInFire(owner, actor))
-            actor.setRemoved(true);
+            // The block under an item that has not changed cell was checked just above.
+            if (!sameBlock(previous, actor.getPosition()) && isInFire(owner, actor)
+                && !isFireResistant(actor.getItem()))
+                actor.setRemoved(true);
+        }
 
         tryPickupItemActor(owner, actor);
 

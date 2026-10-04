@@ -212,11 +212,15 @@ namespace {
         std::unordered_set<int64_t> &sent = player.getSentChunks();
         unsigned added = 0;
 
-        while (!state.mReadyToSend.empty()) {
+        // Encoding a chunk and loading its block entities runs on the main thread, so a burst
+        // of ready chunks after a teleport is spread over several ticks in priority order.
+        while (!state.mReadyToSend.empty() && added < ChunkStreamHandler::MAX_SENDS_PER_TICK) {
             const int64_t hash = popQueue(state, state.mReadyToSend);
 
             if (state.mInRadius.find(hash) == state.mInRadius.end()) {
                 sent.erase(hash);
+                level.unregisterChunkLoader(player.getRuntimeId(), ChunkStreamHandler::unpackChunkX(hash),
+                                            ChunkStreamHandler::unpackChunkZ(hash));
                 continue;
             }
 
@@ -305,10 +309,12 @@ void ChunkStreamHandler::handleTeleport(ServerNetworkHandler &owner, ServerPlaye
 void ChunkStreamHandler::invalidateChunk(ServerPlayer &player, int64_t hash) {
     ChunkStreamState &state = player.getChunkStreamState();
 
-    if (player.getSentChunks().erase(hash) == 0)
+    // A sent chunk outside the radius stays in the sent set so that leaving the radius still
+    // releases its loader.
+    if (state.mInRadius.find(hash) == state.mInRadius.end())
         return;
 
-    if (state.mInRadius.find(hash) == state.mInRadius.end())
+    if (player.getSentChunks().erase(hash) == 0)
         return;
 
     pushQueue(state, state.mReadyToSend, hash);

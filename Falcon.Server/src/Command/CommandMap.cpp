@@ -52,6 +52,7 @@ std::vector<std::string> CommandMap::_tokenize(const std::string &commandLine) {
     bool quoted = false;
     bool escaped = false;
     bool started = false;
+    int selectorDepth = 0;
 
     for (char character: commandLine) {
         if (escaped) {
@@ -71,7 +72,17 @@ std::vector<std::string> CommandMap::_tokenize(const std::string &commandLine) {
             continue;
         }
 
+        if (!quoted && !token.empty() && token[0] == '@') {
+            if (character == '[')
+                ++selectorDepth;
+            else if (character == ']' && selectorDepth > 0)
+                --selectorDepth;
+        }
+
         if (!quoted && std::isspace((unsigned char) character)) {
+            if (selectorDepth > 0)
+                continue;
+
             if (started) {
                 tokens.push_back(token);
                 token.clear();

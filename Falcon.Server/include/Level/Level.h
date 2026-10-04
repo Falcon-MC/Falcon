@@ -374,11 +374,10 @@ private:
     LiquidPhysicsSystem mLiquidPhysics;
     std::unordered_map<int64_t, LevelChunk> mChunks;
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 8;
+    static const size_t MAX_GENERATED_CHANGES_PER_TICK = 1024;
 
-    std::unordered_map<int64_t, std::string> mChunkNetworkCache;
-    std::unordered_map<const BlockNetworkIdMap *, std::unordered_map<int64_t, std::string>> mTranslatedChunkNetworkCache;
+    void _sweepOrphanChunks();
 
-    void _invalidateChunkNetwork(int64_t key);
     std::unordered_set<int64_t> mPendingChunks;
     std::unordered_set<int64_t> mActiveColumns;
     std::deque<ChunkLoadResult> mCompletedChunks;
@@ -386,6 +385,11 @@ private:
     std::unordered_map<int64_t, std::unordered_set<uint64_t>> mChunkLoaders;
     std::unordered_set<int64_t> mUnloadQueue;
     static constexpr size_t MAX_CHUNK_UNLOADS_PER_TICK = 8;
+    static constexpr int32_t UNLOAD_SWEEP_INTERVAL_TICKS = 200;
+    static constexpr size_t HEAP_TRIM_UNLOAD_THRESHOLD = 256;
+    std::unordered_set<int64_t> mOrphanCandidates;
+    int32_t mUnloadSweepTicks = 0;
+    size_t mUnloadedSinceTrim = 0;
     std::vector<GeneratedBlockChange> mIncomingChanges;
     std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> mPendingBlockChanges;
     std::unique_ptr<ChunkWorker> mChunkWorker;

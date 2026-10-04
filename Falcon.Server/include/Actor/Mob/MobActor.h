@@ -119,6 +119,12 @@ public:
 
     const json::Value *getComponent(const std::string &name) const;
 
+    /**
+     * Same lookup for a literal name. Component names are longer than the small string buffer, so building a
+     * temporary std::string for every per-tick lookup allocated; this reuses one key buffer instead.
+     */
+    const json::Value *getComponent(const char *name) const;
+
     const std::unordered_map<std::string, const json::Value *> &getComponents() const;
 
     std::vector<std::string> getFamilies() const;
@@ -490,6 +496,7 @@ private:
     mutable bool mDefinitionResolved = false;
     mutable std::unordered_map<std::string, const json::Value *> mComponents;
     mutable bool mComponentsDirty = true;
+    mutable std::string mComponentKey;
     int64_t mLastHurtTick = INT64_MIN / 2;
     uint64_t mLastHurtBy = 0;
     uint32_t mHurtCount = 0;

@@ -405,6 +405,12 @@ public:
 
     std::vector<ServerPlayer *> resolveTargets(CommandOrigin &sender, const std::string &selector);
 
+    /**
+     * The non-player actors an @e selector matches in the sender's world. Players are returned by
+     * resolveTargets, so a command that accepts any entity calls both.
+     */
+    std::vector<ServerActor *> resolveActorTargets(CommandOrigin &sender, const std::string &selector);
+
     std::vector<std::string> getPlayerNames() const;
 
     void setPlayerGameMode(ServerPlayer &player, int gameMode);

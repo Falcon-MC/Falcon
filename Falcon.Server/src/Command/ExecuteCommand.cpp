@@ -499,6 +499,11 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
             }
 
             matched = !resolveTargets(sender, context, arguments[index + 2]).empty();
+            if (!matched) {
+                ExecuteCommandOrigin origin(sender, context.mExecutor, context.mPosition, context.mRotation,
+                                            context.mLevel);
+                matched = !mHandler.resolveActorTargets(origin, arguments[index + 2]).empty();
+            }
             next = index + 3;
         } else {
             //TODO: the score condition needs a scoreboard, which does not exist yet
