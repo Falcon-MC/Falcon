@@ -308,6 +308,7 @@ void startServer(const ServerSettings &settings) {
     LOG_INFO(LogAreaID::Server, "Shutting down...");
     AutoCompaction::stop();
     networkHandler.stopServerListening();
+    networkHandler.getNetworkHandler().disconnect();
     BedrockLog::shutdown();
 
     // The worlds and player data are saved by now. On Windows the detached console thread may still be blocked
