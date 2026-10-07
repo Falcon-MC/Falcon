@@ -580,7 +580,7 @@ void Level::_sweepOrphanChunks() {
     for (const auto &entry: mChunks) {
         const int64_t key = entry.first;
         if (mChunkLoaders.find(key) != mChunkLoaders.end() || mPendingChunks.find(key) != mPendingChunks.end()
-            || mActiveColumns.find(key) != mActiveColumns.end())
+            || mActiveColumns.find(key) != mActiveColumns.end() || mOccupiedColumns.find(key) != mOccupiedColumns.end())
             continue;
 
         if (mOrphanCandidates.find(key) != mOrphanCandidates.end())
@@ -594,6 +594,10 @@ void Level::_sweepOrphanChunks() {
     // Feature blocks spilled into chunks that are not resident would otherwise stay in memory
     // until the next save.
     _flushPendingBlockChanges(false);
+}
+
+void Level::setOccupiedColumns(std::unordered_set<int64_t> columns) {
+    mOccupiedColumns = std::move(columns);
 }
 
 size_t Level::processChunkUnloads() {
@@ -610,7 +614,7 @@ size_t Level::processChunkUnloads() {
     for (auto it = mUnloadQueue.begin(); it != mUnloadQueue.end() && unloaded < MAX_CHUNK_UNLOADS_PER_TICK;) {
         const int64_t key = *it;
 
-        if (mChunkLoaders.find(key) != mChunkLoaders.end()) {
+        if (mChunkLoaders.find(key) != mChunkLoaders.end() || mOccupiedColumns.find(key) != mOccupiedColumns.end()) {
             it = mUnloadQueue.erase(it);
             continue;
         }

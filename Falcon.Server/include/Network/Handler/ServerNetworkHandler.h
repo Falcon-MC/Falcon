@@ -771,6 +771,8 @@ private:
 
     void _tickDimension(World &world, Level &level);
 
+    void _processChunkUnloads(Level &level);
+
     void _broadcastFluidChanges(Level &level);
 
     void _sendWorldState(ServerPlayer &player);

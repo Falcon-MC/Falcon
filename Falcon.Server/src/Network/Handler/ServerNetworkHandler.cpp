@@ -723,7 +723,7 @@ void ServerNetworkHandler::tick() {
         broadcastPlayerMove(entry.second);
 
     for (World *world: mWorlds.getWorlds()) {
-        world->getOverworld().processChunkUnloads();
+        _processChunkUnloads(world->getOverworld());
         _tickDimension(*world, world->getLevel(DimensionType::Nether));
         _tickDimension(*world, world->getLevel(DimensionType::TheEnd));
     }

@@ -200,6 +200,13 @@ public:
 
     size_t processChunkUnloads();
 
+    /**
+     * The columns an actor stands in. Actors tick wherever they are and read their blocks with
+     * synchronous loads, so a chunk under one is kept resident instead of being unloaded and loaded
+     * straight back.
+     */
+    void setOccupiedColumns(std::unordered_set<int64_t> columns);
+
     void releaseChunkIfUnused(int32_t chunkX, int32_t chunkZ);
 
     size_t getUnloadQueueSize() const { return mUnloadQueue.size(); }
@@ -388,6 +395,7 @@ private:
     static constexpr int32_t UNLOAD_SWEEP_INTERVAL_TICKS = 200;
     static constexpr size_t HEAP_TRIM_UNLOAD_THRESHOLD = 256;
     std::unordered_set<int64_t> mOrphanCandidates;
+    std::unordered_set<int64_t> mOccupiedColumns;
     int32_t mUnloadSweepTicks = 0;
     size_t mUnloadedSinceTrim = 0;
     std::vector<GeneratedBlockChange> mIncomingChanges;
