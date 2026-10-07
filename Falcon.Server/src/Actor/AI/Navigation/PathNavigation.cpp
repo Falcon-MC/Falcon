@@ -31,9 +31,6 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (!mHasTarget)
         return;
 
-    const bool freeMoving = mOptions.isVolumetric()
-                            || (mOptions.swimsThroughWater()
-                                && LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition()).water);
     if (mNeedsPath) {
         Level &level = owner.getLevelFor(mob);
         const bool direct = PathFinder::get().findDirectPath(level, mob, mTarget, mOptions, mPath);
@@ -61,6 +58,9 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
         mPath.advance();
     }
 
+    const bool freeMoving = mOptions.isVolumetric()
+                            || (mOptions.swimsThroughWater()
+                                && LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition()).water);
     _checkStuck(mob, freeMoving);
 }
 

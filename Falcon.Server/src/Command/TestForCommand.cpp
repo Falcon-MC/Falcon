@@ -1,5 +1,6 @@
 #include "Command/TestForCommand.h"
 
+#include "Actor/ServerActor.h"
 #include "Actor/ServerPlayer.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
@@ -19,7 +20,8 @@ bool TestForCommand::execute(CommandOrigin &sender, const std::vector<std::strin
     }
 
     const std::vector<ServerPlayer *> targets = mHandler.resolveTargets(sender, arguments[0]);
-    if (targets.empty()) {
+    const std::vector<ServerActor *> actors = mHandler.resolveActorTargets(sender, arguments[0]);
+    if (targets.empty() && actors.empty()) {
         sender.sendTranslation("commands.generic.noTargetMatch", {});
         return false;
     }
@@ -29,6 +31,12 @@ bool TestForCommand::execute(CommandOrigin &sender, const std::vector<std::strin
         if (!names.empty())
             names += ", ";
         names += target->getName();
+    }
+
+    for (const ServerActor *actor: actors) {
+        if (!names.empty())
+            names += ", ";
+        names += actor->getName();
     }
 
     sender.sendTranslation("commands.testfor.success", {names});

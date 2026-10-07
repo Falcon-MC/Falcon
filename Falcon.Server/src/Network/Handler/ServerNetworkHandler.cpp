@@ -37,6 +37,7 @@
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Level/LevelChunk.h"
 #include "Block/BlockData.h"
+#include "Block/BlockNetworkIdTable.h"
 #include "Block/BlockShape.h"
 #include "Block/Inventory/EnderChestInventoryStore.h"
 #include "Protocol/Codec/ProtocolCodec.h"
@@ -722,7 +723,7 @@ void ServerNetworkHandler::tick() {
         broadcastPlayerMove(entry.second);
 
     for (World *world: mWorlds.getWorlds()) {
-        world->getOverworld().processChunkUnloads();
+        _processChunkUnloads(world->getOverworld());
         _tickDimension(*world, world->getLevel(DimensionType::Nether));
         _tickDimension(*world, world->getLevel(DimensionType::TheEnd));
     }

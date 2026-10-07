@@ -14,6 +14,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 Level &ServerNetworkHandler::getDimension(DimensionType dimension) {
@@ -173,6 +175,31 @@ void ServerNetworkHandler::_tickDimension(World &world, Level &level) {
     syncActorPersistence(level, activeColumns);
     level.tick();
     _broadcastFluidChanges(level);
+    _processChunkUnloads(level);
+}
+
+/**
+ * Actors outside the active columns are only saved away when their column leaves the active set,
+ * so one that walked out on its own keeps ticking there. Its chunk stays resident while it does.
+ */
+void ServerNetworkHandler::_processChunkUnloads(Level &level) {
+    std::unordered_set<int64_t> occupied;
+    const auto occupy = [&](const Actor &actor) {
+        if (!actor.isIn(level))
+            return;
+
+        const Vector3f position = actor.getPosition();
+        const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+        const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+        occupied.insert(((int64_t) chunkX << 32) | (uint32_t) chunkZ);
+    };
+
+    for (auto &entry: mActors)
+        occupy(*entry.second);
+    for (const std::unique_ptr<ItemActor> &item: mItemEntities)
+        occupy(*item);
+
+    level.setOccupiedColumns(std::move(occupied));
     level.processChunkUnloads();
 }
 

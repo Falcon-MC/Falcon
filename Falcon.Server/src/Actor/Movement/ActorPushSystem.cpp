@@ -42,14 +42,15 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, const ServerA
     float negativeZ = UNSET;
     bool touched = false;
 
+    // Every actor runs this against every other actor, so the box test comes before the virtual checks:
+    // getPhysics() on a mob resolves several definition components and must stay out of the pair loop.
     for (auto &entry: owner.getActors()) {
         const ServerActor &other = *entry.second;
-        if (&other == &actor || !other.isAlive() || other.isProjectile() || !other.getPhysics().mPushable
-            || !other.sharesLevelWith(actor))
+        if (&other == &actor || other.isProjectile() || !other.sharesLevelWith(actor))
             continue;
 
         const AxisAlignedBB box = boundingBoxOf(other);
-        if (!box.intersectsWith(self))
+        if (!box.intersectsWith(self) || !other.isAlive() || !other.isPushable())
             continue;
 
         _accumulate(self, box, positiveX, negativeX, positiveZ, negativeZ);

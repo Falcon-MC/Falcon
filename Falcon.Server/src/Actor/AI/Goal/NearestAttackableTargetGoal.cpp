@@ -5,10 +5,18 @@
 #include "Actor/ServerPlayer.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
+#include <algorithm>
 #include <utility>
 
 NearestAttackableTargetGoal::NearestAttackableTargetGoal(float range, std::vector<Entry> entries)
-        : mRangeSquared(range * range), mEntries(std::move(entries)) {
+        : mRangeSquared(range * range), mMaxRangeSquared(range * range), mEntries(std::move(entries)) {
+    if (!mEntries.empty()) {
+        mMaxRangeSquared = 0.0f;
+        for (const Entry &entry: mEntries) {
+            const float limit = entry.mMaxDistance > 0.0f ? entry.mMaxDistance * entry.mMaxDistance : mRangeSquared;
+            mMaxRangeSquared = std::max(mMaxRangeSquared, limit);
+        }
+    }
     setRequiredControlFlags((uint8_t) GoalControlFlag::Target);
 }
 
@@ -33,10 +41,10 @@ void NearestAttackableTargetGoal::stop(ServerNetworkHandler &owner, MobActor &mo
 }
 
 bool NearestAttackableTargetGoal::_matches(ServerNetworkHandler &owner, MobActor &mob, const Actor &candidate) const {
-    if (!mob.canTarget(candidate))
+    const float distance = mob.distanceSquaredTo(candidate);
+    if (distance > mMaxRangeSquared || !mob.canTarget(candidate))
         return false;
 
-    const float distance = mob.distanceSquaredTo(candidate);
     if (mEntries.empty())
         return candidate.isPlayer() && distance <= mRangeSquared;
 

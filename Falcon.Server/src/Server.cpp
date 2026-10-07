@@ -308,7 +308,16 @@ void startServer(const ServerSettings &settings) {
     LOG_INFO(LogAreaID::Server, "Shutting down...");
     AutoCompaction::stop();
     networkHandler.stopServerListening();
+    networkHandler.getNetworkHandler().disconnect();
     BedrockLog::shutdown();
+
+    // The worlds and player data are saved by now. On Windows the detached console thread may still be blocked
+    // inside std::getline holding the stdin lock (a pipe that never closes never returns), and a normal exit
+    // flushes every stream, stdin included, so it would wait on that lock forever. Leftover worker and plugin
+    // host threads can block destructors the same way, so the process ends here without running them.
+    std::cout.flush();
+    std::fflush(nullptr);
+    std::_Exit(0);
 }
 
 int main(int argc, char **argv) {

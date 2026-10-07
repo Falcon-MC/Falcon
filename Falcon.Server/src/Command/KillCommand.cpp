@@ -32,12 +32,8 @@ bool KillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     }
 
     std::vector<ServerActor *> actors;
-    if (!arguments.empty() && arguments[0] == "@e") {
-        for (auto &entry: mHandler.getActors()) {
-            if (!entry.second->isDead())
-                actors.push_back(entry.second.get());
-        }
-    }
+    if (!arguments.empty())
+        actors = mHandler.resolveActorTargets(sender, arguments[0]);
 
     if (targets.empty() && actors.empty()) {
         sender.sendTranslation("commands.generic.noTargetMatch", {});

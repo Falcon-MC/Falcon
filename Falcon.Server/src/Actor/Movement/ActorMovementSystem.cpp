@@ -30,7 +30,8 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
 
     const LiquidContact feet = LiquidBlocksFetch::at(level, position);
     const Vector3f eyes(position.x, position.y + actor.getSize().mHeight * EYE_HEIGHT_RATIO, position.z);
-    const bool eyesInWater = LiquidBlocksFetch::at(level, eyes).water;
+    // Only floating reads the eye probe, and only with the feet in water: skip the block scan otherwise.
+    const bool eyesInWater = feet.water && LiquidBlocksFetch::at(level, eyes).water;
 
     Vector3f motion = PreMoveTravelVelocitySystem::apply(owner, actor, physics, feet, eyesInWater);
 

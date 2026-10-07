@@ -110,6 +110,10 @@ void ChunkWorker::requestLoad(int32_t chunkX, int32_t chunkZ) {
     mQueues[_queueIndexFor(chunkX, chunkZ)]->push(std::move(task));
 }
 
+int64_t ChunkWorker::_packChunk(int32_t chunkX, int32_t chunkZ) {
+    return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
+}
+
 void ChunkWorker::requestSave(std::unique_ptr<LevelChunk> chunk) {
     if (chunk == nullptr || mQueues.empty())
         return;
@@ -119,7 +123,18 @@ void ChunkWorker::requestSave(std::unique_ptr<LevelChunk> chunk) {
     task.mX = chunk->getX();
     task.mZ = chunk->getZ();
     task.mChunk = std::move(chunk);
+
+    {
+        std::lock_guard<std::mutex> lock(mPendingSavesMutex);
+        mPendingSaves[_packChunk(task.mX, task.mZ)]++;
+    }
+
     mQueues[_queueIndexFor(task.mX, task.mZ)]->push(std::move(task));
+}
+
+bool ChunkWorker::hasPendingSave(int32_t chunkX, int32_t chunkZ) const {
+    std::lock_guard<std::mutex> lock(mPendingSavesMutex);
+    return mPendingSaves.find(_packChunk(chunkX, chunkZ)) != mPendingSaves.end();
 }
 
 void ChunkWorker::requestPopulate(std::unique_ptr<LevelChunk> chunk) {
@@ -211,20 +226,19 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
     // only has to swap the finished chunk in.
     chunk->buildNetworkCaches();
 
-    result.mNetworkSubChunkCount = chunk->getNetworkSubChunkCount();
-    result.mNetworkData = chunk->encodeNetwork();
-
     result.mChunk = std::move(chunk);
 
     mCompleted.push(std::move(result));
 }
 
 void ChunkWorker::_processSave(ChunkTask &task) {
-    if (task.mChunk == nullptr || !mStorage.isOpen())
-        return;
-
-    if (mStorage.saveChunk(*task.mChunk))
+    if (task.mChunk != nullptr && mStorage.isOpen() && mStorage.saveChunk(*task.mChunk))
         mSavedCount.fetch_add(1);
+
+    std::lock_guard<std::mutex> lock(mPendingSavesMutex);
+    const auto pending = mPendingSaves.find(_packChunk(task.mX, task.mZ));
+    if (pending != mPendingSaves.end() && --pending->second == 0)
+        mPendingSaves.erase(pending);
 }
 
 void ChunkWorker::_run(size_t queueIndex) {
