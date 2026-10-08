@@ -431,6 +431,15 @@ public:
 
     void setAutoSaveEnabled(bool enabled) { mAutoSaveEnabled = enabled; }
 
+    void setPluginsEnabled(bool enabled) { mPluginsEnabled = enabled; }
+
+    /**
+     * An embedded server only plays with its host: logins from anywhere but the loopback address are refused.
+     */
+    void setLocalOnly(bool localOnly) { mLocalOnly = localOnly; }
+
+    bool isLocalOnly() const { return mLocalOnly; }
+
     bool isStopRequested() const { return mStopRequested; }
 
     void requestStop() { mStopRequested = true; }
@@ -788,6 +797,8 @@ private:
     BanList mBanList;
     BanList mIpBanList;
     bool mAutoSaveEnabled = true;
+    bool mPluginsEnabled = true;
+    bool mLocalOnly = false;
     bool mStopRequested = false;
     ResourcePackManager mResourcePacks;
     CommandMap mCommands;

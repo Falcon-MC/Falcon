@@ -133,6 +133,12 @@ public:
         return mFrozen;
     }
 
+    /**
+     * Drops every pack's content and unfreezes, so a host that runs one world after another loads the next
+     * world's packs from scratch.
+     */
+    void reset();
+
     static CustomContentRegistry &getInstance();
 
 private:

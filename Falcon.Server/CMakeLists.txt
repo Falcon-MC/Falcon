@@ -124,15 +124,16 @@ endif()
 set(FALCON_BUILD_BRANCH "unknown")
 set(FALCON_BUILD_COMMIT "unknown")
 find_package(Git QUIET)
-if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+get_filename_component(FALCON_REPOSITORY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+if(GIT_FOUND AND EXISTS "${FALCON_REPOSITORY_DIR}/.git")
     execute_process(COMMAND "${GIT_EXECUTABLE}" rev-list --count HEAD
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE FALCON_BUILD_ID
+            WORKING_DIRECTORY "${FALCON_REPOSITORY_DIR}" OUTPUT_VARIABLE FALCON_BUILD_ID
             OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
     execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --abbrev-ref HEAD
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE FALCON_BUILD_BRANCH
+            WORKING_DIRECTORY "${FALCON_REPOSITORY_DIR}" OUTPUT_VARIABLE FALCON_BUILD_BRANCH
             OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
     execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE FALCON_BUILD_COMMIT
+            WORKING_DIRECTORY "${FALCON_REPOSITORY_DIR}" OUTPUT_VARIABLE FALCON_BUILD_COMMIT
             OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 endif()
 if(CMAKE_BUILD_TYPE)
@@ -144,19 +145,45 @@ string(MAKE_C_IDENTIFIER "falcon_build_${FALCON_BUILD_COMMIT}_${FALCON_BUILD_ID}
 configure_file(cmake/BuildInfo.h.in "${FALCON_GENERATED_DIR}/BuildInfo.h" @ONLY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FALCON_BLOCK_UPGRADE_SCHEMA_FILES})
 
-file(GLOB_RECURSE FALCON_SERVER_SOURCES CONFIGURE_DEPENDS
+file(GLOB_RECURSE FALCON_CORE_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+set(FALCON_EXECUTABLE_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Server.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/SetupWizard.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/VersionChecker.cpp")
+list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_EXECUTABLE_SOURCES})
 
-add_executable(FalconServer ${FALCON_SERVER_SOURCES})
+# An object library rather than a static one: blocks, items and actors register themselves from static
+# initialisers, and a static library would let the linker drop every object nothing references by name.
+add_library(FalconCore OBJECT ${FALCON_CORE_SOURCES})
 
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
 
-target_include_directories(FalconServer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+target_include_directories(FalconCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${FALCON_GENERATED_DIR} ${ZLIB_INCLUDE_DIRS}
         ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(FalconServer PRIVATE FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic
+target_link_libraries(FalconCore PUBLIC FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic
         Falcon::PluginAPI ${CMAKE_DL_LIBS})
+
+if(WIN32)
+    target_compile_definitions(FalconCore PRIVATE WIN32_LEAN_AND_MEAN)
+endif()
+
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_link_libraries(FalconCore PUBLIC z ssl crypto ws2_32 crypt32)
+else()
+    target_link_libraries(FalconCore PUBLIC ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto)
+endif()
+
+option(FALCON_BUILD_SERVER_EXECUTABLE "Build the dedicated server executable" ON)
+
+if(NOT FALCON_BUILD_SERVER_EXECUTABLE)
+    return()
+endif()
+
+add_executable(FalconServer ${FALCON_EXECUTABLE_SOURCES})
+target_link_libraries(FalconServer PRIVATE FalconCore)
 
 if(WIN32)
     target_compile_definitions(FalconServer PRIVATE WIN32_LEAN_AND_MEAN)
@@ -164,9 +191,6 @@ endif()
 
 if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_options(FalconServer PRIVATE -static -fuse-ld=lld)
-    target_link_libraries(FalconServer PRIVATE z ssl crypto ws2_32 crypt32)
-else()
-    target_link_libraries(FalconServer PRIVATE ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto)
 endif()
 
 option(FALCON_EXPORT_SYMBOLS "Export the server symbols so internal plugins can link against the executable" ON)
@@ -177,7 +201,8 @@ if(FALCON_EXPORT_SYMBOLS)
     if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         set(FALCON_EXPORT_INPUTS "${CMAKE_CURRENT_BINARY_DIR}/FalconServerExports.txt")
         set(FALCON_EXPORT_DEFINITION "${CMAKE_CURRENT_BINARY_DIR}/FalconServer.def")
-        set(FALCON_EXPORT_SOURCES "$<TARGET_OBJECTS:FalconServer>" "$<TARGET_FILE:FalconProtocol>"
+        set(FALCON_EXPORT_SOURCES "$<TARGET_OBJECTS:FalconServer>" "$<TARGET_OBJECTS:FalconCore>"
+                "$<TARGET_FILE:FalconProtocol>"
                 "$<TARGET_FILE:FalconNetwork>" "$<TARGET_FILE:FalconNBT>" "$<TARGET_FILE:FalconBlockStateUpdater>")
         file(GENERATE OUTPUT "${FALCON_EXPORT_INPUTS}" CONTENT "$<JOIN:${FALCON_EXPORT_SOURCES},\n>\n")
         add_custom_command(TARGET FalconServer PRE_LINK
@@ -191,8 +216,8 @@ if(FALCON_EXPORT_SYMBOLS)
     string(CONCAT FALCON_INTERNAL_SDK
             "set(FALCON_INTERNAL_EXECUTABLE \"$<TARGET_FILE:FalconServer>\")\n"
             "set(FALCON_INTERNAL_LINKER_FILE \"$<TARGET_LINKER_FILE:FalconServer>\")\n"
-            "set(FALCON_INTERNAL_INCLUDE_DIRECTORIES \"$<TARGET_PROPERTY:FalconServer,INCLUDE_DIRECTORIES>\")\n"
-            "set(FALCON_INTERNAL_COMPILE_DEFINITIONS \"$<TARGET_PROPERTY:FalconServer,COMPILE_DEFINITIONS>\")\n"
+            "set(FALCON_INTERNAL_INCLUDE_DIRECTORIES \"$<TARGET_PROPERTY:FalconCore,INCLUDE_DIRECTORIES>\")\n"
+            "set(FALCON_INTERNAL_COMPILE_DEFINITIONS \"$<TARGET_PROPERTY:FalconCore,COMPILE_DEFINITIONS>\")\n"
             "set(FALCON_INTERNAL_CXX_COMPILER_ID \"${CMAKE_CXX_COMPILER_ID}\")\n"
             "set(FALCON_INTERNAL_CXX_COMPILER_VERSION \"${CMAKE_CXX_COMPILER_VERSION}\")\n")
     file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/FalconInternalSDK.cmake" CONTENT "${FALCON_INTERNAL_SDK}")

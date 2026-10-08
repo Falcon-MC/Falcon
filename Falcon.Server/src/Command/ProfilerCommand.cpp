@@ -2,6 +2,7 @@
 
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Server/Profiler.h"
+#include "Server/ServerPaths.h"
 
 namespace {
     const char *PROFILER_DIRECTORY = "profiler";
@@ -68,7 +69,7 @@ bool ProfilerCommand::execute(CommandOrigin &sender, const std::vector<std::stri
 
         std::string path;
         std::string error;
-        if (!profiler.stop(PROFILER_DIRECTORY, path, error)) {
+        if (!profiler.stop(ServerPaths::file(PROFILER_DIRECTORY), path, error)) {
             sender.sendLocalized("falcon.commands.profiler.writeFailed", {error});
             return false;
         }

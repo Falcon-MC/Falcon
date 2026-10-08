@@ -17,7 +17,7 @@ World &ServerNetworkHandler::_openWorld(const std::string &name, int64_t seed) {
         BlockActionHandler::broadcastToViewers(*this, level, position, packet);
     };
 
-    world.open(WorldManager::WORLDS_DIRECTORY, _getChunkWorkerThreadCount(), broadcaster, this);
+    world.open(WorldManager::getWorldsDirectory(), _getChunkWorkerThreadCount(), broadcaster, this);
     AutoCompaction::track(world.getOverworld());
     LOG_INFO(LogAreaID::Server, "Loaded world %s", name.c_str());
 

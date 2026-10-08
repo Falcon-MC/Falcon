@@ -3,6 +3,7 @@
 #include "Core/Archive/ZipArchive.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Pack/PackDependencies.h"
+#include "Server/ServerPaths.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -219,5 +220,5 @@ void BehaviorPackManager::discover(const std::string &directory) {
     _scanContainer(directory, cacheRoot.string());
 
     const std::filesystem::path bundledCache = cacheRoot / "_bundled";
-    _scanContainer("resource_packs", bundledCache.string());
+    _scanContainer(ServerPaths::file("resource_packs"), bundledCache.string());
 }

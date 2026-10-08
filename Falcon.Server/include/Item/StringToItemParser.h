@@ -19,6 +19,11 @@ public:
 
     std::vector<std::string> getKnownAliases() const;
 
+    /**
+     * Forgets the aliases behavior packs added, so the next world only parses its own content.
+     */
+    void reset();
+
 private:
     StringToItemParser();
 

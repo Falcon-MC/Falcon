@@ -33,6 +33,7 @@
 #include "Network/Handler/SubChunkRequestHandler.h"
 #include "Plugin/PluginManager.h"
 #include "Plugin/PluginPackets.h"
+#include "Server/ServerPaths.h"
 #include "Protocol/Packets/SubChunkRequestPacket.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Level/LevelChunk.h"
@@ -347,8 +348,9 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
                                            TransportLayer transport)
         : mRakNetInstance(nullptr), mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers),
           mIsListening(false), mNextRuntimeId(1),
-          mPlayerData("players"), mOps("ops.txt"), mAllowList("allowlist.json"),
-          mBanList("banned-players.json"), mIpBanList("banned-ips.json") {
+          mPlayerData(ServerPaths::file("players")), mOps(ServerPaths::file("ops.txt")),
+          mAllowList(ServerPaths::file("allowlist.json")), mBanList(ServerPaths::file("banned-players.json")),
+          mIpBanList(ServerPaths::file("banned-ips.json")) {
     mWorlds.add("Bedrock level", DEFAULT_VIEW_DISTANCE, 0);
 
     std::unique_ptr<Connector> rakNet = TransportFactory::createConnector(TransportLayer::RakNet, *this, true);
@@ -382,9 +384,9 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
 
     _registerCommands();
 
-    mResourcePacks.loadFromDirectory("resource_packs");
-    mResourcePacks.loadBundledAddonsFrom("behavior_packs");
-    mResourcePacks.loadCdnConfig("cdn_config.json");
+    mResourcePacks.loadFromDirectory(ServerPaths::file("resource_packs"));
+    mResourcePacks.loadBundledAddonsFrom(ServerPaths::file("behavior_packs"));
+    mResourcePacks.loadCdnConfig(ServerPaths::file("cdn_config.json"));
     _registerVanillaDefinitions();
 
     AuthKeyProvider::getInstance().start();
@@ -523,7 +525,8 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
         return false;
     }
 
-    mPluginManager->loadAll("plugins");
+    if (mPluginsEnabled)
+        mPluginManager->loadAll(ServerPaths::file("plugins"));
     CustomContentRegistry::getInstance().freeze();
     mPluginManager->enableAll();
 
@@ -562,7 +565,7 @@ void ServerNetworkHandler::_loadScripts() {
 
     mScriptEngine.bindHost(*this);
 
-    mBehaviorPacks.discover("behavior_packs");
+    mBehaviorPacks.discover(ServerPaths::file("behavior_packs"));
     _validatePackDependencies();
 
     CustomContentRegistry::getInstance().load(mBehaviorPacks, mItemDefinitions, mBlockDefinitions);
