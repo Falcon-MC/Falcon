@@ -7,6 +7,7 @@
 
 #include "Command/ServerCommandOrigin.h"
 #include "Block/BlockActorStore.h"
+#include "Block/BlockNetworkIdTable.h"
 #include "Block/BlockPickItem.h"
 #include "Level/AutoCompaction.h"
 #include "Level/Generator/Overworld/OverworldGenerator.h"
