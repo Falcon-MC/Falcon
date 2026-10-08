@@ -2,7 +2,6 @@
 
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Debug/ILogEndPoint.h"
-#include "RakNet/RakNetSocket2.h"
 #include "Server/ServerHost.h"
 #include "Server/ServerPaths.h"
 
@@ -24,18 +23,6 @@ namespace {
     private:
         std::function<void(LogLevel, const std::string &)> mCallback;
     };
-
-    /**
-     * Asks the system for a free port by binding the same dual stack socket the server opens, then releases
-     * it for the server to take.
-     */
-    unsigned short findFreePort() {
-        RakNet::RakNetSocket2 probe;
-        if (probe.Bind("::", 0, AF_INET6) != RakNet::BR_SUCCESS)
-            return 0;
-
-        return probe.GetBoundAddress().GetPort();
-    }
 }
 
 EmbeddedServer::EmbeddedServer() = default;
@@ -52,10 +39,6 @@ bool EmbeddedServer::start(const EmbeddedServerConfig &config) {
     if (mThread.joinable())
         mThread.join();
 
-    const unsigned short port = findFreePort();
-    if (port == 0)
-        return false;
-
     if (config.log) {
         mLogEndPoint = std::make_shared<CallbackLogEndPoint>(config.log);
         BedrockLog::addEndPoint(mLogEndPoint);
@@ -64,7 +47,7 @@ bool EmbeddedServer::start(const EmbeddedServerConfig &config) {
     mStopRequested.store(false);
     mPaused.store(false);
     mState = State::Starting;
-    mThread = std::thread(&EmbeddedServer::_run, this, config, port);
+    mThread = std::thread(&EmbeddedServer::_run, this, config);
 
     mStateChanged.wait(lock, [this]() {
         return mState != State::Starting;
@@ -112,7 +95,7 @@ unsigned short EmbeddedServer::getPort() const {
 }
 
 // The whole server lives on this thread: the game state belongs to whichever thread ticks it.
-void EmbeddedServer::_run(EmbeddedServerConfig config, unsigned short port) {
+void EmbeddedServer::_run(EmbeddedServerConfig config) {
     const std::filesystem::path previousRoot = ServerPaths::getRoot();
     ServerPaths::setRoot(config.dataDirectory);
 
@@ -121,9 +104,11 @@ void EmbeddedServer::_run(EmbeddedServerConfig config, unsigned short port) {
     options.properties["level-name"] = config.levelName;
     options.properties["transport"] = "raknet";
     options.properties["enable-lan-visibility"] = "false";
-    options.portOverride = port;
+    options.properties["online-mode"] = "false";
+    options.properties["network-encryption"] = "false";
+    options.bindAddress = "127.0.0.1";
+    options.portOverride = 0;
     options.plugins = false;
-    options.localOnly = true;
 
     ServerHost host;
     const bool started = host.start(options);

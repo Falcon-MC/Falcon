@@ -433,12 +433,7 @@ public:
 
     void setPluginsEnabled(bool enabled) { mPluginsEnabled = enabled; }
 
-    /**
-     * An embedded server only plays with its host: logins from anywhere but the loopback address are refused.
-     */
-    void setLocalOnly(bool localOnly) { mLocalOnly = localOnly; }
-
-    bool isLocalOnly() const { return mLocalOnly; }
+    unsigned short getBoundPort() const;
 
     bool isStopRequested() const { return mStopRequested; }
 
@@ -798,7 +793,6 @@ private:
     BanList mIpBanList;
     bool mAutoSaveEnabled = true;
     bool mPluginsEnabled = true;
-    bool mLocalOnly = false;
     bool mStopRequested = false;
     ResourcePackManager mResourcePacks;
     CommandMap mCommands;

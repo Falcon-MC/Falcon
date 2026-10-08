@@ -26,8 +26,9 @@ struct EmbeddedServerConfig {
 
 /**
  * A server running inside another program, on its own thread, for a single player on the same machine. It
- * listens on a free port that only loopback clients may join, never loads plugins and never touches the
- * process: no console, no signal handlers, no exit. One runs at a time.
+ * listens on the loopback address alone, on a port the system picks, and lets the player in without an Xbox
+ * login or encryption. It never loads plugins and never touches the process: no console, no signal handlers,
+ * no exit. One runs at a time.
  */
 class EmbeddedServer {
 public:
@@ -68,7 +69,7 @@ private:
         Stopped
     };
 
-    void _run(EmbeddedServerConfig config, unsigned short port);
+    void _run(EmbeddedServerConfig config);
 
     std::thread mThread;
     std::shared_ptr<ILogEndPoint> mLogEndPoint;

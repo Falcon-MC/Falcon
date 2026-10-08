@@ -197,7 +197,6 @@ bool ServerHost::start(const ServerHostOptions &options) {
     mHandler.reset(new ServerNetworkHandler(serverName, options.subMotd, maxPlayers, transport));
     mHandler->setProtocolVersion(options.protocolVersion, options.gameVersion);
     mHandler->setPluginsEnabled(options.plugins);
-    mHandler->setLocalOnly(options.localOnly);
     mHandler->setProperties(properties);
 
     if (properties.getAllowList() && mHandler->getAllowList().isEmpty())
@@ -208,10 +207,14 @@ bool ServerHost::start(const ServerHostOptions &options) {
 
     unsigned short port = properties.isLoaded() ? properties.getServerPort() : options.port;
     const unsigned short portV6 = properties.isLoaded() ? properties.getServerPortV6() : options.portV6;
-    if (options.portOverride != 0)
-        port = options.portOverride;
+    if (options.portOverride)
+        port = *options.portOverride;
 
-    const ConnectionDefinition definition = ConnectionDefinition::createFromPorts(port, portV6, maxPlayers);
+    ConnectionDefinition definition = ConnectionDefinition::createFromPorts(port, portV6, maxPlayers);
+    if (!options.bindAddress.empty()) {
+        definition.mIPv4Address = options.bindAddress;
+        definition.mNeedsHostDiscovery = false;
+    }
 
     if (!mHandler->startServerListening(definition)) {
         LOG_FATAL(LogAreaID::Server, "Failed to start server");
@@ -221,7 +224,7 @@ bool ServerHost::start(const ServerHostOptions &options) {
         return false;
     }
 
-    mPort = port;
+    mPort = mHandler->getBoundPort() != 0 ? mHandler->getBoundPort() : port;
 
     LOG_INFO(LogAreaID::Server, "Server started.");
     logTransportNotice(transport);

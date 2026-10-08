@@ -393,6 +393,10 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mPluginManager = std::make_unique<PluginManager>(*this);
 }
 
+unsigned short ServerNetworkHandler::getBoundPort() const {
+    return mRakNetInstance != nullptr ? mRakNetInstance->getBoundPort() : 0;
+}
+
 int ServerNetworkHandler::_getServerViewDistance() const {
     int distance = mProperties.getViewDistance();
 

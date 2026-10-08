@@ -2,6 +2,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 
 class ServerNetworkHandler;
@@ -14,12 +15,14 @@ struct ServerHostOptions {
     int maxPlayers = 20;
     unsigned short port = 19132;
     unsigned short portV6 = 19133;
-    // Replaces the port server.properties asks for, without writing it back to the file.
-    unsigned short portOverride = 0;
+    // Replaces the port server.properties asks for, without writing it back to the file. Port 0 lets the
+    // system pick a free one, which getPort() then reports.
+    std::optional<unsigned short> portOverride;
+    // Listens on this IPv4 address alone, such as the loopback address. Empty listens everywhere.
+    std::string bindAddress;
     // Written into server.properties before it is read, so they persist like any other setting.
     std::map<std::string, std::string> properties;
     bool plugins = true;
-    bool localOnly = false;
 };
 
 /**

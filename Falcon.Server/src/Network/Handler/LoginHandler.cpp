@@ -70,28 +70,6 @@ namespace {
     const float PLAYER_BASE_OFFSET = 1.62f;
     const size_t SPAWN_CHUNK_THRESHOLD = 56;
 
-    /**
-     * The socket listens on both IP versions, so an IPv4 client on this machine arrives as an IPv4 mapped
-     * IPv6 address, which the address's own loopback check does not recognise.
-     */
-    bool isLoopback(const NetworkIdentifier &id) {
-        if (id.getType() != NetworkIdentifier::Type::RakNet)
-            return false;
-
-        const RakNet::SystemAddress &address = id.getSystemAddress();
-        if (address.IsLoopback())
-            return true;
-        if (address.GetIPVersion() != 6)
-            return false;
-
-        const unsigned char *bytes = (const unsigned char *) &address.addr6.sin6_addr;
-        for (int i = 0; i < 10; i++) {
-            if (bytes[i] != 0)
-                return false;
-        }
-        return bytes[10] == 0xff && bytes[11] == 0xff && bytes[12] == 127;
-    }
-
     Uuid listUuidFor(const ServerPlayer &player) {
         Uuid parsed = Uuid::fromString(player.getUuid());
         if (parsed.mostSignificantBits != 0 || parsed.leastSignificantBits != 0)
@@ -182,12 +160,6 @@ void LoginHandler::registerVanillaDefinitions(ServerNetworkHandler &owner) {
 
 void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                 const RequestNetworkSettingsPacket &packet) {
-    if (owner.isLocalOnly() && !isLoopback(id)) {
-        LOG_WARN(LogAreaID::Network, "%s tried to join a local only server", id.getAddress().c_str());
-        owner.getNetworkHandler().closeConnection(id);
-        return;
-    }
-
     const int newest = ProtocolCodecRegistry::instance().getProtocolVersions().back();
     std::shared_ptr<const ProtocolCodec> codec = ProtocolCodecRegistry::instance().find(packet.mProtocolVersion);
     if (!owner.getProperties().getAnyVersion() && packet.mProtocolVersion != newest)
