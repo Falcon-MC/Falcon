@@ -37,8 +37,11 @@ public:
     ~ServerHost();
 
     bool start(const ServerHostOptions &options);
+    // Reserve before changing process-wide paths. Release after stop and path restoration.
+    bool acquire();
+    void release() noexcept;
 
-    void tick();
+    void tick(bool paused = false);
 
     /**
      * Saves the players and worlds and closes the connections, but keeps the server's objects alive. The
@@ -63,4 +66,5 @@ private:
     std::unique_ptr<ServerNetworkHandler> mHandler;
     unsigned short mPort = 0;
     bool mShutDown = false;
+    bool mOwnsProcess = false;
 };

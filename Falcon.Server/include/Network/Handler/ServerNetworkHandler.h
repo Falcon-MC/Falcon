@@ -95,7 +95,7 @@ public:
 
     void stopServerListening();
 
-    void tick();
+    void tick(bool paused = false);
 
     void setMotd(const std::string &serverName, const std::string &subName);
 
@@ -618,6 +618,8 @@ public:
     void sendPacketTo(const NetworkIdentifier &id, const Packet &packet) override;
 
     void queueConsoleCommand(const std::string &commandLine);
+    // Only call on the thread that owns the server state.
+    void executeConsoleCommand(std::string commandLine);
 
     void postToMainThread(std::function<void()> task);
 

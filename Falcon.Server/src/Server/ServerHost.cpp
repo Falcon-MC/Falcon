@@ -20,8 +20,13 @@
 
 #include <fstream>
 #include <random>
+#include <atomic>
+#include <exception>
+#include <stdexcept>
+#include "Level/WorldManager.h"
 
 namespace {
+    std::atomic<bool> processOwned{false};
     const char *const PROPERTIES_FILE = "server.properties";
     const char *const PROFILER_CONFIG_FILE = "bootstrap.json";
     const char *const CDN_CONFIG_FILE = "cdn_config.json";
@@ -156,11 +161,26 @@ namespace {
 ServerHost::ServerHost() = default;
 
 ServerHost::~ServerHost() {
-    stop();
+    try { stop(); } catch (...) {}
+    release();
+}
+
+bool ServerHost::acquire() {
+    if (mOwnsProcess) return true;
+    bool expected = false;
+    mOwnsProcess = processOwned.compare_exchange_strong(expected, true);
+    return mOwnsProcess;
+}
+
+void ServerHost::release() noexcept {
+    if (mOwnsProcess && mHandler == nullptr) {
+        mOwnsProcess = false;
+        processOwned.store(false);
+    }
 }
 
 bool ServerHost::start(const ServerHostOptions &options) {
-    if (mHandler != nullptr)
+    if (mHandler != nullptr || !acquire())
         return false;
 
     BiomeChunkGenDataRegistry::initialize();
@@ -171,7 +191,14 @@ bool ServerHost::start(const ServerHostOptions &options) {
     const std::string propertiesPath = ServerPaths::file(PROPERTIES_FILE);
     PropertiesSettings properties(propertiesPath);
     for (const auto &entry: options.properties)
-        properties.setProperty(entry.first, entry.second);
+        if (!properties.setProperty(entry.first, entry.second))
+            throw std::runtime_error("Could not write server property: " + entry.first);
+    if (!properties.load(propertiesPath))
+        throw std::runtime_error("Could not read server.properties");
+    if (!options.properties.empty() && !properties.getInvalidProperties().empty())
+        throw std::invalid_argument("Invalid server property: " + properties.getInvalidProperties().front());
+    if (!WorldManager::isValidName(properties.getLevelName()))
+        throw std::invalid_argument("Invalid world name");
 
     Localization::setServerLocale(properties.getLanguage());
     logStartupBanner(properties);
@@ -234,9 +261,9 @@ bool ServerHost::start(const ServerHostOptions &options) {
     return true;
 }
 
-void ServerHost::tick() {
+void ServerHost::tick(bool paused) {
     if (mHandler != nullptr && !mShutDown)
-        mHandler->tick();
+        mHandler->tick(paused);
 }
 
 void ServerHost::shutdown() {
@@ -255,12 +282,16 @@ void ServerHost::stop() {
     if (mHandler == nullptr)
         return;
 
-    shutdown();
+    std::exception_ptr error;
+    try { shutdown(); } catch (...) { error = std::current_exception(); }
+    for (World *world: mHandler->getWorlds().getWorlds())
+        AutoCompaction::untrack(world->getOverworld());
     mHandler.reset();
     mShutDown = false;
     mPort = 0;
     resetProcessState();
     BedrockLog::flush();
+    if (error) std::rethrow_exception(error);
 }
 
 bool ServerHost::isRunning() const {
