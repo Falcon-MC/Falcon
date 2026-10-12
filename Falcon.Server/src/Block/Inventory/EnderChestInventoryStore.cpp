@@ -24,3 +24,7 @@ SimpleContainerInventory *EnderChestInventoryStore::find(int64_t ownerId) {
 void EnderChestInventoryStore::remove(int64_t ownerId) {
     mInventories.erase(ownerId);
 }
+
+void EnderChestInventoryStore::clear() {
+    mInventories.clear();
+}

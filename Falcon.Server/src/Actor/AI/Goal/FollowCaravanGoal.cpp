@@ -49,6 +49,10 @@ bool FollowCaravanGoal::isInCaravan(int64_t uniqueId) {
     return caravanHeads().count(uniqueId) != 0;
 }
 
+void FollowCaravanGoal::clearCaravans() {
+    caravanHeads().clear();
+}
+
 bool FollowCaravanGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (mob.getFlags().get(ActorFlag::Leashed) || isInCaravan(mob.getUniqueId()))
         return false;

@@ -7,6 +7,7 @@
 
 #include "Command/ServerCommandOrigin.h"
 #include "Block/BlockActorStore.h"
+#include "Block/BlockNetworkIdTable.h"
 #include "Block/BlockPickItem.h"
 #include "Level/AutoCompaction.h"
 #include "Level/Generator/Overworld/OverworldGenerator.h"
@@ -33,11 +34,11 @@
 #include "Network/Handler/SubChunkRequestHandler.h"
 #include "Plugin/PluginManager.h"
 #include "Plugin/PluginPackets.h"
+#include "Server/ServerPaths.h"
 #include "Protocol/Packets/SubChunkRequestPacket.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Level/LevelChunk.h"
 #include "Block/BlockData.h"
-#include "Block/BlockNetworkIdTable.h"
 #include "Block/BlockShape.h"
 #include "Block/Inventory/EnderChestInventoryStore.h"
 #include "Protocol/Codec/ProtocolCodec.h"
@@ -348,8 +349,9 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
                                            TransportLayer transport)
         : mRakNetInstance(nullptr), mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers),
           mIsListening(false), mNextRuntimeId(1),
-          mPlayerData("players"), mOps("ops.txt"), mAllowList("allowlist.json"),
-          mBanList("banned-players.json"), mIpBanList("banned-ips.json") {
+          mPlayerData(ServerPaths::file("players")), mOps(ServerPaths::file("ops.txt")),
+          mAllowList(ServerPaths::file("allowlist.json")), mBanList(ServerPaths::file("banned-players.json")),
+          mIpBanList(ServerPaths::file("banned-ips.json")) {
     mWorlds.add("Bedrock level", DEFAULT_VIEW_DISTANCE, 0);
 
     std::unique_ptr<Connector> rakNet = TransportFactory::createConnector(TransportLayer::RakNet, *this, true);
@@ -383,13 +385,17 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
 
     _registerCommands();
 
-    mResourcePacks.loadFromDirectory("resource_packs");
-    mResourcePacks.loadBundledAddonsFrom("behavior_packs");
-    mResourcePacks.loadCdnConfig("cdn_config.json");
+    mResourcePacks.loadFromDirectory(ServerPaths::file("resource_packs"));
+    mResourcePacks.loadBundledAddonsFrom(ServerPaths::file("behavior_packs"));
+    mResourcePacks.loadCdnConfig(ServerPaths::file("cdn_config.json"));
     _registerVanillaDefinitions();
 
     AuthKeyProvider::getInstance().start();
     mPluginManager = std::make_unique<PluginManager>(*this);
+}
+
+unsigned short ServerNetworkHandler::getBoundPort() const {
+    return mRakNetInstance != nullptr ? mRakNetInstance->getBoundPort() : 0;
 }
 
 int ServerNetworkHandler::_getServerViewDistance() const {
@@ -422,7 +428,9 @@ void ServerNetworkHandler::_registerVanillaDefinitions() {
 }
 
 ServerNetworkHandler::~ServerNetworkHandler() {
-    stopServerListening();
+    try { stopServerListening(); } catch (...) {
+        if (mNetworkHandler != nullptr) mNetworkHandler->disconnect();
+    }
 
     if (mNetworkHandler != nullptr)
         mNetworkHandler->removeListener(this);
@@ -524,7 +532,8 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
         return false;
     }
 
-    mPluginManager->loadAll("plugins");
+    if (mPluginsEnabled)
+        mPluginManager->loadAll(ServerPaths::file("plugins"));
     CustomContentRegistry::getInstance().freeze();
     mPluginManager->enableAll();
 
@@ -563,7 +572,7 @@ void ServerNetworkHandler::_loadScripts() {
 
     mScriptEngine.bindHost(*this);
 
-    mBehaviorPacks.discover("behavior_packs");
+    mBehaviorPacks.discover(ServerPaths::file("behavior_packs"));
     _validatePackDependencies();
 
     CustomContentRegistry::getInstance().load(mBehaviorPacks, mItemDefinitions, mBlockDefinitions);
@@ -588,7 +597,18 @@ void ServerNetworkHandler::stopServerListening() {
     if (!mIsListening)
         return;
 
-    mPluginManager->disableAll();
+    // Prevent destruction from retrying partially completed shutdown after an exception.
+    mIsListening = false;
+    struct DisconnectOnExit {
+        NetworkHandler *handler;
+        ~DisconnectOnExit() { try { handler->disconnect(); } catch (...) {} }
+    } disconnectOnExit{mNetworkHandler.get()};
+
+    std::exception_ptr error;
+    const auto finish = [&error](const std::function<void()> &step) {
+        try { step(); } catch (...) { if (!error) error = std::current_exception(); }
+    };
+    finish([this]() { mPluginManager->disableAll(); });
 
     if (!mPlayers.empty()) {
         LOG_INFO(LogAreaID::Server, "Saving data for %zu player(s)", mPlayers.size());
@@ -596,37 +616,60 @@ void ServerNetworkHandler::stopServerListening() {
         for (auto &entry: mPlayers) {
             ServerPlayer &player = entry.second;
 
-            if (!player.getName().empty())
-                _savePlayerData(player);
-
-            _disconnect(entry.first, player.localize("falcon.disconnect.disconnected"));
+            finish([this, &player]() {
+                if (!player.getName().empty()) _savePlayerData(player);
+            });
+            finish([this, &entry, &player]() {
+                _disconnect(entry.first, player.localize("falcon.disconnect.disconnected"));
+            });
         }
 
         mPlayers.clear();
-        mNetworkHandler->runEvents();
+        finish([this]() { mNetworkHandler->runEvents(); });
     }
 
-    saveWorldDynamicProperties();
-
-    saveAllActors();
+    finish([this]() { saveWorldDynamicProperties(); });
+    finish([this]() { saveAllActors(); });
 
     for (World *world: mWorlds.getWorlds()) {
         LOG_INFO(LogAreaID::Server, "Saving level %s", world->getName().c_str());
         AutoCompaction::untrack(world->getOverworld());
-        world->close();
+        finish([world]() { world->close(); });
     }
 
-    AuthKeyProvider::getInstance().stop();
-
-    mNetworkHandler->disconnect();
-    mIsListening = false;
+    finish([]() { AuthKeyProvider::getInstance().stop(); });
+    finish([this]() { mNetworkHandler->disconnect(); });
 
     LOG_INFO(LogAreaID::Server, "Server stopped.");
+    if (error) std::rethrow_exception(error);
 }
 
-void ServerNetworkHandler::tick() {
+void ServerNetworkHandler::tick(bool paused) {
     if (!mIsListening)
         return;
+
+    if (paused) {
+        mNetworkHandler->runEvents();
+        std::vector<std::string> commands;
+        {
+            std::lock_guard<std::mutex> lock(mConsoleQueueMutex);
+            while (!mConsoleQueue.empty()) {
+                commands.push_back(std::move(mConsoleQueue.front()));
+                mConsoleQueue.pop();
+            }
+        }
+        for (const std::string &command: commands)
+            executeConsoleCommand(command);
+        std::vector<std::function<void()>> tasks;
+        {
+            std::lock_guard<std::mutex> lock(mMainThreadTaskMutex);
+            tasks.swap(mMainThreadTasks);
+        }
+        for (const auto &task: tasks) task();
+        for (auto &entry: mPlayers)
+            entry.second.getAcknowledgements().flush(*this, entry.first);
+        return;
+    }
 
     const std::chrono::steady_clock::time_point tickStart = std::chrono::steady_clock::now();
 
@@ -661,18 +704,8 @@ void ServerNetworkHandler::tick() {
             }
         }
 
-        for (std::string &commandLine: commandLines) {
-            PluginEvent commandEvent;
-            commandEvent.mType = FALCON_EVENT_SERVER_COMMAND;
-            commandEvent.mCancellable = true;
-            commandEvent.mMessage = &commandLine;
-            mPluginManager->dispatch(commandEvent);
-            if (commandEvent.mCancelled)
-                continue;
-
-            ServerCommandOrigin sender(this);
-            mCommands.dispatch(sender, commandLine);
-        }
+        for (const std::string &commandLine: commandLines)
+            executeConsoleCommand(commandLine);
     }
 
     {
@@ -1265,6 +1298,18 @@ void ServerNetworkHandler::setPlayerOp(ServerPlayer &player, bool isOp) {
 void ServerNetworkHandler::queueConsoleCommand(const std::string &commandLine) {
     std::lock_guard<std::mutex> lock(mConsoleQueueMutex);
     mConsoleQueue.push(commandLine);
+}
+
+void ServerNetworkHandler::executeConsoleCommand(std::string commandLine) {
+    PluginEvent event;
+    event.mType = FALCON_EVENT_SERVER_COMMAND;
+    event.mCancellable = true;
+    event.mMessage = &commandLine;
+    mPluginManager->dispatch(event);
+    if (!event.mCancelled) {
+        ServerCommandOrigin sender(this);
+        mCommands.dispatch(sender, commandLine);
+    }
 }
 
 void ServerNetworkHandler::postToMainThread(std::function<void()> task) {

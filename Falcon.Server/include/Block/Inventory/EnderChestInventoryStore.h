@@ -18,6 +18,8 @@ public:
 
     void remove(int64_t ownerId);
 
+    void clear();
+
 private:
     std::unordered_map<int64_t, std::unique_ptr<SimpleContainerInventory>> mInventories;
 };

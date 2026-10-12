@@ -14,7 +14,7 @@
  */
 class WorldManager {
 public:
-    static const char *const WORLDS_DIRECTORY;
+    static std::string getWorldsDirectory();
 
     World &add(const std::string &name, int viewDistance, int64_t seed);
 

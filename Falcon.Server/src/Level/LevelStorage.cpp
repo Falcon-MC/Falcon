@@ -6,6 +6,7 @@
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Level/FalconDataVersion.h"
 
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -744,24 +745,30 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
 
     const std::filesystem::path root = std::filesystem::path(mPath).parent_path();
 
-    Tag data = Tag::ofCompound();
-    data.putString("LevelName", levelName);
+    Tag data;
+    if (!readLevelDat(data))
+        data = Tag::ofCompound();
+    if (!data.contains("LevelName"))
+        data.putString("LevelName", levelName);
+    if (!data.contains("GameType"))
+        data.putInt("GameType", gameType);
+    if (!data.contains("Difficulty"))
+        data.putInt("Difficulty", difficulty);
+    if (!data.contains("commandsEnabled"))
+        data.putByte("commandsEnabled", 1);
     data.putInt("SpawnX", spawnX);
     data.putInt("SpawnY", spawnY);
     data.putInt("SpawnZ", spawnZ);
-    data.putInt("GameType", gameType);
-    data.putInt("Difficulty", difficulty);
     data.putLong("RandomSeed", seed);
     data.putLong("Time", time);
     data.putInt("StorageVersion", 10);
     data.putInt("NetworkVersion", 2193);
-    data.putByte("commandsEnabled", 1);
     data.putByte("bonusChestEnabled", bonusChestEnabled ? 1 : 0);
     data.putByte("bonusChestSpawned", bonusChestSpawned ? 1 : 0);
     data.putInt("limitedWorldOriginX", spawnX);
     data.putInt("limitedWorldOriginY", spawnY);
     data.putInt("limitedWorldOriginZ", spawnZ);
-    data.putLong("LastPlayed", 0);
+    data.putLong("LastPlayed", (int64_t) std::time(nullptr));
     data.putLong("worldStartCount", worldStartCount);
 
     BinaryStream body;

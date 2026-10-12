@@ -1,5 +1,7 @@
 #include "Level/WorldManager.h"
 
+#include "Server/ServerPaths.h"
+
 #include <algorithm>
 #include <filesystem>
 
@@ -9,7 +11,9 @@ namespace {
     const char *const FORBIDDEN_CHARACTERS = "/\\:*?\"<>|";
 }
 
-const char *const WorldManager::WORLDS_DIRECTORY = "worlds";
+std::string WorldManager::getWorldsDirectory() {
+    return ServerPaths::file("worlds");
+}
 
 World &WorldManager::add(const std::string &name, int viewDistance, int64_t seed) {
     const uint32_t id = mNextId++;
@@ -46,7 +50,7 @@ std::vector<World *> WorldManager::getWorlds() {
 std::vector<std::string> WorldManager::listOnDisk() {
     std::vector<std::string> names;
     std::error_code error;
-    for (std::filesystem::directory_iterator it(WORLDS_DIRECTORY, error), end; !error && it != end;
+    for (std::filesystem::directory_iterator it(getWorldsDirectory(), error), end; !error && it != end;
          it.increment(error)) {
         if (it->is_directory(error) && std::filesystem::is_directory(it->path() / DATABASE_FOLDER, error))
             names.push_back(it->path().filename().string());
@@ -58,7 +62,7 @@ std::vector<std::string> WorldManager::listOnDisk() {
 bool WorldManager::exists(const std::string &name) {
     std::error_code error;
     return isValidName(name)
-           && std::filesystem::is_directory(std::filesystem::path(WORLDS_DIRECTORY) / name / DATABASE_FOLDER, error);
+           && std::filesystem::is_directory(std::filesystem::path(getWorldsDirectory()) / name / DATABASE_FOLDER, error);
 }
 
 bool WorldManager::isValidName(const std::string &name) {

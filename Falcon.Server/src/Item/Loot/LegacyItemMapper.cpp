@@ -59,18 +59,30 @@ std::string LegacyItemMapper::resolveWithData(const std::string &identifierAndDa
 }
 
 std::string LegacyItemMapper::resolve(const std::string &identifier, int32_t data) const {
-    std::string name = identifier.find(':') == std::string::npos ? "minecraft:" + identifier : identifier;
+    std::string name = identifier;
+    upgrade(name, data);
+    return name;
+}
+
+bool LegacyItemMapper::upgrade(std::string &identifier, int32_t &data) const {
+    const std::string name = identifier.find(':') == std::string::npos ? "minecraft:" + identifier : identifier;
 
     const auto complex = mComplex.find(name);
     if (complex != mComplex.end()) {
         const auto value = complex->second.find(data);
-        if (value != complex->second.end())
-            return value->second;
+        if (value != complex->second.end()) {
+            identifier = value->second;
+            data = 0;
+            return true;
+        }
     }
 
     const auto simple = mSimple.find(name);
-    if (simple != mSimple.end())
-        return simple->second;
+    if (simple != mSimple.end()) {
+        identifier = simple->second;
+        return true;
+    }
 
-    return name;
+    identifier = name;
+    return false;
 }

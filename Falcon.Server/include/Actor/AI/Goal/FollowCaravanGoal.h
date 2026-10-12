@@ -15,6 +15,11 @@ public:
 
     static bool isInCaravan(int64_t uniqueId);
 
+    /**
+     * Unique ids restart with every server, so the links of a stopped server must not carry into the next.
+     */
+    static void clearCaravans();
+
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
     bool canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) override;
