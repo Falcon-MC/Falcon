@@ -129,7 +129,7 @@ std::future<void> EmbeddedServer::save() {
     auto result = promise->get_future();
     try {
         _enqueue([promise](ServerNetworkHandler &handler) {
-            try { handler.autoSave(); promise->set_value(); }
+            try { handler.autoSave(true); promise->set_value(); }
             catch (...) { promise->set_exception(std::current_exception()); }
         });
     } catch (...) { promise->set_exception(std::current_exception()); }

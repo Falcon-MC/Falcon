@@ -2,6 +2,7 @@
 #include "Server/ServerHost.h"
 #include "Server/ServerPaths.h"
 #include "Core/NBT/NbtIo.h"
+#include "Core/Debug/BedrockLog.h"
 #include "Core/Utility/BinaryStream.h"
 #include "Network/Client/ClientNetworkSystem.h"
 
@@ -82,6 +83,19 @@ int main() {
         await(server.save());
         require(await(server.getPlayerNames()).empty(), "Unexpected players");
         require(savedTime(config.dataDirectory) == 1000, "Command did not execute during pause");
+        const auto metadata = config.dataDirectory / "worlds" / "World" / "level.dat";
+        std::filesystem::remove(metadata);
+        std::filesystem::create_directory(metadata);
+        bool saveRejected = false;
+        try {
+            await(server.save());
+        } catch (const std::exception &) {
+            saveRejected = true;
+        }
+        std::filesystem::remove(metadata);
+        require(saveRejected, "Save future ignored a disk error");
+        require(server.isRunning(), "Save failure stopped the server");
+        await(server.save());
         ClientConnectionSettings client;
         client.mHost = "127.0.0.1";
         client.mPort = server.getPort();
@@ -130,7 +144,8 @@ int main() {
         std::cout << "Embedded lifecycle checks passed\n";
         return 0;
     } catch (const std::exception &error) {
-        std::cerr << error.what() << '\n';
+        LOG_ERROR(LogAreaID::Server, "%s", error.what());
+        BedrockLog::flush();
         return 1;
     }
 }

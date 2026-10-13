@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <iterator>
 #include <random>
+#include <stdexcept>
 #include <utility>
 
 #if defined(__linux__) && defined(__GLIBC__)
@@ -135,9 +136,17 @@ bool Level::attachStorage(Level &overworld) {
     return mStorage.attach(overworld.mStorage, getDimensionId());
 }
 
-void Level::saveAll() {
+void Level::saveAll(bool wait) {
     if (!mStorage.isOpen())
         return;
+
+    const uint64_t failures = mStorage.getWriteFailures();
+    const bool async = mChunkWorker != nullptr && mChunkWorker->isRunning();
+    if (wait && async) {
+        mChunkWorker->waitForSaves();
+        while (drainCompletedChunks() != 0) {
+        }
+    }
 
     if (mDimension == DimensionType::Overworld) {
         saveWeather();
@@ -145,9 +154,7 @@ void Level::saveAll() {
         saveLevelDat();
     }
 
-    const bool async = mChunkWorker != nullptr && mChunkWorker->isRunning();
-
-    if (!async) {
+    if (wait || !async) {
         std::vector<GeneratedBlockChange> backlog;
         backlog.swap(mIncomingChanges);
         _applyGeneratedChanges(backlog);
@@ -157,7 +164,8 @@ void Level::saveAll() {
 
     size_t saved = 0;
     for (auto &entry: mChunks) {
-        if (!entry.second.isDirty())
+        if (!entry.second.isDirty() && (mChunkWorker == nullptr ||
+                !mChunkWorker->hasFailedSave(entry.second.getX(), entry.second.getZ())))
             continue;
 
         if (async) {
@@ -179,6 +187,11 @@ void Level::saveAll() {
 
     if (saved != 0)
         LOG_INFO(LogAreaID::Server, "Saved %zu chunk(s) for level %s", saved, mName.c_str());
+    if (wait) {
+        const bool workerSuccess = !async || mChunkWorker->waitForSaves();
+        if (!workerSuccess || mStorage.getWriteFailures() != failures)
+            throw std::runtime_error("Could not save level: " + mName);
+    }
 }
 
 void Level::saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities) {
@@ -238,13 +251,24 @@ std::vector<Tag> Level::loadBlockEntities(int32_t chunkX, int32_t chunkZ) {
 }
 
 void Level::closeStorage() {
-    if (mChunkWorker != nullptr)
+    if (mChunkWorker != nullptr) {
         mChunkWorker->discardPendingGeneration();
-
-    saveAll();
-
-    if (mChunkWorker != nullptr)
         mChunkWorker->stop();
+        while (drainCompletedChunks() != 0) {
+        }
+        for (auto &entry: mChunks) {
+            if (mChunkWorker->hasFailedSave(entry.second.getX(), entry.second.getZ()))
+                entry.second.markDirty();
+        }
+        mChunkWorker.reset();
+    }
+    mPendingChunks.clear();
+    try {
+        saveAll(true);
+    } catch (...) {
+        mStorage.close();
+        throw;
+    }
 
     mStorage.close();
 }
@@ -510,9 +534,11 @@ void Level::_flushPendingBlockChanges(bool includeInFlight) {
             continue;
         }
 
-        mStorage.mergePendingBlockChanges((int32_t) (it->first >> 32), (int32_t) (it->first & 0xffffffff),
-                                          it->second);
-        it = mPendingBlockChanges.erase(it);
+        if (mStorage.mergePendingBlockChanges((int32_t) (it->first >> 32), (int32_t) (it->first & 0xffffffff),
+                                              it->second))
+            it = mPendingBlockChanges.erase(it);
+        else
+            ++it;
     }
 }
 

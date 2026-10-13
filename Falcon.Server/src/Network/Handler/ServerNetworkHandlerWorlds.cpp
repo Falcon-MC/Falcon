@@ -46,7 +46,12 @@ World *ServerNetworkHandler::loadWorld(const std::string &name, bool create, int
     if (!create && !WorldManager::exists(name))
         return nullptr;
 
-    return &_openWorld(name, seed);
+    try {
+        return &_openWorld(name, seed);
+    } catch (const std::exception &exception) {
+        LOG_ERROR(LogAreaID::Server, "Could not load world %s: %s", name.c_str(), exception.what());
+        return nullptr;
+    }
 }
 
 bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &error) {

@@ -368,7 +368,7 @@ public:
 
     void saveAllActors();
 
-    void autoSave();
+    void autoSave(bool wait = false);
 
     bool syncActorPersistence(Level &level, const std::vector<int64_t> &activeColumns);
 
@@ -380,7 +380,7 @@ public:
 
     void loadWorldDynamicProperties();
 
-    void saveWorldDynamicProperties();
+    void saveWorldDynamicProperties(bool checked = false);
 
     std::vector<std::unique_ptr<ItemActor>> &getItemEntities() { return mItemEntities; }
 
@@ -726,7 +726,7 @@ private:
 
     void _validatePackDependencies();
 
-    void _savePlayerData(const ServerPlayer &player);
+    void _savePlayerData(const ServerPlayer &player, bool checked = false);
 
     void _handleVoidDamage(ServerPlayer &player);
 
@@ -809,6 +809,7 @@ private:
     PingedCompatibleServer mAnnouncement;
     int mMaxPlayers;
     bool mIsListening;
+    bool mSimulationPaused = false;
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;

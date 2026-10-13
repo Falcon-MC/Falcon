@@ -126,9 +126,22 @@ namespace {
         const std::string body = selector.substr(3, selector.size() - 4);
         size_t start = 0;
         while (start <= body.size()) {
-            size_t comma = body.find(',', start);
-            if (comma == std::string::npos)
-                comma = body.size();
+            size_t comma = start;
+            bool quoted = false;
+            bool escaped = false;
+            for (; comma < body.size(); ++comma) {
+                const char character = body[comma];
+                if (escaped)
+                    escaped = false;
+                else if (quoted && character == '\\')
+                    escaped = true;
+                else if (character == '"')
+                    quoted = !quoted;
+                else if (!quoted && character == ',')
+                    break;
+            }
+            if (quoted || escaped)
+                return filter;
 
             const std::string entry = trimCopy(body.substr(start, comma - start));
             start = comma + 1;
@@ -148,6 +161,21 @@ namespace {
             if (!value.empty() && value[0] == '!') {
                 negated = true;
                 value = trimCopy(value.substr(1));
+            }
+            if (!value.empty() && value[0] == '"') {
+                if (value.size() < 2 || value.back() != '"')
+                    return filter;
+                std::string decoded;
+                for (size_t i = 1; i + 1 < value.size(); ++i) {
+                    if (value[i] == '\\') {
+                        if (++i + 1 >= value.size())
+                            return filter;
+                    } else if (value[i] == '"') {
+                        return filter;
+                    }
+                    decoded.push_back(value[i]);
+                }
+                value = std::move(decoded);
             }
 
             if (key == "type") {
@@ -317,16 +345,16 @@ std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &
     if (filter.mKind != 'a' && filter.mKind != 'e' && filter.mKind != 'r')
         return targets;
 
-    const ServerPlayer *senderPlayer = sender.asPlayer();
-    const uint32_t worldId = senderPlayer != nullptr ? getWorldFor(*senderPlayer).getId()
-                                                     : getWorldOf(sender.getLevel()).getId();
+    const Level *contextLevel = sender.getLevel();
+    if (contextLevel == nullptr)
+        contextLevel = &getLevel();
     const size_t limit = filter.mKind == 'r' && filter.mLimit == 0 ? 1 : filter.mLimit;
 
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
         if (!player.isSpawned() || !matchesName(filter, player.getName()))
             continue;
-        if (filter.mKind == 'e' && player.getWorldId() != worldId)
+        if (filter.mKind == 'e' && !player.isIn(*contextLevel))
             continue;
 
         targets.push_back(&player);
@@ -345,19 +373,26 @@ std::vector<ServerActor *> ServerNetworkHandler::resolveActorTargets(CommandOrig
     if (!filter.mValid || filter.mKind != 'e')
         return targets;
 
-    const ServerPlayer *senderPlayer = sender.asPlayer();
-    const uint32_t worldId = senderPlayer != nullptr ? getWorldFor(*senderPlayer).getId()
-                                                     : getWorldOf(sender.getLevel()).getId();
+    const Level *contextLevel = sender.getLevel();
+    if (contextLevel == nullptr)
+        contextLevel = &getLevel();
+    size_t limit = filter.mLimit;
+    if (limit != 0) {
+        const size_t players = resolveTargets(sender, selector).size();
+        if (players >= limit)
+            return targets;
+        limit -= players;
+    }
 
     for (auto &entry: mActors) {
         ServerActor *actor = entry.second.get();
-        if (actor == nullptr || actor->isDead() || actor->getWorldId() != worldId)
+        if (actor == nullptr || actor->isDead() || !actor->isIn(*contextLevel))
             continue;
         if (!matchesType(filter, actor->getTypeId()) || !matchesName(filter, actor->getName()))
             continue;
 
         targets.push_back(actor);
-        if (filter.mLimit != 0 && targets.size() >= filter.mLimit)
+        if (limit != 0 && targets.size() >= limit)
             break;
     }
 

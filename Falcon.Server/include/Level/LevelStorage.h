@@ -5,6 +5,7 @@
 #include "Core/NBT/Tag.h"
 
 #include <cstdint>
+#include <atomic>
 #include <memory>
 #include <string>
 #include <utility>
@@ -58,6 +59,8 @@ public:
 
     bool isOpen() const { return mDb != nullptr; }
 
+    uint64_t getWriteFailures() const { return mWriteFailures.load(); }
+
     bool saveChunk(const LevelChunk &chunk);
 
     bool loadChunk(LevelChunk &chunk);
@@ -103,6 +106,7 @@ public:
     bool readLevelDat(Tag &out) const;
 
 private:
+    bool _recordWrite(bool success) const;
     std::string _makeKey(int32_t chunkX, int32_t chunkZ, LevelDbTag tag) const;
 
     std::string _makeDataVersionKey(int32_t chunkX, int32_t chunkZ) const;
@@ -125,4 +129,5 @@ private:
     std::shared_ptr<leveldb::DecompressAllocator> mDecompressAllocator;
     std::string mPath;
     int mDimensionId;
+    mutable std::atomic<uint64_t> mWriteFailures{0};
 };

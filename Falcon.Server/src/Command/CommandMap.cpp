@@ -62,11 +62,15 @@ std::vector<std::string> CommandMap::_tokenize(const std::string &commandLine) {
         }
 
         if (quoted && character == '\\') {
+            if (selectorDepth > 0)
+                token.push_back(character);
             escaped = true;
             continue;
         }
 
         if (character == '"') {
+            if (selectorDepth > 0)
+                token.push_back(character);
             quoted = !quoted;
             started = true;
             continue;

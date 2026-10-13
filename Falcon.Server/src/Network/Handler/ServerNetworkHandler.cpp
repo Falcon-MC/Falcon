@@ -645,6 +645,7 @@ void ServerNetworkHandler::stopServerListening() {
 }
 
 void ServerNetworkHandler::tick(bool paused) {
+    mSimulationPaused = paused;
     if (!mIsListening)
         return;
 
@@ -992,6 +993,25 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
         }
         if (gate == LoginGate::Ignore)
             return;
+
+        if (mSimulationPaused) {
+            switch (packetId) {
+                case MinecraftPacketIds::RequestNetworkSettings:
+                case MinecraftPacketIds::Login:
+                case MinecraftPacketIds::ClientToServerHandshake:
+                case MinecraftPacketIds::ResourcePackClientResponse:
+                case MinecraftPacketIds::ResourcePackChunkRequest:
+                case MinecraftPacketIds::ClientCacheStatus:
+                case MinecraftPacketIds::SetLocalPlayerAsInitialized:
+                case MinecraftPacketIds::RequestChunkRadius:
+                case MinecraftPacketIds::SubChunkRequest:
+                case MinecraftPacketIds::NetworkStackLatency:
+                case MinecraftPacketIds::PacketViolationWarning:
+                    break;
+                default:
+                    return;
+            }
+        }
 
         const PacketCodecContext &context = getCodecContext(id);
         const ProtocolCodec &codec = context.getCodec();

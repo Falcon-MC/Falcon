@@ -35,6 +35,7 @@ class ServerNetworkHandler;
  * to a ChunkWorker and merged back through drainCompletedChunks().
  */
 class Level {
+    friend class LevelPersistenceProbe;
 public:
     struct ChunkPosition {
         int32_t mX;
@@ -134,7 +135,9 @@ public:
 
     bool attachStorage(Level &overworld);
 
-    void saveAll();
+    void saveAll(bool wait = false);
+
+    uint64_t getSaveFailureCount() const { return mStorage.getWriteFailures(); }
 
     void closeStorage();
 

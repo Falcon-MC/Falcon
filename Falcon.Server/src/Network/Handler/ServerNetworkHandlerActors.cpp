@@ -57,6 +57,7 @@
 #include "Network/Handler/ChunkStreamHandler.h"
 
 #include <cmath>
+#include <stdexcept>
 
 namespace {
     const char *const UNDEAD_FAMILY = "undead";
@@ -1343,10 +1344,11 @@ void ServerNetworkHandler::loadWorldDynamicProperties() {
         deserializeDynamicProperties(*properties, mWorldDynamicProperties);
 }
 
-void ServerNetworkHandler::saveWorldDynamicProperties() {
+void ServerNetworkHandler::saveWorldDynamicProperties(bool checked) {
     Tag data = Tag::ofCompound();
     data.put("DynamicProperties", serializeDynamicProperties(mWorldDynamicProperties));
-    mPlayerData.saveData("world_dynamic_properties", data);
+    if (!mPlayerData.saveData("world_dynamic_properties", data) && checked)
+        throw std::runtime_error("Could not save world dynamic properties");
 }
 
 
