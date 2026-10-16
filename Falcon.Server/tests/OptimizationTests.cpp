@@ -186,6 +186,20 @@ int main() {
             level.unregisterAllChunkLoaders(player.getRuntimeId());
             player.resetChunkStreaming();
         });
+        check("paused ticks complete terrain without advancing time", [&]() {
+            handler.autoSave(true);
+            LevelPersistenceProbe::queueOverflow(level);
+            const int64_t time = level.getTime();
+            host.tick(true);
+            require(level.getBlockState(15, 143, 15).mName == "minecraft:diamond_block",
+                    "Paused tick did not apply generation overflow");
+            require(level.getBlockState(15, 147, 15).mName != "minecraft:diamond_block",
+                    "Paused tick exceeded generation budget");
+            host.tick(true);
+            require(level.getBlockState(15, 147, 15).mName == "minecraft:diamond_block",
+                    "Paused generation backlog did not drain");
+            require(level.getTime() == time, "Terrain completion advanced paused time");
+        });
         check("large generation queue drains within the change budget", [&]() {
             for (int count: {16384, 65536, 262144}) {
                 Level backlog("QueueBenchmark", 4, 1, DimensionType::Overworld);

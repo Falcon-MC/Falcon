@@ -673,8 +673,20 @@ void ServerNetworkHandler::tick(bool paused) {
             tasks.swap(mMainThreadTasks);
         }
         for (const auto &task: tasks) task();
-        for (Level *level: getLevels())
+        for (Level *level: getLevels()) {
             level->drainCompletedChunks();
+            level->processGeneratedChanges();
+            const std::vector<int64_t> repopulated = level->consumeRepopulatedChunks();
+            if (repopulated.empty())
+                continue;
+            for (auto &entry: mPlayers) {
+                ServerPlayer &player = entry.second;
+                if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent || !player.isIn(*level))
+                    continue;
+                for (const int64_t hash: repopulated)
+                    ChunkStreamHandler::invalidateChunk(player, hash);
+            }
+        }
         for (auto &entry: mPlayers) {
             ServerPlayer &player = entry.second;
             if (player.getLoginState() >= ServerPlayer::LoginState::StartGameSent && player.hasChunkPosition()) {
