@@ -403,7 +403,7 @@ private:
     std::unordered_set<int64_t> mOccupiedColumns;
     int32_t mUnloadSweepTicks = 0;
     size_t mUnloadedSinceTrim = 0;
-    std::vector<GeneratedBlockChange> mIncomingChanges;
+    std::deque<GeneratedBlockChange> mIncomingChanges;
     std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> mPendingBlockChanges;
     std::unique_ptr<ChunkWorker> mChunkWorker;
     int64_t mTime = 0;

@@ -1,12 +1,14 @@
 #include "Server/ServerHost.h"
 #include "Server/ServerPaths.h"
 #include "Network/Handler/ServerNetworkHandler.h"
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "Command/ServerCommandOrigin.h"
 #include "Command/ExecuteCommandOrigin.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Protocol/Packets/CommandRequestPacket.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <stdexcept>
@@ -32,12 +34,12 @@ public:
         return failed;
     }
 
-    static void queueOverflow(Level &level) {
-        for (int i = 0; i < 2048; ++i) {
+    static void queueOverflow(Level &level, int count = 2048, bool invalidY = false) {
+        for (int i = 0; i < count; ++i) {
             GeneratedBlockChange change;
             change.mX = i % 16;
             change.mZ = (i / 16) % 16;
-            change.mY = 140 + i / 256;
+            change.mY = invalidY ? LevelChunk::MIN_Y - 1 : 140 + i / 256;
             change.mState = BlockState("minecraft:diamond_block");
             level.mIncomingChanges.push_back(std::move(change));
         }
@@ -139,6 +141,75 @@ int main() {
             host.tick(false);
             static_cast<NetworkHandler::Listener &>(handler).onDataReceived(id, stream.getBuffer());
             require(level.getTime() == 1234, "Gameplay packet remained blocked after resume");
+        });
+        check("invalidated loaders survive only inside radius", [&]() {
+            player.setPosition(Vector3f(0, 140, 0));
+            for (bool teleport: {false, true}) {
+                auto &state = player.getChunkStreamState();
+                for (int32_t x = 100; x < 124; ++x) {
+                    const int64_t hash = ChunkStreamHandler::packChunk(x, 100);
+                    state.mInRadius.insert(hash);
+                    player.getSentChunks().insert(hash);
+                    level.registerChunkLoader(player.getRuntimeId(), x, 100);
+                    ChunkStreamHandler::invalidateChunk(player, hash);
+                }
+                if (teleport)
+                    ChunkStreamHandler::handleTeleport(handler, player);
+                else
+                    ChunkStreamHandler::handleViewDistanceChange(handler, player);
+                for (int32_t x = 100; x < 124; ++x)
+                    require(!level.unregisterChunkLoader(player.getRuntimeId(), x, 100),
+                            "Pruning an invalidated chunk retained its loader");
+            }
+            player.getChunkStreamState() = ChunkStreamState();
+            level.unregisterAllChunkLoaders(player.getRuntimeId());
+            player.resetChunkStreaming();
+        });
+        check("chunk send budget shared across triggers", [&]() {
+            auto &state = player.getChunkStreamState();
+            player.setPosition(Vector3f(0, 140, 0));
+            state.mLastLoaderChunk = ChunkStreamHandler::packChunk(0, 0);
+            for (int32_t x = 0; x < 17; ++x) {
+                level.getChunk(x, 0);
+                const int64_t hash = ChunkStreamHandler::packChunk(x, 0);
+                state.mInRadius.insert(hash);
+                player.getSentChunks().insert(hash);
+                ChunkStreamHandler::invalidateChunk(player, hash);
+            }
+            const size_t before = player.getSentChunkCount();
+            ChunkStreamHandler::tick(handler, player);
+            ChunkStreamHandler::tick(handler, player);
+            require(player.getSentChunkCount() - before == 16, "Repeated calls exceeded send budget");
+            host.tick(true);
+            require(player.getSentChunkCount() - before == 17, "Paused network tick did not renew send budget");
+            state = ChunkStreamState();
+            level.unregisterAllChunkLoaders(player.getRuntimeId());
+            player.resetChunkStreaming();
+        });
+        check("large generation queue drains within the change budget", [&]() {
+            for (int count: {16384, 65536, 262144}) {
+                Level backlog("QueueBenchmark", 4, 1, DimensionType::Overworld);
+                LevelPersistenceProbe::queueOverflow(backlog, count, true);
+                size_t processed = 0;
+                double maxMicros = 0;
+                const auto start = std::chrono::steady_clock::now();
+                for (;;) {
+                    const auto tickStart = std::chrono::steady_clock::now();
+                    const size_t batch = backlog.processGeneratedChanges();
+                    const double micros = std::chrono::duration<double, std::micro>(
+                            std::chrono::steady_clock::now() - tickStart).count();
+                    if (batch == 0)
+                        break;
+                    require(batch <= 1024, "Generation processing exceeded its change budget");
+                    maxMicros = std::max(maxMicros, micros);
+                    processed += batch;
+                }
+                require(processed == (size_t) count, "Generation queue lost pending changes");
+                const double totalMicros = std::chrono::duration<double, std::micro>(
+                        std::chrono::steady_clock::now() - start).count();
+                LOG_INFO(LogAreaID::Server, "Queue-only backlog=%d total_us=%.1f max_batch_us=%.1f",
+                         count, totalMicros, maxMicros);
+            }
         });
         check("generation backlog survives close", [&]() {
             Level backlog("Backlog", 4, 1, DimensionType::Overworld);

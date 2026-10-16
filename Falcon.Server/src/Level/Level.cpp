@@ -155,9 +155,8 @@ void Level::saveAll(bool wait) {
     }
 
     if (wait || !async) {
-        std::vector<GeneratedBlockChange> backlog;
-        backlog.swap(mIncomingChanges);
-        _applyGeneratedChanges(backlog);
+        while (!mIncomingChanges.empty())
+            processGeneratedChanges();
     }
 
     _flushPendingBlockChanges(!async);
@@ -456,11 +455,6 @@ void Level::_queueGeneratedChanges(std::vector<GeneratedBlockChange> changes) {
     if (changes.empty())
         return;
 
-    if (mIncomingChanges.empty()) {
-        mIncomingChanges = std::move(changes);
-        return;
-    }
-
     mIncomingChanges.insert(mIncomingChanges.end(), std::make_move_iterator(changes.begin()),
                             std::make_move_iterator(changes.end()));
 }
@@ -508,16 +502,13 @@ size_t Level::processGeneratedChanges() {
     if (mIncomingChanges.empty())
         return 0;
 
+    // Pop only the budgeted prefix so a large backlog does not add work to every tick.
+    const size_t count = std::min(mIncomingChanges.size(), (size_t) MAX_GENERATED_CHANGES_PER_TICK);
     std::vector<GeneratedBlockChange> batch;
-    batch.swap(mIncomingChanges);
-
-    // Each applied change relights its column, so a burst of feature overflow from many
-    // freshly generated chunks is spread over several ticks. The remainder stays ahead of
-    // anything queued later to keep the original order.
-    if (batch.size() > MAX_GENERATED_CHANGES_PER_TICK) {
-        mIncomingChanges.assign(std::make_move_iterator(batch.begin() + MAX_GENERATED_CHANGES_PER_TICK),
-                                std::make_move_iterator(batch.end()));
-        batch.erase(batch.begin() + MAX_GENERATED_CHANGES_PER_TICK, batch.end());
+    batch.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        batch.push_back(std::move(mIncomingChanges.front()));
+        mIncomingChanges.pop_front();
     }
 
     _applyGeneratedChanges(batch);

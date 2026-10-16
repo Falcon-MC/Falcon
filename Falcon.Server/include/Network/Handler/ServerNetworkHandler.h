@@ -109,6 +109,10 @@ public:
 
     int64_t getCurrentTick() const { return mCurrentTick; }
 
+    uint64_t getChunkStreamTick() const {
+        return mChunkStreamTick;
+    }
+
     int64_t getUptimeSeconds() const;
 
     double getTicksPerSecond() const;
@@ -845,6 +849,7 @@ private:
     std::vector<std::unique_ptr<ItemActor>> mItemEntities;
     uint64_t mNextRuntimeId;
     int64_t mCurrentTick = 0;
+    uint64_t mChunkStreamTick = 0;
     std::chrono::steady_clock::time_point mStartTime = std::chrono::steady_clock::now();
 
     Profiler mProfiler;

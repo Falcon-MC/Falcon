@@ -103,7 +103,7 @@ int main() {
         client.mGameVersion = "1.26.52";
         client.mIdentity.mDisplayName = "EmbeddedPlayer";
         client.mChunkRadius = 4;
-        client.mDeferSpawn = true;
+        client.mDeferSpawn = false;
         client.mTimeoutMs = 10000;
         auto connection = ClientNetworkSystem::dial(client);
         require(connection.mConnection != nullptr, connection.mError.c_str());
@@ -144,6 +144,31 @@ int main() {
                 "Invalid property error missing");
         require(await(server.startAsync(config)), "Same instance could not restart");
         server.stop();
+        const auto worldProperties = config.dataDirectory / "players" / "world_dynamic_properties.dat";
+        std::filesystem::remove(worldProperties);
+        std::filesystem::create_directory(worldProperties);
+        require(await(server.startAsync(config)), "Could not restart for shutdown failure check");
+        server.stop();
+        require(server.getState() == EmbeddedServer::State::Failed,
+                "World properties save failure reported a clean shutdown");
+        require(server.getError().code == EmbeddedServer::ErrorCode::Shutdown,
+                "World properties save failure did not report Shutdown");
+        std::filesystem::remove(worldProperties);
+        require(await(server.startAsync(config)), "Could not restart after failed shutdown");
+        server.setPaused(true);
+        client.mPort = server.getPort();
+        auto shutdownConnection = ClientNetworkSystem::dial(client);
+        require(shutdownConnection.mConnection != nullptr, shutdownConnection.mError.c_str());
+        const auto playerData = config.dataDirectory / "players" / "embeddedplayer.dat";
+        std::filesystem::remove(playerData);
+        std::filesystem::create_directory(playerData);
+        server.stop();
+        require(server.getState() == EmbeddedServer::State::Failed,
+                "Player save failure reported a clean shutdown");
+        require(server.getError().code == EmbeddedServer::ErrorCode::Shutdown,
+                "Player save failure did not report Shutdown");
+        shutdownConnection.mConnection->disconnect("Done");
+        std::filesystem::remove(playerData);
         std::filesystem::remove_all(directory);
         std::cout << "Embedded lifecycle checks passed\n";
         return 0;

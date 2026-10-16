@@ -262,7 +262,12 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
     player.getVisiblePlayers().clear();
     player.setAwaitingDimensionAck(true);
     player.resetChunkStreaming();
-    player.getChunkStreamState() = ChunkStreamState();
+    ChunkStreamState &stream = player.getChunkStreamState();
+    const uint64_t sendTick = stream.mSendTick;
+    const unsigned sendsThisTick = stream.mSendsThisTick;
+    stream = ChunkStreamState();
+    stream.mSendTick = sendTick;
+    stream.mSendsThisTick = sendsThisTick;
 
     player.setPosition(destination);
     player.clearPendingMove();

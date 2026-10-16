@@ -13,6 +13,8 @@ struct ChunkStreamState {
     std::unordered_set<int64_t> mLoading;
     std::vector<int64_t> mReadyToSend;
     int64_t mLastLoaderChunk = INT64_MAX;
+    uint64_t mSendTick = UINT64_MAX;
+    unsigned mSendsThisTick = 0;
     int32_t mComparatorChunkX = 0;
     int32_t mComparatorChunkZ = 0;
     double mComparatorDirX = 0.0;

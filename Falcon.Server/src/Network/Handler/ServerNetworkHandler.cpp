@@ -622,7 +622,7 @@ void ServerNetworkHandler::stopServerListening() {
             ServerPlayer &player = entry.second;
 
             finish([this, &player]() {
-                if (!player.getName().empty()) _savePlayerData(player);
+                if (!player.getName().empty()) _savePlayerData(player, true);
             });
             finish([this, &entry, &player]() {
                 _disconnect(entry.first, player.localize("falcon.disconnect.disconnected"));
@@ -633,7 +633,7 @@ void ServerNetworkHandler::stopServerListening() {
         finish([this]() { mNetworkHandler->runEvents(); });
     }
 
-    finish([this]() { saveWorldDynamicProperties(); });
+    finish([this]() { saveWorldDynamicProperties(true); });
     finish([this]() { saveAllActors(); });
 
     for (World *world: mWorlds.getWorlds()) {
@@ -654,6 +654,7 @@ void ServerNetworkHandler::tick(bool paused) {
     if (!mIsListening)
         return;
 
+    ++mChunkStreamTick;
     if (paused) {
         mNetworkHandler->runEvents();
         std::vector<std::string> commands;
@@ -672,8 +673,16 @@ void ServerNetworkHandler::tick(bool paused) {
             tasks.swap(mMainThreadTasks);
         }
         for (const auto &task: tasks) task();
-        for (auto &entry: mPlayers)
-            entry.second.getAcknowledgements().flush(*this, entry.first);
+        for (Level *level: getLevels())
+            level->drainCompletedChunks();
+        for (auto &entry: mPlayers) {
+            ServerPlayer &player = entry.second;
+            if (player.getLoginState() >= ServerPlayer::LoginState::StartGameSent && player.hasChunkPosition()) {
+                _sendChunks(player);
+                _checkTerrainReady(player);
+            }
+            player.getAcknowledgements().flush(*this, entry.first);
+        }
         return;
     }
 
