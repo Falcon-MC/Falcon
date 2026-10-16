@@ -3,14 +3,15 @@
 #include "Core/Debug/LogLevel.h"
 
 #include <atomic>
-#include <condition_variable>
 #include <filesystem>
 #include <functional>
+#include <future>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 class ILogEndPoint;
 
@@ -32,6 +33,13 @@ struct EmbeddedServerConfig {
  */
 class EmbeddedServer {
 public:
+    enum class State { Starting, Running, Stopping, Failed, Stopped };
+    enum class Progress { None, Validating, PreparingData, LoadingWorld, Listening, Stopping };
+    enum class ErrorCode { None, Busy, InvalidConfiguration, Startup, Runtime, Shutdown };
+    struct Error {
+        ErrorCode code = ErrorCode::None;
+        std::string message;
+    };
     EmbeddedServer();
 
     ~EmbeddedServer();
@@ -44,6 +52,19 @@ public:
      * Starts the server and waits until it listens or failed to. Returns false when it could not start.
      */
     bool start(const EmbeddedServerConfig &config);
+    // Poll the future and getState() from the UI; start()/stop() are blocking wrappers.
+    // Serialize lifecycle calls. Log callbacks run on the logger thread.
+    std::future<bool> startAsync(const EmbeddedServerConfig &config);
+    // Returns immediately; Stopped/Failed means cleanup has completed.
+    void requestStop();
+    State getState() const;
+    Progress getProgress() const;
+    Error getError() const;
+    // Requests execute on the server thread, including during pause. Futures report
+    // completion or exceptions; pending requests are abandoned when the server stops.
+    std::future<void> executeCommand(std::string command);
+    std::future<void> save();
+    std::future<std::vector<std::string>> getPlayerNames();
 
     /**
      * Saves the world and the player, stops the server and waits for its thread.
@@ -62,14 +83,8 @@ public:
     unsigned short getPort() const;
 
 private:
-    enum class State {
-        Starting,
-        Running,
-        Failed,
-        Stopped
-    };
-
-    void _run(EmbeddedServerConfig config);
+    void _run(EmbeddedServerConfig config, std::shared_ptr<std::promise<bool>> started) noexcept;
+    void _enqueue(std::function<void(class ServerNetworkHandler &)> task);
 
     std::thread mThread;
     std::shared_ptr<ILogEndPoint> mLogEndPoint;
@@ -77,6 +92,8 @@ private:
     std::atomic<bool> mPaused{false};
     std::atomic<unsigned short> mPort{0};
     mutable std::mutex mMutex;
-    std::condition_variable mStateChanged;
     State mState = State::Stopped;
+    Error mError;
+    Progress mProgress = Progress::None;
+    std::vector<std::function<void(class ServerNetworkHandler &)>> mTasks;
 };

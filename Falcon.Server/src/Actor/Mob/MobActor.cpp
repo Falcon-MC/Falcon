@@ -447,22 +447,23 @@ int32_t MobActor::_countSensedEntities(ServerNetworkHandler &owner, const json::
     const Vector3f center(position.x, position.y + numberIn(&subsensor, "y_offset", 0.0f), position.z);
     const json::Value *filters = subsensor.get("event_filters");
 
-    const auto senses = [&](const Actor &actor) {
+    const auto inRange = [&](const Actor &actor) {
         if (&actor == this || !actor.isAlive() || !actor.sharesLevelWith(*this))
             return false;
 
         const Vector3f other = actor.getPosition();
         const float dx = other.x - center.x;
         const float dz = other.z - center.z;
-        if (dx * dx + dz * dz > horizontal * horizontal || std::fabs(other.y - center.y) > vertical)
-            return false;
+        return dx * dx + dz * dz <= horizontal * horizontal && std::fabs(other.y - center.y) <= vertical;
+    };
 
+    const auto passesFilters = [&](const Actor &actor) {
         return filters == nullptr || EntityFilter::test(*filters, owner, *this, &actor);
     };
 
     int32_t count = 0;
     for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && senses(entry.second))
+        if (entry.second.isSpawned() && inRange(entry.second) && passesFilters(entry.second))
             count++;
     }
 
@@ -470,7 +471,8 @@ int32_t MobActor::_countSensedEntities(ServerNetworkHandler &owner, const json::
         return count;
 
     for (auto &entry: owner.getActors()) {
-        if (dynamic_cast<MobActor *>(entry.second.get()) != nullptr && senses(*entry.second))
+        if (inRange(*entry.second) && dynamic_cast<MobActor *>(entry.second.get()) != nullptr
+            && passesFilters(*entry.second))
             count++;
     }
     return count;
@@ -1732,6 +1734,11 @@ const json::Value *MobActor::getComponent(const std::string &name) const {
     const std::unordered_map<std::string, const json::Value *> &components = getComponents();
     const auto found = components.find(name);
     return found == components.end() ? nullptr : found->second;
+}
+
+const json::Value *MobActor::getComponent(const char *name) const {
+    mComponentKey.assign(name);
+    return getComponent(mComponentKey);
 }
 
 bool MobActor::burnsInDaylight() const {

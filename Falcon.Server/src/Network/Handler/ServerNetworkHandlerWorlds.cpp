@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <vector>
+#include <stdexcept>
 
 World &ServerNetworkHandler::_openWorld(const std::string &name, int64_t seed) {
     World &world = mWorlds.add(name, _getServerViewDistance(), seed);
@@ -17,7 +18,11 @@ World &ServerNetworkHandler::_openWorld(const std::string &name, int64_t seed) {
         BlockActionHandler::broadcastToViewers(*this, level, position, packet);
     };
 
-    world.open(WorldManager::getWorldsDirectory(), _getChunkWorkerThreadCount(), broadcaster, this);
+    if (!world.open(WorldManager::getWorldsDirectory(), _getChunkWorkerThreadCount(), broadcaster, this)) {
+        const uint32_t id = world.getId();
+        mWorlds.remove(id);
+        throw std::runtime_error("Could not open world: " + name);
+    }
     AutoCompaction::track(world.getOverworld());
     LOG_INFO(LogAreaID::Server, "Loaded world %s", name.c_str());
 
@@ -41,7 +46,12 @@ World *ServerNetworkHandler::loadWorld(const std::string &name, bool create, int
     if (!create && !WorldManager::exists(name))
         return nullptr;
 
-    return &_openWorld(name, seed);
+    try {
+        return &_openWorld(name, seed);
+    } catch (const std::exception &exception) {
+        LOG_ERROR(LogAreaID::Server, "Could not load world %s: %s", name.c_str(), exception.what());
+        return nullptr;
+    }
 }
 
 bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &error) {

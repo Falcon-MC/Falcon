@@ -19,7 +19,12 @@
 #include <cstdlib>
 #include <iterator>
 #include <random>
+#include <stdexcept>
 #include <utility>
+
+#if defined(__linux__) && defined(__GLIBC__)
+#include <malloc.h>
+#endif
 
 Level::Level(const std::string &name, int viewDistance, int64_t seed, DimensionType dimension)
         : mName(name), mViewDistance(viewDistance), mSeed(seed), mDimension(dimension),
@@ -62,8 +67,6 @@ Level &Level::operator=(Level &&other) noexcept {
     mGenerator = std::move(other.mGenerator);
     mStorage = std::move(other.mStorage);
     mChunks = std::move(other.mChunks);
-    mChunkNetworkCache = std::move(other.mChunkNetworkCache);
-    mTranslatedChunkNetworkCache = std::move(other.mTranslatedChunkNetworkCache);
     mPendingChunks = std::move(other.mPendingChunks);
     mActiveColumns = std::move(other.mActiveColumns);
     mCompletedChunks = std::move(other.mCompletedChunks);
@@ -133,9 +136,17 @@ bool Level::attachStorage(Level &overworld) {
     return mStorage.attach(overworld.mStorage, getDimensionId());
 }
 
-void Level::saveAll() {
+void Level::saveAll(bool wait) {
     if (!mStorage.isOpen())
         return;
+
+    const uint64_t failures = mStorage.getWriteFailures();
+    const bool async = mChunkWorker != nullptr && mChunkWorker->isRunning();
+    if (wait && async) {
+        mChunkWorker->waitForSaves();
+        while (drainCompletedChunks() != 0) {
+        }
+    }
 
     if (mDimension == DimensionType::Overworld) {
         saveWeather();
@@ -143,13 +154,17 @@ void Level::saveAll() {
         saveLevelDat();
     }
 
-    const bool async = mChunkWorker != nullptr && mChunkWorker->isRunning();
+    if (wait || !async) {
+        while (!mIncomingChanges.empty())
+            processGeneratedChanges();
+    }
 
     _flushPendingBlockChanges(!async);
 
     size_t saved = 0;
     for (auto &entry: mChunks) {
-        if (!entry.second.isDirty())
+        if (!entry.second.isDirty() && (mChunkWorker == nullptr ||
+                !mChunkWorker->hasFailedSave(entry.second.getX(), entry.second.getZ())))
             continue;
 
         if (async) {
@@ -171,6 +186,11 @@ void Level::saveAll() {
 
     if (saved != 0)
         LOG_INFO(LogAreaID::Server, "Saved %zu chunk(s) for level %s", saved, mName.c_str());
+    if (wait) {
+        const bool workerSuccess = !async || mChunkWorker->waitForSaves();
+        if (!workerSuccess || mStorage.getWriteFailures() != failures)
+            throw std::runtime_error("Could not save level: " + mName);
+    }
 }
 
 void Level::saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities) {
@@ -230,13 +250,24 @@ std::vector<Tag> Level::loadBlockEntities(int32_t chunkX, int32_t chunkZ) {
 }
 
 void Level::closeStorage() {
-    if (mChunkWorker != nullptr)
+    if (mChunkWorker != nullptr) {
         mChunkWorker->discardPendingGeneration();
-
-    saveAll();
-
-    if (mChunkWorker != nullptr)
         mChunkWorker->stop();
+        while (drainCompletedChunks() != 0) {
+        }
+        for (auto &entry: mChunks) {
+            if (mChunkWorker->hasFailedSave(entry.second.getX(), entry.second.getZ()))
+                entry.second.markDirty();
+        }
+        mChunkWorker.reset();
+    }
+    mPendingChunks.clear();
+    try {
+        saveAll(true);
+    } catch (...) {
+        mStorage.close();
+        throw;
+    }
 
     mStorage.close();
 }
@@ -424,11 +455,6 @@ void Level::_queueGeneratedChanges(std::vector<GeneratedBlockChange> changes) {
     if (changes.empty())
         return;
 
-    if (mIncomingChanges.empty()) {
-        mIncomingChanges = std::move(changes);
-        return;
-    }
-
     mIncomingChanges.insert(mIncomingChanges.end(), std::make_move_iterator(changes.begin()),
                             std::make_move_iterator(changes.end()));
 }
@@ -468,7 +494,6 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
 
         chunk->setBlock(localX, change.mY, localZ, change.mState);
         LightSystem::onBlockChanged(*this, change.mX, change.mY, change.mZ);
-        _invalidateChunkNetwork(key);
         mRepopulatedChunks.insert(key);
     }
 }
@@ -477,8 +502,15 @@ size_t Level::processGeneratedChanges() {
     if (mIncomingChanges.empty())
         return 0;
 
+    // Pop only the budgeted prefix so a large backlog does not add work to every tick.
+    const size_t count = std::min(mIncomingChanges.size(), (size_t) MAX_GENERATED_CHANGES_PER_TICK);
     std::vector<GeneratedBlockChange> batch;
-    batch.swap(mIncomingChanges);
+    batch.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        batch.push_back(std::move(mIncomingChanges.front()));
+        mIncomingChanges.pop_front();
+    }
+
     _applyGeneratedChanges(batch);
     return batch.size();
 }
@@ -493,9 +525,11 @@ void Level::_flushPendingBlockChanges(bool includeInFlight) {
             continue;
         }
 
-        mStorage.mergePendingBlockChanges((int32_t) (it->first >> 32), (int32_t) (it->first & 0xffffffff),
-                                          it->second);
-        it = mPendingBlockChanges.erase(it);
+        if (mStorage.mergePendingBlockChanges((int32_t) (it->first >> 32), (int32_t) (it->first & 0xffffffff),
+                                              it->second))
+            it = mPendingBlockChanges.erase(it);
+        else
+            ++it;
     }
 }
 
@@ -551,7 +585,44 @@ void Level::releaseChunkIfUnused(int32_t chunkX, int32_t chunkZ) {
         mUnloadQueue.insert(key);
 }
 
+/**
+ * Chunks can become resident without ever getting a loader: a synchronous getChunk() from a
+ * game system, or an async load that completes after the player who asked for it moved on.
+ * Nothing would queue those for unload, so they are collected here once they have stayed
+ * without a loader, outside the ticking columns, for two sweeps in a row.
+ */
+void Level::_sweepOrphanChunks() {
+    std::unordered_set<int64_t> orphans;
+
+    for (const auto &entry: mChunks) {
+        const int64_t key = entry.first;
+        if (mChunkLoaders.find(key) != mChunkLoaders.end() || mPendingChunks.find(key) != mPendingChunks.end()
+            || mActiveColumns.find(key) != mActiveColumns.end() || mOccupiedColumns.find(key) != mOccupiedColumns.end())
+            continue;
+
+        if (mOrphanCandidates.find(key) != mOrphanCandidates.end())
+            mUnloadQueue.insert(key);
+        else
+            orphans.insert(key);
+    }
+
+    mOrphanCandidates.swap(orphans);
+
+    // Feature blocks spilled into chunks that are not resident would otherwise stay in memory
+    // until the next save.
+    _flushPendingBlockChanges(false);
+}
+
+void Level::setOccupiedColumns(std::unordered_set<int64_t> columns) {
+    mOccupiedColumns = std::move(columns);
+}
+
 size_t Level::processChunkUnloads() {
+    if (++mUnloadSweepTicks >= UNLOAD_SWEEP_INTERVAL_TICKS) {
+        mUnloadSweepTicks = 0;
+        _sweepOrphanChunks();
+    }
+
     if (mUnloadQueue.empty())
         return 0;
 
@@ -560,8 +631,15 @@ size_t Level::processChunkUnloads() {
     for (auto it = mUnloadQueue.begin(); it != mUnloadQueue.end() && unloaded < MAX_CHUNK_UNLOADS_PER_TICK;) {
         const int64_t key = *it;
 
-        if (mChunkLoaders.find(key) != mChunkLoaders.end() || mPendingChunks.find(key) != mPendingChunks.end()) {
+        if (mChunkLoaders.find(key) != mChunkLoaders.end() || mOccupiedColumns.find(key) != mOccupiedColumns.end()) {
             it = mUnloadQueue.erase(it);
+            continue;
+        }
+
+        // A load or populate still in flight would insert the chunk again after it is freed;
+        // it stays queued until the result has been drained.
+        if (mPendingChunks.find(key) != mPendingChunks.end()) {
+            ++it;
             continue;
         }
 
@@ -571,23 +649,38 @@ size_t Level::processChunkUnloads() {
             continue;
         }
 
-        if (chunk->second.isDirty() && mStorage.isOpen()) {
-            if (mChunkWorker != nullptr && mChunkWorker->isRunning()) {
-                std::unique_ptr<LevelChunk> copy(new LevelChunk(chunk->second));
-                copy->invalidateNetworkCaches();
-                mChunkWorker->requestSave(std::move(copy));
-            } else
-                mStorage.saveChunk(chunk->second);
+        // The save is synchronous: an async save still queued on a worker could be overtaken by a
+        // synchronous getChunk() reading the old version back from storage. For the same reason a
+        // chunk waits while an earlier save of it is queued, which would otherwise land last. A
+        // chunk that cannot be saved stays resident instead of losing its changes.
+        if (mChunkWorker != nullptr && mChunkWorker->hasPendingSave(chunk->second.getX(), chunk->second.getZ())) {
+            ++it;
+            continue;
+        }
+
+        if (chunk->second.isDirty() && (!mStorage.isOpen() || !mStorage.saveChunk(chunk->second))) {
+            it = mUnloadQueue.erase(it);
+            continue;
         }
 
         const int32_t chunkX = chunk->second.getX();
         const int32_t chunkZ = chunk->second.getZ();
         mChunks.erase(chunk);
-        _invalidateChunkNetwork(key);
         mRepopulatedChunks.erase(key);
+        mOrphanCandidates.erase(key);
         it = mUnloadQueue.erase(it);
         unloaded++;
         _dispatchChunkEvent(FALCON_EVENT_CHUNK_UNLOAD, chunkX, chunkZ, false);
+    }
+
+    mUnloadedSinceTrim += unloaded;
+    if (mUnloadQueue.empty() && mUnloadedSinceTrim >= HEAP_TRIM_UNLOAD_THRESHOLD) {
+        mUnloadedSinceTrim = 0;
+#if defined(__linux__) && defined(__GLIBC__)
+        // glibc keeps freed chunk memory in its arenas instead of returning it to the system, so
+        // the resident size would stay at its peak after players leave an area.
+        malloc_trim(0);
+#endif
     }
 
     return unloaded;
@@ -742,9 +835,6 @@ size_t Level::drainCompletedChunks() {
                 mRepopulatedChunks.insert(key);
             }
 
-            _invalidateChunkNetwork(key);
-            mChunkNetworkCache[key] = std::move(result.mNetworkData);
-
             added++;
 
             _queueGeneratedChanges(std::move(result.mOverflowChanges));
@@ -757,34 +847,8 @@ size_t Level::drainCompletedChunks() {
     return added;
 }
 
-void Level::_invalidateChunkNetwork(int64_t key) {
-    mChunkNetworkCache.erase(key);
-    for (auto &translated: mTranslatedChunkNetworkCache)
-        translated.second.erase(key);
-}
-
 std::string Level::getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds) {
-    const int64_t key = _packChunk(chunkX, chunkZ);
-
-    if (blockIds != nullptr) {
-        std::unordered_map<int64_t, std::string> &translated = mTranslatedChunkNetworkCache[blockIds];
-        auto found = translated.find(key);
-        if (found != translated.end())
-            return found->second;
-
-        std::string data = getChunk(chunkX, chunkZ).encodeNetwork(blockIds);
-        translated[key] = data;
-        return data;
-    }
-
-
-    auto cached = mChunkNetworkCache.find(key);
-    if (cached != mChunkNetworkCache.end())
-        return cached->second;
-
-    std::string data = getChunk(chunkX, chunkZ).encodeNetwork();
-    mChunkNetworkCache[key] = data;
-    return data;
+    return getChunk(chunkX, chunkZ).encodeNetwork(blockIds);
 }
 
 int Level::getChunkSubChunkCount(int32_t chunkX, int32_t chunkZ) {
@@ -870,7 +934,6 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
 
     chunk.setBlock(x & 15, y, z & 15, state);
     LightSystem::onBlockChanged(*this, x, y, z);
-    _invalidateChunkNetwork(_packChunk(x >> 4, z >> 4));
 
     if (chunk.getBlock(x & 15, y, z & 15, 1).mName != "minecraft:air")
         mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
@@ -899,7 +962,6 @@ void Level::setBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer, con
         return;
 
     chunk.setBlock(x & 15, y, z & 15, layer, state);
-    _invalidateChunkNetwork(_packChunk(x >> 4, z >> 4));
     mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
     mLiquidPhysics.onBlockChanged(x, y, z);
 }

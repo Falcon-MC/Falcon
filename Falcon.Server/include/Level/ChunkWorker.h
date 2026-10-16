@@ -6,9 +6,13 @@
 
 #include <atomic>
 #include <cstdint>
+#include <future>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class ChunkGenerator;
@@ -19,21 +23,21 @@ struct ChunkTask {
     enum class Kind : int {
         Load = 0,
         Save = 1,
-        Populate = 2
+        Populate = 2,
+        Barrier = 3
     };
 
     Kind mKind = Kind::Load;
     int32_t mX = 0;
     int32_t mZ = 0;
     std::unique_ptr<LevelChunk> mChunk;
+    std::shared_ptr<std::promise<void>> mBarrier;
 };
 
 struct ChunkLoadResult {
     int32_t mX = 0;
     int32_t mZ = 0;
     std::unique_ptr<LevelChunk> mChunk;
-    std::string mNetworkData;
-    int mNetworkSubChunkCount = 0;
     std::vector<GeneratedBlockChange> mOverflowChanges;
     bool mReplacesResident = false;
     bool mGenerated = false;
@@ -70,6 +74,16 @@ public:
 
     void requestPopulate(std::unique_ptr<LevelChunk> chunk);
 
+    /**
+     * Whether a save requested for this chunk has not been written yet. A chunk must not be
+     * freed and written synchronously meanwhile, or the older queued copy would overwrite it.
+     */
+    bool hasPendingSave(int32_t chunkX, int32_t chunkZ) const;
+
+    bool hasFailedSave(int32_t chunkX, int32_t chunkZ) const;
+
+    bool waitForSaves();
+
     void discardPendingGeneration();
 
     std::vector<ChunkLoadResult> drainCompleted();
@@ -96,12 +110,18 @@ private:
 
     size_t _queueIndexFor(int32_t chunkX, int32_t chunkZ) const;
 
+    static int64_t _packChunk(int32_t chunkX, int32_t chunkZ);
+
     const ChunkGenerator &mGenerator;
     LevelStorage &mStorage;
 
     std::vector<std::unique_ptr<GeneratorChunkSource>> mSources;
     std::vector<std::unique_ptr<TaskQueue<ChunkTask>>> mQueues;
     TaskQueue<ChunkLoadResult> mCompleted;
+
+    mutable std::mutex mPendingSavesMutex;
+    std::unordered_map<int64_t, size_t> mPendingSaves;
+    std::unordered_set<int64_t> mFailedSaves;
 
     std::vector<std::thread> mThreads;
     std::atomic<bool> mRunning;

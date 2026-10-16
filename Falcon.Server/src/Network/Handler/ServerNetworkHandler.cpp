@@ -428,7 +428,9 @@ void ServerNetworkHandler::_registerVanillaDefinitions() {
 }
 
 ServerNetworkHandler::~ServerNetworkHandler() {
-    stopServerListening();
+    try { stopServerListening(); } catch (...) {
+        if (mNetworkHandler != nullptr) mNetworkHandler->disconnect();
+    }
 
     if (mNetworkHandler != nullptr)
         mNetworkHandler->removeListener(this);
@@ -595,7 +597,23 @@ void ServerNetworkHandler::stopServerListening() {
     if (!mIsListening)
         return;
 
-    mPluginManager->disableAll();
+    // Prevent destruction from retrying partially completed shutdown after an exception.
+    mIsListening = false;
+    struct DisconnectOnExit {
+        NetworkHandler *handler;
+        ~DisconnectOnExit() { try { handler->disconnect(); } catch (...) {} }
+    } disconnectOnExit{mNetworkHandler.get()};
+
+    std::exception_ptr error;
+    const auto finish = [&error](const std::function<void()> &step) {
+        try {
+            step();
+        } catch (...) {
+            if (!error)
+                error = std::current_exception();
+        }
+    };
+    finish([this]() { mPluginManager->disableAll(); });
 
     if (!mPlayers.empty()) {
         LOG_INFO(LogAreaID::Server, "Saving data for %zu player(s)", mPlayers.size());
@@ -603,37 +621,82 @@ void ServerNetworkHandler::stopServerListening() {
         for (auto &entry: mPlayers) {
             ServerPlayer &player = entry.second;
 
-            if (!player.getName().empty())
-                _savePlayerData(player);
-
-            _disconnect(entry.first, player.localize("falcon.disconnect.disconnected"));
+            finish([this, &player]() {
+                if (!player.getName().empty()) _savePlayerData(player, true);
+            });
+            finish([this, &entry, &player]() {
+                _disconnect(entry.first, player.localize("falcon.disconnect.disconnected"));
+            });
         }
 
         mPlayers.clear();
-        mNetworkHandler->runEvents();
+        finish([this]() { mNetworkHandler->runEvents(); });
     }
 
-    saveWorldDynamicProperties();
-
-    saveAllActors();
+    finish([this]() { saveWorldDynamicProperties(true); });
+    finish([this]() { saveAllActors(); });
 
     for (World *world: mWorlds.getWorlds()) {
         LOG_INFO(LogAreaID::Server, "Saving level %s", world->getName().c_str());
         AutoCompaction::untrack(world->getOverworld());
-        world->close();
+        finish([world]() { world->close(); });
     }
 
-    AuthKeyProvider::getInstance().stop();
-
-    mNetworkHandler->disconnect();
-    mIsListening = false;
+    finish([]() { AuthKeyProvider::getInstance().stop(); });
+    finish([this]() { mNetworkHandler->disconnect(); });
 
     LOG_INFO(LogAreaID::Server, "Server stopped.");
+    if (error) std::rethrow_exception(error);
 }
 
-void ServerNetworkHandler::tick() {
+void ServerNetworkHandler::tick(bool paused) {
+    mSimulationPaused = paused;
     if (!mIsListening)
         return;
+
+    ++mChunkStreamTick;
+    if (paused) {
+        mNetworkHandler->runEvents();
+        std::vector<std::string> commands;
+        {
+            std::lock_guard<std::mutex> lock(mConsoleQueueMutex);
+            while (!mConsoleQueue.empty()) {
+                commands.push_back(std::move(mConsoleQueue.front()));
+                mConsoleQueue.pop();
+            }
+        }
+        for (const std::string &command: commands)
+            executeConsoleCommand(command);
+        std::vector<std::function<void()>> tasks;
+        {
+            std::lock_guard<std::mutex> lock(mMainThreadTaskMutex);
+            tasks.swap(mMainThreadTasks);
+        }
+        for (const auto &task: tasks) task();
+        for (Level *level: getLevels()) {
+            level->drainCompletedChunks();
+            level->processGeneratedChanges();
+            const std::vector<int64_t> repopulated = level->consumeRepopulatedChunks();
+            if (repopulated.empty())
+                continue;
+            for (auto &entry: mPlayers) {
+                ServerPlayer &player = entry.second;
+                if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent || !player.isIn(*level))
+                    continue;
+                for (const int64_t hash: repopulated)
+                    ChunkStreamHandler::invalidateChunk(player, hash);
+            }
+        }
+        for (auto &entry: mPlayers) {
+            ServerPlayer &player = entry.second;
+            if (player.getLoginState() >= ServerPlayer::LoginState::StartGameSent && player.hasChunkPosition()) {
+                _sendChunks(player);
+                _checkTerrainReady(player);
+            }
+            player.getAcknowledgements().flush(*this, entry.first);
+        }
+        return;
+    }
 
     const std::chrono::steady_clock::time_point tickStart = std::chrono::steady_clock::now();
 
@@ -668,18 +731,8 @@ void ServerNetworkHandler::tick() {
             }
         }
 
-        for (std::string &commandLine: commandLines) {
-            PluginEvent commandEvent;
-            commandEvent.mType = FALCON_EVENT_SERVER_COMMAND;
-            commandEvent.mCancellable = true;
-            commandEvent.mMessage = &commandLine;
-            mPluginManager->dispatch(commandEvent);
-            if (commandEvent.mCancelled)
-                continue;
-
-            ServerCommandOrigin sender(this);
-            mCommands.dispatch(sender, commandLine);
-        }
+        for (const std::string &commandLine: commandLines)
+            executeConsoleCommand(commandLine);
     }
 
     {
@@ -730,7 +783,7 @@ void ServerNetworkHandler::tick() {
         broadcastPlayerMove(entry.second);
 
     for (World *world: mWorlds.getWorlds()) {
-        world->getOverworld().processChunkUnloads();
+        _processChunkUnloads(world->getOverworld());
         _tickDimension(*world, world->getLevel(DimensionType::Nether));
         _tickDimension(*world, world->getLevel(DimensionType::TheEnd));
     }
@@ -966,6 +1019,25 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
         }
         if (gate == LoginGate::Ignore)
             return;
+
+        if (mSimulationPaused) {
+            switch (packetId) {
+                case MinecraftPacketIds::RequestNetworkSettings:
+                case MinecraftPacketIds::Login:
+                case MinecraftPacketIds::ClientToServerHandshake:
+                case MinecraftPacketIds::ResourcePackClientResponse:
+                case MinecraftPacketIds::ResourcePackChunkRequest:
+                case MinecraftPacketIds::ClientCacheStatus:
+                case MinecraftPacketIds::SetLocalPlayerAsInitialized:
+                case MinecraftPacketIds::RequestChunkRadius:
+                case MinecraftPacketIds::SubChunkRequest:
+                case MinecraftPacketIds::NetworkStackLatency:
+                case MinecraftPacketIds::PacketViolationWarning:
+                    break;
+                default:
+                    return;
+            }
+        }
 
         const PacketCodecContext &context = getCodecContext(id);
         const ProtocolCodec &codec = context.getCodec();
@@ -1272,6 +1344,18 @@ void ServerNetworkHandler::setPlayerOp(ServerPlayer &player, bool isOp) {
 void ServerNetworkHandler::queueConsoleCommand(const std::string &commandLine) {
     std::lock_guard<std::mutex> lock(mConsoleQueueMutex);
     mConsoleQueue.push(commandLine);
+}
+
+void ServerNetworkHandler::executeConsoleCommand(std::string commandLine) {
+    PluginEvent event;
+    event.mType = FALCON_EVENT_SERVER_COMMAND;
+    event.mCancellable = true;
+    event.mMessage = &commandLine;
+    mPluginManager->dispatch(event);
+    if (!event.mCancelled) {
+        ServerCommandOrigin sender(this);
+        mCommands.dispatch(sender, commandLine);
+    }
 }
 
 void ServerNetworkHandler::postToMainThread(std::function<void()> task) {

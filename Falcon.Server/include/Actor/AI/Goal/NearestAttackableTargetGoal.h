@@ -31,5 +31,6 @@ private:
     bool _matches(ServerNetworkHandler &owner, MobActor &mob, const Actor &candidate) const;
 
     float mRangeSquared;
+    float mMaxRangeSquared;
     std::vector<Entry> mEntries;
 };

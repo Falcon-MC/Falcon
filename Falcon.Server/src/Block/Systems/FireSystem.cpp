@@ -262,6 +262,15 @@ namespace {
         extinguish(owner, level, position);
     }
 
+    /**
+     * Contact checks run for every player and actor each tick, so they peek the block in place
+     * instead of copying its state.
+     */
+    bool isFireAt(Level &level, const Vector3i &position) {
+        const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
+        return state != nullptr && FireSystem::matches(state->mName);
+    }
+
     void touchActor(ServerNetworkHandler &owner, Level &level, ServerActor &actor) {
         if (actor.isDead() || actor.isProjectile() || !actor.isIn(level))
             return;
@@ -273,7 +282,7 @@ namespace {
         const Vector3i block((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                              (int32_t) std::floor(position.z));
 
-        if (!FireSystem::matches(stateAt(level, block).mName))
+        if (!isFireAt(level, block))
             return;
 
         actor.hurt(owner, FireSystem::CONTACT_DAMAGE,
@@ -300,7 +309,7 @@ namespace {
         const Vector3i block((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                              (int32_t) std::floor(position.z));
 
-        if (!FireSystem::matches(stateAt(level, block).mName))
+        if (!isFireAt(level, block))
             return;
 
         owner.hurt(player, FireSystem::CONTACT_DAMAGE,

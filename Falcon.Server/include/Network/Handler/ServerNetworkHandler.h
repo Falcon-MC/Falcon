@@ -95,7 +95,7 @@ public:
 
     void stopServerListening();
 
-    void tick();
+    void tick(bool paused = false);
 
     void setMotd(const std::string &serverName, const std::string &subName);
 
@@ -108,6 +108,10 @@ public:
     int getActivePlayerCount() const { return (int) mNetworkHandler->getConnectionCount(); }
 
     int64_t getCurrentTick() const { return mCurrentTick; }
+
+    uint64_t getChunkStreamTick() const {
+        return mChunkStreamTick;
+    }
 
     int64_t getUptimeSeconds() const;
 
@@ -368,7 +372,7 @@ public:
 
     void saveAllActors();
 
-    void autoSave();
+    void autoSave(bool wait = false);
 
     bool syncActorPersistence(Level &level, const std::vector<int64_t> &activeColumns);
 
@@ -380,7 +384,7 @@ public:
 
     void loadWorldDynamicProperties();
 
-    void saveWorldDynamicProperties();
+    void saveWorldDynamicProperties(bool checked = false);
 
     std::vector<std::unique_ptr<ItemActor>> &getItemEntities() { return mItemEntities; }
 
@@ -404,6 +408,12 @@ public:
     ServerPlayer *getPlayerByName(const std::string &name);
 
     std::vector<ServerPlayer *> resolveTargets(CommandOrigin &sender, const std::string &selector);
+
+    /**
+     * The non-player actors an @e selector matches in the sender's world. Players are returned by
+     * resolveTargets, so a command that accepts any entity calls both.
+     */
+    std::vector<ServerActor *> resolveActorTargets(CommandOrigin &sender, const std::string &selector);
 
     std::vector<std::string> getPlayerNames() const;
 
@@ -618,6 +628,8 @@ public:
     void sendPacketTo(const NetworkIdentifier &id, const Packet &packet) override;
 
     void queueConsoleCommand(const std::string &commandLine);
+    // Only call on the thread that owns the server state.
+    void executeConsoleCommand(std::string commandLine);
 
     void postToMainThread(std::function<void()> task);
 
@@ -718,7 +730,7 @@ private:
 
     void _validatePackDependencies();
 
-    void _savePlayerData(const ServerPlayer &player);
+    void _savePlayerData(const ServerPlayer &player, bool checked = false);
 
     void _handleVoidDamage(ServerPlayer &player);
 
@@ -769,6 +781,8 @@ private:
 
     void _tickDimension(World &world, Level &level);
 
+    void _processChunkUnloads(Level &level);
+
     void _broadcastFluidChanges(Level &level);
 
     void _sendWorldState(ServerPlayer &player);
@@ -799,6 +813,7 @@ private:
     PingedCompatibleServer mAnnouncement;
     int mMaxPlayers;
     bool mIsListening;
+    bool mSimulationPaused = false;
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
@@ -834,6 +849,7 @@ private:
     std::vector<std::unique_ptr<ItemActor>> mItemEntities;
     uint64_t mNextRuntimeId;
     int64_t mCurrentTick = 0;
+    uint64_t mChunkStreamTick = 0;
     std::chrono::steady_clock::time_point mStartTime = std::chrono::steady_clock::now();
 
     Profiler mProfiler;

@@ -112,25 +112,44 @@ namespace {
         return isNegation(op) ? result != expected : result == expected;
     }
 
-    std::vector<std::string> familiesOf(const Actor &actor) {
-        if (actor.isPlayer())
-            return {"player"};
+    const char *const PLAYER_FAMILY = "player";
+    const char *const TYPE_FAMILY_COMPONENT = "minecraft:type_family";
 
-        if (const MobActor *mob = dynamic_cast<const MobActor *>(&actor))
-            return mob->getFamilies();
+    const std::string &textOf(const json::Value &value) {
+        static const std::string empty;
+        return value.isString() ? value.mString : empty;
+    }
 
-        std::vector<std::string> families;
-        const ServerActor *serverActor = dynamic_cast<const ServerActor *>(&actor);
-        const json::Value *definition = serverActor == nullptr ? nullptr
-                                                               : EntityDefinitions::find(serverActor->getIdentifier());
-        const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
-        const json::Value *typeFamily = components == nullptr ? nullptr : components->get("minecraft:type_family");
-        const json::Value *family = typeFamily == nullptr ? nullptr : typeFamily->get("family");
-        if (family != nullptr) {
-            for (const std::unique_ptr<json::Value> &entry: family->mArray)
-                families.push_back(entry->string());
+    /**
+     * Reads the family list in place instead of copying it: `is_family` runs for every candidate a targeting or
+     * sensing scan looks at, every tick.
+     */
+    bool hasFamily(const Actor *actor, const json::Value *value) {
+        if (actor == nullptr || value == nullptr)
+            return false;
+
+        const std::string &expected = textOf(*value);
+        if (actor->isPlayer())
+            return expected == PLAYER_FAMILY;
+
+        const json::Value *typeFamily = nullptr;
+        if (const MobActor *mob = dynamic_cast<const MobActor *>(actor)) {
+            typeFamily = mob->getComponent(TYPE_FAMILY_COMPONENT);
+        } else if (const ServerActor *serverActor = dynamic_cast<const ServerActor *>(actor)) {
+            const json::Value *definition = EntityDefinitions::find(serverActor->getIdentifier());
+            const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
+            typeFamily = components == nullptr ? nullptr : components->get(TYPE_FAMILY_COMPONENT);
         }
-        return families;
+
+        const json::Value *family = typeFamily == nullptr ? nullptr : typeFamily->get("family");
+        if (family == nullptr)
+            return false;
+
+        for (const std::unique_ptr<json::Value> &entry: family->mArray) {
+            if (textOf(*entry) == expected)
+                return true;
+        }
+        return false;
     }
 
     Vector3i blockPosition(const Actor &actor) {
@@ -232,19 +251,13 @@ namespace {
         return false;
     }
 
-    std::vector<std::string> vehicleFamiliesOf(ServerNetworkHandler &owner, const Actor &actor) {
-        const Actor *vehicle = RideSystem::resolve(owner, actor.getVehicleId());
-        return vehicle == nullptr ? std::vector<std::string>() : familiesOf(*vehicle);
+    const Actor *vehicleOf(ServerNetworkHandler &owner, const Actor &actor) {
+        return RideSystem::resolve(owner, actor.getVehicleId());
     }
 
-    std::vector<std::string> controllerFamiliesOf(ServerNetworkHandler &owner, const Actor &actor) {
+    const Actor *controllerOf(ServerNetworkHandler &owner, const Actor &actor) {
         const std::vector<int64_t> &passengers = actor.getPassengers();
-        const Actor *controller = passengers.empty() ? nullptr : RideSystem::resolve(owner, passengers.front());
-        return controller == nullptr ? std::vector<std::string>() : familiesOf(*controller);
-    }
-
-    bool containsFamily(const std::vector<std::string> &families, const json::Value *value) {
-        return value != nullptr && std::find(families.begin(), families.end(), value->string()) != families.end();
+        return passengers.empty() ? nullptr : RideSystem::resolve(owner, passengers.front());
     }
 
     const char *const COLOR_NAMES[] = {"white", "orange", "magenta", "light_blue", "yellow", "lime", "pink",
@@ -512,17 +525,17 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     }
 
     if (test == "is_family") {
-        const bool result = containsFamily(familiesOf(*target), value);
+        const bool result = hasFamily(target, value);
         return isNegation(op) ? !result : result;
     }
 
     if (test == "is_vehicle_family") {
-        const bool result = containsFamily(vehicleFamiliesOf(owner, *target), value);
+        const bool result = hasFamily(vehicleOf(owner, *target), value);
         return isNegation(op) ? !result : result;
     }
 
     if (test == "is_controlling_passenger_family") {
-        const bool result = containsFamily(controllerFamiliesOf(owner, *target), value);
+        const bool result = hasFamily(controllerOf(owner, *target), value);
         return isNegation(op) ? !result : result;
     }
 

@@ -14,14 +14,18 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <stdexcept>
 #include <unordered_set>
 #include <vector>
 
-void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player) {
+void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player, bool checked) {
     if (mPlayerData.saveData(player.getName(), player.saveNbt(getWorldFor(player).getName())))
         LOG_INFO(LogAreaID::Server, "Saved player data for %s", player.getName().c_str());
-    else
+    else {
         LOG_WARN(LogAreaID::Server, "Could not save player data for %s", player.getName().c_str());
+        if (checked)
+            throw std::runtime_error("Could not save player: " + player.getName());
+    }
 }
 
 void ServerNetworkHandler::_loadPlayerData(ServerPlayer &player) {
@@ -179,23 +183,32 @@ void ServerNetworkHandler::saveAllActors() {
     }
 }
 
-void ServerNetworkHandler::autoSave() {
+void ServerNetworkHandler::autoSave(bool wait) {
     if (!getLevel().isStorageOpen())
         return;
 
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    std::vector<std::pair<Level *, uint64_t>> failures;
+    if (wait) {
+        for (Level *level: getLevels())
+            failures.emplace_back(level, level->getSaveFailureCount());
+    }
 
     for (auto &entry: mPlayers) {
         const ServerPlayer &player = entry.second;
         if (player.isSpawned() && !player.getName().empty())
-            _savePlayerData(player);
+            _savePlayerData(player, wait);
     }
 
-    saveWorldDynamicProperties();
+    saveWorldDynamicProperties(wait);
     saveAllActors();
 
     for (World *world: mWorlds.getWorlds())
-        world->saveAll();
+        world->saveAll(wait);
+    for (const auto &entry: failures) {
+        if (entry.first->getSaveFailureCount() != entry.second)
+            throw std::runtime_error("Could not save level: " + entry.first->getName());
+    }
 
     const long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - start).count();

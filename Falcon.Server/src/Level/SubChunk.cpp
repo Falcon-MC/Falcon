@@ -10,7 +10,6 @@
 
 SubChunk::SubChunk(int8_t y) : mY(y) {
     mPalette.push_back(BlockState("minecraft:air"));
-    mBlocks.assign(BLOCK_COUNT, 0);
     mBiomePalette.push_back(1);
 }
 
@@ -162,6 +161,9 @@ int SubChunk::_bitsPerBlock(size_t paletteSize) {
 }
 
 const BlockState &SubChunk::getBlock(int x, int y, int z) const {
+    if (mBlocks.empty())
+        return mPalette[0];
+
     return mPalette[mBlocks[_index(x, y, z)]];
 }
 
@@ -200,6 +202,15 @@ uint16_t SubChunk::_paletteIndexForLayer1(const BlockState &state) {
 }
 
 void SubChunk::setBlock(int x, int y, int z, const BlockState &state) {
+    // Layer 0 indices are only allocated once the section holds a second state: most
+    // sections above the terrain stay uniform air and cost no 8 KB index array.
+    if (mBlocks.empty()) {
+        if (mPalette[0] == state)
+            return;
+
+        mBlocks.assign(BLOCK_COUNT, 0);
+    }
+
     mBlocks[_index(x, y, z)] = _paletteIndexFor(state);
 }
 
@@ -268,7 +279,7 @@ void SubChunk::_writeStorage(BinaryStream &stream, bool persistent,
     int blockIndex = 0;
     for (int word = 0; word < wordCount; word++) {
         uint32_t packed = 0;
-        for (int slot = 0; slot < blocksPerWord && blockIndex < BLOCK_COUNT; slot++) {
+        for (int slot = 0; slot < blocksPerWord && blockIndex < BLOCK_COUNT && !blocks.empty(); slot++) {
             packed |= ((uint32_t) blocks[blockIndex]) << (slot * bitsPerBlock);
             blockIndex++;
         }
@@ -409,6 +420,9 @@ bool SubChunk::readPersistent(ReadOnlyBinaryStream &stream, bool *replacedUnknow
 
     if (!_readStorage(stream, mPalette, mBlocks, replacedUnknown))
         return false;
+
+    if (mPalette.size() == 1)
+        std::vector<uint16_t>().swap(mBlocks);
 
     mPalette2.clear();
     mBlocks2.clear();
