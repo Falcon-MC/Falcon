@@ -606,7 +606,12 @@ void ServerNetworkHandler::stopServerListening() {
 
     std::exception_ptr error;
     const auto finish = [&error](const std::function<void()> &step) {
-        try { step(); } catch (...) { if (!error) error = std::current_exception(); }
+        try {
+            step();
+        } catch (...) {
+            if (!error)
+                error = std::current_exception();
+        }
     };
     finish([this]() { mPluginManager->disableAll(); });
 

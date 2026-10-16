@@ -137,7 +137,9 @@ public:
 
     void saveAll(bool wait = false);
 
-    uint64_t getSaveFailureCount() const { return mStorage.getWriteFailures(); }
+    uint64_t getSaveFailureCount() const {
+        return mStorage.getWriteFailures();
+    }
 
     void closeStorage();
 

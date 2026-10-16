@@ -59,7 +59,9 @@ public:
 
     bool isOpen() const { return mDb != nullptr; }
 
-    uint64_t getWriteFailures() const { return mWriteFailures.load(); }
+    uint64_t getWriteFailures() const {
+        return mWriteFailures.load();
+    }
 
     bool saveChunk(const LevelChunk &chunk);
 

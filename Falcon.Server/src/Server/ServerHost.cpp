@@ -283,7 +283,11 @@ void ServerHost::stop() {
         return;
 
     std::exception_ptr error;
-    try { shutdown(); } catch (...) { error = std::current_exception(); }
+    try {
+        shutdown();
+    } catch (...) {
+        error = std::current_exception();
+    }
     for (World *world: mHandler->getWorlds().getWorlds())
         AutoCompaction::untrack(world->getOverworld());
     mHandler.reset();

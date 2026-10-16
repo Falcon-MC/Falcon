@@ -125,7 +125,11 @@ int main() {
         require(std::filesystem::exists(config.dataDirectory / "worlds" / "World" / "level.dat"),
                 "World was not saved");
         bool rejected = false;
-        try { await(server.save()); } catch (...) { rejected = true; }
+        try {
+            await(server.save());
+        } catch (...) {
+            rejected = true;
+        }
         require(rejected, "Stopped server accepted request");
         const unsigned int callsAfterStop = logCalls.load();
         require(callsAfterStop != 0, "Log callback was not called");
