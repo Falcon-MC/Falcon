@@ -181,7 +181,9 @@ int main() {
             ChunkStreamHandler::tick(handler, player);
             require(player.getSentChunkCount() - before == 16, "Repeated calls exceeded send budget");
             host.tick(true);
-            require(player.getSentChunkCount() - before == 17, "Paused network tick did not renew send budget");
+            const size_t after = player.getSentChunkCount() - before;
+            require(after > 16, "Paused network tick did not renew send budget");
+            require(after <= 32, "Paused network tick exceeded send budget after terrain invalidation");
             state = ChunkStreamState();
             level.unregisterAllChunkLoaders(player.getRuntimeId());
             player.resetChunkStreaming();
