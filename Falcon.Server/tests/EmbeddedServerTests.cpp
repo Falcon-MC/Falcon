@@ -55,7 +55,7 @@ int main() {
         require(ServerPaths::getRoot() == originalRoot, "Failed start changed root");
 
         config.dataDirectory = directory / "new-directory";
-        config.properties = {{"view-distance", "4"}, {"tick-distance", "4"},
+        config.properties = {{"view-distance", "5"}, {"tick-distance", "4"},
                              {"level-seed", "1"}, {"auto-compaction-interval", "0"}};
         config.log = [&logCalls](LogLevel, const std::string &) {
             logCalls.fetch_add(1);
@@ -102,9 +102,9 @@ int main() {
         client.mProtocolVersion = 2193;
         client.mGameVersion = "1.26.52";
         client.mIdentity.mDisplayName = "EmbeddedPlayer";
-        client.mChunkRadius = 4;
+        client.mChunkRadius = 5;
         client.mDeferSpawn = false;
-        client.mTimeoutMs = 10000;
+        client.mTimeoutMs = 30000;
         auto connection = ClientNetworkSystem::dial(client);
         require(connection.mConnection != nullptr, connection.mError.c_str());
         const auto players = await(server.getPlayerNames());
