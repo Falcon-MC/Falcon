@@ -14,7 +14,6 @@
 #include <chrono>
 
 namespace {
-    const float MAX_BREAKING_DISTANCE_SQUARED = 256.0f;
     const int32_t BREAKING_FX_INTERVAL = 5;
 
     class ProfiledPlayerScope {
@@ -115,14 +114,7 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
 
     if (player.isBreakingBlock()) {
         const Vector3i breakingPosition = player.getBreakingBlockPosition();
-        const Vector3f breakingCenter((float) breakingPosition.x + 0.5f, (float) breakingPosition.y + 0.5f,
-                                      (float) breakingPosition.z + 0.5f);
-        const Vector3f feet = player.getPosition();
-        const float dx = feet.x - breakingCenter.x;
-        const float dy = feet.y - breakingCenter.y;
-        const float dz = feet.z - breakingCenter.z;
-
-        if (dx * dx + dy * dy + dz * dz > MAX_BREAKING_DISTANCE_SQUARED) {
+        if (!BlockActionHandler::canBreakBlock(*this, player, breakingPosition)) {
             BlockActionHandler::stopBreakingBlock(*this, player);
         } else {
             BlockActionHandler::continueBreakingBlock(*this, player);

@@ -188,6 +188,12 @@ public:
         return getFloat("player-movement-action-direction-threshold");
     }
 
+    bool getServerAuthoritativeBlockBreaking() const {
+        return getBool("server-authoritative-block-breaking");
+    }
+
+    float getServerAuthoritativeBlockBreakingRangeScalar() const;
+
     TransportLayer getTransportLayer() const;
 
     bool setProperty(const std::string &key, const std::string &value);

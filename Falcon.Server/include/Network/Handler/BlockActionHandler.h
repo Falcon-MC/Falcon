@@ -46,9 +46,13 @@ public:
 
     static bool canInteractWithBlock(ServerPlayer &player, const Vector3i &position);
 
+    static bool canBreakBlock(const ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
+
     static void placeBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemUseTransaction &transaction);
 
 private:
+    static bool _canInteractWithBlock(ServerPlayer &player, const Vector3i &position, float rangeScalar);
+
     static constexpr int32_t NETHER_PLACEMENT_LIMIT = 127;
 
     static constexpr float MAX_SYNC_DISTANCE_SQUARED = 10000.0f;

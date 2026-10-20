@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <cmath>
 #include <fstream>
 #include <map>
 #include <set>
@@ -93,6 +94,8 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"server-authoritative-movement-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"server-authoritative-dismount-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"server-authoritative-entity-interactions-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"server-authoritative-block-breaking", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"server-authoritative-block-breaking-range-scalar", "1.5", PropertyKind::Float, 1, 0, nullptr},
             {"server-authoritative-block-breaking-pick-range-scalar", "1.5", PropertyKind::Float, 0, 0, nullptr},
             {"server-build-radius-ratio", "Disabled", PropertyKind::String, 0, 0, nullptr},
             {"player-position-acceptance-threshold", "0.5", PropertyKind::Float, 0, 0, nullptr},
@@ -128,6 +131,9 @@ std::string PropertiesSettings::getDefaultContents() {
     std::string contents;
 
     for (const PropertyDefinition &definition: getDefinitions()) {
+        // Accept the BDS spelling on input without generating two competing settings.
+        if (std::string(definition.mKey) == "server-authoritative-block-breaking-pick-range-scalar")
+            continue;
         contents += definition.mKey;
         contents += "=";
         contents += definition.mDefault;
@@ -169,6 +175,8 @@ bool PropertiesSettings::_isValidValue(const PropertyDefinition &definition, con
         case PropertyKind::String:
             return true;
         case PropertyKind::Bool:
+            if (std::string(definition.mKey) == "server-authoritative-block-breaking")
+                return value == "true" || value == "false";
             return value == "true" || value == "false" || value == "1" || value == "0";
         case PropertyKind::Int: {
             if (!isInteger(value))
@@ -178,7 +186,14 @@ bool PropertiesSettings::_isValidValue(const PropertyDefinition &definition, con
             return parsed >= definition.mMinimum && parsed <= definition.mMaximum;
         }
         case PropertyKind::Float:
-            return isFloating(value);
+            if (!isFloating(value))
+                return false;
+            if (std::string(definition.mKey) == "server-authoritative-block-breaking-range-scalar"
+                || std::string(definition.mKey) == "server-authoritative-block-breaking-pick-range-scalar") {
+                const float scalar = std::strtof(value.c_str(), nullptr);
+                return std::isfinite(scalar) && scalar > 1.0f;
+            }
+            return true;
         case PropertyKind::Enum:
             return isListed(value, definition.mValues);
     }
@@ -384,6 +399,15 @@ bool PropertiesSettings::getBool(const char *key) const {
     const bool fallback = definition != nullptr
                           && (std::string(definition->mDefault) == "true" || std::string(definition->mDefault) == "1");
     return getBool(key, fallback);
+}
+
+float PropertiesSettings::getServerAuthoritativeBlockBreakingRangeScalar() const {
+    // Prefer Falcon's public spelling; retain the BDS pick-range spelling for existing files.
+    const char *key = hasProperty("server-authoritative-block-breaking-range-scalar")
+                          ? "server-authoritative-block-breaking-range-scalar"
+                          : "server-authoritative-block-breaking-pick-range-scalar";
+    const float scalar = getFloat(key);
+    return std::isfinite(scalar) && scalar > 1.0f ? scalar : 1.5f;
 }
 
 GameType PropertiesSettings::getGameType() const {

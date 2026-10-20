@@ -418,6 +418,10 @@ int32_t BlockActionHandler::breakSpeedEventData(double speed) {
 }
 
 bool BlockActionHandler::canInteractWithBlock(ServerPlayer &player, const Vector3i &position) {
+    return _canInteractWithBlock(player, position, 1.0f);
+}
+
+bool BlockActionHandler::_canInteractWithBlock(ServerPlayer &player, const Vector3i &position, float rangeScalar) {
     const float maxDistance = player.getGameType() == (int32_t) GameType::Creative ? 13.0f : 7.0f;
 
     const Vector3f feet = player.getPosition();
@@ -428,8 +432,10 @@ bool BlockActionHandler::canInteractWithBlock(ServerPlayer &player, const Vector
     const float dy = target.y - eyePosition.y;
     const float dz = target.z - eyePosition.z;
 
-    const float distanceSquared = dx * dx + dy * dy + dz * dz;
-    if (distanceSquared > maxDistance * maxDistance)
+    const double distanceSquared = (double) dx * dx + (double) dy * dy + (double) dz * dz;
+    const double maximumSquared = (double) maxDistance * maxDistance * (double) rangeScalar * rangeScalar;
+    if (!std::isfinite(distanceSquared) || !std::isfinite(rangeScalar) || rangeScalar < 1.0f
+        || distanceSquared > maximumSquared)
         return false;
 
     const float yawRad = player.getRotation().y * MathConstants::PI_F / 180.0f;
@@ -448,6 +454,14 @@ bool BlockActionHandler::canInteractWithBlock(ServerPlayer &player, const Vector
     const float dot = directionX * eyePosition.x + directionZ * eyePosition.z;
     const float dot1 = directionX * target.x + directionZ * target.z;
     return (dot1 - dot) >= -REACH_MAX_DIFF;
+}
+
+bool BlockActionHandler::canBreakBlock(const ServerNetworkHandler &owner, ServerPlayer &player,
+                                       const Vector3i &position) {
+    const PropertiesSettings &properties = owner.getProperties();
+    const float scalar = properties.getServerAuthoritativeBlockBreaking()
+                             ? properties.getServerAuthoritativeBlockBreakingRangeScalar() : 1.0f;
+    return _canInteractWithBlock(player, position, scalar);
 }
 
 void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
@@ -617,6 +631,13 @@ void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerP
     if (position.y < level.getMinY() || position.y > level.getMaxY())
         return;
 
+    if (!canBreakBlock(owner, player, position)) {
+        if (player.isBreakingBlock())
+            stopBreakingBlock(owner, player);
+        sendCurrentBlockState(owner, player, position);
+        return;
+    }
+
     if (player.isBreakingBlock() && player.getBreakingBlockPosition() == position)
         return;
 
@@ -671,6 +692,10 @@ void BlockActionHandler::continueBreakingBlock(ServerNetworkHandler &owner, Serv
         return;
 
     const Vector3i position = player.getBreakingBlockPosition();
+    if (!canBreakBlock(owner, player, position)) {
+        stopBreakingBlock(owner, player);
+        return;
+    }
     Level &level = owner.getLevelFor(player);
     if (position.y < level.getMinY() || position.y > level.getMaxY()) {
         stopBreakingBlock(owner, player);
@@ -704,7 +729,7 @@ void BlockActionHandler::continueBreakingBlock(ServerNetworkHandler &owner, Serv
 
     player.addBreakProgress(player.getBreakSpeed());
 
-    if (player.getBreakProgress() >= 1.0) {
+    if (owner.getProperties().getServerAuthoritativeBlockBreaking() && player.getBreakProgress() >= 1.0) {
         completeBreakingBlock(owner, player, position);
     }
 }
@@ -715,7 +740,7 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
     if (position.y < playerLevel.getMinY() || position.y > playerLevel.getMaxY())
         return;
 
-    if (!canInteractWithBlock(player, position) || isInSpawnProtection(owner, player, playerLevel, position)) {
+    if (!canBreakBlock(owner, player, position) || isInSpawnProtection(owner, player, playerLevel, position)) {
         sendCurrentBlockState(owner, player, position);
         return;
     }

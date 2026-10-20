@@ -480,6 +480,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mDisablingPlayerInteractions = owner.getProperties().getDisablePlayerInteraction();
     startGame.mClientSideGenerationEnabled = owner.getProperties().getClientSideChunkGenerationEnabled();
     startGame.mDisablingCustomSkins = owner.getProperties().getDisableCustomSkins();
+    startGame.mServerAuthoritativeBlockBreaking = owner.getProperties().getServerAuthoritativeBlockBreaking();
     startGame.mServerChunkTickRange = owner.getProperties().getTickDistance();
     startGame.mVanillaVersion = owner.getAnnouncement().mGameVersion;
     startGame.mLevelId = "RmFsY29u";
