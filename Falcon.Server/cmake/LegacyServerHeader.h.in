@@ -1,0 +1,3 @@
+#pragma once
+
+#include "@FALCON_CURRENT_SERVER_HEADER@"

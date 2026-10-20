@@ -1,11 +1,11 @@
-#include "Block/BlockPaletteRegistry.h"
+#include "World/Level/Block/BlockPaletteRegistry.h"
 #include "BlockPaletteNbt.h"
 #include "Core/Archive/Gzip.h"
 #include "Core/NBT/NbtIo.h"
-#include "Level/Generator/Biome/BiomeChunkGenDataRegistry.h"
-#include "Level/Level.h"
-#include "Level/LevelStorage.h"
-#include "Level/World.h"
+#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+#include "World/Level/Level.h"
+#include "World/Level/Storage/LevelStorage.h"
+#include "World/Level/World.h"
 
 #include <chrono>
 #include <cstdio>

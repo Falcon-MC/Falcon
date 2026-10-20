@@ -1,10 +1,10 @@
 #include "Network/Handler/SubChunkRequestHandler.h"
 
-#include "Actor/ServerPlayer.h"
-#include "Block/BlockActorStore.h"
-#include "Level/Level.h"
-#include "Level/LevelChunk.h"
-#include "Network/Handler/ServerNetworkHandler.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Level.h"
+#include "World/Level/Chunk/LevelChunk.h"
+#include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/SubChunkPacket.h"
 #include "Protocol/Packets/SubChunkRequestPacket.h"
 

@@ -2,8 +2,8 @@
 
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Json/Json.h"
-#include "Item/Item.h"
-#include "Item/StringToItemParser.h"
+#include "World/Item/Item.h"
+#include "World/Item/StringToItemParser.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Types/BlockDefinition.h"
 #include "Protocol/Types/BlockDefinitionRegistry.h"

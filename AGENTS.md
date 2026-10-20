@@ -49,15 +49,18 @@ change that does not compile is worse than no change.
 Falcon.Server/
   include/                      Headers, mirroring src/
   src/
-    Network/Handler/            Session, login, movement, inventory, damage, commands
-    Level/                      Worlds, chunks, LevelDB storage, world generation
-    Block/Blocks/               One class per block family
-    Block/Systems/              Redstone, pistons, fluids, fire, random ticks, copper...
-    Item/Items/                 One class per item behaviour
-    Actor/                      Players, mobs, projectiles
-    Actor/AI/Goal/              Mob AI goals
-    Command/                    One class per command
+    Network/                    Session, login, movement, inventory and gameplay handlers
+    Server/                     Server lifecycle, configuration and commands
+    World/Actor/                Players, mobs, projectiles, AI and movement systems
+    World/Level/                Worlds, chunks, storage, generation, blocks and particles
+    World/Level/Block/           Block classes, block actors and block systems
+    World/Item/                 Items and item behaviour
+    World/Inventory/            Inventories, crafting and item stack requests
+    World/Containers/           Container manager models
+    Resources/                  Resource packs and pack dependencies
     Scripting/                  JavaScript scripting API for behavior packs
+    Falcon/                     Falcon-specific embedding and plugin implementation
+  structure/                    BDS 1.26.10 layout evidence and relocation inventory
 ```
 
 The network transport, protocol packets, NBT and Bedrock data files live in separate `Falcon-MC`

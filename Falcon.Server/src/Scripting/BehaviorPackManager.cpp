@@ -2,7 +2,7 @@
 
 #include "Core/Archive/ZipArchive.h"
 #include "Core/Debug/BedrockLog.h"
-#include "Core/Pack/PackDependencies.h"
+#include "Resources/PackDependencies.h"
 #include "Server/ServerPaths.h"
 
 #include <algorithm>
