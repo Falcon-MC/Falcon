@@ -11984,6 +11984,22 @@
       "old": "Falcon.Server/src/Server/VersionChecker.cpp",
       "path": "Falcon.Server/src/Server/VersionChecker.cpp",
       "sha256": "aa4774b7f984b5a48dc6e99b608b3ec292b964179a1c4d836a6a923fb63975e8"
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/ServerPlayerMovementComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/ServerPlayerMovementComponent.h",
+      "sha256": "cb1a3dc64d4ddb07ac1e139df5d8e7ce552aa343ba165dbd0bfae01bbd2983e1",
+      "classes": [
+        "ServerPlayerMovementComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/ServerPlayerMovementComponent.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/ServerPlayerMovementComponent.cpp",
+      "sha256": "9a1424f12dee8ba4a3d6dd0ff0b02b20414e3983ff0d0494dedecd1819b6e647",
+      "classes": [
+        "ServerPlayerMovementComponent"
+      ]
     }
   ]
 }

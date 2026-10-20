@@ -1843,7 +1843,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerAuthI
         return;
     }
 
-    MovementHandler::handlePlayerAuthInput(*this, id, *player, packet);
+    if (!player->isAwaitingDimensionAck() && player->getLoginState() >= ServerPlayer::LoginState::StartGameSent)
+        player->getMovementInputs().enqueue(packet);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CompletedUsingItemPacket &packet) {

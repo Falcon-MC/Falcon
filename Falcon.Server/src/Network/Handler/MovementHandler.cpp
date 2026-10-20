@@ -155,7 +155,8 @@ namespace {
         SetActorMotionPacket motion;
         motion.mRuntimeActorId = player.getRuntimeId();
         motion.mMotion = player.getMotion();
-        motion.mTick = (uint64_t) owner.getCurrentTick();
+        const int64_t inputTick = player.getMovementInputs().lastProcessedTick();
+        motion.mTick = inputTick < 0 ? 0 : (uint64_t) inputTick;
         owner.getNetworkHandler().send(player.getNetworkIdentifier(), motion, owner.getCodecContext());
         return true;
     }

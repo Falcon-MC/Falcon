@@ -188,6 +188,14 @@ public:
         return getFloat("player-movement-action-direction-threshold");
     }
 
+    int getPlayerTickThrottledInputBatchSize() const {
+        return getInt("player-tick-throttled-input-batch-size");
+    }
+
+    int getPlayerTickThrottledMaxTickCredits() const {
+        return getInt("player-tick-throttled-max-tick-credits");
+    }
+
     bool getServerAuthoritativeBlockBreaking() const {
         return getBool("server-authoritative-block-breaking");
     }

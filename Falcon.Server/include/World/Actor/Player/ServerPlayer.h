@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/Actor.h"
+#include "World/Actor/Movement/ServerPlayerMovementComponent.h"
 #include "World/Actor/DynamicPropertyValue.h"
 #include "Core/Math/Vector3i.h"
 #include "Core/NBT/Tag.h"
@@ -318,7 +319,13 @@ public:
 
     bool isAwaitingDimensionAck() const { return mAwaitingDimensionAck; }
 
-    void setAwaitingDimensionAck(bool awaiting) { mAwaitingDimensionAck = awaiting; }
+    void setAwaitingDimensionAck(bool awaiting) {
+        if (awaiting) {
+            mMovementInputs.clearPending();
+            clearMovementSimulation();
+        }
+        mAwaitingDimensionAck = awaiting;
+    }
 
     /** A world change inside one dimension sent an intermediate dimension; the real one follows the ack. */
     bool hasPendingDimensionHop() const { return mPendingDimensionHop; }
@@ -427,6 +434,8 @@ public:
     static constexpr std::chrono::milliseconds POST_TELEPORT_GRACE{1000};
 
     void markTeleported() {
+        mMovementInputs.clearPending();
+        clearMovementSimulation();
         mLastTeleport = std::chrono::steady_clock::now();
         awaitMovementChange();
     }
@@ -503,6 +512,10 @@ public:
     }
 
     int getBreakingFxTicker() { return mBreakingFxTicker++; }
+
+    ServerPlayerMovementComponent &getMovementInputs() {
+        return mMovementInputs;
+    }
 
     bool hasSeenNonZeroClientTick() const { return mSawNonZeroClientTick; }
 
@@ -621,6 +634,7 @@ private:
     int mBreakingFxTicker = 0;
     bool mHasLastBlockAttacked = false;
     Vector3i mLastBlockAttacked;
+    ServerPlayerMovementComponent mMovementInputs;
     bool mSawNonZeroClientTick = false;
     std::unordered_set<int64_t> mSentChunks;
     std::unordered_set<uint64_t> mVisibleActors;

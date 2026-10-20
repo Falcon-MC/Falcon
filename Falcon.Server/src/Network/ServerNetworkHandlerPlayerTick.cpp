@@ -10,6 +10,7 @@
 #include "Network/Handler/MovementHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Protocol/Packets/PlayerAuthInputPacket.h"
 
 #include <chrono>
 
@@ -42,21 +43,7 @@ namespace {
     };
 }
 
-void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
-    if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent)
-        return;
-
-    ProfiledPlayerScope playerScope(mProfiler, player);
-
-    const bool wasOnFire = player.isOnFire();
-    player.tickGroundTracking();
-    player.tickCombat(1);
-    player.tickItemCooldowns(mCurrentTick);
-    player.tickShield(*this);
-    player.tickSpinAttack(*this);
-    ElytraItem::tickGliding(*this, player);
-    FurnaceSystem::tick(*this, player);
-
+void ServerNetworkHandler::_applyPendingPlayerMove(ServerPlayer &player) {
     if (player.hasPendingMove() && player.getPendingMovePosition() != player.getPosition()) {
         PluginEvent moveEvent;
         moveEvent.mType = FALCON_EVENT_PLAYER_MOVE;
@@ -84,6 +71,44 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
         }
         player.clearPendingMove();
     }
+}
+
+void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
+    if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent)
+        return;
+
+    ProfiledPlayerScope playerScope(mProfiler, player);
+
+    const bool wasOnFire = player.isOnFire();
+    player.tickGroundTracking();
+
+    ServerPlayerMovementComponent &inputs = player.getMovementInputs();
+    inputs.beginTick(mCurrentTick, mProperties.getPlayerTickThrottledMaxTickCredits(),
+                     mProperties.getPlayerTickThrottledInputBatchSize());
+    const double previousTickMs = mTickDurationSamples.empty() ? 0.0 : mTickDurationSamples.back();
+    // Vehicles still travel in tickActors; consuming several rider inputs here would overwrite their controls.
+    const size_t steps = player.isRiding() ? 1 : 1 + ServerPlayerMovementComponent::catchupSteps(previousTickMs);
+    for (size_t step = 0; step < steps; ++step) {
+        if (player.isDead() || player.isAwaitingDimensionAck()) {
+            inputs.clearPending();
+            break;
+        }
+        const auto packet = inputs.takeNext();
+        if (packet == nullptr)
+            break;
+        MovementHandler::handlePlayerAuthInput(*this, player.getNetworkIdentifier(), player, *packet);
+        // Collision state, position and plugin cancellation must settle before the next replay step.
+        _applyPendingPlayerMove(player);
+    }
+
+    player.tickCombat(1);
+    player.tickItemCooldowns(mCurrentTick);
+    player.tickShield(*this);
+    player.tickSpinAttack(*this);
+    ElytraItem::tickGliding(*this, player);
+    FurnaceSystem::tick(*this, player);
+
+    _applyPendingPlayerMove(player);
 
     _handleVoidDamage(player);
     _handleSuffocationDamage(player);

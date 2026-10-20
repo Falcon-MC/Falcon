@@ -627,6 +627,8 @@ public:
                        ModalFormCallback callback = {});
 
 private:
+    friend class MovementInputProbe;
+
     bool onValidateIncomingConnection(const NetworkIdentifier &id) override;
 
     void onNewIncomingConnection(const NetworkIdentifier &id, uint16_t mtuSize) override;
@@ -739,6 +741,8 @@ private:
     void _tickSleep(World &world);
 
     void _tickWeather(World &world);
+
+    void _applyPendingPlayerMove(ServerPlayer &player);
 
     void _tickPlayer(ServerPlayer &player);
 

@@ -653,7 +653,8 @@ void ServerPlayer::teleport(ServerNetworkHandler &owner, const Vector3f &positio
     packet.mOnGround = isOnGround();
     packet.mTeleportationCause = cause;
     packet.mActorType = 0;
-    packet.mTick = owner.getCurrentTick();
+    const int64_t inputTick = mMovementInputs.lastProcessedTick();
+    packet.mTick = inputTick < 0 ? 0 : (uint64_t) inputTick;
     owner.getNetworkHandler().send(getNetworkIdentifier(), packet, owner.getCodecContext());
 
     ChunkStreamHandler::handleTeleport(owner, *this);
