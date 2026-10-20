@@ -89,6 +89,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"client-side-chunk-generation-enabled", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"block-network-ids-are-hashes", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"disable-custom-skins", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"disable-client-vibrant-visuals", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"skin-change-cooldown", "30", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"spawn-protection", "16", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"server-authoritative-movement-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
@@ -178,7 +179,8 @@ bool PropertiesSettings::_isValidValue(const PropertyDefinition &definition, con
         case PropertyKind::String:
             return true;
         case PropertyKind::Bool:
-            if (std::string(definition.mKey) == "server-authoritative-block-breaking")
+            if (std::string(definition.mKey) == "server-authoritative-block-breaking"
+                || std::string(definition.mKey) == "disable-client-vibrant-visuals")
                 return value == "true" || value == "false";
             return value == "true" || value == "false" || value == "1" || value == "0";
         case PropertyKind::Int: {

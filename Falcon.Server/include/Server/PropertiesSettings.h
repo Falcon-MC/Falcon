@@ -157,6 +157,10 @@ public:
 
     bool getDisableCustomSkins() const { return getBool("disable-custom-skins"); }
 
+    bool getDisableClientVibrantVisuals() const {
+        return getBool("disable-client-vibrant-visuals");
+    }
+
     /** Minimum number of seconds between two skin changes of the same player. */
     int getSkinChangeCooldown() const { return getInt("skin-change-cooldown"); }
 

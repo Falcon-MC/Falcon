@@ -352,7 +352,7 @@ void LoginHandler::completeLogin(ServerNetworkHandler &owner, const NetworkIdent
     packs.mWorldTemplateVersion = "";
     packs.mHasAddonPacks = false;
     packs.mScriptingEnabled = false;
-    packs.mVibrantVisualsForceDisabled = false;
+    packs.mVibrantVisualsForceDisabled = owner.getProperties().getDisableClientVibrantVisuals();
 
     for (const ResourcePack &pack: owner.getResourcePacks().getPacks()) {
         ResourcePacksInfoPacket::Entry entry;
