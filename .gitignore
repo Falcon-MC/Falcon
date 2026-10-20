@@ -17,3 +17,5 @@
 !/Falcon.Protocol/**
 !/Falcon.Server
 !/Falcon.Server/**
+/Falcon.Server/structure/
+/Falcon.Server/benchmarks/
