@@ -54,6 +54,10 @@ public:
 
     virtual int getExperienceDrop() const { return 0; }
 
+    virtual bool shouldRemoveInPeaceful() const {
+        return getComponent("minecraft:remove_in_peaceful") != nullptr;
+    }
+
     int getBreedingExperience() const;
 
     bool isExpired() const override {

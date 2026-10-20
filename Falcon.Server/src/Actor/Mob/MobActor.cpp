@@ -1998,6 +1998,10 @@ Actor *MobActor::getTarget(ServerNetworkHandler &owner) const {
         return nullptr;
 
     Actor *target = findActor(owner, mTargetRuntimeId);
+    if (owner.getProperties().getDifficulty() == Difficulty::Peaceful &&
+        dynamic_cast<const ServerPlayer *>(target) != nullptr)
+        return nullptr;
+
     return target != nullptr && canTarget(*target) ? target : nullptr;
 }
 
