@@ -6,6 +6,8 @@
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 
+#include <utility>
+
 BlockPaletteRegistry::BlockPaletteRegistry() : mLoaded(false) {
 }
 
@@ -37,40 +39,66 @@ void BlockPaletteRegistry::initialize() {
     trustedSettings.mMaxListSize = 65536;
     stream.setEncodingSettings(trustedSettings);
 
-    Tag root;
+    BlockPaletteRegistry palette;
+    bool hasBlocks = false;
     try {
-        root = NbtIo::readTag(stream, NbtVariant::BigEndian);
+        if (stream.getByte() != (unsigned char) Tag::Type::Compound)
+            throw NbtException("Expected a compound block palette");
+        NbtIo::readValue(stream, Tag::Type::String, NbtVariant::BigEndian);
+
+        for (;;) {
+            const unsigned char typeId = stream.getByte();
+            if (!Tag::isValidType(typeId))
+                throw NbtException("Invalid block palette tag type");
+            const Tag::Type type = (Tag::Type) typeId;
+            if (type == Tag::Type::End)
+                break;
+
+            const std::string key = NbtIo::readValue(stream, Tag::Type::String, NbtVariant::BigEndian).asString();
+            if (key != "blocks" || type != Tag::Type::List) {
+                NbtIo::readValue(stream, type, NbtVariant::BigEndian, NbtIo::MAX_DEPTH - 1);
+                continue;
+            }
+
+            if (stream.getByte() != (unsigned char) Tag::Type::Compound)
+                throw NbtException("Expected compound block palette entries");
+            const int32_t count = stream.getSignedInt();
+            if (count < 0 || (size_t) count > trustedSettings.mMaxListSize)
+                throw NbtException("Invalid block palette list size");
+            hasBlocks = true;
+
+            // Consume one entry at a time and move its states into the registry, rather than
+            // retaining the whole NBT tree and deep-copying every permutation out of it.
+            for (int32_t i = 0; i < count; ++i) {
+                Tag entry = NbtIo::readValue(stream, Tag::Type::Compound, NbtVariant::BigEndian,
+                                             NbtIo::MAX_DEPTH - 2);
+                const Tag *nameTag = entry.get("name");
+                Tag *statesTag = entry.get("states");
+                if (nameTag == nullptr || statesTag == nullptr)
+                    continue;
+
+                const std::string &name = nameTag->asString();
+                if (palette.mDefaultStates.find(name) == palette.mDefaultStates.end()) {
+                    palette.mBlockNames.push_back(name);
+                    palette.mDefaultStates.emplace(name, *statesTag);
+                    const Tag *networkIdTag = entry.get("network_id");
+                    if (networkIdTag != nullptr)
+                        palette.mDefaultNetworkId.emplace(name, networkIdTag->asInt());
+                }
+                palette.mPermutations[name].push_back(std::move(*statesTag));
+            }
+        }
     } catch (const std::exception &exception) {
         LOG_WARN(LogAreaID::Server, "Failed to parse block palette: %s", exception.what());
         return;
     }
 
-    const Tag *blocksTag = root.get("blocks");
-    if (blocksTag == nullptr) {
+    if (!hasBlocks) {
         LOG_WARN(LogAreaID::Server, "Embedded block palette is missing blocks list");
         return;
     }
 
-    for (const Tag &entry: blocksTag->getList()) {
-        const Tag *nameTag = entry.get("name");
-        const Tag *statesTag = entry.get("states");
-        if (nameTag == nullptr || statesTag == nullptr)
-            continue;
-
-        const std::string &name = nameTag->asString();
-        std::vector<Tag> &permutations = mPermutations[name];
-        permutations.push_back(*statesTag);
-        if (mDefaultStates.find(name) != mDefaultStates.end())
-            continue;
-
-        mBlockNames.push_back(name);
-        mDefaultStates.emplace(name, *statesTag);
-
-        const Tag *networkIdTag = entry.get("network_id");
-        if (networkIdTag != nullptr)
-            mDefaultNetworkId.emplace(name, networkIdTag->asInt());
-    }
-
+    *this = std::move(palette);
     mLoaded = true;
     LOG_INFO(LogAreaID::Server, "Loaded %zu block palette default states", mDefaultStates.size());
 }

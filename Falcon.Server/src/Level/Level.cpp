@@ -114,8 +114,10 @@ bool Level::openStorage(const std::string &worldsDirectory) {
                                           levelDat.getInt("SpawnZ")));
         }
 
-        mDefaultSpawnPosition = _findLandSpawn();
-        mHasDefaultSpawnPosition = true;
+        if (!mHasSpawnPosition) {
+            mDefaultSpawnPosition = _findLandSpawn();
+            mHasDefaultSpawnPosition = true;
+        }
 
         saveLevelDat();
     }
@@ -124,7 +126,8 @@ bool Level::openStorage(const std::string &worldsDirectory) {
 }
 
 void Level::saveLevelDat() {
-    const Vector3i spawn = mHasSpawnPosition ? mSpawnPosition : Vector3i(0, UNSET_SPAWN_Y, 0);
+    const Vector3i spawn = mHasSpawnPosition ? mSpawnPosition
+                           : mHasDefaultSpawnPosition ? mDefaultSpawnPosition : Vector3i(0, UNSET_SPAWN_Y, 0);
     mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime, mBonusChestEnabled,
                            mBonusChestSpawned, (int64_t) (uint32_t) (mWorldStartCount - 1));
 }

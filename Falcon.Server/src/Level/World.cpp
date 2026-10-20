@@ -15,12 +15,14 @@ bool World::open(const std::string &worldsDirectory, size_t workerThreads,
     mOverworld->initializeWeather();
     mOverworld->initializeGameRules();
 
-    // An existing world keeps the seed stored in its level.dat, so the other dimensions are only
-    // created once the overworld has read it.
+    // An existing world may have a different seed in level.dat. Keep the generators already
+    // constructed for the requested seed unless the stored one differs.
     const std::string &name = mOverworld->getName();
     const int viewDistance = mOverworld->getViewDistance();
-    mNether.reset(new Level(name, viewDistance, mOverworld->getSeed(), DimensionType::Nether));
-    mTheEnd.reset(new Level(name, viewDistance, mOverworld->getSeed(), DimensionType::TheEnd));
+    if (mNether->getSeed() != mOverworld->getSeed())
+        mNether.reset(new Level(name, viewDistance, mOverworld->getSeed(), DimensionType::Nether));
+    if (mTheEnd->getSeed() != mOverworld->getSeed())
+        mTheEnd.reset(new Level(name, viewDistance, mOverworld->getSeed(), DimensionType::TheEnd));
     mNether->setWorldId(mId);
     mTheEnd->setWorldId(mId);
     mNether->shareGameRulesWith(*mOverworld);

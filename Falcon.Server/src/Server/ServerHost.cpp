@@ -19,6 +19,7 @@
 #include "Server/ServerPaths.h"
 
 #include <fstream>
+#include <future>
 #include <random>
 #include <atomic>
 #include <exception>
@@ -183,10 +184,14 @@ bool ServerHost::start(const ServerHostOptions &options) {
     if (mHandler != nullptr || !acquire())
         return false;
 
-    BiomeChunkGenDataRegistry::initialize();
+    // These embedded registries are independent. Join before constructing the handler so
+    // the game only sees fully initialized definitions.
+    auto entityDefinitions = std::async(std::launch::async, EntityDefinitions::initialize);
+    auto biomeData = std::async(std::launch::async, BiomeChunkGenDataRegistry::initialize);
     BlockPaletteRegistry::getInstance().initialize();
     SpawnRules::initialize();
-    EntityDefinitions::initialize();
+    entityDefinitions.get();
+    biomeData.get();
 
     const std::string propertiesPath = ServerPaths::file(PROPERTIES_FILE);
     PropertiesSettings properties(propertiesPath);
