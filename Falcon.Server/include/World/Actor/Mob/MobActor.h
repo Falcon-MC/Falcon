@@ -357,6 +357,7 @@ protected:
 
 private:
     friend class RideControlSystem;
+    friend class RideControlProbe;
 
     void _rebuildComponents() const;
 

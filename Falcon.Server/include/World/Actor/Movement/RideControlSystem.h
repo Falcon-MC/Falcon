@@ -37,9 +37,6 @@ struct RideControlState {
     int32_t mRearingTicks = 0;
     int32_t mBoostTicks = 0;
     float mBoostMultiplier = 1.0f;
-    bool mAirRotationInitialized = false;
-    float mAirTargetYaw = 0.0f;
-    int32_t mAirRotationDelayTicks = 0;
     bool mWasOnSlipperyGround = false;
     int32_t mSlipperyGraceTicks = 0;
     float mSlipperyEntrySpeed = 0.0f;
@@ -64,6 +61,8 @@ public:
     static void reset(MobActor &mob);
 
 private:
+    friend class RideControlProbe;
+
     static bool _holdsControlItem(const MobActor &mob, const ServerPlayer &player);
 
     static bool _handleJumpOrDash(ServerNetworkHandler &owner, MobActor &mob, RideControlType type);
