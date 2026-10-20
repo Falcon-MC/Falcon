@@ -2,6 +2,7 @@
 
 #include "Block/Blocks/IceBlock.h"
 #include "Block/Blocks/LeavesBlock.h"
+#include "Block/Blocks/SnowLayerBlock.h"
 #include "Block/Blocks/VanillaBlocks.h"
 #include "Block/Blocks/WaterBlock.h"
 #include "Block/Systems/BlockChangeSystem.h"
@@ -133,6 +134,11 @@ bool PrecipitationSystem::shouldSnow(Level &level, const Vector3i &position) {
     const Vector3i below(position.x, position.y - 1, position.z);
     const BlockState *support = stateAt(level, below);
     if (support == nullptr || IceBlock::matches(support->mName) || support->mName == "minecraft:packed_ice")
+        return false;
+
+    // Thin snow has collision but cannot support another layer a whole block above it.
+    const SnowLayerBlock *snow = VanillaBlocks::getAs<SnowLayerBlock>(support->mName);
+    if (snow != nullptr && snow->canBeReplaced(*support))
         return false;
 
     return level.isSolidAt(below.x, below.y, below.z) || VanillaBlocks::getAs<LeavesBlock>(support->mName) != nullptr;
