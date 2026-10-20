@@ -148,7 +148,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FALCON_BLOCK_UP
 file(GLOB_RECURSE FALCON_CORE_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 set(FALCON_EXECUTABLE_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/Server.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/Server.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/SetupWizard.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/VersionChecker.cpp")
 list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_EXECUTABLE_SOURCES})
@@ -157,11 +157,13 @@ list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_EXECUTABLE_SOURCES})
 # initialisers, and a static library would let the linker drop every object nothing references by name.
 add_library(FalconCore OBJECT ${FALCON_CORE_SOURCES})
 
+include(cmake/FalconLegacyHeaders.cmake)
+
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 target_include_directories(FalconCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${FALCON_GENERATED_DIR} ${ZLIB_INCLUDE_DIRS}
+        ${FALCON_GENERATED_DIR} ${FALCON_LEGACY_INCLUDE_DIR} ${ZLIB_INCLUDE_DIRS}
         ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(FalconCore PUBLIC FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic
         Falcon::PluginAPI ${CMAKE_DL_LIBS})

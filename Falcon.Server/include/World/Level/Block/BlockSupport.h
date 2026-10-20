@@ -1,0 +1,16 @@
+#pragma once
+
+#include "World/Level/Block/BlockState.h"
+#include "Core/Math/Vector3i.h"
+
+namespace BlockSupport {
+    Vector3i supportOf(const Vector3i &position, int blockFace);
+
+    bool isSolid(const BlockState &state);
+
+    bool isReplaceable(const BlockState &state);
+
+    bool isAttachable(const BlockState &support, int blockFace);
+
+    bool isSolidOrCauldron(const BlockState &support);
+}

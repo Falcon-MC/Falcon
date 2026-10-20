@@ -1,17 +1,17 @@
 #include "Server/ServerHost.h"
 
 #include "BuildInfo.h"
-#include "Actor/AI/Goal/FollowCaravanGoal.h"
-#include "Actor/Definition/EntityDefinitions.h"
-#include "Actor/Spawn/SpawnRules.h"
-#include "Block/BlockPaletteRegistry.h"
-#include "Block/Inventory/EnderChestInventoryStore.h"
+#include "World/Actor/AI/Goal/FollowCaravanGoal.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Spawn/SpawnRules.h"
+#include "World/Level/Block/BlockPaletteRegistry.h"
+#include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Utility/UUID.h"
-#include "Item/StringToItemParser.h"
-#include "Level/AutoCompaction.h"
-#include "Level/Generator/Biome/BiomeChunkGenDataRegistry.h"
-#include "Network/Handler/ServerNetworkHandler.h"
+#include "World/Item/StringToItemParser.h"
+#include "World/Level/Storage/AutoCompaction.h"
+#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+#include "Network/ServerNetworkHandler.h"
 #include "Network/TransportFactory.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Localization.h"
@@ -24,7 +24,7 @@
 #include <atomic>
 #include <exception>
 #include <stdexcept>
-#include "Level/WorldManager.h"
+#include "World/Level/WorldManager.h"
 
 namespace {
     std::atomic<bool> processOwned{false};

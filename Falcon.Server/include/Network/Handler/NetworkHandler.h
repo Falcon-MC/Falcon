@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core/Concurrency/TaskQueue.h"
+#include "Core/Threading/TaskQueue.h"
 #include "Network/BatchedNetworkPeer.h"
 #include "Network/CompressedNetworkPeer.h"
 #include "Network/Connector.h"
