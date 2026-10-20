@@ -413,7 +413,7 @@ namespace {
 }
 
 void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
-                                    const PlayerAuthInputPacket &packet, Vector3f &feetPosition) {
+                                    const PlayerAuthInputPacket &packet, Vector3f &feetPosition, bool sprinting) {
     // Temporary: the movement simulation only runs when server-authoritative-movement-strict is true, until it is
     // reliable enough to run for every player.
     if (!owner.getProperties().getServerAuthoritativeMovementStrict()) {
@@ -455,8 +455,6 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     if (!jumpHeld)
         jumpDelay = 0;
 
-    const bool sprinting = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sprinting)
-                           || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
     const PlayerPose pose = resolvePose(level, start, packet, player.isSimulatedSneaking(),
                                         player.isSimulatedCrawling());
     player.setSimulatedPose(pose.mSneaking, pose.mCrawling);

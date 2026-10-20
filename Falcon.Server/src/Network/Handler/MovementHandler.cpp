@@ -321,10 +321,17 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
 
 void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                             ServerPlayer &player, const PlayerAuthInputPacket &packet) {
+    // Resolve sprinting before replay so physics and the advertised actor state use the same decision.
+    bool sprinting = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sprinting)
+                     || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
+
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSprinting) || !player.canSprint())
+        sprinting = false;
+
     // Player positions on the wire are at eye height; the server works with feet positions.
     Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
                           packet.mPosition.z);
-    PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition);
+    PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition, sprinting);
     player.queueMove(feetPosition, packet.mRotation);
     if (!player.hasSimulatedVelocity())
         player.setMotion(packet.mDelta);
@@ -341,17 +348,6 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
 
     ActorFlags &flags = player.getFlags();
     const ActorFlags previous = flags;
-
-    // Sprinting and sneaking are states the client reports every tick, the start and stop flags only
-    // mark their edges. Reacting to the edges alone leaves a flag stuck whenever an edge is missed.
-    bool sprinting = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sprinting)
-                     || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
-
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSprinting))
-        sprinting = false;
-
-    if (!player.canSprint())
-        sprinting = false;
 
     flags.set(ActorFlag::Sprinting, sprinting);
 

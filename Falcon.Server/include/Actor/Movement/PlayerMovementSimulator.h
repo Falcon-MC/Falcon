@@ -19,5 +19,5 @@ public:
     static constexpr float PLAYER_BASE_OFFSET = 1.62f;
 
     static void apply(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
-                      const PlayerAuthInputPacket &packet, Vector3f &feetPosition);
+                      const PlayerAuthInputPacket &packet, Vector3f &feetPosition, bool sprinting);
 };
