@@ -705,12 +705,12 @@ void BlockActionHandler::continueBreakingBlock(ServerNetworkHandler &owner, Serv
     player.addBreakProgress(player.getBreakSpeed());
 
     if (player.getBreakProgress() >= 1.0) {
-        completeBreakingBlock(owner, player, position, false);
+        completeBreakingBlock(owner, player, position);
     }
 }
 
 void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player,
-                                               const Vector3i &position, bool clientPredicted) {
+                                               const Vector3i &position) {
     Level &playerLevel = owner.getLevelFor(player);
     if (position.y < playerLevel.getMinY() || position.y > playerLevel.getMaxY())
         return;
@@ -735,20 +735,16 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
             return;
         }
 
-        // A break the server timed itself must have reached full progress; one predicted by
-        // the client is still bounded by reach and spawn protection above.
-        if (!clientPredicted) {
-            if (!player.isBreakingBlock() || player.getBreakingBlockPosition() != position) {
-                sendCurrentBlockState(owner, player, position);
-                return;
-            }
+        if (!player.isBreakingBlock() || player.getBreakingBlockPosition() != position) {
+            sendCurrentBlockState(owner, player, position);
+            return;
+        }
 
-            const BlockData *blockData = BlockDataTable::find(state.mName.c_str());
-            if (!hasReachedBreakTime(owner, player, blockData) ||
-                player.getBreakProgress() + BREAK_PROGRESS_EPSILON < 1.0) {
-                sendCurrentBlockState(owner, player, position);
-                return;
-            }
+        const BlockData *blockData = BlockDataTable::find(state.mName.c_str());
+        if (!hasReachedBreakTime(owner, player, blockData) ||
+            player.getBreakProgress() + BREAK_PROGRESS_EPSILON < 1.0) {
+            sendCurrentBlockState(owner, player, position);
+            return;
         }
     }
 
