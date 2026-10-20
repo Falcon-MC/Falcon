@@ -40,8 +40,7 @@ public:
 
     static void stopBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player);
 
-    static void completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                                      bool clientPredicted = true);
+    static void completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 
     static void sendBreakingFx(ServerNetworkHandler &owner, ServerPlayer &player);
 
