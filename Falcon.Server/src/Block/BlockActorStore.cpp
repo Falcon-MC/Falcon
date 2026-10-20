@@ -64,6 +64,8 @@ std::unique_ptr<BlockActor> BlockActorStore::take(const Vector3i &position) {
 }
 
 void BlockActorStore::tick(ServerNetworkHandler &owner) {
+    // Iterate over a snapshot of the keys: a ticking block actor can add or remove others
+    // (hoppers, pistons), which would invalidate iterators into the map.
     std::vector<int64_t> keys;
     keys.reserve(mBlockActors.size());
     for (const auto &entry: mBlockActors)

@@ -7,6 +7,10 @@
 #include <utility>
 
 namespace {
+    /**
+     * Plugin code is foreign: an exception escaping a task must not unwind through the tick
+     * loop, so it is caught and logged here.
+     */
     void runGuarded(const LoadedPlugin &plugin, FalconTask task, void *userData) {
         if (task == nullptr)
             return;
@@ -67,6 +71,8 @@ void PluginScheduler::cancelAll(const LoadedPlugin &plugin) {
             continue;
         }
 
+        // Jobs that never ran still get their completion callback: every async job's done
+        // callback runs exactly once, here or in shutdown().
         mCompleted.push_back(*it);
         it = mPending.erase(it);
     }
@@ -75,6 +81,8 @@ void PluginScheduler::cancelAll(const LoadedPlugin &plugin) {
 void PluginScheduler::tick() {
     mCurrentTick++;
 
+    // A task may schedule new tasks, which can reallocate mTasks: the count is fixed up front
+    // so new tasks wait for the next tick, and each task is copied before it runs.
     const size_t count = mTasks.size();
     for (size_t index = 0; index < count; index++) {
         Task task = mTasks[index];
@@ -93,6 +101,8 @@ void PluginScheduler::tick() {
         return task.mCancelled;
     }), mTasks.end());
 
+    // Async work runs on the worker thread, but its completion callback always runs here on
+    // the main thread, where touching game state is safe.
     std::deque<AsyncJob> completed;
     {
         std::lock_guard<std::mutex> lock(mMutex);

@@ -304,7 +304,7 @@ bool HopperBlockActor::_pickupItemActors(ServerNetworkHandler &owner) {
             break;
 
         ItemActor &actor = *entry;
-        if (actor.isRemoved() || mLevel == nullptr || actor.getDimension() != mLevel->getDimensionType())
+        if (actor.isRemoved() || mLevel == nullptr || !actor.isIn(*mLevel))
             continue;
 
         const Vector3f &position = actor.getPosition();

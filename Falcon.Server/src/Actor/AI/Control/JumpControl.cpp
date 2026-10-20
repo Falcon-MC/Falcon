@@ -11,6 +11,7 @@
 
 namespace {
     const float JUMP_PROBE_DEPTH = 0.5f;
+    const float FULL_JUMP_HEIGHT = 0.51f;
 }
 
 void JumpControl::jump(float height) {
@@ -37,8 +38,10 @@ void JumpControl::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (block != nullptr)
         jumpFactor = block->getJumpFactor();
 
+    const float jumpPower = mob.getJumpPower();
+    const bool fullJump = !inWater && jumpPower > 0.0f && mHeight >= FULL_JUMP_HEIGHT;
     Vector3f motion = mob.getMotion();
-    motion.y += jumpingMotion(mHeight, inWater) * jumpFactor;
+    motion.y += (fullJump ? jumpPower : jumpingMotion(mHeight, inWater)) * jumpFactor;
     mob.setMotion(motion);
     mCoolDown = 0;
 }

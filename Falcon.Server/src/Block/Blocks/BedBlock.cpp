@@ -56,7 +56,7 @@ namespace {
         for (const auto &entry: owner.getActors()) {
             const MobActor *actor = dynamic_cast<const MobActor *>(entry.second.get());
             if (actor == nullptr || !actor->isAlive() || !actor->preventsSleep() ||
-                actor->getDimension() != level.getDimensionType())
+                !actor->isIn(level))
                 continue;
 
             const Vector3f position = actor->getPosition();
@@ -178,7 +178,7 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
         return true;
     }
 
-    player.setSpawnPoint(head);
+    player.setSpawnPoint(head, level.getName());
     player.sendTranslation("§7%tile.bed.respawnSet", {});
 
     if (!level.isNight() && !level.isThundering()) {

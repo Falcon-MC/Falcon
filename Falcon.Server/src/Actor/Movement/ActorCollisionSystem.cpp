@@ -15,6 +15,9 @@ ActorMoveResult ActorCollisionSystem::move(Level &level, AxisAlignedBB &box, con
     const bool landing = wasOnGround || (moved.y != delta.y && delta.y < 0.0f);
     const bool blockedHorizontally = moved.x != delta.x || moved.z != delta.z;
 
+    // Step-up: replay the move from the original box lifted by the step height, then drop
+    // back down onto whatever is there. The stepped result is kept only if it gets further
+    // horizontally than the plain move, so slabs and stairs are climbed but walls are not.
     if (stepHeight > 0.0f && landing && blockedHorizontally) {
         const AxisAlignedBB flat = box;
         const Vector3f flatMoved = moved;
@@ -47,6 +50,8 @@ ActorMoveResult ActorCollisionSystem::move(Level &level, AxisAlignedBB &box, con
 Vector3f ActorCollisionSystem::_resolve(Level &level, AxisAlignedBB &box, const Vector3f &delta) {
     const std::vector<AxisAlignedBB> obstacles = level.getCollisionBoxes(box.addCoord(delta.x, delta.y, delta.z));
 
+    // Axes are resolved one at a time in Y, X, Z order, each against the box already moved
+    // on the previous axes, so a move into a corner slides along the wall it does not hit.
     float dy = delta.y;
     for (const AxisAlignedBB &obstacle: obstacles)
         dy = obstacle.calculateYOffset(box, dy);

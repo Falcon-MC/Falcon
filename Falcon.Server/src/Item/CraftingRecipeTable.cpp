@@ -1,6 +1,7 @@
 #include "Item/CraftingRecipeTable.h"
 #include "CraftingRecipeJson.h"
 #include "Core/Json/Json.h"
+#include "Network/ProtocolData.h"
 
 #include <algorithm>
 #include <cctype>
@@ -9,8 +10,10 @@
 #include <deque>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -414,6 +417,33 @@ bool CraftingRecipeTable::isBrewingReagent(const std::string &reagentId, int32_t
             return true;
     }
     return false;
+}
+
+bool CraftingRecipeTable::isKnownBy(const std::string &recipeId, int32_t protocol) {
+    const ProtocolData *data = ProtocolData::find(protocol);
+    if (data == nullptr)
+        return true;
+
+    static std::mutex mutex;
+    static std::unordered_map<int32_t, std::unordered_set<std::string>> idsByProtocol;
+
+    const std::lock_guard<std::mutex> lock(mutex);
+    auto found = idsByProtocol.find(data->mProtocol);
+    if (found == idsByProtocol.end()) {
+        std::unordered_set<std::string> &ids = idsByProtocol[data->mProtocol];
+        const std::unique_ptr<json::Value> root = json::parse(data->mRecipes);
+        const json::Value *recipes = root == nullptr ? nullptr : root->get("recipes");
+        if (recipes != nullptr && recipes->mType == json::Value::Type::Array) {
+            for (const std::unique_ptr<json::Value> &recipe: recipes->mArray) {
+                const json::Value *id = recipe->get("id");
+                if (id != nullptr)
+                    ids.insert(id->string());
+            }
+        }
+        found = idsByProtocol.find(data->mProtocol);
+    }
+
+    return found->second.count(recipeId.substr(0, recipeId.find('#'))) != 0;
 }
 
 const std::vector<std::string> &CraftingRecipeTable::getItemTags(const std::string &identifier) {

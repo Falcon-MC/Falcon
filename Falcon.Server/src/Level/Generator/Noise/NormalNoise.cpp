@@ -38,6 +38,12 @@ NormalNoise::NormalNoise(IRandom &random, int32_t firstOctave, const std::vector
     mMaxValue = (mFirst->maxValue() + mSecond->maxValue()) * mValueFactor;
 }
 
+/**
+ * Sum of two independent Perlin stacks, the second sampled at a slightly scaled position so
+ * their lattices never line up; this smooths out grid artefacts and gives a roughly normal
+ * value distribution. The scale factor and normalisation must stay exact for seeds to
+ * produce the expected terrain.
+ */
 float NormalNoise::getValue(double x, double y, double z) const {
     const double x2 = x * INPUT_FACTOR;
     const double y2 = y * INPUT_FACTOR;

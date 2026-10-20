@@ -15,6 +15,7 @@
 #include <vector>
 
 enum class Difficulty : int;
+class Level;
 
 class Actor {
 public:
@@ -49,6 +50,17 @@ public:
     DimensionType getDimension() const { return mDimension; }
 
     void setDimension(DimensionType dimension) { mDimension = dimension; }
+
+    uint32_t getWorldId() const { return mWorldId; }
+
+    /** Places the actor in `level`: its dimension and its world change together. */
+    void moveToLevel(const Level &level);
+
+    bool isIn(const Level &level) const;
+
+    bool sharesLevelWith(const Actor &other) const {
+        return mDimension == other.mDimension && mWorldId == other.mWorldId;
+    }
 
     int32_t getPortalCooldown() const { return mPortalCooldown; }
 
@@ -310,6 +322,7 @@ protected:
     std::vector<int64_t> mPassengers;
     Vector3f mPosition;
     DimensionType mDimension = DimensionType::Overworld;
+    uint32_t mWorldId = 0;
     int32_t mPortalCooldown = 0;
     int32_t mPortalTicks = 0;
     int64_t mLastPortalTick = -1;

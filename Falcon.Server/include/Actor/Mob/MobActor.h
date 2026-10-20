@@ -54,6 +54,10 @@ public:
 
     virtual int getExperienceDrop() const { return 0; }
 
+    virtual bool shouldRemoveInPeaceful() const {
+        return getComponent("minecraft:remove_in_peaceful") != nullptr;
+    }
+
     int getBreedingExperience() const;
 
     bool isExpired() const override {
@@ -94,6 +98,10 @@ public:
     }
 
     PathNavigation &getNavigation() {
+        return mNavigation;
+    }
+
+    const PathNavigation &getNavigation() const {
         return mNavigation;
     }
 
@@ -225,6 +233,18 @@ public:
         mPanicking = panicking;
     }
 
+    bool isAvoidingMobs() const {
+        return mAvoidingMobs;
+    }
+
+    void setAvoidingMobs(bool avoiding) {
+        mAvoidingMobs = avoiding;
+    }
+
+    int32_t getInactivityTicks() const {
+        return mInactivityTicks;
+    }
+
     ServerPlayer *getOwner(ServerNetworkHandler &owner) const;
 
     Tag saveNbt() const override;
@@ -252,6 +272,15 @@ public:
     bool canTarget(const Actor &actor) const;
 
     float distanceSquaredTo(const Actor &other) const;
+
+    /** Largest body turn per tick in degrees, from the active `minecraft:movement.*` component. */
+    float getMaxTurn() const;
+
+    /** Upward velocity of a full jump from `minecraft:jump.static`, or a negative value without it. */
+    float getJumpPower() const;
+
+    /** True when no block lies on the ray between this mob's eyes and the eyes of `other`. */
+    bool canSee(ServerNetworkHandler &owner, const Actor &other) const;
 
     static ServerPlayer *findPlayer(ServerNetworkHandler &owner, uint64_t runtimeId);
 
@@ -342,6 +371,12 @@ private:
     void _tickSensors(ServerNetworkHandler &owner);
 
     void _tickEntitySensor(ServerNetworkHandler &owner);
+
+    void _tickTargetNearbySensor(ServerNetworkHandler &owner);
+
+    void _tickHurtOnCondition(ServerNetworkHandler &owner);
+
+    void _tickInactivity(ServerNetworkHandler &owner);
 
     int32_t _countSensedEntities(ServerNetworkHandler &owner, const json::Value &subsensor, bool playersOnly,
                                  bool relativeRange);
@@ -484,5 +519,10 @@ private:
     static constexpr int32_t UNSET_AIR_SUPPLY = INT32_MIN;
     int32_t mAirSupply = UNSET_AIR_SUPPLY;
     bool mPanicking = false;
+    bool mAvoidingMobs = false;
+    int32_t mInactivityTicks = 0;
+    bool mTargetInsideRange = false;
+    bool mTargetOutsideRange = false;
+    bool mTargetSeenInsideRange = false;
     const json::Value *mCelebrationComponent = nullptr;
 };

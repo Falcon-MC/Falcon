@@ -409,6 +409,10 @@ void BlockActionHandler::broadcastBlockActorData(ServerNetworkHandler &owner, Le
                        data);
 }
 
+/**
+ * The block-cracking level events carry the per-tick break progress as a fraction of
+ * 65535; the client uses it to animate the crack at the same pace as the server.
+ */
 int32_t BlockActionHandler::breakSpeedEventData(double speed) {
     return (int32_t) std::clamp(65535.0 * speed, 0.0, 65535.0);
 }
@@ -439,6 +443,8 @@ bool BlockActionHandler::canInteractWithBlock(ServerPlayer &player, const Vector
         directionZ /= length;
     }
 
+    // Besides the reach distance, reject blocks clearly behind the player: the target must
+    // not lie more than REACH_MAX_DIFF behind the plane through the eyes facing the yaw.
     const float dot = directionX * eyePosition.x + directionZ * eyePosition.z;
     const float dot1 = directionX * target.x + directionZ * target.z;
     return (dot1 - dot) >= -REACH_MAX_DIFF;
@@ -699,12 +705,12 @@ void BlockActionHandler::continueBreakingBlock(ServerNetworkHandler &owner, Serv
     player.addBreakProgress(player.getBreakSpeed());
 
     if (player.getBreakProgress() >= 1.0) {
-        completeBreakingBlock(owner, player, position, false);
+        completeBreakingBlock(owner, player, position);
     }
 }
 
 void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player,
-                                               const Vector3i &position, bool clientPredicted) {
+                                               const Vector3i &position) {
     Level &playerLevel = owner.getLevelFor(player);
     if (position.y < playerLevel.getMinY() || position.y > playerLevel.getMaxY())
         return;
@@ -729,18 +735,16 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
             return;
         }
 
-        if (!clientPredicted) {
-            if (!player.isBreakingBlock() || player.getBreakingBlockPosition() != position) {
-                sendCurrentBlockState(owner, player, position);
-                return;
-            }
+        if (!player.isBreakingBlock() || player.getBreakingBlockPosition() != position) {
+            sendCurrentBlockState(owner, player, position);
+            return;
+        }
 
-            const BlockData *blockData = BlockDataTable::find(state.mName.c_str());
-            if (!hasReachedBreakTime(owner, player, blockData) ||
-                player.getBreakProgress() + BREAK_PROGRESS_EPSILON < 1.0) {
-                sendCurrentBlockState(owner, player, position);
-                return;
-            }
+        const BlockData *blockData = BlockDataTable::find(state.mName.c_str());
+        if (!hasReachedBreakTime(owner, player, blockData) ||
+            player.getBreakProgress() + BREAK_PROGRESS_EPSILON < 1.0) {
+            sendCurrentBlockState(owner, player, position);
+            return;
         }
     }
 
@@ -762,10 +766,14 @@ void BlockActionHandler::sendBreakingFx(ServerNetworkHandler &owner, ServerPlaye
     const int32_t blockHash = BlockStateHasher::hash(state.mName, state.mStates);
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
 
-    owner.broadcastLevelEvent(level, LevelEventPacket::Event::ParticlePunchBlock, center,
-                              blockHash | (player.getBreakingFace() << 24));
+    LevelEventPacket punch;
+    punch.mEventId = LevelEventPacket::Event::ParticlePunchBlock;
+    punch.mPosition = center;
+    punch.mData = blockHash;
+    punch.mBlockFace = player.getBreakingFace();
+    broadcastToViewers(owner, level, center, punch);
 
-    owner.playLevelSound(level, LevelSoundEvent::HIT, center, "", blockHash);
+    owner.playBlockSound(level, LevelSoundEvent::HIT, center, blockHash);
 
     ActorEventPacket swing;
     swing.mRuntimeActorId = player.getRuntimeId();
@@ -790,14 +798,20 @@ void BlockActionHandler::stopBreakingBlock(ServerNetworkHandler &owner, ServerPl
 
 }
 
-bool BlockActionHandler::matchesTransactionItem(const ItemStack &held, const ItemStack &sent) {
+bool BlockActionHandler::matchesTransactionItem(const PacketCodecContext &context, const ItemStack &held,
+                                                const ItemStack &sent) {
     if (held.isAir() || sent.isAir())
         return held.isAir() && sent.isAir();
 
-    return held.mDefinition->getIdentifier() == sent.mDefinition->getIdentifier()
+    return context.toNetworkItemId(held.mDefinition->getRuntimeId())
+               == context.toNetworkItemId(sent.mDefinition->getRuntimeId())
            && held.mDamage == sent.mDamage;
 }
 
+/**
+ * Allow and deny blocks: the nearest one below the position in the same column decides,
+ * and deny still lets creative players build.
+ */
 bool BlockActionHandler::isBlockChangeAllowed(Level &level, const Vector3i &position, const ServerPlayer &player) {
     for (int32_t y = position.y - 1; y >= level.getMinY(); --y) {
         const std::string &identifier = level.getBlockState(position.x, y, position.z).mName;
@@ -881,7 +895,8 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     if (canInteractWithBlock(player, transaction.mBlockPosition)) {
         if (player.getGameType() == (int32_t) GameType::Creative)
             handled = interactBlock(owner, player, transaction, selectedSlotChanged);
-        else if (matchesTransactionItem(inventory.getItemInHand(), transaction.mItemInHand))
+        else if (matchesTransactionItem(owner.getCodecContext(player.getNetworkIdentifier()),
+                                        inventory.getItemInHand(), transaction.mItemInHand))
             handled = interactBlock(owner, player, transaction, selectedSlotChanged);
     }
 
@@ -1163,7 +1178,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         broadcastToViewers(owner, level, targetCenter, waterUpdate);
     }
 
-    owner.playLevelSound(level, LevelSoundEvent::PLACE, targetCenter, "", (int32_t) blockHash);
+    owner.playBlockSound(level, LevelSoundEvent::PLACE, targetCenter, (int32_t) blockHash);
 
     if (placedBlock != nullptr)
         placedBlock->onPlaced(owner, player, target, placedState, placedWithItem, placementFace);

@@ -6,8 +6,14 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
+/**
+ * One 16x16 column of sub-chunks with its light, heightmap and biomes. Encoded network
+ * forms are cached per sub-chunk and invalidated by block changes. Owned by the main
+ * thread once resident; workers only ever see copies.
+ */
 class LevelChunk {
 public:
     static constexpr int SUB_CHUNK_COUNT = 24;
@@ -54,11 +60,20 @@ public:
 
     uint32_t getColumnBiome(int x, int z) const;
 
-    std::string encodeNetwork() const;
+    /**
+     * The chunk as a client sees it, with the block states translated by blockIds when it is set.
+     */
+    std::string encodeNetwork(const BlockNetworkIdMap *blockIds = nullptr) const;
 
     const std::string &encodeNetworkAnchor() const;
 
     const std::string &encodeSubChunkNetwork(int index) const;
+
+    /**
+     * A section translated for clients of another version, cached per translation like the untranslated one.
+     * Main thread only: the cache is filled here and cleared by setBlock without a lock.
+     */
+    const std::string &encodeSubChunkNetwork(int index, const BlockNetworkIdMap &blockIds) const;
 
     const std::vector<int32_t> &getTopBlockHeights() const;
 
@@ -131,6 +146,7 @@ private:
     std::vector<uint8_t> mBlockLight;
     mutable std::vector<std::string> mSubChunkNetworkCache;
     mutable std::vector<uint8_t> mSubChunkNetworkValid;
+    mutable std::unordered_map<const BlockNetworkIdMap *, std::vector<std::string>> mTranslatedSubChunkCache;
     mutable std::vector<int32_t> mTopHeightsCache;
     mutable std::string mNetworkAnchorCache;
     mutable bool mTopHeightsValid = false;

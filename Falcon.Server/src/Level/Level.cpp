@@ -56,12 +56,14 @@ Level &Level::operator=(Level &&other) noexcept {
     mTime = other.mTime;
     mSeed = other.mSeed;
     mDimension = other.mDimension;
+    mWorldId = other.mWorldId;
     mSpawnPosition = other.mSpawnPosition;
     mHasSpawnPosition = other.mHasSpawnPosition;
     mGenerator = std::move(other.mGenerator);
     mStorage = std::move(other.mStorage);
     mChunks = std::move(other.mChunks);
     mChunkNetworkCache = std::move(other.mChunkNetworkCache);
+    mTranslatedChunkNetworkCache = std::move(other.mTranslatedChunkNetworkCache);
     mPendingChunks = std::move(other.mPendingChunks);
     mActiveColumns = std::move(other.mActiveColumns);
     mCompletedChunks = std::move(other.mCompletedChunks);
@@ -72,6 +74,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mBlockUpdates.moveStateFrom(std::move(other.mBlockUpdates));
     mLiquidPhysics.moveStateFrom(std::move(other.mLiquidPhysics));
     mGameRules = std::move(other.mGameRules);
+    mRulesOwner = other.mRulesOwner;
     mPacketBroadcaster = std::move(other.mPacketBroadcaster);
     mBlockLightQueue = std::move(other.mBlockLightQueue);
     mBlockActors.moveStateFrom(std::move(other.mBlockActors));
@@ -150,6 +153,8 @@ void Level::saveAll() {
             continue;
 
         if (async) {
+            // The worker gets its own copy: resident chunks belong to the main thread and
+            // keep changing while the save runs.
             std::unique_ptr<LevelChunk> copy(new LevelChunk(entry.second));
             copy->invalidateNetworkCaches();
             mChunkWorker->requestSave(std::move(copy));
@@ -448,6 +453,8 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
         const int64_t key = _packChunk(chunkX, chunkZ);
 
         LevelChunk *chunk = peekChunkPtr(chunkX, chunkZ);
+        // Feature blocks that spill into a chunk which is absent or still being loaded are
+        // kept aside, replayed once it arrives, or merged into storage on save.
         if (chunk == nullptr || mPendingChunks.find(key) != mPendingChunks.end()) {
             mPendingBlockChanges[key].push_back(change);
             continue;
@@ -461,7 +468,7 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
 
         chunk->setBlock(localX, change.mY, localZ, change.mState);
         LightSystem::onBlockChanged(*this, change.mX, change.mY, change.mZ);
-        mChunkNetworkCache.erase(key);
+        _invalidateChunkNetwork(key);
         mRepopulatedChunks.insert(key);
     }
 }
@@ -576,7 +583,7 @@ size_t Level::processChunkUnloads() {
         const int32_t chunkX = chunk->second.getX();
         const int32_t chunkZ = chunk->second.getZ();
         mChunks.erase(chunk);
-        mChunkNetworkCache.erase(key);
+        _invalidateChunkNetwork(key);
         mRepopulatedChunks.erase(key);
         it = mUnloadQueue.erase(it);
         unloaded++;
@@ -648,6 +655,8 @@ bool Level::isColumnActive(int32_t chunkX, int32_t chunkZ) const {
 void Level::setActiveColumns(std::vector<int64_t> columns) {
     std::unordered_set<int64_t> next(columns.begin(), columns.end());
 
+    // Block updates that came due in a column while it was inactive were parked; they
+    // resume as soon as the column becomes active again.
     for (int64_t column: columns) {
         if (mActiveColumns.find(column) == mActiveColumns.end())
             mBlockUpdateScheduler.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
@@ -712,6 +721,9 @@ size_t Level::drainCompletedChunks() {
 
     size_t added = 0;
 
+    // Inserts are capped per tick to bound main-thread work; leftovers stay queued for the
+    // next tick. A populated result only replaces a resident chunk that is still
+    // unpopulated, so it never overwrites edits made since the copy was taken.
     while (!mCompletedChunks.empty() && added < MAX_CHUNK_INSERTS_PER_TICK) {
         ChunkLoadResult &result = mCompletedChunks.front();
         const int64_t key = _packChunk(result.mX, result.mZ);
@@ -730,6 +742,7 @@ size_t Level::drainCompletedChunks() {
                 mRepopulatedChunks.insert(key);
             }
 
+            _invalidateChunkNetwork(key);
             mChunkNetworkCache[key] = std::move(result.mNetworkData);
 
             added++;
@@ -744,8 +757,26 @@ size_t Level::drainCompletedChunks() {
     return added;
 }
 
-std::string Level::getChunkData(int32_t chunkX, int32_t chunkZ) {
+void Level::_invalidateChunkNetwork(int64_t key) {
+    mChunkNetworkCache.erase(key);
+    for (auto &translated: mTranslatedChunkNetworkCache)
+        translated.second.erase(key);
+}
+
+std::string Level::getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds) {
     const int64_t key = _packChunk(chunkX, chunkZ);
+
+    if (blockIds != nullptr) {
+        std::unordered_map<int64_t, std::string> &translated = mTranslatedChunkNetworkCache[blockIds];
+        auto found = translated.find(key);
+        if (found != translated.end())
+            return found->second;
+
+        std::string data = getChunk(chunkX, chunkZ).encodeNetwork(blockIds);
+        translated[key] = data;
+        return data;
+    }
+
 
     auto cached = mChunkNetworkCache.find(key);
     if (cached != mChunkNetworkCache.end())
@@ -839,7 +870,7 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
 
     chunk.setBlock(x & 15, y, z & 15, state);
     LightSystem::onBlockChanged(*this, x, y, z);
-    mChunkNetworkCache.erase(_packChunk(x >> 4, z >> 4));
+    _invalidateChunkNetwork(_packChunk(x >> 4, z >> 4));
 
     if (chunk.getBlock(x & 15, y, z & 15, 1).mName != "minecraft:air")
         mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
@@ -868,7 +899,7 @@ void Level::setBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer, con
         return;
 
     chunk.setBlock(x & 15, y, z & 15, layer, state);
-    mChunkNetworkCache.erase(_packChunk(x >> 4, z >> 4));
+    _invalidateChunkNetwork(_packChunk(x >> 4, z >> 4));
     mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
     mLiquidPhysics.onBlockChanged(x, y, z);
 }

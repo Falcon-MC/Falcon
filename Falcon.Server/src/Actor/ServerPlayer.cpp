@@ -41,7 +41,6 @@ namespace {
     const char *TAG_HEALTH = "Health";
     const char *TAG_FIRE = "Fire";
     const char *TAG_AIR = "Air";
-    const char *TAG_LEVEL = "Level";
     const char *TAG_GAME_MODE = "playerGameType";
     const char *TAG_FIRST_PLAYED = "firstPlayed";
     const char *TAG_LAST_PLAYED = "lastPlayed";
@@ -62,6 +61,7 @@ namespace {
     const char *TAG_SPAWN_X = "SpawnX";
     const char *TAG_SPAWN_Y = "SpawnY";
     const char *TAG_SPAWN_Z = "SpawnZ";
+    const char *TAG_SPAWN_LEVEL = "SpawnLevel";
 
     int64_t currentTimeMillis() {
         using namespace std::chrono;
@@ -239,7 +239,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     swing.mEventData = 0;
     swing.mHasFirePosition = false;
     for (const auto &entry: owner.getPlayers()) {
-        if (&entry.second != this && entry.second.isSpawned() && entry.second.getDimension() == getDimension())
+        if (&entry.second != this && entry.second.isSpawned() && entry.second.sharesLevelWith(*this))
             owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), swing, owner.getCodecContext());
     }
 
@@ -260,7 +260,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
         for (auto &entry: owner.getActors()) {
             ServerActor &target = *entry.second;
             if (target.getRuntimeId() != targetRuntimeId || !target.isAlive() || target.isProjectile() ||
-                target.getDimension() != getDimension())
+                !target.sharesLevelWith(*this))
                 continue;
 
             const Vector3f actorDelta(target.getPosition().x - getPosition().x,
@@ -326,7 +326,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
         victim->getGameType() == (int32_t) GameType::Creative)
         return false;
 
-    if (!owner.getLevelFor(*this).getGameRules().getBool("pvp"))
+    if (!owner.getWorldFor(*this).getOverworld().getGameRules().getBool("pvp"))
         return false;
 
     const Vector3f delta(victim->getPosition().x - getPosition().x,
@@ -606,7 +606,7 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
     for (auto &entry: owner.getActors()) {
         ServerActor &target = *entry.second;
         if (!target.isAlive() || target.isDead() || target.isProjectile() || target.getNoDamageTicks() > 0 ||
-            target.getDimension() != getDimension())
+            !target.sharesLevelWith(*this))
             continue;
 
         const ActorSize size = target.getSize();
@@ -898,6 +898,7 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
         data.putInt(TAG_SPAWN_X, mSpawnPoint.x);
         data.putInt(TAG_SPAWN_Y, mSpawnPoint.y);
         data.putInt(TAG_SPAWN_Z, mSpawnPoint.z);
+        data.putString(TAG_SPAWN_LEVEL, mSpawnWorld);
     }
 
     data.putInt(TAG_FOOD_LEVEL, (int32_t) getFood());
@@ -989,6 +990,7 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
     mHasSpawnPoint = data.contains(TAG_SPAWN_X);
     if (mHasSpawnPoint)
         mSpawnPoint = Vector3i(data.getInt(TAG_SPAWN_X, 0), data.getInt(TAG_SPAWN_Y, 0), data.getInt(TAG_SPAWN_Z, 0));
+    mSpawnWorld = data.getString(TAG_SPAWN_LEVEL, data.getString(TAG_LEVEL, std::string()));
     setFireTicks(std::clamp((int) data.getShort(TAG_FIRE, 0), 0, 32767));
 
     setFood((float) data.getInt(TAG_FOOD_LEVEL, (int32_t) getFood()));

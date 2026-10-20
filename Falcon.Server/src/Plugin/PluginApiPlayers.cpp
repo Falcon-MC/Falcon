@@ -3,6 +3,8 @@
 #include "Actor/ServerPlayer.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Plugin/PluginApiHelpers.h"
+#include "Protocol/Codec/ProtocolCodec.h"
+#include "Protocol/Codec/ProtocolCodecRegistry.h"
 
 #include <string>
 
@@ -26,6 +28,12 @@ namespace {
 
     const char *playerXuid(FalconPlayer *target) {
         return hold(player(target)->getXuid());
+    }
+
+    int32_t playerProtocolVersion(FalconPlayer *target) {
+        const std::shared_ptr<const ProtocolCodec> &codec = player(target)->getCodec();
+        return codec != nullptr ? codec->getProtocolVersion()
+                                : ProtocolCodecRegistry::instance().getDefault().getProtocolVersion();
     }
 
     const char *playerUuid(FalconPlayer *target) {
@@ -82,6 +90,7 @@ void PluginServerApi::fillPlayers(FalconServerApi &api) {
     api.playerGameMode = &playerGameMode;
     api.playerSetGameMode = &playerSetGameMode;
     api.playerXuid = &playerXuid;
+    api.playerProtocolVersion = &playerProtocolVersion;
     api.playerUuid = &playerUuid;
     api.playerAddress = &playerAddress;
     api.playerSendTitle = &playerSendTitle;

@@ -3,6 +3,10 @@
 #include "Plugin/PluginServerApi.h"
 #include "Protocol/Types/ItemStack.h"
 
+#include "Core/Json/Json.h"
+
+#include <cmath>
+#include <memory>
 #include <string>
 
 using namespace PluginApiHelpers;
@@ -240,6 +244,69 @@ namespace {
             return;
         *source->mResult = *item(result);
     }
+
+    const char *eventWorldName(FalconEvent *target) {
+        return hold(event(target)->mWorldName);
+    }
+
+    const char *eventPreviousWorldName(FalconEvent *target) {
+        return hold(event(target)->mPreviousWorldName);
+    }
+
+    const char *eventAddress(FalconEvent *target) {
+        return hold(event(target)->mAddress);
+    }
+
+    const char *eventTransport(FalconEvent *target) {
+        return hold(event(target)->mTransport);
+    }
+
+    uint64_t eventClientGuid(FalconEvent *target) {
+        return event(target)->mClientGuid;
+    }
+
+    uint32_t eventMtuSize(FalconEvent *target) {
+        return event(target)->mMtuSize;
+    }
+
+    const char *eventClientData(FalconEvent *target) {
+        const std::string *clientData = event(target)->mClientData;
+        return hold(clientData != nullptr ? *clientData : std::string());
+    }
+
+    uint32_t eventFormId(FalconEvent *target) {
+        return event(target)->mFormId;
+    }
+
+    const char *eventFormResponse(FalconEvent *target) {
+        return hold(event(target)->mFormResponse);
+    }
+
+    const char *eventClientDataField(FalconEvent *target, const char *key) {
+        const std::string *clientData = event(target)->mClientData;
+        if (clientData == nullptr || key == nullptr)
+            return hold(std::string());
+
+        const std::unique_ptr<json::Value> root = json::parse(*clientData);
+        const json::Value *value = root != nullptr ? root->get(key) : nullptr;
+        if (value == nullptr)
+            return hold(std::string());
+
+        switch (value->mType) {
+            case json::Value::Type::String:
+                return hold(value->mString);
+            case json::Value::Type::Boolean:
+                return hold(value->mBoolean ? "true" : "false");
+            case json::Value::Type::Number: {
+                const double number = value->mNumber;
+                if (std::floor(number) == number && std::fabs(number) < 9.0e15)
+                    return hold(std::to_string((long long) number));
+                return hold(std::to_string(number));
+            }
+            default:
+                return hold(std::string());
+        }
+    }
 }
 
 void PluginServerApi::fillEvents(FalconServerApi &api) {
@@ -287,4 +354,14 @@ void PluginServerApi::fillEvents(FalconServerApi &api) {
     api.eventChunkZ = &eventChunkZ;
     api.eventResult = &eventResult;
     api.eventSetResult = &eventSetResult;
+    api.eventWorldName = &eventWorldName;
+    api.eventPreviousWorldName = &eventPreviousWorldName;
+    api.eventAddress = &eventAddress;
+    api.eventTransport = &eventTransport;
+    api.eventClientGuid = &eventClientGuid;
+    api.eventMtuSize = &eventMtuSize;
+    api.eventClientData = &eventClientData;
+    api.eventClientDataField = &eventClientDataField;
+    api.eventFormId = &eventFormId;
+    api.eventFormResponse = &eventFormResponse;
 }

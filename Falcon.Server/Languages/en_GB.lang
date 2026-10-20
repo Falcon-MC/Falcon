@@ -4,6 +4,21 @@ falcon.commands.about.version=This server is running Falcon version %1$s (%2$s o
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protocol %2$s)
 falcon.commands.about.build=Build %1$s, %2$s configuration
 
+falcon.commands.world.list=Loaded worlds (%1$s): %2$s
+falcon.commands.world.available=Worlds on disk: %1$s
+falcon.commands.world.created=Created world %1$s
+falcon.commands.world.exists=World %1$s already exists
+falcon.commands.world.invalidName=Invalid world name: %1$s
+falcon.commands.world.loaded=Loaded world %1$s
+falcon.commands.world.alreadyLoaded=World %1$s is already loaded
+falcon.commands.world.notFound=No world named %1$s
+falcon.commands.world.notLoaded=World %1$s is not loaded
+falcon.commands.world.unloaded=Unloaded world %1$s
+falcon.commands.world.unload.default=The default world %1$s cannot be unloaded
+falcon.commands.world.unload.occupied=World %1$s still has players in it
+falcon.commands.world.unload.cancelled=A plugin prevented world %1$s from unloading
+falcon.commands.world.teleported=Sent %1$s to world %2$s
+
 falcon.commands.allowlist.enabled=Turned on the allowlist
 falcon.commands.allowlist.disabled=Turned off the allowlist
 falcon.commands.allowlist.list=Allowlist (%1$s): %2$s

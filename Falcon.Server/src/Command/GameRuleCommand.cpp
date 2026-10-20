@@ -39,7 +39,8 @@ std::vector<CommandOverloadData> GameRuleCommand::getOverloads() const {
 }
 
 bool GameRuleCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
-    GameRules &rules = mHandler.getLevel().getGameRules();
+    World &world = mHandler.getWorldOf(sender.getLevel());
+    GameRules &rules = world.getOverworld().getGameRules();
 
     if (arguments.empty()) {
         std::string names;
@@ -64,7 +65,7 @@ bool GameRuleCommand::execute(CommandOrigin &sender, const std::vector<std::stri
         return true;
     }
 
-    if (!mHandler.changeGameRule(arguments[0], arguments[1])) {
+    if (!mHandler.changeGameRule(world, arguments[0], arguments[1])) {
         sender.sendTranslation("commands.generic.parameter.invalid", {arguments[1]});
         return false;
     }

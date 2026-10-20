@@ -10,6 +10,7 @@
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/NetworkIdentifier.h"
 #include "Network/PacketSender.h"
+#include "Protocol/Codec/ProtocolCodec.h"
 #include "Protocol/PacketCodecContext.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Protocol/Types/AdventureSettingData.h"
@@ -18,6 +19,7 @@
 #include "Actor/PlayerAcknowledgements.h"
 
 #include <chrono>
+#include <memory>
 #include <string>
 #include <vector>
 #include <unordered_set>
@@ -27,6 +29,9 @@ class ServerNetworkHandler;
 
 class ServerPlayer : public Actor {
 public:
+    /** Name of the world the player was in when saved; the player data file is shared by every world. */
+    static constexpr const char *TAG_LEVEL = "Level";
+
     enum class LoginState : int {
         Connecting = 0,
         NetworkSettingsSent = 1,
@@ -51,6 +56,13 @@ public:
     LoginState getLoginState() const { return mLoginState; }
 
     void setLoginState(LoginState state) { mLoginState = state; }
+
+    /**
+     * The protocol this connection chose from the version it announced, fixed for the rest of the session.
+     */
+    const std::shared_ptr<const ProtocolCodec> &getCodec() const { return mCodec; }
+
+    void setCodec(std::shared_ptr<const ProtocolCodec> codec) { mCodec = std::move(codec); }
 
     bool isSpawned() const { return mLoginState == LoginState::Spawned; }
 
@@ -312,6 +324,11 @@ public:
 
     void setAwaitingDimensionAck(bool awaiting) { mAwaitingDimensionAck = awaiting; }
 
+    /** A world change inside one dimension sent an intermediate dimension; the real one follows the ack. */
+    bool hasPendingDimensionHop() const { return mPendingDimensionHop; }
+
+    void setPendingDimensionHop(bool pending) { mPendingDimensionHop = pending; }
+
     void consumeOneHeldItem();
 
     bool isSleeping() const {
@@ -339,9 +356,15 @@ public:
         return mSpawnPoint;
     }
 
-    void setSpawnPoint(const Vector3i &position) {
+    /** The world that holds the spawn point, since a bed only counts in the world it was placed in. */
+    const std::string &getSpawnWorld() const {
+        return mSpawnWorld;
+    }
+
+    void setSpawnPoint(const Vector3i &position, const std::string &world) {
         mHasSpawnPoint = true;
         mSpawnPoint = position;
+        mSpawnWorld = world;
     }
 
     void clearSpawnPoint() {
@@ -558,6 +581,7 @@ private:
 
     NetworkIdentifier mId;
     LoginState mLoginState;
+    std::shared_ptr<const ProtocolCodec> mCodec;
     std::string mName;
     std::string mUuid;
     std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;
@@ -570,10 +594,12 @@ private:
     int32_t mSpinAttackTicks = 0;
     ChunkStreamState mChunkStreamState;
     bool mAwaitingDimensionAck = false;
+    bool mPendingDimensionHop = false;
     bool mSleeping = false;
     Vector3i mSleepingPosition;
     bool mHasSpawnPoint = false;
     Vector3i mSpawnPoint;
+    std::string mSpawnWorld;
     int32_t mTicksSinceInAir = 0;
     bool mAwaitingConsumableRelease = false;
     int64_t mLastEarlyConsumableReleaseTick = 0;

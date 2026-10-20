@@ -4,6 +4,21 @@ falcon.commands.about.version=Den här servern kör Falcon version %1$s (%2$s p�
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokoll %2$s)
 falcon.commands.about.build=Build %1$s, %2$s-konfiguration
 
+falcon.commands.world.list=Inlästa världar (%1$s): %2$s
+falcon.commands.world.available=Världar på disken: %1$s
+falcon.commands.world.created=Världen %1$s har skapats
+falcon.commands.world.exists=Världen %1$s finns redan
+falcon.commands.world.invalidName=Ogiltigt världsnamn: %1$s
+falcon.commands.world.loaded=Världen %1$s har lästs in
+falcon.commands.world.alreadyLoaded=Världen %1$s är redan inläst
+falcon.commands.world.notFound=Det finns ingen värld som heter %1$s
+falcon.commands.world.notLoaded=Världen %1$s är inte inläst
+falcon.commands.world.unloaded=Världen %1$s har laddats ur
+falcon.commands.world.unload.default=Standardvärlden %1$s kan inte laddas ur
+falcon.commands.world.unload.occupied=Det finns fortfarande spelare i världen %1$s
+falcon.commands.world.unload.cancelled=Ett plugin hindrade att världen %1$s laddades ur
+falcon.commands.world.teleported=%1$s skickades till världen %2$s
+
 falcon.commands.allowlist.enabled=Listan över tillåtna har aktiverats
 falcon.commands.allowlist.disabled=Listan över tillåtna har inaktiverats
 falcon.commands.allowlist.list=Listan över tillåtna (%1$s): %2$s

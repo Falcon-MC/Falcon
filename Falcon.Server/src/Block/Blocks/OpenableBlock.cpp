@@ -42,7 +42,7 @@ void OpenableBlock::setOpen(ServerNetworkHandler &owner, Level &level, const Vec
     level.setBlock(position, BlockState(state.mName, states), false);
 
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    owner.playLevelSound(level, soundOf(state, open), center, "", state.getHash());
+    owner.playBlockSound(level, soundOf(state, open), center, state.getHash());
 }
 
 bool OpenableBlock::hasManualOverride(Level &level, const Vector3i &position) {

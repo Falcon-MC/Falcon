@@ -45,7 +45,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, const ServerA
     for (auto &entry: owner.getActors()) {
         const ServerActor &other = *entry.second;
         if (&other == &actor || !other.isAlive() || other.isProjectile() || !other.getPhysics().mPushable
-            || other.getDimension() != actor.getDimension())
+            || !other.sharesLevelWith(actor))
             continue;
 
         const AxisAlignedBB box = boundingBoxOf(other);
@@ -58,7 +58,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, const ServerA
 
     for (auto &entry: owner.getPlayers()) {
         const ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead() || player.getDimension() != actor.getDimension()
+        if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(actor)
             || player.getGameType() == (int32_t) GameType::Spectator)
             continue;
 

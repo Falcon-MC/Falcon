@@ -48,6 +48,13 @@ void GeneratorChunkSource::_trim() {
     }
 }
 
+/**
+ * Decorates one chunk inside a private scratch level that holds its 3x3 neighbourhood as
+ * raw terrain, so trees and other features can be placed across chunk borders. Blocks that
+ * land in a neighbour are reported through `overflow` so the real neighbour receives them. The
+ * neighbours' terrain is cached afterwards because adjacent chunks are usually populated
+ * soon after and would otherwise regenerate the same terrain.
+ */
 void GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow,
                                     std::vector<Tag> &blockActors) {
     const int32_t chunkX = chunk.getX();

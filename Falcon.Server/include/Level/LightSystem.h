@@ -6,6 +6,10 @@
 class Level;
 class LevelChunk;
 
+/**
+ * Heightmap, sky light and block light. Whole chunks are lit on the chunk workers; single
+ * block changes are queued and relit incrementally on the main thread.
+ */
 class LightSystem {
 public:
     static constexpr int MAX_LIGHT = 15;

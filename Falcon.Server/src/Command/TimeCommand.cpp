@@ -102,9 +102,12 @@ bool TimeCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     for (char &character: operation)
         character = (char) std::tolower((unsigned char) character);
 
+    World &world = mHandler.getWorldOf(sender.getLevel());
+    Level &level = world.getOverworld();
+
     if (operation == "start" || operation == "stop") {
         const bool running = operation == "start";
-        mHandler.changeGameRule("dodaylightcycle", running ? "true" : "false");
+        mHandler.changeGameRule(world, "dodaylightcycle", running ? "true" : "false");
         sender.sendTranslation("commands.gamerule.success", {"dodaylightcycle", running ? "true" : "false"});
         return true;
     }
@@ -120,9 +123,9 @@ bool TimeCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
             sender.sendTranslation("commands.generic.syntax", {"/time set ", arguments[1], ""});
             return false;
         }
-        mHandler.getLevel().setTime(time);
-        mHandler.broadcastWorldTime();
-        sender.sendTranslation("commands.time.set", {std::to_string(mHandler.getLevel().getDayTime())});
+        level.setTime(time);
+        mHandler.broadcastWorldTime(world);
+        sender.sendTranslation("commands.time.set", {std::to_string(level.getDayTime())});
         return true;
     }
 
@@ -132,8 +135,8 @@ bool TimeCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
             sender.sendTranslation("commands.generic.syntax", {"/time add ", arguments[1], ""});
             return false;
         }
-        mHandler.getLevel().addTime(time);
-        mHandler.broadcastWorldTime();
+        level.addTime(time);
+        mHandler.broadcastWorldTime(world);
         sender.sendTranslation("commands.time.added", {std::to_string(time)});
         return true;
     }
@@ -141,11 +144,11 @@ bool TimeCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     if (operation == "query") {
         const std::string query = arguments[1];
         if (query == "daytime")
-            sender.sendTranslation("commands.time.query.daytime", {std::to_string(mHandler.getLevel().getDayTime())});
+            sender.sendTranslation("commands.time.query.daytime", {std::to_string(level.getDayTime())});
         else if (query == "gametime")
-            sender.sendTranslation("commands.time.query.gametime", {std::to_string(mHandler.getLevel().getTime())});
+            sender.sendTranslation("commands.time.query.gametime", {std::to_string(level.getTime())});
         else if (query == "day")
-            sender.sendTranslation("commands.time.query.day", {std::to_string(mHandler.getLevel().getTime() / 24000)});
+            sender.sendTranslation("commands.time.query.day", {std::to_string(level.getTime() / 24000)});
         else {
             sender.sendTranslation("commands.generic.syntax", {"/time query ", query, ""});
             return false;

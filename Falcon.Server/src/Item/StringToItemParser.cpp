@@ -14,6 +14,11 @@ StringToItemParser &StringToItemParser::getInstance() {
     return instance;
 }
 
+void StringToItemParser::reset() {
+    mFactories.clear();
+    _registerDefaults();
+}
+
 std::string StringToItemParser::_normalize(const std::string &input) {
     std::string out;
     out.reserve(input.size());

@@ -30,7 +30,7 @@ bool FollowMobGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 
 bool FollowMobGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
     const Actor *leader = _resolveLeader(owner);
-    if (leader == nullptr || !leader->isAlive() || leader->getDimension() != mob.getDimension())
+    if (leader == nullptr || !leader->isAlive() || !leader->sharesLevelWith(mob))
         return false;
 
     return mob.distanceSquaredTo(*leader) <= mSearchRange * mSearchRange;
@@ -72,7 +72,7 @@ Actor *FollowMobGoal::_resolveLeader(ServerNetworkHandler &owner) const {
 }
 
 bool FollowMobGoal::_accepts(ServerNetworkHandler &owner, const MobActor &mob, const Actor &candidate) const {
-    if (&candidate == &mob || !candidate.isAlive() || candidate.getDimension() != mob.getDimension())
+    if (&candidate == &mob || !candidate.isAlive() || !candidate.sharesLevelWith(mob))
         return false;
 
     if (mob.distanceSquaredTo(candidate) > mSearchRange * mSearchRange)

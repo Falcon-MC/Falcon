@@ -11,6 +11,11 @@ constexpr int64_t MIX_CONSTANT_1 = static_cast<int64_t>(0xBF58476D1CE4E5B9ULL);
 constexpr int64_t MIX_CONSTANT_2 = static_cast<int64_t>(0x94D049BB133111EBULL);
 constexpr int32_t JAVA_INTEGER_MAX_VALUE = 0x7FFFFFFF;
 
+/**
+ * The generator's random streams are defined on signed 64-bit arithmetic with logical
+ * shifts; every operation goes through uint64_t so overflow stays well-defined in C++ and
+ * the sequence matches bit for bit.
+ */
 int64_t unsignedShiftRight(int64_t value, int32_t bits) {
     return static_cast<int64_t>(static_cast<uint64_t>(value) >> bits);
 }
@@ -82,6 +87,8 @@ double XoroshiroRandom::nextGaussian() {
 void XoroshiroRandom::setSeed(int64_t seed) {
     mSeed = seed;
 
+    // The 64-bit seed is expanded into the 128-bit state with two SplitMix64 steps; an
+    // all-zero state would make xoroshiro emit zeros forever, hence the fallback below.
     int64_t state[2] = {0, 0};
     uint64_t z = static_cast<uint64_t>(seed);
 

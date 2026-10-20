@@ -160,7 +160,7 @@ namespace {
 
     bool execute(ServerNetworkHandler &owner, Level &level, CommandBlockActor &actor, int chain)
     {
-        const GameRules &rules = owner.getLevel().getGameRules();
+        const GameRules &rules = owner.getWorldOf(level).getOverworld().getGameRules();
         if (chain > std::min(MAX_CHAIN_LENGTH, rules.getInt("maxcommandchainlength")))
             return false;
 
@@ -348,7 +348,7 @@ void CommandBlockSystem::broadcastData(ServerNetworkHandler &owner, Level &level
     const int64_t chunkKey = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 
     for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && entry.second.getDimension() == level.getDimensionType()
+        if (entry.second.isSpawned() && entry.second.isIn(level)
             && entry.second.getSentChunks().count(chunkKey) != 0)
             stateOf(level).mSyncedRevisions[entry.first][key] = actor.mRevision;
     }
@@ -396,7 +396,7 @@ void CommandBlockSystem::tickCommandBlocks(ServerNetworkHandler &owner, Level &l
 
     for (auto it = syncedRevisions.begin(); it != syncedRevisions.end();) {
         const auto player = owner.getPlayers().find(it->first);
-        if (player == owner.getPlayers().end() || player->second.getDimension() != level.getDimensionType())
+        if (player == owner.getPlayers().end() || !player->second.isIn(level))
             it = syncedRevisions.erase(it);
         else
             ++it;
@@ -404,7 +404,7 @@ void CommandBlockSystem::tickCommandBlocks(ServerNetworkHandler &owner, Level &l
 
     for (auto &playerEntry: owner.getPlayers()) {
         ServerPlayer &player = playerEntry.second;
-        if (!player.isSpawned() || player.getDimension() != level.getDimensionType())
+        if (!player.isSpawned() || !player.isIn(level))
             continue;
 
         std::unordered_map<int64_t, uint64_t> &synced = syncedRevisions[playerEntry.first];

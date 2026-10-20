@@ -26,7 +26,7 @@ LookAtEntityGoal::LookAtEntityGoal(Settings settings) : mSettings(std::move(sett
 }
 
 bool LookAtEntityGoal::_accepts(ServerNetworkHandler &owner, const MobActor &mob, const Actor &candidate) const {
-    if (&candidate == &mob || !candidate.isAlive() || candidate.getDimension() != mob.getDimension())
+    if (&candidate == &mob || !candidate.isAlive() || !candidate.sharesLevelWith(mob))
         return false;
     if (mob.distanceSquaredTo(candidate) > mSettings.mRange * mSettings.mRange)
         return false;

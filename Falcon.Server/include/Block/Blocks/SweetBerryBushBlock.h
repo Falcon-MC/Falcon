@@ -14,6 +14,10 @@ public:
 
     bool getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const override;
 
+    PathHazard getPathHazard() const override {
+        return PathHazard::Damaging;
+    }
+
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                        const BlockState &state) const override;
 };

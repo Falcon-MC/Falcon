@@ -8,6 +8,8 @@ public:
 
     using HostileActor::HostileActor;
 
+    bool shouldRemoveInPeaceful() const override { return MobActor::shouldRemoveInPeaceful(); }
+
     ActorSize getSize() const override { return ActorSize{13.0f, 4.0f}; }
 
     float getDefaultMaxHealth() const override { return 200.0f; }

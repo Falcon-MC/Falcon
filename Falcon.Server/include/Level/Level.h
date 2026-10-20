@@ -29,6 +29,11 @@ class Packet;
 class Particle;
 class ServerNetworkHandler;
 
+/**
+ * One dimension of the world: resident chunks, block access, block updates, fluids, light,
+ * block actors and storage. Main-thread only; chunk loading and generation are delegated
+ * to a ChunkWorker and merged back through drainCompletedChunks().
+ */
 class Level {
 public:
     struct ChunkPosition {
@@ -46,6 +51,10 @@ public:
     int getViewDistance() const { return mViewDistance; }
 
     DimensionType getDimensionType() const { return mDimension; }
+
+    uint32_t getWorldId() const { return mWorldId; }
+
+    void setWorldId(uint32_t worldId) { mWorldId = worldId; }
 
     int getDimensionId() const { return Dimension::toId(mDimension); }
 
@@ -106,9 +115,12 @@ public:
 
     const BlockActorStore &getBlockActors() const { return mBlockActors; }
 
-    GameRules &getGameRules() { return mGameRules; }
+    GameRules &getGameRules() { return mRulesOwner == nullptr ? mGameRules : mRulesOwner->mGameRules; }
 
-    const GameRules &getGameRules() const { return mGameRules; }
+    const GameRules &getGameRules() const { return mRulesOwner == nullptr ? mGameRules : mRulesOwner->mGameRules; }
+
+    /** Game rules belong to a world, so the Nether and the End read and write the rules of its overworld. */
+    void shareGameRulesWith(Level &overworld) { mRulesOwner = &overworld; }
 
     void initializeGameRules();
 
@@ -224,7 +236,11 @@ public:
 
     const ChunkWorker *getChunkWorker() const { return mChunkWorker.get(); }
 
-    std::string getChunkData(int32_t chunkX, int32_t chunkZ);
+    /**
+     * The chunk's network payload, translated by blockIds for clients of another version and cached per
+     * translation. Main thread only: the caches are filled here and cleared on block changes without a lock.
+     */
+    std::string getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds = nullptr);
 
     int getChunkSubChunkCount(int32_t chunkX, int32_t chunkZ);
 
@@ -351,6 +367,7 @@ private:
     int mViewDistance;
     int64_t mSeed;
     DimensionType mDimension;
+    uint32_t mWorldId = 0;
     std::unique_ptr<ChunkGenerator> mGenerator;
     LevelStorage mStorage;
     BlockUpdateScheduler mBlockUpdateScheduler;
@@ -359,6 +376,9 @@ private:
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 8;
 
     std::unordered_map<int64_t, std::string> mChunkNetworkCache;
+    std::unordered_map<const BlockNetworkIdMap *, std::unordered_map<int64_t, std::string>> mTranslatedChunkNetworkCache;
+
+    void _invalidateChunkNetwork(int64_t key);
     std::unordered_set<int64_t> mPendingChunks;
     std::unordered_set<int64_t> mActiveColumns;
     std::deque<ChunkLoadResult> mCompletedChunks;
@@ -376,6 +396,7 @@ private:
     int32_t mThunderTime = 0;
     int32_t mSkyLightSubtracted = 0;
     GameRules mGameRules;
+    Level *mRulesOwner = nullptr;
     BlockActorStore mBlockActors{*this};
     PacketBroadcaster mPacketBroadcaster;
     std::unordered_set<int64_t> mBlockLightQueue;

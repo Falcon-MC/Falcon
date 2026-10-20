@@ -90,7 +90,7 @@ void PortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const
                                  ? DimensionType::Nether
                                  : DimensionType::Overworld;
 
-    Level &destination = owner.getDimension(target);
+    Level &destination = owner.getWorldOf(level).getLevel(target);
 
     const Vector3f actorPosition = actor.getPosition();
     const Vector3i source((int32_t) std::floor(actorPosition.x),
@@ -112,7 +112,7 @@ void PortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const
     }
 
     actor.setPortalCooldown(PORTAL_COOLDOWN_TICKS);
-    owner.changeActorDimension(actor, target, arrival);
+    owner.changeActorLevel(actor, destination, arrival);
 }
 
 void PortalBlock::spawnPortal(Level &level, const Vector3i &position, ServerNetworkHandler *owner) {

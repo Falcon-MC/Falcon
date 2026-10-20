@@ -4,6 +4,21 @@ falcon.commands.about.version=Server ini menjalankan Falcon versi %1$s (%2$s di 
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
 falcon.commands.about.build=Build %1$s, konfigurasi %2$s
 
+falcon.commands.world.list=Dunia yang dimuat (%1$s): %2$s
+falcon.commands.world.available=Dunia di disk: %1$s
+falcon.commands.world.created=Dunia %1$s telah dibuat
+falcon.commands.world.exists=Dunia %1$s sudah ada
+falcon.commands.world.invalidName=Nama dunia tidak valid: %1$s
+falcon.commands.world.loaded=Dunia %1$s telah dimuat
+falcon.commands.world.alreadyLoaded=Dunia %1$s sudah dimuat
+falcon.commands.world.notFound=Tidak ada dunia bernama %1$s
+falcon.commands.world.notLoaded=Dunia %1$s tidak dimuat
+falcon.commands.world.unloaded=Dunia %1$s telah dilepas
+falcon.commands.world.unload.default=Dunia bawaan %1$s tidak dapat dilepas
+falcon.commands.world.unload.occupied=Masih ada pemain di dunia %1$s
+falcon.commands.world.unload.cancelled=Sebuah plugin mencegah dunia %1$s dilepas
+falcon.commands.world.teleported=%1$s dikirim ke dunia %2$s
+
 falcon.commands.allowlist.enabled=Mengaktifkan daftar izin
 falcon.commands.allowlist.disabled=Menonaktifkan daftar izin
 falcon.commands.allowlist.list=Daftar izin (%1$s): %2$s

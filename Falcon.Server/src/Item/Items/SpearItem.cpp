@@ -82,7 +82,7 @@ Actor *SpearItem::findTarget(ServerNetworkHandler &owner, ServerPlayer &player, 
 
     const auto consider = [&](Actor &candidate, float width, float height) {
         (void) width;
-        if (candidate.getDimension() != player.getDimension())
+        if (!candidate.sharesLevelWith(player))
             return;
 
         const Vector3f candidatePosition = candidate.getPosition();
@@ -146,7 +146,7 @@ Actor *SpearItem::findSweepTarget(ServerNetworkHandler &owner, ServerPlayer &pla
     float closestDistance = std::numeric_limits<float>::max();
 
     const auto consider = [&](Actor &candidate, float width, float height) {
-        if (candidate.getDimension() != player.getDimension())
+        if (!candidate.sharesLevelWith(player))
             return;
 
         const Vector3f candidatePosition = candidate.getPosition();

@@ -173,7 +173,7 @@ void AbstractSlimeActor::_attackTouchingPlayers(ServerNetworkHandler &owner) {
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead() || player.getDimension() != getDimension())
+        if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(*this))
             continue;
 
         const int32_t gameType = player.getGameType();

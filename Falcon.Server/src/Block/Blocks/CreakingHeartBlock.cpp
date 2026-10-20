@@ -153,7 +153,7 @@ bool CreakingHeartBlock::canSpawnCreaking(ServerNetworkHandler &owner, Level &le
 
     for (auto &entry: owner.getPlayers()) {
         const ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || !player.isAlive() || player.getDimension() != level.getDimensionType())
+        if (!player.isSpawned() || !player.isAlive() || !player.isIn(level))
             continue;
 
         const Vector3f playerPosition = player.getPosition();

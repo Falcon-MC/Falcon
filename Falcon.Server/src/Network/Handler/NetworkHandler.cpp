@@ -1,6 +1,7 @@
 #include "Network/Handler/NetworkHandler.h"
 
 #include "Core/Utility/BinaryStream.h"
+#include "Protocol/Codec/ProtocolCodec.h"
 #include "Protocol/Packet.h"
 
 #include <algorithm>
@@ -125,6 +126,13 @@ void NetworkHandler::enableEncryption(const NetworkIdentifier &id, const Encrypt
     mOutbound.push(std::move(command));
 }
 
+void NetworkHandler::closeConnection(const NetworkIdentifier &id) {
+    OutboundCommand command;
+    command.mKind = OutboundCommand::Kind::Close;
+    command.mId = id;
+    mOutbound.push(std::move(command));
+}
+
 NetworkPeer::Reliability NetworkHandler::_toPeerReliability(const Packet &packet) {
     switch (packet.mReliability) {
         case Packet::Reliability::Reliable:
@@ -145,8 +153,13 @@ Compressibility NetworkHandler::_toPeerCompressibility(const Packet &packet) {
 }
 
 void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, const PacketCodecContext &context) {
+    const PacketCodecContext *own = mContextResolver ? mContextResolver(id) : nullptr;
+    const PacketCodecContext &session = own != nullptr ? *own : context;
+    if (!session.getCodec().supports(packet.getId()))
+        return;
+
     BinaryStream stream;
-    packet.writeWithHeader(stream, context);
+    packet.writeWithHeader(stream, session);
 
     if (!mOutboundFilter) {
         send(id, stream.getBuffer(), _toPeerReliability(packet), _toPeerCompressibility(packet));
@@ -164,11 +177,8 @@ void NetworkHandler::setOutboundFilter(OutboundFilter filter) {
     mOutboundFilter = std::move(filter);
 }
 
-void NetworkHandler::sendToAll(const Packet &packet, const PacketCodecContext &context) {
-    BinaryStream stream;
-    packet.writeWithHeader(stream, context);
-
-    sendToAll(stream.getBuffer(), _toPeerReliability(packet), _toPeerCompressibility(packet));
+void NetworkHandler::setContextResolver(ContextResolver resolver) {
+    mContextResolver = std::move(resolver);
 }
 
 void NetworkHandler::send(const NetworkIdentifier &id, const std::string &data, NetworkPeer::Reliability reliability,
@@ -211,6 +221,15 @@ void NetworkHandler::_applyOutbound(OutboundCommand &command) {
     Connection *connection = getConnection(command.mId);
     if (connection == nullptr)
         return;
+
+    if (command.mKind == OutboundCommand::Kind::Close) {
+        for (std::unique_ptr<Connector> &connector: mConnectors) {
+            if (connector->closeConnection(command.mId))
+                break;
+        }
+        onConnectionClosed(command.mId, DisconnectFailReason::ConnectionRefused, "");
+        return;
+    }
 
     if (command.mKind == OutboundCommand::Kind::Flush)
         connection->getBatchedPeer()->flush();
@@ -274,7 +293,7 @@ void NetworkHandler::runEvents() {
             case InboundEvent::Kind::Opened: {
                 ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
                 for (Listener *listener: mListeners)
-                    listener->onNewIncomingConnection(event.mId);
+                    listener->onNewIncomingConnection(event.mId, event.mMtuSize);
                 break;
             }
 
@@ -310,12 +329,14 @@ bool NetworkHandler::onValidateIncomingConnection(const NetworkIdentifier &id) {
 }
 
 void NetworkHandler::onNewIncomingConnection(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer) {
+    const uint16_t mtuSize = peer != nullptr ? peer->getMtuSize() : 0;
     mConnections[id] = std::unique_ptr<Connection>(new Connection(id, std::move(peer)));
     mConnectionCount.store(mConnections.size());
 
     InboundEvent event;
     event.mKind = InboundEvent::Kind::Opened;
     event.mId = id;
+    event.mMtuSize = mtuSize;
     mInbound.push(std::move(event));
 }
 

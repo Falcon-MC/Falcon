@@ -1,0 +1,10 @@
+#pragma once
+
+#include "Network/ProtocolData.h"
+
+@FALCON_OLDER_DATA_INCLUDES@
+namespace FalconOlderData {
+    inline const ProtocolData kEntries[] = {
+@FALCON_OLDER_DATA_ENTRIES@        {0, nullptr, nullptr, 0, nullptr, nullptr, nullptr, 0},
+    };
+}

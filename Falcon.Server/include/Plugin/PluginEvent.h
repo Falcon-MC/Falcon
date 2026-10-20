@@ -55,4 +55,13 @@ struct PluginEvent {
     int32_t mChunkX = 0;
     int32_t mChunkZ = 0;
     ItemStack *mResult = nullptr;
+    std::string mWorldName;
+    std::string mPreviousWorldName;
+    std::string mAddress;
+    std::string mTransport;
+    uint64_t mClientGuid = 0;
+    uint32_t mMtuSize = 0;
+    const std::string *mClientData = nullptr;
+    uint32_t mFormId = 0;
+    std::string mFormResponse;
 };

@@ -53,6 +53,10 @@ namespace {
                * OverworldGeneratorConstants::CELL_X_COUNT + cellXIndex;
     }
 
+    /**
+     * Stone turns into deepslate below y 0, with a dithered transition between y 0 and 8
+     * where the chance of deepslate drops as y rises.
+     */
     bool shouldPlaceDeepslate(IRandom &random, int32_t y) {
         if (y < 0)
             return true;
@@ -195,6 +199,7 @@ int64_t OverworldGenerator::parseSeed(const std::string &value) {
     if (end != nullptr && *end == '\0')
         return (int64_t) parsed;
 
+    // Non-numeric seeds are reduced to a 32-bit seed with the 31-multiplier string hash.
     int32_t hash = 0;
     for (char character: value)
         hash = (int32_t) ((uint32_t) hash * 31u + (uint32_t) (unsigned char) character);
@@ -260,6 +265,8 @@ void OverworldGenerator::_generateTerrain(LevelChunk &chunk, DensityChunkCache &
             terrain.getOreVeinifierSeed()
     );
 
+    // Rules are tried in order and the first non-null block wins: the aquifer, then ore
+    // veins, then plain stone wherever the density is positive.
     std::vector<MaterialRule> rules;
     rules.push_back([&aquifer, wrappedDensity](FunctionContext &context) -> const BlockState * {
         return aquifer.computeSubstance(context, wrappedDensity->compute(context));
@@ -317,6 +324,11 @@ void OverworldGenerator::_generateTerrain(LevelChunk &chunk, DensityChunkCache &
         return hasNonAir;
     };
 
+    // Evaluating the density for every block is the dominant cost of terrain generation, and
+    // most of a column above the surface is air. Only cells up to sea level or the
+    // preliminary surface estimate (plus a few seed cells) are evaluated first; then a flood
+    // fill grows from every cell that produced a block, so overhangs and peaks above the
+    // estimate are still generated while most of the open sky is never sampled.
     for (int32_t cellYIndex = 0; cellYIndex < cellYCount; cellYIndex++) {
         const int32_t cellY = cellMinY + cellYIndex * OverworldGeneratorConstants::CELL_HEIGHT;
         for (int32_t cellXIndex = 0; cellXIndex < OverworldGeneratorConstants::CELL_X_COUNT; cellXIndex++) {

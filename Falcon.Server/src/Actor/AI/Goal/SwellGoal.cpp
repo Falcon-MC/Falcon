@@ -2,23 +2,11 @@
 
 #include "Actor/Mob/Hostile/CreeperActor.h"
 #include "Actor/ServerPlayer.h"
-#include "Level/Explosion.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
 namespace {
     const float START_RANGE_SQUARED = 9.0f;
     const float CANCEL_RANGE_SQUARED = 49.0f;
-    const double SIGHT_STEP = 0.25;
-    const float EYE_RATIO = 0.85f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
-
-    bool canSee(ServerNetworkHandler &owner, MobActor &mob, const Actor &target) {
-        const Vector3f from = mob.getPosition();
-        const Vector3f to = target.getPosition();
-        return !Explosion::isRayCollidingWithBlocks(owner.getLevelFor(mob), from.x,
-                                                    from.y + mob.getSize().mHeight * EYE_RATIO, from.z, to.x,
-                                                    to.y + PLAYER_EYE_HEIGHT, to.z, SIGHT_STEP);
-    }
 }
 
 SwellGoal::SwellGoal() {
@@ -54,7 +42,7 @@ void SwellGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         return;
 
     const Actor *target = mob.getTarget(owner);
-    if (target == nullptr || mob.distanceSquaredTo(*target) > CANCEL_RANGE_SQUARED || !canSee(owner, mob, *target)) {
+    if (target == nullptr || mob.distanceSquaredTo(*target) > CANCEL_RANGE_SQUARED || !mob.canSee(owner, *target)) {
         creeper->setSwellDirection(-1);
         return;
     }

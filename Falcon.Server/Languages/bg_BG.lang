@@ -4,6 +4,21 @@ falcon.commands.about.version=Този сървър използва Falcon ве
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (протокол %2$s)
 falcon.commands.about.build=Компилация %1$s, конфигурация %2$s
 
+falcon.commands.world.list=Заредени светове (%1$s): %2$s
+falcon.commands.world.available=Светове на диска: %1$s
+falcon.commands.world.created=Светът %1$s е създаден
+falcon.commands.world.exists=Светът %1$s вече съществува
+falcon.commands.world.invalidName=Невалидно име на свят: %1$s
+falcon.commands.world.loaded=Светът %1$s е зареден
+falcon.commands.world.alreadyLoaded=Светът %1$s вече е зареден
+falcon.commands.world.notFound=Няма свят с име %1$s
+falcon.commands.world.notLoaded=Светът %1$s не е зареден
+falcon.commands.world.unloaded=Светът %1$s е разтоварен
+falcon.commands.world.unload.default=Светът по подразбиране %1$s не може да бъде разтоварен
+falcon.commands.world.unload.occupied=В света %1$s все още има играчи
+falcon.commands.world.unload.cancelled=Плъгин попречи на разтоварването на света %1$s
+falcon.commands.world.teleported=%1$s е изпратен в света %2$s
+
 falcon.commands.allowlist.enabled=Списъкът с разрешени е включен
 falcon.commands.allowlist.disabled=Списъкът с разрешени е изключен
 falcon.commands.allowlist.list=Списък с разрешени (%1$s): %2$s

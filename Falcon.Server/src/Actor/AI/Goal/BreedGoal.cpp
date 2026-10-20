@@ -61,7 +61,7 @@ MobActor *BreedGoal::_findPartner(ServerNetworkHandler &owner, const MobActor &m
     for (auto &entry: owner.getActors()) {
         MobActor *candidate = dynamic_cast<MobActor *>(entry.second.get());
         if (candidate == nullptr || candidate == &mob || !candidate->isAlive() || !candidate->isInLove()
-            || candidate->getDimension() != mob.getDimension() || !canMateWith(mob, *candidate))
+            || !candidate->sharesLevelWith(mob) || !canMateWith(mob, *candidate))
             continue;
 
         const float distance = mob.distanceSquaredTo(*candidate);

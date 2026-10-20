@@ -64,6 +64,8 @@ int32_t ItemDurability::_rollUnbreaking(const ItemStack &item, int32_t amount) {
     if (unbreaking <= 0)
         return amount;
 
+    // Each point of damage is rolled separately and only lands with a 1 in (level + 1)
+    // chance.
     int32_t applied = 0;
     for (int32_t index = 0; index < amount; ++index) {
         if (std::uniform_int_distribution<int32_t>(0, unbreaking)(durabilityRandom()) == 0)

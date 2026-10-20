@@ -42,6 +42,9 @@ namespace {
         plugins->dispatch(event);
     }
 
+    /**
+     * Respiration level N skips losing air on a tick with probability N / (N + 1).
+     */
     bool consumesAir(const ServerPlayer &player) {
         const int32_t respiration = ItemEnchantments::getLevel(
                 player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD), EnchantmentIds::RESPIRATION);
@@ -277,6 +280,8 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
     const bool turtleHelmet = !helmet.isAir() && helmet.mDefinition != nullptr
                               && helmet.mDefinition->getIdentifier() == TURTLE_HELMET;
 
+    // A turtle helmet worn out of water charges a 10 second timer that keeps the player
+    // breathing after diving in.
     if (breathing && turtleHelmet) {
         player.setTurtleHelmetTicks(TURTLE_HELMET_TICKS);
     } else if (player.getTurtleHelmetTicks() > 0) {
@@ -316,6 +321,7 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
 
 void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                             ServerPlayer &player, const PlayerAuthInputPacket &packet) {
+    // Player positions on the wire are at eye height; the server works with feet positions.
     Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
                           packet.mPosition.z);
     PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition);
@@ -390,6 +396,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     for (const PlayerBlockActionData &action: packet.mPlayerActions) {
         if (action.mAction == PlayerActionType::StartBreak
             || action.mAction == PlayerActionType::BlockContinueDestroy) {
+            // The client keeps reporting the block it is hitting; restarting the break on each
+            // repeat would reset the break progress.
             if (player.hasLastBlockAttacked() && player.getLastBlockAttacked() == action.mBlockPosition)
                 continue;
 

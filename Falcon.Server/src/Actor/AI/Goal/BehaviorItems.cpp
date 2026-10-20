@@ -41,7 +41,7 @@ ServerPlayer *BehaviorItems::findNearestHolder(ServerNetworkHandler &owner, cons
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead() || player.getDimension() != mob.getDimension()
+        if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(mob)
             || player.getGameType() == (int32_t) GameType::Spectator)
             continue;
 

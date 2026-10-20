@@ -62,32 +62,33 @@ bool WeatherCommand::execute(CommandOrigin &sender, const std::vector<std::strin
         }
     }
 
-    Level &level = mHandler.getLevel();
+    World &world = mHandler.getWorldOf(sender.getLevel());
+    Level &level = world.getOverworld();
 
     if (type == "clear") {
-        mHandler.setThundering(false);
-        mHandler.setRaining(false);
+        mHandler.setThundering(world, false);
+        mHandler.setRaining(world, false);
         level.setRainTime(durationTicks);
         level.setThunderTime(durationTicks);
-        mHandler.broadcastWeather();
+        mHandler.broadcastWeather(world);
         sender.sendTranslation("commands.weather.clear", {});
         return true;
     }
 
     if (type == "rain") {
-        mHandler.setThundering(false);
-        mHandler.setRaining(true);
+        mHandler.setThundering(world, false);
+        mHandler.setRaining(world, true);
         level.setRainTime(durationTicks);
-        mHandler.broadcastWeather();
+        mHandler.broadcastWeather(world);
         sender.sendTranslation("commands.weather.rain", {});
         return true;
     }
 
-    mHandler.setRaining(true);
-    mHandler.setThundering(true);
+    mHandler.setRaining(world, true);
+    mHandler.setThundering(world, true);
     level.setRainTime(durationTicks);
     level.setThunderTime(durationTicks);
-    mHandler.broadcastWeather();
+    mHandler.broadcastWeather(world);
     sender.sendTranslation("commands.weather.thunder", {});
     return true;
 }

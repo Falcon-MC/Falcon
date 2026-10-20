@@ -10,6 +10,10 @@
 
 class LevelChunk;
 
+/**
+ * Per-worker population context: a private scratch level plus a bounded cache of
+ * neighbour terrain. Each chunk worker owns one, so it needs no locking.
+ */
 class GeneratorChunkSource {
 public:
     static constexpr size_t MAX_CACHED_CHUNKS = 48;

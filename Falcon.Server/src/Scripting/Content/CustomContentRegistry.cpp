@@ -88,6 +88,10 @@ CustomContentRegistry &CustomContentRegistry::getInstance() {
     return instance;
 }
 
+void CustomContentRegistry::reset() {
+    *this = CustomContentRegistry();
+}
+
 bool CustomContentRegistry::isCustomBlock(const std::string &identifier) const {
     for (const CustomBlockDefinition &block: mBlocks) {
         if (block.mIdentifier == identifier)

@@ -93,7 +93,7 @@ FetchContent_MakeAvailable(falcon_block_state_updater)
 FetchContent_Declare(
     falcon_bedrock_data
     GIT_REPOSITORY https://github.com/Falcon-MC/BedrockData.git
-    GIT_TAG main
+    GIT_TAG bedrock-1.26.60.30-preview
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
     SOURCE_SUBDIR cmake
@@ -104,7 +104,7 @@ set(FALCON_PLUGIN_API_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     falcon_plugin_api
     GIT_REPOSITORY https://github.com/Falcon-MC/PluginAPI.git
-    GIT_TAG 89fc0a9359890b34cd5052c632591048a63b1a78
+    GIT_TAG fdf70c7e737a3b4f7daa96dbf9203362ce1ab47f
     GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(falcon_plugin_api)

@@ -131,7 +131,7 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
     std::vector<Vector3f> players;
     for (auto &entry: owner.getPlayers()) {
         const ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead() || player.getDimension() != level.getDimensionType()
+        if (!player.isSpawned() || player.isDead() || !player.isIn(level)
             || player.getGameType() == (int32_t) GameType::Spectator)
             continue;
         players.push_back(player.getPosition());
@@ -147,7 +147,7 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
     std::vector<NearbyActor> nearby;
     for (auto &entry: owner.getActors()) {
         const ServerActor &actor = *entry.second;
-        if (!actor.isAlive() || actor.getDimension() != level.getDimensionType())
+        if (!actor.isAlive() || !actor.isIn(level))
             continue;
 
         const std::string &population = SpawnRules::getPopulation(actor.getIdentifier());
@@ -191,7 +191,7 @@ void NaturalSpawner::_despawn(ServerNetworkHandler &owner, Level &level, const s
 
     for (auto &entry: owner.getActors()) {
         ServerActor &actor = *entry.second;
-        if (!actor.isAlive() || actor.isPersistent() || actor.getDimension() != level.getDimensionType())
+        if (!actor.isAlive() || actor.isPersistent() || !actor.isIn(level))
             continue;
 
         const DespawnRule *rule = SpawnRules::getDespawnRule(actor.getIdentifier());

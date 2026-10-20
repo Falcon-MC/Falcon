@@ -51,7 +51,7 @@ bool AvoidMobTypeGoal::_isOutnumbered(ServerNetworkHandler &owner, MobActor &mob
     int32_t threats = 0;
     for (auto &actor: owner.getActors()) {
         const Actor &candidate = *actor.second;
-        if (&candidate == &mob || !candidate.isAlive() || candidate.getDimension() != mob.getDimension()
+        if (&candidate == &mob || !candidate.isAlive() || !candidate.sharesLevelWith(mob)
             || mob.distanceSquaredTo(candidate) > entry.mMaxDistance * entry.mMaxDistance)
             continue;
         if (entry.mFilters == nullptr || EntityFilter::test(*entry.mFilters, owner, mob, &candidate))
@@ -66,7 +66,7 @@ bool AvoidMobTypeGoal::_isOutnumbered(ServerNetworkHandler &owner, MobActor &mob
     int32_t allies = 0;
     for (auto &actor: owner.getActors()) {
         const MobActor *ally = dynamic_cast<const MobActor *>(actor.second.get());
-        if (ally == nullptr || !ally->isAlive() || ally->getDimension() != mob.getDimension()
+        if (ally == nullptr || !ally->isAlive() || !ally->sharesLevelWith(mob)
             || mob.distanceSquaredTo(*ally) > radius * radius)
             continue;
         if (groupFilters == nullptr || EntityFilter::test(*groupFilters, owner, *ally))
@@ -80,7 +80,7 @@ const Actor *AvoidMobTypeGoal::_findThreat(ServerNetworkHandler &owner, MobActor
     float nearestDistance = 0.0f;
 
     const auto consider = [&](const Actor &candidate) {
-        if (&candidate == &mob || !candidate.isAlive() || candidate.getDimension() != mob.getDimension())
+        if (&candidate == &mob || !candidate.isAlive() || !candidate.sharesLevelWith(mob))
             return;
 
         const float distance = mob.distanceSquaredTo(candidate);
@@ -144,12 +144,14 @@ void AvoidMobTypeGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     mSoundTicks = 0;
     if (mOptions.mRemoveTarget)
         mob.clearTarget();
+    mob.setAvoidingMobs(true);
     mob.getNavigation().moveTo(mDestination, mEntry->mWalkSpeed);
 }
 
 void AvoidMobTypeGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
     const bool escaped = mEntry != nullptr;
     mEntry = nullptr;
+    mob.setAvoidingMobs(false);
     mob.getNavigation().stop(mob);
     if (escaped)
         EntityEvents::fireTrigger(owner, mob, mOptions.mOnEscape.get());

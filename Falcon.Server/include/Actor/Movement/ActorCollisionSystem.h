@@ -14,6 +14,10 @@ struct ActorMoveResult {
     bool mOnGround = false;
 };
 
+/**
+ * Moves an axis-aligned box through the level's collision boxes, one axis at a time, with
+ * optional step-up. Shared by player movement simulation and actor physics.
+ */
 class ActorCollisionSystem {
 public:
     static ActorMoveResult move(Level &level, AxisAlignedBB &box, const Vector3f &delta, float stepHeight,

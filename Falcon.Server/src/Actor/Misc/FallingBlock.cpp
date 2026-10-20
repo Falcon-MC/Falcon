@@ -54,6 +54,7 @@ void FallingBlock::fillSpawnMetadata(EntityDataMap &metadata) const {
     variant.mId = ACTOR_DATA_VARIANT;
     variant.mFormat = EntityDataFormat::Int;
     variant.mIntValue = mBlockState.getHash();
+    variant.mIsBlock = true;
     metadata.mEntries.push_back(variant);
 }
 
@@ -143,7 +144,7 @@ void FallingBlock::_destroy(ServerNetworkHandler &owner, const Vector3i &positio
 
 void FallingBlock::_dropItem(ServerNetworkHandler &owner) {
     const char *rule = mBlockState.mName == "minecraft:snow_layer" ? "dotiledrops" : "doentitydrops";
-    if (!owner.getLevel().getGameRules().getBool(rule))
+    if (!owner.getWorldFor(*this).getOverworld().getGameRules().getBool(rule))
         return;
 
     const Vector3f position = getPosition();
@@ -265,7 +266,7 @@ void FallingBlock::_damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead() || player.getDimension() != getDimension())
+        if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(*this))
             continue;
 
         const ActorSize size = ActorClassRegistry::getSize("minecraft:player");
@@ -285,7 +286,7 @@ void FallingBlock::_damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i
     for (auto &entry: owner.getActors()) {
         ServerActor *actor = entry.second.get();
         if (actor == nullptr || actor == this || !actor->isAlive() || actor->isProjectile() ||
-            actor->getDimension() != getDimension())
+            !actor->sharesLevelWith(*this))
             continue;
 
         const ActorSize size = actor->getSize();

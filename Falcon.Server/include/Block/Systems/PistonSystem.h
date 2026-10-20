@@ -10,6 +10,10 @@
 class Level;
 class ServerNetworkHandler;
 
+/**
+ * Piston extension and retraction. A move removes the pushed blocks at once and places
+ * them when the arm animation finishes in tick().
+ */
 class PistonSystem {
 public:
     static const int MOVE_BLOCK_LIMIT = 12;

@@ -4,6 +4,21 @@ falcon.commands.about.version=На цьому сервері працює Falcon
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (протокол %2$s)
 falcon.commands.about.build=Збірка %1$s, конфігурація %2$s
 
+falcon.commands.world.list=Завантажені світи (%1$s): %2$s
+falcon.commands.world.available=Світи на диску: %1$s
+falcon.commands.world.created=Світ %1$s створено
+falcon.commands.world.exists=Світ %1$s уже існує
+falcon.commands.world.invalidName=Неприпустима назва світу: %1$s
+falcon.commands.world.loaded=Світ %1$s завантажено
+falcon.commands.world.alreadyLoaded=Світ %1$s уже завантажено
+falcon.commands.world.notFound=Світу з назвою %1$s немає
+falcon.commands.world.notLoaded=Світ %1$s не завантажено
+falcon.commands.world.unloaded=Світ %1$s вивантажено
+falcon.commands.world.unload.default=Світ за замовчуванням %1$s не можна вивантажити
+falcon.commands.world.unload.occupied=У світі %1$s ще є гравці
+falcon.commands.world.unload.cancelled=Плагін не дав вивантажити світ %1$s
+falcon.commands.world.teleported=%1$s відправлено у світ %2$s
+
 falcon.commands.allowlist.enabled=Список дозволених увімкнуто
 falcon.commands.allowlist.disabled=Список дозволених вимкнуто
 falcon.commands.allowlist.list=Список дозволених (%1$s): %2$s

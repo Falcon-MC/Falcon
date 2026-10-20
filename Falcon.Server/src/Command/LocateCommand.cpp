@@ -68,6 +68,8 @@ std::vector<CommandOverloadData> LocateCommand::getOverloads() const {
     CommandParamData radiusParameter;
     radiusParameter.mName = "radius";
     radiusParameter.mOptional = true;
+    radiusParameter.mHasType = true;
+    radiusParameter.mType = CommandParamType::Int;
 
     CommandParamData searchParameter;
     searchParameter.mName = "search";
@@ -181,7 +183,7 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
                 return;
 
             ServerPlayer *target = &entry->second;
-            if (!target->isSpawned() || target->getDimension() != level.getDimensionType())
+            if (!target->isSpawned() || !target->isIn(level))
                 return;
 
             if (!located) {

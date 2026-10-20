@@ -16,10 +16,13 @@ LevelChunk::LevelChunk(int32_t x, int32_t z) : mX(x), mZ(z), mBiomeId(1), mDirty
 }
 
 void LevelChunk::invalidateNetworkCaches() {
+    // Swapping with empty objects releases the memory, which clear() would keep; this runs
+    // on copies sent off for saving, where the encoded buffers are dead weight.
     for (std::string &cached: mSubChunkNetworkCache)
         std::string().swap(cached);
 
     mSubChunkNetworkValid.assign(SUB_CHUNK_COUNT, 0);
+    std::unordered_map<const BlockNetworkIdMap *, std::vector<std::string>>().swap(mTranslatedSubChunkCache);
     std::vector<int32_t>().swap(mTopHeightsCache);
     std::string().swap(mNetworkAnchorCache);
     mTopHeightsValid = false;
@@ -134,6 +137,8 @@ void LevelChunk::setBlock(int x, int32_t y, int z, const BlockState &state) {
     const int index = subChunkIndexFor(y);
     mSubChunks[index].setBlock(x, y & 15, z, state);
     mSubChunkNetworkValid[(size_t) index] = 0;
+    for (auto &translated: mTranslatedSubChunkCache)
+        translated.second[(size_t) index].clear();
     mTopHeightsValid = false;
     mNetworkAnchorValid = false;
     mDirty = true;
@@ -151,6 +156,8 @@ void LevelChunk::setBlock(int x, int32_t y, int z, int layer, const BlockState &
     const int index = subChunkIndexFor(y);
     mSubChunks[index].setBlock(x, y & 15, z, layer, state);
     mSubChunkNetworkValid[(size_t) index] = 0;
+    for (auto &translated: mTranslatedSubChunkCache)
+        translated.second[(size_t) index].clear();
     mDirty = true;
 }
 
@@ -249,13 +256,20 @@ std::string LevelChunk::encodeBiomesPersistent(int sectionCount) const {
     return stream.getBuffer();
 }
 
-std::string LevelChunk::encodeNetwork() const {
+std::string LevelChunk::encodeNetwork(const BlockNetworkIdMap *blockIds) const {
     BinaryStream stream;
 
     const int sectionCount = getNetworkSubChunkCount();
 
-    for (int i = 0; i < sectionCount; i++)
-        stream.put(encodeSubChunkNetwork(mFirstNetworkSubChunk + i));
+    // Full chunk payload: the non-empty sub-chunks up to the highest one, one biome palette
+    // per sent section, then a zero byte for the border block count. Block actors are
+    // appended by the caller.
+    for (int i = 0; i < sectionCount; i++) {
+        if (blockIds == nullptr)
+            stream.put(encodeSubChunkNetwork(mFirstNetworkSubChunk + i));
+        else
+            stream.put(encodeSubChunkNetwork(mFirstNetworkSubChunk + i, *blockIds));
+    }
 
     stream.put(encodeBiomes(sectionCount));
     stream.putByte(0);
@@ -274,6 +288,8 @@ const std::string &LevelChunk::encodeNetworkAnchor() const {
     for (int i = 0; i < sectionCount; i++)
         mSubChunks[mFirstNetworkSubChunk + i].writeBiomes(stream, false);
 
+    // Sections above the last non-empty one reuse the previous biome palette; 0xff is the
+    // protocol's one-byte marker for that.
     for (int i = sectionCount; i < mNetworkSubChunkLimit; i++)
         stream.putByte(BIOME_COPY_PREVIOUS);
 
@@ -285,6 +301,10 @@ const std::string &LevelChunk::encodeNetworkAnchor() const {
     return mNetworkAnchorCache;
 }
 
+/**
+ * Encoded sub-chunks are cached per section and only re-encoded after a block in that
+ * section changes, since the same data is sent to every player who loads the chunk.
+ */
 const std::string &LevelChunk::encodeSubChunkNetwork(int index) const {
     static const std::string empty;
 
@@ -301,6 +321,26 @@ const std::string &LevelChunk::encodeSubChunkNetwork(int index) const {
     cached = stream.getBuffer();
     mSubChunkNetworkValid[(size_t) index] = 1;
 
+    return cached;
+}
+
+const std::string &LevelChunk::encodeSubChunkNetwork(int index, const BlockNetworkIdMap &blockIds) const {
+    static const std::string empty;
+
+    if (index < 0 || index >= SUB_CHUNK_COUNT)
+        return empty;
+
+    std::vector<std::string> &sections = mTranslatedSubChunkCache[&blockIds];
+    if (sections.empty())
+        sections.resize(SUB_CHUNK_COUNT);
+
+    std::string &cached = sections[(size_t) index];
+    if (!cached.empty())
+        return cached;
+
+    BinaryStream stream;
+    mSubChunks[(size_t) index].writeNetwork(stream, &blockIds);
+    cached = stream.getBuffer();
     return cached;
 }
 

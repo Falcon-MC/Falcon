@@ -75,12 +75,11 @@ namespace {
     void entityTeleport(FalconEntity *target, FalconLevel *destination, FalconVec3 position) {
         Actor *value = entity(target);
         const Vector3f to = toVector3f(position);
-        const DimensionType dimension =
-                destination == nullptr ? value->getDimension() : level(destination)->getDimensionType();
+        Level &destinationLevel = destination == nullptr ? owner().getLevelFor(*value) : *level(destination);
 
         if (ServerPlayer *playerValue = asPlayer(value)) {
-            if (playerValue->getDimension() != dimension)
-                owner().changePlayerDimension(*playerValue, dimension, to);
+            if (!playerValue->isIn(destinationLevel))
+                owner().changePlayerLevel(*playerValue, destinationLevel, to);
             else
                 playerValue->teleport(owner(), to);
             return;
@@ -90,8 +89,8 @@ namespace {
         if (actorValue == nullptr)
             return;
 
-        if (actorValue->getDimension() != dimension) {
-            owner().changeActorDimension(*actorValue, dimension, to);
+        if (!actorValue->isIn(destinationLevel)) {
+            owner().changeActorLevel(*actorValue, destinationLevel, to);
             return;
         }
 
@@ -203,6 +202,14 @@ namespace {
         return entity(target)->isOnFire() ? 1 : 0;
     }
 
+    int entityIsInvisible(FalconEntity *target) {
+        return entity(target)->getFlags().get(ActorFlag::Invisible) ? 1 : 0;
+    }
+
+    void entitySetInvisible(FalconEntity *target, int invisible) {
+        entity(target)->getFlags().set(ActorFlag::Invisible, invisible != 0);
+    }
+
     void entitySetOnFire(FalconEntity *target, uint32_t ticks) {
         Actor *value = entity(target);
         if (ticks == 0)
@@ -282,6 +289,8 @@ void PluginServerApi::fillEntities(FalconServerApi &api) {
     api.entitySetNameTag = &entitySetNameTag;
     api.entityIsOnFire = &entityIsOnFire;
     api.entitySetOnFire = &entitySetOnFire;
+    api.entityIsInvisible = &entityIsInvisible;
+    api.entitySetInvisible = &entitySetInvisible;
     api.levelEntityCount = &levelEntityCount;
     api.levelEntity = &levelEntity;
 }

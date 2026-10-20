@@ -60,22 +60,23 @@ void EndPortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, co
     Level &level = owner.getLevelFor(actor);
     const DimensionType current = level.getDimensionType();
 
+    World &world = owner.getWorldOf(level);
     if (current != DimensionType::TheEnd) {
-        Level &end = owner.getDimension(DimensionType::TheEnd);
+        Level &end = world.getLevel(DimensionType::TheEnd);
         spawnObsidianPlatform(end, Vector3i(END_PLATFORM_X, END_PLATFORM_Y, END_PLATFORM_Z), &owner);
 
         actor.setPortalCooldown(PortalBlock::PORTAL_COOLDOWN_TICKS);
-        owner.changeActorDimension(actor, DimensionType::TheEnd,
-                                    Vector3f((float) END_PLATFORM_X + 0.5f,
-                                             (float) END_PLATFORM_Y + 1.0f,
-                                             (float) END_PLATFORM_Z + 0.5f));
+        owner.changeActorLevel(actor, end,
+                               Vector3f((float) END_PLATFORM_X + 0.5f,
+                                        (float) END_PLATFORM_Y + 1.0f,
+                                        (float) END_PLATFORM_Z + 0.5f));
         return;
     }
 
-    Level &overworld = owner.getDimension(DimensionType::Overworld);
+    Level &overworld = world.getOverworld();
 
     actor.setPortalCooldown(PortalBlock::PORTAL_COOLDOWN_TICKS);
-    owner.changeActorDimension(actor, DimensionType::Overworld, overworld.getSpawnPositionForPlayer());
+    owner.changeActorLevel(actor, overworld, overworld.getSpawnPositionForPlayer());
 }
 
 void EndPortalBlock::spawnObsidianPlatform(Level &level, const Vector3i &position, ServerNetworkHandler *owner) {

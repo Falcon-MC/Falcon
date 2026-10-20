@@ -5,6 +5,7 @@
 #include "Core/Math/Vector3f.h"
 
 #include <cstdint>
+#include <utility>
 
 class MobActor;
 class ServerNetworkHandler;
@@ -19,22 +20,18 @@ public:
         return !mHasTarget;
     }
 
-    void setCanOpenDoors(bool canOpenDoors) {
-        mOptions.mCanOpenDoors = canOpenDoors;
+    void setOptions(PathOptions options) {
+        mOptions = std::move(options);
     }
 
-    void setAvoidSun(bool avoidSun) {
-        mOptions.mAvoidSun = avoidSun;
-    }
-
-    void setFlying(bool flying) {
-        mFlying = flying;
+    const PathOptions &getOptions() const {
+        return mOptions;
     }
 
     void tick(ServerNetworkHandler &owner, MobActor &mob);
 
 private:
-    void _checkStuck(MobActor &mob, bool direct);
+    void _checkStuck(MobActor &mob, bool freeMoving);
 
     Path mPath;
     PathOptions mOptions;
@@ -43,7 +40,6 @@ private:
     float mSpeed = 0.0f;
     bool mHasTarget = false;
     bool mNeedsPath = false;
-    bool mFlying = false;
     int32_t mStuckTicks = 0;
     int32_t mRepaths = 0;
 };

@@ -4,6 +4,8 @@
 #include "Level/Level.h"
 #include "Level/PlayerDataProvider.h"
 #include "Level/TickingAreaManager.h"
+#include "Level/World.h"
+#include "Level/WorldManager.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/PacketRateLimiter.h"
 #include "Network/PingedCompatibleServer.h"
@@ -69,6 +71,12 @@ struct QueuedActorCommand {
     std::string mCommand;
 };
 
+/**
+ * The server's central object: owns the players, levels and actors, receives every decoded
+ * packet and drives the game tick. Packet handling is split across the
+ * ServerNetworkHandler*.cpp files and the helpers in Network/Handler. All player damage
+ * goes through hurt().
+ */
 class ServerNetworkHandler : public NetworkHandler::Listener,
                              public NetworkPacketHandler,
                              public RakPeerHelper::IPSupportInterface,
@@ -115,11 +123,11 @@ public:
 
     PluginManager &getPluginManager() { return *mPluginManager; }
 
-    std::string &getCraftingDataBytes() { return mCraftingDataBytes; }
+    std::string &getCraftingDataBytes(int protocol) { return mCraftingDataBytes[protocol]; }
 
-    std::string &getCreativeContentBytes() { return mCreativeContentBytes; }
+    std::string &getCreativeContentBytes(int protocol) { return mCreativeContentBytes[protocol]; }
 
-    std::string &getItemComponentsBytes() { return mItemComponentsBytes; }
+    std::string &getItemComponentsBytes(int protocol) { return mItemComponentsBytes[protocol]; }
 
     double getPeakMillisecondsPerTick() const;
 
@@ -127,18 +135,41 @@ public:
 
     NetworkHandler &getNetworkHandler() { return *mNetworkHandler; }
 
-    Level &getLevel() { return mLevel; }
+    /** Overworld of the default world, the one named by `level-name`. */
+    Level &getLevel() { return mWorlds.getDefault().getOverworld(); }
 
+    /** A dimension of the default world. Code that has an actor or a level must use getLevelFor or getWorldOf. */
     Level &getDimension(DimensionType dimension);
 
     Level &getLevelFor(const Actor &actor);
 
-    /** Every loaded level: the Overworld, then the Nether and the End when they exist. */
+    WorldManager &getWorlds() { return mWorlds; }
+
+    World &getWorldFor(const Actor &actor);
+
+    World &getWorldOf(const Level &level);
+
+    /** The default world when `level` is null, as for a console sender. */
+    World &getWorldOf(const Level *level) { return level == nullptr ? mWorlds.getDefault() : getWorldOf(*level); }
+
+    /** Every dimension of every loaded world. */
     std::vector<Level *> getLevels();
+
+    World *loadWorld(const std::string &name, bool create, int64_t seed);
+
+    /** Saves and closes a world. Refuses the default world and worlds that still hold players. */
+    bool unloadWorld(const std::string &name, std::string &error);
+
+    static int64_t randomSeed();
 
     void changePlayerDimension(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
 
+    /** Moves a player to another dimension or world through the dimension change handshake. */
+    void changePlayerLevel(ServerPlayer &player, Level &destination, const Vector3f &position);
+
     void changeActorDimension(Actor &actor, DimensionType dimension, const Vector3f &position);
+
+    void changeActorLevel(Actor &actor, Level &destination, const Vector3f &position);
 
     void onPlayerDimensionChangeAck(ServerPlayer &player);
 
@@ -180,11 +211,11 @@ public:
 
     void sendWeatherTo(ServerPlayer &player);
 
-    void broadcastWeather();
+    void broadcastWeather(World &world);
 
-    void setRaining(bool raining);
+    void setRaining(World &world, bool raining);
 
-    void setThundering(bool thundering);
+    void setThundering(World &world, bool thundering);
 
     void strikeLightning(Level &level, const Vector3f &position);
 
@@ -277,6 +308,12 @@ public:
     void playLevelSound(Level &level, const std::string &sound, const Vector3f &position,
                         const std::string &actorType = ":", int32_t extraData = -1);
 
+    /**
+     * Plays a sound whose extra data is a block state, translated for each viewer's version.
+     */
+    void playBlockSound(Level &level, const std::string &sound, const Vector3f &position, int32_t blockHash,
+                        const std::string &actorType = "");
+
     void playNamedSound(Level &level, const std::string &sound, const Vector3f &position, float volume,
                         float pitch);
 
@@ -351,15 +388,18 @@ public:
 
     int64_t allocateActorUniqueId();
 
-    TickingAreaManager &getTickingAreas() { return mTickingAreas; }
-
-    void markActiveColumnsDirty() { mActorPersistencePending = true; }
 
     BlockDefinitionRegistry &getBlockDefinitions() { return mBlockDefinitions; }
 
     ItemDefinitionRegistry &getItemDefinitions() { return mItemDefinitions; }
 
     const PacketCodecContext &getCodecContext() const { return mCodecContext; }
+
+    /**
+     * The context of the protocol this connection chose when it connected, or the current protocol's before it
+     * chose one.
+     */
+    const PacketCodecContext &getCodecContext(const NetworkIdentifier &id);
 
     ServerPlayer *getPlayerByName(const std::string &name);
 
@@ -391,6 +431,10 @@ public:
 
     void setAutoSaveEnabled(bool enabled) { mAutoSaveEnabled = enabled; }
 
+    void setPluginsEnabled(bool enabled) { mPluginsEnabled = enabled; }
+
+    unsigned short getBoundPort() const;
+
     bool isStopRequested() const { return mStopRequested; }
 
     void requestStop() { mStopRequested = true; }
@@ -420,9 +464,9 @@ public:
 
     void broadcastTranslation(const std::string &key, const std::vector<std::string> &parameters = {});
 
-    void broadcastWorldTime();
+    void broadcastWorldTime(World &world);
 
-    bool changeGameRule(const std::string &name, const std::string &value);
+    bool changeGameRule(World &world, const std::string &name, const std::string &value);
 
     void setDefaultGameType(GameType gameType);
 
@@ -431,6 +475,11 @@ public:
     ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
                         int pickupDelay);
 
+    /**
+     * Single entry point for player damage. Applies, in order: game mode and spawn
+     * invulnerability, damage game rules, scripts and plugins, the invulnerability window,
+     * shields, armor, Resistance and the totem, then kills the player if health runs out.
+     */
     DamageResult hurt(ServerPlayer &player, float amount, const ActorDamageSource &source);
 
     void killPlayer(ServerPlayer &player, const std::string &deathMessageKey,
@@ -459,6 +508,16 @@ public:
     std::vector<ItemStack> &getRecipeOutputsMutable() { return mRecipeOutputs; }
 
     std::vector<uint32_t> &getRecipeSourceIndicesMutable() { return mRecipeSourceIndices; }
+
+    /**
+     * The vanilla recipe each recipe network ID was built from. Custom recipes are absent.
+     */
+    std::unordered_map<int32_t, std::string> &getVanillaRecipeIdsMutable() { return mVanillaRecipeIds; }
+
+    /**
+     * The creative content table index of each creative item, or -1 for a custom one.
+     */
+    std::vector<int32_t> &getCreativeSourceIndicesMutable() { return mCreativeSourceIndices; }
 
     CraftingDataPacket &getCachedCraftingData() { return mCachedCraftingData; }
 
@@ -497,6 +556,20 @@ public:
     void _disconnect(const NetworkIdentifier &id, const std::string &reason);
 
     bool _allowPacket(const NetworkIdentifier &id, RateLimitedPacket category);
+
+    enum class LoginGate {
+        Accept,
+        Ignore,
+        Reject
+    };
+
+    /**
+     * Checks the packet against the login step the connection has reached, so a client cannot skip
+     * authentication, bans or the allowlist by sending later packets early. A login packet out of its step is
+     * rejected; any other packet arriving before the game started is ignored, since vanilla clients send a few
+     * of them during the login.
+     */
+    LoginGate _checkLoginState(const NetworkIdentifier &id, MinecraftPacketIds packetId);
 
     void _rejectBadPacket(const NetworkIdentifier &id, const std::string &reason);
 
@@ -554,7 +627,7 @@ public:
 private:
     bool onValidateIncomingConnection(const NetworkIdentifier &id) override;
 
-    void onNewIncomingConnection(const NetworkIdentifier &id) override;
+    void onNewIncomingConnection(const NetworkIdentifier &id, uint16_t mtuSize) override;
 
     void onConnectionClosed(const NetworkIdentifier &id, DisconnectFailReason reason,
                             const std::string &message) override;
@@ -629,6 +702,12 @@ private:
 
     ServerPlayer *_getPlayer(const NetworkIdentifier &id);
 
+    /**
+     * The vanilla translation for this protocol, with the custom items kept at their own IDs. A custom item whose
+     * ID the client already uses for a vanilla item gets the first ID the client leaves free.
+     */
+    std::shared_ptr<const ItemNetworkIdMap> _itemNetworkIdsFor(int protocol) const;
+
     int _getServerViewDistance() const;
 
     void _logPackStack() const;
@@ -655,6 +734,10 @@ private:
 
     void _tickSleep();
 
+    void _tickSleep(World &world);
+
+    void _tickWeather(World &world);
+
     void _tickPlayer(ServerPlayer &player);
 
     void _registerCommands();
@@ -669,6 +752,7 @@ private:
     BlockDefinitionRegistry mBlockDefinitions;
     ItemDefinitionRegistry mItemDefinitions;
     PacketCodecContext mCodecContext;
+    std::unordered_map<int, std::unique_ptr<PacketCodecContext>> mProtocolContexts;
 
     PropertiesSettings mProperties;
     static const int DEFAULT_VIEW_DISTANCE = 4;
@@ -681,23 +765,34 @@ private:
     static const unsigned CHUNK_REQUESTS_PER_TICK = 64;
     static const size_t SPAWN_CHUNK_THRESHOLD = 56;
 
-    void _tickDimension(Level &level);
+    void _tickOverworld(World &world);
 
-    Level mLevel;
-    std::unique_ptr<Level> mNetherLevel;
-    std::unique_ptr<Level> mTheEndLevel;
+    void _tickDimension(World &world, Level &level);
+
+    void _broadcastFluidChanges(Level &level);
+
+    void _sendWorldState(ServerPlayer &player);
+
+    void _sendDimensionChange(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
+
+    World &_openWorld(const std::string &name, int64_t seed);
+
+    WorldManager mWorlds;
     BiomeRegistry mBiomes;
     std::vector<CreativeItemGroup> mCreativeGroups;
     std::vector<CreativeItemData> mCreativeItems;
     CraftingDataPacket mCachedCraftingData;
     std::vector<ItemStack> mRecipeOutputs;
     std::vector<uint32_t> mRecipeSourceIndices;
+    std::unordered_map<int32_t, std::string> mVanillaRecipeIds;
+    std::vector<int32_t> mCreativeSourceIndices;
     PlayerDataProvider mPlayerData;
     OpList mOps;
     AllowList mAllowList;
     BanList mBanList;
     BanList mIpBanList;
     bool mAutoSaveEnabled = true;
+    bool mPluginsEnabled = true;
     bool mStopRequested = false;
     ResourcePackManager mResourcePacks;
     CommandMap mCommands;
@@ -709,7 +804,6 @@ private:
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
     std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
     std::unordered_set<int64_t> mVehiclesWithPendingPassengers;
-    TickingAreaManager mTickingAreas;
     uint32_t mActorUniqueIdCounter = 0;
     std::vector<QueuedActorCommand> mQueuedActorCommands;
     NaturalSpawner mNaturalSpawner;
@@ -727,14 +821,11 @@ private:
         float mRadiusOnUse;
         Vector3f mPosition;
         DimensionType mDimension = DimensionType::Overworld;
+        uint32_t mWorldId = 0;
     };
 
     std::unordered_map<int64_t, LingeringCloud> mLingeringClouds;
-    std::array<std::unordered_set<int64_t>, Dimension::DIMENSION_COUNT> mActorLoadedChunks;
     std::vector<int64_t> mDetachedActors;
-    std::vector<int64_t> mActiveCenters;
-    int mActiveTickDistance = -1;
-    bool mActorPersistencePending = true;
     std::unordered_map<std::string, DynamicPropertyValue> mWorldDynamicProperties;
     std::unordered_map<std::string, int64_t> mScoreboardIds;
     int64_t mNextScoreboardId = 1;
@@ -743,7 +834,6 @@ private:
     std::vector<std::unique_ptr<ItemActor>> mItemEntities;
     uint64_t mNextRuntimeId;
     int64_t mCurrentTick = 0;
-    int32_t mSleepTicks = 0;
     std::chrono::steady_clock::time_point mStartTime = std::chrono::steady_clock::now();
 
     Profiler mProfiler;
@@ -751,9 +841,9 @@ private:
     ScriptEngine mScriptEngine;
     BehaviorPackManager mBehaviorPacks;
 
-    std::string mCraftingDataBytes;
-    std::string mCreativeContentBytes;
-    std::string mItemComponentsBytes;
+    std::unordered_map<int, std::string> mCraftingDataBytes;
+    std::unordered_map<int, std::string> mCreativeContentBytes;
+    std::unordered_map<int, std::string> mItemComponentsBytes;
 
     static const size_t TICK_SAMPLE_COUNT = 100;
     std::deque<std::chrono::steady_clock::time_point> mTickStartSamples;

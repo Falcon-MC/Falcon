@@ -4,6 +4,21 @@ falcon.commands.about.version=Tento server používa Falcon verzie %1$s (%2$s na
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
 falcon.commands.about.build=Zostava %1$s, konfigurácia %2$s
 
+falcon.commands.world.list=Načítané svety (%1$s): %2$s
+falcon.commands.world.available=Svety na disku: %1$s
+falcon.commands.world.created=Svet %1$s bol vytvorený
+falcon.commands.world.exists=Svet %1$s už existuje
+falcon.commands.world.invalidName=Neplatný názov sveta: %1$s
+falcon.commands.world.loaded=Svet %1$s bol načítaný
+falcon.commands.world.alreadyLoaded=Svet %1$s je už načítaný
+falcon.commands.world.notFound=Neexistuje žiadny svet s názvom %1$s
+falcon.commands.world.notLoaded=Svet %1$s nie je načítaný
+falcon.commands.world.unloaded=Svet %1$s bol uvoľnený
+falcon.commands.world.unload.default=Predvolený svet %1$s nemožno uvoľniť
+falcon.commands.world.unload.occupied=Vo svete %1$s sú stále hráči
+falcon.commands.world.unload.cancelled=Doplnok zabránil uvoľneniu sveta %1$s
+falcon.commands.world.teleported=Hráč %1$s bol poslaný do sveta %2$s
+
 falcon.commands.allowlist.enabled=Zoznam povolených hráčov sa zapol
 falcon.commands.allowlist.disabled=Zoznam povolených hráčov sa vypol
 falcon.commands.allowlist.list=Zoznam povolených hráčov (%1$s): %2$s

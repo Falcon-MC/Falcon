@@ -25,10 +25,6 @@ namespace {
         return heads;
     }
 
-    bool isInCaravan(int64_t uniqueId) {
-        return caravanHeads().count(uniqueId) != 0;
-    }
-
     bool hasCaravanTail(ServerNetworkHandler &owner, int64_t uniqueId) {
         for (const auto &entry: caravanHeads()) {
             if (entry.second != uniqueId)
@@ -47,6 +43,14 @@ FollowCaravanGoal::FollowCaravanGoal(float movementSpeed, float speedMultiplier,
         : mMovementSpeed(movementSpeed), mBaseSpeedMultiplier(speedMultiplier), mSpeedMultiplier(speedMultiplier),
           mEntityCount(entityCount), mFilters(std::move(filters)) {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move);
+}
+
+bool FollowCaravanGoal::isInCaravan(int64_t uniqueId) {
+    return caravanHeads().count(uniqueId) != 0;
+}
+
+void FollowCaravanGoal::clearCaravans() {
+    caravanHeads().clear();
 }
 
 bool FollowCaravanGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
@@ -134,7 +138,7 @@ Actor *FollowCaravanGoal::_findHead(ServerNetworkHandler &owner, const MobActor 
     for (auto &entry: owner.getActors()) {
         MobActor *candidate = dynamic_cast<MobActor *>(entry.second.get());
         if (candidate == nullptr || candidate == &mob || !candidate->isAlive()
-            || candidate->getDimension() != mob.getDimension())
+            || !candidate->sharesLevelWith(mob))
             continue;
 
         const Vector3f other = candidate->getPosition();

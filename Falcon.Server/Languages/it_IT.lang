@@ -4,6 +4,21 @@ falcon.commands.about.version=Questo server usa Falcon versione %1$s (%2$s su %3
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protocollo %2$s)
 falcon.commands.about.build=Build %1$s, configurazione %2$s
 
+falcon.commands.world.list=Mondi caricati (%1$s): %2$s
+falcon.commands.world.available=Mondi sul disco: %1$s
+falcon.commands.world.created=Il mondo %1$s è stato creato
+falcon.commands.world.exists=Il mondo %1$s esiste già
+falcon.commands.world.invalidName=Nome del mondo non valido: %1$s
+falcon.commands.world.loaded=Il mondo %1$s è stato caricato
+falcon.commands.world.alreadyLoaded=Il mondo %1$s è già caricato
+falcon.commands.world.notFound=Nessun mondo chiamato %1$s
+falcon.commands.world.notLoaded=Il mondo %1$s non è caricato
+falcon.commands.world.unloaded=Il mondo %1$s è stato scaricato
+falcon.commands.world.unload.default=Il mondo predefinito %1$s non può essere scaricato
+falcon.commands.world.unload.occupied=Nel mondo %1$s ci sono ancora giocatori
+falcon.commands.world.unload.cancelled=Un plugin ha impedito di scaricare il mondo %1$s
+falcon.commands.world.teleported=%1$s è stato inviato nel mondo %2$s
+
 falcon.commands.allowlist.enabled=L'elenco autorizzati è stato attivato
 falcon.commands.allowlist.disabled=L'elenco autorizzati è stato disattivato
 falcon.commands.allowlist.list=Elenco autorizzati (%1$s): %2$s

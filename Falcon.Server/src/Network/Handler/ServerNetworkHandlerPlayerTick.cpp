@@ -135,7 +135,8 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     player.tickSpawnInvulnerability();
 
     const bool wasSprinting = player.getFlags().get(ActorFlag::Sprinting);
-    const bool naturalRegeneration = getLevelFor(player).getGameRules().getBool("naturalregeneration");
+    const bool naturalRegeneration = getWorldFor(player).getOverworld().getGameRules()
+            .getBool("naturalregeneration");
     const bool hungerChanged = player.isSpawned()
                                && player.tickHunger(1, (int) mProperties.getDifficulty(), naturalRegeneration);
     if (hungerChanged)

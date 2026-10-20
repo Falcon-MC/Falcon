@@ -21,6 +21,8 @@ const BlockState &LiquidPhysicsSystem::_stateAt(int32_t x, int32_t y, int32_t z,
     static const BlockState air;
 
     const BlockState *state = mLevel.peekBlockPtr(x, y, z, layer);
+    // An unloaded chunk reads as a solid wall on layer 0 so fluids never flow into, or
+    // decide anything from, terrain that is not resident.
     if (state == nullptr)
         return layer <= 0 ? bedrock : air;
     return *state;
@@ -97,6 +99,8 @@ Vector3f LiquidPhysicsSystem::getFlowVector(const Vector3i &position) {
     float z = 0.0f;
     static const int offsets[4][3] = {{0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
+    // The current pushes towards neighbours with a higher decay (shallower fluid). An open
+    // side with fluid below it counts as 8 levels deeper, so entities are pulled over edges.
     for (const auto &offset: offsets) {
         const int32_t nx = position.x + offset[0];
         const int32_t ny = position.y;
@@ -120,6 +124,8 @@ Vector3f LiquidPhysicsSystem::getFlowVector(const Vector3i &position) {
         }
     }
 
+    // Falling fluid next to a wall gets a strong downward component, which is what drags
+    // entities down along waterfalls.
     if (liquid.isFalling()) {
         for (const auto &offset: offsets) {
             const BlockState side = _fluidAt(position.x + offset[0], position.y, position.z + offset[2]);
@@ -180,6 +186,8 @@ bool LiquidPhysicsSystem::isFlowable(const BlockState &state, bool lava) const {
     if (data == nullptr)
         return false;
 
+    // Waterlogging level 1 blocks only hold a source, flowing water cannot enter them;
+    // higher levels accept flowing water into layer 1. Lava never waterlogs anything.
     if (!lava && data->mWaterloggingLevel > 1)
         return true;
 
@@ -246,6 +254,7 @@ void LiquidPhysicsSystem::setFluidState(const Vector3i &position, const BlockSta
         return;
     }
 
+    // Water landing in a waterloggable block goes to layer 1 so the block itself survives.
     const uint8_t waterlogging = getWaterloggingLevel(layer0);
     const bool intoLayer1 = waterlogged
                             || (liquid.isWater() && !isFluidState(layer0) && waterlogging > 0);
@@ -323,6 +332,8 @@ bool LiquidPhysicsSystem::resolveFluidCollision(const Vector3i &target, const Bl
                : targetLiquid.getDecay() <= 4 ? "minecraft:cobblestone"
                : "minecraft:stone";
     } else {
+        // Lava hitting water held in a waterlogged block is stopped but must not replace
+        // the host block with stone.
         if (_fluidLayer(target.x, target.y, target.z) == 1)
             return true;
         result = downward ? "minecraft:stone" : "minecraft:cobblestone";
@@ -437,6 +448,9 @@ void LiquidPhysicsSystem::process(const Vector3i &position) {
         }
     }
 
+    // Flowing fluid re-derives its level from its neighbours every update: it becomes a new
+    // source (infinite water), turns into a falling column under same fluid, or shrinks and
+    // eventually dries up once nothing feeds it.
     if (!source) {
         if (current.isWater()) {
             int sources = 0;
@@ -492,6 +506,11 @@ bool LiquidPhysicsSystem::_canBeFlowedInto(const BlockState &state, bool lava) c
     return isFlowable(state, lava);
 }
 
+/**
+ * Depth-first search for the shortest horizontal path to a drop. Directions are indexed so
+ * that `j ^ 1` is the opposite one, which lets the search skip walking straight back. The
+ * visited map is a member reused across calls to avoid reallocating it every flow update.
+ */
 int LiquidPhysicsSystem::_calculateFlowCost(int32_t x, int32_t y, int32_t z, int accumulatedCost, int maxCost,
                                             int originOpposite, int lastOpposite, bool lava) {
     std::unordered_map<Position, int8_t, PositionHash> &visited = mFlowCostVisited;

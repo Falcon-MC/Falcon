@@ -106,7 +106,7 @@ namespace {
     }
 
     void spawnItemActorTo(ServerNetworkHandler &owner, ServerPlayer &player, const ItemActor &actor) {
-        if (player.getDimension() != actor.getDimension())
+        if (!player.sharesLevelWith(actor))
             return;
 
         AddItemActorPacket add;
@@ -149,7 +149,7 @@ namespace {
         move.mForceMove = false;
 
         for (auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned() && entry.second.getDimension() == actor.getDimension())
+            if (entry.second.isSpawned() && entry.second.sharesLevelWith(actor))
                 owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), move, owner.getCodecContext());
         }
     }
@@ -159,7 +159,7 @@ namespace {
     remove.mUniqueActorId = actor.getUniqueId();
 
         for (auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned() && entry.second.getDimension() == actor.getDimension())
+            if (entry.second.isSpawned() && entry.second.sharesLevelWith(actor))
                 owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), remove, owner.getCodecContext());
         }
     }
@@ -247,7 +247,7 @@ namespace {
             if (player.getGameType() == (int32_t) GameType::Spectator)
                 continue;
 
-            if (player.getDimension() != actor.getDimension())
+            if (!player.sharesLevelWith(actor))
                 continue;
 
             const Vector3f playerPosition = player.getPosition();
@@ -302,7 +302,7 @@ ItemActor *ItemActorHandler::dropItem(ServerNetworkHandler &owner, Level &level,
 
     std::unique_ptr<ItemActor> actor(new ItemActor(owner.allocateRuntimeId(), item));
     actor->setUniqueId(owner.allocateActorUniqueId());
-    actor->setDimension(level.getDimensionType());
+    actor->moveToLevel(level);
     actor->getItem().mUsingNetId = false;
     actor->getItem().mNetId = 0;
     actor->setPosition(position);
@@ -323,7 +323,7 @@ void ItemActorHandler::collect(ServerNetworkHandler &owner, ItemActor &item, con
     take.mRuntimeActorId = collector.getRuntimeId();
 
     for (auto &viewer: owner.getPlayers()) {
-        if (viewer.second.isSpawned() && viewer.second.getDimension() == item.getDimension())
+        if (viewer.second.isSpawned() && viewer.second.sharesLevelWith(item))
             owner.getNetworkHandler().send(viewer.second.getNetworkIdentifier(), take, owner.getCodecContext());
     }
 
@@ -386,7 +386,7 @@ ItemActor *ItemActorHandler::restoreItem(ServerNetworkHandler &owner, Level &lev
     if (!actor->hasAssignedUniqueId())
         actor->setUniqueId(owner.allocateActorUniqueId());
 
-    actor->setDimension(level.getDimensionType());
+    actor->moveToLevel(level);
     actor->getItem().mUsingNetId = false;
     actor->getItem().mNetId = 0;
 
@@ -404,7 +404,7 @@ void ItemActorHandler::saveItemsInChunk(ServerNetworkHandler &owner, Level &leve
     for (auto it = actors.begin(); it != actors.end();) {
         ItemActor &actor = **it;
         const Vector3f &position = actor.getPosition();
-        if (actor.isRemoved() || actor.getDimension() != level.getDimensionType()
+        if (actor.isRemoved() || !actor.isIn(level)
             || ((int32_t) std::floor(position.x) >> 4) != chunkX || ((int32_t) std::floor(position.z) >> 4) != chunkZ) {
             ++it;
             continue;

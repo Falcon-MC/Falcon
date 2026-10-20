@@ -143,6 +143,8 @@ namespace {
             }
             return &view->mContents[(size_t) slot];
         }
+        // The client may refer to the created output as slot 0 or as slot 50; both map to
+        // the same per-request virtual slot.
         if (container == ContainerSlotType::CreatedOutput) {
             return (slot == 0 || slot == 50) ? &context.mCreatedOutput : nullptr;
         }
@@ -569,6 +571,8 @@ namespace {
             return false;
         }
 
+        // The request does not say which grid it crafts from, so any item left in the 3x3
+        // table grid means the table is the one in use.
         const int gridWidth = tableHasItems ? 3 : 2;
         const std::vector<ItemStack> &grid = tableHasItems
                                              ? inventory.getCraftingTableContents()
@@ -721,6 +725,9 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
 
+    // A request is all-or-nothing: every action runs against copies of the inventory, the
+    // open container and any bundle contents, and nothing is written back unless all of
+    // them succeed and the end-of-request checks below pass.
     PlayerInventory working = inventory;
     std::vector<TouchedSlot> touched;
     std::vector<ItemStack> localDroppedItems;
@@ -753,6 +760,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
         }
     }
 
+    // A craft is only valid if the client consumed exactly the matched recipe's ingredients
+    // and took the whole created output; anything left over means a forged or desynced request.
     if (context.mCraftingActive) {
         if (context.mCraftingRequired.size() != context.mCraftingConsumed.size()) {
             entry.mResult = RESULT_ERROR;

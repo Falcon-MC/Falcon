@@ -13,6 +13,13 @@ public:
     FollowCaravanGoal(float movementSpeed, float speedMultiplier, int32_t entityCount,
                       std::shared_ptr<json::Value> filters);
 
+    static bool isInCaravan(int64_t uniqueId);
+
+    /**
+     * Unique ids restart with every server, so the links of a stopped server must not carry into the next.
+     */
+    static void clearCaravans();
+
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
     bool canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) override;

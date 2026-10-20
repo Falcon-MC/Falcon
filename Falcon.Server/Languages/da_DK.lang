@@ -4,6 +4,21 @@ falcon.commands.about.version=Denne server kører Falcon version %1$s (%2$s på 
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
 falcon.commands.about.build=Build %1$s, %2$s-konfiguration
 
+falcon.commands.world.list=Indlæste verdener (%1$s): %2$s
+falcon.commands.world.available=Verdener på disken: %1$s
+falcon.commands.world.created=Verdenen %1$s er oprettet
+falcon.commands.world.exists=Verdenen %1$s findes allerede
+falcon.commands.world.invalidName=Ugyldigt verdensnavn: %1$s
+falcon.commands.world.loaded=Verdenen %1$s er indlæst
+falcon.commands.world.alreadyLoaded=Verdenen %1$s er allerede indlæst
+falcon.commands.world.notFound=Der findes ingen verden med navnet %1$s
+falcon.commands.world.notLoaded=Verdenen %1$s er ikke indlæst
+falcon.commands.world.unloaded=Verdenen %1$s er fjernet fra hukommelsen
+falcon.commands.world.unload.default=Standardverdenen %1$s kan ikke fjernes
+falcon.commands.world.unload.occupied=Der er stadig spillere i verdenen %1$s
+falcon.commands.world.unload.cancelled=Et plugin forhindrede, at verdenen %1$s blev fjernet
+falcon.commands.world.teleported=%1$s er sendt til verdenen %2$s
+
 falcon.commands.allowlist.enabled=Tilladlisten er aktiveret
 falcon.commands.allowlist.disabled=Tilladlisten er deaktiveret
 falcon.commands.allowlist.list=Tilladlisten (%1$s): %2$s

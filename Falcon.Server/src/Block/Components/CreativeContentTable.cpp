@@ -3,10 +3,14 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Json/Json.h"
 #include "CreativeItemsJson.h"
+#include "Network/ProtocolData.h"
 
 #include <deque>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -125,27 +129,53 @@ namespace {
         }
     }
 
-    const Storage &storage() {
-        static const Storage loaded = []() {
-            Storage result;
+    Storage load(const char *json) {
+        Storage result;
 
-            const std::unique_ptr<json::Value> root =
-                    json::parse(std::string(FalconCreativeItemData::kCreativeItemsJson));
+        const std::unique_ptr<json::Value> root = json::parse(std::string(json));
 
-            if (root == nullptr || !root->isObject()) {
-                LOG_WARN(LogAreaID::Server, "Failed to parse the creative items data");
-                return result;
-            }
-
-            readGroups(result, *root);
-            readItems(result, *root);
-
-            LOG_TRACE(LogAreaID::Server, "Loaded %zu creative group(s) and %zu creative item(s)",
-                      result.mGroups.size(), result.mEntries.size());
+        if (root == nullptr || !root->isObject()) {
+            LOG_WARN(LogAreaID::Server, "Failed to parse the creative items data");
             return result;
-        }();
+        }
 
+        readGroups(result, *root);
+        readItems(result, *root);
+
+        LOG_TRACE(LogAreaID::Server, "Loaded %zu creative group(s) and %zu creative item(s)",
+                  result.mGroups.size(), result.mEntries.size());
+        return result;
+    }
+
+    const Storage &storage() {
+        static const Storage loaded = load(FalconCreativeItemData::kCreativeItemsJson);
         return loaded;
+    }
+
+    std::string keyOf(const CreativeEntry &entry) {
+        std::string key = entry.mIdentifier;
+        key += '\x1f';
+        key += std::to_string(entry.mDamage);
+        key += '\x1f';
+        if (entry.mNbt != nullptr)
+            key.append((const char *) entry.mNbt, entry.mNbtSize);
+        return key;
+    }
+
+    const std::unordered_set<std::string> &olderKeys(const ProtocolData &data) {
+        static std::mutex mutex;
+        static std::unordered_map<int32_t, std::unordered_set<std::string>> keys;
+
+        const std::lock_guard<std::mutex> lock(mutex);
+        const auto it = keys.find(data.mProtocol);
+        if (it != keys.end())
+            return it->second;
+
+        const Storage older = load(data.mCreativeItems);
+        std::unordered_set<std::string> &result = keys[data.mProtocol];
+        for (const CreativeEntry &entry: older.mEntries)
+            result.insert(keyOf(entry));
+        return result;
     }
 }
 
@@ -163,4 +193,11 @@ const CreativeEntry *CreativeContentTable::getEntries() {
 
 size_t CreativeContentTable::getEntryCount() {
     return storage().mEntries.size();
+}
+
+bool CreativeContentTable::isKnownBy(size_t index, int32_t protocol) {
+    const ProtocolData *data = ProtocolData::find(protocol);
+    if (data == nullptr)
+        return true;
+    return olderKeys(*data).count(keyOf(storage().mEntries[index])) != 0;
 }

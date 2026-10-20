@@ -135,6 +135,9 @@ bool FallingBlockSystem::canFallInto(Level &level, const Vector3i &position) {
     return false;
 }
 
+/**
+ * Every face except the bottom: powder resting on top of water stays powder.
+ */
 bool FallingBlockSystem::isTouchingWater(Level &level, const Vector3i &position) {
     static const Vector3i OFFSETS[] = {
             Vector3i(0, 1, 0),
@@ -207,6 +210,8 @@ void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &leve
         return;
     }
 
+    // Hanging dripstone is held up from above, by a solid block or the rest of the
+    // stalactite; it only falls once that support is gone.
     if (state.mName == "minecraft:pointed_dripstone" && state.mStates.getBool("hanging", false)) {
         const BlockState above = level.getBlockState(position.x, position.y + 1, position.z);
         if (level.isSolidAt(position.x, position.y + 1, position.z) || above.mName == "minecraft:pointed_dripstone")

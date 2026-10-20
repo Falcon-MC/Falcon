@@ -6,12 +6,20 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 #include "Plugin/PluginApiHelpers.h"
+#include "Plugin/PluginEvent.h"
+#include "Plugin/PluginManager.h"
+#include "Protocol/Packets/TransferPacket.h"
+
+#include <atomic>
 
 #include <string>
 
 using namespace PluginApiHelpers;
 
 namespace {
+    // Script forms count up from 1; plugin forms start far above so both share a player's callbacks safely.
+    constexpr uint32_t PLUGIN_FORM_ID_BASE = 0x40000000u;
+
     ServerPlayer *spawnedPlayerAt(uint32_t index) {
         uint32_t current = 0;
         for (auto &entry: owner().getPlayers()) {
@@ -77,6 +85,52 @@ namespace {
     void playerSendMessage(FalconPlayer *target, const char *message) {
         if (message != nullptr)
             player(target)->sendMessage(message);
+    }
+
+    uint32_t playerSendForm(FalconPlayer *target, const char *formJson) {
+        static std::atomic<uint32_t> nextFormId{PLUGIN_FORM_ID_BASE};
+        if (formJson == nullptr || *formJson == '\0')
+            return 0;
+
+        const uint32_t formId = nextFormId.fetch_add(1);
+        const NetworkIdentifier id = player(target)->getNetworkIdentifier();
+        const std::string form(formJson);
+        owner().postToMainThread([id, formId, form] {
+            auto found = owner().getPlayers().find(id);
+            if (found == owner().getPlayers().end())
+                return;
+
+            owner().sendModalForm(found->second, formId, form,
+                                  [formId](ServerPlayer &responder, const std::string &response, bool closed) {
+                                      PluginManager *plugins =
+                                          PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FORM_RESPONSE);
+                                      if (plugins == nullptr)
+                                          return;
+
+                                      PluginEvent answer;
+                                      answer.mType = FALCON_EVENT_PLAYER_FORM_RESPONSE;
+                                      answer.mPlayer = &responder;
+                                      answer.mFormId = formId;
+                                      answer.mFormResponse = response;
+                                      answer.mState = closed;
+                                      plugins->dispatch(answer);
+                                  });
+        });
+        return formId;
+    }
+
+    int playerTransfer(FalconPlayer *target, const char *address, uint32_t port) {
+        if (address == nullptr || *address == '\0' || port == 0 || port > 65535)
+            return 0;
+
+        const NetworkIdentifier id = player(target)->getNetworkIdentifier();
+        TransferPacket packet;
+        packet.mAddress = address;
+        packet.mPort = (uint16_t) port;
+        owner().postToMainThread([id, packet] {
+            owner().sendPacketTo(id, packet);
+        });
+        return 1;
     }
 
     void playerKick(FalconPlayer *target, const char *reason) {
@@ -170,6 +224,8 @@ void PluginServerApi::fillCore(FalconServerApi &api) {
     api.playerIsOperator = &playerIsOperator;
     api.playerSendMessage = &playerSendMessage;
     api.playerKick = &playerKick;
+    api.playerSendForm = &playerSendForm;
+    api.playerTransfer = &playerTransfer;
     api.broadcastMessage = &broadcastMessage;
     api.subscribe = &subscribe;
     api.unsubscribe = &unsubscribe;

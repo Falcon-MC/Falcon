@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Actor/AI/Navigation/WalkNodeEvaluator.h"
+#include "Actor/AI/Navigation/NodeEvaluator.h"
 #include "Core/Math/Vector3f.h"
 
 #include <array>
@@ -21,6 +21,13 @@ public:
     static bool tryReserveSearch(int64_t tick);
 
     bool findPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options, Path &path);
+
+    /**
+     * Straight-line path for swimmers and fliers when nothing blocks the way. It costs a single ray test, so
+     * callers try it before spending one of the per-tick search slots.
+     */
+    bool findDirectPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options,
+                        Path &path);
 
 private:
     struct Node {
@@ -43,6 +50,10 @@ private:
 
     void _expand(int32_t nodeIndex);
 
+    void _expandGround(int32_t nodeIndex);
+
+    void _expandVolume(int32_t nodeIndex, bool swimming);
+
     int32_t _heuristic(int32_t x, int32_t y, int32_t z) const;
 
     void _heapPush(int32_t nodeIndex);
@@ -58,7 +69,7 @@ private:
     void _buildPath(int32_t endIndex, bool reachesTarget, const Vector3f &start, const Vector3f &target,
                     Path &path);
 
-    WalkNodeEvaluator mEvaluator;
+    NodeEvaluator mEvaluator;
     std::vector<Node> mNodes;
     std::vector<int32_t> mHeap;
     std::vector<Vector3f> mChain;

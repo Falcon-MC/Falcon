@@ -4,6 +4,21 @@ falcon.commands.about.version=Bu sunucu Falcon %1$s sürümünü çalıştırıy
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
 falcon.commands.about.build=Derleme %1$s, %2$s yapılandırması
 
+falcon.commands.world.list=Yüklenen dünyalar (%1$s): %2$s
+falcon.commands.world.available=Diskteki dünyalar: %1$s
+falcon.commands.world.created=%1$s dünyası oluşturuldu
+falcon.commands.world.exists=%1$s dünyası zaten var
+falcon.commands.world.invalidName=Geçersiz dünya adı: %1$s
+falcon.commands.world.loaded=%1$s dünyası yüklendi
+falcon.commands.world.alreadyLoaded=%1$s dünyası zaten yüklü
+falcon.commands.world.notFound=%1$s adında bir dünya yok
+falcon.commands.world.notLoaded=%1$s dünyası yüklü değil
+falcon.commands.world.unloaded=%1$s dünyası kaldırıldı
+falcon.commands.world.unload.default=Varsayılan dünya %1$s kaldırılamaz
+falcon.commands.world.unload.occupied=%1$s dünyasında hâlâ oyuncular var
+falcon.commands.world.unload.cancelled=Bir eklenti %1$s dünyasının kaldırılmasını engelledi
+falcon.commands.world.teleported=%1$s, %2$s dünyasına gönderildi
+
 falcon.commands.allowlist.enabled=İzin verilenler listesi açıldı
 falcon.commands.allowlist.disabled=İzin verilenler listesi kapatıldı
 falcon.commands.allowlist.list=İzin verilenler listesi (%1$s): %2$s

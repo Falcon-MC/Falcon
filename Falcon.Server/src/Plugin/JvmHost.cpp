@@ -594,9 +594,9 @@ bool JvmHost::load(LoadedPlugin &plugin) {
     const PluginDescription &description = plugin.mDescription;
     const char *name = description.mName.c_str();
 
-    if (description.mApiMajor != FALCON_API_VERSION_MAJOR || description.mApiMinor > FALCON_API_VERSION_MINOR) {
-        LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: it needs API %u.%u, the server provides %u.%u", name,
-                  description.mApiMajor, description.mApiMinor, FALCON_API_VERSION_MAJOR, FALCON_API_VERSION_MINOR);
+    if (!description.isApiSupported()) {
+        LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: it needs API %s, the server provides %s", name,
+                  description.apiVersionText().c_str(), PluginDescription::serverApiVersionText().c_str());
         return false;
     }
 

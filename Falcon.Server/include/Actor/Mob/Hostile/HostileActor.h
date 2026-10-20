@@ -10,6 +10,8 @@ public:
 
     ActorCategory getCategory() const override { return ActorCategory::Hostile; }
 
+    bool shouldRemoveInPeaceful() const override { return true; }
+
     int getExperienceDrop() const override { return DEFAULT_EXPERIENCE; }
 
     bool preventsSleep() const override {

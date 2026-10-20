@@ -2,6 +2,7 @@
 
 #include "Level/Level.h"
 #include "Level/TickingAreaManager.h"
+#include "Level/World.h"
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include <algorithm>
@@ -130,7 +131,8 @@ bool TickingAreaCommand::execute(CommandOrigin &sender, const std::vector<std::s
 
 bool TickingAreaCommand::_add(CommandOrigin &sender, const std::vector<std::string> &arguments,
                               const Vector3i &origin) {
-    TickingAreaManager &areas = mHandler.getTickingAreas();
+    World &world = mHandler.getWorldOf(*sender.getLevel());
+    TickingAreaManager &areas = world.getTickingAreas();
     const bool circle = arguments.size() > 1 && arguments[1] == "circle";
     const size_t optionalIndex = circle ? 6 : 7;
 
@@ -188,7 +190,7 @@ bool TickingAreaCommand::_add(CommandOrigin &sender, const std::vector<std::stri
         return false;
     }
 
-    const TickingArea &added = areas.add(mHandler, area);
+    const TickingArea &added = areas.add(world, area);
     if (added.mCircle) {
         const std::string center = triple(added.getCenterChunkX() * CHUNK_SIZE + CHUNK_CENTER_OFFSET,
                                           added.getCenterChunkZ() * CHUNK_SIZE + CHUNK_CENTER_OFFSET, ", ");
@@ -217,8 +219,9 @@ bool TickingAreaCommand::_remove(CommandOrigin &sender, const std::vector<std::s
     const bool byPosition = arguments.size() >= 4 && parseBlockPosition(arguments, 1, origin, position);
     const std::string name = arguments[1];
 
-    const std::vector<TickingArea> removed = mHandler.getTickingAreas().remove(
-            mHandler, [&](const TickingArea &area) {
+    World &world = mHandler.getWorldOf(*sender.getLevel());
+    const std::vector<TickingArea> removed = world.getTickingAreas().remove(
+            world, [&](const TickingArea &area) {
                 return area.mDimension == dimension
                        && (byPosition ? area.containsBlock(position) : area.mName == name);
             });
@@ -242,8 +245,9 @@ bool TickingAreaCommand::_remove(CommandOrigin &sender, const std::vector<std::s
 
 bool TickingAreaCommand::_removeAll(CommandOrigin &sender) {
     const DimensionType dimension = sender.getLevel()->getDimensionType();
-    const std::vector<TickingArea> removed = mHandler.getTickingAreas().remove(
-            mHandler, [dimension](const TickingArea &area) {
+    World &world = mHandler.getWorldOf(*sender.getLevel());
+    const std::vector<TickingArea> removed = world.getTickingAreas().remove(
+            world, [dimension](const TickingArea &area) {
                 return area.mDimension == dimension;
             });
 
@@ -260,7 +264,7 @@ bool TickingAreaCommand::_removeAll(CommandOrigin &sender) {
 }
 
 bool TickingAreaCommand::_list(CommandOrigin &sender, const std::vector<std::string> &arguments) {
-    const std::vector<TickingArea> &areas = mHandler.getTickingAreas().getAreas();
+    const std::vector<TickingArea> &areas = mHandler.getWorldOf(*sender.getLevel()).getTickingAreas().getAreas();
     const bool allDimensions = arguments.size() > 1 && arguments[1] == "all-dimensions";
 
     if (!allDimensions) {
@@ -321,11 +325,12 @@ bool TickingAreaCommand::_preload(CommandOrigin &sender, const std::vector<std::
         return area.mDimension == dimension && (byPosition ? area.containsBlock(position) : area.mName == name);
     };
 
+    World &world = mHandler.getWorldOf(*sender.getLevel());
     std::vector<TickingArea> matched;
     if (setting) {
-        matched = mHandler.getTickingAreas().setPreload(mHandler, match, preload);
+        matched = world.getTickingAreas().setPreload(world, match, preload);
     } else {
-        for (const TickingArea &area: mHandler.getTickingAreas().getAreas()) {
+        for (const TickingArea &area: world.getTickingAreas().getAreas()) {
             if (match(area))
                 matched.push_back(area);
         }
@@ -356,7 +361,7 @@ bool TickingAreaCommand::_preload(CommandOrigin &sender, const std::vector<std::
 
 void TickingAreaCommand::_sendInUse(CommandOrigin &sender) {
     sender.sendTranslation("commands.tickingarea.inuse",
-                           {std::to_string(mHandler.getTickingAreas().getAreas().size()),
+                           {std::to_string(mHandler.getWorldOf(*sender.getLevel()).getTickingAreas().getAreas().size()),
                             std::to_string(TickingAreaManager::MAX_AREAS)});
 }
 

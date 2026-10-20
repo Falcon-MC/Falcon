@@ -120,6 +120,24 @@ bool PathFinder::findPath(Level &level, const MobActor &mob, const Vector3f &tar
     return !path.isEmpty();
 }
 
+bool PathFinder::findDirectPath(Level &level, const MobActor &mob, const Vector3f &target,
+                                const PathOptions &options, Path &path) {
+    if (!options.isVolumetric())
+        return false;
+
+    const Vector3f position = mob.getPosition();
+    const ActorSize size = mob.getSize();
+    mEvaluator.prepare(level, size.mWidth, size.mHeight, position, LiquidBlocksFetch::at(level, position).water,
+                       options);
+    if (mEvaluator.hasBarrier(position, target))
+        return false;
+
+    path.clear();
+    path.add(target);
+    path.setReachesTarget(true);
+    return true;
+}
+
 int32_t PathFinder::_findNode(int32_t x, int32_t y, int32_t z) const {
     const int64_t key = packPosition(x, y, z);
     uint32_t slot = hashPosition(key) & (INDEX_CAPACITY - 1);
@@ -166,18 +184,39 @@ void PathFinder::_offer(int32_t x, int32_t y, int32_t z, int32_t g, int32_t pare
 }
 
 void PathFinder::_expand(int32_t nodeIndex) {
+    const PathOptions &options = mEvaluator.getOptions();
+    if (options.isVolumetric()) {
+        _expandVolume(nodeIndex, options.mMode == NavigationMode::Swim);
+        return;
+    }
+
+    _expandGround(nodeIndex);
+
+    const Node &node = mNodes[nodeIndex];
+    if (options.swimsThroughWater() && mEvaluator.isOpen(node.mX, node.mY, node.mZ, true))
+        _expandVolume(nodeIndex, true);
+}
+
+void PathFinder::_expandGround(int32_t nodeIndex) {
     const Node node = mNodes[nodeIndex];
 
     const int32_t selfOffset = mEvaluator.availableOffset(node.mX, node.mY, node.mZ);
-    if (selfOffset != WalkNodeEvaluator::NO_OFFSET && selfOffset != 0)
+    if (selfOffset != NodeEvaluator::NO_OFFSET && selfOffset != 0)
         _offer(node.mX, node.mY + selfOffset, node.mZ, node.mG, nodeIndex);
+
+    if (mEvaluator.getOptions().mMode == NavigationMode::Climb) {
+        if (mEvaluator.canClimb(node.mX, node.mY + 1, node.mZ))
+            _offer(node.mX, node.mY + 1, node.mZ, node.mG + DIRECT_MOVE_COST, nodeIndex);
+        if (mEvaluator.canClimb(node.mX, node.mY - 1, node.mZ))
+            _offer(node.mX, node.mY - 1, node.mZ, node.mG + DIRECT_MOVE_COST, nodeIndex);
+    }
 
     bool open[4];
     for (int32_t direction = 0; direction < 4; ++direction) {
         const int32_t x = node.mX + ORTHOGONAL_X[direction];
         const int32_t z = node.mZ + ORTHOGONAL_Z[direction];
         const int32_t offset = mEvaluator.availableOffset(x, node.mY, z);
-        open[direction] = offset != WalkNodeEvaluator::NO_OFFSET;
+        open[direction] = offset != NodeEvaluator::NO_OFFSET;
         if (!open[direction])
             continue;
 
@@ -193,11 +232,43 @@ void PathFinder::_expand(int32_t nodeIndex) {
         const int32_t x = node.mX + ORTHOGONAL_X[direction] + ORTHOGONAL_X[next];
         const int32_t z = node.mZ + ORTHOGONAL_Z[direction] + ORTHOGONAL_Z[next];
         const int32_t offset = mEvaluator.availableOffset(x, node.mY, z);
-        if (offset != 0 && (offset == WalkNodeEvaluator::NO_OFFSET || !mEvaluator.isInWater()))
+        if (offset != 0 && (offset == NodeEvaluator::NO_OFFSET || !mEvaluator.isInWater()))
             continue;
 
         const int32_t y = node.mY + offset;
         _offer(x, y, z, node.mG + OBLIQUE_MOVE_COST + mEvaluator.extraCost(x, y, z), nodeIndex);
+    }
+}
+
+/**
+ * Expands to the 18 neighbours that share a face or an edge with the node. Corner moves are left out, and an
+ * edge move is only allowed when both face moves it cuts across are open, so the mob never clips a corner.
+ */
+void PathFinder::_expandVolume(int32_t nodeIndex, bool swimming) {
+    const Node node = mNodes[nodeIndex];
+
+    for (int32_t dx = -1; dx <= 1; ++dx) {
+        for (int32_t dy = -1; dy <= 1; ++dy) {
+            for (int32_t dz = -1; dz <= 1; ++dz) {
+                const int32_t axes = (dx != 0) + (dy != 0) + (dz != 0);
+                if (axes == 0 || axes == 3)
+                    continue;
+
+                const int32_t x = node.mX + dx;
+                const int32_t y = node.mY + dy;
+                const int32_t z = node.mZ + dz;
+                if (!mEvaluator.isOpen(x, y, z, swimming))
+                    continue;
+
+                if (axes == 2 && ((dx != 0 && !mEvaluator.isOpen(node.mX + dx, node.mY, node.mZ, swimming))
+                                  || (dy != 0 && !mEvaluator.isOpen(node.mX, node.mY + dy, node.mZ, swimming))
+                                  || (dz != 0 && !mEvaluator.isOpen(node.mX, node.mY, node.mZ + dz, swimming))))
+                    continue;
+
+                const int32_t cost = axes == 1 ? DIRECT_MOVE_COST : OBLIQUE_MOVE_COST;
+                _offer(x, y, z, node.mG + cost + mEvaluator.extraCost(x, y, z), nodeIndex);
+            }
+        }
     }
 }
 
