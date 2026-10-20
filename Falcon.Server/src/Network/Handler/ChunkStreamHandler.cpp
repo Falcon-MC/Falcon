@@ -186,10 +186,10 @@ namespace {
                 continue;
             }
 
-            if (state.mLoading.find(hash) == state.mLoading.end()) {
-                level.requestChunkAsync(chunkX, chunkZ);
-                state.mLoading.insert(hash);
-            }
+            // Admission can be deferred by generation backpressure. Level deduplicates
+            // accepted requests, so retry even when this stream already wants the chunk.
+            level.requestChunkAsync(chunkX, chunkZ);
+            state.mLoading.insert(hash);
 
             requeue.push_back(hash);
         }

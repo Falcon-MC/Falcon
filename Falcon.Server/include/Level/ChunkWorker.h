@@ -24,7 +24,8 @@ struct ChunkTask {
         Load = 0,
         Save = 1,
         Populate = 2,
-        Barrier = 3
+        Barrier = 3,
+        PersistChanges = 4
     };
 
     Kind mKind = Kind::Load;
@@ -32,6 +33,8 @@ struct ChunkTask {
     int32_t mZ = 0;
     std::unique_ptr<LevelChunk> mChunk;
     std::shared_ptr<std::promise<void>> mBarrier;
+    std::vector<GeneratedBlockChange> mChanges;
+    std::shared_ptr<std::promise<std::vector<GeneratedBlockChange>>> mChangesResult;
 };
 
 struct ChunkLoadResult {
@@ -51,6 +54,9 @@ struct ChunkLoadResult {
 class ChunkWorker {
 public:
     static constexpr size_t MAX_THREADS = 64;
+    // Credits stay held until the main thread drains completed results, not just until
+    // generation finishes, so slow consumers cannot accumulate an unbounded result queue.
+    static constexpr size_t MAX_OUTSTANDING_GENERATION = 8;
 
     ChunkWorker(const ChunkGenerator &generator, LevelStorage &storage);
 
@@ -68,11 +74,16 @@ public:
 
     size_t getThreadCount() const { return mQueues.size(); }
 
-    void requestLoad(int32_t chunkX, int32_t chunkZ);
+    bool requestLoad(int32_t chunkX, int32_t chunkZ);
 
     void requestSave(std::unique_ptr<LevelChunk> chunk);
 
-    void requestPopulate(std::unique_ptr<LevelChunk> chunk);
+    bool requestPopulate(std::unique_ptr<LevelChunk> chunk);
+
+    std::future<std::vector<GeneratedBlockChange>> requestPersistChanges(
+            int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes);
+
+    size_t getOutstandingGenerationCount() const { return mOutstandingGeneration.load(); }
 
     /**
      * Whether a save requested for this chunk has not been written yet. A chunk must not be
@@ -105,6 +116,10 @@ private:
 
     void _processSave(ChunkTask &task);
 
+    void _processPersistChanges(ChunkTask &task);
+
+    bool _reserveGeneration();
+
     void _finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident,
                       bool generated);
 
@@ -126,6 +141,7 @@ private:
     std::vector<std::thread> mThreads;
     std::atomic<bool> mRunning;
     std::atomic<bool> mDiscardGeneration;
+    std::atomic<size_t> mOutstandingGeneration{0};
     std::atomic<uint64_t> mGeneratedCount;
     std::atomic<uint64_t> mLoadedCount;
     std::atomic<uint64_t> mSavedCount;

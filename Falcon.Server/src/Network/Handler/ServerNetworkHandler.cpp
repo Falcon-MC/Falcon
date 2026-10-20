@@ -655,6 +655,8 @@ void ServerNetworkHandler::tick(bool paused) {
         return;
 
     ++mChunkStreamTick;
+    for (World *world: mWorlds.getWorlds())
+        world->getTickingAreas().retryPendingLoads(*world);
     if (paused) {
         mNetworkHandler->runEvents();
         std::vector<std::string> commands;

@@ -193,6 +193,18 @@ std::string TickingAreaManager::_randomId() {
     return Uuid(most, least).toString();
 }
 
+void TickingAreaManager::retryPendingLoads(World &world) {
+    for (const auto &area: mAreas) {
+        Level &level = world.getLevel(area.mDimension);
+        for (const int64_t column: area.getColumns()) {
+            const int32_t x = (int32_t) (column >> 32);
+            const int32_t z = (int32_t) (column & 0xffffffff);
+            if (!level.isChunkPopulated(x, z))
+                level.requestChunkAsync(x, z);
+        }
+    }
+}
+
 void TickingAreaManager::_attach(World &world, const TickingArea &area) {
     Level &level = world.getLevel(area.mDimension);
     const uint64_t loader = _loaderId(area);

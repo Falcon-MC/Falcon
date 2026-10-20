@@ -53,6 +53,8 @@ public:
 
     void load(World &world);
 
+    void retryPendingLoads(World &world);
+
     const std::vector<TickingArea> &getAreas() const {
         return mAreas;
     }

@@ -48,6 +48,8 @@ Level &Level::operator=(Level &&other) noexcept {
     if (this == &other)
         return *this;
 
+    _finishPendingChangeWrite(true);
+    other._finishPendingChangeWrite(true);
     if (mChunkWorker != nullptr)
         mChunkWorker->stop();
     mChunkWorker.reset();
@@ -73,6 +75,8 @@ Level &Level::operator=(Level &&other) noexcept {
     mRepopulatedChunks = std::move(other.mRepopulatedChunks);
     mIncomingChanges = std::move(other.mIncomingChanges);
     mPendingBlockChanges = std::move(other.mPendingBlockChanges);
+    mPendingBlockChangeCount = other.mPendingBlockChangeCount;
+    other.mPendingBlockChangeCount = 0;
     mBlockUpdateScheduler.moveStateFrom(std::move(other.mBlockUpdateScheduler));
     mBlockUpdates.moveStateFrom(std::move(other.mBlockUpdates));
     mLiquidPhysics.moveStateFrom(std::move(other.mLiquidPhysics));
@@ -159,7 +163,12 @@ void Level::saveAll(bool wait) {
             processGeneratedChanges();
     }
 
-    _flushPendingBlockChanges(!async);
+    if (wait || !async) {
+        _finishPendingChangeWrite(true);
+        _flushPendingBlockChanges(true);
+    } else {
+        _flushPendingBlockChanges(false);
+    }
 
     size_t saved = 0;
     for (auto &entry: mChunks) {
@@ -253,6 +262,7 @@ void Level::closeStorage() {
     if (mChunkWorker != nullptr) {
         mChunkWorker->discardPendingGeneration();
         mChunkWorker->stop();
+        _finishPendingChangeWrite(true);
         while (drainCompletedChunks() != 0) {
         }
         for (auto &entry: mChunks) {
@@ -399,11 +409,29 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
     if (it != mChunks.end())
         return it->second;
 
+    // A synchronous read must not overtake an older pending-change write. Normal
+    // streaming retries instead of waiting on the tick thread.
+    if (mPendingChangeWrite.valid() && mPersistingChangeKey == key)
+        _finishPendingChangeWrite(true);
+
     LevelChunk chunk(chunkX, chunkZ);
     chunk.setDimension(mDimension);
 
     if (!mStorage.isOpen() || !mStorage.loadChunk(chunk))
         _generate(chunk);
+
+    if (mStorage.isOpen() && mPendingChunks.find(key) == mPendingChunks.end()) {
+        const auto stored = mStorage.loadPendingBlockChanges(chunkX, chunkZ);
+        for (const auto &change: stored) {
+            if (change.mY >= LevelChunk::MIN_Y && change.mY <= LevelChunk::MAX_Y)
+                chunk.setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mState);
+        }
+        if (!stored.empty()) {
+            LightSystem::computeSkyLight(chunk);
+            LightSystem::computeBlockLight(chunk);
+            mStorage.erasePendingBlockChanges(chunkX, chunkZ);
+        }
+    }
 
     mPendingChunks.erase(key);
 
@@ -465,6 +493,7 @@ void Level::_replayPendingChanges(int64_t key) {
         return;
 
     std::vector<GeneratedBlockChange> changes = std::move(pending->second);
+    mPendingBlockChangeCount -= changes.size();
     mPendingBlockChanges.erase(pending);
     _queueGeneratedChanges(std::move(changes));
 }
@@ -483,6 +512,7 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
         // kept aside, replayed once it arrives, or merged into storage on save.
         if (chunk == nullptr || mPendingChunks.find(key) != mPendingChunks.end()) {
             mPendingBlockChanges[key].push_back(change);
+            ++mPendingBlockChangeCount;
             continue;
         }
 
@@ -499,6 +529,7 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
 }
 
 size_t Level::processGeneratedChanges() {
+    _flushPendingBlockChanges(false);
     if (mIncomingChanges.empty())
         return 0;
 
@@ -515,8 +546,30 @@ size_t Level::processGeneratedChanges() {
     return batch.size();
 }
 
+void Level::_finishPendingChangeWrite(bool wait) {
+    if (!mPendingChangeWrite.valid())
+        return;
+    if (!wait && mPendingChangeWrite.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+
+    auto failed = mPendingChangeWrite.get();
+    mPersistingChangeCount = 0;
+    if (failed.empty())
+        return;
+
+    // Failed writes retain their payload. Older changes must precede changes received
+    // while the write was running, so a retry still keeps the newest state per position.
+    mPendingBlockChangeCount += failed.size();
+    auto &newer = mPendingBlockChanges[mPersistingChangeKey];
+    failed.insert(failed.end(), std::make_move_iterator(newer.begin()), std::make_move_iterator(newer.end()));
+    newer = std::move(failed);
+}
+
 void Level::_flushPendingBlockChanges(bool includeInFlight) {
+    _finishPendingChangeWrite(includeInFlight);
     if (!mStorage.isOpen())
+        return;
+    if (mPendingChangeWrite.valid())
         return;
 
     for (auto it = mPendingBlockChanges.begin(); it != mPendingBlockChanges.end();) {
@@ -525,11 +578,24 @@ void Level::_flushPendingBlockChanges(bool includeInFlight) {
             continue;
         }
 
+        if (!includeInFlight && mChunkWorker != nullptr && mChunkWorker->isRunning()) {
+            mPersistingChangeKey = it->first;
+            mPersistingChangeCount = it->second.size();
+            mPendingBlockChangeCount -= mPersistingChangeCount;
+            mPendingChangeWrite = mChunkWorker->requestPersistChanges(
+                    (int32_t) (it->first >> 32), (int32_t) (it->first & 0xffffffff), std::move(it->second));
+            mPendingBlockChanges.erase(it);
+            return;
+        }
+
+        const size_t count = it->second.size();
         if (mStorage.mergePendingBlockChanges((int32_t) (it->first >> 32), (int32_t) (it->first & 0xffffffff),
-                                              it->second))
+                                              it->second)) {
+            mPendingBlockChangeCount -= count;
             it = mPendingBlockChanges.erase(it);
-        else
+        } else {
             ++it;
+        }
     }
 }
 
@@ -608,9 +674,6 @@ void Level::_sweepOrphanChunks() {
 
     mOrphanCandidates.swap(orphans);
 
-    // Feature blocks spilled into chunks that are not resident would otherwise stay in memory
-    // until the next save.
-    _flushPendingBlockChanges(false);
 }
 
 void Level::setOccupiedColumns(std::unordered_set<int64_t> columns) {
@@ -776,15 +839,23 @@ bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
     if (mChunkWorker == nullptr || !mChunkWorker->isRunning())
         return false;
 
+    _finishPendingChangeWrite(false);
+    if (_generationBacklog() >= MAX_GENERATION_BACKLOG || !mCompletedChunks.empty()
+        || mChunkWorker->getOutstandingGenerationCount() >= ChunkWorker::MAX_OUTSTANDING_GENERATION
+        || (mPendingChangeWrite.valid() && mPersistingChangeKey == key))
+        return false;
+
     if (!mPendingChunks.insert(key).second)
         return false;
 
     if (resident != mChunks.end()) {
-        mChunkWorker->requestPopulate(std::unique_ptr<LevelChunk>(new LevelChunk(resident->second)));
+        if (!mChunkWorker->requestPopulate(std::unique_ptr<LevelChunk>(new LevelChunk(resident->second))))
+            mPendingChunks.erase(key);
         return false;
     }
 
-    mChunkWorker->requestLoad(chunkX, chunkZ);
+    if (!mChunkWorker->requestLoad(chunkX, chunkZ))
+        mPendingChunks.erase(key);
     return false;
 }
 

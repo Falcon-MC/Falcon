@@ -365,6 +365,12 @@ private:
 
     void _flushPendingBlockChanges(bool includeInFlight);
 
+    void _finishPendingChangeWrite(bool wait);
+
+    size_t _generationBacklog() const {
+        return mIncomingChanges.size() + mPendingBlockChangeCount + mPersistingChangeCount;
+    }
+
     ServerNetworkHandler *mOwner = nullptr;
     Vector3i mSpawnPosition;
     Vector3i mDefaultSpawnPosition;
@@ -387,6 +393,8 @@ private:
     std::unordered_map<int64_t, LevelChunk> mChunks;
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 8;
     static const size_t MAX_GENERATED_CHANGES_PER_TICK = 1024;
+    // Admission high-water mark; the finite set of already accepted results may overshoot it.
+    static constexpr size_t MAX_GENERATION_BACKLOG = 65536;
 
     void _sweepOrphanChunks();
 
@@ -405,6 +413,10 @@ private:
     size_t mUnloadedSinceTrim = 0;
     std::deque<GeneratedBlockChange> mIncomingChanges;
     std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> mPendingBlockChanges;
+    size_t mPendingBlockChangeCount = 0;
+    size_t mPersistingChangeCount = 0;
+    int64_t mPersistingChangeKey = 0;
+    std::future<std::vector<GeneratedBlockChange>> mPendingChangeWrite;
     std::unique_ptr<ChunkWorker> mChunkWorker;
     int64_t mTime = 0;
     bool mRaining = false;

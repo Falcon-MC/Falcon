@@ -44,6 +44,61 @@ public:
             level.mIncomingChanges.push_back(std::move(change));
         }
     }
+
+    static void stagePending(Level &level, int32_t x, int32_t z, int count,
+                             const char *block = "minecraft:diamond_block") {
+        auto &changes = level.mPendingBlockChanges[Level::_packChunk(x, z)];
+        for (int i = 0; i < count; ++i) {
+            GeneratedBlockChange change;
+            change.mX = x * 16 + i % 16;
+            change.mZ = z * 16 + (i / 16) % 16;
+            change.mY = 140 + (i / 256) % 64;
+            change.mState = BlockState(block);
+            changes.push_back(std::move(change));
+        }
+        level.mPendingBlockChangeCount += count;
+    }
+
+    static bool writing(Level &level) { return level.mPendingChangeWrite.valid(); }
+
+    static void holdWrite(Level &level, int32_t x, int32_t z,
+                          std::promise<std::vector<GeneratedBlockChange>> &completion) {
+        level.mPersistingChangeKey = Level::_packChunk(x, z);
+        level.mPendingChangeWrite = completion.get_future();
+    }
+
+    static size_t outstanding(Level &level) { return level.mChunkWorker->getOutstandingGenerationCount(); }
+
+    static void finishWrites(Level &level) {
+        level.mChunkWorker->waitForSaves();
+        level._finishPendingChangeWrite(true);
+    }
+
+    static std::vector<GeneratedBlockChange> storedPending(Level &level, int32_t x, int32_t z) {
+        return level.mStorage.loadPendingBlockChanges(x, z);
+    }
+
+    static void saveEmpty(Level &level, int32_t x, int32_t z) {
+        LevelChunk chunk(x, z);
+        chunk.setPopulated(true);
+        if (!level.mStorage.saveChunk(chunk))
+            throw std::runtime_error("Could not save pressure fixture chunk");
+    }
+
+    static void failPendingWrite(Level &level, int32_t x, int32_t z) {
+        level.mChunkWorker->waitForSaves();
+        const int64_t key = Level::_packChunk(x, z);
+        auto &changes = level.mPendingBlockChanges.at(key);
+        level.mPersistingChangeKey = key;
+        level.mPersistingChangeCount = changes.size();
+        level.mPendingBlockChangeCount -= changes.size();
+        level.mStorage.close();
+        level.mPendingChangeWrite = level.mChunkWorker->requestPersistChanges(x, z, std::move(changes));
+        level.mPendingBlockChanges.erase(key);
+        finishWrites(level);
+        if (!level.mStorage.open(WorldManager::getWorldsDirectory(), level.getName(), level.getDimensionId()))
+            throw std::runtime_error("Could not reopen pending-write fixture storage");
+    }
 };
 
 namespace {
@@ -226,6 +281,114 @@ int main() {
                 LOG_INFO(LogAreaID::Server, "Queue-only backlog=%d total_us=%.1f max_batch_us=%.1f",
                          count, totalMicros, maxMicros);
             }
+        });
+        check("pending changes persist off the tick path and precede synchronous loads", [&]() {
+            Level pending("PendingAsync", 4, 1);
+            require(pending.openStorage(WorldManager::getWorldsDirectory()), "Could not open pending fixture");
+            pending.startWorkers(1);
+            LevelPersistenceProbe::stagePending(pending, 32, 32, 16384);
+            const auto start = std::chrono::steady_clock::now();
+            require(pending.processGeneratedChanges() == 0, "Persistence changed the generation budget");
+            const double queuedMicros = std::chrono::duration<double, std::micro>(
+                    std::chrono::steady_clock::now() - start).count();
+            require(LevelPersistenceProbe::writing(pending), "Tick did not hand persistence to a worker");
+            require(pending.getBlockState(32 * 16, 140, 32 * 16).mName == "minecraft:diamond_block",
+                    "Synchronous load missed the pending write");
+            LevelPersistenceProbe::stagePending(pending, 35, 35, 1, "minecraft:glowstone");
+            pending.processGeneratedChanges();
+            LevelPersistenceProbe::finishWrites(pending);
+            pending.requestChunkAsync(35, 35);
+            LevelPersistenceProbe::finishWrites(pending);
+            pending.drainCompletedChunks();
+            require(pending.getBlockState(35 * 16, 140, 35 * 16).mName == "minecraft:glowstone",
+                    "Asynchronous load missed persisted changes");
+            require(pending.getChunk(35, 35).getBlockLight(0, 140, 0) > 0, "Persisted light source was not relit");
+            pending.closeStorage();
+            Level reopened("PendingAsync", 4, 1);
+            require(reopened.openStorage(WorldManager::getWorldsDirectory()), "Could not reopen pending fixture");
+            require(reopened.getBlockState(32 * 16 + 15, 203, 32 * 16 + 15).mName == "minecraft:diamond_block",
+                    "Pending write lost blocks across close");
+            reopened.closeStorage();
+            LOG_INFO(LogAreaID::Server, "Async persistence handoff: changes=16384 main_thread_us=%.1f", queuedMicros);
+        });
+        check("streaming defers a load while persistence is unfinished", [&]() {
+            Level gate("WriteGate", 4, 1);
+            gate.startWorkers(1);
+            std::promise<std::vector<GeneratedBlockChange>> completion;
+            LevelPersistenceProbe::holdWrite(gate, 37, 37, completion);
+            gate.requestChunkAsync(37, 37);
+            const size_t outstanding = LevelPersistenceProbe::outstanding(gate);
+            completion.set_value({});
+            require(outstanding == 0, "Load was queued before persistence completed");
+            gate.closeStorage();
+        });
+        check("failed pending write retains changes and newest states win", [&]() {
+            Level pending("PendingRetry", 4, 1);
+            require(pending.openStorage(WorldManager::getWorldsDirectory()), "Could not open pending retry fixture");
+            pending.startWorkers(1);
+            LevelPersistenceProbe::stagePending(pending, 33, 33, 1024);
+            LevelPersistenceProbe::failPendingWrite(pending, 33, 33);
+            require(pending.getPendingChangeChunkCount() == 1, "Failed persistence discarded its payload");
+            LevelPersistenceProbe::stagePending(pending, 33, 33, 1, "minecraft:gold_block");
+            pending.processGeneratedChanges();
+            LevelPersistenceProbe::finishWrites(pending);
+            const auto saved = LevelPersistenceProbe::storedPending(pending, 33, 33);
+            require(saved.size() == 1024, "Retry lost or duplicated positions");
+            const auto newest = std::find_if(saved.begin(), saved.end(), [](const GeneratedBlockChange &change) {
+                return change.mX == 33 * 16 && change.mY == 140 && change.mZ == 33 * 16;
+            });
+            require(newest != saved.end() && newest->mState.mName == "minecraft:gold_block", "Retry overwrote a newer state");
+            LevelPersistenceProbe::stagePending(pending, 34, 34, 1024);
+            pending.processGeneratedChanges();
+            pending.closeStorage();
+            Level reopened("PendingRetry", 4, 1);
+            require(reopened.openStorage(WorldManager::getWorldsDirectory()), "Could not reopen pending retry fixture");
+            require(reopened.getBlockState(34 * 16, 140, 34 * 16).mName == "minecraft:diamond_block",
+                    "Shutdown discarded a pending write");
+            reopened.closeStorage();
+        });
+        check("generation admission pauses under pressure and resumes without losing requests", [&]() {
+            Level pressure("Pressure", 4, 1);
+            require(pressure.openStorage(WorldManager::getWorldsDirectory()), "Could not open pressure fixture");
+            for (int x = 40; x < 64; ++x)
+                LevelPersistenceProbe::saveEmpty(pressure, x, 40);
+            pressure.startWorkers(1);
+            LevelPersistenceProbe::queueOverflow(pressure, 65536, true);
+            for (int x = 40; x < 64; ++x)
+                pressure.requestChunkAsync(x, 40);
+            require(LevelPersistenceProbe::outstanding(pressure) == 0, "Generation ignored backlog pressure");
+            while (pressure.processGeneratedChanges() != 0) {}
+            for (int x = 40; x < 64; ++x)
+                pressure.requestChunkAsync(x, 40);
+            require(LevelPersistenceProbe::outstanding(pressure) == ChunkWorker::MAX_OUTSTANDING_GENERATION,
+                    "Worker admission did not enforce its outstanding-result limit");
+            for (int round = 0; round < 3; ++round) {
+                LevelPersistenceProbe::finishWrites(pressure);
+                pressure.drainCompletedChunks();
+                for (int x = 40; x < 64; ++x)
+                    pressure.requestChunkAsync(x, 40);
+                require(LevelPersistenceProbe::outstanding(pressure) <= ChunkWorker::MAX_OUTSTANDING_GENERATION,
+                        "Generation exceeded its result credit limit");
+            }
+            LevelPersistenceProbe::finishWrites(pressure);
+            pressure.drainCompletedChunks();
+            for (int x = 40; x < 64; ++x)
+                require(pressure.isChunkPopulated(x, 40), "Deferred generation request never completed");
+            pressure.closeStorage();
+        });
+        check("ticking areas retry chunks deferred by generation pressure", [&]() {
+            World &world = handler.getWorldFor(player);
+            for (int x = 70; x < 86; ++x)
+                LevelPersistenceProbe::saveEmpty(level, x, 70);
+            auto area = TickingArea::box(Vector3i(70 * 16, 0, 70 * 16), Vector3i(85 * 16, 0, 70 * 16));
+            const std::string areaId = world.getTickingAreas().add(world, area).mId;
+            for (int round = 0; round < 8; ++round) {
+                LevelPersistenceProbe::finishWrites(level);
+                host.tick(true);
+            }
+            for (int x = 70; x < 86; ++x)
+                require(level.isChunkPopulated(x, 70), "Ticking area never retried deferred terrain");
+            world.getTickingAreas().remove(world, [&areaId](const TickingArea &entry) { return entry.mId == areaId; });
         });
         check("generation backlog survives close", [&]() {
             Level backlog("Backlog", 4, 1, DimensionType::Overworld);

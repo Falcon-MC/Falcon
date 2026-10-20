@@ -99,15 +99,28 @@ size_t ChunkWorker::_queueIndexFor(int32_t chunkX, int32_t chunkZ) const {
     return (size_t) ((key * 1099511628211ull) >> 32) % mQueues.size();
 }
 
-void ChunkWorker::requestLoad(int32_t chunkX, int32_t chunkZ) {
-    if (mQueues.empty())
-        return;
+bool ChunkWorker::_reserveGeneration() {
+    if (!mRunning.load() || mDiscardGeneration.load())
+        return false;
+
+    size_t count = mOutstandingGeneration.load();
+    while (count < MAX_OUTSTANDING_GENERATION) {
+        if (mOutstandingGeneration.compare_exchange_weak(count, count + 1))
+            return true;
+    }
+    return false;
+}
+
+bool ChunkWorker::requestLoad(int32_t chunkX, int32_t chunkZ) {
+    if (mQueues.empty() || !_reserveGeneration())
+        return false;
 
     ChunkTask task;
     task.mKind = ChunkTask::Kind::Load;
     task.mX = chunkX;
     task.mZ = chunkZ;
     mQueues[_queueIndexFor(chunkX, chunkZ)]->push(std::move(task));
+    return true;
 }
 
 int64_t ChunkWorker::_packChunk(int32_t chunkX, int32_t chunkZ) {
@@ -158,9 +171,9 @@ bool ChunkWorker::waitForSaves() {
     return mFailedSaves.empty();
 }
 
-void ChunkWorker::requestPopulate(std::unique_ptr<LevelChunk> chunk) {
-    if (chunk == nullptr || mQueues.empty())
-        return;
+bool ChunkWorker::requestPopulate(std::unique_ptr<LevelChunk> chunk) {
+    if (chunk == nullptr || mQueues.empty() || !_reserveGeneration())
+        return false;
 
     ChunkTask task;
     task.mKind = ChunkTask::Kind::Populate;
@@ -168,10 +181,30 @@ void ChunkWorker::requestPopulate(std::unique_ptr<LevelChunk> chunk) {
     task.mZ = chunk->getZ();
     task.mChunk = std::move(chunk);
     mQueues[_queueIndexFor(task.mX, task.mZ)]->push(std::move(task));
+    return true;
+}
+
+std::future<std::vector<GeneratedBlockChange>> ChunkWorker::requestPersistChanges(
+        int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes) {
+    ChunkTask task;
+    task.mKind = ChunkTask::Kind::PersistChanges;
+    task.mX = chunkX;
+    task.mZ = chunkZ;
+    task.mChanges = std::move(changes);
+    task.mChangesResult = std::make_shared<std::promise<std::vector<GeneratedBlockChange>>>();
+    auto result = task.mChangesResult->get_future();
+    if (mQueues.empty() || !mRunning.load()) {
+        task.mChangesResult->set_value(std::move(task.mChanges));
+        return result;
+    }
+    mQueues[_queueIndexFor(chunkX, chunkZ)]->push(std::move(task));
+    return result;
 }
 
 std::vector<ChunkLoadResult> ChunkWorker::drainCompleted() {
-    return mCompleted.drain();
+    auto results = mCompleted.drain();
+    mOutstandingGeneration.fetch_sub(results.size());
+    return results;
 }
 
 size_t ChunkWorker::getPendingTaskCount() const {
@@ -273,6 +306,19 @@ void ChunkWorker::_processSave(ChunkTask &task) {
         mPendingSaves.erase(pending);
 }
 
+void ChunkWorker::_processPersistChanges(ChunkTask &task) {
+    bool saved = false;
+    try {
+        saved = mStorage.mergePendingBlockChanges(task.mX, task.mZ, task.mChanges);
+    } catch (...) {
+        saved = false;
+    }
+    if (saved)
+        std::vector<GeneratedBlockChange>().swap(task.mChanges);
+    task.mChangesResult->set_value(std::move(task.mChanges));
+    task.mChangesResult.reset();
+}
+
 void ChunkWorker::_run(size_t queueIndex) {
     lowerCurrentThreadPriority();
 
@@ -285,9 +331,14 @@ void ChunkWorker::_run(size_t queueIndex) {
             task.mBarrier.reset();
             continue;
         }
+        if (task.mKind == ChunkTask::Kind::PersistChanges) {
+            _processPersistChanges(task);
+            continue;
+        }
         // Saves are never dropped, even when pending generation is discarded, or player
         // changes would be lost.
         if (task.mKind != ChunkTask::Kind::Save && mDiscardGeneration.load()) {
+            mOutstandingGeneration.fetch_sub(1);
             task.mChunk.reset();
             continue;
         }
