@@ -103,6 +103,11 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
         }
 
         actor->loadNbt(tag);
+        if (mob != nullptr && mProperties.getDifficulty() == Difficulty::Peaceful && mob->shouldRemoveInPeaceful()) {
+            level.eraseEntity(actor->getUniqueId());
+            continue;
+        }
+
         if (idTaken)
             actor->setUniqueId(allocateActorUniqueId());
         actor->initializeProperties();

@@ -186,6 +186,9 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
         actor->setProjectile(definition->mIsProjectile);
     }
 
+    if (mob != nullptr && mProperties.getDifficulty() == Difficulty::Peaceful && mob->shouldRemoveInPeaceful())
+        return nullptr;
+
     actor->initializeProperties();
 
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_SPAWN)) {
@@ -1364,6 +1367,12 @@ void ServerNetworkHandler::tickActors() {
             continue;
 
         ServerActor &actor = *actorEntry->second;
+        const MobActor *mob = dynamic_cast<const MobActor *>(&actor);
+        if (mob != nullptr && mProperties.getDifficulty() == Difficulty::Peaceful && mob->shouldRemoveInPeaceful()) {
+            expired.push_back(actorId);
+            continue;
+        }
+
         Level &level = getLevelFor(actor);
         actor.addLifetimeTick();
         actor.tickCombat(1);
