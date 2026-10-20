@@ -8,6 +8,7 @@
 #include "Level/World.h"
 
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -137,7 +138,7 @@ int main() {
         std::cout << "Startup persistence checks passed\n";
         return 0;
     } catch (const std::exception &error) {
-        std::cerr << error.what() << '\n';
+        std::fprintf(stderr, "Startup persistence checks failed: %s\n", error.what());
         std::filesystem::remove_all(directory);
         return 1;
     }
