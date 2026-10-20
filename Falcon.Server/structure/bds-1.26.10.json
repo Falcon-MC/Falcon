@@ -12000,6 +12000,14 @@
       "classes": [
         "ServerPlayerMovementComponent"
       ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Block/SoulSpeedBlockBehavior.h",
+      "path": "Falcon.Server/include/World/Level/Block/SoulSpeedBlockBehavior.h",
+      "sha256": "4b5b09c7e76eb4f235384be8a290d2654d77b78c80c78d696b5724085217ad05",
+      "classes": [
+        "SoulSpeedBlockBehavior"
+      ]
     }
   ]
 }

@@ -9,6 +9,11 @@ void WaterMoveSystem::tick(ServerPlayer &player, const LiquidContact &contact) {
         return;
 
     player.resetFallDistance();
+    if (player.hasSimulatedVelocity()) {
+        if (player.isOnFire())
+            player.extinguish();
+        return;
+    }
     Vector3f motion = player.getMotion();
     if (contact.water || contact.lava) {
         motion.x += contact.flow.x * 0.014f;

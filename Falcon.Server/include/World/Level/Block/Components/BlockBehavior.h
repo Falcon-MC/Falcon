@@ -16,6 +16,10 @@ public:
 
     virtual bool slidesAlongSides() const { return false; }
 
+    virtual bool supportsSoulSpeed() const {
+        return false;
+    }
+
     virtual bool onEntityLand(Actor &actor, float downwardVelocity) const;
 
     virtual std::optional<float> getFallDamage(const Actor &actor, float vanillaFallDamage) const;

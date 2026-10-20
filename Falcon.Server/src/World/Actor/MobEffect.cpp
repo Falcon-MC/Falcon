@@ -1,6 +1,7 @@
 #include "World/Actor/MobEffect.h"
 
 #include "World/Actor/Actor.h"
+#include "World/Actor/Player/ServerPlayer.h"
 
 #include <algorithm>
 #include <cctype>
@@ -144,6 +145,10 @@ void LevitationMobEffect::onRemove(Actor &actor, const MobEffectInstance &) cons
 }
 
 void LevitationMobEffect::tick(Actor &actor, const MobEffectInstance &instance) const {
+    // Players integrate levitation once per replayed input, including catchup steps.
+    const auto *player = dynamic_cast<const ServerPlayer *>(&actor);
+    if (player != nullptr && player->hasSimulatedVelocity())
+        return;
     Vector3f motion = actor.getMotion();
     const float target = std::min(0.05f * (float) instance.level(), 0.5f);
     motion.y += (target - motion.y) * 0.5f;
@@ -326,8 +331,15 @@ float MobEffectManager::movementSpeedMultiplier() const {
     return multiplier;
 }
 
+void MobEffectManager::setMovementSpeedBonus(float bonus) {
+    if (mMovementSpeedBonus == bonus)
+        return;
+    mMovementSpeedBonus = bonus;
+    refreshDerivedAttributes();
+}
+
 void MobEffectManager::refreshDerivedAttributes() {
-    mActor.getAttributes().set(MOVEMENT, 0.1f * movementSpeedMultiplier());
+    mActor.getAttributes().set(MOVEMENT, (0.1f + mMovementSpeedBonus) * movementSpeedMultiplier());
     if (has(MobEffectId::Invisibility))
         mActor.getFlags().set(ActorFlag::Invisible, true);
     else

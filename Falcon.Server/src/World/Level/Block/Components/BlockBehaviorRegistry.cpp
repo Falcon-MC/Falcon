@@ -6,6 +6,7 @@
 #include "World/Level/Block/HoneyBlockBehavior.h"
 #include "World/Level/Block/IceBlockBehavior.h"
 #include "World/Level/Block/SlimeBlockBehavior.h"
+#include "World/Level/Block/SoulSpeedBlockBehavior.h"
 
 #include <unordered_map>
 
@@ -49,6 +50,9 @@ namespace {
 
     void registerVanillaBehaviors() {
         static const bool registered = [] {
+            static const SoulSpeedBlockBehavior soulSpeed;
+            BlockBehaviorRegistry::registerBehavior("minecraft:soul_sand", soulSpeed);
+            BlockBehaviorRegistry::registerBehavior("minecraft:soul_soil", soulSpeed);
             BlockBehaviorRegistry::registerBehavior("minecraft:slime", slimeBehavior());
             BlockBehaviorRegistry::registerBehavior("minecraft:bed", bedBehavior());
             BlockBehaviorRegistry::registerBehavior("minecraft:honey_block", honeyBehavior());

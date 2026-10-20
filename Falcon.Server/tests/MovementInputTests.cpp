@@ -1,9 +1,14 @@
 #include "World/Actor/Movement/ServerPlayerMovementComponent.h"
+#include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/WaterBlock.h"
+#include "World/Level/Block/LavaBlock.h"
+#include "World/Item/ItemEnchantments.h"
+#include "World/Item/ElytraItem.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
@@ -199,6 +204,203 @@ namespace {
         require(player.getMovementInputs().pendingCount() == 0, "Death retained pending movement");
         checkStrictReplay(owner);
     }
+
+    // BDS 1.26.10: ground 0x140E104A0, water 0x140F1E690/0x14103D110,
+    // levitation 0x14104F680, flight 0x14104F280/0x140F1D980, glide 0x140C66F70.
+    void checkTravelPhysics() {
+        ServerNetworkHandler owner("Travel regression", "", 1);
+        const auto path = ServerPaths::getRoot() / "travel.properties";
+        std::ofstream(path) << "server-authoritative-movement-strict=true\n"
+                              "player-position-acceptance-threshold=0\n";
+        owner.setProperties(PropertiesSettings(path.string()));
+        NetworkIdentifier id;
+        ServerPlayer locator(id, 3000);
+        Level &level = owner.getLevelFor(locator);
+        level.getChunk(3, 0);
+        level.getBlockActors().loadChunk(3, 0, {}, owner.getCodecContext());
+        int64_t nextId = 3001;
+        const auto terrain = [&](const BlockState &floor, const BlockState &body) {
+            for (int x = 49; x <= 52; ++x)
+                for (int z = 1; z <= 4; ++z)
+                    for (int y = 247; y <= 254; ++y)
+                        level.setBlockState(x, y, z, y == 249 ? floor : y >= 250 && y <= 252
+                                                                      ? body : BlockState("minecraft:air"));
+        };
+        const auto makePlayer = [&](bool grounded = true) {
+            auto player = std::make_unique<ServerPlayer>(id, nextId++);
+            player->getAttributes() = ActorAttributes::createPlayerDefaults();
+            player->setPosition(Vector3f(50.5f, 250.0f, 2.5f));
+            player->setOnGround(grounded);
+            player->setSimulatedPosition(player->getPosition());
+            player->setSimulatedVelocity(Vector3f(0, 0, 0));
+            return player;
+        };
+        const auto step = [&](ServerPlayer &player, std::vector<int32_t> flags = {}, bool sprinting = false,
+                              float forward = 1.0f) {
+            PlayerAuthInputPacket packet;
+            packet.mMotionY = forward;
+            packet.mInputData = std::move(flags);
+            packet.mTick = 1;
+            packet.mPosition = player.getPosition();
+            Vector3f feet = player.getPosition();
+            PlayerMovementSimulator::apply(owner, id, player, packet, feet, sprinting);
+            require(player.hasSimulatedVelocity(), "Travel unexpectedly bypassed server simulation");
+            player.setPosition(feet);
+        };
+        const auto close = [&](float actual, float expected, const char *message) {
+            if (std::fabs(actual - expected) >= 0.000002f)
+                throw std::runtime_error(std::string(message) + ": got " + std::to_string(actual)
+                                         + ", expected " + std::to_string(expected));
+        };
+        const BlockState air("minecraft:air");
+        const BlockState stone("minecraft:stone");
+        terrain(stone, air);
+        auto walk = makePlayer();
+        step(*walk);
+        close(walk->getSimulatedVelocity().z, 0.053508f, "BDS ground acceleration or drag differs");
+        auto sprint = makePlayer();
+        step(*sprint, {}, true);
+        close(sprint->getSimulatedVelocity().z, 0.0695604f, "BDS sprint acceleration differs");
+
+        auto stopped = makePlayer();
+        MobEffectInstance slowness;
+        slowness.mId = MobEffectId::Slowness;
+        slowness.mAmplifier = 6;
+        slowness.mDuration = 200;
+        stopped->addEffect(slowness);
+        step(*stopped);
+        close(stopped->getSimulatedVelocity().z, 0.0f, "Zero movement speed regained default acceleration");
+        auto fast = makePlayer();
+        MobEffectInstance speed;
+        speed.mId = MobEffectId::Speed;
+        speed.mDuration = 200;
+        fast->addEffect(speed);
+        step(*fast);
+        close(fast->getSimulatedVelocity().z, 0.0642096f, "Speed effect did not reach the simulator");
+
+        terrain(BlockState("minecraft:ice"), air);
+        Tag snowStates = Tag::ofCompound();
+        snowStates.putInt("height", 0);
+        level.setBlockState(50, 250, 2, BlockState("minecraft:snow_layer", snowStates));
+        auto snow = makePlayer();
+        snow->setPosition(Vector3f(50.5f, 250.125f, 2.5f));
+        snow->setSimulatedPosition(snow->getPosition());
+        step(*snow);
+        close(snow->getSimulatedVelocity().z, 0.053508f, "Ground probe selected ice below the snow layer");
+
+        for (const char *surface: {"minecraft:soul_sand", "minecraft:soul_soil"}) {
+            terrain(BlockState(surface), air);
+            for (int enchantmentLevel = 1; enchantmentLevel <= 3; ++enchantmentLevel) {
+                auto soul = makePlayer();
+                ItemStack boots = owner.createItemStack("minecraft:diamond_boots", 1);
+                ItemEnchantments::write(boots, {{EnchantmentIds::SOUL_SPEED, enchantmentLevel}});
+                soul->getInventory().setArmor(PlayerInventory::ARMOR_FEET, boots);
+                step(*soul);
+                const float expected = 0.13f + 0.0105f * (float) enchantmentLevel;
+                close(soul->getAttributes().get("minecraft:movement"), expected, "Soul Speed modifier differs");
+                close(soul->getSimulatedVelocity().z, expected * 0.98f * 0.54600006f,
+                      "Soul Speed was omitted or applied twice");
+                soul->setPosition(Vector3f(50.5f, 253.0f, 2.5f));
+                soul->setSimulatedPosition(soul->getPosition());
+                soul->setOnGround(false);
+                step(*soul);
+                close(soul->getAttributes().get("minecraft:movement"), expected, "Jumping removed Soul Speed over air");
+                terrain(stone, air);
+                soul->setPosition(Vector3f(50.5f, 250.0f, 2.5f));
+                soul->setSimulatedPosition(soul->getPosition());
+                step(*soul);
+                close(soul->getAttributes().get("minecraft:movement"), 0.1f, "Soul Speed survived another surface");
+                terrain(BlockState(surface), air);
+            }
+        }
+
+        terrain(stone, WaterBlock::source());
+        auto water = makePlayer(false);
+        step(*water);
+        close(water->getSimulatedVelocity().z, 0.01568f, "Water acceleration or drag differs");
+        close(water->getSimulatedVelocity().y, -0.005f, "Player water gravity differs");
+        auto waterLevitation = makePlayer(false);
+        MobEffectInstance waterEffect;
+        waterEffect.mId = MobEffectId::Levitation;
+        waterEffect.mAmplifier = 1;
+        waterEffect.mDuration = 200;
+        waterLevitation->addEffect(waterEffect);
+        step(*waterLevitation);
+        close(waterLevitation->getSimulatedVelocity().y, 0.015f, "Water drag, levitation and gravity order differs");
+        auto swimming = makePlayer(false);
+        step(*swimming, {(int32_t) PlayerAuthInputData::StartSwimming});
+        close(swimming->getSimulatedVelocity().y, 0.0f, "Swimming incorrectly applied sinking gravity");
+        swimming->getFlags().set(ActorFlag::Swimming, true);
+        step(*swimming);
+        close(swimming->getSimulatedVelocity().y, 0.0f, "Persistent swimming state was lost");
+        step(*swimming, {(int32_t) PlayerAuthInputData::StopSwimming});
+        close(swimming->getSimulatedVelocity().y, -0.005f, "StopSwimming failed to restore sinking gravity");
+        auto depth = makePlayer();
+        ItemStack boots = owner.createItemStack("minecraft:diamond_boots", 1);
+        ItemEnchantments::write(boots, {{EnchantmentIds::DEPTH_STRIDER, 3}});
+        depth->getInventory().setArmor(PlayerInventory::ARMOR_FEET, boots);
+        step(*depth);
+        close(depth->getSimulatedVelocity().z, 0.053508f, "Depth Strider ground interpolation differs");
+        auto floatingDepth = makePlayer(false);
+        floatingDepth->getInventory().setArmor(PlayerInventory::ARMOR_FEET, boots);
+        step(*floatingDepth);
+        close(floatingDepth->getSimulatedVelocity().z, 0.0395724f, "Airborne Depth Strider was not halved");
+
+        terrain(stone, LavaBlock(BlockState("minecraft:lava")).makeState(0));
+        auto lava = makePlayer(false);
+        step(*lava);
+        close(lava->getSimulatedVelocity().z, 0.0098f, "Lava acceleration or drag differs");
+        close(lava->getSimulatedVelocity().y, -0.02f, "Lava gravity differs");
+
+        terrain(air, air);
+        auto levitating = makePlayer(false);
+        MobEffectInstance levitation;
+        levitation.mId = MobEffectId::Levitation;
+        levitation.mAmplifier = 1;
+        levitation.mDuration = 200;
+        levitating->addEffect(levitation);
+        step(*levitating);
+        close(levitating->getSimulatedVelocity().y, 0.02f, "BDS levitation integration differs");
+        levitating->setMotion(levitating->getSimulatedVelocity());
+        levitating->tickEffects();
+        close(levitating->getMotion().y, 0.02f, "Levitation was integrated twice in one server tick");
+
+        auto flying = makePlayer(false);
+        flying->setGameType((int32_t) GameType::Creative);
+        flying->setFlying(true);
+        step(*flying, {(int32_t) PlayerAuthInputData::Ascend}, true);
+        close(flying->getSimulatedVelocity().z, 0.08918f, "Flying sprint did not double the advertised fly speed");
+        close(flying->getSimulatedVelocity().y, 0.09f, "Vertical flight input or drag differs");
+        flying->setSimulatedVelocity(Vector3f(0, 0.2f, 0));
+        step(*flying, {}, false, 0.0f);
+        close(flying->getSimulatedVelocity().y, 0.045f, "Mouse idle flight damping differs");
+        terrain(stone, air);
+        auto creative = makePlayer();
+        creative->setGameType((int32_t) GameType::Creative);
+        step(*creative);
+        close(creative->getSimulatedVelocity().z, 0.053508f, "Grounded creative bypassed walking physics");
+
+        terrain(air, air);
+        auto gliding = makePlayer(false);
+        gliding->getInventory().setArmor(PlayerInventory::ARMOR_TORSO,
+                                         owner.createItemStack(ElytraItem::IDENTIFIER, 1));
+        step(*gliding, {(int32_t) PlayerAuthInputData::StartGliding});
+        close(gliding->getSimulatedVelocity().y, -0.01764f, "BDS glide lift differs");
+        close(gliding->getSimulatedVelocity().z, 0.001782f, "Ground movement input leaked into gliding");
+        gliding->getFlags().set(ActorFlag::Gliding, true);
+        step(*gliding);
+        require(gliding->getSimulatedVelocity().z < 0.01f, "Persistent gliding fell back to air walking");
+        step(*gliding, {(int32_t) PlayerAuthInputData::StopGliding});
+        require(gliding->getSimulatedVelocity().y < -0.1f, "StopGliding did not restore gravity");
+
+        auto initial = makePlayer(false);
+        initial->clearSimulatedVelocity();
+        PlayerAuthInputPacket untrusted;
+        untrusted.mDelta = Vector3f(100, 100, 100);
+        Vector3f feet = initial->getPosition();
+        PlayerMovementSimulator::apply(owner, id, *initial, untrusted, feet, false);
+        close(initial->getSimulatedVelocity().z, 0.0f, "Client delta seeded authoritative velocity after reset");
+    }
 }
 
 int main() {
@@ -211,6 +413,7 @@ int main() {
         ServerPaths::setRoot(directory);
         checkTimeline();
         checkServerPipeline();
+        checkTravelPhysics();
     } catch (const std::exception &error) {
         std::clog << "Movement input regression failed: " << error.what() << '\n';
         result = 1;

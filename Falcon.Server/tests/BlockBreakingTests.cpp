@@ -75,31 +75,34 @@ namespace {
         player.setPosition(Vector3f(std::numeric_limits<float>::quiet_NaN(), 250, 0.5f));
         require(!BlockActionHandler::canBreakBlock(owner, player, block), "Nonfinite position passed reach validation");
         player.setPosition(Vector3f(0.5f, 250.0f, 0.5f));
-        Level &level = owner.getLevelFor(player);
-        level.setBlockState(block.x, block.y, block.z, BlockState("minecraft:slime"));
+        // setProperties reloads worlds, so no Level reference may survive a settings change.
+        const auto level = [&]() -> Level & {
+            return owner.getLevelFor(player);
+        };
+        level().setBlockState(block.x, block.y, block.z, BlockState("minecraft:slime"));
         player.startBreakingBlock(block, 0, 1.0, owner.getCurrentTick() - 1);
         BlockActionHandler::continueBreakingBlock(owner, player);
-        require(level.getBlockState(block.x, block.y, block.z).mName == "minecraft:air",
+        require(level().getBlockState(block.x, block.y, block.z).mName == "minecraft:air",
                 "Authoritative tick did not complete ready mining");
         owner.setProperties(legacy);
-        level.setBlockState(block.x, block.y, block.z, BlockState("minecraft:slime"));
+        level().setBlockState(block.x, block.y, block.z, BlockState("minecraft:slime"));
         player.startBreakingBlock(block, 0, 1.0, owner.getCurrentTick() - 1);
         BlockActionHandler::continueBreakingBlock(owner, player);
-        require(level.getBlockState(block.x, block.y, block.z).mName == "minecraft:slime",
+        require(level().getBlockState(block.x, block.y, block.z).mName == "minecraft:slime",
                 "Legacy mode completed mining before client confirmation");
         BlockActionHandler::completeBreakingBlock(owner, player, block);
-        require(level.getBlockState(block.x, block.y, block.z).mName == "minecraft:air",
+        require(level().getBlockState(block.x, block.y, block.z).mName == "minecraft:air",
                 "Legacy mode rejected ready client confirmation");
         for (const auto &config: {legacy, authoritative}) {
             owner.setProperties(config);
-            level.setBlockState(block.x, block.y, block.z, BlockState("minecraft:stone"));
+            level().setBlockState(block.x, block.y, block.z, BlockState("minecraft:stone"));
             player.startBreakingBlock(block, 0, 0.001, owner.getCurrentTick());
             BlockActionHandler::completeBreakingBlock(owner, player, block);
-            require(level.getBlockState(block.x, block.y, block.z).mName == "minecraft:stone",
+            require(level().getBlockState(block.x, block.y, block.z).mName == "minecraft:stone",
                     "Configuration bypassed the minimum mining time");
             player.stopBreakingBlock();
             BlockActionHandler::completeBreakingBlock(owner, player, block);
-            require(level.getBlockState(block.x, block.y, block.z).mName == "minecraft:stone",
+            require(level().getBlockState(block.x, block.y, block.z).mName == "minecraft:stone",
                     "Unstarted mining was accepted");
         }
     }

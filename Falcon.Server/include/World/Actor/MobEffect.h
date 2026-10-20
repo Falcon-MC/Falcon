@@ -178,6 +178,7 @@ public:
     void setEventCallback(EventCallback callback) { mEventCallback = std::move(callback); }
 
     float movementSpeedMultiplier() const;
+    void setMovementSpeedBonus(float bonus);
     bool hasResistance() const { return has(MobEffectId::Resistance); }
 
     bool consumeAttributesDirty() {
@@ -198,6 +199,7 @@ private:
     std::unordered_map<int32_t, MobEffectInstance> mEffects;
     EventCallback mEventCallback;
     bool mAttributesDirty = false;
+    float mMovementSpeedBonus = 0.0f;
 };
 
 using MobEffectSystem = MobEffectManager;

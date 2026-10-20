@@ -4,6 +4,7 @@
 #include "World/Actor/Movement/PhysicsComponent.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Block.h"
+#include "World/Level/Block/BlockTypeIds.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Components/BlockBehavior.h"
@@ -12,6 +13,7 @@
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/ElytraItem.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
@@ -37,7 +39,6 @@ namespace {
     const float WALK_AIR_SPEED = 0.02f;
     const float SPRINT_AIR_SPEED = 0.026f;
     const float SPRINT_SPEED_MULTIPLIER = 1.3f;
-    const float DEFAULT_MOVE_SPEED = 0.1f;
     const float DEFAULT_BLOCK_FRICTION = 0.6f;
     const float IMPULSE_SCALE = 0.98f;
     const float PLAYER_WIDTH = 0.6f;
@@ -55,7 +56,7 @@ namespace {
     const float WALK_SLOWDOWN_LIMIT = 0.1f;
     const float WALK_SLOWDOWN_BASE = 0.4f;
     const float WALK_SLOWDOWN_PER_VELOCITY = 0.2f;
-    const float GROUND_PROBE_DEPTH = 0.5f;
+    const float GROUND_PROBE_DEPTH = 0.1f;
     const float JUMP_PROBE_DEPTH = 0.1f;
     const float JUMP_VELOCITY = 0.42f;
     const float CLIMB_SPEED = 0.2f;
@@ -143,6 +144,47 @@ namespace {
 
     float mojangCos(float radians) {
         return mojangSineTable()[(int) (radians * 10430.378f + 16384.0f) & 65535];
+    }
+
+    bool input(const PlayerAuthInputPacket &packet, PlayerAuthInputData flag) {
+        return packet.hasInputFlag((int32_t) flag);
+    }
+
+    bool activeState(bool previous, const PlayerAuthInputPacket &packet,
+                     PlayerAuthInputData start, PlayerAuthInputData stop) {
+        return (previous || input(packet, start)) && !input(packet, stop);
+    }
+
+    // BDS GlideMoveSystem (0x140C66F70), before collision resolution.
+    void glide(Vector3f &velocity, const PlayerAuthInputPacket &packet, bool slowFalling) {
+        const float pitch = packet.mRotation.x * MOJANG_PI / 180.0f;
+        const float yaw = packet.mRotation.y * MOJANG_PI / 180.0f;
+        const float cosine = mojangCos(pitch);
+        const Vector3f look(-mojangSin(yaw) * cosine, -mojangSin(pitch), mojangCos(yaw) * cosine);
+        const float horizontalLook = std::sqrt(look.x * look.x + look.z * look.z);
+        const float horizontalSpeed = std::sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+        const float lift = std::min(std::sqrt(look.x * look.x + look.y * look.y + look.z * look.z) * 2.5f, 1.0f)
+                           * cosine * cosine;
+        velocity.y -= (slowFalling ? -0.0075f : -0.06f) * lift - (slowFalling ? -0.01f : -0.08f);
+        if (velocity.y < 0.0f && horizontalLook > 0.0f) {
+            const float fallLift = velocity.y * -0.1f * lift;
+            velocity.x += fallLift * look.x * (1.0f / horizontalLook);
+            velocity.y += fallLift;
+            velocity.z += fallLift * look.z * (1.0f / horizontalLook);
+        }
+        if (pitch < 0.0f && horizontalLook > 0.0f) {
+            const float climb = horizontalSpeed * mojangSin(pitch) * -0.04f;
+            velocity.x -= climb * look.x * (1.0f / horizontalLook);
+            velocity.y += climb * 3.2f;
+            velocity.z -= climb * look.z * (1.0f / horizontalLook);
+        }
+        if (horizontalLook > 0.0f) {
+            velocity.x += (look.x * (1.0f / horizontalLook) * horizontalSpeed - velocity.x) * 0.1f;
+            velocity.z += (look.z * (1.0f / horizontalLook) * horizontalSpeed - velocity.z) * 0.1f;
+        }
+        velocity.x *= 0.99f;
+        velocity.y *= 0.98f;
+        velocity.z *= 0.99f;
     }
 
     bool chunkLoaded(Level &level, const Vector3f &position) {
@@ -414,6 +456,17 @@ namespace {
 
 void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                     const PlayerAuthInputPacket &packet, Vector3f &feetPosition, bool sprinting) {
+    Level &level = owner.getLevelFor(player);
+    const Vector3f start = player.hasSimulatedPosition() ? player.getSimulatedPosition() : player.getPosition();
+    const ItemStack &boots = player.getInventory().getArmor(PlayerInventory::ARMOR_FEET);
+    const Block *soulSupport = blockAt(level, start.x, start.y - SUPPORT_PROBE_DEPTH, start.z);
+    // BDS keeps the modifier over air while jumping, and refreshes it on the next non-air block.
+    if (soulSupport != nullptr && soulSupport->getTypeId() != BlockTypeIds::AIR) {
+        const int enchantmentLevel = ItemEnchantments::getLevel(boots, EnchantmentIds::SOUL_SPEED);
+        const float bonus = enchantmentLevel > 0 && soulSupport->getBehavior().supportsSoulSpeed()
+                            ? 0.03f + 0.0105f * (float) enchantmentLevel : 0.0f;
+        player.getEffects().setMovementSpeedBonus(bonus);
+    }
     // Temporary: the movement simulation only runs when server-authoritative-movement-strict is true, until it is
     // reliable enough to run for every player.
     if (!owner.getProperties().getServerAuthoritativeMovementStrict()) {
@@ -422,22 +475,25 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     }
 
     const int32_t gameType = player.getGameType();
-    const bool skip = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator
-                      || player.isRiding() || player.isFlying() || player.isSleeping() || player.hasPendingMovementChange()
-                      || player.hasEffect(MobEffectId::Levitation)
-                      || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartGliding)
-                      || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSwimming)
+    const bool spectator = gameType == (int32_t) GameType::Spectator;
+    const bool flying = player.isFlying() || spectator;
+    const bool gliding = !flying && ElytraItem::isWearingElytra(player)
+                         && activeState(player.getFlags().get(ActorFlag::Gliding), packet,
+                                        PlayerAuthInputData::StartGliding, PlayerAuthInputData::StopGliding);
+    const bool swimming = !flying && activeState(player.getFlags().get(ActorFlag::Swimming), packet,
+                                                PlayerAuthInputData::StartSwimming, PlayerAuthInputData::StopSwimming);
+    const bool skip = player.isRiding() || player.isSleeping() || player.hasPendingMovementChange()
                       || packet.hasInputFlag((int32_t) PlayerAuthInputData::InClientPredictedInVehicle)
                       || packet.hasInputFlag((int32_t) PlayerAuthInputData::HandleTeleport);
-    Level &level = owner.getLevelFor(player);
-    const LiquidContact liquid = LiquidBlocksFetch::at(level, player.getPosition());
-    if (skip || liquid.water || liquid.lava || !chunkLoaded(level, player.getPosition())
+    const LiquidContact liquid = LiquidBlocksFetch::at(level, start);
+    const bool waterTravel = !flying && liquid.water;
+    const bool lavaTravel = !flying && !waterTravel && liquid.lava;
+    if (skip || !chunkLoaded(level, start)
         || !chunkLoaded(level, feetPosition)) {
         player.clearMovementSimulation();
         return;
     }
 
-    const Vector3f start = player.hasSimulatedPosition() ? player.getSimulatedPosition() : player.getPosition();
     const AxisAlignedBB pistonArea = boxAt(start, PLAYER_HEIGHT).expand(PISTON_RANGE, PISTON_RANGE, PISTON_RANGE);
     const bool strict = owner.getProperties().getServerAuthoritativeMovementStrict();
     if (!strict && PistonSystem::isMovingNear(level, pistonArea)) {
@@ -446,7 +502,7 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     }
     Vector3f velocity;
     if (!player.takeKnockback(velocity))
-        velocity = player.hasSimulatedVelocity() ? player.getSimulatedVelocity() : packet.mDelta;
+        velocity = player.hasSimulatedVelocity() ? player.getSimulatedVelocity() : player.getMotion();
     bool onGround = player.isOnGround();
     int32_t jumpDelay = player.getJumpDelay();
     const bool jumpHeld = packet.hasInputFlag((int32_t) PlayerAuthInputData::Jumping)
@@ -467,7 +523,7 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
         maxImpulse *= CONSUMING_INPUT;
     const int32_t slowdownTicks = sneaking || crawling ? player.getSlowdownTicks() + 1 : 0;
     player.setSlowdownTicks(slowdownTicks);
-    if (sneaking || crawling) {
+    if (!flying && (sneaking || crawling)) {
         float sneakMultiplier = SNEAK_INPUT;
         if (slowdownTicks > SWIFT_SNEAK_DELAY_TICKS) {
             const ItemStack &leggings = player.getInventory().getArmor(PlayerInventory::ARMOR_LEGS);
@@ -479,10 +535,36 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     const float sideways = std::clamp(packet.mMotionX, -maxImpulse, maxImpulse) * IMPULSE_SCALE;
     const float forward = std::clamp(packet.mMotionY, -maxImpulse, maxImpulse) * IMPULSE_SCALE;
 
-    const ItemStack &boots = player.getInventory().getArmor(PlayerInventory::ARMOR_FEET);
     float friction = AIR_FRICTION;
     float acceleration = sprinting ? SPRINT_AIR_SPEED : WALK_AIR_SPEED;
-    if (onGround) {
+    if (flying) {
+        // Same fly speed as the ability advertised by LoginHandler; BDS doubles it when sprinting.
+        acceleration = 0.05f * (sprinting ? 2.0f : 1.0f);
+        const bool ascend = input(packet, PlayerAuthInputData::Ascend);
+        const bool descend = input(packet, PlayerAuthInputData::Descend);
+        if (packet.mInputMode == PlayerInputMode::Mouse
+            && std::max(std::fabs(packet.mMotionX), std::fabs(packet.mMotionY)) < 0.01f
+            && !ascend && !descend && !jumpHeld && !pressingSneak)
+            velocity.y *= 0.375f;
+        if (ascend && descend) {
+            velocity.y = 0.0f;
+        } else {
+            velocity.y += (ascend ? 0.15f : 0.0f) + (jumpHeld ? 0.05f : 0.0f)
+                          - (descend ? 0.22f : 0.0f) - (pressingSneak ? 0.15f : 0.0f);
+        }
+    } else if (waterTravel) {
+        const float depth = (float) std::clamp(ItemEnchantments::getLevel(boots, EnchantmentIds::DEPTH_STRIDER), 0, 3)
+                            * (onGround ? 1.0f : 0.5f);
+        const float movement = std::max(0.0f, player.getAttributes().get("minecraft:movement"))
+                               * (sprinting ? SPRINT_SPEED_MULTIPLIER : 1.0f);
+        acceleration = std::max(0.0f, player.getAttributes().get("minecraft:underwater_movement"));
+        acceleration += (movement - acceleration) * depth / 3.0f;
+        friction = sprinting ? 0.9f : 0.8f;
+        friction += depth / 3.0f * (0.54600006f - friction);
+    } else if (lavaTravel) {
+        acceleration = std::max(0.0f, player.getAttributes().get("minecraft:lava_movement"));
+        friction = 0.5f;
+    } else if (onGround && !gliding) {
         const Block *ground = blockAt(level, start.x, start.y - GROUND_PROBE_DEPTH, start.z);
         const float groundFriction = blockFriction(ground);
         friction *= groundFriction;
@@ -495,14 +577,32 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
         const float accelerationFriction = (groundFriction * accelerationMultiplier) * AIR_FRICTION;
         const float baseFriction = AIR_FRICTION * DEFAULT_BLOCK_FRICTION;
         const float ratio = baseFriction / accelerationFriction;
-        const float baseMovement = speed > 0.0f ? speed : DEFAULT_MOVE_SPEED;
-        const float movement = sprinting ? baseMovement * SPRINT_SPEED_MULTIPLIER : baseMovement;
-        acceleration = ((movement * ratio) * ratio) * ratio;
+        const float movement = sprinting ? speed * SPRINT_SPEED_MULTIPLIER : speed;
+        acceleration = ((ratio * ratio) * ratio) * movement;
     }
 
-    moveRelative(velocity, sideways, forward, acceleration, packet.mRotation.y);
+    if (gliding && !waterTravel && !lavaTravel) {
+        glide(velocity, packet, player.hasEffect(MobEffectId::SlowFalling));
+    } else {
+        moveRelative(velocity, sideways, forward, acceleration, packet.mRotation.y);
+    }
 
-    if (startJumping && onGround && jumpDelay <= 0) {
+    if (waterTravel || lavaTravel) {
+        if (jumpHeld)
+            velocity.y += 0.04f;
+        if (pressingSneak || input(packet, PlayerAuthInputData::Descend))
+            velocity.y -= 0.04f;
+        if (waterTravel) {
+            velocity.x += liquid.flow.x * 0.014f;
+            velocity.z += liquid.flow.z * 0.014f;
+            if (liquid.bubble) {
+                velocity.y = liquid.dragDown ? std::max(-0.3f, velocity.y - 0.03f)
+                                            : std::min(0.7f, velocity.y + 0.06f);
+            }
+        }
+    }
+
+    if (!flying && !gliding && !waterTravel && !lavaTravel && startJumping && onGround && jumpDelay <= 0) {
         const MobEffectInstance *jumpBoost = player.getEffects().get(MobEffectId::JumpBoost);
         const float jumpBonus = jumpBoost == nullptr ? 0.0f : JUMP_BOOST_PER_LEVEL * (float) jumpBoost->level();
         const float jumpHeight = JUMP_VELOCITY + jumpBonus;
@@ -524,6 +624,8 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
             traversal = BlockTraversal::Scaffolding;
     }
     bool scaffoldDescend = false;
+    if (flying || gliding || waterTravel || lavaTravel)
+        traversal = BlockTraversal::None;
     if (traversal == BlockTraversal::Scaffolding) {
         if (pressingSneak) {
             velocity.y = -TRAVERSAL_SPEED;
@@ -538,7 +640,7 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
             velocity.y = POWDER_SNOW_ASCEND_SPEED;
     }
 
-    if (inside != nullptr && inside->isClimbable() && traversal == BlockTraversal::None) {
+    if (!flying && !gliding && inside != nullptr && inside->isClimbable() && traversal == BlockTraversal::None) {
         velocity.y = std::max(velocity.y, -CLIMB_SPEED);
         if (jumpHeld || player.hasHorizontalCollision())
             velocity.y = CLIMB_SPEED;
@@ -548,17 +650,23 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
 
     AxisAlignedBB box = boxAt(start, pose.mHeight);
     Vector3f stuck;
-    const bool isStuck = stuckMultiplier(level, player, box, stuck);
+    const bool isStuck = !spectator && stuckMultiplier(level, player, box, stuck);
     if (isStuck) {
         velocity.x *= stuck.x;
         velocity.y *= stuck.y;
         velocity.z *= stuck.z;
     }
 
-    if (sneaking && !crawling && onGround && velocity.y <= 0.0f)
+    if (!flying && sneaking && !crawling && onGround && velocity.y <= 0.0f)
         avoidEdge(level, box, velocity);
 
-    const ActorMoveResult moved = ActorCollisionSystem::move(level, box, velocity, STEP_HEIGHT, onGround);
+    ActorMoveResult moved;
+    if (spectator) {
+        box = box.offset(velocity.x, velocity.y, velocity.z);
+        moved.mMoved = velocity;
+    } else {
+        moved = ActorCollisionSystem::move(level, box, velocity, STEP_HEIGHT, onGround);
+    }
     Vector3f simulated(box.mMinX + PLAYER_WIDTH * 0.5f, box.mMinY, box.mMinZ + PLAYER_WIDTH * 0.5f);
     const bool wasOnGround = onGround;
     onGround = moved.mOnGround;
@@ -585,14 +693,33 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     if (moved.mCollidedY)
         velocity.y = wasOnGround || velocity.y >= 0.0f || pressingSneak ? 0.0f : landingVelocity(under, velocity.y);
 
-    if (!scaffoldDescend) {
-        const float gravity = player.hasEffect(MobEffectId::SlowFalling) && velocity.y < 0.0f ? SLOW_FALLING_GRAVITY
-                                                                                              : GRAVITY;
-        velocity.y = (velocity.y - gravity) * GRAVITY_MULTIPLIER;
+    if (flying) {
+        velocity.y *= 0.6f;
+    } else if (waterTravel || lavaTravel) {
+        velocity.y *= waterTravel ? 0.8f : 0.5f;
+        const MobEffectInstance *levitation = player.getEffects().get(MobEffectId::Levitation);
+        if (levitation != nullptr)
+            velocity.y = velocity.y * 0.8f + 0.01f * (float) levitation->level();
+        if (!waterTravel || !swimming)
+            velocity.y -= waterTravel ? 0.005f : 0.02f;
+    } else if (!gliding && !scaffoldDescend) {
+        const MobEffectInstance *levitation = player.getEffects().get(MobEffectId::Levitation);
+        if (levitation != nullptr) {
+            velocity.y = velocity.y * 0.8f + 0.01f * (float) levitation->level();
+        } else {
+            const float gravity = player.hasEffect(MobEffectId::SlowFalling) && velocity.y < 0.0f
+                                  ? SLOW_FALLING_GRAVITY : GRAVITY;
+            velocity.y = (velocity.y - gravity) * GRAVITY_MULTIPLIER;
+        }
     }
-    velocity.x *= friction;
-    velocity.z *= friction;
-    slideAlongHoney(level, box, velocity);
+    if (!gliding || waterTravel || lavaTravel) {
+        velocity.x *= friction;
+        velocity.z *= friction;
+    }
+    if (!spectator)
+        slideAlongHoney(level, box, velocity);
+    if (gameType == (int32_t) GameType::Creative || spectator)
+        player.setOnGround(onGround);
 
     if (jumpDelay > 0)
         jumpDelay -= 1;
