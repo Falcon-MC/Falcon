@@ -90,6 +90,8 @@ string(REGEX REPLACE "(0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x
 configure_file(cmake/BlockPaletteNbt.h.in "${FALCON_GENERATED_DIR}/BlockPaletteNbt.h" @ONLY)
 
 file(GLOB FALCON_BLOCK_UPGRADE_SCHEMA_FILES "${FALCON_BLOCK_UPGRADE_SCHEMA_DIR}/*.json")
+list(APPEND FALCON_BLOCK_UPGRADE_SCHEMA_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/block_upgrades/0361_1.26.50_to_1.26.60.json")
 list(SORT FALCON_BLOCK_UPGRADE_SCHEMA_FILES)
 set(FALCON_BLOCK_UPGRADE_SCHEMAS "")
 foreach(schemaFile IN LISTS FALCON_BLOCK_UPGRADE_SCHEMA_FILES)
@@ -177,6 +179,14 @@ else()
 endif()
 
 option(FALCON_BUILD_SERVER_EXECUTABLE "Build the dedicated server executable" ON)
+
+option(FALCON_BUILD_TESTS "Build server regression tests" OFF)
+if(FALCON_BUILD_TESTS)
+    enable_testing()
+    add_executable(FalconGameplay2660Tests tests/Gameplay2660Tests.cpp)
+    target_link_libraries(FalconGameplay2660Tests PRIVATE FalconCore)
+    add_test(NAME gameplay-26.60 COMMAND FalconGameplay2660Tests)
+endif()
 
 if(NOT FALCON_BUILD_SERVER_EXECUTABLE)
     return()

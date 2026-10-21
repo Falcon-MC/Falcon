@@ -18,6 +18,7 @@ namespace {
     };
 
     const ThrowableDefinition THROWABLES[] = {
+            {"minecraft:ice_ball",           "minecraft:ice_ball",              1.0f, 0},
             {"minecraft:snowball",           "minecraft:snowball",              1.5f, 0},
             {"minecraft:egg",                "minecraft:egg",                   1.5f, 0},
             {"minecraft:ender_pearl",        "minecraft:ender_pearl",           1.5f, 20},

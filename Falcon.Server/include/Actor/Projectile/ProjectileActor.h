@@ -56,6 +56,15 @@ public:
     bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
 };
 
+class IceBallActor final : public ThrownProjectileActor {
+public:
+    using ThrownProjectileActor::ThrownProjectileActor;
+
+    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+
+    bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
+};
+
 class EggActor final : public ThrownProjectileActor {
 public:
     using ThrownProjectileActor::ThrownProjectileActor;

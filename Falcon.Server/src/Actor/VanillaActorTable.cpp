@@ -138,6 +138,8 @@ static const char *const kIdentifiers[] = {
     "minecraft:parched",
     "minecraft:camel_husk",
     "minecraft:sulfur_cube",
+    "minecraft:frostbite",
+    "minecraft:ice_ball",
     "minecraft:cushion",
 };
 

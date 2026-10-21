@@ -9,6 +9,9 @@
 namespace {
 
     const BlockData ENTRIES[] = {
+            {BlockTypeIds::DISC_PRESS, "minecraft:disc_press", "Disc Press", 3.5f, 3.5f, BlockToolType::Pickaxe, BlockToolTier::Wooden, false, false, 0, false, true, 0, 0, 0, BlockDropKind::Self, "", 1, 1},
+            {BlockTypeIds::ICE_CRYSTAL, "minecraft:ice_crystal", "Ice Crystal", 0.5f, 0.5f, BlockToolType::Pickaxe, BlockToolTier::Wooden, false, false, 0, true, false, 0, 0, 1, BlockDropKind::Self, "", 1, 1},
+            {BlockTypeIds::ICICLE, "minecraft:icicle", "Icicle", 0.5f, 0.5f, BlockToolType::Pickaxe, BlockToolTier::Wooden, false, false, 0, true, false, 0, 0, 1, BlockDropKind::Self, "", 1, 1},
             {BlockTypeIds::CYAN_TERRACOTTA, "minecraft:cyan_terracotta", "Cyan Terracotta", 1.25f, 7.0f, BlockToolType::Pickaxe, BlockToolTier::Wooden, false, false, 0, false, true, 0, 0, 0, BlockDropKind::Self, "", 1, 1},
             {BlockTypeIds::HARD_PINK_STAINED_GLASS, "minecraft:hard_pink_stained_glass", "Hard Pink Stained Glass", 0.3f, 0.3f, BlockToolType::None, BlockToolTier::None, true, true, 0, true, true, 0, 0, 0, BlockDropKind::Nothing, "", 0, 0},
             {BlockTypeIds::BLUE_CANDLE, "minecraft:blue_candle", "Blue Candle", 0.1f, 0.1f, BlockToolType::None, BlockToolTier::None, true, false, 0, true, false, 0, 0, 0, BlockDropKind::Self, "", 1, 1},

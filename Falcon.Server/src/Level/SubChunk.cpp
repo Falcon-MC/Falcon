@@ -228,6 +228,15 @@ bool SubChunk::isEmpty() const {
     return isLayerEmpty(1);
 }
 
+bool SubChunk::hasDynamicShapes() const {
+    for (const BlockState &state: mPalette) {
+        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+        if (block != nullptr && block->hasDynamicShape())
+            return true;
+    }
+    return false;
+}
+
 bool SubChunk::hasLightEmitter() const {
     for (const BlockState &state: mPalette) {
         if (BlockLightProperties::lightLevel(BlockLightProperties::packed(state)) > 0)

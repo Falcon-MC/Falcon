@@ -612,5 +612,7 @@ public:
     static const int32_t ZOMBIE_SPAWN_EGG = 20228;
     static const int32_t ZOMBIE_VILLAGER_SPAWN_EGG = 20692;
 
-    static const int32_t FIRST_UNUSED_ITEM_ID = 20693;
+    static const int32_t ICE_BALL = 20693;
+    static const int32_t FROSTBITE_SPAWN_EGG = 20694;
+    static const int32_t FIRST_UNUSED_ITEM_ID = 20695;
 };

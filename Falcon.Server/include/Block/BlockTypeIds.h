@@ -1481,5 +1481,8 @@ public:
     static const int32_t SHELF_MUSHROOM = 11897;
     static const int32_t RED_SHRUB = 11898;
 
-    static const int32_t FIRST_UNUSED_BLOCK_ID = 11899;
+    static const int32_t DISC_PRESS = 11899;
+    static const int32_t ICE_CRYSTAL = 11900;
+    static const int32_t ICICLE = 11901;
+    static const int32_t FIRST_UNUSED_BLOCK_ID = 11902;
 };
