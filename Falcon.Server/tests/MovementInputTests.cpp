@@ -49,6 +49,10 @@ namespace {
 
     void checkTimeline() {
         PropertiesSettings defaults;
+        require(defaults.getSimulation() && !defaults.getServerAuthoritativeMovementStrict(),
+                "Simulation must be enabled independently of strict mode by default");
+        require(PropertiesSettings::getDefaultContents().find("simulation=true\n") != std::string::npos,
+                "Generated server.properties omitted the simulation switch");
         require(defaults.getPlayerTickThrottledInputBatchSize() == -1
                 && defaults.getPlayerTickThrottledMaxTickCredits() == -1, "BDS tick policy defaults differ");
         ServerPlayerMovementComponent timeline;
@@ -113,6 +117,74 @@ namespace {
                 "Nonfinite timing produced an unbounded catchup budget");
     }
 
+    void checkPositionReconciliation() {
+        const auto close = [](float actual, float expected, const char *message) {
+            require(std::fabs(actual - expected) < 0.000001f, message);
+        };
+        for (bool strict: {false, true}) {
+            PlayerMovementValidator validator;
+            Vector3f position(0, 0, 0);
+            require(!validator.reconcile(position, Vector3f(1, 0, 0), 5, 0.5f, strict),
+                    "Correction ignored the initial BDS delay");
+            require(validator.reconcile(position, Vector3f(1, 0, 0), 6, 0.5f, strict),
+                    "Large position error was not corrected in both modes");
+            require(!validator.reconcile(position, Vector3f(1, 0, 0), 11, 0.5f, strict)
+                    && validator.reconcile(position, Vector3f(1, 0, 0), 12, 0.5f, strict),
+                    "Corrections did not respect the strict greater-than-five tick gate");
+            validator.reset();
+            require(!validator.reconcile(position, Vector3f(0.004f, 0, 0), 100, 0.5f, strict),
+                    "Strict mode rejected a position within BDS fine tolerance");
+            close(position.x, 0.004f, "Fine tolerance did not adopt the client position");
+        }
+
+        PlayerMovementValidator normal;
+        PlayerMovementValidator strict;
+        Vector3f gradual(0, 0, 0);
+        Vector3f authoritative(0, 0, 0);
+        require(!normal.reconcile(gradual, Vector3f(0.3f, 0.4f, 0), 100, 0.5f, false),
+                "Normal mode corrected instead of gradually reconciling");
+        close(gradual.x, 0.003f, "Normal reconciliation was not normalized in 3D");
+        close(gradual.y, 0.004f, "Normal reconciliation exceeded the BDS step");
+        require(strict.reconcile(authoritative, Vector3f(0.3f, 0.4f, 0), 100, 0.5f, true),
+                "Strict mode did not replace gradual adoption with a correction");
+        close(authoritative.x, 0.0f, "Strict correction adopted untrusted coordinates");
+
+        normal.reset();
+        gradual = Vector3f(0, 0, 0);
+        require(!normal.reconcile(gradual, Vector3f(0.6f, 0, 0), 100, 0.5f, false),
+                "Acceptance threshold was incorrectly squared a second time");
+        require(normal.reconcile(gradual, Vector3f(0.72f, 0, 0), 101, 0.5f, false),
+                "Normal mode accepted an error above the squared-distance threshold");
+        normal.reset();
+        for (uint64_t tick = 100; tick < 110; ++tick) {
+            gradual = Vector3f(0, 0, 0);
+            require(!normal.reconcile(gradual, Vector3f(0.1f, 0, 0), tick, 0.5f, false),
+                    "Gradual reconciliation exhausted its budget too early");
+        }
+        gradual = Vector3f(0, 0, 0);
+        require(normal.reconcile(gradual, Vector3f(0.1f, 0, 0), 110, 0.5f, false),
+                "Persistent drift exceeded ten BDS adjustments without a correction");
+
+        strict.reset();
+        authoritative = Vector3f(0, 0, 0);
+        strict.onMovementEffect(100);
+        require(!strict.reconcile(authoritative, Vector3f(0.1f, 0, 0), 120, 0.5f, true),
+                "Movement effect grace ended before 20 ticks");
+        close(authoritative.x, 0.0f, "Movement effect grace adopted the client position");
+        require(strict.reconcile(authoritative, Vector3f(0.1f, 0, 0), 121, 0.5f, true),
+                "Movement effect grace did not expire");
+        strict.reset();
+        strict.onMovementEffect(100);
+        require(strict.reconcile(authoritative, Vector3f(1, 0, 0), 101, 0.5f, true),
+                "Movement effect grace bypassed the large-error check");
+        normal.reset();
+        gradual = Vector3f(0, 0, 0);
+        require(!normal.reconcile(gradual, Vector3f(0, 0, 0), 100, 0.0f, false),
+                "Zero threshold rejected an exact match in normal mode");
+        require(normal.reconcile(gradual, Vector3f(0.001f, 0, 0), 101, 0.0f, false),
+                "Zero threshold accepted displacement");
+    }
+
     void checkStrictReplay(ServerNetworkHandler &owner) {
         const auto path = ServerPaths::getRoot() / "simulation.properties";
         std::ofstream(path) << "server-authoritative-movement-strict=true\n"
@@ -156,6 +228,9 @@ namespace {
 
     void checkServerPipeline() {
         ServerNetworkHandler owner("Input regression", "", 2);
+        const auto path = ServerPaths::getRoot() / "timeline.properties";
+        std::ofstream(path) << "simulation=false\n";
+        owner.setProperties(PropertiesSettings(path.string()));
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
         player.setLoginState(ServerPlayer::LoginState::StartGameSent);
@@ -203,6 +278,61 @@ namespace {
         MovementInputProbe::step(owner, player, 16);
         require(player.getMovementInputs().pendingCount() == 0, "Death retained pending movement");
         checkStrictReplay(owner);
+    }
+
+    void checkSimulationSettings() {
+        ServerNetworkHandler owner("Simulation settings regression", "", 1);
+        const auto path = ServerPaths::getRoot() / "switch.properties";
+        std::ofstream(path) << "simulation=invalid\n";
+        const PropertiesSettings invalid(path.string());
+        require(invalid.getSimulation() && invalid.getInvalidProperties().size() == 1,
+                "Invalid simulation setting did not fall back to enabled");
+        for (const std::string configuration: {"", "simulation=true\n",
+                                               "simulation=true\nserver-authoritative-movement-strict=true\n",
+                                               "simulation=false\nserver-authoritative-movement-strict=true\n"}) {
+            std::ofstream(path) << configuration;
+            const PropertiesSettings settings(path.string());
+            owner.setProperties(settings);
+            NetworkIdentifier id;
+            ServerPlayer player(id, 4001);
+            Level &level = owner.getLevelFor(player);
+            level.getChunk(4, 0);
+            level.getBlockActors().loadChunk(4, 0, {}, owner.getCodecContext());
+            for (int x = 65; x <= 68; ++x)
+                for (int z = 1; z <= 4; ++z)
+                    for (int y = 249; y <= 252; ++y)
+                        level.setBlockState(x, y, z, BlockState(y == 249 ? "minecraft:stone" : "minecraft:air"));
+            player.setPosition(Vector3f(66.5f, 250.0f, 2.5f));
+            player.setOnGround(true);
+            player.setSimulatedPosition(player.getPosition());
+            player.setSimulatedVelocity(Vector3f(0, -0.0784f, 0));
+            PlayerAuthInputPacket packet;
+            packet.mTick = 100;
+            packet.mDelta = Vector3f(100, 100, 100);
+            Vector3f feet(66.6f, 250.0f, 2.5f);
+            PlayerMovementSimulator::apply(owner, id, player, packet, feet, false);
+            if (!settings.getSimulation()) {
+                require(!player.hasSimulatedPosition() && !player.hasSimulatedVelocity(),
+                        "simulation=false did not clear replay state when strict was enabled");
+                require(feet.x == 66.6f, "Disabled simulation changed the reported coordinates");
+                continue;
+            }
+            require(player.hasSimulatedPosition() && player.hasSimulatedVelocity(),
+                    "Enabled simulation still depended on the strict setting");
+            const float expected = settings.getServerAuthoritativeMovementStrict() ? 66.5f : 66.505f;
+            require(std::fabs(feet.x - expected) < 0.00001f,
+                    "Simulation did not apply the configured strict or gradual BDS position policy");
+            require(player.getSimulatedVelocity().x == 0.0f && player.getMotion().x == 0.0f,
+                    "Client delta replaced authoritative velocity");
+            player.setSimulatedPosition(player.getPosition());
+            player.setSimulatedVelocity(Vector3f(0, -0.0784f, 0));
+            feet = Vector3f(66.502f, 250.0f, 2.5f);
+            packet.mTick = 200;
+            PlayerMovementSimulator::apply(owner, id, player, packet, feet, false);
+            require(feet.x == 66.502f && player.getSimulatedVelocity().x == 0.0f
+                    && player.getMotion().x == 0.0f,
+                    "Accepting a close position also trusted the client velocity");
+        }
     }
 
     // BDS 1.26.10: ground 0x140E104A0, water 0x140F1E690/0x14103D110,
@@ -412,7 +542,9 @@ int main() {
         std::filesystem::create_directories(directory);
         ServerPaths::setRoot(directory);
         checkTimeline();
+        checkPositionReconciliation();
         checkServerPipeline();
+        checkSimulationSettings();
         checkTravelPhysics();
     } catch (const std::exception &error) {
         std::clog << "Movement input regression failed: " << error.what() << '\n';

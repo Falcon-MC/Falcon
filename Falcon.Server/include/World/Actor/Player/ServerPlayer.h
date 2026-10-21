@@ -2,6 +2,7 @@
 
 #include "World/Actor/Actor.h"
 #include "World/Actor/Movement/ServerPlayerMovementComponent.h"
+#include "World/Actor/Movement/PlayerMovementValidator.h"
 #include "World/Actor/DynamicPropertyValue.h"
 #include "Core/Math/Vector3i.h"
 #include "Core/NBT/Tag.h"
@@ -136,6 +137,7 @@ public:
     void clearSimulatedPosition() { mHasSimulatedPosition = false; }
 
     void clearMovementSimulation() {
+        mMovementValidator.reset();
         mHasSimulatedVelocity = false;
         mHasSimulatedPosition = false;
         mHasPendingKnockback = false;
@@ -143,6 +145,10 @@ public:
         mSimulatedCrawling = false;
         mSlowdownTicks = 0;
         mHasSupportingBlock = false;
+    }
+
+    PlayerMovementValidator &getMovementValidator() {
+        return mMovementValidator;
     }
 
     bool hasSupportingBlock() const { return mHasSupportingBlock; }
@@ -635,6 +641,7 @@ private:
     bool mHasLastBlockAttacked = false;
     Vector3i mLastBlockAttacked;
     ServerPlayerMovementComponent mMovementInputs;
+    PlayerMovementValidator mMovementValidator;
     bool mSawNonZeroClientTick = false;
     std::unordered_set<int64_t> mSentChunks;
     std::unordered_set<uint64_t> mVisibleActors;

@@ -10,9 +10,9 @@ class ServerNetworkHandler;
 class ServerPlayer;
 
 /**
- * Server-side replay of player travel physics for each PlayerAuthInput. When the
- * client's reported position or velocity strays past the configured threshold, the
- * simulated result wins and a movement correction is sent.
+ * Server-side replay of player travel physics for each PlayerAuthInput. The
+ * simulation property enables replay; the strict movement property chooses the BDS
+ * position reconciliation policy. Velocity always comes from server physics.
  */
 class PlayerMovementSimulator {
 public:

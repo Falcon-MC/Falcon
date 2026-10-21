@@ -9,7 +9,6 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Components/BlockBehavior.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
-#include "World/Level/Block/Systems/PistonSystem.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
@@ -43,7 +42,6 @@ namespace {
     const float IMPULSE_SCALE = 0.98f;
     const float PLAYER_WIDTH = 0.6f;
     const float PLAYER_HEIGHT = 1.8f;
-    const float PISTON_RANGE = 1.0f;
     const float PLAYER_SNEAKING_HEIGHT = 1.49f;
     const float PLAYER_CRAWLING_HEIGHT = 0.6f;
     const int32_t JUMP_DELAY_TICKS = 10;
@@ -467,9 +465,7 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
                             ? 0.03f + 0.0105f * (float) enchantmentLevel : 0.0f;
         player.getEffects().setMovementSpeedBonus(bonus);
     }
-    // Temporary: the movement simulation only runs when server-authoritative-movement-strict is true, until it is
-    // reliable enough to run for every player.
-    if (!owner.getProperties().getServerAuthoritativeMovementStrict()) {
+    if (!owner.getProperties().getSimulation()) {
         player.clearMovementSimulation();
         return;
     }
@@ -494,12 +490,7 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
         return;
     }
 
-    const AxisAlignedBB pistonArea = boxAt(start, PLAYER_HEIGHT).expand(PISTON_RANGE, PISTON_RANGE, PISTON_RANGE);
     const bool strict = owner.getProperties().getServerAuthoritativeMovementStrict();
-    if (!strict && PistonSystem::isMovingNear(level, pistonArea)) {
-        player.clearMovementSimulation();
-        return;
-    }
     Vector3f velocity;
     if (!player.takeKnockback(velocity))
         velocity = player.hasSimulatedVelocity() ? player.getSimulatedVelocity() : player.getMotion();
@@ -725,27 +716,16 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
         jumpDelay -= 1;
     player.setJumpDelay(jumpDelay);
 
-    const float dx = feetPosition.x - simulated.x;
-    const float dy = feetPosition.y - simulated.y;
-    const float dz = feetPosition.z - simulated.z;
-    const float threshold = std::max(0.0f, owner.getProperties().getPlayerPositionAcceptanceThreshold());
-    const float vx = packet.mDelta.x - velocity.x;
-    const float vy = packet.mDelta.y - velocity.y;
-    const float vz = packet.mDelta.z - velocity.z;
-    const bool positionAccepted = dx * dx + dy * dy + dz * dz <= threshold * threshold;
-    const bool velocityAccepted = vx * vx + vy * vy + vz * vz <= threshold * threshold;
-    // Within tolerance the client's own values become the new baseline, so small float
-    // differences never accumulate into a correction later on.
-    if (positionAccepted && velocityAccepted) {
-        player.setSimulatedPosition(feetPosition);
-        player.setSimulatedVelocity(packet.mDelta);
-        return;
-    }
-
+    const bool needsCorrection = player.getMovementValidator().reconcile(
+            simulated, feetPosition, (uint64_t) packet.mTick,
+            owner.getProperties().getPlayerPositionAcceptanceThreshold(), strict);
     player.setSimulatedPosition(simulated);
     player.setSimulatedVelocity(velocity);
     feetPosition = simulated;
     player.setMotion(velocity);
+
+    if (!needsCorrection)
+        return;
 
     // The client rewinds to the tick named in the correction and replays its inputs from the
     // server's position and velocity; the position is sent at eye level like other player

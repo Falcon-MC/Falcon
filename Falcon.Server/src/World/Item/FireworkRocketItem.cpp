@@ -96,6 +96,9 @@ bool FireworkRocketItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player
                               -std::sin(pitch) * ELYTRA_BOOST_SPEED,
                               std::cos(yaw) * std::cos(pitch) * ELYTRA_BOOST_SPEED));
     player.scheduleKnockback(player.getMotion());
+    const int64_t inputTick = player.getMovementInputs().lastProcessedTick();
+    if (inputTick >= 0)
+        player.getMovementValidator().onMovementEffect((uint64_t) inputTick);
     owner.sendActorMotion(player);
 
     ServerActor *rocket = owner.spawnActor(owner.getLevelFor(player), FIREWORK_ACTOR, player.getPosition());

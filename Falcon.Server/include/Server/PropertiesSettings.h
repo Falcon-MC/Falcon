@@ -184,6 +184,10 @@ public:
         return getFloat("player-position-acceptance-threshold");
     }
 
+    bool getSimulation() const {
+        return getBool("simulation");
+    }
+
     bool getServerAuthoritativeMovementStrict() const {
         return getBool("server-authoritative-movement-strict");
     }
