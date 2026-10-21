@@ -369,6 +369,10 @@ bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkId
 
 void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                             ServerPlayer &player, const PlayerAuthInputPacket &packet) {
+    // BDS LoadingScreenPlayerProtectionsSystem disables movement until loading completes.
+    if (!player.isSpawned())
+        return;
+
     // Flight transitions belong to this input tick, including replayed inputs.
     const bool stopFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopFlying);
     const bool startFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartFlying);

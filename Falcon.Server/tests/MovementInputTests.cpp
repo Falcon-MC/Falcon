@@ -4,6 +4,7 @@
 #include "World/Actor/Movement/Systems/MovementInputSystem.h"
 #include "World/Actor/Movement/Systems/SwimControlSystem.h"
 #include "World/Actor/Movement/Systems/PlayerPredictionSystem.h"
+#include "World/Actor/Movement/Systems/ClientAcceptanceSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/MovementHandler.h"
@@ -35,6 +36,9 @@ public:
 
     static void step(ServerNetworkHandler &owner, ServerPlayer &player, int64_t tick, double milliseconds = 0) {
         owner.mCurrentTick = tick;
+        // These fixtures exercise movement; chunk streaming has its own lifecycle tests.
+        player.setLastChunkPosition((int32_t) std::floor(player.getPosition().x) >> 4,
+                                    (int32_t) std::floor(player.getPosition().z) >> 4);
         owner.mTickDurationSamples.clear();
         owner.mTickDurationSamples.push_back(milliseconds);
         owner._tickPlayer(player);
@@ -343,8 +347,8 @@ namespace {
                     level.setBlockState(x, y, z, BlockState("minecraft:air"));
         level.setBlockState(34, 248, 0, BlockState("minecraft:stone"));
         level.setBlockState(38, 248, 0, BlockState("minecraft:stone"));
-        immediate.setLoginState(ServerPlayer::LoginState::StartGameSent);
-        delayed.setLoginState(ServerPlayer::LoginState::StartGameSent);
+        immediate.setLoginState(ServerPlayer::LoginState::Spawned);
+        delayed.setLoginState(ServerPlayer::LoginState::Spawned);
         immediate.setPosition(Vector3f(34.5f, 250.0f, 0.5f));
         delayed.setPosition(Vector3f(38.5f, 250.0f, 0.5f));
         for (int64_t tick = 1; tick <= 10; ++tick) {
@@ -377,7 +381,7 @@ namespace {
             owner.setProperties(PropertiesSettings(path.string()));
             NetworkIdentifier id;
             ServerPlayer player(id, 5000);
-            player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+            player.setLoginState(ServerPlayer::LoginState::Spawned);
             player.getAttributes() = ActorAttributes::createPlayerDefaults();
             Level &level = owner.getLevelFor(player);
             for (int chunkZ = 0; chunkZ < 4; ++chunkZ) {
@@ -600,7 +604,7 @@ namespace {
                     level.setBlockState(x, 251, z, BlockState("minecraft:ice"));
                 }
             ServerPlayer player(id, 7361);
-            player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+            player.setLoginState(ServerPlayer::LoginState::Spawned);
             player.getAttributes() = ActorAttributes::createPlayerDefaults();
             player.setPosition(Vector3f(166.5f, 250.1f, 2.5f));
             player.getFlags().set(ActorFlag::Swimming, true);
@@ -633,6 +637,87 @@ namespace {
         }
     }
 
+    void checkClientAcceptance() {
+        ServerNetworkHandler owner("Client acceptance regression", "", 1);
+        NetworkIdentifier id;
+        ServerPlayer player(id, 7370);
+        Level &level = owner.getLevelFor(player);
+        level.getChunk(11, 0);
+        level.getBlockActors().loadChunk(11, 0, {}, owner.getCodecContext());
+        for (int x = 179; x <= 183; ++x)
+            for (int y = 249; y <= 253; ++y)
+                for (int z = 1; z <= 4; ++z)
+                    level.setBlockState(x, y, z, BlockState("minecraft:air"));
+        PlayerAuthInputPacket packet;
+        Vector3f reported;
+        const auto contextFor = [&](const Vector3f &position) {
+            PlayerMovementContext context{owner, id, player, level, {}, {packet}, {}, {},
+                                          {reported, player.getMovementValidator()}, {}};
+            context.state.start = position;
+            context.state.simulated = position;
+            context.state.velocity = Vector3f(0.012f, -0.08f, 0.03f);
+            context.travel.pose.mHeight = 1.8f;
+            context.travel.box = MovementPhysics::boxAt(position, 1.8f);
+            return context;
+        };
+        auto &budget = player.getMovementValidator().clientAcceptance();
+        auto context = contextFor(Vector3f(180.5f, 250.0f, 2.5f));
+        reported = Vector3f(180.575f, 250.0f, 2.5f);
+        budget.mBudget = 0.5f;
+        ClientAcceptanceSystem::tick(context);
+        require(std::fabs(context.state.simulated.x - reported.x) < 0.00002f
+                && context.state.velocity.x == 0.012f && context.state.velocity.y == -0.08f
+                && std::fabs(budget.mBudget - 0.46f) < 0.00002f,
+                "BDS air acceptance did not spend/refill its budget independently of physical velocity");
+        auto context2 = contextFor(Vector3f(180.5f, 250.0f, 2.5f));
+        reported = Vector3f(182.5f, 249.5f, 2.5f);
+        budget.mBudget = 0.5f;
+        ClientAcceptanceSystem::tick(context2);
+        require(context2.state.simulated.x == 180.5f && context2.state.simulated.y == 250.0f,
+                "Acceptance adopted an oversized horizontal displacement or downward client error");
+        auto context3 = contextFor(Vector3f(180.5f, 250.0f, 2.5f));
+        reported = Vector3f(180.58f, 250.2f, 2.58f);
+        budget.mBudget = 0.3f;
+        ClientAcceptanceSystem::tick(context3);
+        require(std::fabs(context3.state.simulated.y - reported.y) < 0.00002f
+                && std::fabs(context3.state.simulated.x - reported.x) < 0.00002f
+                && context3.state.simulated.z == 2.5f && budget.mBudget < 0.056f,
+                "Acceptance did not share its Manhattan budget in Y/X/Z order");
+        for (int y = 250; y <= 252; ++y)
+            level.setBlockState(181, y, 2, BlockState("minecraft:stone"));
+        auto context4 = contextFor(Vector3f(180.7f, 250.0f, 2.5f));
+        context4.travel.moved.mRequested.x = 0.5f;
+        reported = Vector3f(181.3f, 250.0f, 2.5f);
+        budget.mBudget = 1.0f;
+        ClientAcceptanceSystem::tick(context4);
+        require(context4.state.simulated.x <= 180.70002f && budget.mBudget < 0.501f,
+                "Solid-shape acceptance crossed a wall or refunded a blocked correction");
+        auto context5 = contextFor(Vector3f(180.5f, 250.0f, 2.5f));
+        reported = Vector3f(180.575f, 250.0f, 2.5f);
+        budget.mBudget = 0.5f;
+        player.getMovementValidator().onMovementEffect(1);
+        ClientAcceptanceSystem::tick(context5);
+        require(context5.state.simulated.x == 180.5f && budget.mCooldown == 19 && budget.mBudget == 0.5f,
+                "Server-initiated motion did not suspend client acceptance for the BDS cooldown");
+    }
+
+    void checkLoadingScreenMovement() {
+        ServerNetworkHandler owner("Loading movement regression", "", 1);
+        NetworkIdentifier id;
+        ServerPlayer player(id, 7360);
+        player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+        player.setPosition(Vector3f(-63.5f, 63.0f, 64.5f));
+        PlayerAuthInputPacket packet;
+        packet.mTick = 10;
+        packet.mPosition = Vector3f(-63.5f, 64.62f, 64.5f);
+        packet.mMotionY = 1.0f;
+        packet.mDelta.y = -0.1f;
+        MovementHandler::handlePlayerAuthInput(owner, id, player, packet);
+        require(!player.hasSimulatedPosition() && !player.hasSimulatedVelocity()
+                && !player.hasPendingMove() && player.getPosition().y == 63.0f,
+                "Loading-screen input started falling or changed the authoritative spawn position");
+    }
+
     void checkQueuedFlightRequests() {
         ServerNetworkHandler owner("Queued flight regression", "", 1);
         const auto path = ServerPaths::getRoot() / "queued-flight.properties";
@@ -640,7 +725,7 @@ namespace {
         owner.setProperties(PropertiesSettings(path.string()));
         NetworkIdentifier id;
         ServerPlayer player(id, 7350);
-        player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
         player.getAttributes() = ActorAttributes::createPlayerDefaults();
         player.setGameType((int32_t) GameType::Creative);
         player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
@@ -700,7 +785,7 @@ namespace {
         owner.setProperties(PropertiesSettings(path.string()));
         NetworkIdentifier id;
         ServerPlayer player(id, 7300);
-        player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
         player.getAttributes() = ActorAttributes::createPlayerDefaults();
         player.setGameType((int32_t) GameType::Creative);
         player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
@@ -829,7 +914,7 @@ namespace {
                     }
                 }
             ServerPlayer player(id, slab ? 6002 : 6001);
-            player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+            player.setLoginState(ServerPlayer::LoginState::Spawned);
             player.getAttributes() = ActorAttributes::createPlayerDefaults();
             const float feetY = slab ? 250.5f : 250.0f;
             player.setPosition(Vector3f(86.5f, feetY, 3.5f));
@@ -882,7 +967,9 @@ namespace {
             ServerPlayer immediate(id, 4001 + scenario * 2);
             ServerPlayer delayed(id, 4002 + scenario * 2);
             for (ServerPlayer *player: {&immediate, &delayed}) {
-                player->setLoginState(ServerPlayer::LoginState::StartGameSent);
+                player->setLoginState(ServerPlayer::LoginState::Spawned);
+                // Like a fresh login, keep lava damage out of the movement replay comparison.
+                player->grantSpawnInvulnerability();
                 player->getAttributes() = ActorAttributes::createPlayerDefaults();
                 player->setPosition(Vector3f(70.5f, 250.0f, 2.5f));
                 player->setOnGround(scenario < 2);
@@ -933,7 +1020,7 @@ namespace {
                     && std::fabs(positionDelta.x) < 0.000001f && std::fabs(positionDelta.y) < 0.000001f
                     && std::fabs(positionDelta.z) < 0.000001f && std::fabs(velocityDelta.x) < 0.000001f
                     && std::fabs(velocityDelta.y) < 0.000001f && std::fabs(velocityDelta.z) < 0.000001f,
-                    "Ground/jump/water/lava/flight catch-up diverged from normal input processing");
+                    ("Ground/jump/water/lava/flight catch-up diverged in scenario " + std::to_string(scenario)).c_str());
             require(immediate.isOnGround() == delayed.isOnGround()
                     && immediate.getJumpDelay() == delayed.getJumpDelay()
                     && delayed.getMovementInputs().lastProcessedTick() == 24,
@@ -948,7 +1035,7 @@ namespace {
         owner.setProperties(PropertiesSettings(path.string()));
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
-        player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
         player.setGameType((int32_t) GameType::Creative);
         player.setPosition(Vector3f(0.5f, 250.0f, 0.5f));
         MovementInputProbe::receive(owner, id, input(100, 1.5f));
@@ -1398,6 +1485,8 @@ int main() {
         checkCreativeFlightTrajectory();
         checkAnalogInputSlowdown();
         checkConfinedSwimmingPose();
+        checkClientAcceptance();
+        checkLoadingScreenMovement();
         checkQueuedFlightRequests();
         checkFlightInputTransitions();
         checkShallowWaterExit();

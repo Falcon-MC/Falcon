@@ -56,7 +56,8 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
              "ground=%d water=%d lava=%d feet_water=%d eyes_water=%d swim_probe=%d "
              "fly=%d sprint=%d swim=%d glide=%d jump=%d sneak=%d pose_height=%.9g "
              "collision=(%d,%d,%d) requested=(%.9g,%.9g,%.9g) moved=(%.9g,%.9g,%.9g) "
-             "acceleration=%.9g friction=%.9g friction_modifier=%.9g pending_inputs=%zu credits=%llu",
+             "acceleration=%.9g friction=%.9g friction_modifier=%.9g pending_inputs=%zu credits=%llu "
+             "accepted=(%.9g,%.9g,%.9g) acceptance_budget=%.9g acceptance_cooldown=%u",
              context.player.getName().c_str(), details.reason, (unsigned long long) input.packet.mTick,
              (long long) context.owner.getCurrentTick(), (unsigned long long) details.previousCorrectionTick,
              prediction.strict, details.error.x, details.error.y, details.error.z,
@@ -75,7 +76,10 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
              travel.moved.mRequested.x, travel.moved.mRequested.y, travel.moved.mRequested.z,
              travel.moved.mMoved.x, travel.moved.mMoved.y, travel.moved.mMoved.z,
              travel.acceleration, travel.friction, travel.frictionModifier,
-             timeline.pendingCount(), (unsigned long long) timeline.credits());
+             timeline.pendingCount(), (unsigned long long) timeline.credits(),
+             travel.accepted.x, travel.accepted.y, travel.accepted.z,
+             prediction.validator.clientAcceptance().mBudget,
+             (unsigned int) prediction.validator.clientAcceptance().mCooldown);
 
     // The client rewinds to the tick named in the correction and replays its inputs from the
     // server's position and velocity; the position is sent at eye level like other player

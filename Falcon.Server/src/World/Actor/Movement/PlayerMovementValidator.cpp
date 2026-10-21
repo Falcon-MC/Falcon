@@ -61,6 +61,7 @@ bool PlayerMovementValidator::reconcile(Vector3f &simulated, const Vector3f &rep
 }
 
 void PlayerMovementValidator::reset() {
+    mClientAcceptance = {};
     mLastCorrectionTick = 0;
     mAdjustmentCount = 0;
     mHasMovementEffect = false;
@@ -68,6 +69,7 @@ void PlayerMovementValidator::reset() {
 }
 
 void PlayerMovementValidator::onMovementEffect(uint64_t tick) {
+    mClientAcceptance.mCooldown = 20;
     mHasMovementEffect = true;
     mLastMovementEffectTick = tick;
 }

@@ -1,4 +1,5 @@
 #include "World/Actor/Movement/Systems/PlayerCollisionSystem.h"
+#include "World/Actor/Movement/Systems/ClientAcceptanceSystem.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -182,8 +183,9 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
     state.simulated = Vector3f(travel.box.mMinX + PLAYER_WIDTH * 0.5f, travel.box.mMinY, travel.box.mMinZ + PLAYER_WIDTH * 0.5f);
     const bool wasOnGround = state.onGround;
     state.onGround = travel.moved.mOnGround;
+    ClientAcceptanceSystem::tick(context);
 
-    updateSupportingBlock(context.level, context.player, travel.box, state.simulated, travel.moved.mOnGround, state.velocity);
+    updateSupportingBlock(context.level, context.player, travel.box, state.simulated, state.onGround, state.velocity);
     const BlockBehavior &under = behaviorUnder(context.level, state.simulated, context.player);
     if (state.simulated.y == state.start.y && state.onGround && !travel.sneaking && !input.pressingSneak && under.slowsWalking()) {
         const float vertical = std::fabs(travel.moved.mMoved.y);
