@@ -326,8 +326,48 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
         owner._sendEntityData(player);
 }
 
+bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkIdentifier &id,
+                                     ServerPlayer &player, bool flying) {
+    const int32_t gameType = player.getGameType();
+    const bool mayFly = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator;
+
+    if (flying && !mayFly) {
+        owner._disconnect(id, player.localize("falcon.disconnect.flyingDisabled"));
+        return false;
+    }
+
+    if (flying != player.isFlying()) {
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_TOGGLE_FLIGHT)) {
+            PluginEvent flightEvent;
+            flightEvent.mType = FALCON_EVENT_PLAYER_TOGGLE_FLIGHT;
+            flightEvent.mCancellable = true;
+            flightEvent.mPlayer = &player;
+            flightEvent.mState = flying;
+            plugins->dispatch(flightEvent);
+            if (flightEvent.mCancelled) {
+                owner._sendAbilities(player);
+                return false;
+            }
+        }
+    }
+
+    player.setFlying(flying);
+
+    if (!flying)
+        player.setOnGround(MovementHandler::checkGroundState(owner.getLevelFor(player), player.getPosition()));
+
+    owner._sendAbilities(player);
+    return true;
+}
+
 void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                             ServerPlayer &player, const PlayerAuthInputPacket &packet) {
+    // Flight transitions belong to this input tick, including replayed inputs.
+    const bool stopFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopFlying);
+    const bool startFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartFlying);
+    if ((startFlying || stopFlying) && !requestFlight(owner, id, player, startFlying && !stopFlying))
+        return;
+
     // Resolve sprinting before replay so physics and the advertised actor state use the same decision.
     bool sprinting = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sprinting)
                      || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);

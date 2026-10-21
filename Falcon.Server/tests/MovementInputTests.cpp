@@ -1,5 +1,8 @@
 #include "World/Actor/Movement/ServerPlayerMovementComponent.h"
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
+#include "World/Actor/Movement/PlayerMovementContext.h"
+#include "World/Actor/Movement/Systems/MovementInputSystem.h"
+#include "World/Actor/Movement/Systems/SwimControlSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/MovementHandler.h"
@@ -412,13 +415,13 @@ namespace {
                 packet.mMotionY = moving ? 1.0f : 0.0f;
                 packet.mPosition = Vector3f(expected.x, expected.y + 1.62f, expected.z);
                 if (ascend)
-                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Ascend);
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::WantUp);
                 if (descend)
-                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Descend);
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::WantDown);
                 if (jumping)
-                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Jumping);
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::WantUpSlow);
                 if (sneaking)
-                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Sneaking);
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::WantDownSlow);
                 Vector3f feet = expected;
                 PlayerMovementSimulator::apply(owner, id, player, packet, feet, sprinting);
                 player.setPosition(feet);
@@ -455,7 +458,7 @@ namespace {
         grounded.setSimulatedPosition(grounded.getPosition());
         grounded.setSimulatedVelocity(Vector3f(0.0f, 0.2f, 0.0f));
         packet.mMotionY = 0.0f;
-        packet.mInputData = {(int32_t) PlayerAuthInputData::Ascend};
+        packet.mInputData = {(int32_t) PlayerAuthInputData::WantUp};
         feet = Vector3f(102.5f, 251.2f, 2.5f);
         PlayerMovementSimulator::apply(owner, id, grounded, packet, feet, false);
         require(std::fabs(feet.y - 251.2f) < 0.00003f && grounded.getSimulatedVelocity().y == 0.0f,
@@ -469,6 +472,96 @@ namespace {
         PlayerMovementSimulator::apply(owner, id, grounded, packet, feet, false);
         require(std::fabs(grounded.getSimulatedVelocity().y - 0.0196f) < 0.000002f,
                 "Stopping creative flight did not restore airborne gravity");
+    }
+
+    void checkAnalogInputSlowdown() {
+        ServerNetworkHandler owner("Analog input regression", "", 1);
+        NetworkIdentifier id;
+        ServerPlayer player(id, 7299);
+        PlayerAuthInputPacket packet;
+        Vector3f feet;
+        PlayerMovementContext context{owner, id, player, owner.getLevelFor(player), {}, {packet}, {}, {},
+                                      {feet, player.getMovementValidator()}, {}};
+        packet.mMotionX = 1.0f;
+        packet.mMotionY = 1.0f;
+        MovementInputSystem::tick(context);
+        require(std::fabs(std::hypot(context.input.sideways, context.input.forward) - 0.98f) < 0.000002f,
+                "Diagonal input was not normalized before damping");
+        packet.mMotionX = 0.2f;
+        packet.mMotionY = 0.4f;
+        context.travel.sneaking = true;
+        MovementInputSystem::tick(context);
+        require(std::fabs(context.input.sideways - 0.0588f) < 0.000002f
+                && std::fabs(context.input.forward - 0.1176f) < 0.000002f,
+                "Crouch slowdown clipped analog axes instead of scaling their magnitude");
+        context.abilities.swimming = true;
+        MovementInputSystem::tick(context);
+        require(std::fabs(context.input.sideways - 0.196f) < 0.000002f
+                && std::fabs(context.input.forward - 0.392f) < 0.000002f,
+                "Swimming inherited the crouched input slowdown");
+        packet.mRotation.x = -30.0f;
+        context.state.velocity.y = 0.1f;
+        SwimControlSystem::tick(context);
+        require(context.state.velocity.y == 0.0f,
+                "Swimming surface exit skipped BDS vertical control without water travel contact");
+        context.input.jumpHeld = true;
+        context.state.velocity.y = 0.1f;
+        SwimControlSystem::tick(context);
+        require(context.state.velocity.y == 0.1f,
+                "Swim control ran despite the jumping exclusion");
+    }
+
+    void checkFlightInputTransitions() {
+        ServerNetworkHandler owner("Flight transition regression", "", 1);
+        const auto path = ServerPaths::getRoot() / "flight-transitions.properties";
+        std::ofstream(path) << "simulation=true\nserver-authoritative-movement-strict=true\n";
+        owner.setProperties(PropertiesSettings(path.string()));
+        NetworkIdentifier id;
+        ServerPlayer player(id, 7300);
+        player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+        player.getAttributes() = ActorAttributes::createPlayerDefaults();
+        player.setGameType((int32_t) GameType::Creative);
+        player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
+        Level &level = owner.getLevelFor(player);
+        level.getChunk(9, 0);
+        level.getBlockActors().loadChunk(9, 0, {}, owner.getCodecContext());
+        PlayerAuthInputPacket packet;
+        packet.mTick = 100;
+        packet.mInputData = {(int32_t) PlayerAuthInputData::StartFlying,
+                             (int32_t) PlayerAuthInputData::WantUp,
+                             (int32_t) PlayerAuthInputData::Jumping};
+        packet.mPosition = Vector3f(150.5f, 251.77f, 2.5f);
+        player.getMovementInputs().enqueue(packet);
+        MovementInputProbe::step(owner, player, 1);
+        require(player.isFlying() && std::fabs(player.getPosition().y - 250.15f) < 0.00003f
+                && std::fabs(player.getSimulatedVelocity().y - 0.09f) < 0.000002f,
+                "AuthInput StartFlying was not applied before simulation, or Jumping was confused with WantUpSlow");
+        packet.mTick = 101;
+        packet.mInputData = {(int32_t) PlayerAuthInputData::WantUp};
+        packet.mPosition.y = 252.01f;
+        player.getMovementInputs().enqueue(packet);
+        MovementInputProbe::step(owner, player, 2);
+        require(player.isFlying() && std::fabs(player.getPosition().y - 250.39f) < 0.00003f,
+                "Flying state did not persist across subsequent input ticks");
+        packet.mTick = 102;
+        packet.mInputData = {(int32_t) PlayerAuthInputData::StopFlying};
+        player.getMovementInputs().enqueue(packet);
+        MovementInputProbe::step(owner, player, 3);
+        require(!player.isFlying() && std::fabs(player.getSimulatedVelocity().y - 0.06272f) < 0.000002f,
+                "AuthInput StopFlying did not restore gravity on its own tick");
+        packet.mTick = 103;
+        packet.mInputData = {(int32_t) PlayerAuthInputData::StartFlying,
+                             (int32_t) PlayerAuthInputData::WantUp};
+        player.getMovementInputs().enqueue(packet);
+        packet.mTick = 104;
+        packet.mInputData = {(int32_t) PlayerAuthInputData::StopFlying};
+        player.getMovementInputs().enqueue(packet);
+        MovementInputProbe::step(owner, player, 10);
+        require(!player.isFlying() && player.getMovementInputs().lastProcessedTick() == 104,
+                "Catch-up inputs did not apply both flight transitions in order");
+        player.setGameType((int32_t) GameType::Survival);
+        require(!MovementHandler::requestFlight(owner, id, player, true) && !player.isFlying(),
+                "Survival AuthInput flight bypassed the existing may-fly permission check");
     }
 
     void checkShallowWaterExit() {
@@ -631,9 +724,9 @@ namespace {
                 if (scenario == 4) {
                     packet.mMotionY = tick <= 8 || tick > 16 ? 1.0f : 0.0f;
                     if (tick <= 12)
-                        packet.mInputData.push_back((int32_t) PlayerAuthInputData::Ascend);
+                        packet.mInputData.push_back((int32_t) PlayerAuthInputData::WantUp);
                     if (tick > 18)
-                        packet.mInputData.push_back((int32_t) PlayerAuthInputData::Descend);
+                        packet.mInputData.push_back((int32_t) PlayerAuthInputData::WantDown);
                 }
                 return packet;
             };
@@ -951,14 +1044,14 @@ namespace {
               "Swim steering ran while MobIsJumping should exclude it");
         auto swimmingSink = makePlayer(false);
         step(*swimmingSink, {(int32_t) PlayerAuthInputData::StartSwimming,
-                             (int32_t) PlayerAuthInputData::Sneaking}, false, 0.0f);
+                             (int32_t) PlayerAuthInputData::WantDownSlow}, false, 0.0f);
         close(swimmingSink->getSimulatedVelocity().y, -0.03008f,
               "Water sink input and swim steering order differs");
         auto waterJump = makePlayer(false);
         step(*waterJump, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
         close(waterJump->getSimulatedVelocity().y, 0.027f, "Standing water jump or sinking gravity differs");
         auto waterSink = makePlayer(false);
-        step(*waterSink, {(int32_t) PlayerAuthInputData::Sneaking}, false, 0.0f);
+        step(*waterSink, {(int32_t) PlayerAuthInputData::WantDownSlow}, false, 0.0f);
         close(waterSink->getSimulatedVelocity().y, -0.037f, "Standing water sink or drag differs");
 
         terrain(air, air);
@@ -1057,7 +1150,7 @@ namespace {
         auto flying = makePlayer(false);
         flying->setGameType((int32_t) GameType::Creative);
         flying->setFlying(true);
-        step(*flying, {(int32_t) PlayerAuthInputData::Ascend}, true);
+        step(*flying, {(int32_t) PlayerAuthInputData::WantUp}, true);
         close(flying->getSimulatedVelocity().z, 0.08918f, "Flying sprint did not double the advertised fly speed");
         close(flying->getSimulatedVelocity().y, 0.09f, "Vertical flight input or drag differs");
         flying->setSimulatedVelocity(Vector3f(0, 0.2f, 0));
@@ -1110,6 +1203,8 @@ int main() {
         checkGroundJumpTrajectory();
         checkShallowWaterWalking();
         checkCreativeFlightTrajectory();
+        checkAnalogInputSlowdown();
+        checkFlightInputTransitions();
         checkShallowWaterExit();
     } catch (const std::exception &error) {
         std::clog << "Movement input regression failed: " << error.what() << '\n';

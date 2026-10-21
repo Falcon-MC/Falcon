@@ -1926,35 +1926,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestAbil
     if (packet.mAbility != Ability::Flying || packet.mType != AbilityValueType::Boolean)
         return;
 
-    const int32_t gameType = player->getGameType();
-    const bool mayFly = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator;
-
-    if (packet.mBoolValue && !mayFly) {
-        _disconnect(id, player->localize("falcon.disconnect.flyingDisabled"));
-        return;
-    }
-
-    if (packet.mBoolValue != player->isFlying()) {
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_TOGGLE_FLIGHT)) {
-            PluginEvent flightEvent;
-            flightEvent.mType = FALCON_EVENT_PLAYER_TOGGLE_FLIGHT;
-            flightEvent.mCancellable = true;
-            flightEvent.mPlayer = player;
-            flightEvent.mState = packet.mBoolValue;
-            plugins->dispatch(flightEvent);
-            if (flightEvent.mCancelled) {
-                _sendAbilities(*player);
-                return;
-            }
-        }
-    }
-
-    player->setFlying(packet.mBoolValue);
-
-    if (!packet.mBoolValue)
-        player->setOnGround(MovementHandler::checkGroundState(getLevelFor(*player), player->getPosition()));
-
-    _sendAbilities(*player);
+    MovementHandler::requestFlight(*this, id, *player, packet.mBoolValue);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const MobEquipmentPacket &packet) {

@@ -128,8 +128,9 @@ namespace MovementPhysics {
         sideways *= force;
         forward *= force;
         const float yaw = yawDegrees * MOJANG_PI / 180.0f;
-        const float sine = mojangSin(yaw);
-        const float cosine = mojangCos(yaw);
+        // BDS moveRelative (0x1432674C0) uses sincosf; the jump and look-vector paths use the table.
+        const float sine = std::sin(yaw);
+        const float cosine = std::cos(yaw);
         velocity.x += sideways * cosine - forward * sine;
         velocity.z += forward * cosine + sideways * sine;
     }

@@ -7,6 +7,7 @@
 #include "World/Item/ItemEnchantments.h"
 
 #include <algorithm>
+#include <cmath>
 
 using namespace MovementPhysics;
 
@@ -22,7 +23,7 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
         maxImpulse *= CONSUMING_INPUT;
     const int32_t slowdownTicks = travel.sneaking || travel.crawling ? context.player.getSlowdownTicks() + 1 : 0;
     context.player.setSlowdownTicks(slowdownTicks);
-    if (!abilities.flying && (travel.sneaking || travel.crawling)) {
+    if (!abilities.flying && !abilities.swimming && (travel.sneaking || travel.crawling)) {
         float sneakMultiplier = SNEAK_INPUT;
         if (slowdownTicks > SWIFT_SNEAK_DELAY_TICKS) {
             const ItemStack &leggings = context.player.getInventory().getArmor(PlayerInventory::ARMOR_LEGS);
@@ -31,6 +32,10 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
         }
         maxImpulse *= std::clamp(sneakMultiplier, 0.0f, 1.0f);
     }
-    input.sideways = std::clamp(input.packet.mMotionX, -maxImpulse, maxImpulse) * IMPULSE_SCALE;
-    input.forward = std::clamp(input.packet.mMotionY, -maxImpulse, maxImpulse) * IMPULSE_SCALE;
+    // BDS 0x140E70890 normalizes the raw 2D input before applying pose slowdown and damping.
+    const float length = std::sqrt(input.packet.mMotionX * input.packet.mMotionX
+                                   + input.packet.mMotionY * input.packet.mMotionY);
+    const float scale = maxImpulse * IMPULSE_SCALE / std::max(1.0f, length);
+    input.sideways = input.packet.mMotionX * scale;
+    input.forward = input.packet.mMotionY * scale;
 }
