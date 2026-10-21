@@ -227,6 +227,82 @@ namespace {
         require(delayed.getMovementInputs().lastProcessedTick() == 10, "Catchup used the server tick as the input tick");
     }
 
+    void checkTravelReplay() {
+        ServerNetworkHandler owner("Travel replay regression", "", 2);
+        const auto path = ServerPaths::getRoot() / "travel-replay.properties";
+        std::ofstream(path) << "simulation=true\nserver-authoritative-movement-strict=true\n"
+                              "player-position-acceptance-threshold=0\n";
+        owner.setProperties(PropertiesSettings(path.string()));
+        NetworkIdentifier id;
+        ServerPlayer locator(id, 4000);
+        Level &level = owner.getLevelFor(locator);
+        level.getChunk(4, 0);
+        level.getBlockActors().loadChunk(4, 0, {}, owner.getCodecContext());
+        for (int scenario = 0; scenario < 5; ++scenario) {
+            const BlockState liquid(scenario == 2 ? "minecraft:water" : scenario == 3
+                                   ? "minecraft:lava" : "minecraft:air");
+            for (int x = 64; x < 80; ++x)
+                for (int z = 0; z < 16; ++z)
+                    for (int y = 248; y <= 256; ++y)
+                        level.setBlockState(x, y, z, y == 249 ? BlockState("minecraft:stone")
+                                                                            : y >= 250 ? liquid : BlockState("minecraft:air"));
+            ServerPlayer immediate(id, 4001 + scenario * 2);
+            ServerPlayer delayed(id, 4002 + scenario * 2);
+            for (ServerPlayer *player: {&immediate, &delayed}) {
+                player->setLoginState(ServerPlayer::LoginState::StartGameSent);
+                player->getAttributes() = ActorAttributes::createPlayerDefaults();
+                player->setPosition(Vector3f(70.5f, 250.0f, 2.5f));
+                player->setOnGround(scenario < 2);
+                if (scenario == 4) {
+                    player->setGameType((int32_t) GameType::Creative);
+                    player->setFlying(true);
+                }
+            }
+            const auto packetFor = [&](int64_t tick) {
+                auto packet = input(tick, 70.5f);
+                packet.mPosition.z = 2.5f;
+                packet.mMotionY = 1.0f;
+                packet.mRotation.x = tick < 12 ? -30.0f : 30.0f;
+                if (scenario == 1) {
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Sprinting);
+                    if (tick == 1 || tick == 14)
+                        packet.mInputData.push_back((int32_t) PlayerAuthInputData::StartJumping);
+                }
+                if (scenario == 2 && tick == 1)
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::StartSwimming);
+                if (scenario == 3 && tick % 2 == 0)
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Jumping);
+                if (scenario == 4)
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Ascend);
+                return packet;
+            };
+            for (int64_t tick = 1; tick <= 24; ++tick) {
+                immediate.getMovementInputs().enqueue(packetFor(tick));
+                MovementInputProbe::step(owner, immediate, tick);
+                if (tick < 24)
+                    MovementInputProbe::step(owner, delayed, tick);
+            }
+            for (int64_t tick = 1; tick <= 24; ++tick)
+                delayed.getMovementInputs().enqueue(packetFor(tick));
+            MovementInputProbe::step(owner, delayed, 24, 1000);
+            const Vector3f positionDelta(immediate.getSimulatedPosition().x - delayed.getSimulatedPosition().x,
+                                         immediate.getSimulatedPosition().y - delayed.getSimulatedPosition().y,
+                                         immediate.getSimulatedPosition().z - delayed.getSimulatedPosition().z);
+            const Vector3f velocityDelta(immediate.getSimulatedVelocity().x - delayed.getSimulatedVelocity().x,
+                                         immediate.getSimulatedVelocity().y - delayed.getSimulatedVelocity().y,
+                                         immediate.getSimulatedVelocity().z - delayed.getSimulatedVelocity().z);
+            require(immediate.hasSimulatedPosition() && delayed.hasSimulatedPosition()
+                    && std::fabs(positionDelta.x) < 0.000001f && std::fabs(positionDelta.y) < 0.000001f
+                    && std::fabs(positionDelta.z) < 0.000001f && std::fabs(velocityDelta.x) < 0.000001f
+                    && std::fabs(velocityDelta.y) < 0.000001f && std::fabs(velocityDelta.z) < 0.000001f,
+                    "Ground/jump/water/lava/flight catch-up diverged from normal input processing");
+            require(immediate.isOnGround() == delayed.isOnGround()
+                    && immediate.getJumpDelay() == delayed.getJumpDelay()
+                    && delayed.getMovementInputs().lastProcessedTick() == 24,
+                    "Catch-up lost collision, jump cooldown or input timeline state");
+        }
+    }
+
     void checkServerPipeline() {
         ServerNetworkHandler owner("Input regression", "", 2);
         const auto path = ServerPaths::getRoot() / "timeline.properties";
@@ -642,6 +718,7 @@ int main() {
         checkServerPipeline();
         checkSimulationSettings();
         checkTravelPhysics();
+        checkTravelReplay();
     } catch (const std::exception &error) {
         std::clog << "Movement input regression failed: " << error.what() << '\n';
         result = 1;

@@ -1,0 +1,42 @@
+#include "World/Actor/Movement/Systems/PlayerGroundJumpSystem.h"
+#include "World/Level/Level.h"
+#include "World/Level/Block/Block.h"
+#include "World/Level/Block/BlockShape.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Block/Components/BlockBehavior.h"
+#include "World/Actor/Movement/PlayerMovementContext.h"
+#include "World/Actor/Player/ServerPlayer.h"
+
+#include <algorithm>
+
+using namespace MovementPhysics;
+
+namespace MovementPhysics {
+    float jumpFactor(Level &level, const Vector3f &feet) {
+        const Block *inside = blockAt(level, feet.x, feet.y, feet.z);
+        if (inside != nullptr && inside->getJumpFactor() != 1.0f)
+            return inside->getJumpFactor();
+        const Block *below = blockAt(level, feet.x, feet.y - JUMP_PROBE_DEPTH, feet.z);
+        return below == nullptr ? 1.0f : below->getJumpFactor();
+    }
+}
+
+void PlayerGroundJumpSystem::tick(PlayerMovementContext &context) {
+    auto &state = context.state;
+    auto &input = context.input;
+    auto &abilities = context.abilities;
+    auto &contact = context.contact;
+
+    if (!abilities.flying && !abilities.gliding && !contact.waterTravel && !contact.lavaTravel && input.startJumping && state.onGround && state.jumpDelay <= 0) {
+        const MobEffectInstance *jumpBoost = context.player.getEffects().get(MobEffectId::JumpBoost);
+        const float jumpBonus = jumpBoost == nullptr ? 0.0f : JUMP_BOOST_PER_LEVEL * (float) jumpBoost->level();
+        const float jumpHeight = JUMP_VELOCITY + jumpBonus;
+        state.velocity.y = std::max(jumpHeight * jumpFactor(context.level, state.start), state.velocity.y);
+        state.jumpDelay = JUMP_DELAY_TICKS;
+        if (abilities.sprinting) {
+            const float direction = input.packet.mRotation.y * 0.017453292f;
+            state.velocity.x -= mojangSin(direction) * 0.2f;
+            state.velocity.z += mojangCos(direction) * 0.2f;
+        }
+    }
+}
