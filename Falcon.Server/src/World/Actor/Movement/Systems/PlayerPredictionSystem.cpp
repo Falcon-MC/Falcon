@@ -16,9 +16,15 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
 
     const Vector3f reported = prediction.feetPosition;
     MovementCorrectionDetails details;
+    Vector3f acceptedPosition = state.simulated;
     const bool needsCorrection = prediction.validator.reconcile(
-            state.simulated, prediction.feetPosition, (uint64_t) input.packet.mTick,
+            acceptedPosition, prediction.feetPosition, (uint64_t) input.packet.mTick,
             context.owner.getProperties().getPlayerPositionAcceptanceThreshold(), prediction.strict, &details);
+    // BDS ReplayState (0x140E70E40) steers the next tick's velocity toward acceptPos;
+    // it leaves this tick's physical position unchanged, including fine-threshold adoption.
+    state.velocity.x += acceptedPosition.x - state.simulated.x;
+    state.velocity.y += acceptedPosition.y - state.simulated.y;
+    state.velocity.z += acceptedPosition.z - state.simulated.z;
     context.player.setSimulatedPosition(state.simulated);
     context.player.setSimulatedOnGround(state.onGround);
     context.player.setSimulatedVelocity(state.velocity);

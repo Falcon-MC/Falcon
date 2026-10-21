@@ -3,6 +3,7 @@
 #include "World/Actor/Movement/PlayerMovementContext.h"
 #include "World/Actor/Movement/Systems/MovementInputSystem.h"
 #include "World/Actor/Movement/Systems/SwimControlSystem.h"
+#include "World/Actor/Movement/Systems/PlayerPredictionSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/MovementHandler.h"
@@ -189,6 +190,73 @@ namespace {
                 "Zero threshold rejected an exact match in normal mode");
         require(normal.reconcile(gradual, Vector3f(0.001f, 0, 0), 101, 0.0f, false),
                 "Zero threshold accepted displacement");
+    }
+
+    void checkPredictionVelocityFeedback() {
+        ServerNetworkHandler owner("Prediction feedback regression", "", 1);
+        NetworkIdentifier id;
+        ServerPlayer player(id, 7400);
+        PlayerAuthInputPacket packet;
+        packet.mTick = 100;
+        Vector3f reported(10.3f, 80.4f, 20.0f);
+        PlayerMovementContext context{owner, id, player, owner.getLevelFor(player), {}, {packet}, {}, {},
+                                      {reported, player.getMovementValidator()}, {}};
+        context.state.simulated = Vector3f(10.0f, 80.0f, 20.0f);
+        context.state.velocity = Vector3f(0.1f, 0.2f, 0.3f);
+        PlayerPredictionSystem::tick(context);
+        require(reported.x == 10.0f && reported.y == 80.0f && reported.z == 20.0f,
+                "Soft reconciliation moved the current physical position instead of steering velocity");
+        require(std::fabs(player.getSimulatedVelocity().x - 0.103f) < 0.000005f
+                && std::fabs(player.getSimulatedVelocity().y - 0.204f) < 0.000005f
+                && player.getSimulatedVelocity().z == 0.3f,
+                "BDS acceptPos displacement was not added to the next tick velocity");
+        player.getMovementValidator().reset();
+        reported = Vector3f(10.001f, 79.998f, 20.003f);
+        context.state.velocity = Vector3f(0.1f, 0.2f, 0.3f);
+        PlayerPredictionSystem::tick(context);
+        require(reported.x == 10.0f && reported.y == 80.0f && reported.z == 20.0f
+                && std::fabs(player.getSimulatedVelocity().x - 0.101f) < 0.000005f
+                && std::fabs(player.getSimulatedVelocity().y - 0.198f) < 0.000005f
+                && std::fabs(player.getSimulatedVelocity().z - 0.303f) < 0.000005f,
+                "Fine-threshold adoption bypassed velocity feedback or lost a signed axis");
+        player.getMovementValidator().reset();
+        player.getMovementValidator().onMovementEffect(100);
+        reported = Vector3f(10.3f, 80.4f, 20.0f);
+        context.state.velocity = Vector3f(0.1f, 0.2f, 0.3f);
+        PlayerPredictionSystem::tick(context);
+        require(player.getSimulatedVelocity().x == 0.1f && player.getSimulatedVelocity().y == 0.2f,
+                "Movement-effect grace period still applied acceptance feedback");
+        player.getMovementValidator().reset();
+        context.prediction.strict = true;
+        reported = Vector3f(10.3f, 80.4f, 20.0f);
+        PlayerPredictionSystem::tick(context);
+        require(player.getSimulatedVelocity().x == 0.1f && player.getSimulatedVelocity().y == 0.2f,
+                "A rejected strict-mode position contaminated authoritative velocity");
+
+        player.getMovementValidator().reset();
+        context.prediction.strict = false;
+        context.state.simulated = Vector3f(10.0f, 80.0f, 20.0f);
+        context.state.velocity = Vector3f(0.1f, 0.0f, 0.0f);
+        Vector3f clientPosition = context.state.simulated;
+        float clientVelocity = 0.11f;
+        // A small initial speed mismatch must converge instead of exhausting the adjustment budget.
+        for (int tick = 100; tick < 140; ++tick) {
+            packet.mTick = tick;
+            clientVelocity += 0.049f;
+            clientPosition.x += clientVelocity;
+            clientVelocity *= 0.91f;
+            context.state.velocity.x += 0.049f;
+            context.state.simulated.x += context.state.velocity.x;
+            context.state.velocity.x *= 0.91f;
+            reported = clientPosition;
+            auto comparison = player.getMovementValidator();
+            Vector3f checked = context.state.simulated;
+            require(!comparison.reconcile(checked, reported, (uint64_t) tick, 0.5f, false),
+                    "Small flight speed drift exhausted BDS's acceptance budget instead of converging");
+            PlayerPredictionSystem::tick(context);
+        }
+        require(std::fabs(context.state.simulated.x - clientPosition.x) < 0.005f,
+                "Flight reconciliation failed to converge after the initial speed mismatch");
     }
 
     void checkCorrectionDiagnostics() {
@@ -423,6 +491,8 @@ namespace {
                 if (sneaking)
                     packet.mInputData.push_back((int32_t) PlayerAuthInputData::WantDownSlow);
                 Vector3f feet = expected;
+                // Isolate travel integration from prediction feedback, which has its own regression above.
+                player.getMovementValidator().onMovementEffect((uint64_t) tick);
                 PlayerMovementSimulator::apply(owner, id, player, packet, feet, sprinting);
                 player.setPosition(feet);
                 require(std::fabs(feet.y - expected.y) < 0.00005f && std::fabs(feet.z - expected.z) < 0.00005f
@@ -522,6 +592,8 @@ namespace {
         player.getAttributes() = ActorAttributes::createPlayerDefaults();
         player.setGameType((int32_t) GameType::Creative);
         player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
+        // This fixture measures transition timing; prediction feedback is exercised separately.
+        player.getMovementValidator().onMovementEffect(100);
         Level &level = owner.getLevelFor(player);
         level.getChunk(9, 0);
         level.getBlockActors().loadChunk(9, 0, {}, owner.getCodecContext());
@@ -850,19 +922,21 @@ namespace {
             }
             require(player.hasSimulatedPosition() && player.hasSimulatedVelocity(),
                     "Enabled simulation still depended on the strict setting");
-            const float expected = settings.getServerAuthoritativeMovementStrict() ? 66.5f : 66.505f;
-            require(std::fabs(feet.x - expected) < 0.00001f,
-                    "Simulation did not apply the configured strict or gradual BDS position policy");
-            require(player.getSimulatedVelocity().x == 0.0f && player.getMotion().x == 0.0f,
-                    "Client delta replaced authoritative velocity");
+            const float expectedFeedback = settings.getServerAuthoritativeMovementStrict() ? 0.0f : 0.005f;
+            require(feet.x == 66.5f,
+                    "Position reconciliation moved the physical result before the next tick");
+            require(std::fabs(player.getSimulatedVelocity().x - expectedFeedback) < 0.00001f
+                    && player.getMotion().x == player.getSimulatedVelocity().x,
+                    "Velocity feedback ignored strict mode or trusted the client's delta");
             player.setSimulatedPosition(player.getPosition());
             player.setSimulatedVelocity(Vector3f(0, -0.0784f, 0));
             feet = Vector3f(66.502f, 250.0f, 2.5f);
             packet.mTick = 200;
             PlayerMovementSimulator::apply(owner, id, player, packet, feet, false);
-            require(feet.x == 66.502f && player.getSimulatedVelocity().x == 0.0f
-                    && player.getMotion().x == 0.0f,
-                    "Accepting a close position also trusted the client velocity");
+            require(feet.x == 66.5f
+                    && std::fabs(player.getSimulatedVelocity().x - (66.502f - 66.5f)) < 0.00001f
+                    && player.getMotion().x == player.getSimulatedVelocity().x,
+                    "Fine acceptance did not steer velocity independently of client delta");
         }
     }
 
@@ -1195,6 +1269,7 @@ int main() {
         ServerPaths::setRoot(directory);
         checkTimeline();
         checkPositionReconciliation();
+        checkPredictionVelocityFeedback();
         checkCorrectionDiagnostics();
         checkServerPipeline();
         checkSimulationSettings();
