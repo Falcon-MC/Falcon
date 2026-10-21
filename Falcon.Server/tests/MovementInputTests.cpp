@@ -7,6 +7,7 @@
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/WaterBlock.h"
 #include "World/Level/Block/LavaBlock.h"
+#include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/ElytraItem.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
@@ -366,9 +367,10 @@ namespace {
             return player;
         };
         const auto step = [&](ServerPlayer &player, std::vector<int32_t> flags = {}, bool sprinting = false,
-                              float forward = 1.0f) {
+                              float forward = 1.0f, float pitch = 0.0f) {
             PlayerAuthInputPacket packet;
             packet.mMotionY = forward;
+            packet.mRotation.x = pitch;
             packet.mInputData = std::move(flags);
             packet.mTick = 1;
             packet.mPosition = player.getPosition();
@@ -465,6 +467,100 @@ namespace {
         close(swimming->getSimulatedVelocity().y, 0.0f, "Persistent swimming state was lost");
         step(*swimming, {(int32_t) PlayerAuthInputData::StopSwimming});
         close(swimming->getSimulatedVelocity().y, -0.005f, "StopSwimming failed to restore sinking gravity");
+        // BDS SwimControlSystem 0x140F4FB60 and MobJumpSystem 0x140EB1110.
+        terrain(air, WaterBlock::source());
+        const std::vector<int32_t> swimFlags{(int32_t) PlayerAuthInputData::StartSwimming};
+        for (bool sprinting: {false, true}) {
+            auto dive = makePlayer(false);
+            step(*dive, swimFlags, sprinting, 0.0f, 90.0f);
+            close(dive->getPosition().y, 249.915f, "Swim steering did not precede collision movement");
+            close(dive->getSimulatedVelocity().y, -0.068f, "BDS downward swim steering or drag differs");
+            auto ascend = makePlayer(false);
+            step(*ascend, swimFlags, sprinting, 0.0f, -90.0f);
+            close(ascend->getSimulatedVelocity().y, 0.048f, "BDS upward swim steering or drag differs");
+        }
+        auto shallowDive = makePlayer(false);
+        step(*shallowDive, swimFlags, false, 0.0f, 10.0f);
+        require(shallowDive->getSimulatedVelocity().y < -0.008f
+                && shallowDive->getSimulatedVelocity().y > -0.009f,
+                "Shallow diving used the steep-dive steering coefficient");
+        auto swimmingJump = makePlayer(false);
+        step(*swimmingJump, {(int32_t) PlayerAuthInputData::StartSwimming,
+                             (int32_t) PlayerAuthInputData::Jumping}, false, 0.0f, 90.0f);
+        close(swimmingJump->getSimulatedVelocity().y, 0.032f,
+              "Swim steering ran while MobIsJumping should exclude it");
+        auto swimmingSink = makePlayer(false);
+        step(*swimmingSink, {(int32_t) PlayerAuthInputData::StartSwimming,
+                             (int32_t) PlayerAuthInputData::Sneaking}, false, 0.0f);
+        close(swimmingSink->getSimulatedVelocity().y, -0.03008f,
+              "Water sink input and swim steering order differs");
+        auto waterJump = makePlayer(false);
+        step(*waterJump, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
+        close(waterJump->getSimulatedVelocity().y, 0.027f, "Standing water jump or sinking gravity differs");
+        auto waterSink = makePlayer(false);
+        step(*waterSink, {(int32_t) PlayerAuthInputData::Sneaking}, false, 0.0f);
+        close(waterSink->getSimulatedVelocity().y, -0.037f, "Standing water sink or drag differs");
+
+        terrain(air, air);
+        level.setBlockState(50, 251, 2, WaterBlock::source());
+        const Vector3f waterBelowCeiling(50.5f, 250.0f, 2.5f);
+        require(LiquidBlocksFetch::at(level, waterBelowCeiling).water
+                && !LiquidBlocksFetch::at(level, waterBelowCeiling, true).water,
+                "Horizontal liquid sampling still included the standing body volume");
+        terrain(stone, air);
+        for (int x = 49; x <= 52; ++x)
+            for (int z = 1; z <= 4; ++z)
+                level.setBlockState(x, 250, z, WaterBlock::source());
+        const LiquidContact horizontalWater = LiquidBlocksFetch::at(level, waterBelowCeiling, true);
+        require(horizontalWater.eyeInWater && horizontalWater.swimProbeInWater
+                && !LiquidBlocksFetch::at(level, waterBelowCeiling).eyeInWater,
+                "Swimming eyes or swim-control probe used standing offsets");
+        auto surface = makePlayer(false);
+        surface->setPosition(Vector3f(50.5f, 250.7f, 2.5f));
+        surface->setSimulatedPosition(surface->getPosition());
+        surface->setSimulatedVelocity(Vector3f(0, 0.2f, 0));
+        step(*surface, swimFlags, false, 0.0f, -90.0f);
+        close(surface->getSimulatedVelocity().y, 0.0f, "Looking up accelerated a swimmer out of the water");
+        auto surfaceJump = makePlayer(false);
+        surfaceJump->setPosition(Vector3f(50.5f, 250.7f, 2.5f));
+        surfaceJump->setSimulatedPosition(surfaceJump->getPosition());
+        surfaceJump->setSimulatedVelocity(Vector3f(0, 0.2f, 0));
+        step(*surfaceJump, {(int32_t) PlayerAuthInputData::StartSwimming,
+                           (int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
+        close(surfaceJump->getSimulatedVelocity().y, 0.0f, "Swimming jump escaped the head-out-water clamp");
+        // A low tunnel must not collide with the standing head while swimming.
+        terrain(stone, WaterBlock::source());
+        level.setBlockState(50, 251, 2, stone);
+        auto tunnel = makePlayer(false);
+        step(*tunnel, swimFlags, false, 0.0f, -90.0f);
+        close(tunnel->getPosition().y, 250.06f, "Swimming retained a standing collision box");
+
+        for (bool lavaCurrent: {false, true}) {
+            terrain(air, air);
+            const BlockState falling = lavaCurrent
+                                       ? LavaBlock(BlockState("minecraft:lava")).makeState(0, true)
+                                       : WaterBlock(WaterBlock::source()).makeState(0, true);
+            for (int y = 250; y <= 252; ++y) {
+                level.setBlockState(50, y, 2, falling);
+                level.setBlockState(51, y, 2, stone);
+            }
+            const LiquidContact current = LiquidBlocksFetch::at(level, waterBelowCeiling);
+            close(current.flow.y, -1.0f, "Liquid current was not normalized across multiple blocks");
+            close(LiquidBlocksFetch::at(level, waterBelowCeiling, true).flow.y, -1.0f,
+                  "Current strength depended on the player's pose");
+            auto waterfall = makePlayer(false);
+            step(*waterfall, {}, false, 0.0f);
+            close(waterfall->getSimulatedVelocity().y, lavaCurrent ? -0.02175f : -0.0162f,
+                  "BDS vertical liquid current strength or integration differs");
+        }
+        terrain(air, air);
+        level.setBlockState(50, 250, 2, WaterBlock::source());
+        level.setBlockState(50, 251, 2, LavaBlock(BlockState("minecraft:lava")).makeState(0));
+        auto mixedLiquids = makePlayer(false);
+        step(*mixedLiquids, {}, false, 0.0f);
+        close(mixedLiquids->getSimulatedVelocity().y, -0.02f, "Water overrode BDS lava travel priority");
+
+        terrain(stone, WaterBlock::source());
         auto depth = makePlayer();
         ItemStack boots = owner.createItemStack("minecraft:diamond_boots", 1);
         ItemEnchantments::write(boots, {{EnchantmentIds::DEPTH_STRIDER, 3}});

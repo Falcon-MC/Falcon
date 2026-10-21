@@ -30,6 +30,12 @@
 #include <cstdlib>
 
 namespace {
+    LiquidContact liquidContact(Level &level, const ServerPlayer &player, const Vector3f &feet) {
+        const ActorFlags &flags = player.getFlags();
+        return LiquidBlocksFetch::at(level, feet, flags.get(ActorFlag::Swimming)
+                                                 || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling));
+    }
+
     void dispatchPlayerState(ServerPlayer &player, FalconEventType type, bool state) {
         PluginManager *plugins = PluginManager::findWithSubscribers(type);
         if (plugins == nullptr)
@@ -207,7 +213,7 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
     const bool onGround = checkGroundState(level, feetPosition);
     player.setOnGround(onGround);
 
-    const LiquidContact water = LiquidBlocksFetch::at(level, feetPosition);
+    const LiquidContact water = liquidContact(level, player, feetPosition);
     if (!player.wasRecentlyTeleported()) {
         const float distance = std::sqrt(requestedX * requestedX + requestedY * requestedY + requestedZ * requestedZ);
         const float horizontalDistance = std::sqrt(requestedX * requestedX + requestedZ * requestedZ);
@@ -252,7 +258,7 @@ void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer
     if (!player.isSpawned() || player.isDead())
         return;
 
-    const LiquidContact contact = LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition());
+    const LiquidContact contact = liquidContact(owner.getLevelFor(player), player, player.getPosition());
     const FireContact fireContact = FireBlocksFetch::at(owner.getLevelFor(player), player.getPosition());
     WaterMoveSystem::tick(player, contact);
     LavaResetFallDistanceSystem::tick(player, contact);
@@ -414,7 +420,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
             BlockActionHandler::completeBreakingBlock(owner, player, action.mBlockPosition);
             player.clearLastBlockAttacked();
         } else if (action.mAction == PlayerActionType::Jump) {
-            if (!LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition()).eyeInWater)
+            if (!liquidContact(owner.getLevelFor(player), player, player.getPosition()).eyeInWater)
                 player.exhaust(player.getFlags().get(ActorFlag::Sprinting) ? SPRINT_JUMP_EXHAUSTION : JUMP_EXHAUSTION);
         } else if (action.mAction == PlayerActionType::StartUsingItem) {
             player.clearAwaitingConsumableRelease();

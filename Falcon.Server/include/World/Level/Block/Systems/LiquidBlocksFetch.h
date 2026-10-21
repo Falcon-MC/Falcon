@@ -14,10 +14,11 @@ struct LiquidContact {
     bool eyeInWater = false;
     /** Water at the feet, below its surface. */
     bool feetInWater = false;
+    bool swimProbeInWater = false;
     Vector3f flow;
 };
 
 class LiquidBlocksFetch {
 public:
-    static LiquidContact at(Level &level, const Vector3f &feet);
+    static LiquidContact at(Level &level, const Vector3f &feet, bool horizontalPose = false);
 };

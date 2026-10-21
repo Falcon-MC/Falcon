@@ -481,9 +481,6 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     const bool skip = player.isRiding() || player.isSleeping() || player.hasPendingMovementChange()
                       || packet.hasInputFlag((int32_t) PlayerAuthInputData::InClientPredictedInVehicle)
                       || packet.hasInputFlag((int32_t) PlayerAuthInputData::HandleTeleport);
-    const LiquidContact liquid = LiquidBlocksFetch::at(level, start);
-    const bool waterTravel = !flying && liquid.water;
-    const bool lavaTravel = !flying && !waterTravel && liquid.lava;
     if (skip || !chunkLoaded(level, start)
         || !chunkLoaded(level, feetPosition)) {
         player.clearMovementSimulation();
@@ -502,8 +499,14 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
     if (!jumpHeld)
         jumpDelay = 0;
 
-    const PlayerPose pose = resolvePose(level, start, packet, player.isSimulatedSneaking(),
+    PlayerPose pose = resolvePose(level, start, packet, player.isSimulatedSneaking(),
                                         player.isSimulatedCrawling());
+    const bool horizontalPose = swimming || gliding || pose.mCrawling;
+    if (horizontalPose)
+        pose.mHeight = PLAYER_WIDTH;
+    const LiquidContact liquid = LiquidBlocksFetch::at(level, start, horizontalPose);
+    const bool lavaTravel = !flying && liquid.lava;
+    const bool waterTravel = !flying && !lavaTravel && liquid.water;
     player.setSimulatedPose(pose.mSneaking, pose.mCrawling);
     const bool sneaking = pose.mSneaking;
     const bool crawling = pose.mCrawling;
@@ -572,25 +575,41 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
         acceleration = ((ratio * ratio) * ratio) * movement;
     }
 
+    if (waterTravel || lavaTravel) {
+        const float current = waterTravel ? 0.014f : 0.0035f;
+        velocity.x += liquid.flow.x * current;
+        velocity.y += liquid.flow.y * current;
+        velocity.z += liquid.flow.z * current;
+        if (pressingSneak || input(packet, PlayerAuthInputData::Descend))
+            velocity.y -= 0.04f;
+        // MobJumpSystem (0x140EB1110) suppresses the water jump while swimming with the head out.
+        if (jumpHeld) {
+            if (waterTravel && swimming && !liquid.eyeSubmerged)
+                velocity.y = 0.0f;
+            else
+                velocity.y += 0.04f;
+        }
+        // BDS SwimControlSystem (0x140F4FB60), before movement and water drag.
+        // Its ECS view excludes MobIsJumpingFlagComponent (0x140F54910).
+        if (waterTravel && swimming && !jumpHeld) {
+            const float lookY = -mojangSin(packet.mRotation.x * MOJANG_PI / 180.0f);
+            const float factor = lookY < -0.2f ? 0.085f : 0.06f;
+            if (lookY <= 0.0f || liquid.swimProbeInWater)
+                velocity.y += (lookY - velocity.y) * factor;
+            else
+                velocity.y = 0.0f;
+        }
+    }
+
     if (gliding && !waterTravel && !lavaTravel) {
         glide(velocity, packet, player.hasEffect(MobEffectId::SlowFalling));
     } else {
         moveRelative(velocity, sideways, forward, acceleration, packet.mRotation.y);
     }
 
-    if (waterTravel || lavaTravel) {
-        if (jumpHeld)
-            velocity.y += 0.04f;
-        if (pressingSneak || input(packet, PlayerAuthInputData::Descend))
-            velocity.y -= 0.04f;
-        if (waterTravel) {
-            velocity.x += liquid.flow.x * 0.014f;
-            velocity.z += liquid.flow.z * 0.014f;
-            if (liquid.bubble) {
-                velocity.y = liquid.dragDown ? std::max(-0.3f, velocity.y - 0.03f)
-                                            : std::min(0.7f, velocity.y + 0.06f);
-            }
-        }
+    if (waterTravel && liquid.bubble) {
+        velocity.y = liquid.dragDown ? std::max(-0.3f, velocity.y - 0.03f)
+                                    : std::min(0.7f, velocity.y + 0.06f);
     }
 
     if (!flying && !gliding && !waterTravel && !lavaTravel && startJumping && onGround && jumpDelay <= 0) {
