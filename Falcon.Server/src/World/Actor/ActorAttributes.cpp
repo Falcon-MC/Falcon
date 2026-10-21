@@ -55,6 +55,27 @@ void ActorAttributes::set(const std::string &name, float value) {
     }
 }
 
+std::vector<AttributeData> ActorAttributes::getPlayerUpdate(bool sprinting) const {
+    auto attributes = mAttributes;
+    for (auto &attribute: attributes) {
+        if (attribute.mName != "minecraft:movement")
+            continue;
+        // BDS 0x1400ACB30/0x143900150: synchronize the same modifier the client uses.
+        if (sprinting) {
+            AttributeModifierData modifier;
+            modifier.mId = "d208fc00-42aa-4aad-9276-d5446530de43";
+            modifier.mName = "Sprinting speed boost";
+            modifier.mAmount = 0.3f;
+            modifier.mOperation = AttributeOperation::MultiplyTotal;
+            modifier.mOperand = 2;
+            attribute.mModifiers.push_back(modifier);
+            attribute.mValue *= 1.3f;
+        }
+        break;
+    }
+    return attributes;
+}
+
 void ActorAttributes::addMaximum(const std::string &name, float amount) {
     for (AttributeData &attribute: mAttributes) {
         if (attribute.mName != name)

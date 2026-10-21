@@ -28,6 +28,8 @@ public:
 
     const std::vector<AttributeData> &getAll() const { return mAttributes; }
 
+    std::vector<AttributeData> getPlayerUpdate(bool sprinting) const;
+
 private:
     void _add(const std::string &name, float minimum, float maximum, float value);
 

@@ -1142,14 +1142,15 @@ void LoginHandler::sendAvailableCommands(ServerNetworkHandler &owner, ServerPlay
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), availableCommands, owner.getCodecContext());
 }
 
-void LoginHandler::sendAttributes(ServerNetworkHandler &owner, ServerPlayer &player) {
+void LoginHandler::sendAttributes(ServerNetworkHandler &owner, ServerPlayer &player, bool movementChange) {
     UpdateAttributesPacket attributes;
     attributes.mRuntimeActorId = (int64_t) player.getRuntimeId();
     attributes.mTick = 0;
-    attributes.mAttributes = player.getAttributes().getAll();
+    attributes.mAttributes = player.getAttributes().getPlayerUpdate(player.getFlags().get(ActorFlag::Sprinting));
 
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), attributes, owner.getCodecContext());
-    player.awaitMovementChange();
+    if (movementChange)
+        player.awaitMovementChange();
 }
 
 void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &player) {

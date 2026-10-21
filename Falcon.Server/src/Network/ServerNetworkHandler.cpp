@@ -1360,8 +1360,8 @@ void ServerNetworkHandler::_sendAvailableCommands(ServerPlayer &player) {
     LoginHandler::sendAvailableCommands(*this, player);
 }
 
-void ServerNetworkHandler::_sendAttributes(ServerPlayer &player) {
-    LoginHandler::sendAttributes(*this, player);
+void ServerNetworkHandler::_sendAttributes(ServerPlayer &player, bool movementChange) {
+    LoginHandler::sendAttributes(*this, player, movementChange);
 }
 
 void ServerNetworkHandler::_broadcastEntityEvent(const Actor &entity, uint8_t eventId) {

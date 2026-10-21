@@ -128,6 +128,31 @@ namespace {
                 "Nonfinite timing produced an unbounded catchup budget");
     }
 
+    void checkSprintAttributeSynchronization() {
+        auto attributes = ActorAttributes::createPlayerDefaults();
+        const auto movement = [](const std::vector<AttributeData> &values) {
+            for (const auto &value: values)
+                if (value.mName == "minecraft:movement")
+                    return value;
+            throw std::runtime_error("Missing movement attribute in player update");
+        };
+        for (float speed: {0.1f, 0.14f, 0.07f}) {
+            attributes.set("minecraft:movement", speed);
+            const auto sprint = movement(attributes.getPlayerUpdate(true));
+            require(std::fabs(sprint.mValue - speed * 1.3f) < 0.000001f
+                    && sprint.mModifiers.size() == 1
+                    && sprint.mModifiers.front().mId == "d208fc00-42aa-4aad-9276-d5446530de43"
+                    && sprint.mModifiers.front().mOperation == AttributeOperation::MultiplyTotal
+                    && sprint.mModifiers.front().mOperand == 2
+                    && std::fabs(sprint.mModifiers.front().mAmount - 0.3f) < 0.000001f,
+                    "Sprint update omitted the BDS movement modifier or effective speed");
+            const auto walk = movement(attributes.getPlayerUpdate(false));
+            require(walk.mValue == speed && walk.mModifiers.empty()
+                    && attributes.get("minecraft:movement") == speed,
+                    "Stopping sprint retained the client boost or changed the server base speed");
+        }
+    }
+
     void checkPositionReconciliation() {
         const auto close = [](float actual, float expected, const char *message) {
             require(std::fabs(actual - expected) < 0.000001f, message);
@@ -1004,6 +1029,8 @@ namespace {
                 }
                 if (scenario == 2 && tick == 1)
                     packet.mInputData.push_back((int32_t) PlayerAuthInputData::StartSwimming);
+                if (scenario == 2 && tick >= 7 && tick <= 15)
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Jumping);
                 if (scenario == 3 && tick % 2 == 0)
                     packet.mInputData.push_back((int32_t) PlayerAuthInputData::Jumping);
                 if (scenario == 4) {
@@ -1211,6 +1238,15 @@ namespace {
         step(*sprint, {}, true);
         close(sprint->getSimulatedVelocity().z, 0.0695604f, "BDS sprint acceleration differs");
 
+        auto leavingSwim = makePlayer();
+        leavingSwim->getSwimAmount().mCurrent = 0.5f;
+        step(*leavingSwim, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
+        close(leavingSwim->getPosition().y, 250.0f,
+              "Ground jump ignored the remaining swim pose transition");
+        leavingSwim->getSwimAmount().mCurrent = 0.0f;
+        step(*leavingSwim, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
+        close(leavingSwim->getPosition().y, 250.42f, "Ground jump remained blocked after the swim pose ended");
+
         auto stopped = makePlayer();
         MobEffectInstance slowness;
         slowness.mId = MobEffectId::Slowness;
@@ -1329,6 +1365,29 @@ namespace {
                              (int32_t) PlayerAuthInputData::Jumping}, false, 0.0f, 90.0f);
         close(swimmingJump->getSimulatedVelocity().y, 0.032f,
               "Swim steering ran while MobIsJumping should exclude it");
+        // Recorded ticks 560..563 hold Y still until the ten-tick pose transition completes.
+        auto transition = makePlayer(false);
+        step(*transition, {(int32_t) PlayerAuthInputData::StartSwimming}, false, 0.0f);
+        transition->getFlags().set(ActorFlag::Swimming, true);
+        for (int tick = 2; tick <= 10; ++tick) {
+            step(*transition, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
+            close(transition->getSimulatedVelocity().y, 0.0f,
+                  "Water jump accelerated during the BDS swim transition");
+            close(transition->getPosition().y, 250.0f,
+                  "Swim transition accumulated the recorded vertical drift");
+        }
+        close(transition->getSwimAmount().mCurrent, 1.0f, "Swim transition did not finish in ten inputs");
+        step(*transition, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
+        close(transition->getSimulatedVelocity().y, 0.032f,
+              "Completed swim transition kept suppressing the water jump");
+        step(*transition, {(int32_t) PlayerAuthInputData::StopSwimming}, false, 0.0f);
+        transition->getFlags().set(ActorFlag::Swimming, false);
+        step(*transition, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
+        close(transition->getSimulatedVelocity().y, -0.005f,
+              "Leaving the swim pose failed to clamp the water jump before sinking gravity");
+        transition->clearMovementSimulation();
+        close(transition->getSwimAmount().mCurrent, 0.8f,
+              "Prediction reset restarted the independent swim pose transition");
         auto swimmingSink = makePlayer(false);
         step(*swimmingSink, {(int32_t) PlayerAuthInputData::StartSwimming,
                              (int32_t) PlayerAuthInputData::WantDownSlow}, false, 0.0f);
@@ -1487,6 +1546,7 @@ int main() {
         std::filesystem::create_directories(directory);
         ServerPaths::setRoot(directory);
         checkTimeline();
+        checkSprintAttributeSynchronization();
         checkPositionReconciliation();
         checkPredictionVelocityFeedback();
         checkCorrectionDiagnostics();

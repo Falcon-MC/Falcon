@@ -3,6 +3,7 @@
 #include "World/Actor/Movement/Systems/FlyingPlayerStuckOnGroundWorkaroundSystem.h"
 #include "World/Actor/Movement/Systems/PlayerMovementAdmissionSystem.h"
 #include "World/Actor/Movement/Systems/MovementAbilitiesSystem.h"
+#include "World/Actor/Movement/Systems/CurrentSwimAmountSystem.h"
 
 #include "World/Actor/Movement/Systems/PlayerMovementInitializationSystem.h"
 #include "World/Actor/Movement/Systems/UpdateHorizontalPoseSystem.h"
@@ -64,4 +65,5 @@ void PlayerMovementPipeline::tick(PlayerMovementContext &context) {
     ClimbOutOfLiquidSystem::tick(context);
     PlayerPostTravelSystem::tick(context);
     PlayerPredictionSystem::tick(context);
+    CurrentSwimAmountSystem::tick(context);
 }

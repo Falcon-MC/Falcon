@@ -39,6 +39,8 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     frame.rotation = input.packet.mRotation;
     frame.motionX = input.packet.mMotionX;
     frame.motionY = input.packet.mMotionY;
+    frame.swimAmount = context.player.getSwimAmount().mCurrent;
+    frame.movementSpeed = context.player.getAttributes().get("minecraft:movement");
     frame.state = (uint32_t) state.onGround | ((uint32_t) context.contact.waterTravel << 1)
                   | ((uint32_t) context.contact.lavaTravel << 2) | ((uint32_t) abilitiesBeforeCorrection.flying << 3)
                   | ((uint32_t) abilitiesBeforeCorrection.sprinting << 4) | ((uint32_t) abilitiesBeforeCorrection.swimming << 5)
@@ -112,7 +114,7 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
                  "start=(%.9g,%.9g,%.9g) reported=(%.9g,%.9g,%.9g) predicted=(%.9g,%.9g,%.9g) "
                  "previous_velocity=(%.9g,%.9g,%.9g) physical_velocity=(%.9g,%.9g,%.9g) "
                  "client_delta=(%.9g,%.9g,%.9g) input=(%.9g,%.9g) yaw=%.9g pitch=%.9g "
-                 "accepted=(%.9g,%.9g,%.9g) acceptance_budget=%.9g",
+                 "accepted=(%.9g,%.9g,%.9g) acceptance_budget=%.9g swim_amount=%.9g movement_speed=%.9g",
                  context.player.getName().c_str(), (unsigned long long) input.packet.mTick,
                  (unsigned long long) entry.tick, entry.state,
                  (unsigned long long) entry.flagsHigh, (unsigned long long) entry.flagsLow,
@@ -123,7 +125,8 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
                  entry.physicalVelocity.x, entry.physicalVelocity.y, entry.physicalVelocity.z,
                  entry.clientDelta.x, entry.clientDelta.y, entry.clientDelta.z,
                  entry.motionX, entry.motionY, entry.rotation.y, entry.rotation.x,
-                 entry.accepted.x, entry.accepted.y, entry.accepted.z, entry.acceptanceBudget);
+                 entry.accepted.x, entry.accepted.y, entry.accepted.z, entry.acceptanceBudget,
+                 entry.swimAmount, entry.movementSpeed);
     }
 
     // The client rewinds to the tick named in the correction and replays its inputs from the

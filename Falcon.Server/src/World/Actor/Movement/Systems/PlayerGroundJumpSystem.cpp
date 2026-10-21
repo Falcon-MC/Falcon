@@ -27,6 +27,10 @@ void PlayerGroundJumpSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &contact = context.contact;
 
+    const float swimAmount = context.player.getSwimAmount().mCurrent;
+    if (swimAmount > 0.0f && swimAmount < 1.0f)
+        return;
+
     if (!abilities.flying && !abilities.gliding && !contact.waterTravel && !contact.lavaTravel && input.jumpHeld && state.onGround && state.jumpDelay <= 0) {
         const MobEffectInstance *jumpBoost = context.player.getEffects().get(MobEffectId::JumpBoost);
         const float jumpBonus = jumpBoost == nullptr ? 0.0f : JUMP_BOOST_PER_LEVEL * (float) jumpBoost->level();

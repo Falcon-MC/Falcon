@@ -447,8 +447,12 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
 
     if (sneaking != previous.get(ActorFlag::Sneaking))
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SNEAK, sneaking);
-    if (sprinting != previous.get(ActorFlag::Sprinting))
+    if (sprinting != previous.get(ActorFlag::Sprinting)) {
+        // Sprint changes the movement attribute as well as actor metadata in BDS (0x140F4D3F0).
+        // This client-requested transition must not reset authoritative validation.
+        owner._sendAttributes(player, false);
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting);
+    }
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping))
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_JUMP, true);
 

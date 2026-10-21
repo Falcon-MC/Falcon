@@ -21,6 +21,8 @@ struct MovementTraceFrame {
     float motionX = 0.0f;
     float motionY = 0.0f;
     float acceptanceBudget = 0.0f;
+    float swimAmount = 0.0f;
+    float movementSpeed = 0.0f;
     uint32_t state = 0;
 };
 

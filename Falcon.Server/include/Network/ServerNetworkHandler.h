@@ -595,7 +595,7 @@ public:
 
     void _removeFromPlayerList(ServerPlayer &player);
 
-    void _sendAttributes(ServerPlayer &player);
+    void _sendAttributes(ServerPlayer &player, bool movementChange = true);
 
     void _checkTerrainReady(ServerPlayer &player);
 

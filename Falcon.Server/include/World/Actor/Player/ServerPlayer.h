@@ -3,6 +3,7 @@
 #include "World/Actor/Actor.h"
 #include "World/Actor/Movement/ServerPlayerMovementComponent.h"
 #include "World/Actor/Movement/PlayerMovementValidator.h"
+#include "World/Actor/Movement/Components/SwimAmountComponent.h"
 #include "World/Actor/DynamicPropertyValue.h"
 #include "Core/Math/Vector3i.h"
 #include "Core/NBT/Tag.h"
@@ -168,6 +169,10 @@ public:
 
     PlayerMovementValidator &getMovementValidator() {
         return mMovementValidator;
+    }
+
+    SwimAmountComponent &getSwimAmount() {
+        return mSwimAmount;
     }
 
     bool hasSupportingBlock() const { return mHasSupportingBlock; }
@@ -695,6 +700,7 @@ private:
     bool mSimulatedSneaking = false;
     bool mSimulatedCrawling = false;
     bool mSimulatedSwimming = false;
+    SwimAmountComponent mSwimAmount;
     int32_t mSlowdownTicks = 0;
     bool mHasSupportingBlock = false;
     Vector3i mSupportingBlock;
