@@ -1,6 +1,7 @@
 #include "Network/Handler/ServerNetworkHandler.h"
 
 #include "Actor/ActorFlags.h"
+#include "Actor/FreezingSystem.h"
 #include "Actor/ServerPlayer.h"
 #include "Block/Systems/BlockContactSystem.h"
 #include "Block/Systems/FurnaceSystem.h"
@@ -106,6 +107,8 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
 
     _tickItemUse(player);
 
+    if (player.isSpawned())
+        FreezingSystem::tick(*this, player);
     const bool effectAttributesDirty = player.getEffects().consumeAttributesDirty();
     const bool effectStateChanged = player.isSpawned() && player.tickEffects(1);
     if (player.isSpawned() && (effectAttributesDirty || effectStateChanged)) {

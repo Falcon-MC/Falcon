@@ -37,7 +37,6 @@ namespace {
     const float WALK_AIR_SPEED = 0.02f;
     const float SPRINT_AIR_SPEED = 0.026f;
     const float SPRINT_SPEED_MULTIPLIER = 1.3f;
-    const float DEFAULT_MOVE_SPEED = 0.1f;
     const float DEFAULT_BLOCK_FRICTION = 0.6f;
     const float IMPULSE_SCALE = 0.98f;
     const float PLAYER_WIDTH = 0.6f;
@@ -412,6 +411,13 @@ namespace {
     }
 }
 
+float PlayerMovementSimulator::groundAcceleration(const ServerPlayer &player, float friction, bool sprinting) {
+    const float speed = std::max(0.0f, player.getAttributes().get("minecraft:movement"));
+    const float ratio = (AIR_FRICTION * DEFAULT_BLOCK_FRICTION) / friction;
+    const float movement = sprinting ? speed * SPRINT_SPEED_MULTIPLIER : speed;
+    return ((movement * ratio) * ratio) * ratio;
+}
+
 void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                     const PlayerAuthInputPacket &packet, Vector3f &feetPosition) {
     // Temporary: the movement simulation only runs when server-authoritative-movement-strict is true, until it is
@@ -488,18 +494,13 @@ void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkId
         const Block *ground = blockAt(level, start.x, start.y - GROUND_PROBE_DEPTH, start.z);
         const float groundFriction = blockFriction(ground);
         friction *= groundFriction;
-        const float speed = std::max(0.0f, player.getAttributes().get("minecraft:movement"));
         float accelerationMultiplier = ground == nullptr ? 1.0f : ground->getAccelerationFrictionMultiplier();
         if (ItemEnchantments::getLevel(boots, EnchantmentIds::SOUL_SPEED) > 0)
             accelerationMultiplier = 1.0f;
         // Ground acceleration scales with the cube of (default friction / block friction), so
         // slippery blocks such as ice accelerate slowly but keep their momentum.
         const float accelerationFriction = (groundFriction * accelerationMultiplier) * AIR_FRICTION;
-        const float baseFriction = AIR_FRICTION * DEFAULT_BLOCK_FRICTION;
-        const float ratio = baseFriction / accelerationFriction;
-        const float baseMovement = speed > 0.0f ? speed : DEFAULT_MOVE_SPEED;
-        const float movement = sprinting ? baseMovement * SPRINT_SPEED_MULTIPLIER : baseMovement;
-        acceleration = ((movement * ratio) * ratio) * ratio;
+        acceleration = groundAcceleration(player, accelerationFriction, sprinting);
     }
 
     moveRelative(velocity, sideways, forward, acceleration, packet.mRotation.y);

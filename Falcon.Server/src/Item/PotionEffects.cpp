@@ -148,6 +148,10 @@ std::vector<PotionEffect> getPotionEffects(int32_t potionId) {
             return {timed(MobEffectId::SlowFalling, 1800, 0)};
         case 41:
             return {timed(MobEffectId::SlowFalling, 4800, 0)};
+        case 47:
+            return {timed(MobEffectId::Freezing, 900, 0)};
+        case 48:
+            return {timed(MobEffectId::Freezing, 1800, 0)};
         default:
             return {};
     }

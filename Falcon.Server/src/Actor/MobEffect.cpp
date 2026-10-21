@@ -1,6 +1,14 @@
 #include "Actor/MobEffect.h"
 
 #include "Actor/Actor.h"
+#include "Actor/Mob/MobActor.h"
+#include "Actor/Mob/Hostile/ZombieActor.h"
+#include "Actor/Mob/Hostile/DrownedActor.h"
+#include "Actor/Mob/Hostile/HuskActor.h"
+#include "Actor/Mob/Hostile/WitherActor.h"
+#include "Actor/Mob/Hostile/EnderDragon.h"
+#include "Actor/ServerPlayer.h"
+#include "Item/ItemData.h"
 
 #include <algorithm>
 #include <cctype>
@@ -53,6 +61,7 @@ const char *getMobEffectName(MobEffectId id) {
         case MobEffectId::VillageHero: return "village_hero";
         case MobEffectId::Darkness: return "darkness";
         case MobEffectId::Weaving: return "weaving";
+        case MobEffectId::Freezing: return "freezing";
     }
     return "unknown";
 }
@@ -200,6 +209,7 @@ std::unique_ptr<MobEffect> MobEffectManager::create(MobEffectId id) {
         case MobEffectId::Strength: return std::make_unique<AttackDamageMobEffect>();
         case MobEffectId::BadOmen: return std::make_unique<RaidOmenMobEffect>();
         case MobEffectId::Weaving: return std::make_unique<WeavingMobEffect>();
+        case MobEffectId::Freezing: return std::make_unique<FreezingMobEffect>();
         default: return std::make_unique<MobEffect>();
     }
 }
@@ -219,6 +229,8 @@ void MobEffectManager::emit(const MobEffectInstance &instance, MobEffectEvent ev
 }
 
 bool MobEffectManager::add(const MobEffectInstance &input) {
+    if (input.mId == MobEffectId::Freezing && FreezingMobEffect::isImmune(mActor))
+        return false;
     if (input.mDuration == 0 && !input.mInfinite)
         return false;
 
@@ -256,6 +268,10 @@ bool MobEffectManager::remove(MobEffectId id) {
     MobEffectInstance instance = it->second;
     effect(id).onRemove(mActor, instance);
     mEffects.erase(it);
+    if (id == MobEffectId::Freezing) {
+        mFreezingTicks = 0;
+        mFreezingDamageTicks = 0;
+    }
     refreshDerivedAttributes();
     emit(instance, MobEffectEvent::Remove);
     return true;
@@ -323,7 +339,69 @@ float MobEffectManager::movementSpeedMultiplier() const {
         multiplier *= 1.0f + 0.2f * (float) speed->level();
     if (const MobEffectInstance *slowness = get(MobEffectId::Slowness))
         multiplier *= std::max(0.0f, 1.0f - 0.15f * (float) slowness->level());
+    multiplier *= 1.0f - 0.5f * (float) mFreezingTicks / 140.0f;
     return multiplier;
+}
+
+float MobEffectManager::advanceFreezing(bool suppressed) {
+    if (!has(MobEffectId::Freezing) || suppressed) {
+        const bool changed = mFreezingTicks != 0;
+        mFreezingTicks = 0;
+        mFreezingDamageTicks = 0;
+        if (changed)
+            refreshDerivedAttributes();
+        return 0.0f;
+    }
+    bool damage = false;
+    if (mFreezingTicks < 140) {
+        ++mFreezingTicks;
+        refreshDerivedAttributes();
+        damage = mFreezingTicks == 140;
+    } else if (++mFreezingDamageTicks >= 40) {
+        mFreezingDamageTicks = 0;
+        damage = true;
+    }
+    return damage ? (FreezingMobEffect::isVulnerable(mActor) ? 7.5f : 1.5f) : 0.0f;
+}
+
+bool FreezingMobEffect::isImmune(const Actor &actor) {
+    return dynamic_cast<const ZombieActor *>(&actor) != nullptr
+           || dynamic_cast<const DrownedActor *>(&actor) != nullptr
+           || dynamic_cast<const HuskActor *>(&actor) != nullptr
+           || dynamic_cast<const WitherActor *>(&actor) != nullptr
+           || dynamic_cast<const EnderDragon *>(&actor) != nullptr
+           || std::string(actor.getIdentifier()) == "minecraft:frostbite";
+}
+
+bool FreezingMobEffect::isProtected(const Actor &actor) {
+    const auto leather = [](const ItemStack &item) {
+        if (item.mDefinition == nullptr || item.mCount <= 0)
+            return false;
+        const std::string &id = item.mDefinition->getIdentifier();
+        const ItemData *data = ItemDataTable::find(id);
+        return (data != nullptr && data->mArmorTier == (int32_t) ArmorTier::Leather)
+               || id == "minecraft:leather_horse_armor";
+    };
+    if (const auto *player = dynamic_cast<const ServerPlayer *>(&actor)) {
+        for (const ItemStack &item: player->getInventory().getArmorContents()) {
+            if (leather(item))
+                return true;
+        }
+    }
+    if (const auto *mob = dynamic_cast<const MobActor *>(&actor)) {
+        if (mob->getComponent("minecraft:freezing_immune") != nullptr)
+            return true;
+        for (int slot = MobEquipment::HEAD; slot <= MobEquipment::BODY; ++slot) {
+            if (leather(mob->getEquipment().getSlot(slot)))
+                return true;
+        }
+    }
+    return false;
+}
+
+bool FreezingMobEffect::isVulnerable(const Actor &actor) {
+    const auto *mob = dynamic_cast<const MobActor *>(&actor);
+    return mob != nullptr && mob->getComponent("minecraft:freezing_vulnerable") != nullptr;
 }
 
 void MobEffectManager::refreshDerivedAttributes() {

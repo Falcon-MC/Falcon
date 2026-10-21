@@ -13,6 +13,10 @@ public:
 
     bool canBeReplaced(const BlockState &state) const override;
 
+    bool suppressesFreezing() const override {
+        return true;
+    }
+
     bool hasDynamicShape() const override {
         return true;
     }

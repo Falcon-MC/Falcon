@@ -125,6 +125,10 @@ public:
         return false;
     }
 
+    virtual bool suppressesFreezing() const {
+        return false;
+    }
+
     virtual float getSpeedFactor() const {
         return 1.0f;
     }

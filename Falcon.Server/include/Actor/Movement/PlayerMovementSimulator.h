@@ -18,6 +18,8 @@ class PlayerMovementSimulator {
 public:
     static constexpr float PLAYER_BASE_OFFSET = 1.62f;
 
+    static float groundAcceleration(const ServerPlayer &player, float friction, bool sprinting);
+
     static void apply(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                       const PlayerAuthInputPacket &packet, Vector3f &feetPosition);
 };

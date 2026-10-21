@@ -23,6 +23,7 @@ class ServerNetworkHandler;
 class ServerPlayer;
 
 struct ProjectileData {
+    int32_t mPotionId = -1;
     float mBaseDamage = 0.0f;
     bool mCritical = false;
     int32_t mPunchLevel = 0;

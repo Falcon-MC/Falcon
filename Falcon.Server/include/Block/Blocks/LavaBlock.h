@@ -13,6 +13,10 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    bool suppressesFreezing() const override {
+        return true;
+    }
+
     int getTickRate() const override { return 30; }
     int getFlowDecayPerBlock() const override { return 2; }
     int getMinAdjacentSourcesToFormSource() const override { return 0; }

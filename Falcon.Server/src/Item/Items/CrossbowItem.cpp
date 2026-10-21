@@ -71,6 +71,11 @@ bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
         data.mBaseDamage = ARROW_BASE_DAMAGE;
         data.mCritical = true;
         data.mPiercingLevel = piercing;
+        const Tag *charged = item.mTag.get(CHARGED_ITEM_TAG);
+        if (charged != nullptr) {
+            const int32_t damage = charged->getInt("Damage", 0);
+            data.mPotionId = damage > 0 ? damage - 1 : -1;
+        }
 
         if (index > 0) {
             const float spread = index == 1 ? -0.17f : 0.17f;
@@ -136,6 +141,8 @@ void CrossbowItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player
 
     Tag chargedItem = Tag::ofCompound();
     chargedItem.put(CHARGED_NAME_TAG, Tag::ofString(ARROW_IDENTIFIER));
+    if (arrowSlot >= 0)
+        chargedItem.putInt("Damage", arrowAt(player, arrowSlot).mDamage);
     chargedItem.putInt(CHARGED_LOAD_TICK_TAG, (int32_t) owner.getCurrentTick());
     updated.mTag.put(CHARGED_ITEM_TAG, std::move(chargedItem));
     player.getInventory().setItemInHand(std::move(updated));
