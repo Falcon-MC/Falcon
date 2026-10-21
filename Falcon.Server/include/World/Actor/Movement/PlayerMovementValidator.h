@@ -4,10 +4,21 @@
 
 #include <cstdint>
 
+struct MovementCorrectionDetails {
+    const char *reason = nullptr;
+    Vector3f error;
+    float distanceSquared = 0.0f;
+    float threshold = 0.0f;
+    float fineThreshold = 0.0f;
+    uint8_t adjustments = 0;
+    uint64_t previousCorrectionTick = 0;
+};
+
 /** Position reconciliation policy, independent of travel physics and client velocity. */
 class PlayerMovementValidator {
 public:
-    bool reconcile(Vector3f &simulated, const Vector3f &reported, uint64_t tick, float threshold, bool strict);
+    bool reconcile(Vector3f &simulated, const Vector3f &reported, uint64_t tick, float threshold, bool strict,
+                   MovementCorrectionDetails *details = nullptr);
 
     void reset();
 

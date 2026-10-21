@@ -4,8 +4,10 @@
 #include <cmath>
 
 bool PlayerMovementValidator::reconcile(Vector3f &simulated, const Vector3f &reported, uint64_t tick,
-                                        float threshold, bool strict) {
+                                        float threshold, bool strict, MovementCorrectionDetails *details) {
     // BDS 1.26.10: comparator 0x140B4A560, defaults 0x1437F5420, property scaling 0x140158FA0.
+    if (details != nullptr)
+        *details = {};
     const uint8_t adjustments = mAdjustmentCount;
     mAdjustmentCount = 0;
     if (tick <= mLastCorrectionTick || tick - mLastCorrectionTick <= 5)
@@ -16,7 +18,17 @@ bool PlayerMovementValidator::reconcile(Vector3f &simulated, const Vector3f &rep
     const float dz = reported.z - simulated.z;
     const float distanceSquared = (dy * dy + dx * dx) + dz * dz;
     threshold = std::max(0.0f, threshold);
+    if (details != nullptr) {
+        details->error = Vector3f(dx, dy, dz);
+        details->distanceSquared = distanceSquared;
+        details->threshold = threshold;
+        details->fineThreshold = (threshold * threshold) * 0.0001f;
+        details->adjustments = adjustments;
+        details->previousCorrectionTick = mLastCorrectionTick;
+    }
     if ((adjustments >= 10 && distanceSquared > 0.0000001f) || distanceSquared > threshold) {
+        if (details != nullptr)
+            details->reason = distanceSquared > threshold ? "position_threshold" : "adjustment_limit";
         mLastCorrectionTick = tick;
         return true;
     }
@@ -30,6 +42,8 @@ bool PlayerMovementValidator::reconcile(Vector3f &simulated, const Vector3f &rep
         return false;
     }
     if (strict) {
+        if (details != nullptr)
+            details->reason = "strict_mismatch";
         mLastCorrectionTick = tick;
         return true;
     }

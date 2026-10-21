@@ -13,6 +13,7 @@
 #include "World/Item/ElytraItem.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Core/Debug/BedrockLog.h"
 
 #include <chrono>
 #include <filesystem>
@@ -185,6 +186,73 @@ namespace {
                 "Zero threshold rejected an exact match in normal mode");
         require(normal.reconcile(gradual, Vector3f(0.001f, 0, 0), 101, 0.0f, false),
                 "Zero threshold accepted displacement");
+    }
+
+    void checkCorrectionDiagnostics() {
+        PlayerMovementValidator validator;
+        MovementCorrectionDetails details;
+        Vector3f position;
+        require(validator.reconcile(position, Vector3f(1, 2, 3), 20, 0.5f, false, &details)
+                && std::string(details.reason) == "position_threshold"
+                && details.error.x == 1.0f && details.error.y == 2.0f && details.error.z == 3.0f
+                && details.distanceSquared == 14.0f && details.threshold == 0.5f
+                && details.previousCorrectionTick == 0,
+                "Large-error diagnostics lost the actual comparison or axis error");
+        require(!validator.reconcile(position, Vector3f(1, 2, 3), 21, 0.5f, false, &details)
+                && details.reason == nullptr, "Correction cooldown retained a stale reason");
+        validator.reset();
+        require(validator.reconcile(position, Vector3f(0.1f, 0, 0), 20, 0.5f, true, &details)
+                && std::string(details.reason) == "strict_mismatch"
+                && std::fabs(details.fineThreshold - 0.000025f) < 0.00000001f,
+                "Strict-mode diagnostics reported the broad threshold as the trigger");
+        validator.reset();
+        for (uint64_t tick = 20; tick < 30; ++tick) {
+            position = Vector3f();
+            require(!validator.reconcile(position, Vector3f(0.1f, 0, 0), tick, 0.5f, false, &details)
+                    && details.reason == nullptr, "Gradual adjustment was mislabeled as a correction");
+        }
+        position = Vector3f();
+        require(validator.reconcile(position, Vector3f(0.1f, 0, 0), 30, 0.5f, false, &details)
+                && std::string(details.reason) == "adjustment_limit" && details.adjustments == 10,
+                "Accumulated-drift diagnostics did not identify the exhausted adjustment budget");
+
+        class CorrectionLog final : public ILogEndPoint {
+        public:
+            void log(const LogDetails &entry) override {
+                if (entry.mMessage.find("[MovementCorrection]") != std::string::npos)
+                    messages.push_back(entry.mMessage);
+            }
+
+            std::vector<std::string> messages;
+        };
+        const auto log = std::make_shared<CorrectionLog>();
+        BedrockLog::flush();
+        BedrockLog::addEndPoint(log);
+        ServerNetworkHandler owner("Correction logging regression", "", 1);
+        NetworkIdentifier id;
+        ServerPlayer player(id, 7200);
+        player.setName("CorrectionProbe");
+        player.setGameType((int32_t) GameType::Creative);
+        player.setFlying(true);
+        player.setPosition(Vector3f(134.5f, 250.0f, 2.5f));
+        Level &level = owner.getLevelFor(player);
+        level.getChunk(8, 0);
+        level.getBlockActors().loadChunk(8, 0, {}, owner.getCodecContext());
+        PlayerAuthInputPacket packet;
+        packet.mTick = 20;
+        packet.mInputData = {(int32_t) PlayerAuthInputData::JumpCurrentRaw,
+                             (int32_t) PlayerAuthInputData::InternalUpdate};
+        Vector3f reported(135.5f, 252.0f, 5.5f);
+        PlayerMovementSimulator::apply(owner, id, player, packet, reported, false);
+        BedrockLog::flush();
+        BedrockLog::removeEndPoint(log);
+        require(log->messages.size() == 1, "A correction did not produce exactly one diagnostic record");
+        for (const char *field: {"player=CorrectionProbe", "reason=position_threshold", "tick=20 ",
+                                "error=(1,2,3)", "distance_squared=14", "reported=(135.5,252,5.5)",
+                                "predicted=(134.5,250,2.5)", "flags=0000000000000002:2000000000000000",
+                                "fly=1", "collision=(0,0,0)", "pending_inputs=0"})
+            require(log->messages.front().find(field) != std::string::npos,
+                    "Movement correction diagnostic omitted or overwrote a measured field");
     }
 
     void checkStrictReplay(ServerNetworkHandler &owner) {
@@ -1034,6 +1102,7 @@ int main() {
         ServerPaths::setRoot(directory);
         checkTimeline();
         checkPositionReconciliation();
+        checkCorrectionDiagnostics();
         checkServerPipeline();
         checkSimulationSettings();
         checkTravelPhysics();
