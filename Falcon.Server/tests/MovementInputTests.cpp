@@ -298,6 +298,170 @@ namespace {
         }
     }
 
+    void checkCreativeFlightTrajectory() {
+        ServerNetworkHandler owner("Creative flight regression", "", 1);
+        const auto path = ServerPaths::getRoot() / "flight.properties";
+        std::ofstream(path) << "simulation=true\nserver-authoritative-movement-strict=true\n";
+        owner.setProperties(PropertiesSettings(path.string()));
+        NetworkIdentifier id;
+        ServerPlayer locator(id, 7000);
+        Level &level = owner.getLevelFor(locator);
+        for (int chunkZ = 0; chunkZ < 4; ++chunkZ) {
+            level.getChunk(6, chunkZ);
+            level.getBlockActors().loadChunk(6, chunkZ, {}, owner.getCodecContext());
+        }
+        for (PlayerInputMode mode: {PlayerInputMode::Mouse, PlayerInputMode::Touch, PlayerInputMode::Gamepad}) {
+            ServerPlayer player(id, 7001);
+            player.setGameType((int32_t) GameType::Creative);
+            player.setFlying(true);
+            player.getAttributes() = ActorAttributes::createPlayerDefaults();
+            Vector3f expected(102.5f, 250.0f, 2.5f);
+            Vector3f velocity;
+            player.setPosition(expected);
+            for (int tick = 1; tick <= 100; ++tick) {
+                const bool moving = tick <= 30 || tick > 65;
+                const bool sprinting = tick >= 16 && tick <= 30;
+                const bool ascend = tick <= 10 || (tick >= 41 && tick <= 50);
+                const bool descend = tick >= 41 && tick <= 60;
+                const bool jumping = tick >= 11 && tick <= 20;
+                const bool sneaking = tick >= 21 && tick <= 25;
+                if (!moving && mode == PlayerInputMode::Mouse && !ascend && !descend && !jumping && !sneaking)
+                    velocity.y *= 0.375f;
+                if (ascend && descend)
+                    velocity.y = 0.0f;
+                else
+                    velocity.y += (ascend ? 0.15f : 0.0f) + (jumping ? 0.05f : 0.0f)
+                                  - (descend ? 0.22f : 0.0f) - (sneaking ? 0.15f : 0.0f);
+                if (moving)
+                    velocity.z += (sprinting ? 0.1f : 0.05f) * 0.98f;
+                expected.y += velocity.y;
+                expected.z += velocity.z;
+                velocity.y *= 0.6f;
+                velocity.z *= 0.91f * (moving ? 1.0f : mode == PlayerInputMode::Mouse ? 0.375f : 0.75f);
+                PlayerAuthInputPacket packet;
+                packet.mTick = tick;
+                packet.mInputMode = mode;
+                packet.mMotionY = moving ? 1.0f : 0.0f;
+                packet.mPosition = Vector3f(expected.x, expected.y + 1.62f, expected.z);
+                if (ascend)
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Ascend);
+                if (descend)
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Descend);
+                if (jumping)
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Jumping);
+                if (sneaking)
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Sneaking);
+                Vector3f feet = expected;
+                PlayerMovementSimulator::apply(owner, id, player, packet, feet, sprinting);
+                player.setPosition(feet);
+                require(std::fabs(feet.y - expected.y) < 0.00005f && std::fabs(feet.z - expected.z) < 0.00005f
+                        && std::fabs(player.getSimulatedVelocity().y - velocity.y) < 0.000002f
+                        && std::fabs(player.getSimulatedVelocity().z - velocity.z) < 0.000002f,
+                        "Creative flying trajectory differs from BDS vertical control, drag or idle friction");
+            }
+        }
+        for (int x = 101; x <= 104; ++x)
+            for (int z = 1; z <= 4; ++z)
+                level.setBlockState(x, 249, z, BlockState("minecraft:stone"));
+        ServerPlayer grounded(id, 7002);
+        grounded.setGameType((int32_t) GameType::Creative);
+        grounded.setFlying(true);
+        grounded.setPosition(Vector3f(102.5f, 250.0f, 2.5f));
+        grounded.setOnGround(true);
+        PlayerAuthInputPacket packet;
+        packet.mMotionY = 1.0f;
+        Vector3f feet = grounded.getPosition();
+        PlayerMovementSimulator::apply(owner, id, grounded, packet, feet, false);
+        require(!grounded.isSimulatedOnGround() && feet.y == 250.0f
+                && std::fabs(grounded.getSimulatedVelocity().z - 0.026754f) < 0.000002f,
+                "Flying player retained ground contact or ignored first-input surface friction");
+        grounded.setPosition(feet);
+        PlayerMovementSimulator::apply(owner, id, grounded, packet, feet, false);
+        require(std::fabs(grounded.getSimulatedVelocity().z - (0.026754f + 0.049f) * 0.91f) < 0.000002f,
+                "Flying player reused ground friction after releasing ground contact");
+
+        for (int x = 101; x <= 104; ++x)
+            for (int z = 1; z <= 4; ++z)
+                level.setBlockState(x, 253, z, BlockState("minecraft:stone"));
+        grounded.setPosition(Vector3f(102.5f, 251.0f, 2.5f));
+        grounded.setSimulatedPosition(grounded.getPosition());
+        grounded.setSimulatedVelocity(Vector3f(0.0f, 0.2f, 0.0f));
+        packet.mMotionY = 0.0f;
+        packet.mInputData = {(int32_t) PlayerAuthInputData::Ascend};
+        feet = Vector3f(102.5f, 251.2f, 2.5f);
+        PlayerMovementSimulator::apply(owner, id, grounded, packet, feet, false);
+        require(std::fabs(feet.y - 251.2f) < 0.00003f && grounded.getSimulatedVelocity().y == 0.0f,
+                "Creative flight penetrated a ceiling or retained blocked vertical velocity");
+        grounded.setPosition(Vector3f(102.5f, 250.5f, 2.5f));
+        grounded.setSimulatedPosition(grounded.getPosition());
+        grounded.setSimulatedVelocity(Vector3f(0.0f, 0.1f, 0.0f));
+        grounded.setFlying(false);
+        packet.mInputData.clear();
+        feet = Vector3f(102.5f, 250.6f, 2.5f);
+        PlayerMovementSimulator::apply(owner, id, grounded, packet, feet, false);
+        require(std::fabs(grounded.getSimulatedVelocity().y - 0.0196f) < 0.000002f,
+                "Stopping creative flight did not restore airborne gravity");
+    }
+
+    void checkShallowWaterExit() {
+        ServerNetworkHandler owner("Water exit regression", "", 1);
+        const auto path = ServerPaths::getRoot() / "water-exit.properties";
+        std::ofstream(path) << "simulation=true\nserver-authoritative-movement-strict=true\n";
+        owner.setProperties(PropertiesSettings(path.string()));
+        NetworkIdentifier id;
+        ServerPlayer locator(id, 7100);
+        Level &level = owner.getLevelFor(locator);
+        level.getChunk(7, 0);
+        level.getBlockActors().loadChunk(7, 0, {}, owner.getCodecContext());
+        for (bool ceiling: {false, true}) {
+            for (int x = 116; x <= 120; ++x)
+                for (int z = 0; z <= 12; ++z)
+                    for (int y = 249; y <= 254; ++y)
+                        level.setBlockState(x, y, z, BlockState(y == 249 || (z >= 5 && y == 250)
+                                || (ceiling && y == 253) ? "minecraft:stone" : "minecraft:air"));
+            for (int x = 116; x <= 120; ++x)
+                for (int z = 0; z < 5; ++z)
+                    level.setBlockState(x, 250, z, WaterBlock::source());
+            ServerPlayer player(id, 7101);
+            player.getAttributes() = ActorAttributes::createPlayerDefaults();
+            player.setPosition(Vector3f(118.5f, 250.5f, 4.65f));
+            player.setSimulatedVelocity(Vector3f(0.0f, 0.1f, 0.15f));
+            PlayerAuthInputPacket packet;
+            packet.mTick = 1;
+            packet.mMotionY = 1.0f;
+            packet.mInputData = {(int32_t) PlayerAuthInputData::Jumping};
+            Vector3f feet(118.5f, 250.64f, 4.7f);
+            PlayerMovementSimulator::apply(owner, id, player, packet, feet, false);
+            player.setPosition(feet);
+            require(player.hasHorizontalCollision() && std::fabs(feet.y - 250.64f) < 0.00003f,
+                    "Water exit fixture missed the shore collision");
+            require(std::fabs(player.getSimulatedVelocity().y - (ceiling ? 0.107f : 0.3f)) < 0.000002f,
+                    "Liquid exit boost ignored clearance or did not run after drag");
+            if (ceiling)
+                continue;
+            // After the boost, the contracted sensing box is dry and air gravity resumes.
+            Vector3f expected = feet;
+            Vector3f velocity = player.getSimulatedVelocity();
+            for (int tick = 2; tick <= 5; ++tick) {
+                velocity.z += 0.02f * 0.98f;
+                expected.y += velocity.y;
+                const bool blocked = expected.y < 251.0f && expected.z + velocity.z > 4.7f;
+                expected.z = blocked ? 4.7f : expected.z + velocity.z;
+                if (blocked)
+                    velocity.z = 0.0f;
+                velocity.y = (velocity.y - 0.08f) * 0.98f;
+                velocity.z *= 0.91f;
+                packet.mTick = tick;
+                feet = expected;
+                PlayerMovementSimulator::apply(owner, id, player, packet, feet, false);
+                player.setPosition(feet);
+                require(std::fabs(feet.y - expected.y) < 0.00003f && std::fabs(feet.z - expected.z) < 0.00003f,
+                        "Jumping from one-block-deep water to dry land diverged from the BDS exit trajectory");
+            }
+            require(feet.y > 251.0f && feet.z > 4.7f, "Player failed to clear the water's shore");
+        }
+    }
+
     void checkShallowWaterWalking() {
         ServerNetworkHandler owner("Shallow walking regression", "", 1);
         NetworkIdentifier id;
@@ -396,8 +560,13 @@ namespace {
                     packet.mInputData.push_back((int32_t) PlayerAuthInputData::StartSwimming);
                 if (scenario == 3 && tick % 2 == 0)
                     packet.mInputData.push_back((int32_t) PlayerAuthInputData::Jumping);
-                if (scenario == 4)
-                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Ascend);
+                if (scenario == 4) {
+                    packet.mMotionY = tick <= 8 || tick > 16 ? 1.0f : 0.0f;
+                    if (tick <= 12)
+                        packet.mInputData.push_back((int32_t) PlayerAuthInputData::Ascend);
+                    if (tick > 18)
+                        packet.mInputData.push_back((int32_t) PlayerAuthInputData::Descend);
+                }
                 return packet;
             };
             for (int64_t tick = 1; tick <= 24; ++tick) {
@@ -871,6 +1040,8 @@ int main() {
         checkTravelReplay();
         checkGroundJumpTrajectory();
         checkShallowWaterWalking();
+        checkCreativeFlightTrajectory();
+        checkShallowWaterExit();
     } catch (const std::exception &error) {
         std::clog << "Movement input regression failed: " << error.what() << '\n';
         result = 1;

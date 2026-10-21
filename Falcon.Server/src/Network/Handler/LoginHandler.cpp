@@ -1,4 +1,5 @@
 #include "Network/Handler/LoginHandler.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include "Scripting/Content/CustomContentRegistry.h"
 
@@ -590,8 +591,8 @@ PlayerAbilityData LoginHandler::buildAbilities(ServerNetworkHandler &owner, cons
     layer.mAbilitiesSet = abilitiesSet;
     layer.mAbilityValues = abilityValues;
     layer.mWalkSpeed = 0.1f;
-    layer.mFlySpeed = 0.05f;
-    layer.mVerticalFlySpeed = 1.0f;
+    layer.mFlySpeed = MovementPhysics::FLY_SPEED;
+    layer.mVerticalFlySpeed = MovementPhysics::VERTICAL_FLY_SPEED;
 
     PlayerAbilityData data;
     data.mUniqueActorId = player.getUniqueId();

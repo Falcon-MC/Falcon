@@ -10,6 +10,7 @@ struct PlayerTravelComponent {
     bool crawling = false;
     bool scaffoldDescend = false;
     bool isStuck = false;
+    float frictionModifier = 1.0f;
     float friction = 0.0f;
     float acceleration = 0.0f;
     AxisAlignedBB box;

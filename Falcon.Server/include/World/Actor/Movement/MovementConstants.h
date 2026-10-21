@@ -3,6 +3,8 @@
 #include <cstdint>
 
 namespace MovementPhysics {
+    inline constexpr float FLY_SPEED = 0.05f;
+    inline constexpr float VERTICAL_FLY_SPEED = 1.0f;
     inline constexpr float AIR_FRICTION = 0.91f;
     inline constexpr float GRAVITY = 0.08f;
     inline constexpr float SLOW_FALLING_GRAVITY = 0.01f;

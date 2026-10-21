@@ -1,4 +1,6 @@
 #include "World/Actor/Movement/PlayerMovementPipeline.h"
+#include "World/Actor/Movement/Systems/ClimbOutOfLiquidSystem.h"
+#include "World/Actor/Movement/Systems/FlyingPlayerStuckOnGroundWorkaroundSystem.h"
 #include "World/Actor/Movement/Systems/PlayerMovementAdmissionSystem.h"
 #include "World/Actor/Movement/Systems/MovementAbilitiesSystem.h"
 
@@ -52,12 +54,14 @@ void PlayerMovementPipeline::tick(PlayerMovementContext &context) {
     PlayerMoveRelativeSystem::tick(context);
     BubbleColumnMovementSystem::tick(context);
     PlayerTraversalSystem::tick(context);
+    FlyingPlayerStuckOnGroundWorkaroundSystem::tick(context);
     PlayerCollisionSystem::tick(context);
     PlayerFlightDragSystem::tick(context);
     WaterDragSystem::tick(context);
     LavaDragSystem::tick(context);
     PlayerGravitySystem::tick(context);
     PlayerFrictionSystem::tick(context);
+    ClimbOutOfLiquidSystem::tick(context);
     PlayerPostTravelSystem::tick(context);
     PlayerPredictionSystem::tick(context);
 }
