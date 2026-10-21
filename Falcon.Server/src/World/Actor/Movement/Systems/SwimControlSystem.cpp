@@ -9,9 +9,8 @@ void SwimControlSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &contact = context.contact;
 
-    // BDS SwimControlSystem (0x140F4FB60) requires Swimming and excludes MobIsJumping,
-    // but does not require WasInWater: control also runs on the surface-exit tick.
-    if (abilities.swimming && !input.jumpHeld) {
+    // BDS's view (0x140F54910) requires WasInWater and excludes MobIsJumping.
+    if (contact.waterTravel && abilities.swimming && !input.jumpHeld) {
         const float lookY = mojangSinDegrees(-input.packet.mRotation.x);
         const float factor = lookY < -0.2f ? 0.085f : 0.06f;
         if (lookY <= 0.0f || contact.liquid.swimProbeInWater)

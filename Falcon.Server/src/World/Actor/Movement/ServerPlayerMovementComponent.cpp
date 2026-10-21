@@ -48,9 +48,27 @@ std::shared_ptr<const PlayerAuthInputPacket> ServerPlayerMovementComponent::take
     return packet;
 }
 
+void ServerPlayerMovementComponent::deferFlightRequest(bool flying) {
+    if (!mFlightRequests.empty() && mFlightRequests.back().afterTick == mLastReceivedTick) {
+        mFlightRequests.back().flying = flying;
+    } else if (mFlightRequests.size() < MAX_PENDING_INPUTS) {
+        mFlightRequests.push_back({mLastReceivedTick, flying});
+    }
+}
+
+bool ServerPlayerMovementComponent::takeFlightRequest(int64_t inputTick, bool inclusive, bool &flying) {
+    if (mFlightRequests.empty() || mFlightRequests.front().afterTick > inputTick
+        || (!inclusive && mFlightRequests.front().afterTick == inputTick))
+        return false;
+    flying = mFlightRequests.front().flying;
+    mFlightRequests.pop_front();
+    return true;
+}
+
 void ServerPlayerMovementComponent::clearPending() {
     // A teleport invalidates pending coordinates, but must not reopen the accepted tick sequence.
     mInputs.clear();
+    mFlightRequests.clear();
 }
 
 size_t ServerPlayerMovementComponent::catchupSteps(double previousTickMilliseconds) {

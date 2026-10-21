@@ -161,6 +161,7 @@ public:
         mHasPendingKnockback = false;
         mSimulatedSneaking = false;
         mSimulatedCrawling = false;
+        mSimulatedSwimming = false;
         mSlowdownTicks = 0;
         mHasSupportingBlock = false;
     }
@@ -187,6 +188,14 @@ public:
     bool isSimulatedSneaking() const { return mSimulatedSneaking; }
 
     bool isSimulatedCrawling() const { return mSimulatedCrawling; }
+
+    bool isSimulatedSwimming() const {
+        return mSimulatedSwimming;
+    }
+
+    void setSimulatedSwimming(bool swimming) {
+        mSimulatedSwimming = swimming;
+    }
 
     void setSimulatedPose(bool sneaking, bool crawling) {
         mSimulatedSneaking = sneaking;
@@ -685,6 +694,7 @@ private:
     int32_t mJumpDelay = 0;
     bool mSimulatedSneaking = false;
     bool mSimulatedCrawling = false;
+    bool mSimulatedSwimming = false;
     int32_t mSlowdownTicks = 0;
     bool mHasSupportingBlock = false;
     Vector3i mSupportingBlock;

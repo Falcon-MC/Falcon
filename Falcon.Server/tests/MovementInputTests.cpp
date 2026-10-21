@@ -572,13 +572,125 @@ namespace {
         packet.mRotation.x = -30.0f;
         context.state.velocity.y = 0.1f;
         SwimControlSystem::tick(context);
+        require(context.state.velocity.y == 0.1f,
+                "Swim control ran without BDS's required water contact");
+        context.contact.waterTravel = true;
+        SwimControlSystem::tick(context);
         require(context.state.velocity.y == 0.0f,
-                "Swimming surface exit skipped BDS vertical control without water travel contact");
+                "Swim control ignored the dry head block while the body was still in water");
         context.input.jumpHeld = true;
         context.state.velocity.y = 0.1f;
         SwimControlSystem::tick(context);
         require(context.state.velocity.y == 0.1f,
                 "Swim control ran despite the jumping exclusion");
+    }
+
+    void checkConfinedSwimmingPose() {
+        ServerNetworkHandler owner("Confined pose regression", "", 1);
+        NetworkIdentifier id;
+        ServerPlayer locator(id, 7360);
+        Level &level = owner.getLevelFor(locator);
+        level.getChunk(10, 0);
+        level.getBlockActors().loadChunk(10, 0, {}, owner.getCodecContext());
+        for (bool wet: {false, true}) {
+            for (int x = 164; x <= 168; ++x)
+                for (int z = 0; z <= 4; ++z) {
+                    level.setBlockState(x, 249, z, BlockState("minecraft:stone"));
+                    level.setBlockState(x, 250, z, wet ? WaterBlock::source() : BlockState("minecraft:air"));
+                    level.setBlockState(x, 251, z, BlockState("minecraft:ice"));
+                }
+            ServerPlayer player(id, 7361);
+            player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+            player.getAttributes() = ActorAttributes::createPlayerDefaults();
+            player.setPosition(Vector3f(166.5f, 250.1f, 2.5f));
+            player.getFlags().set(ActorFlag::Swimming, true);
+            player.getMovementValidator().onMovementEffect(100);
+            PlayerAuthInputPacket packet;
+            packet.mPosition = Vector3f(166.5f, 251.72f, 2.5f);
+            packet.mInputData = {(int32_t) PlayerAuthInputData::StopSwimming};
+            for (int tick = 100; tick <= 102; ++tick) {
+                packet.mTick = tick;
+                player.getMovementInputs().enqueue(packet);
+                MovementInputProbe::step(owner, player, tick);
+                require(player.getFlags().get(ActorFlag::Swimming) == wet
+                        && player.getFlags().get(ActorFlag::Crawling) == !wet
+                        && !player.isSimulatedSneaking(),
+                        "StopSwimming expanded a confined swimmer instead of preserving a valid horizontal pose");
+                require(player.getPosition().y < 250.4f,
+                        "Changing pose moved the player through the ice ceiling");
+            }
+            if (!wet) {
+                for (int x = 164; x <= 168; ++x)
+                    for (int z = 0; z <= 4; ++z)
+                        level.setBlockState(x, 251, z, BlockState("minecraft:air"));
+                packet.mTick = 103;
+                packet.mInputData.clear();
+                player.getMovementInputs().enqueue(packet);
+                MovementInputProbe::step(owner, player, 103);
+                require(!player.getFlags().get(ActorFlag::Crawling),
+                        "Crawling did not stop automatically when standing became possible");
+            }
+        }
+    }
+
+    void checkQueuedFlightRequests() {
+        ServerNetworkHandler owner("Queued flight regression", "", 1);
+        const auto path = ServerPaths::getRoot() / "queued-flight.properties";
+        std::ofstream(path) << "simulation=true\nserver-authoritative-movement-strict=true\n";
+        owner.setProperties(PropertiesSettings(path.string()));
+        NetworkIdentifier id;
+        ServerPlayer player(id, 7350);
+        player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+        player.getAttributes() = ActorAttributes::createPlayerDefaults();
+        player.setGameType((int32_t) GameType::Creative);
+        player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
+        player.getMovementValidator().onMovementEffect(100);
+        Level &level = owner.getLevelFor(player);
+        level.getChunk(9, 0);
+        level.getBlockActors().loadChunk(9, 0, {}, owner.getCodecContext());
+        PlayerAuthInputPacket packet;
+        packet.mTick = 100;
+        packet.mPosition = Vector3f(150.5f, 251.62f, 2.5f);
+        player.getMovementInputs().enqueue(packet);
+        require(MovementHandler::requestFlight(owner, id, player, true, true) && !player.isFlying(),
+                "An ability request changed the state of an older queued movement input");
+        packet.mTick = 101;
+        packet.mInputData = {(int32_t) PlayerAuthInputData::WantUp};
+        packet.mPosition.y = 251.6916f;
+        player.getMovementInputs().enqueue(packet);
+        MovementInputProbe::step(owner, player, 1);
+        require(player.isFlying() && player.getPosition().y == 250.0f
+                && std::fabs(player.getSimulatedVelocity().y + 0.0784f) < 0.000002f,
+                "Flight enabled retroactively for an older queued input");
+        MovementInputProbe::step(owner, player, 2);
+        require(std::fabs(player.getPosition().y - 250.0716f) < 0.00003f
+                && std::fabs(player.getSimulatedVelocity().y - 0.04296f) < 0.000002f,
+                "Deferred flight did not apply to the next input boundary");
+        packet.mTick = 102;
+        packet.mPosition.y = 251.88456f;
+        player.getMovementInputs().enqueue(packet);
+        require(MovementHandler::requestFlight(owner, id, player, false, true) && player.isFlying(),
+                "Stop flight changed an already queued flying input");
+        MovementInputProbe::step(owner, player, 3);
+        require(!player.isFlying() && std::fabs(player.getSimulatedVelocity().y - 0.115776f) < 0.000002f,
+                "Queued flight input received fall gravity before its flight-stop boundary");
+
+        ServerPlayerMovementComponent timeline;
+        timeline.enqueue(input(100));
+        timeline.deferFlightRequest(true);
+        bool flying = false;
+        require(!timeline.takeFlightRequest(100, false, flying)
+                && timeline.takeFlightRequest(101, false, flying) && flying,
+                "Discarding an input boundary lost its deferred ability request");
+        timeline.deferFlightRequest(true);
+        timeline.deferFlightRequest(false);
+        require(timeline.takeFlightRequest(100, true, flying) && !flying
+                && !timeline.hasPendingFlightRequest(),
+                "Repeated ability requests at one input boundary were not coalesced");
+        timeline.deferFlightRequest(true);
+        timeline.clearPending();
+        require(!timeline.hasPendingFlightRequest(),
+                "Resetting pending movement retained an obsolete flight request");
     }
 
     void checkFlightInputTransitions() {
@@ -1145,6 +1257,12 @@ namespace {
         require(horizontalWater.eyeInWater && horizontalWater.swimProbeInWater
                 && !LiquidBlocksFetch::at(level, waterBelowCeiling).eyeInWater,
                 "Swimming eyes or swim-control probe used standing offsets");
+        const LiquidContact nearSurface = LiquidBlocksFetch::at(level, Vector3f(50.5f, 250.55f, 2.5f), true);
+        require(nearSurface.eyeInWater && nearSurface.swimProbeInWater,
+                "Swim steering used a body-height probe above the head block");
+        const LiquidContact crouched = LiquidBlocksFetch::at(level, Vector3f(50.5f, 249.5f, 2.5f), false, 1.49f);
+        require(crouched.eyeInWater,
+                "Crouched water sensing kept the standing eye height");
         auto surface = makePlayer(false);
         surface->setPosition(Vector3f(50.5f, 250.65f, 2.5f));
         surface->setSimulatedPosition(surface->getPosition());
@@ -1279,6 +1397,8 @@ int main() {
         checkShallowWaterWalking();
         checkCreativeFlightTrajectory();
         checkAnalogInputSlowdown();
+        checkConfinedSwimmingPose();
+        checkQueuedFlightRequests();
         checkFlightInputTransitions();
         checkShallowWaterExit();
     } catch (const std::exception &error) {

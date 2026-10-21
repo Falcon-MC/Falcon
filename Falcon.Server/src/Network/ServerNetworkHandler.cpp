@@ -1926,7 +1926,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestAbil
     if (packet.mAbility != Ability::Flying || packet.mType != AbilityValueType::Boolean)
         return;
 
-    MovementHandler::requestFlight(*this, id, *player, packet.mBoolValue);
+    MovementHandler::requestFlight(*this, id, *player, packet.mBoolValue, true);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const MobEquipmentPacket &packet) {

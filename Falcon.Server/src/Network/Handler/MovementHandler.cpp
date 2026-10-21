@@ -327,13 +327,20 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
 }
 
 bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkIdentifier &id,
-                                     ServerPlayer &player, bool flying) {
+                                     ServerPlayer &player, bool flying, bool deferUntilInput) {
     const int32_t gameType = player.getGameType();
     const bool mayFly = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator;
 
     if (flying && !mayFly) {
         owner._disconnect(id, player.localize("falcon.disconnect.flyingDisabled"));
         return false;
+    }
+
+    // Unticked AuthInput packets predate this un-timestamped ability request.
+    if (deferUntilInput && (player.getMovementInputs().pendingCount() != 0
+                            || player.getMovementInputs().hasPendingFlightRequest())) {
+        player.getMovementInputs().deferFlightRequest(flying);
+        return true;
     }
 
     if (flying != player.isFlying()) {
@@ -404,22 +411,32 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSneaking))
         sneaking = false;
 
+    if (player.hasSimulatedVelocity())
+        sneaking = player.isSimulatedSneaking();
     flags.set(ActorFlag::Sneaking, sneaking);
 
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSwimming))
-        flags.set(ActorFlag::Swimming, true);
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSwimming))
-        flags.set(ActorFlag::Swimming, false);
+    if (player.hasSimulatedVelocity()) {
+        flags.set(ActorFlag::Swimming, player.isSimulatedSwimming());
+    } else {
+        if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSwimming))
+            flags.set(ActorFlag::Swimming, true);
+        if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSwimming))
+            flags.set(ActorFlag::Swimming, false);
+    }
 
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartGliding))
         flags.set(ActorFlag::Gliding, true);
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopGliding))
         flags.set(ActorFlag::Gliding, false);
 
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartCrawling))
-        flags.set(ActorFlag::Crawling, true);
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopCrawling))
-        flags.set(ActorFlag::Crawling, false);
+    if (player.hasSimulatedVelocity()) {
+        flags.set(ActorFlag::Crawling, player.isSimulatedCrawling());
+    } else {
+        if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartCrawling))
+            flags.set(ActorFlag::Crawling, true);
+        if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopCrawling))
+            flags.set(ActorFlag::Crawling, false);
+    }
 
     if (flags.getLowBits() != previous.getLowBits() || flags.getHighBits() != previous.getHighBits())
         owner._sendEntityData(player);

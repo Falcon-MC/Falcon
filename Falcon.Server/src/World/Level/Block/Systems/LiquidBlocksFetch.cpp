@@ -5,7 +5,6 @@
 #include <cmath>
 
 namespace {
-    const float PLAYER_BASE_OFFSET = 1.62f;
     const float PLAYER_HALF_WIDTH = 0.3f;
 }
 
@@ -15,7 +14,8 @@ LiquidContact LiquidBlocksFetch::at(Level &level, const Vector3f &feet, bool hor
     Vector3f lavaFlow;
     // BDS horizontal pose uses width as height (0x141002DC0), with eyes at 0.4 (0x140F1A3A0).
     const float height = horizontalPose ? PLAYER_HALF_WIDTH * 2.0f : bodyHeight;
-    const float eyeHeight = horizontalPose ? 0.4f : PLAYER_BASE_OFFSET;
+    // BDS 0x140F1A3A0 uses a separate eye offset for modern crouching, not the body height.
+    const float eyeHeight = horizontalPose ? 0.4f : bodyHeight < 1.8f ? 1.62001f - 0.35f : 1.62001f;
     // BDS 0x140FC98E0 shrinks players' liquid sensing boxes; only ItemActorFlagComponent skips this.
     // Water uses (0.001, 0.401, 0.001), lava (0.1, 0.4, 0.1), collapsing inverted axes to the center.
     const auto scan = [&](bool lava) {
@@ -78,8 +78,8 @@ LiquidContact LiquidBlocksFetch::at(Level &level, const Vector3f &feet, bool hor
     const LiquidInfo feetInfo = level.getLiquidInfo(eyeX, feetBlockY, eyeZ);
     const float feetLiquidTop = (float) feetBlockY + 1.0f - (feetInfo.height - 0.1111111f);
     contact.feetInWater = feetInfo.water && !feetInfo.bubble && feet.y < feetLiquidTop;
-    // SwimControlSystem samples the block at the Mob swim offset (0x1438827F0).
-    const LiquidInfo probe = level.getLiquidInfo(eyeX, (int32_t) std::floor(feet.y + height * 0.85f), eyeZ);
-    contact.swimProbeInWater = probe.water || probe.bubble;
+    // BDS PlayerBoundingBoxStateUpdateSystem (0x140F97340) stores the head block's
+    // liquid material in PlayerInputRequest +33, independently of the fluid surface height.
+    contact.swimProbeInWater = eye.water || eye.bubble || eye.lava;
     return contact;
 }

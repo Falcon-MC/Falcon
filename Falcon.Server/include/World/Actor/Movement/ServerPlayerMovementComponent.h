@@ -21,6 +21,14 @@ public:
 
     void clearPending();
 
+    bool hasPendingFlightRequest() const {
+        return !mFlightRequests.empty();
+    }
+
+    void deferFlightRequest(bool flying);
+
+    bool takeFlightRequest(int64_t inputTick, bool inclusive, bool &flying);
+
     size_t pendingCount() const {
         return mInputs.size();
     }
@@ -36,7 +44,13 @@ public:
     static size_t catchupSteps(double previousTickMilliseconds);
 
 private:
+    struct FlightRequest {
+        int64_t afterTick;
+        bool flying;
+    };
+
     std::deque<std::shared_ptr<const PlayerAuthInputPacket>> mInputs;
+    std::deque<FlightRequest> mFlightRequests;
     int64_t mLastReceivedTick = -1;
     int64_t mLastProcessedTick = -1;
     int64_t mLastServerTick = -1;

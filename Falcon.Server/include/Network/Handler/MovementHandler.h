@@ -14,7 +14,8 @@ public:
     static void handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                       const PlayerAuthInputPacket &packet);
 
-    static bool requestFlight(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player, bool flying);
+    static bool requestFlight(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player, bool flying,
+                              bool deferUntilInput = false);
 
     static void handleMovement(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &feetPosition,
                                const Vector3f &rotation);
