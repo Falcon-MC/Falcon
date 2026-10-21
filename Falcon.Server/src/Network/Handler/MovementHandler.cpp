@@ -2,6 +2,7 @@
 
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
+#include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Movement/RideControlSystem.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -32,8 +33,11 @@
 namespace {
     LiquidContact liquidContact(Level &level, const ServerPlayer &player, const Vector3f &feet) {
         const ActorFlags &flags = player.getFlags();
+        const bool sneaking = player.hasSimulatedVelocity() ? player.isSimulatedSneaking()
+                                                           : flags.get(ActorFlag::Sneaking);
         return LiquidBlocksFetch::at(level, feet, flags.get(ActorFlag::Swimming)
-                                                 || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling));
+                                                 || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling),
+                                    sneaking ? MovementPhysics::PLAYER_SNEAKING_HEIGHT : MovementPhysics::PLAYER_HEIGHT);
     }
 
     void dispatchPlayerState(ServerPlayer &player, FalconEventType type, bool state) {
@@ -175,18 +179,12 @@ bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPositio
     const float minZ = feetPosition.z - PLAYER_HALF_WIDTH + shrink;
     const float maxZ = feetPosition.z + PLAYER_HALF_WIDTH - shrink;
 
-    const int32_t lowestY = (int32_t) std::floor(feetPosition.y - GROUND_PROBE_DEPTH);
-    const int32_t highestY = (int32_t) std::floor(feetPosition.y);
-
-    for (int32_t y = lowestY; y <= highestY; y++) {
-        for (int32_t x = (int32_t) std::floor(minX); x <= (int32_t) std::floor(maxX); x++) {
-            for (int32_t z = (int32_t) std::floor(minZ); z <= (int32_t) std::floor(maxZ); z++) {
-                if (level.isSolidAt(x, y, z))
-                    return true;
-            }
-        }
+    const AxisAlignedBB support(minX, feetPosition.y - AABB_EPSILON, minZ,
+                                maxX, feetPosition.y, maxZ);
+    for (const AxisAlignedBB &shape: level.getCollisionBoxes(support)) {
+        if (shape.intersectsWith(support))
+            return true;
     }
-
     return false;
 }
 
@@ -210,7 +208,9 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
     const bool wasOnGround = player.isOnGround();
     Level &level = owner.getLevelFor(player);
-    const bool onGround = checkGroundState(level, feetPosition);
+    // Preserve collision output: a proximity probe can report ground during a jump or above shallow water.
+    const bool onGround = player.hasSimulatedGround() ? player.isSimulatedOnGround()
+                                                     : checkGroundState(level, feetPosition);
     player.setOnGround(onGround);
 
     const LiquidContact water = liquidContact(level, player, feetPosition);

@@ -43,7 +43,9 @@ ActorMoveResult ActorCollisionSystem::move(Level &level, AxisAlignedBB &box, con
     result.mCollidedX = moved.x != delta.x;
     result.mCollidedY = moved.y != delta.y;
     result.mCollidedZ = moved.z != delta.z;
-    result.mOnGround = result.mCollidedY && delta.y < 0.0f;
+    // BDS FinalizeMoveSystem (0x140C638A0) retains grounded state for a zero-Y move.
+    result.mOnGround = (result.mCollidedY && delta.y < 0.0f)
+                       || (wasOnGround && !result.mCollidedY && delta.y == 0.0f);
     return result;
 }
 

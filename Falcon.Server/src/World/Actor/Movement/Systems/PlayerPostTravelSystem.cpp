@@ -35,10 +35,6 @@ void PlayerPostTravelSystem::tick(PlayerMovementContext &context) {
 
     if (!abilities.spectator)
         slideAlongHoney(context.level, travel.box, state.velocity);
-    if (abilities.gameType == (int32_t) GameType::Creative || abilities.spectator)
-        context.player.setOnGround(state.onGround);
 
-    if (state.jumpDelay > 0)
-        state.jumpDelay -= 1;
     context.player.setJumpDelay(state.jumpDelay);
 }

@@ -20,5 +20,5 @@ struct LiquidContact {
 
 class LiquidBlocksFetch {
 public:
-    static LiquidContact at(Level &level, const Vector3f &feet, bool horizontalPose = false);
+    static LiquidContact at(Level &level, const Vector3f &feet, bool horizontalPose = false, float bodyHeight = 1.8f);
 };

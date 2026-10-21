@@ -2,6 +2,7 @@
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Network/Handler/MovementHandler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
@@ -225,6 +226,129 @@ namespace {
                 "Delayed replay diverged from sequential strict simulation");
         require(immediate.isOnGround() && delayed.isOnGround(), "Replay did not preserve landing collision state");
         require(delayed.getMovementInputs().lastProcessedTick() == 10, "Catchup used the server tick as the input tick");
+    }
+
+    // BDS jump 0x140EAFAF0, cooldown 0x140EB0DA0, ground/air travel and gravity.
+    void checkGroundJumpTrajectory() {
+        for (bool strict: {false, true}) {
+            ServerNetworkHandler owner("Ground trajectory regression", "", 1);
+            const auto path = ServerPaths::getRoot() / "ground-trajectory.properties";
+            std::ofstream(path) << "simulation=true\nserver-authoritative-movement-strict="
+                                << (strict ? "true" : "false") << "\n";
+            owner.setProperties(PropertiesSettings(path.string()));
+            NetworkIdentifier id;
+            ServerPlayer player(id, 5000);
+            player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+            player.getAttributes() = ActorAttributes::createPlayerDefaults();
+            Level &level = owner.getLevelFor(player);
+            for (int chunkZ = 0; chunkZ < 4; ++chunkZ) {
+                level.getChunk(4, chunkZ);
+                level.getBlockActors().loadChunk(4, chunkZ, {}, owner.getCodecContext());
+            }
+            for (int x = 69; x <= 72; ++x)
+                for (int z = 0; z < 64; ++z)
+                    for (int y = 249; y <= 254; ++y)
+                        level.setBlockState(x, y, z, BlockState(y == 249 ? "minecraft:stone" : "minecraft:air"));
+            Vector3f expected(70.5f, 250.0f, 2.5f);
+            Vector3f velocity;
+            bool grounded = true;
+            int jumpDelay = 0;
+            int jumps = 0;
+            player.setPosition(expected);
+            player.setOnGround(true);
+            for (int tick = 1; tick <= 60; ++tick) {
+                const bool wasGrounded = grounded;
+                if (jumpDelay > 0)
+                    --jumpDelay;
+                const bool jumpHeld = tick > 5;
+                if (jumpHeld && grounded && jumpDelay == 0) {
+                    velocity.y = std::max(0.42f, velocity.y);
+                    velocity.z += 0.2f;
+                    jumpDelay = 10;
+                    ++jumps;
+                }
+                velocity.z += (grounded ? 0.13f : 0.026f) * 0.98f;
+                const float requestedY = expected.y + velocity.y;
+                grounded = requestedY < 250.0f || (grounded && velocity.y == 0.0f);
+                expected.y = std::max(250.0f, requestedY);
+                expected.z += velocity.z;
+                if (grounded)
+                    velocity.y = 0.0f;
+                velocity.y = (velocity.y - 0.08f) * 0.98f;
+                velocity.z *= wasGrounded ? 0.54600006f : 0.91f;
+                PlayerAuthInputPacket packet;
+                packet.mTick = 100 + tick;
+                packet.mPosition = Vector3f(expected.x, expected.y + 1.62f, expected.z);
+                packet.mMotionY = 1.0f;
+                packet.mInputData = {(int32_t) PlayerAuthInputData::Sprinting};
+                if (jumpHeld)
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::Jumping);
+                if (tick == 6)
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::StartJumping);
+                player.getMovementInputs().enqueue(packet);
+                MovementInputProbe::step(owner, player, tick);
+                require(player.isOnGround() == grounded,
+                        "Ground handler overwrote the jump collision state with a block below the player");
+                require(std::fabs(player.getPosition().y - expected.y) < 0.00005f
+                        && std::fabs(player.getPosition().z - expected.z) < 0.00005f
+                        && std::fabs(player.getSimulatedVelocity().z - velocity.z) < 0.00001f,
+                        "Held sprint-jump trajectory diverged from the BDS reference");
+            }
+            require(jumps >= 4, "Trajectory fixture failed to exercise held repeat jumps");
+        }
+    }
+
+    void checkShallowWaterWalking() {
+        ServerNetworkHandler owner("Shallow walking regression", "", 1);
+        NetworkIdentifier id;
+        ServerPlayer locator(id, 6000);
+        Level &level = owner.getLevelFor(locator);
+        for (int chunkZ = 0; chunkZ < 2; ++chunkZ) {
+            level.getChunk(5, chunkZ);
+            level.getBlockActors().loadChunk(5, chunkZ, {}, owner.getCodecContext());
+        }
+        for (bool slab: {false, true}) {
+            for (int x = 83; x <= 88; ++x)
+                for (int z = 0; z < 32; ++z) {
+                    for (int y = 249; y <= 253; ++y)
+                        level.setBlockState(x, y, z, BlockState(y == 249 ? "minecraft:stone" : "minecraft:air"));
+                    if (slab) {
+                        level.setBlockState(x, 250, z, BlockState("minecraft:oak_slab"));
+                        level.setBlockStateAtLayer(x, 250, z, 1, WaterBlock::source());
+                    } else {
+                        level.setBlockState(x, 250, z, WaterBlock::source());
+                    }
+                }
+            ServerPlayer player(id, slab ? 6002 : 6001);
+            player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+            player.getAttributes() = ActorAttributes::createPlayerDefaults();
+            const float feetY = slab ? 250.5f : 250.0f;
+            player.setPosition(Vector3f(86.5f, feetY, 3.5f));
+            player.setOnGround(true);
+            require(MovementHandler::checkGroundState(level, player.getPosition())
+                    && !MovementHandler::checkGroundState(level, Vector3f(86.5f, feetY + 0.42f, 3.5f)),
+                    "Ground probe ignored the actual stone/slab collision surface");
+            require(LiquidBlocksFetch::at(level, player.getPosition()).water
+                    && !LiquidBlocksFetch::at(level, player.getPosition()).eyeSubmerged,
+                    "Shallow walking fixture did not have water below the head");
+            float expectedZ = 3.5f;
+            float velocityZ = 0.0f;
+            for (int tick = 1; tick <= 30; ++tick) {
+                velocityZ += 0.02f * 0.98f;
+                expectedZ += velocityZ;
+                velocityZ *= 0.8f;
+                PlayerAuthInputPacket packet;
+                packet.mTick = 200 + tick;
+                packet.mMotionY = 1.0f;
+                packet.mPosition = Vector3f(86.5f, feetY + 1.62f, expectedZ);
+                player.getMovementInputs().enqueue(packet);
+                MovementInputProbe::step(owner, player, tick);
+                require(player.isOnGround() && std::fabs(player.getPosition().y - feetY) < 0.00002f
+                        && std::fabs(player.getPosition().z - expectedZ) < 0.00005f
+                        && std::fabs(player.getSimulatedVelocity().z - velocityZ) < 0.00001f,
+                        "Walking on stone or waterlogged slabs in shallow water diverged from BDS water travel");
+            }
+        }
     }
 
     void checkTravelReplay() {
@@ -523,6 +647,29 @@ namespace {
         }
 
         terrain(stone, WaterBlock::source());
+        // BDS LiquidPhysicsSystem 0x140FC98E0 contracts the sensing volume, independently of eye water.
+        const Vector3f shallowFeet(50.5f, 250.75f, 2.5f);
+        for (int x = 49; x <= 52; ++x)
+            for (int z = 1; z <= 4; ++z)
+                for (int y = 251; y <= 252; ++y)
+                    level.setBlockState(x, y, z, air);
+        require(!LiquidBlocksFetch::at(level, shallowFeet).water
+                && LiquidBlocksFetch::at(level, Vector3f(50.5f, 250.59f, 2.5f)).water,
+                "Shallow water still used the player's uncontracted collision box");
+        auto shallow = makePlayer(false);
+        shallow->setPosition(shallowFeet);
+        shallow->setSimulatedPosition(shallowFeet);
+        step(*shallow);
+        close(shallow->getSimulatedVelocity().z, 0.017836f,
+              "Player above shallow water received underwater acceleration and friction");
+        close(shallow->getSimulatedVelocity().y, -0.0784f,
+              "Player above shallow water received water gravity");
+        terrain(stone, air);
+        level.setBlockState(51, 250, 2, WaterBlock::source());
+        require(!LiquidBlocksFetch::at(level, Vector3f(50.7f, 250.0f, 2.5f)).water
+                && LiquidBlocksFetch::at(level, Vector3f(50.71f, 250.0f, 2.5f)).water,
+                "Touching a water block boundary was treated as water travel");
+        terrain(stone, WaterBlock::source());
         auto water = makePlayer(false);
         step(*water);
         close(water->getSimulatedVelocity().z, 0.01568f, "Water acceleration or drag differs");
@@ -580,6 +727,9 @@ namespace {
         terrain(air, air);
         level.setBlockState(50, 251, 2, WaterBlock::source());
         const Vector3f waterBelowCeiling(50.5f, 250.0f, 2.5f);
+        require(LiquidBlocksFetch::at(level, Vector3f(50.5f, 249.7f, 2.5f)).water
+                && !LiquidBlocksFetch::at(level, Vector3f(50.5f, 249.7f, 2.5f), false, 1.49f).water,
+                "Liquid sensing ignored the crouching collision height");
         require(LiquidBlocksFetch::at(level, waterBelowCeiling).water
                 && !LiquidBlocksFetch::at(level, waterBelowCeiling, true).water,
                 "Horizontal liquid sampling still included the standing body volume");
@@ -592,13 +742,13 @@ namespace {
                 && !LiquidBlocksFetch::at(level, waterBelowCeiling).eyeInWater,
                 "Swimming eyes or swim-control probe used standing offsets");
         auto surface = makePlayer(false);
-        surface->setPosition(Vector3f(50.5f, 250.7f, 2.5f));
+        surface->setPosition(Vector3f(50.5f, 250.65f, 2.5f));
         surface->setSimulatedPosition(surface->getPosition());
         surface->setSimulatedVelocity(Vector3f(0, 0.2f, 0));
         step(*surface, swimFlags, false, 0.0f, -90.0f);
         close(surface->getSimulatedVelocity().y, 0.0f, "Looking up accelerated a swimmer out of the water");
         auto surfaceJump = makePlayer(false);
-        surfaceJump->setPosition(Vector3f(50.5f, 250.7f, 2.5f));
+        surfaceJump->setPosition(Vector3f(50.5f, 250.65f, 2.5f));
         surfaceJump->setSimulatedPosition(surfaceJump->getPosition());
         surfaceJump->setSimulatedVelocity(Vector3f(0, 0.2f, 0));
         step(*surfaceJump, {(int32_t) PlayerAuthInputData::StartSwimming,
@@ -662,10 +812,10 @@ namespace {
         levitation.mDuration = 200;
         levitating->addEffect(levitation);
         step(*levitating);
-        close(levitating->getSimulatedVelocity().y, 0.02f, "BDS levitation integration differs");
+        close(levitating->getSimulatedVelocity().y, 0.0196f, "BDS levitation integration differs");
         levitating->setMotion(levitating->getSimulatedVelocity());
         levitating->tickEffects();
-        close(levitating->getMotion().y, 0.02f, "Levitation was integrated twice in one server tick");
+        close(levitating->getMotion().y, 0.0196f, "Levitation was integrated twice in one server tick");
 
         auto flying = makePlayer(false);
         flying->setGameType((int32_t) GameType::Creative);
@@ -719,6 +869,8 @@ int main() {
         checkSimulationSettings();
         checkTravelPhysics();
         checkTravelReplay();
+        checkGroundJumpTrajectory();
+        checkShallowWaterWalking();
     } catch (const std::exception &error) {
         std::clog << "Movement input regression failed: " << error.what() << '\n';
         result = 1;

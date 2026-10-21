@@ -13,6 +13,10 @@ namespace MovementPhysics {
 
     float mojangCos(float radians);
 
+    float mojangSinDegrees(float degrees);
+
+    float mojangCosDegrees(float degrees);
+
     bool input(const PlayerAuthInputPacket &packet, PlayerAuthInputData flag);
 
     bool activeState(bool previous, const PlayerAuthInputPacket &packet,

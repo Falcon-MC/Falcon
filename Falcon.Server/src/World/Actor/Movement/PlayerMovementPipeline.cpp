@@ -46,11 +46,11 @@ void PlayerMovementPipeline::tick(PlayerMovementContext &context) {
     PlayerLiquidCurrentSystem::tick(context);
     WaterSinkInputSystem::tick(context);
     PlayerLiquidJumpSystem::tick(context);
+    PlayerGroundJumpSystem::tick(context);
     SwimControlSystem::tick(context);
     GlideMoveSystem::tick(context);
     PlayerMoveRelativeSystem::tick(context);
     BubbleColumnMovementSystem::tick(context);
-    PlayerGroundJumpSystem::tick(context);
     PlayerTraversalSystem::tick(context);
     PlayerCollisionSystem::tick(context);
     PlayerFlightDragSystem::tick(context);

@@ -132,14 +132,32 @@ public:
     void setSimulatedPosition(const Vector3f &position) {
         mSimulatedPosition = position;
         mHasSimulatedPosition = true;
+        mHasSimulatedGround = false;
     }
 
-    void clearSimulatedPosition() { mHasSimulatedPosition = false; }
+    void clearSimulatedPosition() {
+        mHasSimulatedPosition = false;
+        mHasSimulatedGround = false;
+    }
+
+    bool hasSimulatedGround() const {
+        return mHasSimulatedGround;
+    }
+
+    bool isSimulatedOnGround() const {
+        return mSimulatedOnGround;
+    }
+
+    void setSimulatedOnGround(bool onGround) {
+        mSimulatedOnGround = onGround;
+        mHasSimulatedGround = true;
+    }
 
     void clearMovementSimulation() {
         mMovementValidator.reset();
         mHasSimulatedVelocity = false;
         mHasSimulatedPosition = false;
+        mHasSimulatedGround = false;
         mHasPendingKnockback = false;
         mSimulatedSneaking = false;
         mSimulatedCrawling = false;
@@ -662,6 +680,8 @@ private:
     Vector3f mSimulatedVelocity;
     bool mHasSimulatedPosition = false;
     Vector3f mSimulatedPosition;
+    bool mHasSimulatedGround = false;
+    bool mSimulatedOnGround = false;
     int32_t mJumpDelay = 0;
     bool mSimulatedSneaking = false;
     bool mSimulatedCrawling = false;

@@ -15,7 +15,8 @@ void PlayerGravitySystem::tick(PlayerMovementContext &context) {
         return;
     const MobEffectInstance *levitation = context.player.getEffects().get(MobEffectId::Levitation);
     if (levitation != nullptr) {
-        state.velocity.y = state.velocity.y * 0.8f + 0.01f * (float) levitation->level();
+        // BDS applies LevitateSystem (0x14104F680), then ground/air vertical drag (0x141051E00).
+        state.velocity.y = (state.velocity.y * 0.8f + 0.01f * (float) levitation->level()) * GRAVITY_MULTIPLIER;
     } else {
         const float gravity = context.player.hasEffect(MobEffectId::SlowFalling) && state.velocity.y < 0.0f
                               ? SLOW_FALLING_GRAVITY : GRAVITY;

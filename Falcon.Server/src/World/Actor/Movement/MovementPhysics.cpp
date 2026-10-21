@@ -79,6 +79,14 @@ namespace MovementPhysics {
         return mojangSineTable()[(int) (radians * 10430.378f + 16384.0f) & 65535];
     }
 
+    float mojangSinDegrees(float degrees) {
+        return mojangSineTable()[(int) (degrees * 182.04443f) & 65535];
+    }
+
+    float mojangCosDegrees(float degrees) {
+        return mojangSineTable()[(int) (degrees * 182.04443f + 16384.0f) & 65535];
+    }
+
     bool input(const PlayerAuthInputPacket &packet, PlayerAuthInputData flag) {
         return packet.hasInputFlag((int32_t) flag);
     }

@@ -68,6 +68,8 @@ void ServerNetworkHandler::_applyPendingPlayerMove(ServerPlayer &player) {
         } else {
             player.setPosition(player.getPendingMovePosition());
             player.setRotation(player.getPendingMoveRotation());
+            if (player.hasSimulatedGround())
+                player.setOnGround(player.isSimulatedOnGround());
         }
         player.clearPendingMove();
     }

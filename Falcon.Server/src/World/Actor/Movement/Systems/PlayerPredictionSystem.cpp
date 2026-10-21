@@ -17,6 +17,7 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
             state.simulated, prediction.feetPosition, (uint64_t) input.packet.mTick,
             context.owner.getProperties().getPlayerPositionAcceptanceThreshold(), prediction.strict);
     context.player.setSimulatedPosition(state.simulated);
+    context.player.setSimulatedOnGround(state.onGround);
     context.player.setSimulatedVelocity(state.velocity);
     prediction.feetPosition = state.simulated;
     context.player.setMotion(state.velocity);

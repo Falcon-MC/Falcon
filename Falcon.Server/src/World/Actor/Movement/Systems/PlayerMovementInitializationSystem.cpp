@@ -13,11 +13,14 @@ void PlayerMovementInitializationSystem::tick(PlayerMovementContext &context) {
     prediction.strict = context.owner.getProperties().getServerAuthoritativeMovementStrict();
     if (!context.player.takeKnockback(state.velocity))
         state.velocity = context.player.hasSimulatedVelocity() ? context.player.getSimulatedVelocity() : context.player.getMotion();
-    state.onGround = context.player.isOnGround();
+    state.onGround = context.player.hasSimulatedGround() ? context.player.isSimulatedOnGround()
+                                                        : context.player.isOnGround();
     state.jumpDelay = context.player.getJumpDelay();
     input.jumpHeld = input.packet.hasInputFlag((int32_t) PlayerAuthInputData::Jumping)
                           || input.packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping);
-    input.startJumping = input.packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping);
+    // BDS DecrementNoJumpDelaySystem (0x140EB0DA0) runs before the jump systems.
+    if (state.jumpDelay > 0)
+        --state.jumpDelay;
     if (!input.jumpHeld)
         state.jumpDelay = 0;
 }
