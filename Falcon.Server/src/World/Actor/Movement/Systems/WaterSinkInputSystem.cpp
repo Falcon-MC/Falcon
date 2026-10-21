@@ -8,9 +8,9 @@ void WaterSinkInputSystem::tick(PlayerMovementContext &context) {
     auto &input = context.input;
     auto &contact = context.contact;
 
-    if (contact.waterTravel || contact.lavaTravel) {
-        if (MovementPhysics::input(input.packet, PlayerAuthInputData::WantDownSlow)
-            || MovementPhysics::input(input.packet, PlayerAuthInputData::WantDown))
+    if (context.waterTravel.active || context.liquidTravel.lava) {
+        if (MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantDownSlow)
+            || MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantDown))
             state.velocity.y -= 0.04f;
     }
 }

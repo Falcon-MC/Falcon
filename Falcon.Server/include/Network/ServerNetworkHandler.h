@@ -63,6 +63,7 @@ class CommandBlockUpdatePacket;
 class Item;
 class NetherNetInstance;
 class PluginManager;
+class PlayerMovementRegistry;
 
 struct QueuedActorCommand {
     Level *mLevel = nullptr;
@@ -174,6 +175,10 @@ public:
     void onPlayerDimensionChangeAck(ServerPlayer &player);
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> &getPlayers() { return mPlayers; }
+
+    PlayerMovementRegistry &getPlayerMovementRegistry();
+
+    void erasePlayer(const NetworkIdentifier &id);
 
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> &getActors() { return mActors; }
 
@@ -807,6 +812,7 @@ private:
     bool mIsListening;
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
+    std::unique_ptr<PlayerMovementRegistry> mPlayerMovementRegistry;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
     std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
     std::unordered_set<int64_t> mVehiclesWithPendingPassengers;

@@ -8,7 +8,7 @@ void LavaDragSystem::tick(PlayerMovementContext &context) {
     auto &state = context.state;
     auto &contact = context.contact;
 
-    if (!contact.lavaTravel)
+    if (!context.liquidTravel.lava)
         return;
     state.velocity.y *= 0.5f;
     const MobEffectInstance *levitation = context.player.getEffects().get(MobEffectId::Levitation);

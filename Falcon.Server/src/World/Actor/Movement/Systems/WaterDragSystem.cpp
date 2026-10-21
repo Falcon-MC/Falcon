@@ -9,7 +9,7 @@ void WaterDragSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &contact = context.contact;
 
-    if (!contact.waterTravel)
+    if (!context.waterTravel.active)
         return;
     state.velocity.y *= 0.8f;
     const MobEffectInstance *levitation = context.player.getEffects().get(MobEffectId::Levitation);

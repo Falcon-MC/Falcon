@@ -31,7 +31,7 @@ void PlayerGroundJumpSystem::tick(PlayerMovementContext &context) {
     if (swimAmount > 0.0f && swimAmount < 1.0f)
         return;
 
-    if (!abilities.flying && !abilities.gliding && !contact.waterTravel && !contact.lavaTravel && input.jumpHeld && state.onGround && state.jumpDelay <= 0) {
+    if (!abilities.flying && !abilities.gliding && !context.waterTravel.active && !context.liquidTravel.lava && input.jumpHeld && state.onGround && state.jumpDelay <= 0) {
         const MobEffectInstance *jumpBoost = context.player.getEffects().get(MobEffectId::JumpBoost);
         const float jumpBonus = jumpBoost == nullptr ? 0.0f : JUMP_BOOST_PER_LEVEL * (float) jumpBoost->level();
         const float jumpHeight = JUMP_VELOCITY + jumpBonus;
@@ -39,8 +39,8 @@ void PlayerGroundJumpSystem::tick(PlayerMovementContext &context) {
         state.jumpDelay = JUMP_DELAY_TICKS;
         if (abilities.sprinting) {
             // BDS 0x140EAFAF0 indexes the sine table directly in degrees.
-            state.velocity.x -= mojangSinDegrees(input.packet.mRotation.y) * 0.2f;
-            state.velocity.z += mojangCosDegrees(input.packet.mRotation.y) * 0.2f;
+            state.velocity.x -= mojangSinDegrees(input.getPacket().mRotation.y) * 0.2f;
+            state.velocity.z += mojangCosDegrees(input.getPacket().mRotation.y) * 0.2f;
         }
     }
 }

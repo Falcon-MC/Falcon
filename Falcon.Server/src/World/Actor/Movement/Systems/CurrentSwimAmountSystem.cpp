@@ -8,7 +8,7 @@ void CurrentSwimAmountSystem::tick(PlayerMovementContext &context) {
     auto &amount = context.player.getSwimAmount();
     amount.mPrevious = amount.mCurrent;
     // BDS CurrentSwimAmountSystem (0x140BEE130), after this input's movement.
-    const bool horizontal = context.abilities.swimming || context.travel.crawling;
+    const bool horizontal = context.abilities.swimming || context.pose.mCrawling;
     amount.mCurrent = horizontal ? std::min(amount.mCurrent + 0.1f, 1.0f)
                                  : std::max(amount.mCurrent - 0.1f, 0.0f);
 }

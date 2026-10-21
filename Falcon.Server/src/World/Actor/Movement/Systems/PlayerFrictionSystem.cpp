@@ -9,7 +9,7 @@ void PlayerFrictionSystem::tick(PlayerMovementContext &context) {
     auto &contact = context.contact;
     auto &travel = context.travel;
 
-    if (!abilities.gliding || contact.waterTravel || contact.lavaTravel) {
+    if (!abilities.gliding || context.waterTravel.active || context.liquidTravel.lava) {
         state.velocity.x *= travel.friction * travel.frictionModifier;
         state.velocity.z *= travel.friction * travel.frictionModifier;
     }

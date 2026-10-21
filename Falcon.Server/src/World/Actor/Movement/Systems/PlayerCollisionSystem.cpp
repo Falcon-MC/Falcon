@@ -162,7 +162,7 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &travel = context.travel;
 
-    travel.box = boxAt(state.start, travel.pose.mHeight);
+    travel.box = boxAt(state.start, context.pose.mHeight);
     Vector3f stuck;
     travel.isStuck = !abilities.spectator && stuckMultiplier(context.level, context.player, travel.box, stuck);
     if (travel.isStuck) {
@@ -171,7 +171,7 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
         state.velocity.z *= stuck.z;
     }
 
-    if (!abilities.flying && travel.sneaking && !travel.crawling && state.onGround && state.velocity.y <= 0.0f)
+    if (!abilities.flying && context.pose.mSneaking && !context.pose.mCrawling && state.onGround && state.velocity.y <= 0.0f)
         avoidEdge(context.level, travel.box, state.velocity);
 
     if (abilities.spectator) {
@@ -187,7 +187,7 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
 
     updateSupportingBlock(context.level, context.player, travel.box, state.simulated, state.onGround, state.velocity);
     const BlockBehavior &under = behaviorUnder(context.level, state.simulated, context.player);
-    if (state.simulated.y == state.start.y && state.onGround && !travel.sneaking && !input.pressingSneak && under.slowsWalking()) {
+    if (state.simulated.y == state.start.y && state.onGround && !context.pose.mSneaking && !input.pressingSneak && under.slowsWalking()) {
         const float vertical = std::fabs(travel.moved.mMoved.y);
         if (vertical < WALK_SLOWDOWN_LIMIT) {
             const float slowdown = WALK_SLOWDOWN_BASE + vertical * WALK_SLOWDOWN_PER_VELOCITY;

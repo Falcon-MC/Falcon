@@ -16,14 +16,14 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &travel = context.travel;
 
-    input.pressingSneak = input.packet.hasInputFlag((int32_t) PlayerAuthInputData::Sneaking);
+    input.pressingSneak = input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::Sneaking);
 
     float maxImpulse = 1.0f;
     if (context.player.getFlags().get(ActorFlag::UsingItem))
         maxImpulse *= CONSUMING_INPUT;
-    const int32_t slowdownTicks = travel.sneaking || travel.crawling ? context.player.getSlowdownTicks() + 1 : 0;
+    const int32_t slowdownTicks = context.pose.mSneaking || context.pose.mCrawling ? context.player.getSlowdownTicks() + 1 : 0;
     context.player.setSlowdownTicks(slowdownTicks);
-    if (!abilities.flying && !abilities.swimming && (travel.sneaking || travel.crawling)) {
+    if (!abilities.flying && !abilities.swimming && (context.pose.mSneaking || context.pose.mCrawling)) {
         float sneakMultiplier = SNEAK_INPUT;
         if (slowdownTicks > SWIFT_SNEAK_DELAY_TICKS) {
             const ItemStack &leggings = context.player.getInventory().getArmor(PlayerInventory::ARMOR_LEGS);
@@ -33,9 +33,9 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
         maxImpulse *= std::clamp(sneakMultiplier, 0.0f, 1.0f);
     }
     // BDS 0x140E70890 normalizes the raw 2D input before applying pose slowdown and damping.
-    const float length = std::sqrt(input.packet.mMotionX * input.packet.mMotionX
-                                   + input.packet.mMotionY * input.packet.mMotionY);
+    const float length = std::sqrt(input.getPacket().mMotionX * input.getPacket().mMotionX
+                                   + input.getPacket().mMotionY * input.getPacket().mMotionY);
     const float scale = maxImpulse * IMPULSE_SCALE / std::max(1.0f, length);
-    input.sideways = input.packet.mMotionX * scale;
-    input.forward = input.packet.mMotionY * scale;
+    input.sideways = input.getPacket().mMotionX * scale;
+    input.forward = input.getPacket().mMotionY * scale;
 }

@@ -10,7 +10,7 @@ void LavaTravelSystem::tick(PlayerMovementContext &context) {
     auto &contact = context.contact;
     auto &travel = context.travel;
 
-    if (contact.lavaTravel) {
+    if (context.liquidTravel.lava) {
         travel.acceleration = std::max(0.0f, context.player.getAttributes().get("minecraft:lava_movement"));
         travel.friction = 0.5f;
     }

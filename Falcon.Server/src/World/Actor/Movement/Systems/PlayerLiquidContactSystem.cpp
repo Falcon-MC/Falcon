@@ -7,10 +7,9 @@ void PlayerLiquidContactSystem::tick(PlayerMovementContext &context) {
     auto &state = context.state;
     auto &abilities = context.abilities;
     auto &contact = context.contact;
-    auto &travel = context.travel;
 
-    contact.liquid = LiquidBlocksFetch::at(context.level, state.start, (abilities.swimming || abilities.gliding || travel.pose.mCrawling),
-                                            travel.pose.mHeight);
-    contact.lavaTravel = !abilities.flying && contact.liquid.lava;
-    contact.waterTravel = !abilities.flying && !contact.lavaTravel && contact.liquid.water;
+    contact.liquid = LiquidBlocksFetch::at(context.level, state.start, (abilities.swimming || abilities.gliding || context.pose.mCrawling),
+                                            context.pose.mHeight);
+    context.liquidTravel.lava = !abilities.flying && contact.liquid.lava;
+    context.waterTravel.active = !abilities.flying && !context.liquidTravel.lava && contact.liquid.water;
 }

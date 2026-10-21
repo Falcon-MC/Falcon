@@ -16,7 +16,7 @@ void WaterTravelSystem::tick(PlayerMovementContext &context) {
     auto &travel = context.travel;
 
     const ItemStack &boots = context.player.getInventory().getArmor(PlayerInventory::ARMOR_FEET);
-    if (contact.waterTravel) {
+    if (context.waterTravel.active) {
         const float depth = (float) std::clamp(ItemEnchantments::getLevel(boots, EnchantmentIds::DEPTH_STRIDER), 0, 3)
                             * (state.onGround ? 1.0f : 0.5f);
         const float movement = std::max(0.0f, context.player.getAttributes().get("minecraft:movement"))

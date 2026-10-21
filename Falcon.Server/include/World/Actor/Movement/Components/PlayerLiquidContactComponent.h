@@ -5,6 +5,4 @@
 
 struct PlayerLiquidContactComponent {
     LiquidContact liquid;
-    bool lavaTravel = false;
-    bool waterTravel = false;
 };

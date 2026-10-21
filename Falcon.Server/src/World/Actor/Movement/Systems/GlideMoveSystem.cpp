@@ -46,6 +46,6 @@ void GlideMoveSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &contact = context.contact;
 
-    if (abilities.gliding && !contact.waterTravel && !contact.lavaTravel)
-        glide(state.velocity, input.packet, context.player.hasEffect(MobEffectId::SlowFalling));
+    if (abilities.gliding && !context.waterTravel.active && !context.liquidTravel.lava)
+        glide(state.velocity, input.getPacket(), context.player.hasEffect(MobEffectId::SlowFalling));
 }

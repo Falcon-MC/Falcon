@@ -5,7 +5,7 @@
 #include <cmath>
 
 void ClimbOutOfLiquidSystem::tick(PlayerMovementContext &context) {
-    if ((!context.contact.waterTravel && !context.contact.lavaTravel)
+    if ((!context.waterTravel.active && !context.liquidTravel.lava)
         || (!context.travel.moved.mCollidedX && !context.travel.moved.mCollidedZ))
         return;
 

@@ -6,8 +6,9 @@
 
 void PlayerMovementSimulator::apply(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                     const PlayerAuthInputPacket &packet, Vector3f &feetPosition, bool sprinting) {
-    PlayerMovementContext context{owner, id, player, owner.getLevelFor(player), {}, {packet}, {}, {},
-                                  {feetPosition, player.getMovementValidator()}, {}};
-    context.abilities.sprinting = sprinting;
+    auto &registry = owner.getPlayerMovementRegistry();
+    const auto entity = player.getRuntimeId();
+    registry.prepare(entity, packet, feetPosition, player.getMovementValidator(), sprinting);
+    PlayerMovementContext context{owner, id, player, owner.getLevelFor(player), registry, entity};
     PlayerMovementPipeline::tick(context);
 }

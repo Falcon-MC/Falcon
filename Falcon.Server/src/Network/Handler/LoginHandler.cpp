@@ -179,7 +179,7 @@ void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, con
         return;
     }
 
-    owner.getPlayers().erase(id);
+    owner.erasePlayer(id);
     auto inserted = owner.getPlayers().try_emplace(id, id, owner.allocateRuntimeId(), &owner);
     ServerPlayer &player = inserted.first->second;
     player.setCodec(std::move(codec));
@@ -209,7 +209,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         LOG_WARN(LogAreaID::Network, "%s logged in with protocol %d after announcing another one",
                  id.getAddress().c_str(), packet.mProtocolVersion);
         owner._disconnect(id, "disconnectionScreen.unexpectedPacket");
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
@@ -227,14 +227,14 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         LOG_WARN(LogAreaID::Network, "%s sent a login that failed verification: %s", id.getAddress().c_str(),
                  verifier.getFailureReason().c_str());
         owner._disconnect(id, "disconnectionScreen.notAuthenticated");
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
     if (owner.getProperties().getOnlineMode() && !verifier.isSigned()) {
         LOG_WARN(LogAreaID::Network, "%s failed Xbox Live authentication", id.getAddress().c_str());
         owner._disconnect(id, "disconnectionScreen.notAuthenticated");
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
@@ -262,21 +262,21 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
                               ? localization.translate(request.getLanguageCode(), "falcon.disconnect.banned")
                               : localization.translate(request.getLanguageCode(), "falcon.disconnect.bannedReason",
                                                        {ban->mReason}));
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
     if (!owner.isAllowListed(player)) {
         LOG_INFO(LogAreaID::Server, "Player %s is not in the allow list", player.getName().c_str());
         owner._disconnect(id, ServerNetworkHandler::NOT_ALLOW_LISTED_MESSAGE);
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
     if (owner.isServerFull(id) && !owner.getAllowList().ignoresPlayerLimit(player.getName(), player.getXuid())) {
         LOG_INFO(LogAreaID::Server, "Player %s was refused because the server is full", player.getName().c_str());
         owner._disconnect(id, "disconnectionScreen.serverFull");
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
@@ -292,7 +292,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         if (preLogin.mCancelled) {
             LOG_INFO(LogAreaID::Server, "Player %s was refused by a plugin", player.getName().c_str());
             owner._disconnect(id, kickMessage);
-            owner.getPlayers().erase(id);
+            owner.erasePlayer(id);
             return;
         }
     }
@@ -318,7 +318,7 @@ void LoginHandler::startEncryption(ServerNetworkHandler &owner, const NetworkIde
         || !EncryptionHandshake::createServerToken(*serverKey, clientPublicKey, handshake.mJwt, key)) {
         LOG_WARN(LogAreaID::Network, "Could not prepare the encryption handshake for %s", id.getAddress().c_str());
         owner._disconnect(id, "disconnectionScreen.notAuthenticated");
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 

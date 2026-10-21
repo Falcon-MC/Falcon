@@ -9,7 +9,7 @@
 using namespace MovementPhysics;
 
 void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
-    auto &acceptance = context.prediction.validator.clientAcceptance();
+    auto &acceptance = context.prediction.validator->clientAcceptance();
     auto &state = context.state;
     auto &travel = context.travel;
     if (acceptance.mCooldown != 0) {
@@ -21,7 +21,7 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
 
     // BDS ClientAcceptanceSystem (0x141038FF0) selects the solid-shape thresholds
     // when the move's collision list contains block shapes. Defaults: 0x1402C1190.
-    const AxisAlignedBB sweep = boxAt(state.start, travel.pose.mHeight).addCoord(
+    const AxisAlignedBB sweep = boxAt(state.start, context.pose.mHeight).addCoord(
             travel.moved.mRequested.x, travel.moved.mRequested.y, travel.moved.mRequested.z);
     const bool solid = !context.level.getCollisionBoxes(sweep).empty();
     const float refill = solid ? 0.1f : 0.035f;
@@ -31,9 +31,9 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
     const float minimum = 0.05f;
     float remaining = acceptance.mBudget;
     Vector3f accepted;
-    const Vector3f error(context.prediction.feetPosition.x - state.simulated.x,
-                         context.prediction.feetPosition.y - state.simulated.y,
-                         context.prediction.feetPosition.z - state.simulated.z);
+    const Vector3f error(context.prediction.feetPosition->x - state.simulated.x,
+                         context.prediction.feetPosition->y - state.simulated.y,
+                         context.prediction.feetPosition->z - state.simulated.z);
     // BDS spends the shared Manhattan-distance budget in Y, X, Z order, accepting only upward Y.
     if (error.y > minimum && error.y < std::min(verticalLimit, remaining)) {
         accepted.y = error.y;
@@ -57,8 +57,8 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
         travel.moved.mMoved.z += moved.mMoved.z;
         state.simulated = Vector3f(travel.box.mMinX + PLAYER_WIDTH * 0.5f, travel.box.mMinY,
                                    travel.box.mMinZ + PLAYER_WIDTH * 0.5f);
-        const bool horizontalCollision = input(context.input.packet, PlayerAuthInputData::HorizontalCollision);
-        const bool verticalCollision = input(context.input.packet, PlayerAuthInputData::VerticalCollision);
+        const bool horizontalCollision = input(context.input.getPacket(), PlayerAuthInputData::HorizontalCollision);
+        const bool verticalCollision = input(context.input.getPacket(), PlayerAuthInputData::VerticalCollision);
         if (!horizontalCollision) {
             travel.moved.mRequested.x += accepted.x;
             travel.moved.mRequested.z += accepted.z;

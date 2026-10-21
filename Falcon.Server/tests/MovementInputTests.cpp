@@ -228,8 +228,9 @@ namespace {
         PlayerAuthInputPacket packet;
         packet.mTick = 100;
         Vector3f reported(10.3f, 80.4f, 20.0f);
-        PlayerMovementContext context{owner, id, player, owner.getLevelFor(player), {}, {packet}, {}, {},
-                                      {reported, player.getMovementValidator()}, {}};
+        auto &registry = owner.getPlayerMovementRegistry();
+        registry.prepare(player.getRuntimeId(), packet, reported, player.getMovementValidator(), false);
+        PlayerMovementContext context{owner, id, player, owner.getLevelFor(player), registry, player.getRuntimeId()};
         context.state.simulated = Vector3f(10.0f, 80.0f, 20.0f);
         context.state.velocity = Vector3f(0.1f, 0.2f, 0.3f);
         PlayerPredictionSystem::tick(context);
@@ -579,8 +580,9 @@ namespace {
         ServerPlayer player(id, 7299);
         PlayerAuthInputPacket packet;
         Vector3f feet;
-        PlayerMovementContext context{owner, id, player, owner.getLevelFor(player), {}, {packet}, {}, {},
-                                      {feet, player.getMovementValidator()}, {}};
+        auto &registry = owner.getPlayerMovementRegistry();
+        registry.prepare(player.getRuntimeId(), packet, feet, player.getMovementValidator(), false);
+        PlayerMovementContext context{owner, id, player, owner.getLevelFor(player), registry, player.getRuntimeId()};
         packet.mMotionX = 1.0f;
         packet.mMotionY = 1.0f;
         MovementInputSystem::tick(context);
@@ -588,7 +590,7 @@ namespace {
                 "Diagonal input was not normalized before damping");
         packet.mMotionX = 0.2f;
         packet.mMotionY = 0.4f;
-        context.travel.sneaking = true;
+        context.pose.mSneaking = true;
         MovementInputSystem::tick(context);
         require(std::fabs(context.input.sideways - 0.0588f) < 0.000002f
                 && std::fabs(context.input.forward - 0.1176f) < 0.000002f,
@@ -603,7 +605,7 @@ namespace {
         SwimControlSystem::tick(context);
         require(context.state.velocity.y == 0.1f,
                 "Swim control ran without BDS's required water contact");
-        context.contact.waterTravel = true;
+        context.waterTravel.active = true;
         SwimControlSystem::tick(context);
         require(context.state.velocity.y == 0.0f,
                 "Swim control ignored the dry head block while the body was still in water");
@@ -676,12 +678,13 @@ namespace {
         PlayerAuthInputPacket packet;
         Vector3f reported;
         const auto contextFor = [&](const Vector3f &position) {
-            PlayerMovementContext context{owner, id, player, level, {}, {packet}, {}, {},
-                                          {reported, player.getMovementValidator()}, {}};
+            auto &registry = owner.getPlayerMovementRegistry();
+            registry.prepare(player.getRuntimeId(), packet, reported, player.getMovementValidator(), false);
+            PlayerMovementContext context{owner, id, player, level, registry, player.getRuntimeId()};
             context.state.start = position;
             context.state.simulated = position;
             context.state.velocity = Vector3f(0.012f, -0.08f, 0.03f);
-            context.travel.pose.mHeight = 1.8f;
+            context.pose.mHeight = 1.8f;
             context.travel.box = MovementPhysics::boxAt(position, 1.8f);
             return context;
         };

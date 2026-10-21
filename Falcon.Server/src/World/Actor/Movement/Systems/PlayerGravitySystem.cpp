@@ -10,8 +10,8 @@ void PlayerGravitySystem::tick(PlayerMovementContext &context) {
     auto &contact = context.contact;
     auto &travel = context.travel;
 
-    if (abilities.flying || contact.waterTravel || contact.lavaTravel
-        || abilities.gliding || travel.scaffoldDescend)
+    if (abilities.flying || context.waterTravel.active || context.liquidTravel.lava
+        || abilities.gliding || context.autoClimb.scaffoldDescend)
         return;
     const MobEffectInstance *levitation = context.player.getEffects().get(MobEffectId::Levitation);
     if (levitation != nullptr) {

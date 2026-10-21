@@ -31,10 +31,10 @@ bool PlayerMovementAdmissionSystem::prepare(PlayerMovementContext &context) {
     }
 
     const bool skip = context.player.isRiding() || context.player.isSleeping() || context.player.hasPendingMovementChange()
-                      || input.packet.hasInputFlag((int32_t) PlayerAuthInputData::InClientPredictedInVehicle)
-                      || input.packet.hasInputFlag((int32_t) PlayerAuthInputData::HandleTeleport);
+                      || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::InClientPredictedInVehicle)
+                      || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::HandleTeleport);
     if (skip || !chunkLoaded(context.level, state.start)
-        || !chunkLoaded(context.level, context.prediction.feetPosition)) {
+        || !chunkLoaded(context.level, *context.prediction.feetPosition)) {
         context.player.clearMovementSimulation();
         return false;
     }

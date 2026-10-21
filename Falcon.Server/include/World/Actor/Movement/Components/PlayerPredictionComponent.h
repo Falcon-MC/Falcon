@@ -6,7 +6,7 @@
 
 /** Per-input prediction view; the validator persists on the player between replays. */
 struct PlayerPredictionComponent {
-    Vector3f &feetPosition;
-    PlayerMovementValidator &validator;
+    Vector3f *feetPosition = nullptr;
+    PlayerMovementValidator *validator = nullptr;
     bool strict = false;
 };

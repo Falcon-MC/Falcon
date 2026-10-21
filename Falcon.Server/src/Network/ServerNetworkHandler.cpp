@@ -1,5 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 
+#include "World/Actor/Movement/PlayerMovementRegistry.h"
+
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include "World/Actor/RideSystem.h"
@@ -352,6 +354,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
           mPlayerData(ServerPaths::file("players")), mOps(ServerPaths::file("ops.txt")),
           mAllowList(ServerPaths::file("allowlist.json")), mBanList(ServerPaths::file("banned-players.json")),
           mIpBanList(ServerPaths::file("banned-ips.json")) {
+    mPlayerMovementRegistry = std::make_unique<PlayerMovementRegistry>();
     mWorlds.add("Bedrock level", DEFAULT_VIEW_DISTANCE, 0);
 
     std::unique_ptr<Connector> rakNet = TransportFactory::createConnector(TransportLayer::RakNet, *this, true);
@@ -392,6 +395,18 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
 
     AuthKeyProvider::getInstance().start();
     mPluginManager = std::make_unique<PluginManager>(*this);
+}
+
+PlayerMovementRegistry &ServerNetworkHandler::getPlayerMovementRegistry() {
+    return *mPlayerMovementRegistry;
+}
+
+void ServerNetworkHandler::erasePlayer(const NetworkIdentifier &id) {
+    const auto player = mPlayers.find(id);
+    if (player != mPlayers.end()) {
+        mPlayerMovementRegistry->remove(player->second.getRuntimeId());
+        mPlayers.erase(player);
+    }
 }
 
 unsigned short ServerNetworkHandler::getBoundPort() const {
@@ -900,7 +915,7 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
     }
 
     mModalFormCallbacks.erase(id);
-    mPlayers.erase(id);
+    erasePlayer(id);
     LOG_INFO(LogAreaID::Network, "%s disconnected, reason: %s", playerName.c_str(), toString(reason));
 }
 

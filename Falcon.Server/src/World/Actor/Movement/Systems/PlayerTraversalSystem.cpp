@@ -24,13 +24,13 @@ void PlayerTraversalSystem::tick(PlayerMovementContext &context) {
         if (supporting != nullptr && supporting->getTraversal() == BlockTraversal::Scaffolding)
             traversal = BlockTraversal::Scaffolding;
     }
-    travel.scaffoldDescend = false;
-    if (abilities.flying || abilities.gliding || contact.waterTravel || contact.lavaTravel)
+    context.autoClimb.scaffoldDescend = false;
+    if (abilities.flying || abilities.gliding || context.waterTravel.active || context.liquidTravel.lava)
         traversal = BlockTraversal::None;
     if (traversal == BlockTraversal::Scaffolding) {
         if (input.pressingSneak) {
             state.velocity.y = -TRAVERSAL_SPEED;
-            travel.scaffoldDescend = true;
+            context.autoClimb.scaffoldDescend = true;
         } else if (input.jumpHeld) {
             state.velocity.y = TRAVERSAL_SPEED;
         }
@@ -45,7 +45,7 @@ void PlayerTraversalSystem::tick(PlayerMovementContext &context) {
         state.velocity.y = std::max(state.velocity.y, -CLIMB_SPEED);
         if (input.jumpHeld || context.player.hasHorizontalCollision())
             state.velocity.y = CLIMB_SPEED;
-        if (travel.sneaking && state.velocity.y < 0.0f)
+        if (context.pose.mSneaking && state.velocity.y < 0.0f)
             state.velocity.y = 0.0f;
     }
 }

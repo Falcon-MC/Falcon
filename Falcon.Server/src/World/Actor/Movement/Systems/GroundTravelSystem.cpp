@@ -30,7 +30,7 @@ void GroundTravelSystem::tick(PlayerMovementContext &context) {
     auto &travel = context.travel;
 
     const ItemStack &boots = context.player.getInventory().getArmor(PlayerInventory::ARMOR_FEET);
-    if (!abilities.flying && !contact.waterTravel && !contact.lavaTravel && state.onGround && !abilities.gliding) {
+    if (!abilities.flying && !context.waterTravel.active && !context.liquidTravel.lava && state.onGround && !abilities.gliding) {
         const Block *ground = blockAt(context.level, state.start.x, state.start.y - GROUND_PROBE_DEPTH, state.start.z);
         const float groundFriction = blockFriction(ground);
         travel.friction *= groundFriction;

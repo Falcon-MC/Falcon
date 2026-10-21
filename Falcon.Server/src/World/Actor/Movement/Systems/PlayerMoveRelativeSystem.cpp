@@ -10,7 +10,7 @@ void PlayerMoveRelativeSystem::tick(PlayerMovementContext &context) {
     auto &contact = context.contact;
     auto &travel = context.travel;
 
-    if (!abilities.gliding || contact.waterTravel || contact.lavaTravel)
+    if (!abilities.gliding || context.waterTravel.active || context.liquidTravel.lava)
         moveRelative(state.velocity, input.sideways, input.forward,
-                     travel.acceleration, input.packet.mRotation.y);
+                     travel.acceleration, input.getPacket().mRotation.y);
 }
