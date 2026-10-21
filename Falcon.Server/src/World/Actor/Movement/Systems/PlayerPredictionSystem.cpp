@@ -14,6 +14,37 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     auto &input = context.input;
     auto &prediction = context.prediction;
 
+    uint64_t flagsLow = 0;
+    uint64_t flagsHigh = 0;
+    for (int32_t flag: input.packet.mInputData) {
+        if (flag >= 0 && flag < 64)
+            flagsLow |= uint64_t(1) << flag;
+        else if (flag >= 64 && flag < 128)
+            flagsHigh |= uint64_t(1) << (flag - 64);
+    }
+    const auto &abilitiesBeforeCorrection = context.abilities;
+    MovementTraceFrame frame;
+    frame.tick = (uint64_t) input.packet.mTick;
+    frame.flagsLow = flagsLow;
+    frame.flagsHigh = flagsHigh;
+    frame.start = state.start;
+    frame.reported = prediction.feetPosition;
+    frame.predicted = state.simulated;
+    frame.previousVelocity = context.player.hasSimulatedVelocity() ? context.player.getSimulatedVelocity()
+                                                                  : context.player.getMotion();
+    frame.physicalVelocity = state.velocity;
+    frame.accepted = context.travel.accepted;
+    frame.acceptanceBudget = prediction.validator.clientAcceptance().mBudget;
+    frame.clientDelta = input.packet.mDelta;
+    frame.rotation = input.packet.mRotation;
+    frame.motionX = input.packet.mMotionX;
+    frame.motionY = input.packet.mMotionY;
+    frame.state = (uint32_t) state.onGround | ((uint32_t) context.contact.waterTravel << 1)
+                  | ((uint32_t) context.contact.lavaTravel << 2) | ((uint32_t) abilitiesBeforeCorrection.flying << 3)
+                  | ((uint32_t) abilitiesBeforeCorrection.sprinting << 4) | ((uint32_t) abilitiesBeforeCorrection.swimming << 5)
+                  | ((uint32_t) input.jumpHeld << 6) | ((uint32_t) context.contact.liquid.eyeSubmerged << 7);
+    prediction.validator.trace().record(frame);
+
     const Vector3f reported = prediction.feetPosition;
     MovementCorrectionDetails details;
     Vector3f acceptedPosition = state.simulated;
@@ -34,14 +65,6 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     if (!needsCorrection)
         return;
 
-    uint64_t flagsLow = 0;
-    uint64_t flagsHigh = 0;
-    for (int32_t flag: input.packet.mInputData) {
-        if (flag >= 0 && flag < 64)
-            flagsLow |= uint64_t(1) << flag;
-        else if (flag >= 64 && flag < 128)
-            flagsHigh |= uint64_t(1) << (flag - 64);
-    }
     const auto &travel = context.travel;
     const auto &contact = context.contact;
     const auto &abilities = context.abilities;
@@ -80,6 +103,28 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
              travel.accepted.x, travel.accepted.y, travel.accepted.z,
              prediction.validator.clientAcceptance().mBudget,
              (unsigned int) prediction.validator.clientAcceptance().mCooldown);
+
+    const auto &trace = prediction.validator.trace();
+    for (size_t i = 0; i < trace.size(); ++i) {
+        const auto &entry = trace.at(i);
+        LOG_WARN(LogAreaID::Network,
+                 "[MovementTrace] player=%s correction_tick=%llu tick=%llu state=%u flags=%016llx:%016llx "
+                 "start=(%.9g,%.9g,%.9g) reported=(%.9g,%.9g,%.9g) predicted=(%.9g,%.9g,%.9g) "
+                 "previous_velocity=(%.9g,%.9g,%.9g) physical_velocity=(%.9g,%.9g,%.9g) "
+                 "client_delta=(%.9g,%.9g,%.9g) input=(%.9g,%.9g) yaw=%.9g pitch=%.9g "
+                 "accepted=(%.9g,%.9g,%.9g) acceptance_budget=%.9g",
+                 context.player.getName().c_str(), (unsigned long long) input.packet.mTick,
+                 (unsigned long long) entry.tick, entry.state,
+                 (unsigned long long) entry.flagsHigh, (unsigned long long) entry.flagsLow,
+                 entry.start.x, entry.start.y, entry.start.z,
+                 entry.reported.x, entry.reported.y, entry.reported.z,
+                 entry.predicted.x, entry.predicted.y, entry.predicted.z,
+                 entry.previousVelocity.x, entry.previousVelocity.y, entry.previousVelocity.z,
+                 entry.physicalVelocity.x, entry.physicalVelocity.y, entry.physicalVelocity.z,
+                 entry.clientDelta.x, entry.clientDelta.y, entry.clientDelta.z,
+                 entry.motionX, entry.motionY, entry.rotation.y, entry.rotation.x,
+                 entry.accepted.x, entry.accepted.y, entry.accepted.z, entry.acceptanceBudget);
+    }
 
     // The client rewinds to the tick named in the correction and replays its inputs from the
     // server's position and velocity; the position is sent at eye level like other player

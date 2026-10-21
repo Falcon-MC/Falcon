@@ -2,6 +2,7 @@
 
 #include "Core/Math/Vector3f.h"
 #include "World/Actor/Movement/Components/ClientAcceptanceThresholdsComponent.h"
+#include "World/Actor/Movement/Components/MovementTraceComponent.h"
 
 #include <cstdint>
 
@@ -25,12 +26,17 @@ public:
         return mClientAcceptance;
     }
 
+    MovementTraceComponent &trace() {
+        return mTrace;
+    }
+
     void reset();
 
     void onMovementEffect(uint64_t tick);
 
 private:
     ClientAcceptanceThresholdsComponent mClientAcceptance;
+    MovementTraceComponent mTrace;
     uint64_t mLastCorrectionTick = 0;
     uint8_t mAdjustmentCount = 0;
     bool mHasMovementEffect = false;

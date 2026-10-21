@@ -701,6 +701,20 @@ namespace {
                 "Server-initiated motion did not suspend client acceptance for the BDS cooldown");
     }
 
+    void checkMovementTrace() {
+        PlayerMovementValidator validator;
+        for (uint64_t tick = 1; tick <= 100; ++tick) {
+            MovementTraceFrame frame;
+            frame.tick = tick;
+            validator.trace().record(frame);
+        }
+        require(validator.trace().size() == 32 && validator.trace().at(0).tick == 69
+                && validator.trace().at(31).tick == 100,
+                "Movement diagnostics did not retain exactly the last 32 input ticks in order");
+        validator.reset();
+        require(validator.trace().size() == 0, "Movement reset retained a stale replay history");
+    }
+
     void checkLoadingScreenMovement() {
         ServerNetworkHandler owner("Loading movement regression", "", 1);
         NetworkIdentifier id;
@@ -1486,6 +1500,7 @@ int main() {
         checkAnalogInputSlowdown();
         checkConfinedSwimmingPose();
         checkClientAcceptance();
+        checkMovementTrace();
         checkLoadingScreenMovement();
         checkQueuedFlightRequests();
         checkFlightInputTransitions();

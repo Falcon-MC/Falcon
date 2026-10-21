@@ -62,6 +62,7 @@ bool PlayerMovementValidator::reconcile(Vector3f &simulated, const Vector3f &rep
 
 void PlayerMovementValidator::reset() {
     mClientAcceptance = {};
+    mTrace.clear();
     mLastCorrectionTick = 0;
     mAdjustmentCount = 0;
     mHasMovementEffect = false;
