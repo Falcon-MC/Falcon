@@ -2,6 +2,7 @@
 
 #include "Core/Math/MathConstants.h"
 #include "World/Actor/ActorClassRegistry.h"
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/ItemEnchantments.h"
@@ -136,6 +137,15 @@ FishingHookActor::FishingHookActor(uint64_t runtimeId, const std::string &identi
         : ServerActor(runtimeId, identifier) {
 }
 
+void FishingHookActor::fillSpawnMetadata(EntityDataMap &metadata) const {
+    // The client draws the fishing line from the actor named in the owner data.
+    EntityDataEntry entry;
+    entry.mId = ActorFlags::OWNER_DATA_ID;
+    entry.mFormat = EntityDataFormat::Long;
+    entry.mLongValue = mAnglerUniqueId;
+    metadata.mEntries.push_back(entry);
+}
+
 bool FishingHookActor::isOwnedBy(const ServerPlayer &player) const {
     return !mExpired && getOwnerUniqueId() == (int64_t) player.getRuntimeId();
 }
@@ -143,6 +153,7 @@ bool FishingHookActor::isOwnedBy(const ServerPlayer &player) const {
 void FishingHookActor::cast(ServerNetworkHandler &owner, ServerPlayer &angler) {
     (void) owner;
     setOwnerUniqueId((int64_t) angler.getRuntimeId());
+    mAnglerUniqueId = angler.getUniqueId();
 
     const Vector3f &rotation = angler.getRotation();
     const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
@@ -177,17 +188,6 @@ void FishingHookActor::tick(ServerNetworkHandler &owner) {
     }
 
     Level &level = owner.getLevelFor(*this);
-    if (!mBiomeChecked) {
-        mBiomeChecked = true;
-        const Vector3f &position = getPosition();
-        const int32_t x = (int32_t) std::floor(position.x);
-        const int32_t y = (int32_t) std::floor(position.y);
-        const int32_t z = (int32_t) std::floor(position.z);
-        LevelChunk *chunk = level.peekChunkPtr(x >> 4, z >> 4);
-        mJungle = chunk != nullptr
-                  && BiomeChunkGenDataRegistry::hasTag((int32_t) chunk->getBiomeAt(x & 15, y, z & 15), JUNGLE_TAG);
-    }
-
     if (mHookedUniqueId != 0) {
         _tickHooked(owner);
         return;
@@ -294,16 +294,17 @@ void FishingHookActor::_move(ServerNetworkHandler &owner, Level &level, float wa
 
     setMotion(motion);
     setPosition(next);
-    _tryHookActor(owner, previous, next);
+    if (waterFraction <= 0.0f)
+        _tryHookActor(owner, previous, next);
 }
 
 void FishingHookActor::_tryHookActor(ServerNetworkHandler &owner, const Vector3f &from, const Vector3f &to) {
     for (auto &entry: owner.getActors()) {
-        ServerActor &candidate = *entry.second;
-        if (&candidate == this || !candidate.isAlive() || candidate.isProjectile()
-            || !candidate.sharesLevelWith(*this))
+        MobActor *mob = dynamic_cast<MobActor *>(entry.second.get());
+        if (mob == nullptr || !mob->isAlive() || !mob->sharesLevelWith(*this))
             continue;
 
+        const MobActor &candidate = *mob;
         const ActorSize size = candidate.getSize();
         if (containsPoint(candidate.getPosition(), size.mWidth, size.mHeight, to)
             || containsPoint(candidate.getPosition(), size.mWidth, size.mHeight, from)) {
@@ -466,7 +467,15 @@ int32_t FishingHookActor::retrieve(ServerNetworkHandler &owner, ServerPlayer &an
 }
 
 void FishingHookActor::_catch(ServerNetworkHandler &owner, ServerPlayer &angler) {
-    const LootTable *table = LootTableRegistry::getInstance().get(mJungle ? JUNGLE_FISHING_LOOT : FISHING_LOOT);
+    Level &level = owner.getLevelFor(*this);
+    const Vector3f &position = getPosition();
+    const int32_t x = (int32_t) std::floor(position.x);
+    const int32_t y = (int32_t) std::floor(position.y);
+    const int32_t z = (int32_t) std::floor(position.z);
+    LevelChunk *chunk = level.peekChunkPtr(x >> 4, z >> 4);
+    const bool jungle = chunk != nullptr
+                        && BiomeChunkGenDataRegistry::hasTag((int32_t) chunk->getBiomeAt(x & 15, y, z & 15), JUNGLE_TAG);
+    const LootTable *table = LootTableRegistry::getInstance().get(jungle ? JUNGLE_FISHING_LOOT : FISHING_LOOT);
     if (table == nullptr)
         return;
 
@@ -475,8 +484,6 @@ void FishingHookActor::_catch(ServerNetworkHandler &owner, ServerPlayer &angler)
     context.mLuck = (float) ItemEnchantments::getLevel(angler.getInventory().getItemInHand(),
                                                        EnchantmentIds::LUCK_OF_THE_SEA);
 
-    Level &level = owner.getLevelFor(*this);
-    const Vector3f &position = getPosition();
     const Vector3f &target = angler.getPosition();
     const float dx = (target.x - position.x) * PULL_STRENGTH;
     const float dy = (target.y + 1.0f - position.y) * PULL_STRENGTH;

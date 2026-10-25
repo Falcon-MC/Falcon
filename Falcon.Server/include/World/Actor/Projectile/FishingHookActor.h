@@ -19,6 +19,8 @@ public:
 
     bool shouldSave() const override { return false; }
 
+    void fillSpawnMetadata(EntityDataMap &metadata) const override;
+
     /** Gives the motion of a freshly cast hook, aimed along the angler's view. */
     void cast(ServerNetworkHandler &owner, ServerPlayer &angler);
 
@@ -56,9 +58,8 @@ private:
 
     bool mExpired = false;
     bool mInGround = false;
-    bool mJungle = false;
-    bool mBiomeChecked = false;
     int64_t mHookedUniqueId = 0;
+    int64_t mAnglerUniqueId = 0;
     int32_t mTimeUntilLured = 0;
     int32_t mTimeUntilHooked = 0;
     int32_t mNibble = 0;
