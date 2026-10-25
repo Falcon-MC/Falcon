@@ -751,6 +751,15 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
     RideSystem::appendLinks(actor, packet.mActorLinks);
     actor.fillSpawnMetadata(packet.mMetadata);
 
+    if (!actor.getNameTag().empty()) {
+        const int32_t ENTITY_DATA_NAME = 4;
+        EntityDataEntry name;
+        name.mId = ENTITY_DATA_NAME;
+        name.mFormat = EntityDataFormat::String;
+        name.mStringValue = actor.getNameTag();
+        packet.mMetadata.mEntries.push_back(name);
+    }
+
     const int64_t visibleEffects = actor.getVisibleEffectsData();
     if (visibleEffects != 0) {
         EntityDataEntry effects;

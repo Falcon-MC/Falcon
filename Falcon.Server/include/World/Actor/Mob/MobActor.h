@@ -11,6 +11,7 @@
 #include "World/Actor/ActorSize.h"
 #include "World/Actor/Definition/LookedAtSensor.h"
 #include "World/Actor/Mob/Component/MobAdmiration.h"
+#include "World/Actor/Mob/Component/MobLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
 #include "World/Actor/Mob/MobEntitySpawner.h"
 #include "World/Actor/Mob/MobEquipment.h"
@@ -294,6 +295,10 @@ public:
         return mEquipment;
     }
 
+    MobLeash &getLeash() {
+        return mLeash;
+    }
+
     MobAdmiration &getAdmiration() {
         return mAdmiration;
     }
@@ -424,6 +429,10 @@ private:
 
     bool _tryInteract(ServerNetworkHandler &owner, ServerPlayer &player);
 
+    bool _tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _tryLeash(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
     bool _tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
     bool _tryMount(ServerNetworkHandler &owner, ServerPlayer &player);
@@ -513,6 +522,7 @@ private:
     RideControlState mRideControl;
     MobAnger mAnger;
     MobAdmiration mAdmiration;
+    MobLeash mLeash;
     const json::Value *mAttackCooldownComponent = nullptr;
     int32_t mAttackCooldownTicks = 0;
     int32_t mCelebrationTicks = 0;
