@@ -14,6 +14,7 @@ enum class ActorFlag : int {
     Powered = 9,
     Ignited = 10,
     Baby = 11,
+    CanShowName = 14,
     CanClimb = 19,
     CanWalk = 22,
     Sitting = 24,

@@ -68,6 +68,12 @@ namespace {
     const char *const IS_SHAKING_COMPONENT = "minecraft:is_shaking";
     const char *const CELEBRATE_HUNT_COMPONENT = "minecraft:celebrate_hunt";
     const char *const INVENTORY_COMPONENT = "minecraft:inventory";
+    const char *const NAMEABLE_COMPONENT = "minecraft:nameable";
+    const char *const LEASHABLE_COMPONENT = "minecraft:leashable";
+    const char *const NAME_TAG_ITEM = "minecraft:name_tag";
+    const char *const LEAD_ITEM = "minecraft:lead";
+    const char *const ITEM_DISPLAY_TAG = "display";
+    const char *const ITEM_DISPLAY_NAME_TAG = "Name";
     const char *const EXPERIENCE_REWARD_COMPONENT = "minecraft:experience_reward";
     const char *const NAVIGATION_COMPONENTS[] = {"minecraft:navigation.generic", "minecraft:navigation.walk",
                                                  "minecraft:navigation.swim", "minecraft:navigation.climb"};
@@ -287,6 +293,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     if (_tickInstantDespawn(owner))
         return;
 
+    mLeash.tick(owner, *this);
     mNavigation.tick(owner, *this);
     tickControls(owner);
     ServerActor::tick(owner);
@@ -1028,12 +1035,75 @@ void MobActor::playDefinitionSound(ServerNetworkHandler &owner, const std::strin
 
 bool MobActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack held = player.getInventory().getItemInHand();
-    if (_tryInteract(owner, player) || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held)
+    if (_tryNameTag(owner, player, held) || _tryLeash(owner, player, held) || _tryInteract(owner, player)
+        || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held)
         || _tryStartLove(owner, player, held) || _trySit(owner, player) || _tryFeedMount(owner, player, held)
         || _tryMount(owner, player))
         return true;
 
     return ServerActor::onInteract(owner, player);
+}
+
+bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+    const json::Value *nameable = getComponent(NAMEABLE_COMPONENT);
+    if (nameable == nullptr || held.mDefinition == nullptr || held.mDefinition->getIdentifier() != NAME_TAG_ITEM)
+        return false;
+
+    const json::Value *renaming = nameable->get("allow_name_tag_renaming");
+    if (renaming != nullptr && !renaming->boolean(true))
+        return false;
+
+    const Tag *display = held.mTag.get(ITEM_DISPLAY_TAG);
+    const std::string name = display == nullptr || !display->isCompound()
+                             ? std::string() : display->getString(ITEM_DISPLAY_NAME_TAG, std::string());
+    if (name.empty())
+        return false;
+
+    setNameTag(name);
+    owner.sendActorNameTag(*this);
+    _setFlag(owner, ActorFlag::CanShowName, true);
+
+    // A matching name action fires its event; any other name fires the default trigger instead.
+    const json::Value *trigger = nameable->get("default_trigger");
+    const json::Value *actions = nameable->get("name_actions");
+    if (actions != nullptr && actions->isArray()) {
+        for (const std::unique_ptr<json::Value> &action: actions->mArray) {
+            const json::Value *filter = action->get("name_filter");
+            bool matches = filter != nullptr && filter->isString() && filter->mString == name;
+            if (filter != nullptr && filter->isArray()) {
+                for (const std::unique_ptr<json::Value> &entry: filter->mArray)
+                    matches = matches || entry->string() == name;
+            }
+            if (matches) {
+                trigger = action->get("on_named");
+                break;
+            }
+        }
+    }
+    EntityEvents::fireTrigger(owner, *this, trigger, &player);
+
+    player.consumeOneHeldItem();
+    return true;
+}
+
+bool MobActor::_tryLeash(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+    if (getComponent(LEASHABLE_COMPONENT) == nullptr)
+        return false;
+
+    if (mLeash.isLeashed()) {
+        if (mLeash.getHolderId() != player.getUniqueId())
+            return false;
+
+        mLeash.detach(owner, *this, player.getGameType() != (int32_t) GameType::Creative);
+        return true;
+    }
+
+    if (held.mDefinition == nullptr || held.mDefinition->getIdentifier() != LEAD_ITEM)
+        return false;
+
+    mLeash.attach(owner, *this, player.getUniqueId());
+    player.consumeOneHeldItem();
+    return true;
 }
 
 bool MobActor::_tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
@@ -1274,6 +1344,10 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         const json::Value *sound = interaction->get("play_sounds");
         if (sound != nullptr && sound->isString())
             owner.playLevelSound(level, sound->mString, getPosition(), getIdentifier());
+        else if (sound != nullptr && sound->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: sound->mArray)
+                owner.playLevelSound(level, entry->string(), getPosition(), getIdentifier());
+        }
 
         mInteractCooldown = (int32_t) (numberIn(interaction, "cooldown", 0.0f) * TICKS_PER_SECOND);
 
@@ -1900,6 +1974,7 @@ Tag MobActor::saveNbt() const {
         data.put(TAG_CARRIED_BLOCK, mCarriedBlock.toNbt());
     mEquipment.saveNbt(data);
     mEntitySpawner.saveNbt(data);
+    mLeash.saveNbt(data);
 
     return data;
 }
@@ -1933,6 +2008,8 @@ void MobActor::loadNbt(const Tag &data) {
     getFlags().set(ActorFlag::Tamed, isTamed());
     getFlags().set(ActorFlag::Sitting, mSitting);
     mEntitySpawner.loadNbt(data);
+    mLeash.loadNbt(data);
+    getFlags().set(ActorFlag::Leashed, mLeash.isLeashed());
 
     const Tag *definitions = data.get(TAG_DEFINITIONS);
     const Tag *legacyGroups = data.get(TAG_COMPONENT_GROUPS);
@@ -2090,6 +2167,7 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
         const int experience = _deathExperience(source);
         dropLoot(owner, level, source, lootingLevel);
         mEquipment.dropOnDeath(owner, level, *this, source != nullptr, lootingLevel);
+        mLeash.detach(owner, *this, true);
 
         if (experience > 0)
             owner.spawnExperienceOrbs(level, getPosition(), experience);
