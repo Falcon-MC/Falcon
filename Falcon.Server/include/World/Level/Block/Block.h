@@ -295,8 +295,12 @@ public:
 
     static bool isShears(const ItemStack &tool);
 
-    static std::vector<BlockDrop> grassDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
-                                             int32_t seedChance);
+    static bool hasSilkTouch(const ItemStack &tool);
+
+    static int32_t multifaceCount(const BlockState &state);
+
+    static std::vector<BlockDrop> grassDrops(const std::string &shearedItem, int32_t shearedCount,
+                                             const ItemStack &tool);
 
     virtual bool isSignalSource() const {
         return false;

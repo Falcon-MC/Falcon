@@ -22,10 +22,20 @@ namespace {
 
     const std::unordered_set<std::string> &shearsOnlyIdentifiers() {
         static const std::unordered_set<std::string> identifiers = {
-                "minecraft:bush", "minecraft:short_dry_grass", "minecraft:tall_dry_grass",
-                "minecraft:seagrass", "minecraft:vine", "minecraft:nether_sprouts"
+                "minecraft:vine", "minecraft:nether_sprouts"
         };
         return identifiers;
+    }
+
+    const std::unordered_set<std::string> &shearsOrSilkTouchIdentifiers() {
+        static const std::unordered_set<std::string> identifiers = {
+                "minecraft:bush", "minecraft:short_dry_grass", "minecraft:tall_dry_grass"
+        };
+        return identifiers;
+    }
+
+    bool contains(const std::unordered_set<std::string> &identifiers, const std::string &identifier) {
+        return identifiers.find(identifier) != identifiers.end();
     }
 }
 
@@ -44,10 +54,42 @@ bool ReplaceableBlock::getDrops(const BlockState &state, const ItemStack &tool, 
                                 std::vector<BlockDrop> &drops) const {
     (void) fortuneLevel;
 
-    if (shearsOnlyIdentifiers().find(state.mName) == shearsOnlyIdentifiers().end())
-        return false;
+    if (contains(shearsOnlyIdentifiers(), state.mName)) {
+        if (isShears(tool))
+            drops.push_back({state.mName, 1});
+        return true;
+    }
 
-    if (isShears(tool))
-        drops.push_back({state.mName, 1});
-    return true;
+    if (contains(shearsOrSilkTouchIdentifiers(), state.mName)) {
+        if (isShears(tool) || hasSilkTouch(tool))
+            drops.push_back({state.mName, 1});
+        return true;
+    }
+
+    if (state.mName == "minecraft:seagrass") {
+        // Either half of tall seagrass drops two.
+        const bool tall = state.mStates.getString("sea_grass_type", "default") != "default";
+        if (isShears(tool))
+            drops.push_back({state.mName, tall ? 2 : 1});
+        return true;
+    }
+
+    if (state.mName == "minecraft:glow_lichen") {
+        if (isShears(tool))
+            drops.push_back({state.mName, multifaceCount(state)});
+        return true;
+    }
+
+    if (state.mName == "minecraft:sculk_vein") {
+        if (hasSilkTouch(tool))
+            drops.push_back({state.mName, multifaceCount(state)});
+        return true;
+    }
+
+    if (state.mName == "minecraft:resin_clump") {
+        drops.push_back({state.mName, multifaceCount(state)});
+        return true;
+    }
+
+    return false;
 }

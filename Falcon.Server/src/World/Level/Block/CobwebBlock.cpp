@@ -29,3 +29,14 @@ bool CobwebBlock::getStuckMultiplier(const Actor &actor, Vector3f &multiplier) c
     multiplier = actor.hasEffect(MobEffectId::Weaving) ? WEAVING_STUCK_MULTIPLIER : STUCK_MULTIPLIER;
     return true;
 }
+
+bool CobwebBlock::getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                           std::vector<BlockDrop> &drops) const {
+    (void) fortuneLevel;
+
+    if (isShears(tool) || hasSilkTouch(tool))
+        drops.push_back({state.mName, 1});
+    else
+        drops.push_back({"minecraft:string", 1});
+    return true;
+}
