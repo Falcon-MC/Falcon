@@ -315,7 +315,8 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             if (weaponType != nullptr)
                 weaponType->onPostAttack(owner, *this, target, attackDamage, weapon);
 
-            const int32_t weaponWear = (weaponData != nullptr && weaponData->mToolType == ToolType::Sword) ? 1 : 2;
+            const int32_t weaponWear = weaponType != nullptr && !weaponType->wearsOnAttack() ? 0
+                                       : (weaponData != nullptr && weaponData->mToolType == ToolType::Sword) ? 1 : 2;
             owner.damagePlayerHeldItem(*this, weaponWear);
             return true;
         }
@@ -370,7 +371,8 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (result == DamageResult::Ignored)
         return false;
 
-    const int32_t weaponWear = (data != nullptr && data->mToolType == ToolType::Sword) ? 1 : 2;
+    const int32_t weaponWear = heldType != nullptr && !heldType->wearsOnAttack() ? 0
+                               : (data != nullptr && data->mToolType == ToolType::Sword) ? 1 : 2;
     if (result == DamageResult::Blocked) {
         owner.damagePlayerHeldItem(*this, weaponWear);
         exhaust(0.1f);

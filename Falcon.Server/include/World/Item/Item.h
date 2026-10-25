@@ -63,6 +63,22 @@ public:
         return false;
     }
 
+    // Returns false to fall back to the digger tool type and tier of the block data.
+    virtual bool getDestroySpeed(const std::string &blockIdentifier, float &speed) const {
+        (void) blockIdentifier;
+        (void) speed;
+        return false;
+    }
+
+    virtual bool canDestroySpecial(const std::string &blockIdentifier) const {
+        (void) blockIdentifier;
+        return false;
+    }
+
+    virtual bool wearsOnAttack() const {
+        return true;
+    }
+
     virtual bool onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
         (void) owner;
         (void) player;
