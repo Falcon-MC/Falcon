@@ -16,6 +16,7 @@ struct LootContext {
     int32_t mLootingLevel = 0;
     int32_t mDifficulty = 2;
     float mRegionalDifficulty = 0.0f;
+    float mLuck = 0.0f;
     bool mKilledByPlayer = false;
     bool mKilledByPet = false;
     bool mOnFire = false;

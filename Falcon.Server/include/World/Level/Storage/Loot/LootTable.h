@@ -22,7 +22,8 @@ public:
 
     explicit LootEntry(const json::Value &definition);
 
-    int32_t getWeight() const { return mWeight; }
+    /** Luck shifts the weight by quality per point, as fishing loot uses for Luck of the Sea. */
+    int32_t getWeight(const LootContext &context) const;
 
     bool isAvailable(const LootContext &context) const;
 
@@ -32,6 +33,7 @@ private:
     Type mType = Type::Empty;
     std::string mName;
     int32_t mWeight = 1;
+    int32_t mQuality = 0;
     std::vector<std::unique_ptr<LootCondition>> mConditions;
     std::vector<std::unique_ptr<LootFunction>> mFunctions;
     std::vector<LootPool> mPools;
