@@ -4,6 +4,7 @@
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
 
 #include <algorithm>
+#include <cmath>
 #include <random>
 
 LootEntry::LootEntry(const json::Value &definition)
@@ -24,12 +25,20 @@ LootEntry::LootEntry(const json::Value &definition)
     if (weight != nullptr)
         mWeight = weight->integer(1);
 
+    const json::Value *quality = definition.get("quality");
+    if (quality != nullptr)
+        mQuality = quality->integer(0);
+
     const json::Value *pools = definition.get("pools");
     if (pools == nullptr || !pools->isArray())
         return;
 
     for (const std::unique_ptr<json::Value> &pool: pools->mArray)
         mPools.emplace_back(*pool);
+}
+
+int32_t LootEntry::getWeight(const LootContext &context) const {
+    return (int32_t) std::floor((float) mWeight + (float) mQuality * context.mLuck);
 }
 
 bool LootEntry::isAvailable(const LootContext &context) const {
@@ -126,9 +135,9 @@ void LootPool::roll(const LootContext &context, std::vector<LootDrop> &drops, in
         std::vector<const LootEntry *> available;
         int32_t totalWeight = 0;
         for (const LootEntry &entry: mEntries) {
-            if (entry.getWeight() > 0 && entry.isAvailable(context)) {
+            if (entry.getWeight(context) > 0 && entry.isAvailable(context)) {
                 available.push_back(&entry);
-                totalWeight += entry.getWeight();
+                totalWeight += entry.getWeight(context);
             }
         }
 
@@ -137,11 +146,11 @@ void LootPool::roll(const LootContext &context, std::vector<LootDrop> &drops, in
 
         int32_t pick = std::uniform_int_distribution<int32_t>(0, totalWeight - 1)(context.mRandom);
         for (const LootEntry *entry: available) {
-            if (pick < entry->getWeight()) {
+            if (pick < entry->getWeight(context)) {
                 entry->roll(context, drops, depth);
                 break;
             }
-            pick -= entry->getWeight();
+            pick -= entry->getWeight(context);
         }
     }
 }

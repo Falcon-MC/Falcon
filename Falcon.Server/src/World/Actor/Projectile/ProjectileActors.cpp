@@ -2,7 +2,6 @@
 
 FALCON_REGISTER_PROJECTILE(ArrowActor, Arrow, "minecraft:arrow", 0.1f, 0.1f);
 FALCON_REGISTER_PROJECTILE(ThrownTridentActor, ThrownTrident, "minecraft:thrown_trident", 0.1f, 0.1f);
-FALCON_REGISTER_PROJECTILE(ProjectileActor, FishingHook, "minecraft:fishing_hook", 0.1f, 0.1f);
 FALCON_REGISTER_PROJECTILE(SnowballActor, Snowball, "minecraft:snowball", 0.25f, 0.25f);
 FALCON_REGISTER_PROJECTILE(EggActor, Egg, "minecraft:egg", 0.25f, 0.25f);
 FALCON_REGISTER_PROJECTILE(EnderPearlActor, EnderPearl, "minecraft:ender_pearl", 0.25f, 0.25f);
