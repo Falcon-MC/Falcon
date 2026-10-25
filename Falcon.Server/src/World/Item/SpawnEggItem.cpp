@@ -115,6 +115,9 @@ bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
     if (spawned == nullptr)
         return false;
 
+    if (!customName.empty())
+        owner.sendActorNameTag(*spawned);
+
     player.consumeOneHeldItem();
     return true;
 }
