@@ -29,6 +29,7 @@ namespace {
     const float DEFAULT_MAX_DISTANCE = 12.0f;
 
     const float FOLLOW_SPEED = 1.0f;
+    const float REPATH_DISTANCE_SQUARED = 1.0f;
     const float BOUNCY_PULL = 0.2f;
     const float SPRING_HORIZONTAL = 0.8f;
     const float SPRING_VERTICAL = 0.2f;
@@ -132,7 +133,11 @@ void MobLeash::tick(ServerNetworkHandler &owner, MobActor &mob) {
         return;
 
     Actor *holder = findHolder(owner, mHolderId);
-    if (holder == nullptr || !holder->sharesLevelWith(mob) || mob.getComponent(LEASHABLE_COMPONENT) == nullptr) {
+    // An offline holder keeps the leash, so it reconnects when the player joins again.
+    if (holder == nullptr)
+        return;
+
+    if (!holder->sharesLevelWith(mob) || mob.getComponent(LEASHABLE_COMPONENT) == nullptr) {
         detach(owner, mob, true);
         return;
     }
@@ -150,9 +155,17 @@ void MobLeash::tick(ServerNetworkHandler &owner, MobActor &mob) {
     }
 
     if (distance > preset.mSoftDistance) {
-        if (distance <= preset.mHardDistance)
-            mob.getNavigation().moveTo(holder->getPosition(), FOLLOW_SPEED);
-        else
+        if (distance <= preset.mHardDistance) {
+            const Vector3f &target = holder->getPosition();
+            const float moved = (target.x - mPathTarget.x) * (target.x - mPathTarget.x)
+                                + (target.y - mPathTarget.y) * (target.y - mPathTarget.y)
+                                + (target.z - mPathTarget.z) * (target.z - mPathTarget.z);
+            // Re-pathing every tick would restart the search and stall the mob.
+            if (mob.getNavigation().isDone() || moved > REPATH_DISTANCE_SQUARED) {
+                mPathTarget = target;
+                mob.getNavigation().moveTo(target, FOLLOW_SPEED);
+            }
+        } else
             mob.getNavigation().stop(mob);
     }
 
@@ -256,6 +269,17 @@ void MobLeash::_sync(ServerNetworkHandler &owner, MobActor &mob) {
     EntityDataMap metadata;
     metadata.mEntries.push_back(entry);
     owner.sendActorMetadata(mob, metadata);
+}
+
+void MobLeash::appendSpawnMetadata(EntityDataMap &metadata) const {
+    if (!isLeashed())
+        return;
+
+    EntityDataEntry entry;
+    entry.mId = LEASH_HOLDER_DATA_ID;
+    entry.mFormat = EntityDataFormat::Long;
+    entry.mLongValue = mHolderId;
+    metadata.mEntries.push_back(entry);
 }
 
 void MobLeash::saveNbt(Tag &data) const {

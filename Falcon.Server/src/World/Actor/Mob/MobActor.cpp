@@ -1734,6 +1734,7 @@ void MobActor::fillSpawnMetadata(EntityDataMap &metadata) const {
     scale.mFloatValue = mScale;
     metadata.mEntries.push_back(scale);
 
+    mLeash.appendSpawnMetadata(metadata);
     _appendDefinitionData(metadata);
 }
 

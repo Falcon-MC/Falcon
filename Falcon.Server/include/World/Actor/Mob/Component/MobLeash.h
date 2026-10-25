@@ -8,6 +8,7 @@ class Actor;
 class MobActor;
 class ServerNetworkHandler;
 class Tag;
+class EntityDataMap;
 
 /** Leash held by a player, following the `minecraft:leashable` presets. */
 class MobLeash {
@@ -25,6 +26,8 @@ public:
     void detach(ServerNetworkHandler &owner, MobActor &mob, bool dropLead);
 
     void tick(ServerNetworkHandler &owner, MobActor &mob);
+
+    void appendSpawnMetadata(EntityDataMap &metadata) const;
 
     void saveNbt(Tag &data) const;
 
@@ -52,4 +55,5 @@ private:
     void _sync(ServerNetworkHandler &owner, MobActor &mob);
 
     int64_t mHolderId = 0;
+    Vector3f mPathTarget;
 };
