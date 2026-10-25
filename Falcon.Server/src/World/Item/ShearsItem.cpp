@@ -15,7 +15,6 @@ namespace {
     const float WEB_AND_LEAVES_SPEED = 15.0f;
     const float WOOL_SPEED = 5.0f;
     const float VINE_SPEED = 2.0f;
-    const float DEFAULT_SPEED = 1.0f;
 }
 
 ShearsItem::ShearsItem(const Item &base) : Item(base) {}
@@ -45,8 +44,8 @@ bool ShearsItem::getDestroySpeed(const std::string &blockIdentifier, float &spee
         return true;
     }
 
-    speed = DEFAULT_SPEED;
-    return true;
+    (void) speed;
+    return false;
 }
 
 bool ShearsItem::canDestroySpecial(const std::string &blockIdentifier) const {
