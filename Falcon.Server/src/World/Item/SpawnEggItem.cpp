@@ -7,17 +7,45 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
+#include <cmath>
 #include <string>
 
 namespace {
     const std::string SPAWN_EGG_SUFFIX = "_spawn_egg";
+    const char *const DISPLAY_TAG = "display";
+    const char *const NAME_TAG = "Name";
+    const float PLAYER_HALF_WIDTH = 0.3f;
+    const float FACING_OFFSET_DEGREES = 90.0f;
+    const float RADIANS_TO_DEGREES = 57.295776f;
+    const float MIN_FACING_DISTANCE_SQUARED = 0.00000011920929f;
 
     std::string resolveSpawnedActor(const std::string &identifier) {
         if (identifier == "minecraft:villager")
             return "minecraft:villager_v2";
         if (identifier == "minecraft:zombie_villager")
             return "minecraft:zombie_villager_v2";
+        if (identifier == "minecraft:evoker")
+            return "minecraft:evocation_illager";
+        if (identifier == "minecraft:tropical_fish")
+            return "minecraft:tropicalfish";
         return identifier;
+    }
+
+    // The client turns the spawned mob towards the player, measured from the player's box corner.
+    float yawTowards(const ServerPlayer &player, const Vector3f &spawnPosition) {
+        const Vector3f &position = player.getPosition();
+        const float dx = position.x - PLAYER_HALF_WIDTH - spawnPosition.x;
+        const float dz = position.z - PLAYER_HALF_WIDTH - spawnPosition.z;
+        if (dx * dx + dz * dz <= MIN_FACING_DISTANCE_SQUARED)
+            return 0.0f;
+        return std::atan2(dz, dx) * RADIANS_TO_DEGREES - FACING_OFFSET_DEGREES;
+    }
+
+    std::string customNameOf(const ItemStack &item) {
+        const Tag *display = item.mTag.get(DISPLAY_TAG);
+        if (display == nullptr || !display->isCompound())
+            return std::string();
+        return display->getString(NAME_TAG, std::string());
     }
 }
 
@@ -76,8 +104,19 @@ bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
             break;
     }
 
-    if (owner.spawnActor(owner.getLevelFor(player), entityIdentifier, spawnPosition) == nullptr)
+    const float yaw = yawTowards(player, spawnPosition);
+    const std::string customName = customNameOf(item);
+    ServerActor *spawned = owner.spawnActor(owner.getLevelFor(player), entityIdentifier, spawnPosition,
+                                            [&](ServerActor &actor) {
+                                                actor.setRotation(Vector3f(0.0f, yaw, yaw));
+                                                if (!customName.empty())
+                                                    actor.setNameTag(customName);
+                                            });
+    if (spawned == nullptr)
         return false;
+
+    if (!customName.empty())
+        owner.sendActorNameTag(*spawned);
 
     player.consumeOneHeldItem();
     return true;
