@@ -4,6 +4,7 @@
 #include "World/Level/Block/Components/BlockBehaviorRegistry.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/Block/BlockData.h"
+#include "World/Item/ItemEnchantments.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Types/ItemStack.h"
@@ -11,6 +12,8 @@
 #include <cstdlib>
 
 namespace {
+    const int32_t GRASS_SEED_CHANCE = 8;
+
     bool isSolidNeighbour(Level *level, const Vector3i &position) {
         if (level == nullptr)
             return false;
@@ -139,17 +142,28 @@ bool Block::isShears(const ItemStack &tool) {
     return tool.mDefinition != nullptr && tool.mDefinition->getIdentifier() == "minecraft:shears";
 }
 
-std::vector<BlockDrop> Block::grassDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
-                                         int32_t seedChance) {
-    std::vector<BlockDrop> drops;
-    if (isShears(tool))
-        drops.push_back({state.mName, 1});
+bool Block::hasSilkTouch(const ItemStack &tool) {
+    return ItemEnchantments::getLevel(tool, EnchantmentIds::SILK_TOUCH) > 0;
+}
 
-    if (rand() % seedChance == 0) {
-        const int32_t seedCount = fortuneLevel == 0 ? 1 : 1 + rand() % (fortuneLevel * 2);
-        drops.push_back({"minecraft:wheat_seeds", seedCount});
+int32_t Block::multifaceCount(const BlockState &state) {
+    int32_t bits = state.mStates.getInt("multi_face_direction_bits", 0);
+    int32_t count = 0;
+    for (; bits > 0; bits >>= 1)
+        count += bits & 1;
+    return count;
+}
+
+std::vector<BlockDrop> Block::grassDrops(const std::string &shearedItem, int32_t shearedCount,
+                                         const ItemStack &tool) {
+    std::vector<BlockDrop> drops;
+    if (isShears(tool)) {
+        drops.push_back({shearedItem, shearedCount});
+        return drops;
     }
 
+    if (rand() % GRASS_SEED_CHANCE == 0)
+        drops.push_back({"minecraft:wheat_seeds", 1});
     return drops;
 }
 

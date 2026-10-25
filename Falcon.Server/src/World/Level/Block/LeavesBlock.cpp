@@ -11,11 +11,49 @@ FALCON_REGISTER_BLOCK(LeavesBlock, 290);
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Types/ItemStack.h"
 
+#include <algorithm>
+#include <cstdlib>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace {
     const int LEAVES_SEARCH_DISTANCE = 7;
+
+    // One-in-N chances indexed by Fortune level, clamped to the last entry.
+    const int32_t SAPLING_CHANCE[] = {20, 16, 12, 10, 10};
+    const int32_t STICK_CHANCE[] = {50, 40, 30, 10, 10};
+    const int32_t APPLE_CHANCE[] = {200, 180, 160, 120, 40};
+    const int32_t MAX_FORTUNE_INDEX = 4;
+
+    struct LeafLoot {
+        const char *mSapling;
+        bool mApples;
+    };
+
+    const std::unordered_map<std::string, LeafLoot> &leafLoot() {
+        static const std::unordered_map<std::string, LeafLoot> loot = {
+                {"minecraft:oak_leaves", {"minecraft:oak_sapling", true}},
+                {"minecraft:dark_oak_leaves", {"minecraft:dark_oak_sapling", true}},
+                {"minecraft:spruce_leaves", {"minecraft:spruce_sapling", false}},
+                {"minecraft:birch_leaves", {"minecraft:birch_sapling", false}},
+                {"minecraft:jungle_leaves", {"minecraft:jungle_sapling", false}},
+                {"minecraft:acacia_leaves", {"minecraft:acacia_sapling", false}},
+                {"minecraft:cherry_leaves", {"minecraft:cherry_sapling", false}},
+                {"minecraft:pale_oak_leaves", {"minecraft:pale_oak_sapling", false}},
+                {"minecraft:azalea_leaves", {"minecraft:azalea", false}},
+                {"minecraft:azalea_leaves_flowered", {"minecraft:flowering_azalea", false}},
+                {"minecraft:orange_poplar_leaves", {"minecraft:poplar_sapling", false}},
+                {"minecraft:red_poplar_leaves", {"minecraft:poplar_sapling", false}},
+                {"minecraft:yellow_poplar_leaves", {"minecraft:poplar_sapling", false}},
+                {"minecraft:mangrove_leaves", {nullptr, false}}
+        };
+        return loot;
+    }
+
+    bool rollOneIn(const int32_t *chances, int32_t fortuneLevel) {
+        return rand() % chances[std::min(std::max(fortuneLevel, 0), MAX_FORTUNE_INDEX)] == 0;
+    }
 
     bool isLogState(const BlockState &state) {
         return BlockIdentifier::endsWith(state.mName, "_log")
@@ -90,4 +128,29 @@ void LeavesBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const 
         return;
 
     BlockActionHandler::destroyBlock(owner, level, position, state, true, ItemStack::air());
+}
+
+bool LeavesBlock::getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                           std::vector<BlockDrop> &drops) const {
+    leafDrops(state, tool, fortuneLevel, drops);
+    return true;
+}
+
+void LeavesBlock::leafDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                            std::vector<BlockDrop> &drops) {
+    if (isShears(tool) || hasSilkTouch(tool)) {
+        drops.push_back({state.mName, 1});
+        return;
+    }
+
+    const auto loot = leafLoot().find(state.mName);
+    if (loot == leafLoot().end())
+        return;
+
+    if (loot->second.mSapling != nullptr && rollOneIn(SAPLING_CHANCE, fortuneLevel))
+        drops.push_back({loot->second.mSapling, 1});
+    if (rollOneIn(STICK_CHANCE, fortuneLevel))
+        drops.push_back({"minecraft:stick", 1});
+    if (loot->second.mApples && rollOneIn(APPLE_CHANCE, fortuneLevel))
+        drops.push_back({"minecraft:apple", 1});
 }

@@ -11,17 +11,21 @@
 
 FALCON_REGISTER_BLOCK(DoublePlantBlock, 240);
 
-namespace {
-    const int32_t TALL_GRASS_SEED_CHANCE = 10;
-}
-
 bool DoublePlantBlock::getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
                                 std::vector<BlockDrop> &drops) const {
-    if (state.mName != "minecraft:tall_grass" && state.mName != "minecraft:large_fern")
-        return false;
+    (void) fortuneLevel;
 
-    drops = grassDrops(state, tool, fortuneLevel, TALL_GRASS_SEED_CHANCE);
-    return true;
+    if (state.mName == "minecraft:tall_grass") {
+        drops = grassDrops("minecraft:short_grass", 2, tool);
+        return true;
+    }
+
+    if (state.mName == "minecraft:large_fern") {
+        drops = grassDrops("minecraft:fern", 2, tool);
+        return true;
+    }
+
+    return false;
 }
 
 bool DoublePlantBlock::matches(const std::string &identifier) {

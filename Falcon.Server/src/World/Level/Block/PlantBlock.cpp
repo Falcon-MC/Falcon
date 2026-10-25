@@ -15,8 +15,6 @@ FALCON_REGISTER_BLOCK(PlantBlock, 320);
 #include <unordered_map>
 
 namespace {
-    const int32_t SHORT_GRASS_SEED_CHANCE = 8;
-
     struct PlantRule {
         PlantSupport mSupport;
         bool mReplaceable;
@@ -151,8 +149,10 @@ bool PlantBlock::canSurvive(Level &level, const Vector3i &position, const BlockS
 
 bool PlantBlock::getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
                           std::vector<BlockDrop> &drops) const {
+    (void) fortuneLevel;
+
     if (state.mName == "minecraft:short_grass" || state.mName == "minecraft:fern") {
-        drops = grassDrops(state, tool, fortuneLevel, SHORT_GRASS_SEED_CHANCE);
+        drops = grassDrops(state.mName, 1, tool);
         return true;
     }
 

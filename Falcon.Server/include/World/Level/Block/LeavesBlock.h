@@ -15,4 +15,11 @@ public:
                             const BlockState &state) const override;
 
     PistonMoveReaction getPistonMoveReaction() const override;
+
+    bool getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                  std::vector<BlockDrop> &drops) const override;
+
+    // Shared with flowered azalea leaves, which have their own block class.
+    static void leafDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                          std::vector<BlockDrop> &drops);
 };

@@ -128,19 +128,28 @@ namespace {
             customTool = customSpeed > 0;
         }
 
+        const Item *heldType = itemData == nullptr ? nullptr
+                                                   : VanillaItems::fromIdentifier(heldItem.mDefinition->getIdentifier());
+        float itemSpeed = 1.0f;
+        const bool itemDefinesSpeed = heldType != nullptr
+                                      && heldType->getDestroySpeed(blockData->mIdentifier, itemSpeed);
+
         const bool matchesTool = customTool || (itemData != nullptr && blockData->mToolType != BlockToolType::None &&
                                 (int32_t) itemData->mToolType == (int32_t) blockData->mToolType &&
                                 itemData->mToolTier >= (int32_t) blockData->mToolTier);
 
         const bool canHarvest = blockData->mToolType == BlockToolType::None || blockData->mHandHarvest ||
-                                matchesTool;
+                                matchesTool
+                                || (heldType != nullptr && heldType->canDestroySpecial(blockData->mIdentifier));
 
         double seconds = canHarvest ? blockHardness * 1.5 : blockHardness * 5.0;
 
         float speedMultiplier = 1.0f;
-        const bool correctTool = matchesTool;
+        const bool correctTool = matchesTool || itemDefinesSpeed;
 
-        if (correctTool)
+        if (itemDefinesSpeed)
+            speedMultiplier = itemSpeed;
+        else if (correctTool)
             speedMultiplier = customTool ? (float) customSpeed
                                          : toolSpeedMultiplier((BlockToolTier) (itemData == nullptr ? 0
                                                                                                     : itemData->mToolTier));
