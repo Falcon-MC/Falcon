@@ -60,6 +60,7 @@
 #include "Server/Localization.h"
 #include "Server/PropertiesSettings.h"
 #include "Resources/ResourcePackManager.h"
+#include "World/Item/ArmorTrims.h"
 
 #include <algorithm>
 #include <cstring>
@@ -521,6 +522,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     sendItemComponents(owner, player);
     sendActorIdentifiers(owner, player);
     sendCameraPresets(owner, player);
+    owner.getNetworkHandler().send(id, ArmorTrims::getPacket(), owner.getCodecContext());
     sendBiomeDefinitions(owner, player);
     sendAttributes(owner, player);
     sendAbilities(owner, player);
