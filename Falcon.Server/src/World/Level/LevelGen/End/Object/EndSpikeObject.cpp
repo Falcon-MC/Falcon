@@ -4,6 +4,7 @@
 #include "World/Level/LevelGen/End/TheEndGeneratorConstants.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 
+#include <cmath>
 #include <cstdlib>
 
 namespace {

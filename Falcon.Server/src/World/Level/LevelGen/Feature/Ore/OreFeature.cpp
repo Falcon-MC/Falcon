@@ -8,6 +8,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <unordered_set>
 #include <vector>

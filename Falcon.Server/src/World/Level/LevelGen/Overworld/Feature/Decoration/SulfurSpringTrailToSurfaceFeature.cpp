@@ -7,6 +7,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <string>

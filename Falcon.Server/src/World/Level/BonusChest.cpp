@@ -8,6 +8,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
 
+#include <cmath>
 #include <cstdlib>
 #include <random>
 

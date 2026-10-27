@@ -7,6 +7,7 @@
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 
+#include <cmath>
 #include <cstdlib>
 #include <vector>
 

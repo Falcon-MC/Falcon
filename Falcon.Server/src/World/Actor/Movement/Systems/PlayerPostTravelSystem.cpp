@@ -8,6 +8,8 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Protocol/Types/StartGameTypes.h"
 
+#include <cmath>
+
 using namespace MovementPhysics;
 
 namespace MovementPhysics {

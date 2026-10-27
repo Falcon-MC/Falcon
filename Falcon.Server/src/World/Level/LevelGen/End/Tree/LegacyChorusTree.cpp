@@ -6,6 +6,7 @@
 #include "World/Level/Block/ChorusPlantBlock.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 
+#include <cmath>
 #include <cstdlib>
 
 namespace {

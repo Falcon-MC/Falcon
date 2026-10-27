@@ -8,6 +8,7 @@
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
+#include <cmath>
 #include <cstdlib>
 
 FALCON_REGISTER_BLOCK(DragonEggBlock, 9);
