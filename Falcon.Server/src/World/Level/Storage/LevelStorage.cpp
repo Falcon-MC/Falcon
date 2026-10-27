@@ -762,7 +762,7 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
     data.putLong("RandomSeed", seed);
     data.putLong("Time", time);
     data.putInt("StorageVersion", 10);
-    data.putInt("NetworkVersion", 2193);
+    data.putInt("NetworkVersion", 2225);
     data.putByte("bonusChestEnabled", bonusChestEnabled ? 1 : 0);
     data.putByte("bonusChestSpawned", bonusChestSpawned ? 1 : 0);
     data.putInt("limitedWorldOriginX", spawnX);

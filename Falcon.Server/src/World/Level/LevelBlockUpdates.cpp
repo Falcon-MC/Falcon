@@ -23,10 +23,13 @@ void Level::setBlock(const Vector3i &position, const BlockState &state, bool upd
     if (!isChunkReady(*this, position))
         return;
 
-    setBlockState(position.x, position.y, position.z, state);
+    const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+    const BlockState placed = block != nullptr && block->hasDynamicShape()
+                              ? block->updateShape(*this, position, state) : state;
+    setBlockState(position.x, position.y, position.z, placed);
 
     if (mOwner != nullptr)
-        BlockActionHandler::broadcastBlockUpdate(*mOwner, *this, position, state);
+        BlockActionHandler::broadcastBlockUpdate(*mOwner, *this, position, placed);
 
     if (!update)
         return;
@@ -54,7 +57,15 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type) {
     ++mUpdateDepth;
 
     ServerNetworkHandler &owner = *mOwner;
-    const BlockState state = getBlockState(position.x, position.y, position.z);
+    BlockState state = getBlockState(position.x, position.y, position.z);
+    const Block *shapedBlock = VanillaBlocks::fromIdentifier(state.mName);
+    if (shapedBlock != nullptr && shapedBlock->hasDynamicShape()) {
+        const BlockState shaped = shapedBlock->updateShape(*this, position, state);
+        if (!(shaped == state)) {
+            setBlock(position, shaped, false);
+            state = shaped;
+        }
+    }
     const std::string &identifier = state.mName;
 
     if (PistonSystem::isPiston(identifier)) {

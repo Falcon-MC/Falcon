@@ -125,6 +125,10 @@ public:
         return false;
     }
 
+    virtual bool suppressesFreezing() const {
+        return false;
+    }
+
     virtual float getSpeedFactor() const {
         return 1.0f;
     }
@@ -249,6 +253,16 @@ public:
                                                     const BlockState &state) const;
 
     virtual bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const;
+
+    virtual bool hasDynamicShape() const {
+        return false;
+    }
+
+    virtual BlockState updateShape(Level &level, const Vector3i &position, const BlockState &state) const {
+        (void) level;
+        (void) position;
+        return state;
+    }
 
     virtual void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                     const BlockState &state) const;

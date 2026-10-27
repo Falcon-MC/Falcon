@@ -4,6 +4,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Components/BlockBehavior.h"
 #include "World/Actor/Movement/PlayerMovementContext.h"
+#include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Block.h"
 #include "World/Inventory/PlayerInventory.h"
@@ -34,16 +35,13 @@ void GroundTravelSystem::tick(PlayerMovementContext &context) {
         const Block *ground = blockAt(context.level, state.start.x, state.start.y - GROUND_PROBE_DEPTH, state.start.z);
         const float groundFriction = blockFriction(ground);
         travel.friction *= groundFriction;
-        const float speed = std::max(0.0f, context.player.getAttributes().get("minecraft:movement"));
         float accelerationMultiplier = ground == nullptr ? 1.0f : ground->getAccelerationFrictionMultiplier();
         if (ItemEnchantments::getLevel(boots, EnchantmentIds::SOUL_SPEED) > 0)
             accelerationMultiplier = 1.0f;
         // Ground acceleration scales with the cube of (default friction / block friction), so
         // slippery blocks such as ice accelerate slowly but keep their momentum.
         const float accelerationFriction = (groundFriction * accelerationMultiplier) * AIR_FRICTION;
-        const float baseFriction = AIR_FRICTION * DEFAULT_BLOCK_FRICTION;
-        const float ratio = baseFriction / accelerationFriction;
-        const float movement = abilities.sprinting ? speed * SPRINT_SPEED_MULTIPLIER : speed;
-        travel.acceleration = ((ratio * ratio) * ratio) * movement;
+        travel.acceleration = PlayerMovementSimulator::groundAcceleration(context.player, accelerationFriction,
+                                                                          abilities.sprinting);
     }
 }

@@ -52,6 +52,8 @@ public:
 
     static bool isNormalBlock(const BlockState &state);
 
+    static bool canConnectWireTo(Level &level, const Vector3i &position, int side);
+
     static bool isPowerSource(const BlockState &state);
 
     static int getWeakPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face);

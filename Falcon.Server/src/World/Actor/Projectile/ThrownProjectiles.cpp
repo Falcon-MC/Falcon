@@ -3,6 +3,7 @@
 #include "World/Actor/Mob/Hostile/BlazeActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
@@ -15,6 +16,8 @@ namespace {
     const float SNOWBALL_KNOCKBACK = 0.3f;
     const float SNOWBALL_BLAZE_DAMAGE = 3.0f;
     const char *SNOWBALL_PARTICLE = "minecraft:snowballpoof";
+    // Bedrock v2225 registers ICE_BALL_BREAK as particle type 105.
+    const int32_t ICE_BALL_BREAK_PARTICLE_EVENT = 0x4000 | 105;
     const float EGG_KNOCKBACK = 0.2f;
     const int32_t EGG_HATCH_CHANCE = 8;
     const int32_t EGG_QUADRUPLE_HATCH_CHANCE = 32;
@@ -65,6 +68,22 @@ bool SnowballActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitP
     knockBackFrom(owner, hitActor, hitPosition, SNOWBALL_KNOCKBACK);
     owner.spawnParticleEffect(owner.getLevelFor(*this), SNOWBALL_PARTICLE, hitPosition);
     return true;
+}
+
+bool IceBallActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
+    (void) hitPlayer;
+    LevelEventPacket particle;
+    particle.mEventId = ICE_BALL_BREAK_PARTICLE_EVENT;
+    particle.mPosition = hitPosition;
+    particle.mData = 0;
+    BlockActionHandler::broadcastToViewers(owner, owner.getLevelFor(*this), hitPosition, particle);
+    owner.playLevelSound(owner.getLevelFor(*this), "ice_ball.break", hitPosition);
+    return true;
+}
+
+bool IceBallActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
+    (void) hitActor;
+    return onHit(owner, hitPosition, nullptr);
 }
 
 bool EggActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {

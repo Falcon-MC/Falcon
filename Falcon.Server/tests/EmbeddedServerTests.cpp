@@ -85,7 +85,7 @@ int main() {
         ClientConnectionSettings client;
         client.mHost = "127.0.0.1";
         client.mPort = server.getPort();
-        client.mProtocolVersion = 2193;
+        client.mProtocolVersion = 2225;
         client.mGameVersion = "1.26.52";
         client.mIdentity.mDisplayName = "EmbeddedPlayer";
         client.mChunkRadius = 4;

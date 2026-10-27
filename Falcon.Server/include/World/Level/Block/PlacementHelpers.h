@@ -15,6 +15,8 @@ namespace PlacementHelpers {
 
     BlockState belowOf(Level &level, const Vector3i &position);
 
+    bool hasSolidFace(const BlockState &state, int face);
+
     std::string replaceSuffix(const std::string &identifier, const std::string &suffix,
                               const std::string &replacement);
 }

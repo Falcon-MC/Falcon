@@ -3,6 +3,8 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/Tree/TreeBlockFace.h"
+#include "World/Level/Block/ChorusPlantBlock.h"
+#include "World/Level/Block/Components/PlacementOrientation.h"
 
 #include <cstdlib>
 
@@ -27,12 +29,32 @@ bool LegacyChorusTree::generate(BlockManager &manager, IRandom &random, int32_t 
 bool LegacyChorusTree::generate(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z,
                                 int32_t maxSize) {
     manager.setBlockStateAt(x, y, z, chorusPlantState());
-    growImmediately(manager, random, x, y, z, maxSize, 0);
+    std::vector<Vector3i> plants{Vector3i(x, y, z)};
+    _grow(manager, random, x, y, z, maxSize, 0, plants);
+    _connect(manager, plants);
     return true;
 }
 
 void LegacyChorusTree::growImmediately(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z,
                                        int32_t maxSize, int32_t age) {
+    std::vector<Vector3i> plants;
+    _grow(manager, random, x, y, z, maxSize, age, plants);
+    _connect(manager, plants);
+}
+
+void LegacyChorusTree::_connect(BlockManager &manager, const std::vector<Vector3i> &plants) {
+    for (const Vector3i &position: plants) {
+        const BlockState state = manager.getBlockAt(position.x, position.y, position.z);
+        manager.setBlockStateAt(position.x, position.y, position.z,
+                               ChorusPlantBlock::connectedState(state, [&manager, &position](int face) {
+            const Vector3i other = PlacementOrientation::relativePosition(position, face);
+            return &manager.getBlockAt(other.x, other.y, other.z);
+        }));
+    }
+}
+
+void LegacyChorusTree::_grow(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z,
+                             int32_t maxSize, int32_t age, std::vector<Vector3i> &plants) {
     int32_t height = 1 + random.nextInt(4);
     if (age == 0)
         height++;
@@ -42,6 +64,7 @@ void LegacyChorusTree::growImmediately(BlockManager &manager, IRandom &random, i
             return;
 
         manager.setBlockStateAt(x, y + offsetY, z, chorusPlantState());
+        plants.emplace_back(x, y + offsetY, z);
     }
 
     if (age < 4) {
@@ -61,7 +84,8 @@ void LegacyChorusTree::growImmediately(BlockManager &manager, IRandom &random, i
                     && _isHorizontalAirExcept(manager, checkX, checkY, checkZ,
                                               (int32_t) TreeBlockFaces::getOpposite(face))) {
                     manager.setBlockStateAt(checkX, checkY, checkZ, chorusPlantState());
-                    growImmediately(manager, random, checkX, checkY, checkZ, maxSize, age + 1);
+                    plants.emplace_back(checkX, checkY, checkZ);
+                    _grow(manager, random, checkX, checkY, checkZ, maxSize, age + 1, plants);
                 }
             }
         }

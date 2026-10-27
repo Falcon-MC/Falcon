@@ -71,7 +71,7 @@ FetchContent_MakeAvailable(libdatachannel)
 FetchContent_Declare(
     falcon_protocol
     GIT_REPOSITORY https://github.com/Falcon-MC/Protocol.git
-    GIT_TAG main
+    GIT_TAG 26.60
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )
@@ -80,7 +80,7 @@ FetchContent_MakeAvailable(falcon_protocol)
 FetchContent_Declare(
     falcon_network
     GIT_REPOSITORY https://github.com/Falcon-MC/Network.git
-    GIT_TAG main
+    GIT_TAG 26.60
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )
@@ -98,7 +98,7 @@ FetchContent_MakeAvailable(falcon_block_state_updater)
 FetchContent_Declare(
     falcon_bedrock_data
     GIT_REPOSITORY https://github.com/Falcon-MC/BedrockData.git
-    GIT_TAG main
+    GIT_TAG bedrock-1.26.60.30-preview
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
     SOURCE_SUBDIR cmake

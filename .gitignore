@@ -18,3 +18,4 @@
 !/Falcon.Server
 !/Falcon.Server/**
 /Falcon.Server/benchmarks/
+/Falcon.Server/docs/

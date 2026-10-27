@@ -13,6 +13,16 @@ public:
 
     bool canBeReplaced(const BlockState &state) const override;
 
+    bool suppressesFreezing() const override {
+        return true;
+    }
+
+    bool hasDynamicShape() const override {
+        return true;
+    }
+
+    BlockState updateShape(Level &level, const Vector3i &position, const BlockState &state) const override;
+
     PathHazard getPathHazard() const override {
         return PathHazard::Damaging;
     }

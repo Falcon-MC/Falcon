@@ -40,7 +40,8 @@ enum class MobEffectId : int32_t {
     BadOmen = 28,
     VillageHero = 29,
     Darkness = 30,
-    Weaving = 33
+    Weaving = 33,
+    Freezing = 38
 };
 
 enum class MobEffectEvent : uint8_t { Add, Modify, Remove };
@@ -59,7 +60,7 @@ struct MobEffectInstance {
 const char *getMobEffectName(MobEffectId id);
 bool parseMobEffect(const std::string &value, MobEffectId &id);
 bool isKnownMobEffect(int32_t raw);
-constexpr int32_t MAX_MOB_EFFECT_ID = (int32_t) MobEffectId::Weaving;
+constexpr int32_t MAX_MOB_EFFECT_ID = (int32_t) MobEffectId::Freezing;
 bool parseDefinitionMobEffect(const std::string &value, MobEffectId &id);
 
 class MobEffect {
@@ -141,6 +142,12 @@ public:
 
 class SlownessMobEffect final : public MobEffect {};
 class SpeedMobEffect final : public MobEffect {};
+class FreezingMobEffect final : public MobEffect {
+public:
+    static bool isImmune(const Actor &actor);
+    static bool isProtected(const Actor &actor);
+    static bool isVulnerable(const Actor &actor);
+};
 class WitherMobEffect final : public MobEffect {
 public:
     void tick(Actor &, const MobEffectInstance &) const override;
@@ -179,6 +186,7 @@ public:
 
     float movementSpeedMultiplier() const;
     void setMovementSpeedBonus(float bonus);
+    float advanceFreezing(bool suppressed);
     bool hasResistance() const { return has(MobEffectId::Resistance); }
 
     bool consumeAttributesDirty() {
@@ -200,6 +208,8 @@ private:
     EventCallback mEventCallback;
     bool mAttributesDirty = false;
     float mMovementSpeedBonus = 0.0f;
+    int32_t mFreezingTicks = 0;
+    int32_t mFreezingDamageTicks = 0;
 };
 
 using MobEffectSystem = MobEffectManager;

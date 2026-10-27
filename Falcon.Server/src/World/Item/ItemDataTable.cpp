@@ -7,6 +7,8 @@
 namespace {
 
 const ItemData gItemDataTable[] = {
+        {ItemTypeIds::ICE_BALL, "minecraft:ice_ball", "Ice Ball", 16, 0, ToolType::None, 0, 0, 0, ArmorSlot::None, 0, 0, 0, 0, 0.0f},
+        {ItemTypeIds::FROSTBITE_SPAWN_EGG, "minecraft:frostbite_spawn_egg", "Frostbite Spawn Egg", 64, 0, ToolType::None, 0, 0, 0, ArmorSlot::None, 0, 0, 0, 0, 0.0f},
         {ItemTypeIds::ACACIA_BOAT, "minecraft:acacia_boat", "Acacia Boat", 1, 0, ToolType::None, 0, 0, 0, ArmorSlot::None, 0, 0, 0, 0, 0.0f},
         {ItemTypeIds::ACACIA_CHEST_BOAT, "minecraft:acacia_chest_boat", "Acacia Chest Boat", 1, 0, ToolType::None, 0, 0, 0, ArmorSlot::None, 0, 0, 0, 0, 0.0f},
         {ItemTypeIds::ACACIA_HANGING_SIGN, "minecraft:acacia_hanging_sign", "Acacia Hanging Sign", 16, 0, ToolType::None, 0, 0, 0, ArmorSlot::None, 0, 0, 0, 0, 0.0f},

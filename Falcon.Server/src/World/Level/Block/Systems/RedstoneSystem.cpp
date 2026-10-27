@@ -812,6 +812,10 @@ int64_t RedstoneSystem::packPosition(const Vector3i &position)
     return (x << 38) | (y << 26) | z;
 }
 
+bool RedstoneSystem::canConnectWireTo(Level &level, const Vector3i &position, int side) {
+    return canConnectTo(level, position, side);
+}
+
 bool RedstoneSystem::isNormalBlock(const BlockState &state)
 {
     const BlockData *data = BlockDataTable::find(state.mName.c_str());

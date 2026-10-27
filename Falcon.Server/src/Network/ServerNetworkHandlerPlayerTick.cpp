@@ -6,6 +6,7 @@
 #include "World/Level/Block/Systems/FurnaceSystem.h"
 #include "World/Item/ElytraItem.h"
 #include "World/Level/Level.h"
+#include "World/Actor/FreezingSystem.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/MovementHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
@@ -144,6 +145,8 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
 
     _tickItemUse(player);
 
+    if (player.isSpawned())
+        FreezingSystem::tick(*this, player);
     const bool effectAttributesDirty = player.getEffects().consumeAttributesDirty();
     const bool effectStateChanged = player.isSpawned() && player.tickEffects(1);
     if (player.isSpawned() && (effectAttributesDirty || effectStateChanged)) {

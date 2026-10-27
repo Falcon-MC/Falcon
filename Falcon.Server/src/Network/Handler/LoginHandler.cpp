@@ -253,6 +253,8 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         player.setXuid("");
     }
 
+    player.setPlayFabId(request.getPlayFabId());
+
     const BanEntry *ban = owner.getBanList().find(player.getName());
     if (ban == nullptr)
         ban = owner.getIpBanList().find(id.getAddress());
@@ -1160,6 +1162,7 @@ void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &pl
     newEntry.mActorId = player.getUniqueId();
     newEntry.mName = player.getName();
     newEntry.mXuid = player.getXuid();
+    newEntry.mPlayFabId = player.getPlayFabId();
     newEntry.mSkin = player.getSkin();
     newEntry.mBuildPlatform = player.getBuildPlatform();
 
@@ -1179,6 +1182,7 @@ void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &pl
             existingEntry.mActorId = entry.second.getUniqueId();
             existingEntry.mName = entry.second.getName();
             existingEntry.mXuid = entry.second.getXuid();
+            existingEntry.mPlayFabId = entry.second.getPlayFabId();
             existingEntry.mSkin = entry.second.getSkin();
             existingEntry.mBuildPlatform = entry.second.getBuildPlatform();
             existing.mEntries.push_back(existingEntry);

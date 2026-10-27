@@ -381,6 +381,7 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
 
     auto result = mChunks.emplace(key, std::move(chunk));
     _replayPendingChanges(key);
+    _refreshChunkShapes(chunkX, chunkZ);
     return result.first->second;
 }
 
@@ -401,7 +402,41 @@ LevelChunk &Level::generateTerrainChunk(int32_t chunkX, int32_t chunkZ) {
 LevelChunk &Level::insertChunk(LevelChunk chunk) {
     const int64_t key = _packChunk(chunk.getX(), chunk.getZ());
     chunk.setDimension(mDimension);
-    return mChunks.emplace(key, std::move(chunk)).first->second;
+    auto result = mChunks.emplace(key, std::move(chunk));
+    if (result.second)
+        _refreshChunkShapes(result.first->second.getX(), result.first->second.getZ());
+    return result.first->second;
+}
+
+void Level::_refreshChunkShapes(int32_t chunkX, int32_t chunkZ) {
+    // Only inspect sections whose palette contains a derived shape. Revisit neighbours so a
+    // connection held at an unloaded chunk border is resolved when that chunk arrives.
+    for (int32_t dx = -1; dx <= 1; ++dx) {
+        for (int32_t dz = -1; dz <= 1; ++dz) {
+            LevelChunk *chunk = peekChunkPtr(chunkX + dx, chunkZ + dz);
+            if (chunk == nullptr)
+                continue;
+            for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; ++index) {
+                if (!chunk->getSubChunk(index).hasDynamicShapes())
+                    continue;
+                for (int x = 0; x < 16; ++x) {
+                    for (int z = 0; z < 16; ++z) {
+                        for (int y = 0; y < 16; ++y) {
+                            const int worldY = (index + LevelChunk::LOWEST_SUB_CHUNK_Y) * 16 + y;
+                            const BlockState state = chunk->getBlock(x, worldY, z);
+                            const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+                            if (block == nullptr || !block->hasDynamicShape())
+                                continue;
+                            const Vector3i position(chunk->getX() * 16 + x, worldY, chunk->getZ() * 16 + z);
+                            const BlockState shaped = block->updateShape(*this, position, state);
+                            if (!(shaped == state))
+                                setBlock(position, shaped, false);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 LevelChunk Level::extractChunk(int32_t chunkX, int32_t chunkZ) {
@@ -751,6 +786,7 @@ size_t Level::drainCompletedChunks() {
             added++;
 
             _queueGeneratedChanges(std::move(result.mOverflowChanges));
+            _refreshChunkShapes(result.mX, result.mZ);
         }
 
         _replayPendingChanges(key);

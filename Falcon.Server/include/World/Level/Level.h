@@ -333,6 +333,8 @@ public:
     size_t getPendingChangeChunkCount() const { return mPendingBlockChanges.size(); }
 
 private:
+    void _refreshChunkShapes(int32_t chunkX, int32_t chunkZ);
+
     static constexpr int MAX_UPDATE_DEPTH = 512;
 
     static int64_t _packChunk(int32_t x, int32_t z);

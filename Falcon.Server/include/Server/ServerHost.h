@@ -10,8 +10,8 @@ class ServerNetworkHandler;
 struct ServerHostOptions {
     std::string serverName = "Falcon Server";
     std::string subMotd = "Falcon";
-    std::string gameVersion = "1.26.52";
-    int protocolVersion = 2193;
+    std::string gameVersion = "1.26.60";
+    int protocolVersion = 2225;
     int maxPlayers = 20;
     unsigned short port = 19132;
     unsigned short portV6 = 19133;

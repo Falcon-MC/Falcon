@@ -35,6 +35,8 @@ public:
 
     bool hasLightEmitter() const;
 
+    bool hasDynamicShapes() const;
+
     uint32_t getBiome(int x, int y, int z) const;
 
     void setBiome(int x, int y, int z, uint32_t biomeId);

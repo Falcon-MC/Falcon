@@ -17,7 +17,7 @@ namespace {
             "poison", "long_poison", "strong_poison", "regeneration", "long_regeneration", "strong_regeneration",
             "strength", "long_strength", "strong_strength", "weakness", "long_weakness", "wither", "turtle_master",
             "long_turtle_master", "strong_turtle_master", "slow_falling", "long_slow_falling", "strong_slowness",
-            "wind_charged", "weaving", "oozing", "infested"
+            "wind_charged", "weaving", "oozing", "infested", "freezing", "long_freezing"
     };
 }
 
@@ -148,6 +148,10 @@ std::vector<PotionEffect> getPotionEffects(int32_t potionId) {
             return {timed(MobEffectId::SlowFalling, 1800, 0)};
         case 41:
             return {timed(MobEffectId::SlowFalling, 4800, 0)};
+        case 47:
+            return {timed(MobEffectId::Freezing, 900, 0)};
+        case 48:
+            return {timed(MobEffectId::Freezing, 1800, 0)};
         default:
             return {};
     }

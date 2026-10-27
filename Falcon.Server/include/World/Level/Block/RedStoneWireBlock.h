@@ -15,4 +15,10 @@ public:
     bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
 
     bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
+
+    bool hasDynamicShape() const override {
+        return true;
+    }
+
+    BlockState updateShape(Level &level, const Vector3i &position, const BlockState &state) const override;
 };

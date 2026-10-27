@@ -10,6 +10,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
 #include "Server/Commands/ServerCommandOrigin.h"
+#include "World/Actor/FreezingSystem.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Math/MathConstants.h"
 #include "Protocol/Packets/AddActorPacket.h"
@@ -569,6 +570,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
             shooter = &entry.second;
     }
 
+    bool applyArrowEffect = false;
     ServerPlayer *victimPlayer = dynamic_cast<ServerPlayer *>(&target);
     if (victimPlayer != nullptr) {
         const Vector3f motion = projectile.getMotion();
@@ -579,7 +581,9 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         source.mAttacker = shooter;
         source.fromOrigin(origin).asProjectile();
 
-        if (hurt(*victimPlayer, damage, source) == DamageResult::Blocked) {
+        const DamageResult result = hurt(*victimPlayer, damage, source);
+        applyArrowEffect = result == DamageResult::Dealt;
+        if (result == DamageResult::Blocked) {
             if (!isTrident)
                 return true;
 
@@ -598,8 +602,15 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         if (victimActor != nullptr) {
             ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimActor->getName());
             source.mAttacker = shooter;
-            damageActor(*victimActor, damage, source.asProjectile(), data.mLootingLevel);
+            applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile(), data.mLootingLevel);
         }
+    }
+
+    if (!isTrident && applyArrowEffect && data.mPotionId >= 0 && target.isAlive()) {
+        if (victimPlayer != nullptr)
+            applyPotionEffects(*victimPlayer, data.mPotionId, 0.125f);
+        else if (auto *victim = dynamic_cast<ServerActor *>(&target))
+            applyPotionEffects(*victim, data.mPotionId, 0.125f);
     }
 
     const Vector3f targetPosition = target.getPosition();
@@ -1410,6 +1421,9 @@ void ServerNetworkHandler::tickActors() {
             if (!actor.isAlive() || &getLevelFor(actor) != &level)
                 continue;
 
+            FreezingSystem::tick(*this, actor);
+            if (!actor.isAlive())
+                continue;
             actor.tickEffects(1);
             if (actor.refreshVisibleEffects())
                 syncActorFlags(actor);
