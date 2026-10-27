@@ -1,27 +1,34 @@
 #include "Server/ServerHost.h"
 
 #include "BuildInfo.h"
-#include "Actor/AI/Goal/FollowCaravanGoal.h"
-#include "Actor/Definition/EntityDefinitions.h"
-#include "Actor/Spawn/SpawnRules.h"
-#include "Block/BlockPaletteRegistry.h"
-#include "Block/Inventory/EnderChestInventoryStore.h"
+#include "World/Actor/AI/Goal/FollowCaravanGoal.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Spawn/SpawnRules.h"
+#include "World/Level/Block/BlockPaletteRegistry.h"
+#include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Utility/UUID.h"
-#include "Item/StringToItemParser.h"
-#include "Level/AutoCompaction.h"
-#include "Level/Generator/Biome/BiomeChunkGenDataRegistry.h"
-#include "Network/Handler/ServerNetworkHandler.h"
+#include "World/Item/StringToItemParser.h"
+#include "World/Level/Storage/AutoCompaction.h"
+#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+#include "Network/ServerNetworkHandler.h"
 #include "Network/TransportFactory.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Localization.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
 
+#include <algorithm>
 #include <fstream>
+#include <future>
 #include <random>
+#include <atomic>
+#include <exception>
+#include <stdexcept>
+#include "World/Level/WorldManager.h"
 
 namespace {
+    std::atomic<bool> processOwned{false};
     const char *const PROPERTIES_FILE = "server.properties";
     const char *const PROFILER_CONFIG_FILE = "bootstrap.json";
     const char *const CDN_CONFIG_FILE = "cdn_config.json";
@@ -114,11 +121,8 @@ namespace {
     void logTransportNotice(TransportLayer transport) {
         LOG_INFO(LogAreaID::Server, "==================== TRANSPORT =======================");
         LOG_INFO(LogAreaID::Server, "Connection type: %s", toString(transport));
-        if (transport == TransportLayer::NetherNet) {
+        if (transport == TransportLayer::NetherNet)
             LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over plain HTTP.");
-        } else {
-            LOG_INFO(LogAreaID::Server, "RakNet transport is active.");
-        }
         LOG_INFO(LogAreaID::Server, "======================================================");
     }
 
@@ -156,31 +160,61 @@ namespace {
 ServerHost::ServerHost() = default;
 
 ServerHost::~ServerHost() {
-    stop();
+    try { stop(); } catch (...) {}
+    release();
+}
+
+bool ServerHost::acquire() {
+    if (mOwnsProcess) return true;
+    bool expected = false;
+    mOwnsProcess = processOwned.compare_exchange_strong(expected, true);
+    return mOwnsProcess;
+}
+
+void ServerHost::release() noexcept {
+    if (mOwnsProcess && mHandler == nullptr) {
+        mOwnsProcess = false;
+        processOwned.store(false);
+    }
 }
 
 bool ServerHost::start(const ServerHostOptions &options) {
-    if (mHandler != nullptr)
+    if (mHandler != nullptr || !acquire())
         return false;
 
-    BiomeChunkGenDataRegistry::initialize();
+    // These embedded registries are independent. Join before constructing the handler so
+    // the game only sees fully initialized definitions.
+    auto entityDefinitions = std::async(std::launch::async, EntityDefinitions::initialize);
+    auto biomeData = std::async(std::launch::async, BiomeChunkGenDataRegistry::initialize);
     BlockPaletteRegistry::getInstance().initialize();
     SpawnRules::initialize();
-    EntityDefinitions::initialize();
+    entityDefinitions.get();
+    biomeData.get();
 
     const std::string propertiesPath = ServerPaths::file(PROPERTIES_FILE);
     PropertiesSettings properties(propertiesPath);
     for (const auto &entry: options.properties)
-        properties.setProperty(entry.first, entry.second);
+        if (!properties.setProperty(entry.first, entry.second))
+            throw std::runtime_error("Could not write server property: " + entry.first);
+    if (!properties.load(propertiesPath))
+        throw std::runtime_error("Could not read server.properties");
+    if (!options.properties.empty() && !properties.getInvalidProperties().empty())
+        throw std::invalid_argument("Invalid server property: " + properties.getInvalidProperties().front());
+    if (!WorldManager::isValidName(properties.getLevelName()))
+        throw std::invalid_argument("Invalid world name");
 
     Localization::setServerLocale(properties.getLanguage());
     logStartupBanner(properties);
 
+    const std::vector<std::string> &invalid = properties.getInvalidProperties();
+    if (std::find(invalid.begin(), invalid.end(), "transport=raknet") != invalid.end())
+        LOG_ERROR(LogAreaID::Server, "RakNet is no longer supported, set transport=nethernet in %s. "
+                                     "Falling back to NetherNet.", PROPERTIES_FILE);
+
     const TransportLayer transport = properties.getTransportLayer();
 
     if (transport == TransportLayer::Unknown) {
-        LOG_FATAL(LogAreaID::Server, "Unknown 'transport' value in %s, expected 'raknet' or 'nethernet'",
-                  PROPERTIES_FILE);
+        LOG_FATAL(LogAreaID::Server, "Unknown 'transport' value in %s, expected 'nethernet'", PROPERTIES_FILE);
         BedrockLog::flush();
         return false;
     }
@@ -234,9 +268,9 @@ bool ServerHost::start(const ServerHostOptions &options) {
     return true;
 }
 
-void ServerHost::tick() {
+void ServerHost::tick(bool paused) {
     if (mHandler != nullptr && !mShutDown)
-        mHandler->tick();
+        mHandler->tick(paused);
 }
 
 void ServerHost::shutdown() {
@@ -255,12 +289,16 @@ void ServerHost::stop() {
     if (mHandler == nullptr)
         return;
 
-    shutdown();
+    std::exception_ptr error;
+    try { shutdown(); } catch (...) { error = std::current_exception(); }
+    for (World *world: mHandler->getWorlds().getWorlds())
+        AutoCompaction::untrack(world->getOverworld());
     mHandler.reset();
     mShutDown = false;
     mPort = 0;
     resetProcessState();
     BedrockLog::flush();
+    if (error) std::rethrow_exception(error);
 }
 
 bool ServerHost::isRunning() const {

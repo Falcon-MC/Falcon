@@ -1,24 +1,25 @@
 #include "Network/Handler/LoginHandler.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include "Scripting/Content/CustomContentRegistry.h"
 
-#include "Block/Components/CreativeContentTable.h"
-#include "Block/DataDrivenBlockDefinitions.h"
-#include "Block/Blocks/VanillaBlocks.h"
-#include "Block/VoxelShapeRegistry.h"
-#include "Command/Command.h"
+#include "World/Level/Block/Components/CreativeContentTable.h"
+#include "World/Level/Block/DataDrivenBlockDefinitions.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Block/VoxelShapeRegistry.h"
+#include "Server/Commands/Command.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/BinaryStream.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
-#include "Actor/ActorAttributes.h"
-#include "Actor/Definition/EntityDefinitions.h"
-#include "Actor/VanillaActorTable.h"
-#include "Actor/PlayerAbility.h"
-#include "Actor/ServerPlayer.h"
-#include "Item/CraftingRecipeTable.h"
-#include "Item/ItemNetworkIdTable.h"
-#include "Level/Level.h"
+#include "World/Actor/ActorAttributes.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/VanillaActorTable.h"
+#include "World/Actor/Player/PlayerAbility.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Item/CraftingRecipeTable.h"
+#include "World/Item/ItemNetworkIdTable.h"
+#include "World/Level/Level.h"
 #include "Network/ConnectionRequest.h"
 #include "Network/Crypto/EncryptionHandshake.h"
 #include "Network/Crypto/KeyPair.h"
@@ -26,7 +27,7 @@
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/LoginChainVerifier.h"
 #include "Network/Handler/NetworkHandler.h"
-#include "Network/Handler/ServerNetworkHandler.h"
+#include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AvailableCommandsPacket.h"
 #include "Protocol/Packets/AvailableActorIdentifiersPacket.h"
 #include "Protocol/Packets/BiomeDefinitionListPacket.h"
@@ -53,12 +54,13 @@
 #include "Protocol/Packets/SetTimePacket.h"
 #include "Protocol/Packets/UpdateAbilitiesPacket.h"
 #include "Protocol/Packets/UpdateAttributesPacket.h"
-#include "Level/BonusChest.h"
-#include "Plugin/PluginEvent.h"
-#include "Plugin/PluginManager.h"
+#include "World/Level/BonusChest.h"
+#include "Falcon/Plugin/PluginEvent.h"
+#include "Falcon/Plugin/PluginManager.h"
 #include "Server/Localization.h"
 #include "Server/PropertiesSettings.h"
-#include "Server/ResourcePackManager.h"
+#include "Resources/ResourcePackManager.h"
+#include "World/Item/ArmorTrims.h"
 
 #include <algorithm>
 #include <cstring>
@@ -178,7 +180,7 @@ void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, con
         return;
     }
 
-    owner.getPlayers().erase(id);
+    owner.erasePlayer(id);
     auto inserted = owner.getPlayers().try_emplace(id, id, owner.allocateRuntimeId(), &owner);
     ServerPlayer &player = inserted.first->second;
     player.setCodec(std::move(codec));
@@ -208,7 +210,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         LOG_WARN(LogAreaID::Network, "%s logged in with protocol %d after announcing another one",
                  id.getAddress().c_str(), packet.mProtocolVersion);
         owner._disconnect(id, "disconnectionScreen.unexpectedPacket");
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
@@ -226,14 +228,14 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         LOG_WARN(LogAreaID::Network, "%s sent a login that failed verification: %s", id.getAddress().c_str(),
                  verifier.getFailureReason().c_str());
         owner._disconnect(id, "disconnectionScreen.notAuthenticated");
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
     if (owner.getProperties().getOnlineMode() && !verifier.isSigned()) {
         LOG_WARN(LogAreaID::Network, "%s failed Xbox Live authentication", id.getAddress().c_str());
         owner._disconnect(id, "disconnectionScreen.notAuthenticated");
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
@@ -251,6 +253,8 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         player.setXuid("");
     }
 
+    player.setPlayFabId(request.getPlayFabId());
+
     const BanEntry *ban = owner.getBanList().find(player.getName());
     if (ban == nullptr)
         ban = owner.getIpBanList().find(id.getAddress());
@@ -261,21 +265,21 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
                               ? localization.translate(request.getLanguageCode(), "falcon.disconnect.banned")
                               : localization.translate(request.getLanguageCode(), "falcon.disconnect.bannedReason",
                                                        {ban->mReason}));
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
     if (!owner.isAllowListed(player)) {
         LOG_INFO(LogAreaID::Server, "Player %s is not in the allow list", player.getName().c_str());
         owner._disconnect(id, ServerNetworkHandler::NOT_ALLOW_LISTED_MESSAGE);
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
     if (owner.isServerFull(id) && !owner.getAllowList().ignoresPlayerLimit(player.getName(), player.getXuid())) {
         LOG_INFO(LogAreaID::Server, "Player %s was refused because the server is full", player.getName().c_str());
         owner._disconnect(id, "disconnectionScreen.serverFull");
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
@@ -291,7 +295,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         if (preLogin.mCancelled) {
             LOG_INFO(LogAreaID::Server, "Player %s was refused by a plugin", player.getName().c_str());
             owner._disconnect(id, kickMessage);
-            owner.getPlayers().erase(id);
+            owner.erasePlayer(id);
             return;
         }
     }
@@ -317,7 +321,7 @@ void LoginHandler::startEncryption(ServerNetworkHandler &owner, const NetworkIde
         || !EncryptionHandshake::createServerToken(*serverKey, clientPublicKey, handshake.mJwt, key)) {
         LOG_WARN(LogAreaID::Network, "Could not prepare the encryption handshake for %s", id.getAddress().c_str());
         owner._disconnect(id, "disconnectionScreen.notAuthenticated");
-        owner.getPlayers().erase(id);
+        owner.erasePlayer(id);
         return;
     }
 
@@ -352,7 +356,7 @@ void LoginHandler::completeLogin(ServerNetworkHandler &owner, const NetworkIdent
     packs.mWorldTemplateVersion = "";
     packs.mHasAddonPacks = false;
     packs.mScriptingEnabled = false;
-    packs.mVibrantVisualsForceDisabled = false;
+    packs.mVibrantVisualsForceDisabled = owner.getProperties().getDisableClientVibrantVisuals();
 
     for (const ResourcePack &pack: owner.getResourcePacks().getPacks()) {
         ResourcePacksInfoPacket::Entry entry;
@@ -480,6 +484,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mDisablingPlayerInteractions = owner.getProperties().getDisablePlayerInteraction();
     startGame.mClientSideGenerationEnabled = owner.getProperties().getClientSideChunkGenerationEnabled();
     startGame.mDisablingCustomSkins = owner.getProperties().getDisableCustomSkins();
+    startGame.mServerAuthoritativeBlockBreaking = owner.getProperties().getServerAuthoritativeBlockBreaking();
     startGame.mServerChunkTickRange = owner.getProperties().getTickDistance();
     startGame.mVanillaVersion = owner.getAnnouncement().mGameVersion;
     startGame.mLevelId = "RmFsY29u";
@@ -519,6 +524,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     sendItemComponents(owner, player);
     sendActorIdentifiers(owner, player);
     sendCameraPresets(owner, player);
+    owner.getNetworkHandler().send(id, ArmorTrims::getPacket(), owner.getCodecContext());
     sendBiomeDefinitions(owner, player);
     sendAttributes(owner, player);
     sendAbilities(owner, player);
@@ -589,8 +595,8 @@ PlayerAbilityData LoginHandler::buildAbilities(ServerNetworkHandler &owner, cons
     layer.mAbilitiesSet = abilitiesSet;
     layer.mAbilityValues = abilityValues;
     layer.mWalkSpeed = 0.1f;
-    layer.mFlySpeed = 0.05f;
-    layer.mVerticalFlySpeed = 1.0f;
+    layer.mFlySpeed = MovementPhysics::FLY_SPEED;
+    layer.mVerticalFlySpeed = MovementPhysics::VERTICAL_FLY_SPEED;
 
     PlayerAbilityData data;
     data.mUniqueActorId = player.getUniqueId();
@@ -1140,14 +1146,15 @@ void LoginHandler::sendAvailableCommands(ServerNetworkHandler &owner, ServerPlay
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), availableCommands, owner.getCodecContext());
 }
 
-void LoginHandler::sendAttributes(ServerNetworkHandler &owner, ServerPlayer &player) {
+void LoginHandler::sendAttributes(ServerNetworkHandler &owner, ServerPlayer &player, bool movementChange) {
     UpdateAttributesPacket attributes;
     attributes.mRuntimeActorId = (int64_t) player.getRuntimeId();
     attributes.mTick = 0;
-    attributes.mAttributes = player.getAttributes().getAll();
+    attributes.mAttributes = player.getAttributes().getPlayerUpdate(player.getFlags().get(ActorFlag::Sprinting));
 
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), attributes, owner.getCodecContext());
-    player.awaitMovementChange();
+    if (movementChange)
+        player.awaitMovementChange();
 }
 
 void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -1155,6 +1162,7 @@ void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &pl
     newEntry.mActorId = player.getUniqueId();
     newEntry.mName = player.getName();
     newEntry.mXuid = player.getXuid();
+    newEntry.mPlayFabId = player.getPlayFabId();
     newEntry.mSkin = player.getSkin();
     newEntry.mBuildPlatform = player.getBuildPlatform();
 
@@ -1174,6 +1182,7 @@ void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &pl
             existingEntry.mActorId = entry.second.getUniqueId();
             existingEntry.mName = entry.second.getName();
             existingEntry.mXuid = entry.second.getXuid();
+            existingEntry.mPlayFabId = entry.second.getPlayFabId();
             existingEntry.mSkin = entry.second.getSkin();
             existingEntry.mBuildPlatform = entry.second.getBuildPlatform();
             existing.mEntries.push_back(existingEntry);

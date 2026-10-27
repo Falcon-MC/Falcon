@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <cmath>
 #include <fstream>
 #include <map>
 #include <set>
@@ -88,14 +89,21 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"client-side-chunk-generation-enabled", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"block-network-ids-are-hashes", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"disable-custom-skins", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"disable-client-vibrant-visuals", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"skin-change-cooldown", "30", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"spawn-protection", "16", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"simulation", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"server-authoritative-movement-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"server-authoritative-dismount-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"server-authoritative-entity-interactions-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"server-authoritative-block-breaking", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"server-authoritative-block-breaking-range-scalar", "1.5", PropertyKind::Float, 1, 0, nullptr},
             {"server-authoritative-block-breaking-pick-range-scalar", "1.5", PropertyKind::Float, 0, 0, nullptr},
             {"server-build-radius-ratio", "Disabled", PropertyKind::String, 0, 0, nullptr},
             {"player-position-acceptance-threshold", "0.5", PropertyKind::Float, 0, 0, nullptr},
+            // BDS 1.26.10 movement settings (0x1437F5420) use -1 for both policy limits.
+            {"player-tick-throttled-input-batch-size", "-1", PropertyKind::Int, -1, UNBOUNDED, nullptr},
+            {"player-tick-throttled-max-tick-credits", "-1", PropertyKind::Int, -1, UNBOUNDED, nullptr},
             {"player-movement-action-direction-threshold", "0.85", PropertyKind::Float, 0, 0, nullptr},
             {"allow-inbound-script-debugging", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"allow-outbound-script-debugging", "false", PropertyKind::Bool, 0, 0, nullptr},
@@ -109,7 +117,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"max-form-responses-per-second", "20", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"max-movement-packets-per-second", "40", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"max-chat-message-length", "512", PropertyKind::Int, 0, UNBOUNDED, nullptr},
-            {"transport", "raknet", PropertyKind::Enum, 0, 0, "raknet,nethernet"}
+            {"transport", "nethernet", PropertyKind::Enum, 0, 0, "nethernet"}
     };
 
     return definitions;
@@ -128,6 +136,9 @@ std::string PropertiesSettings::getDefaultContents() {
     std::string contents;
 
     for (const PropertyDefinition &definition: getDefinitions()) {
+        // Accept the BDS spelling on input without generating two competing settings.
+        if (std::string(definition.mKey) == "server-authoritative-block-breaking-pick-range-scalar")
+            continue;
         contents += definition.mKey;
         contents += "=";
         contents += definition.mDefault;
@@ -169,6 +180,10 @@ bool PropertiesSettings::_isValidValue(const PropertyDefinition &definition, con
         case PropertyKind::String:
             return true;
         case PropertyKind::Bool:
+            if (std::string(definition.mKey) == "simulation"
+                || std::string(definition.mKey) == "server-authoritative-block-breaking"
+                || std::string(definition.mKey) == "disable-client-vibrant-visuals")
+                return value == "true" || value == "false";
             return value == "true" || value == "false" || value == "1" || value == "0";
         case PropertyKind::Int: {
             if (!isInteger(value))
@@ -178,7 +193,14 @@ bool PropertiesSettings::_isValidValue(const PropertyDefinition &definition, con
             return parsed >= definition.mMinimum && parsed <= definition.mMaximum;
         }
         case PropertyKind::Float:
-            return isFloating(value);
+            if (!isFloating(value))
+                return false;
+            if (std::string(definition.mKey) == "server-authoritative-block-breaking-range-scalar"
+                || std::string(definition.mKey) == "server-authoritative-block-breaking-pick-range-scalar") {
+                const float scalar = std::strtof(value.c_str(), nullptr);
+                return std::isfinite(scalar) && scalar > 1.0f;
+            }
+            return true;
         case PropertyKind::Enum:
             return isListed(value, definition.mValues);
     }
@@ -223,9 +245,7 @@ std::vector<std::string> PropertiesSettings::getAutoloadWorlds() const {
 TransportLayer PropertiesSettings::getTransportLayer() const {
     const std::string value = getString("transport");
 
-    if (value.empty() || value == "raknet")
-        return TransportLayer::RakNet;
-    if (value == "nethernet")
+    if (value.empty() || value == "nethernet")
         return TransportLayer::NetherNet;
 
     return TransportLayer::Unknown;
@@ -384,6 +404,15 @@ bool PropertiesSettings::getBool(const char *key) const {
     const bool fallback = definition != nullptr
                           && (std::string(definition->mDefault) == "true" || std::string(definition->mDefault) == "1");
     return getBool(key, fallback);
+}
+
+float PropertiesSettings::getServerAuthoritativeBlockBreakingRangeScalar() const {
+    // Prefer Falcon's public spelling; retain the BDS pick-range spelling for existing files.
+    const char *key = hasProperty("server-authoritative-block-breaking-range-scalar")
+                          ? "server-authoritative-block-breaking-range-scalar"
+                          : "server-authoritative-block-breaking-pick-range-scalar";
+    const float scalar = getFloat(key);
+    return std::isfinite(scalar) && scalar > 1.0f ? scalar : 1.5f;
 }
 
 GameType PropertiesSettings::getGameType() const {

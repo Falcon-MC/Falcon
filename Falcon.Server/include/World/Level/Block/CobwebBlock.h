@@ -1,0 +1,19 @@
+#pragma once
+
+#include "World/Level/Block/Block.h"
+
+class CobwebBlock : public Block {
+public:
+    explicit CobwebBlock(const Block &block) : Block(block) {
+    }
+
+    static bool matches(const std::string &identifier);
+
+    bool getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const override;
+
+    void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                       const BlockState &state) const override;
+
+    bool getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
+                  std::vector<BlockDrop> &drops) const override;
+};

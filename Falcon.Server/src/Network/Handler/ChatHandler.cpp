@@ -1,9 +1,9 @@
 #include "Network/Handler/ChatHandler.h"
 
 #include "Core/Debug/BedrockLog.h"
-#include "Actor/ServerPlayer.h"
+#include "World/Actor/Player/ServerPlayer.h"
 #include "Network/Handler/NetworkHandler.h"
-#include "Network/Handler/ServerNetworkHandler.h"
+#include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/TextPacket.h"
 
 void ChatHandler::broadcastChat(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &message) {

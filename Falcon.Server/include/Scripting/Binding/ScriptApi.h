@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Level/Dimension.h"
+#include "World/Level/Dimension/Dimension.h"
 #include "Protocol/Types/ItemStack.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
 #include "Scripting/ScriptScheduler.h"

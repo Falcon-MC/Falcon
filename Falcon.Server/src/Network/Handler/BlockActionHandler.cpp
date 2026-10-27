@@ -1,35 +1,35 @@
 #include "Network/Handler/BlockActionHandler.h"
 
-#include "Block/BlockData.h"
-#include "Block/BlockSupport.h"
-#include "Block/Components/BlockPlacementComponent.h"
-#include "Block/Components/PlacementOrientation.h"
-#include "Block/Blocks/LiquidView.h"
-#include "Block/Blocks/VanillaBlocks.h"
-#include "Block/BlockActorStore.h"
-#include "Block/BlockIdentifier.h"
-#include "Block/BlockPickItem.h"
+#include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/Components/BlockPlacementComponent.h"
+#include "World/Level/Block/Components/PlacementOrientation.h"
+#include "World/Level/Block/LiquidView.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/BlockPickItem.h"
 #include "Core/Math/MathConstants.h"
-#include "Actor/ActorClassRegistry.h"
-#include "Actor/Definition/BlockSensor.h"
-#include "Actor/ServerActor.h"
-#include "Actor/ServerPlayer.h"
-#include "Actor/ExperienceValues.h"
-#include "Block/BlockShape.h"
-#include "Item/ItemData.h"
-#include "Item/VanillaItems.h"
+#include "World/Actor/ActorClassRegistry.h"
+#include "World/Actor/Definition/BlockSensor.h"
+#include "World/Actor/ServerActor.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Player/ExperienceValues.h"
+#include "World/Level/Block/BlockShape.h"
+#include "World/Item/ItemData.h"
+#include "World/Item/VanillaItems.h"
 #include "Scripting/Content/CustomContentRegistry.h"
-#include "Item/ItemEnchantments.h"
-#include "Item/Items/BucketItem.h"
-#include "Item/StringToItemParser.h"
-#include "Inventory/InventoryManager.h"
-#include "Level/Level.h"
+#include "World/Item/ItemEnchantments.h"
+#include "World/Item/BucketItem.h"
+#include "World/Item/StringToItemParser.h"
+#include "World/Inventory/InventoryManager.h"
+#include "World/Level/Level.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/NetworkHandler.h"
-#include "Network/Handler/ServerNetworkHandler.h"
-#include "Plugin/PluginBlock.h"
-#include "Plugin/PluginManager.h"
+#include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginBlock.h"
+#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelEventPacket.h"
@@ -128,19 +128,28 @@ namespace {
             customTool = customSpeed > 0;
         }
 
+        const Item *heldType = itemData == nullptr ? nullptr
+                                                   : VanillaItems::fromIdentifier(heldItem.mDefinition->getIdentifier());
+        float itemSpeed = 1.0f;
+        const bool itemDefinesSpeed = heldType != nullptr
+                                      && heldType->getDestroySpeed(blockData->mIdentifier, itemSpeed);
+
         const bool matchesTool = customTool || (itemData != nullptr && blockData->mToolType != BlockToolType::None &&
                                 (int32_t) itemData->mToolType == (int32_t) blockData->mToolType &&
                                 itemData->mToolTier >= (int32_t) blockData->mToolTier);
 
         const bool canHarvest = blockData->mToolType == BlockToolType::None || blockData->mHandHarvest ||
-                                matchesTool;
+                                matchesTool
+                                || (heldType != nullptr && heldType->canDestroySpecial(blockData->mIdentifier));
 
         double seconds = canHarvest ? blockHardness * 1.5 : blockHardness * 5.0;
 
         float speedMultiplier = 1.0f;
-        const bool correctTool = matchesTool;
+        const bool correctTool = matchesTool || itemDefinesSpeed;
 
-        if (correctTool)
+        if (itemDefinesSpeed)
+            speedMultiplier = itemSpeed;
+        else if (correctTool)
             speedMultiplier = customTool ? (float) customSpeed
                                          : toolSpeedMultiplier((BlockToolTier) (itemData == nullptr ? 0
                                                                                                     : itemData->mToolTier));
@@ -418,6 +427,10 @@ int32_t BlockActionHandler::breakSpeedEventData(double speed) {
 }
 
 bool BlockActionHandler::canInteractWithBlock(ServerPlayer &player, const Vector3i &position) {
+    return _canInteractWithBlock(player, position, 1.0f);
+}
+
+bool BlockActionHandler::_canInteractWithBlock(ServerPlayer &player, const Vector3i &position, float rangeScalar) {
     const float maxDistance = player.getGameType() == (int32_t) GameType::Creative ? 13.0f : 7.0f;
 
     const Vector3f feet = player.getPosition();
@@ -428,8 +441,10 @@ bool BlockActionHandler::canInteractWithBlock(ServerPlayer &player, const Vector
     const float dy = target.y - eyePosition.y;
     const float dz = target.z - eyePosition.z;
 
-    const float distanceSquared = dx * dx + dy * dy + dz * dz;
-    if (distanceSquared > maxDistance * maxDistance)
+    const double distanceSquared = (double) dx * dx + (double) dy * dy + (double) dz * dz;
+    const double maximumSquared = (double) maxDistance * maxDistance * (double) rangeScalar * rangeScalar;
+    if (!std::isfinite(distanceSquared) || !std::isfinite(rangeScalar) || rangeScalar < 1.0f
+        || distanceSquared > maximumSquared)
         return false;
 
     const float yawRad = player.getRotation().y * MathConstants::PI_F / 180.0f;
@@ -448,6 +463,14 @@ bool BlockActionHandler::canInteractWithBlock(ServerPlayer &player, const Vector
     const float dot = directionX * eyePosition.x + directionZ * eyePosition.z;
     const float dot1 = directionX * target.x + directionZ * target.z;
     return (dot1 - dot) >= -REACH_MAX_DIFF;
+}
+
+bool BlockActionHandler::canBreakBlock(const ServerNetworkHandler &owner, ServerPlayer &player,
+                                       const Vector3i &position) {
+    const PropertiesSettings &properties = owner.getProperties();
+    const float scalar = properties.getServerAuthoritativeBlockBreaking()
+                             ? properties.getServerAuthoritativeBlockBreakingRangeScalar() : 1.0f;
+    return _canInteractWithBlock(player, position, scalar);
 }
 
 void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
@@ -617,6 +640,13 @@ void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerP
     if (position.y < level.getMinY() || position.y > level.getMaxY())
         return;
 
+    if (!canBreakBlock(owner, player, position)) {
+        if (player.isBreakingBlock())
+            stopBreakingBlock(owner, player);
+        sendCurrentBlockState(owner, player, position);
+        return;
+    }
+
     if (player.isBreakingBlock() && player.getBreakingBlockPosition() == position)
         return;
 
@@ -671,6 +701,10 @@ void BlockActionHandler::continueBreakingBlock(ServerNetworkHandler &owner, Serv
         return;
 
     const Vector3i position = player.getBreakingBlockPosition();
+    if (!canBreakBlock(owner, player, position)) {
+        stopBreakingBlock(owner, player);
+        return;
+    }
     Level &level = owner.getLevelFor(player);
     if (position.y < level.getMinY() || position.y > level.getMaxY()) {
         stopBreakingBlock(owner, player);
@@ -704,7 +738,7 @@ void BlockActionHandler::continueBreakingBlock(ServerNetworkHandler &owner, Serv
 
     player.addBreakProgress(player.getBreakSpeed());
 
-    if (player.getBreakProgress() >= 1.0) {
+    if (owner.getProperties().getServerAuthoritativeBlockBreaking() && player.getBreakProgress() >= 1.0) {
         completeBreakingBlock(owner, player, position);
     }
 }
@@ -715,7 +749,7 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
     if (position.y < playerLevel.getMinY() || position.y > playerLevel.getMaxY())
         return;
 
-    if (!canInteractWithBlock(player, position) || isInSpawnProtection(owner, player, playerLevel, position)) {
+    if (!canBreakBlock(owner, player, position) || isInSpawnProtection(owner, player, playerLevel, position)) {
         sendCurrentBlockState(owner, player, position);
         return;
     }

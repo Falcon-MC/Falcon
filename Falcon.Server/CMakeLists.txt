@@ -4,7 +4,7 @@ project(Falcon.Server LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(FALCON_BEDROCK_DATA_PROTOCOL 2193)
+set(FALCON_BEDROCK_DATA_PROTOCOL 2225)
 include("${falcon_bedrock_data_SOURCE_DIR}/cmake/FalconBedrockData.cmake")
 
 falcon_bedrock_data_file(recipes.json FALCON_RECIPES_JSON)
@@ -45,7 +45,7 @@ foreach(olderProtocol IN LISTS FALCON_OLDER_DATA_PROTOCOLS)
             "${olderNamespace}::kCreativeItemsJson, ${olderNamespace}::kBlockPaletteNbt, "
             "${olderNamespace}::kBlockPaletteNbtSize},\n")
 endforeach()
-set(FALCON_BEDROCK_DATA_PROTOCOL 2193)
+set(FALCON_BEDROCK_DATA_PROTOCOL 2225)
 configure_file(cmake/OlderProtocolData.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/OlderProtocolData.h" @ONLY)
 falcon_bedrock_data_embed_binary(FILE block_definitions.nbt NAMESPACE FalconBlockDefinitionData
         SYMBOL kBlockDefinitionsNbt OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockDefinitionsNbt.h")
@@ -90,6 +90,8 @@ string(REGEX REPLACE "(0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x
 configure_file(cmake/BlockPaletteNbt.h.in "${FALCON_GENERATED_DIR}/BlockPaletteNbt.h" @ONLY)
 
 file(GLOB FALCON_BLOCK_UPGRADE_SCHEMA_FILES "${FALCON_BLOCK_UPGRADE_SCHEMA_DIR}/*.json")
+list(APPEND FALCON_BLOCK_UPGRADE_SCHEMA_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/block_upgrades/0361_1.26.50_to_1.26.60.json")
 list(SORT FALCON_BLOCK_UPGRADE_SCHEMA_FILES)
 set(FALCON_BLOCK_UPGRADE_SCHEMAS "")
 foreach(schemaFile IN LISTS FALCON_BLOCK_UPGRADE_SCHEMA_FILES)
@@ -116,7 +118,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FALCON_LANGUAGE
 configure_file(cmake/LanguageFiles.h.in "${FALCON_GENERATED_DIR}/LanguageFiles.h" @ONLY)
 
 if(NOT FALCON_BUILD_VERSION)
-    set(FALCON_BUILD_VERSION "1.26.52.01")
+    set(FALCON_BUILD_VERSION "1.26.60.01")
 endif()
 if(NOT FALCON_BUILD_ID)
     set(FALCON_BUILD_ID "0")
@@ -148,7 +150,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FALCON_BLOCK_UP
 file(GLOB_RECURSE FALCON_CORE_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 set(FALCON_EXECUTABLE_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/Server.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/Server.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/SetupWizard.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/VersionChecker.cpp")
 list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_EXECUTABLE_SOURCES})
@@ -157,11 +159,13 @@ list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_EXECUTABLE_SOURCES})
 # initialisers, and a static library would let the linker drop every object nothing references by name.
 add_library(FalconCore OBJECT ${FALCON_CORE_SOURCES})
 
+include(cmake/FalconLegacyHeaders.cmake)
+
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 target_include_directories(FalconCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${FALCON_GENERATED_DIR} ${ZLIB_INCLUDE_DIRS}
+        ${FALCON_GENERATED_DIR} ${FALCON_LEGACY_INCLUDE_DIR} ${ZLIB_INCLUDE_DIRS}
         ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(FalconCore PUBLIC FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic
         Falcon::PluginAPI ${CMAKE_DL_LIBS})
@@ -177,6 +181,43 @@ else()
 endif()
 
 option(FALCON_BUILD_SERVER_EXECUTABLE "Build the dedicated server executable" ON)
+
+option(FALCON_BUILD_EMBEDDED_TESTS "Build embedded server lifecycle checks" OFF)
+if(FALCON_BUILD_EMBEDDED_TESTS)
+    enable_testing()
+    add_executable(FalconEmbeddedTests tests/EmbeddedServerTests.cpp)
+    target_link_libraries(FalconEmbeddedTests PRIVATE FalconCore)
+    add_executable(FalconStartupTests tests/StartupTests.cpp)
+    target_link_libraries(FalconStartupTests PRIVATE FalconCore)
+    add_executable(FalconMovementInputTests tests/MovementInputTests.cpp)
+    target_link_libraries(FalconMovementInputTests PRIVATE FalconCore)
+    add_executable(FalconBlockBreakingTests tests/BlockBreakingTests.cpp)
+    target_link_libraries(FalconBlockBreakingTests PRIVATE FalconCore)
+    add_executable(FalconRideControlTests tests/RideControlTests.cpp)
+    target_link_libraries(FalconRideControlTests PRIVATE FalconCore)
+    add_executable(FalconGameplay2660Tests tests/Gameplay2660Tests.cpp)
+    target_link_libraries(FalconGameplay2660Tests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconMovementInputTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconBlockBreakingTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconRideControlTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconEmbeddedTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconStartupTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconGameplay2660Tests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME movement-input-timeline COMMAND FalconMovementInputTests)
+    set_tests_properties(movement-input-timeline PROPERTIES TIMEOUT 60)
+    add_test(NAME block-breaking-settings COMMAND FalconBlockBreakingTests)
+    set_tests_properties(block-breaking-settings PROPERTIES TIMEOUT 60)
+    add_test(NAME ride-control-regressions COMMAND FalconRideControlTests)
+    set_tests_properties(ride-control-regressions PROPERTIES TIMEOUT 60)
+    add_test(NAME embedded-lifecycle COMMAND FalconEmbeddedTests)
+    set_tests_properties(embedded-lifecycle PROPERTIES TIMEOUT 120)
+    add_test(NAME startup-persistence COMMAND FalconStartupTests)
+    set_tests_properties(startup-persistence PROPERTIES TIMEOUT 60)
+    add_test(NAME gameplay-26.60 COMMAND FalconGameplay2660Tests)
+    set_tests_properties(gameplay-26.60 PROPERTIES TIMEOUT 60)
+endif()
 
 if(NOT FALCON_BUILD_SERVER_EXECUTABLE)
     return()

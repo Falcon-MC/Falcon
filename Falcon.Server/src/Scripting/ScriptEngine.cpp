@@ -1,10 +1,10 @@
 #include "Scripting/ScriptEngine.h"
 
-#include "Actor/MobEffect.h"
-#include "Actor/ServerActor.h"
-#include "Actor/ServerPlayer.h"
+#include "World/Actor/MobEffect.h"
+#include "World/Actor/ServerActor.h"
+#include "World/Actor/Player/ServerPlayer.h"
 #include "Core/Debug/BedrockLog.h"
-#include "Network/Handler/ServerNetworkHandler.h"
+#include "Network/ServerNetworkHandler.h"
 #include "Scripting/Binding/ScriptApi.h"
 
 #include <chrono>
