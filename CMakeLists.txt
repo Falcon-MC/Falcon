@@ -80,7 +80,7 @@ FetchContent_MakeAvailable(falcon_protocol)
 FetchContent_Declare(
     falcon_network
     GIT_REPOSITORY https://github.com/Falcon-MC/Network.git
-    GIT_TAG 26.60
+    GIT_TAG main
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )
