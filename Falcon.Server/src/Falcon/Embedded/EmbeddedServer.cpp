@@ -182,7 +182,7 @@ void EmbeddedServer::_run(EmbeddedServerConfig config, std::shared_ptr<std::prom
         ServerHostOptions options;
         options.properties = config.properties;
         options.properties["level-name"] = config.levelName;
-        options.properties["transport"] = "raknet";
+        options.properties["transport"] = "nethernet";
         options.properties["enable-lan-visibility"] = "false";
         options.properties["online-mode"] = "false";
         options.properties["network-encryption"] = "false";

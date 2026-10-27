@@ -18,6 +18,7 @@
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
 
+#include <algorithm>
 #include <fstream>
 #include <future>
 #include <random>
@@ -120,11 +121,8 @@ namespace {
     void logTransportNotice(TransportLayer transport) {
         LOG_INFO(LogAreaID::Server, "==================== TRANSPORT =======================");
         LOG_INFO(LogAreaID::Server, "Connection type: %s", toString(transport));
-        if (transport == TransportLayer::NetherNet) {
+        if (transport == TransportLayer::NetherNet)
             LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over plain HTTP.");
-        } else {
-            LOG_INFO(LogAreaID::Server, "RakNet transport is active.");
-        }
         LOG_INFO(LogAreaID::Server, "======================================================");
     }
 
@@ -208,11 +206,15 @@ bool ServerHost::start(const ServerHostOptions &options) {
     Localization::setServerLocale(properties.getLanguage());
     logStartupBanner(properties);
 
+    const std::vector<std::string> &invalid = properties.getInvalidProperties();
+    if (std::find(invalid.begin(), invalid.end(), "transport=raknet") != invalid.end())
+        LOG_ERROR(LogAreaID::Server, "RakNet is no longer supported, set transport=nethernet in %s. "
+                                     "Falling back to NetherNet.", PROPERTIES_FILE);
+
     const TransportLayer transport = properties.getTransportLayer();
 
     if (transport == TransportLayer::Unknown) {
-        LOG_FATAL(LogAreaID::Server, "Unknown 'transport' value in %s, expected 'raknet' or 'nethernet'",
-                  PROPERTIES_FILE);
+        LOG_FATAL(LogAreaID::Server, "Unknown 'transport' value in %s, expected 'nethernet'", PROPERTIES_FILE);
         BedrockLog::flush();
         return false;
     }

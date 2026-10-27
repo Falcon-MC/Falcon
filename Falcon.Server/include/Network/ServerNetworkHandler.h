@@ -7,9 +7,9 @@
 #include "World/Level/World.h"
 #include "World/Level/WorldManager.h"
 #include "Network/Handler/NetworkHandler.h"
+#include "Network/RakPeerHelper.h"
 #include "Network/PacketRateLimiter.h"
 #include "Network/PingedCompatibleServer.h"
-#include "Network/RakNetInstance.h"
 #include "Protocol/NetworkPacketHandler.h"
 #include "Protocol/PacketCodecContext.h"
 #include "Protocol/Types/BlockDefinitionRegistry.h"
@@ -86,7 +86,7 @@ public:
     using ModalFormCallback = std::function<void(ServerPlayer &, const std::string &, bool)>;
 
     ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
-                         TransportLayer transport = TransportLayer::RakNet);
+                         TransportLayer transport = TransportLayer::NetherNet);
 
     bool isTransportReady() const { return mNetworkHandler != nullptr; }
 
@@ -758,7 +758,6 @@ private:
     void _updateServerAnnouncement();
 
     std::unique_ptr<NetworkHandler> mNetworkHandler;
-    RakNetInstance *mRakNetInstance;
     NetherNetInstance *mNetherNetInstance = nullptr;
     BlockDefinitionRegistry mBlockDefinitions;
     ItemDefinitionRegistry mItemDefinitions;

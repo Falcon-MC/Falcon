@@ -117,7 +117,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"max-form-responses-per-second", "20", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"max-movement-packets-per-second", "40", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"max-chat-message-length", "512", PropertyKind::Int, 0, UNBOUNDED, nullptr},
-            {"transport", "raknet", PropertyKind::Enum, 0, 0, "raknet,nethernet"}
+            {"transport", "nethernet", PropertyKind::Enum, 0, 0, "nethernet"}
     };
 
     return definitions;
@@ -245,9 +245,7 @@ std::vector<std::string> PropertiesSettings::getAutoloadWorlds() const {
 TransportLayer PropertiesSettings::getTransportLayer() const {
     const std::string value = getString("transport");
 
-    if (value.empty() || value == "raknet")
-        return TransportLayer::RakNet;
-    if (value == "nethernet")
+    if (value.empty() || value == "nethernet")
         return TransportLayer::NetherNet;
 
     return TransportLayer::Unknown;

@@ -86,7 +86,9 @@ int main() {
         client.mHost = "127.0.0.1";
         client.mPort = server.getPort();
         client.mProtocolVersion = 2225;
-        client.mGameVersion = "1.26.52";
+        client.mGameVersion = "1.26.60";
+        client.mTransportLayer = TransportLayer::NetherNet;
+        client.mNetherNet.mSignalingType = NetherNetSignalingType::Http;
         client.mIdentity.mDisplayName = "EmbeddedPlayer";
         client.mChunkRadius = 4;
         client.mDeferSpawn = true;

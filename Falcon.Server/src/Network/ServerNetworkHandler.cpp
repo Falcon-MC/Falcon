@@ -349,7 +349,7 @@ namespace {
 
 ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
                                            TransportLayer transport)
-        : mRakNetInstance(nullptr), mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers),
+        : mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers),
           mIsListening(false), mNextRuntimeId(1),
           mPlayerData(ServerPaths::file("players")), mOps(ServerPaths::file("ops.txt")),
           mAllowList(ServerPaths::file("allowlist.json")), mBanList(ServerPaths::file("banned-players.json")),
@@ -357,27 +357,17 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mPlayerMovementRegistry = std::make_unique<PlayerMovementRegistry>();
     mWorlds.add("Bedrock level", DEFAULT_VIEW_DISTANCE, 0);
 
-    std::unique_ptr<Connector> rakNet = TransportFactory::createConnector(TransportLayer::RakNet, *this, true);
+    std::unique_ptr<Connector> netherNet = TransportFactory::createConnector(transport, *this, true);
 
-    if (rakNet != nullptr) {
-        mRakNetInstance = dynamic_cast<RakNetInstance *>(rakNet.get());
+    if (netherNet != nullptr) {
+        mNetherNetInstance = dynamic_cast<NetherNetInstance *>(netherNet.get());
 
-        mNetworkHandler.reset(new NetworkHandler(std::move(rakNet)));
+        mNetworkHandler.reset(new NetworkHandler(std::move(netherNet)));
         mNetworkHandler->setProfiler(&mProfiler);
         mNetworkHandler->addListener(this);
         mNetworkHandler->setContextResolver([this](const NetworkIdentifier &id) {
             return &getCodecContext(id);
         });
-
-        if (transport == TransportLayer::NetherNet) {
-            std::unique_ptr<Connector> netherNet =
-                    TransportFactory::createConnector(TransportLayer::NetherNet, *this, true);
-
-            if (netherNet != nullptr) {
-                mNetherNetInstance = dynamic_cast<NetherNetInstance *>(netherNet.get());
-                mNetworkHandler->addConnector(std::move(netherNet));
-            }
-        }
     }
 
     mAnnouncement.mServerName = serverName;
@@ -410,7 +400,7 @@ void ServerNetworkHandler::erasePlayer(const NetworkIdentifier &id) {
 }
 
 unsigned short ServerNetworkHandler::getBoundPort() const {
-    return mRakNetInstance != nullptr ? mRakNetInstance->getBoundPort() : 0;
+    return mNetherNetInstance != nullptr ? mNetherNetInstance->getBoundPort() : 0;
 }
 
 int ServerNetworkHandler::_getServerViewDistance() const {
@@ -837,9 +827,6 @@ void ServerNetworkHandler::tick(bool paused) {
 
 void ServerNetworkHandler::_updateServerAnnouncement() {
     mAnnouncement.mCurrentPlayers = getActivePlayerCount();
-
-    if (mRakNetInstance != nullptr)
-        mRakNetInstance->announceServer(mAnnouncement);
 }
 
 bool ServerNetworkHandler::onValidateIncomingConnection(const NetworkIdentifier &id) {
@@ -2060,10 +2047,10 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequ
 }
 
 void ServerNetworkHandler::onReceiveIPSupport(RakPeerHelper::IPSupport support) {
-    if (mRakNetInstance == nullptr)
+    if (mNetherNetInstance == nullptr)
         return;
 
-    const ConnectionDefinition &definition = mRakNetInstance->getConnectionDefinition();
+    const ConnectionDefinition &definition = mNetherNetInstance->getConnectionDefinition();
 
     if (support == RakPeerHelper::IPSupport::IPv4 || support == RakPeerHelper::IPSupport::Both)
         LOG_INFO(LogAreaID::Network, "IPv4 supported, port: %u: Used for gameplay", definition.mPort);
