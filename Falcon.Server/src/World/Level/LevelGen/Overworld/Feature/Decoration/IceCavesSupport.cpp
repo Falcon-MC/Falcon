@@ -10,31 +10,12 @@
 #include "World/Level/LevelGen/Random/IRandom.h"
 #include "World/Level/Chunk/LevelChunk.h"
 
-#include <vector>
 
 namespace {
 
     const BlockState &calciteState() {
         static const BlockState state = VanillaBlocks::CALCITE().toBlockState();
         return state;
-    }
-
-    const BlockState &icicleBaseState() {
-        static const BlockState state = VanillaBlocks::ICICLE().toBlockState();
-        return state;
-    }
-
-    const char *thicknessForIndex(int32_t index, int32_t lastIndex) {
-        if (index == lastIndex)
-            return "tip";
-
-        if (index == 0 && lastIndex >= 2)
-            return "base";
-
-        if (index == lastIndex - 1)
-            return "frustum";
-
-        return "middle";
     }
 
 }
@@ -84,9 +65,8 @@ namespace IceCavesSupport {
         return state;
     }
 
-    BlockState icicleState(int32_t index, int32_t lastIndex) {
-        const BlockState state = DecorationSupport::withByteState(icicleBaseState(), "hanging", true);
-        return DecorationSupport::withState(state, "dripstone_thickness", thicknessForIndex(index, lastIndex));
+    bool isLava(const BlockState &state) {
+        return DecorationSupport::isLiquid(state) && !DecorationSupport::isWater(state);
     }
 
     bool isNaturalBaseBlock(const BlockState &state) {
@@ -124,39 +104,6 @@ namespace IceCavesSupport {
             }
         }
         return false;
-    }
-
-    bool findCeiling(BlockManager &manager, int32_t x, int32_t y, int32_t z, int32_t range, int32_t &ceilingY) {
-        for (int32_t i = 0; i <= range; i++) {
-            const int32_t currentY = y + i;
-            if (currentY >= LevelChunk::MAX_Y)
-                return false;
-
-            if (!DecorationSupport::isAir(manager.getBlockAt(x, currentY, z)))
-                continue;
-
-            const BlockState &above = manager.getBlockAt(x, currentY + 1, z);
-            if (above.getHash() == packedIceState().getHash()) {
-                ceilingY = currentY + 1;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void placeIcicle(BlockManager &manager, int32_t x, int32_t ceilingY, int32_t z, int32_t maxLength) {
-        std::vector<int32_t> plannedY;
-        for (int32_t i = 1; i <= maxLength; i++) {
-            const int32_t currentY = ceilingY - i;
-            if (!DecorationSupport::isAir(manager.getBlockAt(x, currentY, z)))
-                break;
-
-            plannedY.push_back(currentY);
-        }
-
-        const int32_t lastIndex = (int32_t) plannedY.size() - 1;
-        for (int32_t i = 0; i <= lastIndex; i++)
-            manager.setBlockStateAt(x, plannedY[(size_t) i], z, icicleState(i, lastIndex));
     }
 
 }

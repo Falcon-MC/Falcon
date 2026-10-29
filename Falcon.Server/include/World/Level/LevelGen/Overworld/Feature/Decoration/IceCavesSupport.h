@@ -21,7 +21,7 @@ namespace IceCavesSupport {
 
     const BlockState &snowLayerState();
 
-    BlockState icicleState(int32_t index, int32_t lastIndex);
+    bool isLava(const BlockState &state);
 
     bool isNaturalBaseBlock(const BlockState &state);
 
@@ -30,9 +30,5 @@ namespace IceCavesSupport {
     int32_t triangle(IRandom &random, int32_t min, int32_t max);
 
     bool findFloor(BlockManager &manager, int32_t x, int32_t y, int32_t z, int32_t range, int32_t &floorY);
-
-    bool findCeiling(BlockManager &manager, int32_t x, int32_t y, int32_t z, int32_t range, int32_t &ceilingY);
-
-    void placeIcicle(BlockManager &manager, int32_t x, int32_t ceilingY, int32_t z, int32_t maxLength);
 
 }
