@@ -65,9 +65,18 @@ namespace {
         return itemType != nullptr && itemType->isConsumable();
     }
 
+    const Tag *vanillaFood(const ItemStack &item) {
+        const Tag *components = vanillaComponents(item);
+        return components == nullptr ? nullptr : components->get("minecraft:food");
+    }
+
     bool canAlwaysConsume(const ItemStack &item) {
         const FoodItemComponent *food = findFoodComponent(item);
         if (food == nullptr || food->canAlwaysEat())
+            return true;
+
+        const Tag *vanilla = vanillaFood(item);
+        if (vanilla != nullptr && vanilla->getByte("can_always_eat", 0) != 0)
             return true;
 
         const Item *itemType = itemTypeOf(item);
@@ -75,8 +84,7 @@ namespace {
     }
 
     std::string usingConvertsTo(const ItemStack &item) {
-        const Tag *components = vanillaComponents(item);
-        const Tag *food = components == nullptr ? nullptr : components->get("minecraft:food");
+        const Tag *food = vanillaFood(item);
         std::string name = food == nullptr ? std::string() : food->getString("using_converts_to");
         if (name.empty()) {
             const Item *itemType = itemTypeOf(item);
@@ -340,6 +348,14 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         player.consumeFood(food->getNutrition(), food->getSaturation());
         for (const FoodEffect &effect: food->getEffects())
             addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
+
+        // Effects the item cures, such as poison for the honey bottle, come only from the vanilla components.
+        const Tag *vanilla = vanillaFood(usedItem);
+        const Tag *removed = vanilla == nullptr ? nullptr : vanilla->get("remove_effects");
+        if (removed != nullptr && removed->isList()) {
+            for (const Tag &effect: removed->getList())
+                player.removeEffect((MobEffectId) effect.asInt());
+        }
     }
 
     if (itemType != nullptr)
