@@ -15,7 +15,6 @@ namespace {
     struct Candidate {
         Vector3i mPosition;
         const Block *mBlock;
-        std::string mName;
     };
 
     std::mt19937 &generator() {
@@ -114,7 +113,6 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
                                                LevelChunk::MIN_Y + index * 16 + localY,
                                                (chunkZ << 4) + localZ);
                 candidate.mBlock = block;
-                candidate.mName = state.mName;
                 candidates.push_back(std::move(candidate));
             }
         }
@@ -126,7 +124,7 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
     for (const Candidate &candidate: candidates) {
         const Vector3i &position = candidate.mPosition;
         const BlockState *before = level.peekBlockPtr(position.x, position.y, position.z);
-        if (before == nullptr || before->mName != candidate.mName)
+        if (before == nullptr || VanillaBlocks::fromIdentifier(before->mName) != candidate.mBlock)
             continue;
 
         // Copies are passed on because a reaction may rewrite the chunk palette the peeked
