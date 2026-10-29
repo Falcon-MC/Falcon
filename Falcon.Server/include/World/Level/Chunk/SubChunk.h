@@ -1,5 +1,6 @@
 #pragma once
 
+#include "World/Level/Chunk/PaletteIndices.h"
 #include "Core/Utility/BinaryStream.h"
 #include "World/Level/Block/BlockState.h"
 #include "Protocol/Types/BlockNetworkIdMap.h"
@@ -61,12 +62,12 @@ private:
 
     void _writeStorage(BinaryStream &stream, bool persistent,
                        const std::vector<BlockState> &palette,
-                       const std::vector<uint16_t> &blocks, const BlockNetworkIdMap *blockIds) const;
+                       const PaletteIndices &blocks, const BlockNetworkIdMap *blockIds) const;
 
     void _writeEmptyStorage(BinaryStream &stream, bool persistent, const BlockNetworkIdMap *blockIds) const;
 
     bool _readStorage(ReadOnlyBinaryStream &stream, std::vector<BlockState> &palette,
-                      std::vector<uint16_t> &blocks, bool *replacedUnknown);
+                      PaletteIndices &blocks, bool *replacedUnknown);
 
     void _ensureLayer1();
 
@@ -78,9 +79,9 @@ private:
 
     int8_t mY;
     std::vector<BlockState> mPalette;
-    std::vector<uint16_t> mBlocks;
+    PaletteIndices mBlocks;
     std::vector<BlockState> mPalette2;
-    std::vector<uint16_t> mBlocks2;
+    PaletteIndices mBlocks2;
     std::vector<uint32_t> mBiomePalette;
-    std::vector<uint16_t> mBiomes;
+    PaletteIndices mBiomes;
 };

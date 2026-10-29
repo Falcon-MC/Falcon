@@ -40,7 +40,7 @@ void SubChunk::setBiome(int x, int y, int z, uint32_t biomeId) {
         mBiomes.assign(BLOCK_COUNT, 0);
     }
 
-    mBiomes[_index(x, y, z)] = index;
+    mBiomes.set(_index(x, y, z), index);
 }
 
 /**
@@ -112,7 +112,7 @@ bool SubChunk::readBiomes(ReadOnlyBinaryStream &stream) {
     for (int word = 0; word < wordCount; word++) {
         const uint32_t packed = stream.getLInt();
         for (int slot = 0; slot < blocksPerWord && blockIndex < BLOCK_COUNT; slot++) {
-            mBiomes[blockIndex] = (uint16_t) ((packed >> (slot * bitsPerBlock)) & mask);
+            mBiomes.set(blockIndex, (uint16_t) ((packed >> (slot * bitsPerBlock)) & mask));
             blockIndex++;
         }
     }
@@ -129,9 +129,9 @@ bool SubChunk::readBiomes(ReadOnlyBinaryStream &stream) {
 
     // Indices are checked after reading the palette because the words come first in the
     // stream; a corrupt index falls back to the first entry instead of reading out of bounds.
-    for (uint16_t &index: mBiomes) {
-        if (index >= mBiomePalette.size())
-            index = 0;
+    for (int i = 0; i < BLOCK_COUNT; i++) {
+        if (mBiomes[i] >= mBiomePalette.size())
+            mBiomes.set(i, 0);
     }
 
     return true;
@@ -211,7 +211,7 @@ void SubChunk::setBlock(int x, int y, int z, const BlockState &state) {
         mBlocks.assign(BLOCK_COUNT, 0);
     }
 
-    mBlocks[_index(x, y, z)] = _paletteIndexFor(state);
+    mBlocks.set(_index(x, y, z), _paletteIndexFor(state));
 }
 
 void SubChunk::_ensureLayer1() {
@@ -229,7 +229,7 @@ void SubChunk::setBlock(int x, int y, int z, int layer, const BlockState &state)
     }
 
     _ensureLayer1();
-    mBlocks2[_index(x, y, z)] = _paletteIndexForLayer1(state);
+    mBlocks2.set(_index(x, y, z), _paletteIndexForLayer1(state));
 }
 
 bool SubChunk::isEmpty() const {
@@ -268,8 +268,8 @@ bool SubChunk::isLayerEmpty(int layer) const {
     if (mBlocks2.empty())
         return true;
 
-    for (uint16_t index: mBlocks2) {
-        if (mPalette2[index].mName != "minecraft:air")
+    for (int i = 0; i < BLOCK_COUNT; i++) {
+        if (mPalette2[mBlocks2[i]].mName != "minecraft:air")
             return false;
     }
 
@@ -278,7 +278,7 @@ bool SubChunk::isLayerEmpty(int layer) const {
 
 void SubChunk::_writeStorage(BinaryStream &stream, bool persistent,
                             const std::vector<BlockState> &palette,
-                            const std::vector<uint16_t> &blocks, const BlockNetworkIdMap *blockIds) const {
+                            const PaletteIndices &blocks, const BlockNetworkIdMap *blockIds) const {
     const int bitsPerBlock = _bitsPerBlock(palette.size());
     const int blocksPerWord = 32 / bitsPerBlock;
     const int wordCount = (BLOCK_COUNT + blocksPerWord - 1) / blocksPerWord;
@@ -352,7 +352,7 @@ void SubChunk::writePersistent(BinaryStream &stream) const {
 }
 
 bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<BlockState> &palette,
-                           std::vector<uint16_t> &blocks, bool *replacedUnknown) {
+                           PaletteIndices &blocks, bool *replacedUnknown) {
     const unsigned char header = stream.getByte();
     const int bitsPerBlock = header >> 1;
     if (bitsPerBlock <= 0 || bitsPerBlock > 16)
@@ -368,7 +368,7 @@ bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<BlockState
     for (int word = 0; word < wordCount; word++) {
         const uint32_t packed = stream.getLInt();
         for (int slot = 0; slot < blocksPerWord && blockIndex < BLOCK_COUNT; slot++) {
-            blocks[blockIndex] = (uint16_t) ((packed >> (slot * bitsPerBlock)) & mask);
+            blocks.set(blockIndex, (uint16_t) ((packed >> (slot * bitsPerBlock)) & mask));
             blockIndex++;
         }
     }
@@ -409,9 +409,9 @@ bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<BlockState
         palette.push_back(states == nullptr ? BlockState(name) : BlockState(name, *states));
     }
 
-    for (uint16_t &index: blocks) {
-        if (index >= palette.size())
-            index = 0;
+    for (int i = 0; i < BLOCK_COUNT; i++) {
+        if (blocks[i] >= palette.size())
+            blocks.set(i, 0);
     }
 
     return true;
@@ -431,20 +431,20 @@ bool SubChunk::readPersistent(ReadOnlyBinaryStream &stream, bool *replacedUnknow
         return false;
 
     if (mPalette.size() == 1)
-        std::vector<uint16_t>().swap(mBlocks);
+        mBlocks.clear();
 
     mPalette2.clear();
     mBlocks2.clear();
 
     if (layers >= 2) {
         std::vector<BlockState> palette;
-        std::vector<uint16_t> blocks;
+        PaletteIndices blocks;
         if (!_readStorage(stream, palette, blocks, replacedUnknown))
             return false;
 
         bool hasContent = false;
-        for (uint16_t index: blocks) {
-            if (palette[index].mName != "minecraft:air") {
+        for (int i = 0; i < BLOCK_COUNT; i++) {
+            if (palette[blocks[i]].mName != "minecraft:air") {
                 hasContent = true;
                 break;
             }
