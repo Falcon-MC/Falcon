@@ -173,6 +173,48 @@ void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, con
     send(id, data, _toPeerReliability(packet), _toPeerCompressibility(packet));
 }
 
+void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const Packet &packet,
+                                const PacketCodecContext &context) {
+    // Sessions on the same protocol share a codec context, so most recipients reuse one encoding.
+    std::vector<std::pair<const PacketCodecContext *, std::string>> encoded;
+    std::vector<OutboundCommand> commands;
+    commands.reserve(ids.size());
+
+    for (const NetworkIdentifier &id: ids) {
+        const PacketCodecContext *own = mContextResolver ? mContextResolver(id) : nullptr;
+        const PacketCodecContext &session = own != nullptr ? *own : context;
+        if (!session.getCodec().supports(packet.getId()))
+            continue;
+
+        const std::string *data = nullptr;
+        for (const auto &entry: encoded) {
+            if (entry.first == &session) {
+                data = &entry.second;
+                break;
+            }
+        }
+        if (data == nullptr) {
+            BinaryStream stream;
+            packet.writeWithHeader(stream, session);
+            encoded.emplace_back(&session, stream.getBuffer());
+            data = &encoded.back().second;
+        }
+
+        OutboundCommand command;
+        command.mKind = OutboundCommand::Kind::Data;
+        command.mId = id;
+        command.mData = *data;
+        if (mOutboundFilter && !mOutboundFilter(id, command.mData))
+            continue;
+
+        command.mReliability = _toPeerReliability(packet);
+        command.mCompressibility = _toPeerCompressibility(packet);
+        commands.push_back(std::move(command));
+    }
+
+    mOutbound.pushAll(std::move(commands));
+}
+
 void NetworkHandler::setOutboundFilter(OutboundFilter filter) {
     mOutboundFilter = std::move(filter);
 }

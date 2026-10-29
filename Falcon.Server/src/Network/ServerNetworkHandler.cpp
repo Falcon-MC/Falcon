@@ -1252,10 +1252,12 @@ void ServerNetworkHandler::_sendEntityData(ServerPlayer &player) {
     entityData.mTick = 0;
     entityData.mMetadata = _buildPlayerData(player);
 
+    std::vector<NetworkIdentifier> recipients;
     for (const auto &entry: mPlayers) {
         if (entry.first == player.getNetworkIdentifier() || entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, entityData, mCodecContext);
+            recipients.push_back(entry.first);
     }
+    mNetworkHandler->sendToMany(recipients, entityData, mCodecContext);
 }
 
 EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {

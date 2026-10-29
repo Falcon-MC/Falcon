@@ -939,10 +939,7 @@ void ServerNetworkHandler::syncActorAttributes(ServerActor &actor) {
     packet.mTick = 0;
     packet.mAttributes = actor.getAttributes().getAll();
 
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
+    _sendToViewers(actor, packet);
 }
 
 void ServerNetworkHandler::syncActorScale(ServerActor &actor, float scale) {
@@ -980,10 +977,7 @@ void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {
 
     packet.mProperties = buildActorProperties(actor);
 
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
+    _sendToViewers(actor, packet);
 }
 
 void ServerNetworkHandler::syncActorFirework(ServerActor &actor) {
@@ -1134,10 +1128,20 @@ void ServerNetworkHandler::broadcastActorMove(ServerActor &actor) {
     move.mPosition.y += actor.getBaseOffset();
     move.mRotation = actor.getRotation();
 
+    _sendToViewers(actor, move);
+}
+
+void ServerNetworkHandler::_sendToViewers(const ServerActor &actor, const Packet &packet) {
+    std::vector<NetworkIdentifier> viewers;
     for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, move, mCodecContext);
+        if (!entry.second.isSpawned())
+            continue;
+
+        const std::unordered_set<uint64_t> &visible = entry.second.getVisibleActors();
+        if (visible.find(actor.getRuntimeId()) != visible.end())
+            viewers.push_back(entry.first);
     }
+    mNetworkHandler->sendToMany(viewers, packet, mCodecContext);
 }
 
 void ServerNetworkHandler::playActorAnimation(ServerActor &actor, const std::string &animation) {

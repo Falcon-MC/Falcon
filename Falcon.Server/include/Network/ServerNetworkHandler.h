@@ -576,6 +576,9 @@ public:
 
     void _refreshActorIndex();
 
+    // Actor updates only matter to players the actor was spawned for; anyone else gets the state with the spawn.
+    void _sendToViewers(const ServerActor &actor, const Packet &packet);
+
     ServerActor *_registerActor(std::unique_ptr<ServerActor> actor);
 
     void _unregisterActor(int64_t uniqueId);

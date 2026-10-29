@@ -138,6 +138,12 @@ public:
 
     void send(const NetworkIdentifier &id, const Packet &packet, const PacketCodecContext &context);
 
+    /**
+     * Sends one packet to several connections, encoding it once per codec context and queueing every copy under a
+     * single lock.
+     */
+    void sendToMany(const std::vector<NetworkIdentifier> &ids, const Packet &packet, const PacketCodecContext &context);
+
     void send(const NetworkIdentifier &id, const std::string &data,
               NetworkPeer::Reliability reliability = NetworkPeer::Reliability::ReliableOrdered,
               Compressibility compressibility = Compressibility::Compressible);
