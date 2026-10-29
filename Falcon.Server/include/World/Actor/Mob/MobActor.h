@@ -370,7 +370,20 @@ private:
     friend class RideControlSystem;
     friend class RideControlProbe;
 
+    /**
+     * The sensor components are read by every mob every tick, so they are resolved once per component change
+     * instead of by name each tick.
+     */
+    struct SensorComponents {
+        const json::Value *mEntitySensor = nullptr;
+        const json::Value *mEnvironmentSensor = nullptr;
+        const json::Value *mHurtOnCondition = nullptr;
+        const json::Value *mTargetNearbySensor = nullptr;
+    };
+
     void _rebuildComponents() const;
+
+    const SensorComponents &_getSensorComponents() const;
 
     void _registerGoals(ServerNetworkHandler &owner);
 
@@ -511,6 +524,8 @@ private:
     mutable std::unordered_map<std::string, const json::Value *> mComponents;
     mutable bool mComponentsDirty = true;
     mutable std::string mComponentKey;
+    mutable SensorComponents mSensorComponents;
+    mutable bool mSensorComponentsStale = true;
     int64_t mLastHurtTick = INT64_MIN / 2;
     uint64_t mLastHurtBy = 0;
     uint32_t mHurtCount = 0;

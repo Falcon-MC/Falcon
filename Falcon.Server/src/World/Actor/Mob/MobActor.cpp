@@ -110,6 +110,7 @@ namespace {
     const char *const ENTITY_SENSOR_COMPONENT = "minecraft:entity_sensor";
     const char *const TARGET_NEARBY_SENSOR_COMPONENT = "minecraft:target_nearby_sensor";
     const char *const HURT_ON_CONDITION_COMPONENT = "minecraft:hurt_on_condition";
+    const char *const ENVIRONMENT_SENSOR_COMPONENT = "minecraft:environment_sensor";
     const float TARGET_NEARBY_DEFAULT_INSIDE = 1.0f;
     const float TARGET_NEARBY_DEFAULT_OUTSIDE = 5.0f;
     const float INACTIVITY_PLAYER_RANGE_SQUARED = 32.0f * 32.0f;
@@ -375,7 +376,7 @@ void MobActor::_tickSensors(ServerNetworkHandler &owner) {
     _tickHurtOnCondition(owner);
     _tickInactivity(owner);
 
-    const json::Value *sensor = getComponent("minecraft:environment_sensor");
+    const json::Value *sensor = _getSensorComponents().mEnvironmentSensor;
     const json::Value *triggers = sensor == nullptr ? nullptr : sensor->get("triggers");
     if (triggers == nullptr)
         return;
@@ -396,7 +397,7 @@ void MobActor::_tickSensors(ServerNetworkHandler &owner) {
 }
 
 void MobActor::_tickEntitySensor(ServerNetworkHandler &owner) {
-    const json::Value *sensor = getComponent(ENTITY_SENSOR_COMPONENT);
+    const json::Value *sensor = _getSensorComponents().mEntitySensor;
     const json::Value *subsensors = sensor == nullptr ? nullptr : sensor->get("subsensors");
     if (subsensors == nullptr || !subsensors->isArray()) {
         mEntitySensorCooldowns.clear();
@@ -491,7 +492,7 @@ int32_t MobActor::_countSensedEntities(ServerNetworkHandler &owner, const json::
  * ranges is a hysteresis band so a target on the boundary does not toggle the events every tick.
  */
 void MobActor::_tickTargetNearbySensor(ServerNetworkHandler &owner) {
-    const json::Value *sensor = getComponent(TARGET_NEARBY_SENSOR_COMPONENT);
+    const json::Value *sensor = _getSensorComponents().mTargetNearbySensor;
     const Actor *target = sensor == nullptr ? nullptr : getTarget(owner);
     if (target == nullptr) {
         mTargetInsideRange = false;
@@ -528,7 +529,7 @@ void MobActor::_tickTargetNearbySensor(ServerNetworkHandler &owner) {
 }
 
 void MobActor::_tickHurtOnCondition(ServerNetworkHandler &owner) {
-    const json::Value *component = getComponent(HURT_ON_CONDITION_COMPONENT);
+    const json::Value *component = _getSensorComponents().mHurtOnCondition;
     const json::Value *conditions = component == nullptr ? nullptr : component->get("damage_conditions");
     if (conditions == nullptr || !conditions->isArray())
         return;
@@ -1775,6 +1776,7 @@ const json::Value *MobActor::getDefinition() const {
 void MobActor::_rebuildComponents() const {
     mComponents.clear();
     mComponentsDirty = false;
+    mSensorComponentsStale = true;
 
     const json::Value *definition = getDefinition();
     if (definition == nullptr)
@@ -1803,6 +1805,20 @@ const std::unordered_map<std::string, const json::Value *> &MobActor::getCompone
     if (mComponentsDirty)
         _rebuildComponents();
     return mComponents;
+}
+
+const MobActor::SensorComponents &MobActor::_getSensorComponents() const {
+    if (mComponentsDirty)
+        _rebuildComponents();
+    if (!mSensorComponentsStale)
+        return mSensorComponents;
+
+    mSensorComponents.mEntitySensor = getComponent(ENTITY_SENSOR_COMPONENT);
+    mSensorComponents.mEnvironmentSensor = getComponent(ENVIRONMENT_SENSOR_COMPONENT);
+    mSensorComponents.mHurtOnCondition = getComponent(HURT_ON_CONDITION_COMPONENT);
+    mSensorComponents.mTargetNearbySensor = getComponent(TARGET_NEARBY_SENSOR_COMPONENT);
+    mSensorComponentsStale = false;
+    return mSensorComponents;
 }
 
 const json::Value *MobActor::getComponent(const std::string &name) const {
