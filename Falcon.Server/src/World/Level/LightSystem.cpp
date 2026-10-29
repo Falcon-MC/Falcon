@@ -257,6 +257,8 @@ void LightSystem::computeSkyLight(LevelChunk &chunk) {
         for (int z = 0; z < 16; ++z)
             _computeSkyColumn(chunk, x, z);
     }
+
+    chunk.compactLight();
 }
 
 void LightSystem::computeBlockLight(LevelChunk &chunk) {
@@ -285,6 +287,7 @@ void LightSystem::computeBlockLight(LevelChunk &chunk) {
     }
 
     spreadBlockLight(access, spread);
+    chunk.compactLight();
 }
 
 void LightSystem::onBlockChanged(Level &level, int32_t x, int32_t y, int32_t z) {
