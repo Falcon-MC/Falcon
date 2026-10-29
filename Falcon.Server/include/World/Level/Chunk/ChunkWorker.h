@@ -56,7 +56,8 @@ public:
     static constexpr size_t MAX_THREADS = 64;
     // Credits stay held until the main thread drains completed results, not just until
     // generation finishes, so slow consumers cannot accumulate an unbounded result queue.
-    static constexpr size_t MAX_OUTSTANDING_GENERATION = 8;
+    // Generation takes hundreds of milliseconds, so every worker needs several chunks in flight.
+    static constexpr size_t MAX_OUTSTANDING_GENERATION = 64;
 
     ChunkWorker(const ChunkGenerator &generator, LevelStorage &storage);
 

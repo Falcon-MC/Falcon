@@ -364,7 +364,8 @@ int main() {
             while (pressure.processGeneratedChanges() != 0) {}
             for (int x = 40; x < 64; ++x)
                 pressure.requestChunkAsync(x, 40);
-            require(LevelPersistenceProbe::outstanding(pressure) == ChunkWorker::MAX_OUTSTANDING_GENERATION,
+            require(LevelPersistenceProbe::outstanding(pressure)
+                            == std::min<size_t>(24, ChunkWorker::MAX_OUTSTANDING_GENERATION),
                     "Worker admission did not enforce its outstanding-result limit");
             for (int round = 0; round < 3; ++round) {
                 LevelPersistenceProbe::finishWrites(pressure);

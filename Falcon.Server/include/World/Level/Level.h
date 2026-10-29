@@ -393,7 +393,9 @@ private:
     BlockUpdateScheduler mBlockUpdateScheduler;
     LiquidPhysicsSystem mLiquidPhysics;
     std::unordered_map<int64_t, LevelChunk> mChunks;
-    static const size_t MAX_CHUNK_INSERTS_PER_TICK = 8;
+    static const size_t MAX_CHUNK_INSERTS_PER_TICK = 32;
+    // Drained results waiting for insertion; new requests wait while this many are queued.
+    static const size_t MAX_COMPLETED_BACKLOG = 64;
     static const size_t MAX_GENERATED_CHANGES_PER_TICK = 1024;
     // Admission high-water mark; the finite set of already accepted results may overshoot it.
     static constexpr size_t MAX_GENERATION_BACKLOG = 65536;

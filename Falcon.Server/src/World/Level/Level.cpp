@@ -878,7 +878,7 @@ bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
         return false;
 
     _finishPendingChangeWrite(false);
-    if (_generationBacklog() >= MAX_GENERATION_BACKLOG || !mCompletedChunks.empty()
+    if (_generationBacklog() >= MAX_GENERATION_BACKLOG || mCompletedChunks.size() >= MAX_COMPLETED_BACKLOG
         || mChunkWorker->getOutstandingGenerationCount() >= ChunkWorker::MAX_OUTSTANDING_GENERATION
         || (mPendingChangeWrite.valid() && mPersistingChangeKey == key))
         return false;
@@ -915,11 +915,11 @@ size_t Level::drainCompletedChunks() {
     if (mChunkWorker == nullptr)
         return 0;
 
-    if (mCompletedChunks.empty()) {
-        std::vector<ChunkLoadResult> results = mChunkWorker->drainCompleted();
-        for (ChunkLoadResult &result: results)
-            mCompletedChunks.push_back(std::move(result));
-    }
+    // Draining every tick returns worker credits as soon as results are taken, so generation
+    // keeps running while earlier results wait for their insert slot.
+    std::vector<ChunkLoadResult> results = mChunkWorker->drainCompleted();
+    for (ChunkLoadResult &result: results)
+        mCompletedChunks.push_back(std::move(result));
 
     size_t added = 0;
 
