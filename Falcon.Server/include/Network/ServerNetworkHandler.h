@@ -817,6 +817,7 @@ public:
 
 private:
     static const unsigned CHUNKS_PER_TICK = 32;
+    static const int64_t HEAP_RELEASE_INTERVAL_TICKS = 600;
     static const unsigned CHUNK_REQUESTS_PER_TICK = 64;
     static const size_t SPAWN_CHUNK_THRESHOLD = 56;
 

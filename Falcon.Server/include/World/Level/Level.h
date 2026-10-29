@@ -206,6 +206,9 @@ public:
 
     size_t processChunkUnloads();
 
+    // Returns freed heap pages to the system; the heap is process-wide, so one call covers every level.
+    static void releaseFreedHeap();
+
     /**
      * The columns an actor stands in. Actors tick wherever they are and read their blocks with
      * synchronous loads, so a chunk under one is kept resident instead of being unloaded and loaded

@@ -24,6 +24,8 @@
 
 #if defined(__linux__) && defined(__GLIBC__)
 #include <malloc.h>
+#elif defined(__APPLE__)
+#include <malloc/malloc.h>
 #endif
 
 Level::Level(const std::string &name, int viewDistance, int64_t seed, DimensionType dimension)
@@ -785,14 +787,20 @@ size_t Level::processChunkUnloads() {
     mUnloadedSinceTrim += unloaded;
     if (mUnloadQueue.empty() && mUnloadedSinceTrim >= HEAP_TRIM_UNLOAD_THRESHOLD) {
         mUnloadedSinceTrim = 0;
-#if defined(__linux__) && defined(__GLIBC__)
-        // glibc keeps freed chunk memory in its arenas instead of returning it to the system, so
-        // the resident size would stay at its peak after players leave an area.
-        malloc_trim(0);
-#endif
+        releaseFreedHeap();
     }
 
     return unloaded;
+}
+
+void Level::releaseFreedHeap() {
+    // The allocator keeps freed memory instead of returning it to the system, so the resident size
+    // would stay at its peak after players leave an area or generation stops copying chunks around.
+#if defined(__linux__) && defined(__GLIBC__)
+    malloc_trim(0);
+#elif defined(__APPLE__)
+    malloc_zone_pressure_relief(nullptr, 0);
+#endif
 }
 
 bool Level::isChunkPopulated(int32_t chunkX, int32_t chunkZ) const {

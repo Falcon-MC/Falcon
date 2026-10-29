@@ -719,6 +719,9 @@ void ServerNetworkHandler::tick(bool paused) {
     const int autoSaveInterval = mProperties.getAutoSaveInterval();
     if (mAutoSaveEnabled && autoSaveInterval > 0 && mCurrentTick % autoSaveInterval == 0)
         autoSave();
+    // Chunk generation and saving copy whole chunks, so freed memory piles up even when nothing unloads.
+    if (mCurrentTick % HEAP_RELEASE_INTERVAL_TICKS == 0)
+        Level::releaseFreedHeap();
     mProfiler.beginTick(mCurrentTick);
 
     mProfiler.beginSection(ProfilerSection::Weather);
