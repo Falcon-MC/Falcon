@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <stdexcept>
 #include <utility>
 
 NetworkHandler::Connection::Connection(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer)
@@ -293,16 +294,26 @@ void NetworkHandler::_pumpIo() {
 
     for (auto &entry: mConnections) {
         NetworkPeer *peer = entry.second->getBatchedPeer();
+        bool failed = false;
 
-        while (peer->receivePacket(data) == NetworkPeer::DataStatus::HasData) {
-            InboundEvent event;
-            event.mKind = InboundEvent::Kind::Data;
-            event.mId = entry.first;
-            event.mData = data;
-            mInbound.push(std::move(event));
+        // A transport can throw for one connection (for example a data channel closing mid-send);
+        // that connection is dropped instead of the exception ending the whole server.
+        try {
+            while (peer->receivePacket(data) == NetworkPeer::DataStatus::HasData) {
+                InboundEvent event;
+                event.mKind = InboundEvent::Kind::Data;
+                event.mId = entry.first;
+                event.mData = data;
+                mInbound.push(std::move(event));
+            }
+
+            peer->update();
+            peer->flush();
+        } catch (const std::exception &) {
+            failed = true;
         }
 
-        if (entry.second->getEncryptedPeer()->hasFailed() && !entry.second->isFailureReported()) {
+        if ((failed || entry.second->getEncryptedPeer()->hasFailed()) && !entry.second->isFailureReported()) {
             entry.second->markFailureReported();
 
             InboundEvent event;
@@ -310,9 +321,6 @@ void NetworkHandler::_pumpIo() {
             event.mId = entry.first;
             mInbound.push(std::move(event));
         }
-
-        peer->update();
-        peer->flush();
     }
 }
 
