@@ -83,7 +83,9 @@ public:
     std::future<std::vector<GeneratedBlockChange>> requestPersistChanges(
             int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes);
 
-    size_t getOutstandingGenerationCount() const { return mOutstandingGeneration.load(); }
+    size_t getOutstandingGenerationCount() const {
+        return mOutstandingGeneration.load();
+    }
 
     /**
      * Whether a save requested for this chunk has not been written yet. A chunk must not be

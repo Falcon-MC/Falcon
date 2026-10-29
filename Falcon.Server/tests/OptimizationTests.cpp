@@ -59,7 +59,9 @@ public:
         level.mPendingBlockChangeCount += count;
     }
 
-    static bool writing(Level &level) { return level.mPendingChangeWrite.valid(); }
+    static bool writing(Level &level) {
+        return level.mPendingChangeWrite.valid();
+    }
 
     static void holdWrite(Level &level, int32_t x, int32_t z,
                           std::promise<std::vector<GeneratedBlockChange>> &completion) {
@@ -67,7 +69,9 @@ public:
         level.mPendingChangeWrite = completion.get_future();
     }
 
-    static size_t outstanding(Level &level) { return level.mChunkWorker->getOutstandingGenerationCount(); }
+    static size_t outstanding(Level &level) {
+        return level.mChunkWorker->getOutstandingGenerationCount();
+    }
 
     static void finishWrites(Level &level) {
         level.mChunkWorker->waitForSaves();
