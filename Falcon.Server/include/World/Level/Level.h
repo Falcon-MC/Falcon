@@ -416,6 +416,8 @@ private:
     std::deque<ChunkLoadResult> mCompletedChunks;
     // Copying a chunk duplicates its whole palette, so queued saves are copied within a small time budget.
     static constexpr std::chrono::milliseconds DEFERRED_SAVE_BUDGET{3};
+    // Copies wait in the worker queue until LevelDB writes them, so they are only made while few are queued.
+    static constexpr size_t MAX_QUEUED_BACKGROUND_SAVES = 64;
     std::deque<int64_t> mDeferredSaves;
     // Actor deletions run on a worker because a LevelDB write can block for seconds while it
     // compacts; actors still being deleted are hidden from loads so they cannot come back.

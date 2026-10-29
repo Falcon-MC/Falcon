@@ -99,6 +99,8 @@ public:
      */
     bool hasPendingSave(int32_t chunkX, int32_t chunkZ) const;
 
+    size_t getPendingSaveCount() const;
+
     bool hasFailedSave(int32_t chunkX, int32_t chunkZ) const;
 
     bool waitForSaves();

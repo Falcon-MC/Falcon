@@ -145,6 +145,11 @@ void ChunkWorker::requestSave(std::unique_ptr<LevelChunk> chunk) {
     mQueues[_queueIndexFor(task.mX, task.mZ)]->push(std::move(task));
 }
 
+size_t ChunkWorker::getPendingSaveCount() const {
+    std::lock_guard<std::mutex> lock(mPendingSavesMutex);
+    return mPendingSaves.size();
+}
+
 bool ChunkWorker::hasPendingSave(int32_t chunkX, int32_t chunkZ) const {
     std::lock_guard<std::mutex> lock(mPendingSavesMutex);
     const int64_t key = _packChunk(chunkX, chunkZ);

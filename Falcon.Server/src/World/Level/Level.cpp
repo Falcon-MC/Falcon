@@ -813,7 +813,8 @@ void Level::processDeferredSaves() {
     _flushEntityErasures(false);
 
     const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + DEFERRED_SAVE_BUDGET;
-    while (!mDeferredSaves.empty() && std::chrono::steady_clock::now() < deadline) {
+    while (!mDeferredSaves.empty() && std::chrono::steady_clock::now() < deadline
+           && mChunkWorker != nullptr && mChunkWorker->getPendingSaveCount() < MAX_QUEUED_BACKGROUND_SAVES) {
         const int64_t key = mDeferredSaves.front();
         mDeferredSaves.pop_front();
 
