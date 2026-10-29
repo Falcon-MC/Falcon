@@ -1026,7 +1026,12 @@ size_t Level::drainCompletedChunks() {
 }
 
 std::string Level::getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds) {
-    return getChunk(chunkX, chunkZ).encodeNetwork(blockIds);
+    // The encoded sections are built off the main thread for the first send; keeping them for every
+    // loaded chunk costs more memory than re-encoding for the rare later viewer.
+    LevelChunk &chunk = getChunk(chunkX, chunkZ);
+    std::string data = chunk.encodeNetwork(blockIds);
+    chunk.invalidateNetworkCaches();
+    return data;
 }
 
 int Level::getChunkSubChunkCount(int32_t chunkX, int32_t chunkZ) {
