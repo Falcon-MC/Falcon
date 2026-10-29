@@ -169,6 +169,9 @@ namespace {
         return value == nullptr ? fallback : (float) value->number(fallback);
     }
 
+    // Default of the vanilla 26.60 nearest_attackable_target definition.
+    const int32_t TARGET_SCAN_INTERVAL = 10;
+
     std::vector<NearestAttackableTargetGoal::Entry> targetEntries(const json::Value &component) {
         std::vector<NearestAttackableTargetGoal::Entry> entries;
         const json::Value *types = component.get("entity_types");
@@ -513,7 +516,9 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         return std::make_unique<HurtByTargetGoal>(firstFilters(component));
 
     if (behavior == "nearest_attackable_target" || behavior == "nearest_prioritized_attackable_target")
-        return std::make_unique<NearestAttackableTargetGoal>(targetRange(mob, component), targetEntries(component));
+        return std::make_unique<NearestAttackableTargetGoal>(
+                targetRange(mob, component), targetEntries(component),
+                (int32_t) numberOf(component, "scan_interval", (float) TARGET_SCAN_INTERVAL));
 
     if (behavior == "owner_hurt_by_target")
         return std::make_unique<OwnerTargetGoal>(OwnerTargetGoal::Mode::OwnerHurtBy);

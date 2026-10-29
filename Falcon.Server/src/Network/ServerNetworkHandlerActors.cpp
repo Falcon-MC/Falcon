@@ -321,6 +321,7 @@ ServerActor *ServerNetworkHandler::_registerActor(std::unique_ptr<ServerActor> a
     ServerActor *result = actor.get();
     mActorUniqueIdsByRuntimeId[result->getRuntimeId()] = result->getUniqueId();
     mActors[result->getUniqueId()] = std::move(actor);
+    mActorIndexDirty = true;
     if (!result->getPendingPassengers().empty())
         mVehiclesWithPendingPassengers.insert(result->getUniqueId());
     return result;
@@ -334,6 +335,30 @@ void ServerNetworkHandler::_unregisterActor(int64_t uniqueId) {
     mVehiclesWithPendingPassengers.erase(uniqueId);
     mActorUniqueIdsByRuntimeId.erase(it->second->getRuntimeId());
     mActors.erase(it);
+    mActorIndexDirty = true;
+}
+
+void ServerNetworkHandler::_refreshActorIndex() {
+    if (!mActorIndexDirty)
+        return;
+
+    mActorIndexDirty = false;
+    // Buckets are cleared rather than freed so a tick does not reallocate them; ones left empty are dropped.
+    for (auto it = mActorIndex.begin(); it != mActorIndex.end();) {
+        if (it->second.empty()) {
+            it = mActorIndex.erase(it);
+            continue;
+        }
+        it->second.clear();
+        ++it;
+    }
+
+    for (auto &entry: mActors) {
+        const Vector3f position = entry.second->getPosition();
+        const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+        const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+        mActorIndex[_actorIndexKey(chunkX, chunkZ)].push_back(entry.second.get());
+    }
 }
 
 void ServerNetworkHandler::_resolvePendingRides() {
@@ -1376,6 +1401,7 @@ void ServerNetworkHandler::saveWorldDynamicProperties(bool checked) {
 
 
 void ServerNetworkHandler::tickActors() {
+    mActorIndexDirty = true;
     std::vector<int64_t> expired;
 
     std::vector<int64_t> tickOrder;

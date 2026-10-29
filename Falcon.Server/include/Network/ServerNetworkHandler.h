@@ -40,6 +40,7 @@
 #include "Protocol/Packets/CreativeContentPacket.h"
 
 #include <array>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -185,6 +186,31 @@ public:
     void erasePlayer(const NetworkIdentifier &id);
 
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> &getActors() { return mActors; }
+
+    /**
+     * Visits the actors standing in the chunk columns within radius blocks of position. The index behind it is
+     * rebuilt at most once per tick, so positions can lag by one tick of movement: callers still check exact
+     * distances.
+     */
+    template<typename Visitor>
+    void forEachActorNear(const Vector3f &position, float radius, Visitor &&visit) {
+        _refreshActorIndex();
+        const float reach = radius + ACTOR_INDEX_MARGIN;
+        const int32_t minX = (int32_t) std::floor(position.x - reach) >> 4;
+        const int32_t maxX = (int32_t) std::floor(position.x + reach) >> 4;
+        const int32_t minZ = (int32_t) std::floor(position.z - reach) >> 4;
+        const int32_t maxZ = (int32_t) std::floor(position.z + reach) >> 4;
+        for (int32_t chunkX = minX; chunkX <= maxX; chunkX++) {
+            for (int32_t chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
+                const auto bucket = mActorIndex.find(_actorIndexKey(chunkX, chunkZ));
+                if (bucket == mActorIndex.end())
+                    continue;
+
+                for (ServerActor *actor: bucket->second)
+                    visit(*actor);
+            }
+        }
+    }
 
     ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                             const std::function<void(ServerActor &)> &configure = nullptr);
@@ -544,6 +570,12 @@ public:
 
     void _sendActorRemove(ServerPlayer &player, const ServerActor &actor);
 
+    static int64_t _actorIndexKey(int32_t chunkX, int32_t chunkZ) {
+        return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
+    }
+
+    void _refreshActorIndex();
+
     ServerActor *_registerActor(std::unique_ptr<ServerActor> actor);
 
     void _unregisterActor(int64_t uniqueId);
@@ -826,6 +858,10 @@ private:
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
     std::unique_ptr<PlayerMovementRegistry> mPlayerMovementRegistry;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
+    // Actors move up to a few blocks per tick, more than any mob walks, so stale index entries stay in range.
+    static constexpr float ACTOR_INDEX_MARGIN = 4.0f;
+    std::unordered_map<int64_t, std::vector<ServerActor *>> mActorIndex;
+    bool mActorIndexDirty = true;
     std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
     std::unordered_set<int64_t> mVehiclesWithPendingPassengers;
     uint32_t mActorUniqueIdCounter = 0;

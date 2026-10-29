@@ -12,6 +12,8 @@ namespace {
     const float PLAYER_WIDTH = 0.6f;
     const float PLAYER_HEIGHT = 1.8f;
     const float PUSH_STRENGTH = 0.2f * 0.32f;
+    // Wide enough for the widest actor box (the ender dragon) to still reach the pushed actor.
+    const float PUSH_SEARCH_RADIUS = 16.0f;
     const float UNSET = -std::numeric_limits<float>::infinity();
 
     AxisAlignedBB boxAround(const Vector3f &position, float width, float height) {
@@ -42,20 +44,19 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, const ServerA
     float negativeZ = UNSET;
     bool touched = false;
 
-    // Every actor runs this against every other actor, so the box test comes before the virtual checks:
-    // getPhysics() on a mob resolves several definition components and must stay out of the pair loop.
-    for (auto &entry: owner.getActors()) {
-        const ServerActor &other = *entry.second;
+    // The box test comes before the virtual checks: getPhysics() on a mob resolves several definition
+    // components and must stay out of the pair loop.
+    owner.forEachActorNear(actor.getPosition(), PUSH_SEARCH_RADIUS, [&](const ServerActor &other) {
         if (&other == &actor || other.isProjectile() || !other.sharesLevelWith(actor))
-            continue;
+            return;
 
         const AxisAlignedBB box = boundingBoxOf(other);
         if (!box.intersectsWith(self) || !other.isAlive() || !other.isPushable())
-            continue;
+            return;
 
         _accumulate(self, box, positiveX, negativeX, positiveZ, negativeZ);
         touched = true;
-    }
+    });
 
     for (auto &entry: owner.getPlayers()) {
         const ServerPlayer &player = entry.second;

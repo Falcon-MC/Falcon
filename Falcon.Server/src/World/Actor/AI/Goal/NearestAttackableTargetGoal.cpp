@@ -6,10 +6,20 @@
 #include "Network/ServerNetworkHandler.h"
 
 #include <algorithm>
+#include <cmath>
+#include <random>
 #include <utility>
 
-NearestAttackableTargetGoal::NearestAttackableTargetGoal(float range, std::vector<Entry> entries)
-        : mRangeSquared(range * range), mMaxRangeSquared(range * range), mEntries(std::move(entries)) {
+namespace {
+    std::mt19937 &targetScanRandom() {
+        static std::mt19937 generator(std::random_device{}());
+        return generator;
+    }
+}
+
+NearestAttackableTargetGoal::NearestAttackableTargetGoal(float range, std::vector<Entry> entries, int32_t scanInterval)
+        : mRangeSquared(range * range), mScanInterval(scanInterval), mMaxRangeSquared(range * range),
+          mEntries(std::move(entries)) {
     if (!mEntries.empty()) {
         mMaxRangeSquared = 0.0f;
         for (const Entry &entry: mEntries) {
@@ -21,7 +31,13 @@ NearestAttackableTargetGoal::NearestAttackableTargetGoal(float range, std::vecto
 }
 
 bool NearestAttackableTargetGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
-    return _findNearest(owner, mob) != nullptr;
+    if (mScanInterval > 0
+        && std::uniform_int_distribution<int32_t>(0, mScanInterval - 1)(targetScanRandom()) != 0)
+        return false;
+
+    const Actor *nearest = _findNearest(owner, mob);
+    mFoundTargetRuntimeId = nearest == nullptr ? 0 : nearest->getRuntimeId();
+    return nearest != nullptr;
 }
 
 bool NearestAttackableTargetGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
@@ -30,9 +46,9 @@ bool NearestAttackableTargetGoal::canContinueToUse(ServerNetworkHandler &owner, 
 }
 
 void NearestAttackableTargetGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
-    const Actor *nearest = _findNearest(owner, mob);
-    if (nearest != nullptr)
-        mob.setTarget(owner, nearest->getRuntimeId());
+    if (mFoundTargetRuntimeId != 0)
+        mob.setTarget(owner, mFoundTargetRuntimeId);
+    mFoundTargetRuntimeId = 0;
 }
 
 void NearestAttackableTargetGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
@@ -75,10 +91,8 @@ Actor *NearestAttackableTargetGoal::_findNearest(ServerNetworkHandler &owner, Mo
 
     for (auto &entry: owner.getPlayers())
         consider(entry.second);
-    if (!mEntries.empty()) {
-        for (auto &entry: owner.getActors())
-            consider(*entry.second);
-    }
+    if (!mEntries.empty())
+        owner.forEachActorNear(mob.getPosition(), std::sqrt(mMaxRangeSquared), consider);
 
     return nearest;
 }
