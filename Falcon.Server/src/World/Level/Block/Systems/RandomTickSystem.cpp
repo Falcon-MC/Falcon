@@ -104,7 +104,7 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
                 if (state.mName == "minecraft:air")
                     continue;
 
-                const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+                const Block *block = VanillaBlocks::fromState(state);
                 if (block == nullptr)
                     continue;
 
@@ -124,7 +124,7 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
     for (const Candidate &candidate: candidates) {
         const Vector3i &position = candidate.mPosition;
         const BlockState *before = level.peekBlockPtr(position.x, position.y, position.z);
-        if (before == nullptr || VanillaBlocks::fromIdentifier(before->mName) != candidate.mBlock)
+        if (before == nullptr || VanillaBlocks::fromState(*before) != candidate.mBlock)
             continue;
 
         // Copies are passed on because a reaction may rewrite the chunk palette the peeked

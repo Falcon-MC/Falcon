@@ -36,6 +36,8 @@ namespace {
     };
 
     std::atomic<const BlockOverrides *> gBlockOverrides{nullptr};
+    // Starts above the zero a fresh BlockState holds, so no state reads as resolved before its first lookup.
+    std::atomic<uint32_t> gResolvedBlockGeneration{1};
 
     std::vector<std::unique_ptr<BlockOverrides>> &publishedOverrides() {
         static auto *published = new std::vector<std::unique_ptr<BlockOverrides>>();
@@ -6008,6 +6010,20 @@ const Block *VanillaBlocks::fromIdentifier(const std::string &identifier) {
                                        : match->second;
 }
 
+const Block *VanillaBlocks::fromState(const BlockState &state) {
+    const uint32_t generation = gResolvedBlockGeneration.load(std::memory_order_relaxed);
+    if (state.hasResolvedBlock(generation))
+        return state.getResolvedBlock();
+
+    const Block *block = fromIdentifier(state.mName);
+    state.cacheResolvedBlock(block, generation);
+    return block;
+}
+
+void VanillaBlocks::invalidateResolvedBlocks() {
+    gResolvedBlockGeneration.fetch_add(1, std::memory_order_relaxed);
+}
+
 const Block *VanillaBlocks::fromTypeId(int32_t typeId) {
     static const std::unordered_map<int32_t, const Block *> byTypeId = []() {
         std::unordered_map<int32_t, const Block *> index;
@@ -6044,9 +6060,11 @@ void VanillaBlocks::refreshOverrides() {
 
     if (overrides->mByIdentifier.empty()) {
         gBlockOverrides.store(nullptr, std::memory_order_release);
+        invalidateResolvedBlocks();
         return;
     }
 
     gBlockOverrides.store(overrides.get(), std::memory_order_release);
     publishedOverrides().push_back(std::move(overrides));
+    invalidateResolvedBlocks();
 }

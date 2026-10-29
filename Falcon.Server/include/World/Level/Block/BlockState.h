@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <string>
 
+class Block;
+
 class BlockState {
 public:
     BlockState() : mName("minecraft:air"), mStates(Tag::ofCompound()) {}
@@ -30,6 +32,19 @@ public:
         mLightProperties = properties;
     }
 
+    bool hasResolvedBlock(uint32_t generation) const {
+        return mResolved.mGeneration == generation;
+    }
+
+    const Block *getResolvedBlock() const {
+        return mResolved.mBlock;
+    }
+
+    void cacheResolvedBlock(const Block *block, uint32_t generation) const {
+        mResolved.mBlock = block;
+        mResolved.mGeneration = generation;
+    }
+
     bool operator==(const BlockState &other) const {
         return mName == other.mName && mStates == other.mStates;
     }
@@ -48,7 +63,27 @@ public:
     Tag mStates;
 
 private:
+    /**
+     * Not carried over by copies: a copy may have its name changed in place, which would leave it pointing at the
+     * wrong block.
+     */
+    struct ResolvedBlock {
+        ResolvedBlock() = default;
+
+        ResolvedBlock(const ResolvedBlock &) {}
+
+        ResolvedBlock &operator=(const ResolvedBlock &) {
+            mBlock = nullptr;
+            mGeneration = 0;
+            return *this;
+        }
+
+        const Block *mBlock = nullptr;
+        uint32_t mGeneration = 0;
+    };
+
     mutable int32_t mHash = 0;
     mutable bool mHashValid = false;
     mutable int32_t mLightProperties = -1;
+    mutable ResolvedBlock mResolved;
 };
