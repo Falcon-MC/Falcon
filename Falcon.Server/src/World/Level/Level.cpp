@@ -762,7 +762,8 @@ void Level::setOccupiedColumns(std::unordered_set<int64_t> columns) {
 }
 
 void Level::processDeferredSaves() {
-    for (size_t handled = 0; handled < MAX_DEFERRED_SAVES_PER_TICK && !mDeferredSaves.empty(); ++handled) {
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + DEFERRED_SAVE_BUDGET;
+    while (!mDeferredSaves.empty() && std::chrono::steady_clock::now() < deadline) {
         const int64_t key = mDeferredSaves.front();
         mDeferredSaves.pop_front();
 

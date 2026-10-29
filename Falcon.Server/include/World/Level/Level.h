@@ -414,7 +414,8 @@ private:
     std::unordered_set<int64_t> mPendingChunks;
     std::unordered_set<int64_t> mActiveColumns;
     std::deque<ChunkLoadResult> mCompletedChunks;
-    static constexpr size_t MAX_DEFERRED_SAVES_PER_TICK = 64;
+    // Copying a chunk duplicates its whole palette, so queued saves are copied within a small time budget.
+    static constexpr std::chrono::milliseconds DEFERRED_SAVE_BUDGET{3};
     std::deque<int64_t> mDeferredSaves;
     std::unordered_set<int64_t> mRepopulatedChunks;
     std::unordered_map<int64_t, std::unordered_set<uint64_t>> mChunkLoaders;
