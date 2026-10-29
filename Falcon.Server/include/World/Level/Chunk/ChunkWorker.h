@@ -6,9 +6,13 @@
 
 #include <atomic>
 #include <cstdint>
+#include <future>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class ChunkGenerator;
@@ -19,21 +23,26 @@ struct ChunkTask {
     enum class Kind : int {
         Load = 0,
         Save = 1,
-        Populate = 2
+        Populate = 2,
+        Barrier = 3,
+        PersistChanges = 4,
+        EraseEntities = 5
     };
 
     Kind mKind = Kind::Load;
     int32_t mX = 0;
     int32_t mZ = 0;
     std::unique_ptr<LevelChunk> mChunk;
+    std::shared_ptr<std::promise<void>> mBarrier;
+    std::vector<GeneratedBlockChange> mChanges;
+    std::shared_ptr<std::promise<std::vector<GeneratedBlockChange>>> mChangesResult;
+    std::vector<int64_t> mEntityIds;
 };
 
 struct ChunkLoadResult {
     int32_t mX = 0;
     int32_t mZ = 0;
     std::unique_ptr<LevelChunk> mChunk;
-    std::string mNetworkData;
-    int mNetworkSubChunkCount = 0;
     std::vector<GeneratedBlockChange> mOverflowChanges;
     bool mReplacesResident = false;
     bool mGenerated = false;
@@ -47,6 +56,10 @@ struct ChunkLoadResult {
 class ChunkWorker {
 public:
     static constexpr size_t MAX_THREADS = 64;
+    // Credits stay held until the main thread drains completed results, not just until
+    // generation finishes, so slow consumers cannot accumulate an unbounded result queue.
+    // Generation takes hundreds of milliseconds, so every worker needs several chunks in flight.
+    static constexpr size_t MAX_OUTSTANDING_GENERATION = 64;
 
     ChunkWorker(const ChunkGenerator &generator, LevelStorage &storage);
 
@@ -64,11 +77,33 @@ public:
 
     size_t getThreadCount() const { return mQueues.size(); }
 
-    void requestLoad(int32_t chunkX, int32_t chunkZ);
+    bool requestLoad(int32_t chunkX, int32_t chunkZ);
 
     void requestSave(std::unique_ptr<LevelChunk> chunk);
 
-    void requestPopulate(std::unique_ptr<LevelChunk> chunk);
+    bool requestPopulate(std::unique_ptr<LevelChunk> chunk);
+
+    std::future<std::vector<GeneratedBlockChange>> requestPersistChanges(
+            int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes);
+
+    // Deletes stored actors off the main thread; the future completes once every deletion ran.
+    std::future<void> requestEraseEntities(std::vector<int64_t> uniqueIds);
+
+    size_t getOutstandingGenerationCount() const {
+        return mOutstandingGeneration.load();
+    }
+
+    /**
+     * Whether a save requested for this chunk has not been written yet. A chunk must not be
+     * freed and written synchronously meanwhile, or the older queued copy would overwrite it.
+     */
+    bool hasPendingSave(int32_t chunkX, int32_t chunkZ) const;
+
+    size_t getPendingSaveCount() const;
+
+    bool hasFailedSave(int32_t chunkX, int32_t chunkZ) const;
+
+    bool waitForSaves();
 
     void discardPendingGeneration();
 
@@ -91,10 +126,16 @@ private:
 
     void _processSave(ChunkTask &task);
 
+    void _processPersistChanges(ChunkTask &task);
+
+    bool _reserveGeneration();
+
     void _finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident,
                       bool generated);
 
     size_t _queueIndexFor(int32_t chunkX, int32_t chunkZ) const;
+
+    static int64_t _packChunk(int32_t chunkX, int32_t chunkZ);
 
     const ChunkGenerator &mGenerator;
     LevelStorage &mStorage;
@@ -103,9 +144,14 @@ private:
     std::vector<std::unique_ptr<TaskQueue<ChunkTask>>> mQueues;
     TaskQueue<ChunkLoadResult> mCompleted;
 
+    mutable std::mutex mPendingSavesMutex;
+    std::unordered_map<int64_t, size_t> mPendingSaves;
+    std::unordered_set<int64_t> mFailedSaves;
+
     std::vector<std::thread> mThreads;
     std::atomic<bool> mRunning;
     std::atomic<bool> mDiscardGeneration;
+    std::atomic<size_t> mOutstandingGeneration{0};
     std::atomic<uint64_t> mGeneratedCount;
     std::atomic<uint64_t> mLoadedCount;
     std::atomic<uint64_t> mSavedCount;

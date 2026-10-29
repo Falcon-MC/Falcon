@@ -1,5 +1,7 @@
 #include "World/Level/World.h"
 
+#include <exception>
+
 World::World(uint32_t id, const std::string &name, int viewDistance, int64_t seed)
         : mId(id),
           mOverworld(new Level(name, viewDistance, seed, DimensionType::Overworld)),
@@ -43,15 +45,23 @@ bool World::open(const std::string &worldsDirectory, size_t workerThreads,
     return opened;
 }
 
-void World::saveAll() {
+void World::saveAll(bool wait) {
     for (Level *level: getLevels())
-        level->saveAll();
+        level->saveAll(wait);
 }
 
 void World::close() {
-    mNether->closeStorage();
-    mTheEnd->closeStorage();
-    mOverworld->closeStorage();
+    std::exception_ptr error;
+    for (Level *level: {mNether.get(), mTheEnd.get(), mOverworld.get()}) {
+        try {
+            level->closeStorage();
+        } catch (...) {
+            if (!error)
+                error = std::current_exception();
+        }
+    }
+    if (error)
+        std::rethrow_exception(error);
 }
 
 Level &World::getLevel(DimensionType dimension) {

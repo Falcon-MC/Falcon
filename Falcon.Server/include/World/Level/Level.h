@@ -16,6 +16,7 @@
 #include "World/Level/GameRules.h"
 #include "World/Level/Storage/LevelStorage.h"
 
+#include <chrono>
 #include <cstdint>
 #include <deque>
 #include <functional>
@@ -35,6 +36,7 @@ class ServerNetworkHandler;
  * to a ChunkWorker and merged back through drainCompletedChunks().
  */
 class Level {
+    friend class LevelPersistenceProbe;
 public:
     struct ChunkPosition {
         int32_t mX;
@@ -134,7 +136,11 @@ public:
 
     bool attachStorage(Level &overworld);
 
-    void saveAll();
+    void saveAll(bool wait = false);
+
+    uint64_t getSaveFailureCount() const {
+        return mStorage.getWriteFailures();
+    }
 
     void closeStorage();
 
@@ -199,6 +205,19 @@ public:
     void unregisterAllChunkLoaders(uint64_t loaderId);
 
     size_t processChunkUnloads();
+
+    // Hands a bounded number of the chunks queued by a background save to the workers.
+    void processDeferredSaves();
+
+    // Returns freed heap pages to the system; the heap is process-wide, so one call covers every level.
+    static void releaseFreedHeap();
+
+    /**
+     * The columns an actor stands in. Actors tick wherever they are and read their blocks with
+     * synchronous loads, so a chunk under one is kept resident instead of being unloaded and loaded
+     * straight back.
+     */
+    void setOccupiedColumns(std::unordered_set<int64_t> columns);
 
     void releaseChunkIfUnused(int32_t chunkX, int32_t chunkZ);
 
@@ -355,6 +374,12 @@ private:
 
     void _flushPendingBlockChanges(bool includeInFlight);
 
+    void _finishPendingChangeWrite(bool wait);
+
+    size_t _generationBacklog() const {
+        return mIncomingChanges.size() + mPendingBlockChangeCount + mPersistingChangeCount;
+    }
+
     ServerNetworkHandler *mOwner = nullptr;
     Vector3i mSpawnPosition;
     Vector3i mDefaultSpawnPosition;
@@ -375,21 +400,52 @@ private:
     BlockUpdateScheduler mBlockUpdateScheduler;
     LiquidPhysicsSystem mLiquidPhysics;
     std::unordered_map<int64_t, LevelChunk> mChunks;
-    static const size_t MAX_CHUNK_INSERTS_PER_TICK = 8;
+    static const size_t MAX_CHUNK_INSERTS_PER_TICK = 32;
+    // Drained results waiting for insertion; new requests wait while this many are queued.
+    static const size_t MAX_COMPLETED_BACKLOG = 64;
+    static const size_t GENERATED_CHANGES_BATCH = 1024;
+    // Generation admission waits on this queue, so the main thread drains it for as long as this budget allows.
+    static constexpr std::chrono::milliseconds GENERATED_CHANGES_BUDGET{8};
+    // Admission high-water mark; the finite set of already accepted results may overshoot it.
+    static constexpr size_t MAX_GENERATION_BACKLOG = 65536;
 
-    std::unordered_map<int64_t, std::string> mChunkNetworkCache;
-    std::unordered_map<const BlockNetworkIdMap *, std::unordered_map<int64_t, std::string>> mTranslatedChunkNetworkCache;
+    void _sweepOrphanChunks();
 
-    void _invalidateChunkNetwork(int64_t key);
     std::unordered_set<int64_t> mPendingChunks;
     std::unordered_set<int64_t> mActiveColumns;
     std::deque<ChunkLoadResult> mCompletedChunks;
+    // Copying a chunk duplicates its whole palette, so queued saves are copied within a small time budget.
+    static constexpr std::chrono::milliseconds DEFERRED_SAVE_BUDGET{3};
+    // Copies wait in the worker queue until LevelDB writes them, so they are only made while few are queued.
+    static constexpr size_t MAX_QUEUED_BACKGROUND_SAVES = 64;
+    std::deque<int64_t> mDeferredSaves;
+    // Actor deletions run on a worker because a LevelDB write can block for seconds while it
+    // compacts; actors still being deleted are hidden from loads so they cannot come back.
+    std::vector<int64_t> mQueuedEntityErasures;
+    std::vector<int64_t> mErasingEntityBatch;
+    std::unordered_set<int64_t> mErasingEntities;
+    std::future<void> mEntityEraseWrite;
+
+    void _flushEntityErasures(bool wait);
     std::unordered_set<int64_t> mRepopulatedChunks;
     std::unordered_map<int64_t, std::unordered_set<uint64_t>> mChunkLoaders;
     std::unordered_set<int64_t> mUnloadQueue;
     static constexpr size_t MAX_CHUNK_UNLOADS_PER_TICK = 8;
-    std::vector<GeneratedBlockChange> mIncomingChanges;
+    static constexpr int32_t UNLOAD_SWEEP_INTERVAL_TICKS = 200;
+    static constexpr size_t HEAP_TRIM_UNLOAD_THRESHOLD = 256;
+    std::unordered_set<int64_t> mOrphanCandidates;
+    std::unordered_set<int64_t> mOccupiedColumns;
+    int32_t mUnloadSweepTicks = 0;
+    size_t mUnloadedSinceTrim = 0;
+    std::deque<GeneratedBlockChange> mIncomingChanges;
     std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> mPendingBlockChanges;
+    size_t mPendingBlockChangeCount = 0;
+    size_t mPersistingChangeCount = 0;
+    // Chunks whose pending changes are in the write in flight; one write carries a batch of chunks
+    // so persisting keeps up with generation.
+    std::unordered_set<int64_t> mPersistingChangeKeys;
+    static constexpr size_t MAX_PERSIST_BATCH_CHUNKS = 64;
+    std::future<std::vector<GeneratedBlockChange>> mPendingChangeWrite;
     std::unique_ptr<ChunkWorker> mChunkWorker;
     int64_t mTime = 0;
     bool mRaining = false;

@@ -49,14 +49,13 @@ int32_t AvoidMobTypeGoal::_nextSound() const {
 
 bool AvoidMobTypeGoal::_isOutnumbered(ServerNetworkHandler &owner, MobActor &mob, const Entry &entry) const {
     int32_t threats = 0;
-    for (auto &actor: owner.getActors()) {
-        const Actor &candidate = *actor.second;
+    owner.forEachActorNear(mob.getPosition(), entry.mMaxDistance, [&](const Actor &candidate) {
         if (&candidate == &mob || !candidate.isAlive() || !candidate.sharesLevelWith(mob)
             || mob.distanceSquaredTo(candidate) > entry.mMaxDistance * entry.mMaxDistance)
-            continue;
+            return;
         if (entry.mFilters == nullptr || EntityFilter::test(*entry.mFilters, owner, mob, &candidate))
             ++threats;
-    }
+    });
 
     const json::Value *groupSize = mob.getComponent("minecraft:group_size");
     const json::Value *radiusValue = groupSize == nullptr ? nullptr : groupSize->get("radius");
@@ -64,14 +63,14 @@ bool AvoidMobTypeGoal::_isOutnumbered(ServerNetworkHandler &owner, MobActor &mob
     const json::Value *groupFilters = groupSize == nullptr ? nullptr : groupSize->get("filters");
 
     int32_t allies = 0;
-    for (auto &actor: owner.getActors()) {
-        const MobActor *ally = dynamic_cast<const MobActor *>(actor.second.get());
+    owner.forEachActorNear(mob.getPosition(), radius, [&](const ServerActor &actor) {
+        const MobActor *ally = dynamic_cast<const MobActor *>(&actor);
         if (ally == nullptr || !ally->isAlive() || !ally->sharesLevelWith(mob)
             || mob.distanceSquaredTo(*ally) > radius * radius)
-            continue;
+            return;
         if (groupFilters == nullptr || EntityFilter::test(*groupFilters, owner, *ally))
             ++allies;
-    }
+    });
     return threats > allies;
 }
 
@@ -103,8 +102,10 @@ const Actor *AvoidMobTypeGoal::_findThreat(ServerNetworkHandler &owner, MobActor
         if (isAvoidablePlayer(player.second))
             consider(player.second);
     }
-    for (auto &actor: owner.getActors())
-        consider(*actor.second);
+    float searchRadius = 0.0f;
+    for (const Entry &option: mEntries)
+        searchRadius = std::max(searchRadius, option.mMaxDistance);
+    owner.forEachActorNear(mob.getPosition(), searchRadius, consider);
 
     return nearest;
 }

@@ -17,8 +17,8 @@ namespace {
     const int MAXIMUM_SPREAD_LIGHT_FILTER = 2;
 
     int lightFilterAt(Level &level, const Vector3i &position) {
-        const BlockState above = level.getBlockState(position.x, position.y, position.z);
-        return BlockLightProperties::lightFilter(BlockLightProperties::packed(above));
+        const BlockState *above = level.peekBlockPtr(position.x, position.y, position.z);
+        return above == nullptr ? 0 : BlockLightProperties::lightFilter(BlockLightProperties::packed(*above));
     }
 }
 
@@ -42,7 +42,9 @@ void SpreadingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
                           position.y - 3 + RandomTickSystem::nextInt(5),
                           position.z - 1 + RandomTickSystem::nextInt(3));
 
-    if (level.getBlockState(target.x, target.y, target.z).mName != "minecraft:dirt")
+    // Spreading never loads chunks: a target in an unloaded chunk is skipped this tick.
+    const BlockState *targetState = level.peekBlockPtr(target.x, target.y, target.z);
+    if (targetState == nullptr || targetState->mName != "minecraft:dirt")
         return;
 
     const Vector3i targetAbove(target.x, target.y + 1, target.z);

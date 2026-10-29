@@ -2980,5 +2980,13 @@ public:
 
     static const Block *fromTypeId(int32_t typeId);
 
+    /**
+     * Same result as `fromIdentifier(state.mName)`, cached on the state until the block registrations change. Main
+     * thread only, and only for states whose name is not changed in place afterwards, such as chunk palette entries.
+     */
+    static const Block *fromState(const BlockState &state);
+
+    static void invalidateResolvedBlocks();
+
     static void refreshOverrides();
 };

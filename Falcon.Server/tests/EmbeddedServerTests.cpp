@@ -2,6 +2,7 @@
 #include "Server/ServerHost.h"
 #include "Server/ServerPaths.h"
 #include "Core/NBT/NbtIo.h"
+#include "Core/Debug/BedrockLog.h"
 #include "Core/Utility/BinaryStream.h"
 #include "Network/Client/ClientNetworkSystem.h"
 
@@ -54,7 +55,7 @@ int main() {
         require(ServerPaths::getRoot() == originalRoot, "Failed start changed root");
 
         config.dataDirectory = directory / "new-directory";
-        config.properties = {{"view-distance", "4"}, {"tick-distance", "4"},
+        config.properties = {{"view-distance", "5"}, {"tick-distance", "4"},
                              {"level-seed", "1"}, {"auto-compaction-interval", "0"}};
         config.log = [&logCalls](LogLevel, const std::string &) {
             logCalls.fetch_add(1);
@@ -82,6 +83,19 @@ int main() {
         await(server.save());
         require(await(server.getPlayerNames()).empty(), "Unexpected players");
         require(savedTime(config.dataDirectory) == 1000, "Command did not execute during pause");
+        const auto metadata = config.dataDirectory / "worlds" / "World" / "level.dat";
+        std::filesystem::remove(metadata);
+        std::filesystem::create_directory(metadata);
+        bool saveRejected = false;
+        try {
+            await(server.save());
+        } catch (const std::exception &) {
+            saveRejected = true;
+        }
+        std::filesystem::remove(metadata);
+        require(saveRejected, "Save future ignored a disk error");
+        require(server.isRunning(), "Save failure stopped the server");
+        await(server.save());
         ClientConnectionSettings client;
         client.mHost = "127.0.0.1";
         client.mPort = server.getPort();
@@ -90,9 +104,9 @@ int main() {
         client.mTransportLayer = TransportLayer::NetherNet;
         client.mNetherNet.mSignalingType = NetherNetSignalingType::Http;
         client.mIdentity.mDisplayName = "EmbeddedPlayer";
-        client.mChunkRadius = 4;
-        client.mDeferSpawn = true;
-        client.mTimeoutMs = 10000;
+        client.mChunkRadius = 5;
+        client.mDeferSpawn = false;
+        client.mTimeoutMs = 30000;
         auto connection = ClientNetworkSystem::dial(client);
         require(connection.mConnection != nullptr, connection.mError.c_str());
         const auto players = await(server.getPlayerNames());
@@ -113,7 +127,11 @@ int main() {
         require(std::filesystem::exists(config.dataDirectory / "worlds" / "World" / "level.dat"),
                 "World was not saved");
         bool rejected = false;
-        try { await(server.save()); } catch (...) { rejected = true; }
+        try {
+            await(server.save());
+        } catch (...) {
+            rejected = true;
+        }
         require(rejected, "Stopped server accepted request");
         const unsigned int callsAfterStop = logCalls.load();
         require(callsAfterStop != 0, "Log callback was not called");
@@ -128,11 +146,37 @@ int main() {
                 "Invalid property error missing");
         require(await(server.startAsync(config)), "Same instance could not restart");
         server.stop();
+        const auto worldProperties = config.dataDirectory / "players" / "world_dynamic_properties.dat";
+        std::filesystem::remove(worldProperties);
+        std::filesystem::create_directory(worldProperties);
+        require(await(server.startAsync(config)), "Could not restart for shutdown failure check");
+        server.stop();
+        require(server.getState() == EmbeddedServer::State::Failed,
+                "World properties save failure reported a clean shutdown");
+        require(server.getError().code == EmbeddedServer::ErrorCode::Shutdown,
+                "World properties save failure did not report Shutdown");
+        std::filesystem::remove(worldProperties);
+        require(await(server.startAsync(config)), "Could not restart after failed shutdown");
+        server.setPaused(true);
+        client.mPort = server.getPort();
+        auto shutdownConnection = ClientNetworkSystem::dial(client);
+        require(shutdownConnection.mConnection != nullptr, shutdownConnection.mError.c_str());
+        const auto playerData = config.dataDirectory / "players" / "embeddedplayer.dat";
+        std::filesystem::remove(playerData);
+        std::filesystem::create_directory(playerData);
+        server.stop();
+        require(server.getState() == EmbeddedServer::State::Failed,
+                "Player save failure reported a clean shutdown");
+        require(server.getError().code == EmbeddedServer::ErrorCode::Shutdown,
+                "Player save failure did not report Shutdown");
+        shutdownConnection.mConnection->disconnect("Done");
+        std::filesystem::remove(playerData);
         std::filesystem::remove_all(directory);
         std::cout << "Embedded lifecycle checks passed\n";
         return 0;
     } catch (const std::exception &error) {
-        std::cerr << error.what() << '\n';
+        LOG_ERROR(LogAreaID::Server, "%s", error.what());
+        BedrockLog::flush();
         return 1;
     }
 }

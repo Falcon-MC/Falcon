@@ -15,6 +15,10 @@ public:
     void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
 
+    bool hasRandomTick() const override {
+        return true;
+    }
+
     static void breakEgg(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                          const BlockState &state);
 

@@ -611,7 +611,12 @@ void ServerNetworkHandler::stopServerListening() {
 
     std::exception_ptr error;
     const auto finish = [&error](const std::function<void()> &step) {
-        try { step(); } catch (...) { if (!error) error = std::current_exception(); }
+        try {
+            step();
+        } catch (...) {
+            if (!error)
+                error = std::current_exception();
+        }
     };
     finish([this]() { mPluginManager->disableAll(); });
 
@@ -622,7 +627,7 @@ void ServerNetworkHandler::stopServerListening() {
             ServerPlayer &player = entry.second;
 
             finish([this, &player]() {
-                if (!player.getName().empty()) _savePlayerData(player);
+                if (!player.getName().empty()) _savePlayerData(player, true);
             });
             finish([this, &entry, &player]() {
                 _disconnect(entry.first, player.localize("falcon.disconnect.disconnected"));
@@ -633,7 +638,7 @@ void ServerNetworkHandler::stopServerListening() {
         finish([this]() { mNetworkHandler->runEvents(); });
     }
 
-    finish([this]() { saveWorldDynamicProperties(); });
+    finish([this]() { saveWorldDynamicProperties(true); });
     finish([this]() { saveAllActors(); });
 
     for (World *world: mWorlds.getWorlds()) {
@@ -650,9 +655,13 @@ void ServerNetworkHandler::stopServerListening() {
 }
 
 void ServerNetworkHandler::tick(bool paused) {
+    mSimulationPaused = paused;
     if (!mIsListening)
         return;
 
+    ++mChunkStreamTick;
+    for (World *world: mWorlds.getWorlds())
+        world->getTickingAreas().retryPendingLoads(*world);
     if (paused) {
         mNetworkHandler->runEvents();
         std::vector<std::string> commands;
@@ -671,8 +680,28 @@ void ServerNetworkHandler::tick(bool paused) {
             tasks.swap(mMainThreadTasks);
         }
         for (const auto &task: tasks) task();
-        for (auto &entry: mPlayers)
-            entry.second.getAcknowledgements().flush(*this, entry.first);
+        for (Level *level: getLevels()) {
+            level->drainCompletedChunks();
+            level->processGeneratedChanges();
+            const std::vector<int64_t> repopulated = level->consumeRepopulatedChunks();
+            if (repopulated.empty())
+                continue;
+            for (auto &entry: mPlayers) {
+                ServerPlayer &player = entry.second;
+                if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent || !player.isIn(*level))
+                    continue;
+                for (const int64_t hash: repopulated)
+                    ChunkStreamHandler::invalidateChunk(player, hash);
+            }
+        }
+        for (auto &entry: mPlayers) {
+            ServerPlayer &player = entry.second;
+            if (player.getLoginState() >= ServerPlayer::LoginState::StartGameSent && player.hasChunkPosition()) {
+                _sendChunks(player);
+                _checkTerrainReady(player);
+            }
+            player.getAcknowledgements().flush(*this, entry.first);
+        }
         return;
     }
 
@@ -690,6 +719,9 @@ void ServerNetworkHandler::tick(bool paused) {
     const int autoSaveInterval = mProperties.getAutoSaveInterval();
     if (mAutoSaveEnabled && autoSaveInterval > 0 && mCurrentTick % autoSaveInterval == 0)
         autoSave();
+    // Chunk generation and saving copy whole chunks, so freed memory piles up even when nothing unloads.
+    if (mCurrentTick % HEAP_RELEASE_INTERVAL_TICKS == 0)
+        Level::releaseFreedHeap();
     mProfiler.beginTick(mCurrentTick);
 
     mProfiler.beginSection(ProfilerSection::Weather);
@@ -761,7 +793,7 @@ void ServerNetworkHandler::tick(bool paused) {
         broadcastPlayerMove(entry.second);
 
     for (World *world: mWorlds.getWorlds()) {
-        world->getOverworld().processChunkUnloads();
+        _processChunkUnloads(world->getOverworld());
         _tickDimension(*world, world->getLevel(DimensionType::Nether));
         _tickDimension(*world, world->getLevel(DimensionType::TheEnd));
     }
@@ -995,6 +1027,25 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
         if (gate == LoginGate::Ignore)
             return;
 
+        if (mSimulationPaused) {
+            switch (packetId) {
+                case MinecraftPacketIds::RequestNetworkSettings:
+                case MinecraftPacketIds::Login:
+                case MinecraftPacketIds::ClientToServerHandshake:
+                case MinecraftPacketIds::ResourcePackClientResponse:
+                case MinecraftPacketIds::ResourcePackChunkRequest:
+                case MinecraftPacketIds::ClientCacheStatus:
+                case MinecraftPacketIds::SetLocalPlayerAsInitialized:
+                case MinecraftPacketIds::RequestChunkRadius:
+                case MinecraftPacketIds::SubChunkRequest:
+                case MinecraftPacketIds::NetworkStackLatency:
+                case MinecraftPacketIds::PacketViolationWarning:
+                    break;
+                default:
+                    return;
+            }
+        }
+
         const PacketCodecContext &context = getCodecContext(id);
         const ProtocolCodec &codec = context.getCodec();
         std::shared_ptr<Packet> packet = codec.createPacket(packetId);
@@ -1204,10 +1255,12 @@ void ServerNetworkHandler::_sendEntityData(ServerPlayer &player) {
     entityData.mTick = 0;
     entityData.mMetadata = _buildPlayerData(player);
 
+    std::vector<NetworkIdentifier> recipients;
     for (const auto &entry: mPlayers) {
         if (entry.first == player.getNetworkIdentifier() || entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, entityData, mCodecContext);
+            recipients.push_back(entry.first);
     }
+    mNetworkHandler->sendToMany(recipients, entityData, mCodecContext);
 }
 
 EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {

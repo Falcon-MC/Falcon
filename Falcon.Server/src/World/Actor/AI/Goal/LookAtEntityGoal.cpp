@@ -60,8 +60,7 @@ Actor *LookAtEntityGoal::_findNearest(ServerNetworkHandler &owner, const MobActo
         if (entry.second.isSpawned() && !entry.second.isDead())
             consider(entry.second);
     }
-    for (auto &entry: owner.getActors())
-        consider(*entry.second);
+    owner.forEachActorNear(mob.getPosition(), mSettings.mRange, consider);
     return nearest;
 }
 

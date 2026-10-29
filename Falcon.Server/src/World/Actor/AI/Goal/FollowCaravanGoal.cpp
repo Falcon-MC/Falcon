@@ -135,31 +135,31 @@ Actor *FollowCaravanGoal::_findHead(ServerNetworkHandler &owner, const MobActor 
     Actor *nearest = nullptr;
     float nearestDistance = 0.0f;
 
-    for (auto &entry: owner.getActors()) {
-        MobActor *candidate = dynamic_cast<MobActor *>(entry.second.get());
+    owner.forEachActorNear(position, SEARCH_HORIZONTAL, [&](ServerActor &actor) {
+        MobActor *candidate = dynamic_cast<MobActor *>(&actor);
         if (candidate == nullptr || candidate == &mob || !candidate->isAlive()
             || !candidate->sharesLevelWith(mob))
-            continue;
+            return;
 
         const Vector3f other = candidate->getPosition();
         if (std::fabs(other.x - position.x) > SEARCH_HORIZONTAL || std::fabs(other.y - position.y) > SEARCH_VERTICAL
             || std::fabs(other.z - position.z) > SEARCH_HORIZONTAL)
-            continue;
+            return;
 
         const bool linked = inCaravan ? isInCaravan(candidate->getUniqueId())
                                       : candidate->getFlags().get(ActorFlag::Leashed);
         if (!linked || hasCaravanTail(owner, candidate->getUniqueId()))
-            continue;
+            return;
 
         if (mFilters != nullptr && !EntityFilter::test(*mFilters, owner, mob, candidate))
-            continue;
+            return;
 
         const float distance = mob.distanceSquaredTo(*candidate);
         if (nearest == nullptr || distance < nearestDistance) {
             nearest = candidate;
             nearestDistance = distance;
         }
-    }
+    });
     return nearest;
 }
 

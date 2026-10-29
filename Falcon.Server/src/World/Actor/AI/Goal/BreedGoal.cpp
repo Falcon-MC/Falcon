@@ -4,6 +4,7 @@
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace {
@@ -58,18 +59,18 @@ MobActor *BreedGoal::_findPartner(ServerNetworkHandler &owner, const MobActor &m
     MobActor *nearest = nullptr;
     float nearestDistance = SEARCH_RANGE_SQUARED;
 
-    for (auto &entry: owner.getActors()) {
-        MobActor *candidate = dynamic_cast<MobActor *>(entry.second.get());
+    owner.forEachActorNear(mob.getPosition(), std::sqrt(SEARCH_RANGE_SQUARED), [&](ServerActor &actor) {
+        MobActor *candidate = dynamic_cast<MobActor *>(&actor);
         if (candidate == nullptr || candidate == &mob || !candidate->isAlive() || !candidate->isInLove()
             || !candidate->sharesLevelWith(mob) || !canMateWith(mob, *candidate))
-            continue;
+            return;
 
         const float distance = mob.distanceSquaredTo(*candidate);
         if (distance < nearestDistance) {
             nearest = candidate;
             nearestDistance = distance;
         }
-    }
+    });
     return nearest;
 }
 

@@ -1,5 +1,8 @@
 #include "World/Level/Chunk/LevelChunk.h"
 
+static_assert(LightStorage::SECTION_COUNT == LevelChunk::SUB_CHUNK_COUNT && LightStorage::MIN_Y == LevelChunk::MIN_Y,
+              "LightStorage sections must match the chunk sub-chunks");
+
 #include <algorithm>
 
 namespace {
@@ -41,10 +44,6 @@ void LevelChunk::buildNetworkCaches() const {
     encodeNetworkAnchor();
 }
 
-int LevelChunk::_lightIndex(int x, int32_t y, int z) {
-    return (((y - MIN_Y) << 8) | (z << 4) | x);
-}
-
 int32_t LevelChunk::getHeight(int x, int z) const {
     if (mHeightmap.empty())
         return MIN_Y;
@@ -67,49 +66,47 @@ void LevelChunk::setHeight(int x, int z, int32_t height) {
     mHeightmap[(size_t) ((z << 4) | x)] = (int16_t) height;
 }
 
-int LevelChunk::_getNibble(const std::vector<uint8_t> &storage, int x, int32_t y, int z) {
-    if (storage.empty() || y < MIN_Y || y > MAX_Y)
+int LevelChunk::getSkyLight(int x, int32_t y, int z) const {
+    if (y < MIN_Y || y > MAX_Y)
         return 0;
 
-    const int index = _lightIndex(x, y, z);
-    const uint8_t packed = storage[(size_t) (index >> 1)];
-    return (index & 1) != 0 ? packed >> 4 : packed & 0x0F;
-}
-
-void LevelChunk::_setNibble(std::vector<uint8_t> &storage, int x, int32_t y, int z, int value) {
-    if (y < MIN_Y || y > MAX_Y)
-        return;
-
-    if (storage.empty())
-        storage.assign(LIGHT_STORAGE_SIZE, 0);
-
-    const int index = _lightIndex(x, y, z);
-    uint8_t &packed = storage[(size_t) (index >> 1)];
-    if ((index & 1) != 0)
-        packed = (uint8_t) ((packed & 0x0F) | ((value & 0x0F) << 4));
-    else
-        packed = (uint8_t) ((packed & 0xF0) | (value & 0x0F));
-}
-
-int LevelChunk::getSkyLight(int x, int32_t y, int z) const {
-    return _getNibble(mSkyLight, x, y, z);
+    return mSkyLight.get(x, y, z);
 }
 
 void LevelChunk::setSkyLight(int x, int32_t y, int z, int value) {
-    _setNibble(mSkyLight, x, y, z, value);
+    if (y < MIN_Y || y > MAX_Y)
+        return;
+
+    mSkyLight.set(x, y, z, value);
 }
 
 int LevelChunk::getBlockLight(int x, int32_t y, int z) const {
-    return _getNibble(mBlockLight, x, y, z);
+    if (y < MIN_Y || y > MAX_Y)
+        return 0;
+
+    return mBlockLight.get(x, y, z);
 }
 
 void LevelChunk::setBlockLight(int x, int32_t y, int z, int value) {
-    _setNibble(mBlockLight, x, y, z, value);
+    if (y < MIN_Y || y > MAX_Y)
+        return;
+
+    mBlockLight.set(x, y, z, value);
 }
 
 void LevelChunk::clearSkyLight() {
     mSkyLight.clear();
     mHeightmap.clear();
+}
+
+void LevelChunk::compactLight() {
+    mSkyLight.compact();
+    mBlockLight.compact();
+}
+
+void LevelChunk::compactBiomes() {
+    for (SubChunk &subChunk: mSubChunks)
+        subChunk.compactBiomes();
 }
 
 const BlockState &LevelChunk::getBlock(int x, int32_t y, int z) const {

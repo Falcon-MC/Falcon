@@ -58,6 +58,7 @@
 #include "Network/Handler/ChunkStreamHandler.h"
 
 #include <cmath>
+#include <stdexcept>
 
 namespace {
     const char *const UNDEAD_FAMILY = "undead";
@@ -320,6 +321,7 @@ ServerActor *ServerNetworkHandler::_registerActor(std::unique_ptr<ServerActor> a
     ServerActor *result = actor.get();
     mActorUniqueIdsByRuntimeId[result->getRuntimeId()] = result->getUniqueId();
     mActors[result->getUniqueId()] = std::move(actor);
+    mActorIndexDirty = true;
     if (!result->getPendingPassengers().empty())
         mVehiclesWithPendingPassengers.insert(result->getUniqueId());
     return result;
@@ -333,6 +335,30 @@ void ServerNetworkHandler::_unregisterActor(int64_t uniqueId) {
     mVehiclesWithPendingPassengers.erase(uniqueId);
     mActorUniqueIdsByRuntimeId.erase(it->second->getRuntimeId());
     mActors.erase(it);
+    mActorIndexDirty = true;
+}
+
+void ServerNetworkHandler::_refreshActorIndex() {
+    if (!mActorIndexDirty)
+        return;
+
+    mActorIndexDirty = false;
+    // Buckets are cleared rather than freed so a tick does not reallocate them; ones left empty are dropped.
+    for (auto it = mActorIndex.begin(); it != mActorIndex.end();) {
+        if (it->second.empty()) {
+            it = mActorIndex.erase(it);
+            continue;
+        }
+        it->second.clear();
+        ++it;
+    }
+
+    for (auto &entry: mActors) {
+        const Vector3f position = entry.second->getPosition();
+        const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+        const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+        mActorIndex[_actorIndexKey(chunkX, chunkZ)].push_back(entry.second.get());
+    }
 }
 
 void ServerNetworkHandler::_resolvePendingRides() {
@@ -913,10 +939,7 @@ void ServerNetworkHandler::syncActorAttributes(ServerActor &actor) {
     packet.mTick = 0;
     packet.mAttributes = actor.getAttributes().getAll();
 
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
+    _sendToViewers(actor, packet);
 }
 
 void ServerNetworkHandler::syncActorScale(ServerActor &actor, float scale) {
@@ -954,10 +977,7 @@ void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {
 
     packet.mProperties = buildActorProperties(actor);
 
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
+    _sendToViewers(actor, packet);
 }
 
 void ServerNetworkHandler::syncActorFirework(ServerActor &actor) {
@@ -1108,10 +1128,20 @@ void ServerNetworkHandler::broadcastActorMove(ServerActor &actor) {
     move.mPosition.y += actor.getBaseOffset();
     move.mRotation = actor.getRotation();
 
+    _sendToViewers(actor, move);
+}
+
+void ServerNetworkHandler::_sendToViewers(const ServerActor &actor, const Packet &packet) {
+    std::vector<NetworkIdentifier> viewers;
     for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, move, mCodecContext);
+        if (!entry.second.isSpawned())
+            continue;
+
+        const std::unordered_set<uint64_t> &visible = entry.second.getVisibleActors();
+        if (visible.find(actor.getRuntimeId()) != visible.end())
+            viewers.push_back(entry.first);
     }
+    mNetworkHandler->sendToMany(viewers, packet, mCodecContext);
 }
 
 void ServerNetworkHandler::playActorAnimation(ServerActor &actor, const std::string &animation) {
@@ -1366,14 +1396,16 @@ void ServerNetworkHandler::loadWorldDynamicProperties() {
         deserializeDynamicProperties(*properties, mWorldDynamicProperties);
 }
 
-void ServerNetworkHandler::saveWorldDynamicProperties() {
+void ServerNetworkHandler::saveWorldDynamicProperties(bool checked) {
     Tag data = Tag::ofCompound();
     data.put("DynamicProperties", serializeDynamicProperties(mWorldDynamicProperties));
-    mPlayerData.saveData("world_dynamic_properties", data);
+    if (!mPlayerData.saveData("world_dynamic_properties", data) && checked)
+        throw std::runtime_error("Could not save world dynamic properties");
 }
 
 
 void ServerNetworkHandler::tickActors() {
+    mActorIndexDirty = true;
     std::vector<int64_t> expired;
 
     std::vector<int64_t> tickOrder;

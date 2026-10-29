@@ -43,18 +43,18 @@ bool FindMountGoal::_accepts(const MobActor &vehicle, const MobActor &rider) {
 MobActor *FindMountGoal::_findMount(ServerNetworkHandler &owner, const MobActor &mob) const {
     MobActor *nearest = nullptr;
     float nearestDistance = mRadius * mRadius;
-    for (auto &entry: owner.getActors()) {
-        MobActor *candidate = dynamic_cast<MobActor *>(entry.second.get());
+    owner.forEachActorNear(mob.getPosition(), mRadius, [&](ServerActor &actor) {
+        MobActor *candidate = dynamic_cast<MobActor *>(&actor);
         if (candidate == nullptr || candidate == &mob || !candidate->sharesLevelWith(mob)
             || !_accepts(*candidate, mob))
-            continue;
+            return;
 
         const float distance = mob.distanceSquaredTo(*candidate);
         if (distance <= nearestDistance) {
             nearest = candidate;
             nearestDistance = distance;
         }
-    }
+    });
     return nearest;
 }
 

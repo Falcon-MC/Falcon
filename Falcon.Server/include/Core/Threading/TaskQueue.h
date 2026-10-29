@@ -23,6 +23,21 @@ public:
         mCondition.notify_one();
     }
 
+    void pushAll(std::vector<T> values) {
+        if (values.empty())
+            return;
+
+        {
+            std::lock_guard<std::mutex> guard(mMutex);
+            if (mClosed)
+                return;
+
+            mItems.insert(mItems.end(), std::make_move_iterator(values.begin()), std::make_move_iterator(values.end()));
+        }
+
+        mCondition.notify_one();
+    }
+
     bool waitPop(T &out) {
         std::unique_lock<std::mutex> lock(mMutex);
         mCondition.wait(lock, [this]() { return mClosed || !mItems.empty(); });

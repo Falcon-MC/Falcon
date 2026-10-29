@@ -1,5 +1,6 @@
 #pragma once
 
+#include "World/Level/Chunk/PaletteIndices.h"
 #include "Core/Utility/BinaryStream.h"
 #include "World/Level/Block/BlockState.h"
 #include "Protocol/Types/BlockNetworkIdMap.h"
@@ -41,6 +42,9 @@ public:
 
     void setBiome(int x, int y, int z, uint32_t biomeId);
 
+    // Drops the index array of a section that ended up holding a single biome, which is most of them.
+    void compactBiomes();
+
     void writeBiomes(BinaryStream &stream, bool persistent) const;
 
     bool readBiomes(ReadOnlyBinaryStream &stream);
@@ -60,13 +64,13 @@ private:
     static int _bitsPerBlock(size_t paletteSize);
 
     void _writeStorage(BinaryStream &stream, bool persistent,
-                       const std::vector<BlockState> &palette,
-                       const std::vector<uint16_t> &blocks, const BlockNetworkIdMap *blockIds) const;
+                       const std::vector<const BlockState *> &palette,
+                       const PaletteIndices &blocks, const BlockNetworkIdMap *blockIds) const;
 
     void _writeEmptyStorage(BinaryStream &stream, bool persistent, const BlockNetworkIdMap *blockIds) const;
 
-    bool _readStorage(ReadOnlyBinaryStream &stream, std::vector<BlockState> &palette,
-                      std::vector<uint16_t> &blocks, bool *replacedUnknown);
+    bool _readStorage(ReadOnlyBinaryStream &stream, std::vector<const BlockState *> &palette,
+                      PaletteIndices &blocks, bool *replacedUnknown);
 
     void _ensureLayer1();
 
@@ -77,10 +81,11 @@ private:
     uint16_t _biomePaletteIndexFor(uint32_t biomeId);
 
     int8_t mY;
-    std::vector<BlockState> mPalette;
-    std::vector<uint16_t> mBlocks;
-    std::vector<BlockState> mPalette2;
-    std::vector<uint16_t> mBlocks2;
+    // Entries point at interned states shared by every sub-chunk, so a palette entry costs a pointer.
+    std::vector<const BlockState *> mPalette;
+    PaletteIndices mBlocks;
+    std::vector<const BlockState *> mPalette2;
+    PaletteIndices mBlocks2;
     std::vector<uint32_t> mBiomePalette;
-    std::vector<uint16_t> mBiomes;
+    PaletteIndices mBiomes;
 };

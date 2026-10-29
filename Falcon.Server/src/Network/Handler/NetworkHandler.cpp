@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <stdexcept>
 #include <utility>
 
 NetworkHandler::Connection::Connection(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer)
@@ -173,6 +174,48 @@ void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, con
     send(id, data, _toPeerReliability(packet), _toPeerCompressibility(packet));
 }
 
+void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const Packet &packet,
+                                const PacketCodecContext &context) {
+    // Sessions on the same protocol share a codec context, so most recipients reuse one encoding.
+    std::vector<std::pair<const PacketCodecContext *, std::string>> encoded;
+    std::vector<OutboundCommand> commands;
+    commands.reserve(ids.size());
+
+    for (const NetworkIdentifier &id: ids) {
+        const PacketCodecContext *own = mContextResolver ? mContextResolver(id) : nullptr;
+        const PacketCodecContext &session = own != nullptr ? *own : context;
+        if (!session.getCodec().supports(packet.getId()))
+            continue;
+
+        const std::string *data = nullptr;
+        for (const auto &entry: encoded) {
+            if (entry.first == &session) {
+                data = &entry.second;
+                break;
+            }
+        }
+        if (data == nullptr) {
+            BinaryStream stream;
+            packet.writeWithHeader(stream, session);
+            encoded.emplace_back(&session, stream.getBuffer());
+            data = &encoded.back().second;
+        }
+
+        OutboundCommand command;
+        command.mKind = OutboundCommand::Kind::Data;
+        command.mId = id;
+        command.mData = *data;
+        if (mOutboundFilter && !mOutboundFilter(id, command.mData))
+            continue;
+
+        command.mReliability = _toPeerReliability(packet);
+        command.mCompressibility = _toPeerCompressibility(packet);
+        commands.push_back(std::move(command));
+    }
+
+    mOutbound.pushAll(std::move(commands));
+}
+
 void NetworkHandler::setOutboundFilter(OutboundFilter filter) {
     mOutboundFilter = std::move(filter);
 }
@@ -251,16 +294,26 @@ void NetworkHandler::_pumpIo() {
 
     for (auto &entry: mConnections) {
         NetworkPeer *peer = entry.second->getBatchedPeer();
+        bool failed = false;
 
-        while (peer->receivePacket(data) == NetworkPeer::DataStatus::HasData) {
-            InboundEvent event;
-            event.mKind = InboundEvent::Kind::Data;
-            event.mId = entry.first;
-            event.mData = data;
-            mInbound.push(std::move(event));
+        // A transport can throw for one connection (for example a data channel closing mid-send);
+        // that connection is dropped instead of the exception ending the whole server.
+        try {
+            while (peer->receivePacket(data) == NetworkPeer::DataStatus::HasData) {
+                InboundEvent event;
+                event.mKind = InboundEvent::Kind::Data;
+                event.mId = entry.first;
+                event.mData = data;
+                mInbound.push(std::move(event));
+            }
+
+            peer->update();
+            peer->flush();
+        } catch (const std::exception &) {
+            failed = true;
         }
 
-        if (entry.second->getEncryptedPeer()->hasFailed() && !entry.second->isFailureReported()) {
+        if ((failed || entry.second->getEncryptedPeer()->hasFailed()) && !entry.second->isFailureReported()) {
             entry.second->markFailureReported();
 
             InboundEvent event;
@@ -268,9 +321,6 @@ void NetworkHandler::_pumpIo() {
             event.mId = entry.first;
             mInbound.push(std::move(event));
         }
-
-        peer->update();
-        peer->flush();
     }
 }
 

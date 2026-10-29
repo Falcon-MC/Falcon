@@ -26,9 +26,13 @@ namespace {
 }
 
 EmbeddedServer::EmbeddedServer() = default;
-EmbeddedServer::~EmbeddedServer() { stop(); }
+EmbeddedServer::~EmbeddedServer() {
+    stop();
+}
 
-bool EmbeddedServer::start(const EmbeddedServerConfig &config) { return startAsync(config).get(); }
+bool EmbeddedServer::start(const EmbeddedServerConfig &config) {
+    return startAsync(config).get();
+}
 
 std::future<bool> EmbeddedServer::startAsync(const EmbeddedServerConfig &config) {
     auto started = std::make_shared<std::promise<bool>>();
@@ -87,10 +91,18 @@ void EmbeddedServer::stop() {
     }
 }
 
-void EmbeddedServer::setPaused(bool paused) { mPaused.store(paused); }
-bool EmbeddedServer::isPaused() const { return mPaused.load(); }
-bool EmbeddedServer::isRunning() const { return getState() == State::Running; }
-unsigned short EmbeddedServer::getPort() const { return mPort.load(); }
+void EmbeddedServer::setPaused(bool paused) {
+    mPaused.store(paused);
+}
+bool EmbeddedServer::isPaused() const {
+    return mPaused.load();
+}
+bool EmbeddedServer::isRunning() const {
+    return getState() == State::Running;
+}
+unsigned short EmbeddedServer::getPort() const {
+    return mPort.load();
+}
 EmbeddedServer::State EmbeddedServer::getState() const {
     std::lock_guard<std::mutex> lock(mMutex);
     return mState;
@@ -117,10 +129,16 @@ std::future<void> EmbeddedServer::executeCommand(std::string command) {
     auto result = promise->get_future();
     try {
         _enqueue([promise, command = std::move(command)](ServerNetworkHandler &handler) {
-            try { handler.executeConsoleCommand(command); promise->set_value(); }
-            catch (...) { promise->set_exception(std::current_exception()); }
+            try {
+                handler.executeConsoleCommand(command);
+                promise->set_value();
+            } catch (...) {
+                promise->set_exception(std::current_exception());
+            }
         });
-    } catch (...) { promise->set_exception(std::current_exception()); }
+    } catch (...) {
+        promise->set_exception(std::current_exception());
+    }
     return result;
 }
 
@@ -129,10 +147,16 @@ std::future<void> EmbeddedServer::save() {
     auto result = promise->get_future();
     try {
         _enqueue([promise](ServerNetworkHandler &handler) {
-            try { handler.autoSave(); promise->set_value(); }
-            catch (...) { promise->set_exception(std::current_exception()); }
+            try {
+                handler.autoSave(true);
+                promise->set_value();
+            } catch (...) {
+                promise->set_exception(std::current_exception());
+            }
         });
-    } catch (...) { promise->set_exception(std::current_exception()); }
+    } catch (...) {
+        promise->set_exception(std::current_exception());
+    }
     return result;
 }
 
@@ -146,9 +170,13 @@ std::future<std::vector<std::string>> EmbeddedServer::getPlayerNames() {
                 for (const auto &entry: handler.getPlayers())
                     if (!entry.second.getName().empty()) names.push_back(entry.second.getName());
                 promise->set_value(std::move(names));
-            } catch (...) { promise->set_exception(std::current_exception()); }
+            } catch (...) {
+                promise->set_exception(std::current_exception());
+            }
         });
-    } catch (...) { promise->set_exception(std::current_exception()); }
+    } catch (...) {
+        promise->set_exception(std::current_exception());
+    }
     return result;
 }
 

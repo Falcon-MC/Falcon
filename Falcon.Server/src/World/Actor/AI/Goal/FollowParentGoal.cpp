@@ -71,23 +71,23 @@ MobActor *FollowParentGoal::_findParent(ServerNetworkHandler &owner, const MobAc
     float nearestDistance = SEARCH_HORIZONTAL * SEARCH_HORIZONTAL + SEARCH_VERTICAL * SEARCH_VERTICAL;
     const Vector3f position = mob.getPosition();
 
-    for (auto &entry: owner.getActors()) {
-        MobActor *candidate = dynamic_cast<MobActor *>(entry.second.get());
+    owner.forEachActorNear(position, SEARCH_HORIZONTAL, [&](ServerActor &actor) {
+        MobActor *candidate = dynamic_cast<MobActor *>(&actor);
         if (candidate == nullptr || candidate == &mob || !candidate->isAlive() || isBaby(*candidate)
             || !candidate->sharesLevelWith(mob)
             || std::strcmp(candidate->getIdentifier(), mob.getIdentifier()) != 0)
-            continue;
+            return;
 
         const Vector3f other = candidate->getPosition();
         if (std::fabs(other.x - position.x) > SEARCH_HORIZONTAL || std::fabs(other.z - position.z) > SEARCH_HORIZONTAL
             || std::fabs(other.y - position.y) > SEARCH_VERTICAL)
-            continue;
+            return;
 
         const float distance = mob.distanceSquaredTo(*candidate);
         if (distance < nearestDistance) {
             nearest = candidate;
             nearestDistance = distance;
         }
-    }
+    });
     return nearest;
 }

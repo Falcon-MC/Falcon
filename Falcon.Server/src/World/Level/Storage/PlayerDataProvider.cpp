@@ -136,5 +136,6 @@ bool PlayerDataProvider::saveData(const std::string &name, const Tag &data) cons
         return false;
 
     file.write(compressed.data(), (std::streamsize) compressed.size());
+    file.flush();
     return file.good();
 }

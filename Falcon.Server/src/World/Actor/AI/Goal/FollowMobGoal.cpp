@@ -98,16 +98,15 @@ Actor *FollowMobGoal::_findLeader(ServerNetworkHandler &owner, const MobActor &m
         }
     }
 
-    for (auto &entry: owner.getActors()) {
-        ServerActor *candidate = entry.second.get();
-        if (dynamic_cast<MobActor *>(candidate) == nullptr || !_accepts(owner, mob, *candidate))
-            continue;
+    owner.forEachActorNear(mob.getPosition(), mSearchRange, [&](ServerActor &candidate) {
+        if (dynamic_cast<MobActor *>(&candidate) == nullptr || !_accepts(owner, mob, candidate))
+            return;
 
-        const float distance = mob.distanceSquaredTo(*candidate);
+        const float distance = mob.distanceSquaredTo(candidate);
         if (distance <= nearestDistance) {
-            nearest = candidate;
+            nearest = &candidate;
             nearestDistance = distance;
         }
-    }
+    });
     return nearest;
 }

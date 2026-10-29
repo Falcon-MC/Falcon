@@ -230,6 +230,11 @@ public:
         return false;
     }
 
+    // Must return true in every class that overrides onRandomTick, so random ticks can skip inert blocks.
+    virtual bool hasRandomTick() const {
+        return false;
+    }
+
     virtual void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                               const BlockState &state) const {
         (void) owner;

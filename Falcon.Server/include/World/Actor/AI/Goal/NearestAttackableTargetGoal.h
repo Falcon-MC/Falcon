@@ -3,6 +3,7 @@
 #include "World/Actor/AI/Goal/Goal.h"
 #include "Core/Json/Json.h"
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -15,7 +16,7 @@ public:
         float mMaxDistance = 0.0f;
     };
 
-    NearestAttackableTargetGoal(float range, std::vector<Entry> entries);
+    NearestAttackableTargetGoal(float range, std::vector<Entry> entries, int32_t scanInterval);
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
@@ -31,5 +32,9 @@ private:
     bool _matches(ServerNetworkHandler &owner, MobActor &mob, const Actor &candidate) const;
 
     float mRangeSquared;
+    int32_t mScanInterval;
+    // Found by canUse and consumed by start in the same goal selection, so the scan is not run twice.
+    uint64_t mFoundTargetRuntimeId = 0;
+    float mMaxRangeSquared;
     std::vector<Entry> mEntries;
 };

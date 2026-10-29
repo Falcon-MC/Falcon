@@ -99,15 +99,32 @@ size_t ChunkWorker::_queueIndexFor(int32_t chunkX, int32_t chunkZ) const {
     return (size_t) ((key * 1099511628211ull) >> 32) % mQueues.size();
 }
 
-void ChunkWorker::requestLoad(int32_t chunkX, int32_t chunkZ) {
-    if (mQueues.empty())
-        return;
+bool ChunkWorker::_reserveGeneration() {
+    if (!mRunning.load() || mDiscardGeneration.load())
+        return false;
+
+    size_t count = mOutstandingGeneration.load();
+    while (count < MAX_OUTSTANDING_GENERATION) {
+        if (mOutstandingGeneration.compare_exchange_weak(count, count + 1))
+            return true;
+    }
+    return false;
+}
+
+bool ChunkWorker::requestLoad(int32_t chunkX, int32_t chunkZ) {
+    if (mQueues.empty() || !_reserveGeneration())
+        return false;
 
     ChunkTask task;
     task.mKind = ChunkTask::Kind::Load;
     task.mX = chunkX;
     task.mZ = chunkZ;
     mQueues[_queueIndexFor(chunkX, chunkZ)]->push(std::move(task));
+    return true;
+}
+
+int64_t ChunkWorker::_packChunk(int32_t chunkX, int32_t chunkZ) {
+    return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 }
 
 void ChunkWorker::requestSave(std::unique_ptr<LevelChunk> chunk) {
@@ -119,12 +136,49 @@ void ChunkWorker::requestSave(std::unique_ptr<LevelChunk> chunk) {
     task.mX = chunk->getX();
     task.mZ = chunk->getZ();
     task.mChunk = std::move(chunk);
+
+    {
+        std::lock_guard<std::mutex> lock(mPendingSavesMutex);
+        mPendingSaves[_packChunk(task.mX, task.mZ)]++;
+    }
+
     mQueues[_queueIndexFor(task.mX, task.mZ)]->push(std::move(task));
 }
 
-void ChunkWorker::requestPopulate(std::unique_ptr<LevelChunk> chunk) {
-    if (chunk == nullptr || mQueues.empty())
-        return;
+size_t ChunkWorker::getPendingSaveCount() const {
+    std::lock_guard<std::mutex> lock(mPendingSavesMutex);
+    return mPendingSaves.size();
+}
+
+bool ChunkWorker::hasPendingSave(int32_t chunkX, int32_t chunkZ) const {
+    std::lock_guard<std::mutex> lock(mPendingSavesMutex);
+    const int64_t key = _packChunk(chunkX, chunkZ);
+    return mPendingSaves.count(key) != 0 || mFailedSaves.count(key) != 0;
+}
+
+bool ChunkWorker::hasFailedSave(int32_t chunkX, int32_t chunkZ) const {
+    std::lock_guard<std::mutex> lock(mPendingSavesMutex);
+    return mFailedSaves.count(_packChunk(chunkX, chunkZ)) != 0;
+}
+
+bool ChunkWorker::waitForSaves() {
+    std::vector<std::future<void>> barriers;
+    for (auto &queue: mQueues) {
+        ChunkTask task;
+        task.mKind = ChunkTask::Kind::Barrier;
+        task.mBarrier = std::make_shared<std::promise<void>>();
+        barriers.push_back(task.mBarrier->get_future());
+        queue->push(std::move(task));
+    }
+    for (auto &barrier: barriers)
+        barrier.get();
+    std::lock_guard<std::mutex> lock(mPendingSavesMutex);
+    return mFailedSaves.empty();
+}
+
+bool ChunkWorker::requestPopulate(std::unique_ptr<LevelChunk> chunk) {
+    if (chunk == nullptr || mQueues.empty() || !_reserveGeneration())
+        return false;
 
     ChunkTask task;
     task.mKind = ChunkTask::Kind::Populate;
@@ -132,10 +186,46 @@ void ChunkWorker::requestPopulate(std::unique_ptr<LevelChunk> chunk) {
     task.mZ = chunk->getZ();
     task.mChunk = std::move(chunk);
     mQueues[_queueIndexFor(task.mX, task.mZ)]->push(std::move(task));
+    return true;
+}
+
+std::future<std::vector<GeneratedBlockChange>> ChunkWorker::requestPersistChanges(
+        int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes) {
+    ChunkTask task;
+    task.mKind = ChunkTask::Kind::PersistChanges;
+    task.mX = chunkX;
+    task.mZ = chunkZ;
+    task.mChanges = std::move(changes);
+    task.mChangesResult = std::make_shared<std::promise<std::vector<GeneratedBlockChange>>>();
+    auto result = task.mChangesResult->get_future();
+    if (mQueues.empty() || !mRunning.load()) {
+        task.mChangesResult->set_value(std::move(task.mChanges));
+        return result;
+    }
+    mQueues[_queueIndexFor(chunkX, chunkZ)]->push(std::move(task));
+    return result;
+}
+
+std::future<void> ChunkWorker::requestEraseEntities(std::vector<int64_t> uniqueIds) {
+    ChunkTask task;
+    task.mKind = ChunkTask::Kind::EraseEntities;
+    task.mEntityIds = std::move(uniqueIds);
+    task.mBarrier = std::make_shared<std::promise<void>>();
+    std::future<void> done = task.mBarrier->get_future();
+    if (mQueues.empty() || !mRunning.load()) {
+        for (const int64_t uniqueId: task.mEntityIds)
+            mStorage.eraseEntity(uniqueId);
+        task.mBarrier->set_value();
+        return done;
+    }
+    mQueues[0]->push(std::move(task));
+    return done;
 }
 
 std::vector<ChunkLoadResult> ChunkWorker::drainCompleted() {
-    return mCompleted.drain();
+    auto results = mCompleted.drain();
+    mOutstandingGeneration.fetch_sub(results.size());
+    return results;
 }
 
 size_t ChunkWorker::getPendingTaskCount() const {
@@ -204,6 +294,7 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
         }
     }
 
+    chunk->compactBiomes();
     LightSystem::computeSkyLight(*chunk);
     LightSystem::computeBlockLight(*chunk);
 
@@ -211,20 +302,57 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
     // only has to swap the finished chunk in.
     chunk->buildNetworkCaches();
 
-    result.mNetworkSubChunkCount = chunk->getNetworkSubChunkCount();
-    result.mNetworkData = chunk->encodeNetwork();
-
     result.mChunk = std::move(chunk);
 
     mCompleted.push(std::move(result));
 }
 
 void ChunkWorker::_processSave(ChunkTask &task) {
-    if (task.mChunk == nullptr || !mStorage.isOpen())
-        return;
-
-    if (mStorage.saveChunk(*task.mChunk))
+    bool saved = false;
+    try {
+        saved = task.mChunk != nullptr && mStorage.isOpen() && mStorage.saveChunk(*task.mChunk);
+    } catch (...) {
+        saved = false;
+    }
+    if (saved)
         mSavedCount.fetch_add(1);
+
+    std::lock_guard<std::mutex> lock(mPendingSavesMutex);
+    const int64_t key = _packChunk(task.mX, task.mZ);
+    if (saved)
+        mFailedSaves.erase(key);
+    else
+        mFailedSaves.insert(key);
+    const auto pending = mPendingSaves.find(key);
+    if (pending != mPendingSaves.end() && --pending->second == 0)
+        mPendingSaves.erase(pending);
+}
+
+void ChunkWorker::_processPersistChanges(ChunkTask &task) {
+    // A task carries the changes of several chunks; each chunk is merged separately and only the
+    // chunks that fail to save are handed back.
+    std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> byChunk;
+    for (GeneratedBlockChange &change: task.mChanges) {
+        const int64_t key = ((int64_t) (change.mX >> 4) << 32) | (uint32_t) (change.mZ >> 4);
+        byChunk[key].push_back(std::move(change));
+    }
+
+    std::vector<GeneratedBlockChange> failed;
+    for (auto &entry: byChunk) {
+        bool saved = false;
+        try {
+            saved = mStorage.mergePendingBlockChanges((int32_t) (entry.first >> 32),
+                                                      (int32_t) (entry.first & 0xffffffff), entry.second);
+        } catch (...) {
+            saved = false;
+        }
+        if (!saved)
+            failed.insert(failed.end(), std::make_move_iterator(entry.second.begin()),
+                          std::make_move_iterator(entry.second.end()));
+    }
+
+    task.mChangesResult->set_value(std::move(failed));
+    task.mChangesResult.reset();
 }
 
 void ChunkWorker::_run(size_t queueIndex) {
@@ -234,9 +362,27 @@ void ChunkWorker::_run(size_t queueIndex) {
     ChunkTask task;
 
     while (queue.waitPop(task)) {
+        if (task.mKind == ChunkTask::Kind::Barrier) {
+            task.mBarrier->set_value();
+            task.mBarrier.reset();
+            continue;
+        }
+        if (task.mKind == ChunkTask::Kind::PersistChanges) {
+            _processPersistChanges(task);
+            continue;
+        }
+        if (task.mKind == ChunkTask::Kind::EraseEntities) {
+            for (const int64_t uniqueId: task.mEntityIds)
+                mStorage.eraseEntity(uniqueId);
+            task.mEntityIds.clear();
+            task.mBarrier->set_value();
+            task.mBarrier.reset();
+            continue;
+        }
         // Saves are never dropped, even when pending generation is discarded, or player
         // changes would be lost.
         if (task.mKind != ChunkTask::Kind::Save && mDiscardGeneration.load()) {
+            mOutstandingGeneration.fetch_sub(1);
             task.mChunk.reset();
             continue;
         }

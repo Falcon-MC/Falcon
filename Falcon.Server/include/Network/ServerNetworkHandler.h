@@ -40,6 +40,7 @@
 #include "Protocol/Packets/CreativeContentPacket.h"
 
 #include <array>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -109,6 +110,10 @@ public:
     int getActivePlayerCount() const { return (int) mNetworkHandler->getConnectionCount(); }
 
     int64_t getCurrentTick() const { return mCurrentTick; }
+
+    uint64_t getChunkStreamTick() const {
+        return mChunkStreamTick;
+    }
 
     int64_t getUptimeSeconds() const;
 
@@ -181,6 +186,31 @@ public:
     void erasePlayer(const NetworkIdentifier &id);
 
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> &getActors() { return mActors; }
+
+    /**
+     * Visits the actors standing in the chunk columns within radius blocks of position. The index behind it is
+     * rebuilt at most once per tick, so positions can lag by one tick of movement: callers still check exact
+     * distances.
+     */
+    template<typename Visitor>
+    void forEachActorNear(const Vector3f &position, float radius, Visitor &&visit) {
+        _refreshActorIndex();
+        const float reach = radius + ACTOR_INDEX_MARGIN;
+        const int32_t minX = (int32_t) std::floor(position.x - reach) >> 4;
+        const int32_t maxX = (int32_t) std::floor(position.x + reach) >> 4;
+        const int32_t minZ = (int32_t) std::floor(position.z - reach) >> 4;
+        const int32_t maxZ = (int32_t) std::floor(position.z + reach) >> 4;
+        for (int32_t chunkX = minX; chunkX <= maxX; chunkX++) {
+            for (int32_t chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
+                const auto bucket = mActorIndex.find(_actorIndexKey(chunkX, chunkZ));
+                if (bucket == mActorIndex.end())
+                    continue;
+
+                for (ServerActor *actor: bucket->second)
+                    visit(*actor);
+            }
+        }
+    }
 
     ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                             const std::function<void(ServerActor &)> &configure = nullptr);
@@ -373,7 +403,7 @@ public:
 
     void saveAllActors();
 
-    void autoSave();
+    void autoSave(bool wait = false);
 
     bool syncActorPersistence(Level &level, const std::vector<int64_t> &activeColumns);
 
@@ -385,7 +415,7 @@ public:
 
     void loadWorldDynamicProperties();
 
-    void saveWorldDynamicProperties();
+    void saveWorldDynamicProperties(bool checked = false);
 
     std::vector<std::unique_ptr<ItemActor>> &getItemEntities() { return mItemEntities; }
 
@@ -409,6 +439,12 @@ public:
     ServerPlayer *getPlayerByName(const std::string &name);
 
     std::vector<ServerPlayer *> resolveTargets(CommandOrigin &sender, const std::string &selector);
+
+    /**
+     * The non-player actors an @e selector matches in the sender's world. Players are returned by
+     * resolveTargets, so a command that accepts any entity calls both.
+     */
+    std::vector<ServerActor *> resolveActorTargets(CommandOrigin &sender, const std::string &selector);
 
     std::vector<std::string> getPlayerNames() const;
 
@@ -533,6 +569,15 @@ public:
     void _sendActorSpawn(ServerPlayer &player, ServerActor &actor);
 
     void _sendActorRemove(ServerPlayer &player, const ServerActor &actor);
+
+    static int64_t _actorIndexKey(int32_t chunkX, int32_t chunkZ) {
+        return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
+    }
+
+    void _refreshActorIndex();
+
+    // Actor updates only matter to players the actor was spawned for; anyone else gets the state with the spawn.
+    void _sendToViewers(const ServerActor &actor, const Packet &packet);
 
     ServerActor *_registerActor(std::unique_ptr<ServerActor> actor);
 
@@ -727,7 +772,7 @@ private:
 
     void _validatePackDependencies();
 
-    void _savePlayerData(const ServerPlayer &player);
+    void _savePlayerData(const ServerPlayer &player, bool checked = false);
 
     void _handleVoidDamage(ServerPlayer &player);
 
@@ -772,12 +817,15 @@ public:
 
 private:
     static const unsigned CHUNKS_PER_TICK = 32;
+    static const int64_t HEAP_RELEASE_INTERVAL_TICKS = 600;
     static const unsigned CHUNK_REQUESTS_PER_TICK = 64;
     static const size_t SPAWN_CHUNK_THRESHOLD = 56;
 
     void _tickOverworld(World &world);
 
     void _tickDimension(World &world, Level &level);
+
+    void _processChunkUnloads(Level &level);
 
     void _broadcastFluidChanges(Level &level);
 
@@ -809,10 +857,15 @@ private:
     PingedCompatibleServer mAnnouncement;
     int mMaxPlayers;
     bool mIsListening;
+    bool mSimulationPaused = false;
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
     std::unique_ptr<PlayerMovementRegistry> mPlayerMovementRegistry;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
+    // Actors move up to a few blocks per tick, more than any mob walks, so stale index entries stay in range.
+    static constexpr float ACTOR_INDEX_MARGIN = 4.0f;
+    std::unordered_map<int64_t, std::vector<ServerActor *>> mActorIndex;
+    bool mActorIndexDirty = true;
     std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
     std::unordered_set<int64_t> mVehiclesWithPendingPassengers;
     uint32_t mActorUniqueIdCounter = 0;
@@ -845,6 +898,7 @@ private:
     std::vector<std::unique_ptr<ItemActor>> mItemEntities;
     uint64_t mNextRuntimeId;
     int64_t mCurrentTick = 0;
+    uint64_t mChunkStreamTick = 0;
     std::chrono::steady_clock::time_point mStartTime = std::chrono::steady_clock::now();
 
     Profiler mProfiler;

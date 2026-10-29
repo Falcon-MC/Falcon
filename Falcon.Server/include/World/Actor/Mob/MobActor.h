@@ -124,6 +124,12 @@ public:
 
     const json::Value *getComponent(const std::string &name) const;
 
+    /**
+     * Same lookup for a literal name. Component names are longer than the small string buffer, so building a
+     * temporary std::string for every per-tick lookup allocated; this reuses one key buffer instead.
+     */
+    const json::Value *getComponent(const char *name) const;
+
     const std::unordered_map<std::string, const json::Value *> &getComponents() const;
 
     std::vector<std::string> getFamilies() const;
@@ -364,7 +370,20 @@ private:
     friend class RideControlSystem;
     friend class RideControlProbe;
 
+    /**
+     * The sensor components are read by every mob every tick, so they are resolved once per component change
+     * instead of by name each tick.
+     */
+    struct SensorComponents {
+        const json::Value *mEntitySensor = nullptr;
+        const json::Value *mEnvironmentSensor = nullptr;
+        const json::Value *mHurtOnCondition = nullptr;
+        const json::Value *mTargetNearbySensor = nullptr;
+    };
+
     void _rebuildComponents() const;
+
+    const SensorComponents &_getSensorComponents() const;
 
     void _registerGoals(ServerNetworkHandler &owner);
 
@@ -504,6 +523,9 @@ private:
     mutable bool mDefinitionResolved = false;
     mutable std::unordered_map<std::string, const json::Value *> mComponents;
     mutable bool mComponentsDirty = true;
+    mutable std::string mComponentKey;
+    mutable SensorComponents mSensorComponents;
+    mutable bool mSensorComponentsStale = true;
     int64_t mLastHurtTick = INT64_MIN / 2;
     uint64_t mLastHurtBy = 0;
     uint32_t mHurtCount = 0;

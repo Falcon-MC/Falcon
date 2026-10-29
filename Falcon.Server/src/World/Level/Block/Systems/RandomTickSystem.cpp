@@ -7,12 +7,28 @@
 #include "World/Level/Chunk/SubChunk.h"
 
 #include <random>
+#include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace {
+    // Most sampled blocks (stone, dirt, ores...) react to nothing, so they are dropped before the
+    // candidate copy. Copper weathering runs through CopperSystem, not the block class.
+    bool ticksRandomly(const Block &block) {
+        static std::unordered_map<const Block *, bool> cache;
+        const auto found = cache.find(&block);
+        if (found != cache.end())
+            return found->second;
+
+        const bool ticks = block.hasRandomTick() || !CopperSystem::oxidizedOf(block.getIdentifier()).empty();
+        cache.emplace(&block, ticks);
+        return ticks;
+    }
+
     struct Candidate {
         Vector3i mPosition;
-        BlockState mState;
+        const Block *mBlock;
     };
 
     std::mt19937 &generator() {
@@ -74,7 +90,10 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
     if (speed <= 0)
         return;
 
-    std::vector<Candidate> candidates;
+    // Every non-air pick of every active subchunk lands here, thousands per tick, so the buffer
+    // is reused and only the identifier is kept instead of a full state copy.
+    static std::vector<Candidate> candidates;
+    candidates.clear();
 
     for (const int64_t column: level.getActiveColumns()) {
         const int32_t chunkX = (int32_t) (column >> 32);
@@ -95,16 +114,20 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
                 const int localY = (int) ((lcg >> 8) & 0x0f);
                 const int localZ = (int) ((lcg >> 16) & 0x0f);
 
-                const BlockState state = subChunk.getBlock(localX, localY, localZ);
+                const BlockState &state = subChunk.getBlock(localX, localY, localZ);
                 if (state.mName == "minecraft:air")
+                    continue;
+
+                const Block *block = VanillaBlocks::fromState(state);
+                if (block == nullptr || !ticksRandomly(*block))
                     continue;
 
                 Candidate candidate;
                 candidate.mPosition = Vector3i((chunkX << 4) + localX,
                                                LevelChunk::MIN_Y + index * 16 + localY,
                                                (chunkZ << 4) + localZ);
-                candidate.mState = state;
-                candidates.push_back(candidate);
+                candidate.mBlock = block;
+                candidates.push_back(std::move(candidate));
             }
         }
     }
@@ -113,18 +136,25 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
     // chunks while they are being iterated. Each one is re-read because an earlier tick in
     // this batch may already have replaced it.
     for (const Candidate &candidate: candidates) {
-        const Block *block = VanillaBlocks::fromIdentifier(candidate.mState.mName);
-        if (block == nullptr)
+        const Vector3i &position = candidate.mPosition;
+        const BlockState *before = level.peekBlockPtr(position.x, position.y, position.z);
+        if (before == nullptr || VanillaBlocks::fromState(*before) != candidate.mBlock)
             continue;
 
-        const BlockState current = level.getBlockState(candidate.mPosition.x, candidate.mPosition.y,
-                                                       candidate.mPosition.z);
-        if (current.mName != candidate.mState.mName)
+        // Copies are passed on because a reaction may rewrite the chunk palette the peeked
+        // pointer refers to.
+        const BlockState current = *before;
+        candidate.mBlock->onRandomTick(owner, level, position, current);
+
+        const BlockState *after = level.peekBlockPtr(position.x, position.y, position.z);
+        if (after == nullptr)
             continue;
 
-        block->onRandomTick(owner, level, candidate.mPosition, current);
-        CopperSystem::onRandomTick(owner, level, candidate.mPosition,
-                                   level.getBlockState(candidate.mPosition.x, candidate.mPosition.y,
-                                                       candidate.mPosition.z));
+        if (*after == current) {
+            CopperSystem::onRandomTick(owner, level, position, current);
+            continue;
+        }
+
+        CopperSystem::onRandomTick(owner, level, position, BlockState(*after));
     }
 }

@@ -29,7 +29,7 @@ public:
     bool open(const std::string &worldsDirectory, size_t workerThreads, const Level::PacketBroadcaster &broadcaster,
               ServerNetworkHandler *owner);
 
-    void saveAll();
+    void saveAll(bool wait = false);
 
     /** Closes the Nether and the End before the overworld, since they write through its database. */
     void close();

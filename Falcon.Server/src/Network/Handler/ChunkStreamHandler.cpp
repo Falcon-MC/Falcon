@@ -130,13 +130,17 @@ namespace {
         makeQueue(state, state.mSendQueue);
     }
 
-    void pruneQueueOutOfRadius(ChunkStreamState &state, std::vector<int64_t> &queue) {
+    void pruneQueueOutOfRadius(ChunkStreamState &state, std::vector<int64_t> &queue,
+                               Level &level, uint64_t loaderId) {
         std::vector<int64_t> kept;
         kept.reserve(queue.size());
 
         for (const int64_t hash: queue) {
             if (state.mInRadius.find(hash) != state.mInRadius.end())
                 kept.push_back(hash);
+            else
+                level.unregisterChunkLoader(loaderId, ChunkStreamHandler::unpackChunkX(hash),
+                                            ChunkStreamHandler::unpackChunkZ(hash));
         }
 
         queue.swap(kept);
@@ -182,10 +186,10 @@ namespace {
                 continue;
             }
 
-            if (state.mLoading.find(hash) == state.mLoading.end()) {
-                level.requestChunkAsync(chunkX, chunkZ);
-                state.mLoading.insert(hash);
-            }
+            // Admission can be deferred by generation backpressure. Level deduplicates
+            // accepted requests, so retry even when this stream already wants the chunk.
+            level.requestChunkAsync(chunkX, chunkZ);
+            state.mLoading.insert(hash);
 
             requeue.push_back(hash);
         }
@@ -195,7 +199,11 @@ namespace {
     }
 
     void sendReadyChunks(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player) {
-        if (state.mReadyToSend.empty())
+        if (state.mSendTick != owner.getChunkStreamTick()) {
+            state.mSendTick = owner.getChunkStreamTick();
+            state.mSendsThisTick = 0;
+        }
+        if (state.mReadyToSend.empty() || state.mSendsThisTick >= ChunkStreamHandler::MAX_SENDS_PER_TICK)
             return;
 
         Level &level = owner.getLevelFor(player);
@@ -212,11 +220,15 @@ namespace {
         std::unordered_set<int64_t> &sent = player.getSentChunks();
         unsigned added = 0;
 
-        while (!state.mReadyToSend.empty()) {
+        // Encoding a chunk and loading its block entities runs on the main thread, so a burst
+        // of ready chunks after a teleport is spread over several ticks in priority order.
+        while (!state.mReadyToSend.empty() && state.mSendsThisTick < ChunkStreamHandler::MAX_SENDS_PER_TICK) {
             const int64_t hash = popQueue(state, state.mReadyToSend);
 
             if (state.mInRadius.find(hash) == state.mInRadius.end()) {
                 sent.erase(hash);
+                level.unregisterChunkLoader(player.getRuntimeId(), ChunkStreamHandler::unpackChunkX(hash),
+                                            ChunkStreamHandler::unpackChunkZ(hash));
                 continue;
             }
 
@@ -243,6 +255,7 @@ namespace {
             level.registerChunkLoader(player.getRuntimeId(), chunkX, chunkZ);
             sent.insert(hash);
             ++added;
+            ++state.mSendsThisTick;
         }
 
         player.addSentChunkCount(added);
@@ -295,7 +308,7 @@ void ChunkStreamHandler::handleTeleport(ServerNetworkHandler &owner, ServerPlaye
     updateInRadiusChunks(state, TELEPORT_LOAD_COUNT, state.mComparatorChunkX, state.mComparatorChunkZ);
 
     pruneLoadingQueueOutOfRadius(state);
-    pruneQueueOutOfRadius(state, state.mReadyToSend);
+    pruneQueueOutOfRadius(state, state.mReadyToSend, owner.getLevelFor(player), player.getRuntimeId());
     updateChunkSendingQueue(state, player);
 
     loadQueuedChunks(state, owner, player, TELEPORT_LOAD_COUNT);
@@ -305,10 +318,12 @@ void ChunkStreamHandler::handleTeleport(ServerNetworkHandler &owner, ServerPlaye
 void ChunkStreamHandler::invalidateChunk(ServerPlayer &player, int64_t hash) {
     ChunkStreamState &state = player.getChunkStreamState();
 
-    if (player.getSentChunks().erase(hash) == 0)
+    // A sent chunk outside the radius stays in the sent set so that leaving the radius still
+    // releases its loader.
+    if (state.mInRadius.find(hash) == state.mInRadius.end())
         return;
 
-    if (state.mInRadius.find(hash) == state.mInRadius.end())
+    if (player.getSentChunks().erase(hash) == 0)
         return;
 
     pushQueue(state, state.mReadyToSend, hash);
@@ -321,8 +336,8 @@ void ChunkStreamHandler::handleViewDistanceChange(ServerNetworkHandler &owner, S
     updateInRadiusChunks(state, owner.getLevelFor(player).getViewDistance(), state.mComparatorChunkX,
                          state.mComparatorChunkZ);
     removeOutOfRadiusChunks(state, owner, player);
-    pruneQueueOutOfRadius(state, state.mSendQueue);
-    pruneQueueOutOfRadius(state, state.mReadyToSend);
+    pruneQueueOutOfRadius(state, state.mSendQueue, owner.getLevelFor(player), player.getRuntimeId());
+    pruneQueueOutOfRadius(state, state.mReadyToSend, owner.getLevelFor(player), player.getRuntimeId());
     pruneLoadingQueueOutOfRadius(state);
     updateChunkSendingQueue(state, player);
 }
