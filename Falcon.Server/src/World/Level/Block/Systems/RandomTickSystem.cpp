@@ -8,10 +8,24 @@
 
 #include <random>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace {
+    // Most sampled blocks (stone, dirt, ores...) react to nothing, so they are dropped before the
+    // candidate copy. Copper weathering runs through CopperSystem, not the block class.
+    bool ticksRandomly(const Block &block) {
+        static std::unordered_map<const Block *, bool> cache;
+        const auto found = cache.find(&block);
+        if (found != cache.end())
+            return found->second;
+
+        const bool ticks = block.hasRandomTick() || !CopperSystem::oxidizedOf(block.getIdentifier()).empty();
+        cache.emplace(&block, ticks);
+        return ticks;
+    }
+
     struct Candidate {
         Vector3i mPosition;
         const Block *mBlock;
@@ -105,7 +119,7 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
                     continue;
 
                 const Block *block = VanillaBlocks::fromState(state);
-                if (block == nullptr)
+                if (block == nullptr || !ticksRandomly(*block))
                     continue;
 
                 Candidate candidate;
