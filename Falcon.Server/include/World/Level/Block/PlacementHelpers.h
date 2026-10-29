@@ -1,0 +1,22 @@
+#pragma once
+
+#include "World/Level/Block/Block.h"
+#include "World/Level/Block/BlockQuery.h"
+
+#include <string>
+
+namespace PlacementHelpers {
+    using BlockQuery::stateAt;
+
+    extern const std::string SLAB_SUFFIX;
+    extern const std::string DOUBLE_SLAB_SUFFIX;
+    extern const std::string COPPER_SLAB_SUFFIX;
+    extern const std::string DOUBLE_COPPER_SLAB_SUFFIX;
+
+    BlockState belowOf(Level &level, const Vector3i &position);
+
+    bool hasSolidFace(const BlockState &state, int face);
+
+    std::string replaceSuffix(const std::string &identifier, const std::string &suffix,
+                              const std::string &replacement);
+}

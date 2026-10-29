@@ -1,26 +1,27 @@
 #include "Network/Handler/MovementHandler.h"
 
-#include "Actor/ActorFlags.h"
-#include "Actor/Movement/PlayerMovementSimulator.h"
-#include "Actor/Movement/RideControlSystem.h"
-#include "Actor/RideSystem.h"
-#include "Actor/ServerPlayer.h"
-#include "Block/Block.h"
-#include "Block/Blocks/FrostedIceBlock.h"
-#include "Block/Systems/BlockContactSystem.h"
-#include "Block/Systems/LavaResetFallDistanceSystem.h"
-#include "Block/Systems/FireBlocksFetch.h"
-#include "Block/Systems/LiquidBlocksFetch.h"
-#include "Block/Systems/WaterMoveSystem.h"
-#include "Level/Level.h"
-#include "Item/EnchantmentData.h"
-#include "Item/ItemEnchantments.h"
+#include "World/Actor/ActorFlags.h"
+#include "World/Actor/Movement/PlayerMovementSimulator.h"
+#include "World/Actor/Movement/MovementConstants.h"
+#include "World/Actor/Movement/RideControlSystem.h"
+#include "World/Actor/RideSystem.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/Block.h"
+#include "World/Level/Block/FrostedIceBlock.h"
+#include "World/Level/Block/Systems/BlockContactSystem.h"
+#include "World/Level/Block/Systems/LavaResetFallDistanceSystem.h"
+#include "World/Level/Block/Systems/FireBlocksFetch.h"
+#include "World/Level/Block/Systems/LiquidBlocksFetch.h"
+#include "World/Level/Block/Systems/WaterMoveSystem.h"
+#include "World/Level/Level.h"
+#include "World/Item/EnchantmentData.h"
+#include "World/Item/ItemEnchantments.h"
 #include "Network/Handler/BadPacketHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/NetworkHandler.h"
-#include "Network/Handler/ServerNetworkHandler.h"
-#include "Plugin/PluginEvent.h"
-#include "Plugin/PluginManager.h"
+#include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginEvent.h"
+#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -30,6 +31,15 @@
 #include <cstdlib>
 
 namespace {
+    LiquidContact liquidContact(Level &level, const ServerPlayer &player, const Vector3f &feet) {
+        const ActorFlags &flags = player.getFlags();
+        const bool sneaking = player.hasSimulatedVelocity() ? player.isSimulatedSneaking()
+                                                           : flags.get(ActorFlag::Sneaking);
+        return LiquidBlocksFetch::at(level, feet, flags.get(ActorFlag::Swimming)
+                                                 || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling),
+                                    sneaking ? MovementPhysics::PLAYER_SNEAKING_HEIGHT : MovementPhysics::PLAYER_HEIGHT);
+    }
+
     void dispatchPlayerState(ServerPlayer &player, FalconEventType type, bool state) {
         PluginManager *plugins = PluginManager::findWithSubscribers(type);
         if (plugins == nullptr)
@@ -155,7 +165,8 @@ namespace {
         SetActorMotionPacket motion;
         motion.mRuntimeActorId = player.getRuntimeId();
         motion.mMotion = player.getMotion();
-        motion.mTick = (uint64_t) owner.getCurrentTick();
+        const int64_t inputTick = player.getMovementInputs().lastProcessedTick();
+        motion.mTick = inputTick < 0 ? 0 : (uint64_t) inputTick;
         owner.getNetworkHandler().send(player.getNetworkIdentifier(), motion, owner.getCodecContext());
         return true;
     }
@@ -168,18 +179,12 @@ bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPositio
     const float minZ = feetPosition.z - PLAYER_HALF_WIDTH + shrink;
     const float maxZ = feetPosition.z + PLAYER_HALF_WIDTH - shrink;
 
-    const int32_t lowestY = (int32_t) std::floor(feetPosition.y - GROUND_PROBE_DEPTH);
-    const int32_t highestY = (int32_t) std::floor(feetPosition.y);
-
-    for (int32_t y = lowestY; y <= highestY; y++) {
-        for (int32_t x = (int32_t) std::floor(minX); x <= (int32_t) std::floor(maxX); x++) {
-            for (int32_t z = (int32_t) std::floor(minZ); z <= (int32_t) std::floor(maxZ); z++) {
-                if (level.isSolidAt(x, y, z))
-                    return true;
-            }
-        }
+    const AxisAlignedBB support(minX, feetPosition.y - AABB_EPSILON, minZ,
+                                maxX, feetPosition.y, maxZ);
+    for (const AxisAlignedBB &shape: level.getCollisionBoxes(support)) {
+        if (shape.intersectsWith(support))
+            return true;
     }
-
     return false;
 }
 
@@ -203,10 +208,12 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
     const bool wasOnGround = player.isOnGround();
     Level &level = owner.getLevelFor(player);
-    const bool onGround = checkGroundState(level, feetPosition);
+    // Preserve collision output: a proximity probe can report ground during a jump or above shallow water.
+    const bool onGround = player.hasSimulatedGround() ? player.isSimulatedOnGround()
+                                                     : checkGroundState(level, feetPosition);
     player.setOnGround(onGround);
 
-    const LiquidContact water = LiquidBlocksFetch::at(level, feetPosition);
+    const LiquidContact water = liquidContact(level, player, feetPosition);
     if (!player.wasRecentlyTeleported()) {
         const float distance = std::sqrt(requestedX * requestedX + requestedY * requestedY + requestedZ * requestedZ);
         const float horizontalDistance = std::sqrt(requestedX * requestedX + requestedZ * requestedZ);
@@ -251,7 +258,7 @@ void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer
     if (!player.isSpawned() || player.isDead())
         return;
 
-    const LiquidContact contact = LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition());
+    const LiquidContact contact = liquidContact(owner.getLevelFor(player), player, player.getPosition());
     const FireContact fireContact = FireBlocksFetch::at(owner.getLevelFor(player), player.getPosition());
     WaterMoveSystem::tick(player, contact);
     LavaResetFallDistanceSystem::tick(player, contact);
@@ -319,12 +326,70 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
         owner._sendEntityData(player);
 }
 
+bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkIdentifier &id,
+                                     ServerPlayer &player, bool flying, bool deferUntilInput) {
+    const int32_t gameType = player.getGameType();
+    const bool mayFly = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator;
+
+    if (flying && !mayFly) {
+        owner._disconnect(id, player.localize("falcon.disconnect.flyingDisabled"));
+        return false;
+    }
+
+    // Unticked AuthInput packets predate this un-timestamped ability request.
+    if (deferUntilInput && (player.getMovementInputs().pendingCount() != 0
+                            || player.getMovementInputs().hasPendingFlightRequest())) {
+        player.getMovementInputs().deferFlightRequest(flying);
+        return true;
+    }
+
+    if (flying != player.isFlying()) {
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_TOGGLE_FLIGHT)) {
+            PluginEvent flightEvent;
+            flightEvent.mType = FALCON_EVENT_PLAYER_TOGGLE_FLIGHT;
+            flightEvent.mCancellable = true;
+            flightEvent.mPlayer = &player;
+            flightEvent.mState = flying;
+            plugins->dispatch(flightEvent);
+            if (flightEvent.mCancelled) {
+                owner._sendAbilities(player);
+                return false;
+            }
+        }
+    }
+
+    player.setFlying(flying);
+
+    if (!flying)
+        player.setOnGround(MovementHandler::checkGroundState(owner.getLevelFor(player), player.getPosition()));
+
+    owner._sendAbilities(player);
+    return true;
+}
+
 void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                             ServerPlayer &player, const PlayerAuthInputPacket &packet) {
+    // BDS LoadingScreenPlayerProtectionsSystem disables movement until loading completes.
+    if (!player.isSpawned())
+        return;
+
+    // Flight transitions belong to this input tick, including replayed inputs.
+    const bool stopFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopFlying);
+    const bool startFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartFlying);
+    if ((startFlying || stopFlying) && !requestFlight(owner, id, player, startFlying && !stopFlying))
+        return;
+
+    // Resolve sprinting before replay so physics and the advertised actor state use the same decision.
+    bool sprinting = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sprinting)
+                     || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
+
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSprinting) || !player.canSprint())
+        sprinting = false;
+
     // Player positions on the wire are at eye height; the server works with feet positions.
     Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
                           packet.mPosition.z);
-    PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition);
+    PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition, sprinting);
     player.queueMove(feetPosition, packet.mRotation);
     if (!player.hasSimulatedVelocity())
         player.setMotion(packet.mDelta);
@@ -342,17 +407,6 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     ActorFlags &flags = player.getFlags();
     const ActorFlags previous = flags;
 
-    // Sprinting and sneaking are states the client reports every tick, the start and stop flags only
-    // mark their edges. Reacting to the edges alone leaves a flag stuck whenever an edge is missed.
-    bool sprinting = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sprinting)
-                     || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
-
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSprinting))
-        sprinting = false;
-
-    if (!player.canSprint())
-        sprinting = false;
-
     flags.set(ActorFlag::Sprinting, sprinting);
 
     bool sneaking = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sneaking)
@@ -361,30 +415,44 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSneaking))
         sneaking = false;
 
+    if (player.hasSimulatedVelocity())
+        sneaking = player.isSimulatedSneaking();
     flags.set(ActorFlag::Sneaking, sneaking);
 
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSwimming))
-        flags.set(ActorFlag::Swimming, true);
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSwimming))
-        flags.set(ActorFlag::Swimming, false);
+    if (player.hasSimulatedVelocity()) {
+        flags.set(ActorFlag::Swimming, player.isSimulatedSwimming());
+    } else {
+        if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSwimming))
+            flags.set(ActorFlag::Swimming, true);
+        if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSwimming))
+            flags.set(ActorFlag::Swimming, false);
+    }
 
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartGliding))
         flags.set(ActorFlag::Gliding, true);
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopGliding))
         flags.set(ActorFlag::Gliding, false);
 
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartCrawling))
-        flags.set(ActorFlag::Crawling, true);
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopCrawling))
-        flags.set(ActorFlag::Crawling, false);
+    if (player.hasSimulatedVelocity()) {
+        flags.set(ActorFlag::Crawling, player.isSimulatedCrawling());
+    } else {
+        if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartCrawling))
+            flags.set(ActorFlag::Crawling, true);
+        if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopCrawling))
+            flags.set(ActorFlag::Crawling, false);
+    }
 
     if (flags.getLowBits() != previous.getLowBits() || flags.getHighBits() != previous.getHighBits())
         owner._sendEntityData(player);
 
     if (sneaking != previous.get(ActorFlag::Sneaking))
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SNEAK, sneaking);
-    if (sprinting != previous.get(ActorFlag::Sprinting))
+    if (sprinting != previous.get(ActorFlag::Sprinting)) {
+        // Sprint changes the movement attribute as well as actor metadata in BDS (0x140F4D3F0).
+        // This client-requested transition must not reset authoritative validation.
+        owner._sendAttributes(player, false);
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting);
+    }
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping))
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_JUMP, true);
 
@@ -417,7 +485,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
             BlockActionHandler::completeBreakingBlock(owner, player, action.mBlockPosition);
             player.clearLastBlockAttacked();
         } else if (action.mAction == PlayerActionType::Jump) {
-            if (!LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition()).eyeInWater)
+            if (!liquidContact(owner.getLevelFor(player), player, player.getPosition()).eyeInWater)
                 player.exhaust(player.getFlags().get(ActorFlag::Sprinting) ? SPRINT_JUMP_EXHAUSTION : JUMP_EXHAUSTION);
         } else if (action.mAction == PlayerActionType::StartUsingItem) {
             player.clearAwaitingConsumableRelease();

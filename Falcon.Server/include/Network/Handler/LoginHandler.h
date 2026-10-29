@@ -64,7 +64,7 @@ public:
 
     static void sendCreativeContent(ServerNetworkHandler &owner, ServerPlayer &player);
 
-    static void sendAttributes(ServerNetworkHandler &owner, ServerPlayer &player);
+    static void sendAttributes(ServerNetworkHandler &owner, ServerPlayer &player, bool movementChange = true);
 
     static void sendAvailableCommands(ServerNetworkHandler &owner, ServerPlayer &player);
 

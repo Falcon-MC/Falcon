@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Actor/ActorPropertySchema.h"
+#include "World/Actor/ActorPropertySchema.h"
 #include "Core/NBT/Tag.h"
 #include "Protocol/Types/StartGameTypes.h"
 

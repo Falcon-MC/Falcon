@@ -72,15 +72,22 @@ on the issue first so the approach can be agreed on before you write the code.
 
 ### Repository layout
 
-| Path                                   | Contents                                                            |
-|----------------------------------------|---------------------------------------------------------------------|
-| `Falcon.Server/src/Network/Handler`    | Network session, login, movement, inventory and gameplay handlers  |
-| `Falcon.Server/src/Level`              | Worlds, chunks, storage, world generation                           |
-| `Falcon.Server/src/Block`              | Blocks, block actors and block systems (redstone, fluids, fire...)  |
-| `Falcon.Server/src/Item`               | Items and item behaviours                                           |
-| `Falcon.Server/src/Actor`              | Players, mobs, projectiles and AI goals                             |
-| `Falcon.Server/src/Command`            | Commands                                                            |
-| `Falcon.Server/src/Scripting`          | JavaScript scripting API for behavior packs                         |
+| Path | Contents |
+|---|---|
+| `Falcon.Server/src/Network` | Session, login, movement, inventory and gameplay handlers |
+| `Falcon.Server/src/World/Level` | Worlds, chunks, storage and world generation |
+| `Falcon.Server/src/World/Level/Block` | Blocks, block actors and block systems |
+| `Falcon.Server/src/World/Item` | Items and item behaviours |
+| `Falcon.Server/src/World/Actor` | Players, mobs, projectiles and AI goals |
+| `Falcon.Server/src/Server/Commands` | Commands |
+| `Falcon.Server/src/Scripting` | JavaScript scripting API for behavior packs |
+
+The source layout follows the domains recovered from BDS 1.26.10, using PascalCase
+folder names as required by Falcon rules. See
+[`Falcon.Server/structure/README.md`](Falcon.Server/structure/README.md) for the evidence,
+limits and old-to-new file inventory. New code should use the relocated include paths.
+Build-generated forwarding headers preserve existing internal-plugin includes; the
+public `Falcon/EmbeddedServer.h` and external plugin C API remain stable.
 
 The network layer, the protocol, NBT and the Bedrock data files live in their own repositories under
 [Falcon-MC](https://github.com/Falcon-MC). Changes to them go there.
