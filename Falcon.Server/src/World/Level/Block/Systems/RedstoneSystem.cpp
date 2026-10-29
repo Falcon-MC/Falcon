@@ -7,6 +7,7 @@
 #include "World/Level/Block/ButtonBlock.h"
 #include "World/Level/Block/CommandBlock.h"
 #include "World/Level/Block/DaylightDetectorBlock.h"
+#include "World/Level/Block/DispenserBlock.h"
 #include "World/Level/Block/DoorBlock.h"
 #include "World/Level/Block/LeverBlock.h"
 #include "World/Level/Block/OpenableBlock.h"
@@ -1213,6 +1214,9 @@ void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
         if ((type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
             && isGettingPower(owner, level, position))
             TntBlock::prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE);
+    } else if (dynamic_cast<const DispenserBlock *>(block) != nullptr) {
+        if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
+            DispenserBlock::onRedstoneUpdate(owner, level, position, state);
     }
 }
 
