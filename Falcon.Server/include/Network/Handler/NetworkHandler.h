@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core/Concurrency/TaskQueue.h"
+#include "Core/Threading/TaskQueue.h"
 #include "Network/BatchedNetworkPeer.h"
 #include "Network/CompressedNetworkPeer.h"
 #include "Network/Connector.h"
@@ -62,6 +62,11 @@ public:
 
         virtual void onNewIncomingConnection(const NetworkIdentifier &) {}
 
+        virtual void onNewIncomingConnection(const NetworkIdentifier &id, uint16_t mtuSize) {
+            (void) mtuSize;
+            onNewIncomingConnection(id);
+        }
+
         virtual void onConnectionClosed(const NetworkIdentifier &, DisconnectFailReason, const std::string &) {}
 
         virtual void onDataReceived(const NetworkIdentifier &, const std::string &) {}
@@ -81,6 +86,7 @@ public:
         NetworkIdentifier mId;
         std::string mData;
         DisconnectFailReason mReason = DisconnectFailReason::Unknown;
+        uint16_t mMtuSize = 0;
     };
 
     struct OutboundCommand {
@@ -88,7 +94,8 @@ public:
             Data = 0,
             Flush = 1,
             EnableCompression = 2,
-            EnableEncryption = 3
+            EnableEncryption = 3,
+            Close = 4
         };
 
         Kind mKind = Kind::Data;
@@ -103,6 +110,11 @@ public:
     };
 
     using OutboundFilter = std::function<bool(const NetworkIdentifier &, std::string &)>;
+
+    /**
+     * Returns the codec context of the protocol a connection chose, or nullptr to keep the one the caller passed.
+     */
+    using ContextResolver = std::function<const PacketCodecContext *(const NetworkIdentifier &)>;
 
     explicit NetworkHandler(std::unique_ptr<Connector> connector);
 
@@ -126,8 +138,6 @@ public:
 
     void send(const NetworkIdentifier &id, const Packet &packet, const PacketCodecContext &context);
 
-    void sendToAll(const Packet &packet, const PacketCodecContext &context);
-
     void send(const NetworkIdentifier &id, const std::string &data,
               NetworkPeer::Reliability reliability = NetworkPeer::Reliability::ReliableOrdered,
               Compressibility compressibility = Compressibility::Compressible);
@@ -144,6 +154,11 @@ public:
 
     void enableEncryption(const NetworkIdentifier &id, const EncryptionKey &key);
 
+    /**
+     * Drops a connection without sending it anything, then reports it as closed.
+     */
+    void closeConnection(const NetworkIdentifier &id);
+
     size_t getConnectionCount() const { return mConnectionCount.load(); }
 
     Connector &getConnector() { return *mConnectors.front(); }
@@ -153,6 +168,12 @@ public:
     void setProfiler(Profiler *profiler) { mProfiler = profiler; }
 
     void setOutboundFilter(OutboundFilter filter);
+
+    /**
+     * Makes every packet sent to a connection use the codec of its protocol, so callers keep passing the
+     * server's context whatever version the client speaks.
+     */
+    void setContextResolver(ContextResolver resolver);
 
     void addListener(Listener *listener);
 
@@ -183,6 +204,7 @@ private:
     std::unordered_map<NetworkIdentifier, std::unique_ptr<Connection>, NetworkIdentifier::Hasher> mConnections;
     std::vector<Listener *> mListeners;
     OutboundFilter mOutboundFilter;
+    ContextResolver mContextResolver;
 
     TaskQueue<InboundEvent> mInbound;
     TaskQueue<OutboundCommand> mOutbound;

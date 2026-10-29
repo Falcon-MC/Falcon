@@ -4,7 +4,7 @@ project(Falcon.Server LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(FALCON_BEDROCK_DATA_PROTOCOL 2193)
+set(FALCON_BEDROCK_DATA_PROTOCOL 2225)
 include("${falcon_bedrock_data_SOURCE_DIR}/cmake/FalconBedrockData.cmake")
 
 falcon_bedrock_data_file(recipes.json FALCON_RECIPES_JSON)
@@ -19,6 +19,34 @@ falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE FalconItemData S
         DELIMITER falconitems OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ItemPaletteJson.h")
 falcon_bedrock_data_embed_binary(FILE item_components.nbt NAMESPACE FalconItemData SYMBOL kItemComponentsNbt
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ItemComponentsNbt.h")
+set(FALCON_OLDER_DATA_PROTOCOLS 2169)
+set(FALCON_OLDER_DATA_INCLUDES "")
+set(FALCON_OLDER_DATA_ENTRIES "")
+foreach(olderProtocol IN LISTS FALCON_OLDER_DATA_PROTOCOLS)
+    set(FALCON_BEDROCK_DATA_PROTOCOL ${olderProtocol})
+    set(olderDir "${CMAKE_CURRENT_BINARY_DIR}/generated/older/${olderProtocol}")
+    set(olderNamespace "FalconOlderData${olderProtocol}")
+    falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE ${olderNamespace} SYMBOL kItemPaletteJson
+            DELIMITER falconitems OUTPUT "${olderDir}/ItemPaletteJson.h")
+    falcon_bedrock_data_embed_binary(FILE item_components.nbt NAMESPACE ${olderNamespace} SYMBOL kItemComponentsNbt
+            OUTPUT "${olderDir}/ItemComponentsNbt.h")
+    falcon_bedrock_data_embed_text(FILE recipes.json NAMESPACE ${olderNamespace} SYMBOL kRecipesJson
+            DELIMITER falconrecipes OUTPUT "${olderDir}/RecipesJson.h")
+    falcon_bedrock_data_embed_text(FILE creative_items.json NAMESPACE ${olderNamespace} SYMBOL kCreativeItemsJson
+            DELIMITER falconcreative OUTPUT "${olderDir}/CreativeItemsJson.h")
+    falcon_bedrock_data_embed_binary(FILE block_palette.nbt NAMESPACE ${olderNamespace} SYMBOL kBlockPaletteNbt
+            OUTPUT "${olderDir}/BlockPaletteNbt.h")
+    foreach(header ItemPaletteJson ItemComponentsNbt RecipesJson CreativeItemsJson BlockPaletteNbt)
+        string(APPEND FALCON_OLDER_DATA_INCLUDES "#include \"older/${olderProtocol}/${header}.h\"\n")
+    endforeach()
+    string(APPEND FALCON_OLDER_DATA_ENTRIES
+            "        {${olderProtocol}, ${olderNamespace}::kItemPaletteJson, ${olderNamespace}::kItemComponentsNbt, "
+            "${olderNamespace}::kItemComponentsNbtSize, ${olderNamespace}::kRecipesJson, "
+            "${olderNamespace}::kCreativeItemsJson, ${olderNamespace}::kBlockPaletteNbt, "
+            "${olderNamespace}::kBlockPaletteNbtSize},\n")
+endforeach()
+set(FALCON_BEDROCK_DATA_PROTOCOL 2225)
+configure_file(cmake/OlderProtocolData.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/OlderProtocolData.h" @ONLY)
 falcon_bedrock_data_embed_binary(FILE block_definitions.nbt NAMESPACE FalconBlockDefinitionData
         SYMBOL kBlockDefinitionsNbt OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockDefinitionsNbt.h")
 falcon_bedrock_data_embed_text(FILE entity_loot_tables.json NAMESPACE FalconLootData SYMBOL kEntityLootTablesJson
@@ -62,6 +90,8 @@ string(REGEX REPLACE "(0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x
 configure_file(cmake/BlockPaletteNbt.h.in "${FALCON_GENERATED_DIR}/BlockPaletteNbt.h" @ONLY)
 
 file(GLOB FALCON_BLOCK_UPGRADE_SCHEMA_FILES "${FALCON_BLOCK_UPGRADE_SCHEMA_DIR}/*.json")
+list(APPEND FALCON_BLOCK_UPGRADE_SCHEMA_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/block_upgrades/0361_1.26.50_to_1.26.60.json")
 list(SORT FALCON_BLOCK_UPGRADE_SCHEMA_FILES)
 set(FALCON_BLOCK_UPGRADE_SCHEMAS "")
 foreach(schemaFile IN LISTS FALCON_BLOCK_UPGRADE_SCHEMA_FILES)
@@ -88,7 +118,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FALCON_LANGUAGE
 configure_file(cmake/LanguageFiles.h.in "${FALCON_GENERATED_DIR}/LanguageFiles.h" @ONLY)
 
 if(NOT FALCON_BUILD_VERSION)
-    set(FALCON_BUILD_VERSION "1.26.52.01")
+    set(FALCON_BUILD_VERSION "1.26.60.01")
 endif()
 if(NOT FALCON_BUILD_ID)
     set(FALCON_BUILD_ID "0")
@@ -96,15 +126,16 @@ endif()
 set(FALCON_BUILD_BRANCH "unknown")
 set(FALCON_BUILD_COMMIT "unknown")
 find_package(Git QUIET)
-if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+get_filename_component(FALCON_REPOSITORY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+if(GIT_FOUND AND EXISTS "${FALCON_REPOSITORY_DIR}/.git")
     execute_process(COMMAND "${GIT_EXECUTABLE}" rev-list --count HEAD
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE FALCON_BUILD_ID
+            WORKING_DIRECTORY "${FALCON_REPOSITORY_DIR}" OUTPUT_VARIABLE FALCON_BUILD_ID
             OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
     execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --abbrev-ref HEAD
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE FALCON_BUILD_BRANCH
+            WORKING_DIRECTORY "${FALCON_REPOSITORY_DIR}" OUTPUT_VARIABLE FALCON_BUILD_BRANCH
             OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
     execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE FALCON_BUILD_COMMIT
+            WORKING_DIRECTORY "${FALCON_REPOSITORY_DIR}" OUTPUT_VARIABLE FALCON_BUILD_COMMIT
             OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 endif()
 if(CMAKE_BUILD_TYPE)
@@ -116,19 +147,84 @@ string(MAKE_C_IDENTIFIER "falcon_build_${FALCON_BUILD_COMMIT}_${FALCON_BUILD_ID}
 configure_file(cmake/BuildInfo.h.in "${FALCON_GENERATED_DIR}/BuildInfo.h" @ONLY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FALCON_BLOCK_UPGRADE_SCHEMA_FILES})
 
-file(GLOB_RECURSE FALCON_SERVER_SOURCES CONFIGURE_DEPENDS
+file(GLOB_RECURSE FALCON_CORE_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+set(FALCON_EXECUTABLE_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/Server.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/SetupWizard.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/VersionChecker.cpp")
+list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_EXECUTABLE_SOURCES})
 
-add_executable(FalconServer ${FALCON_SERVER_SOURCES})
+# An object library rather than a static one: blocks, items and actors register themselves from static
+# initialisers, and a static library would let the linker drop every object nothing references by name.
+add_library(FalconCore OBJECT ${FALCON_CORE_SOURCES})
+
+include(cmake/FalconLegacyHeaders.cmake)
 
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
 
-target_include_directories(FalconServer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${FALCON_GENERATED_DIR} ${ZLIB_INCLUDE_DIRS}
+target_include_directories(FalconCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${FALCON_GENERATED_DIR} ${FALCON_LEGACY_INCLUDE_DIR} ${ZLIB_INCLUDE_DIRS}
         ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(FalconServer PRIVATE FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic
+target_link_libraries(FalconCore PUBLIC FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic
         Falcon::PluginAPI ${CMAKE_DL_LIBS})
+
+if(WIN32)
+    target_compile_definitions(FalconCore PRIVATE WIN32_LEAN_AND_MEAN)
+endif()
+
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_link_libraries(FalconCore PUBLIC z ssl crypto ws2_32 crypt32)
+else()
+    target_link_libraries(FalconCore PUBLIC ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto)
+endif()
+
+option(FALCON_BUILD_SERVER_EXECUTABLE "Build the dedicated server executable" ON)
+
+option(FALCON_BUILD_EMBEDDED_TESTS "Build embedded server lifecycle checks" OFF)
+if(FALCON_BUILD_EMBEDDED_TESTS)
+    enable_testing()
+    add_executable(FalconEmbeddedTests tests/EmbeddedServerTests.cpp)
+    target_link_libraries(FalconEmbeddedTests PRIVATE FalconCore)
+    add_executable(FalconStartupTests tests/StartupTests.cpp)
+    target_link_libraries(FalconStartupTests PRIVATE FalconCore)
+    add_executable(FalconMovementInputTests tests/MovementInputTests.cpp)
+    target_link_libraries(FalconMovementInputTests PRIVATE FalconCore)
+    add_executable(FalconBlockBreakingTests tests/BlockBreakingTests.cpp)
+    target_link_libraries(FalconBlockBreakingTests PRIVATE FalconCore)
+    add_executable(FalconRideControlTests tests/RideControlTests.cpp)
+    target_link_libraries(FalconRideControlTests PRIVATE FalconCore)
+    add_executable(FalconGameplay2660Tests tests/Gameplay2660Tests.cpp)
+    target_link_libraries(FalconGameplay2660Tests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconMovementInputTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconBlockBreakingTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconRideControlTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconEmbeddedTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconStartupTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconGameplay2660Tests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME movement-input-timeline COMMAND FalconMovementInputTests)
+    set_tests_properties(movement-input-timeline PROPERTIES TIMEOUT 60)
+    add_test(NAME block-breaking-settings COMMAND FalconBlockBreakingTests)
+    set_tests_properties(block-breaking-settings PROPERTIES TIMEOUT 60)
+    add_test(NAME ride-control-regressions COMMAND FalconRideControlTests)
+    set_tests_properties(ride-control-regressions PROPERTIES TIMEOUT 60)
+    add_test(NAME embedded-lifecycle COMMAND FalconEmbeddedTests)
+    set_tests_properties(embedded-lifecycle PROPERTIES TIMEOUT 120)
+    add_test(NAME startup-persistence COMMAND FalconStartupTests)
+    set_tests_properties(startup-persistence PROPERTIES TIMEOUT 60)
+    add_test(NAME gameplay-26.60 COMMAND FalconGameplay2660Tests)
+    set_tests_properties(gameplay-26.60 PROPERTIES TIMEOUT 60)
+endif()
+
+if(NOT FALCON_BUILD_SERVER_EXECUTABLE)
+    return()
+endif()
+
+add_executable(FalconServer ${FALCON_EXECUTABLE_SOURCES})
+target_link_libraries(FalconServer PRIVATE FalconCore)
 
 if(WIN32)
     target_compile_definitions(FalconServer PRIVATE WIN32_LEAN_AND_MEAN)
@@ -136,9 +232,6 @@ endif()
 
 if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_options(FalconServer PRIVATE -static -fuse-ld=lld)
-    target_link_libraries(FalconServer PRIVATE z ssl crypto ws2_32 crypt32)
-else()
-    target_link_libraries(FalconServer PRIVATE ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto)
 endif()
 
 option(FALCON_EXPORT_SYMBOLS "Export the server symbols so internal plugins can link against the executable" ON)
@@ -149,7 +242,8 @@ if(FALCON_EXPORT_SYMBOLS)
     if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         set(FALCON_EXPORT_INPUTS "${CMAKE_CURRENT_BINARY_DIR}/FalconServerExports.txt")
         set(FALCON_EXPORT_DEFINITION "${CMAKE_CURRENT_BINARY_DIR}/FalconServer.def")
-        set(FALCON_EXPORT_SOURCES "$<TARGET_OBJECTS:FalconServer>" "$<TARGET_FILE:FalconProtocol>"
+        set(FALCON_EXPORT_SOURCES "$<TARGET_OBJECTS:FalconServer>" "$<TARGET_OBJECTS:FalconCore>"
+                "$<TARGET_FILE:FalconProtocol>"
                 "$<TARGET_FILE:FalconNetwork>" "$<TARGET_FILE:FalconNBT>" "$<TARGET_FILE:FalconBlockStateUpdater>")
         file(GENERATE OUTPUT "${FALCON_EXPORT_INPUTS}" CONTENT "$<JOIN:${FALCON_EXPORT_SOURCES},\n>\n")
         add_custom_command(TARGET FalconServer PRE_LINK
@@ -163,8 +257,8 @@ if(FALCON_EXPORT_SYMBOLS)
     string(CONCAT FALCON_INTERNAL_SDK
             "set(FALCON_INTERNAL_EXECUTABLE \"$<TARGET_FILE:FalconServer>\")\n"
             "set(FALCON_INTERNAL_LINKER_FILE \"$<TARGET_LINKER_FILE:FalconServer>\")\n"
-            "set(FALCON_INTERNAL_INCLUDE_DIRECTORIES \"$<TARGET_PROPERTY:FalconServer,INCLUDE_DIRECTORIES>\")\n"
-            "set(FALCON_INTERNAL_COMPILE_DEFINITIONS \"$<TARGET_PROPERTY:FalconServer,COMPILE_DEFINITIONS>\")\n"
+            "set(FALCON_INTERNAL_INCLUDE_DIRECTORIES \"$<TARGET_PROPERTY:FalconCore,INCLUDE_DIRECTORIES>\")\n"
+            "set(FALCON_INTERNAL_COMPILE_DEFINITIONS \"$<TARGET_PROPERTY:FalconCore,COMPILE_DEFINITIONS>\")\n"
             "set(FALCON_INTERNAL_CXX_COMPILER_ID \"${CMAKE_CXX_COMPILER_ID}\")\n"
             "set(FALCON_INTERNAL_CXX_COMPILER_VERSION \"${CMAKE_CXX_COMPILER_VERSION}\")\n")
     file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/FalconInternalSDK.cmake" CONTENT "${FALCON_INTERNAL_SDK}")

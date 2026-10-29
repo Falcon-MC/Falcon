@@ -1,6 +1,6 @@
 #include "Network/Handler/BadPacketHandler.h"
 
-#include "Actor/ServerPlayer.h"
+#include "World/Actor/Player/ServerPlayer.h"
 #include "Protocol/Packets/InventoryTransactionPacket.h"
 #include "Protocol/Packets/ItemStackRequestPacket.h"
 #include "Protocol/Packets/MobEquipmentPacket.h"

@@ -11,6 +11,7 @@ class Level;
 class Packet;
 class BlockState;
 class BlockActor;
+class PacketCodecContext;
 
 class BlockActionHandler {
 public:
@@ -39,16 +40,19 @@ public:
 
     static void stopBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player);
 
-    static void completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                                      bool clientPredicted = true);
+    static void completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 
     static void sendBreakingFx(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static bool canInteractWithBlock(ServerPlayer &player, const Vector3i &position);
 
+    static bool canBreakBlock(const ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
+
     static void placeBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemUseTransaction &transaction);
 
 private:
+    static bool _canInteractWithBlock(ServerPlayer &player, const Vector3i &position, float rangeScalar);
+
     static constexpr int32_t NETHER_PLACEMENT_LIMIT = 127;
 
     static constexpr float MAX_SYNC_DISTANCE_SQUARED = 10000.0f;
@@ -56,7 +60,11 @@ private:
     static bool interactBlock(ServerNetworkHandler &owner, ServerPlayer &player,
                               const ItemUseTransaction &transaction, bool selectedSlotChanged);
 
-    static bool matchesTransactionItem(const ItemStack &held, const ItemStack &sent);
+    /**
+     * Compares the items as the client sees them, so an item it only knows under another one still matches.
+     */
+    static bool matchesTransactionItem(const PacketCodecContext &context, const ItemStack &held,
+                                       const ItemStack &sent);
 
     static bool isBlockChangeAllowed(Level &level, const Vector3i &position, const ServerPlayer &player);
 

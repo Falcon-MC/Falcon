@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Actor/ActorPropertySchema.h"
+#include "World/Actor/ActorPropertySchema.h"
 #include "Core/NBT/Tag.h"
 #include "Protocol/Types/StartGameTypes.h"
 
@@ -132,6 +132,12 @@ public:
     bool isFrozen() const {
         return mFrozen;
     }
+
+    /**
+     * Drops every pack's content and unfreezes, so a host that runs one world after another loads the next
+     * world's packs from scratch.
+     */
+    void reset();
 
     static CustomContentRegistry &getInstance();
 

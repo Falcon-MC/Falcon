@@ -105,7 +105,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          cmake --build build --parallel
+          cmake --build build --parallel 4
 
   internal-plugins:
     name: Internal plugins linux-x64

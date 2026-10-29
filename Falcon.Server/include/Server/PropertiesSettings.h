@@ -125,9 +125,17 @@ public:
 
     std::string getLevelSeed() const { return getString("level-seed"); }
 
+    /** Extra worlds loaded at start-up, from the comma-separated `worlds-autoload` list. */
+    std::vector<std::string> getAutoloadWorlds() const;
+
     PlayerPermission getDefaultPlayerPermissionLevel() const;
 
     bool getTexturePackRequired() const { return getBool("texturepack-required"); }
+
+    /**
+     * Whether clients of every supported protocol version may join; otherwise only the newest version is accepted.
+     */
+    bool getAnyVersion() const { return getBool("any-version"); }
 
     bool getContentLogFileEnabled() const { return getBool("content-log-file-enabled"); }
 
@@ -148,6 +156,10 @@ public:
     bool getBlockNetworkIdsAreHashes() const { return getBool("block-network-ids-are-hashes"); }
 
     bool getDisableCustomSkins() const { return getBool("disable-custom-skins"); }
+
+    bool getDisableClientVibrantVisuals() const {
+        return getBool("disable-client-vibrant-visuals");
+    }
 
     /** Minimum number of seconds between two skin changes of the same player. */
     int getSkinChangeCooldown() const { return getInt("skin-change-cooldown"); }
@@ -172,6 +184,10 @@ public:
         return getFloat("player-position-acceptance-threshold");
     }
 
+    bool getSimulation() const {
+        return getBool("simulation");
+    }
+
     bool getServerAuthoritativeMovementStrict() const {
         return getBool("server-authoritative-movement-strict");
     }
@@ -179,6 +195,20 @@ public:
     float getPlayerMovementActionDirectionThreshold() const {
         return getFloat("player-movement-action-direction-threshold");
     }
+
+    int getPlayerTickThrottledInputBatchSize() const {
+        return getInt("player-tick-throttled-input-batch-size");
+    }
+
+    int getPlayerTickThrottledMaxTickCredits() const {
+        return getInt("player-tick-throttled-max-tick-credits");
+    }
+
+    bool getServerAuthoritativeBlockBreaking() const {
+        return getBool("server-authoritative-block-breaking");
+    }
+
+    float getServerAuthoritativeBlockBreakingRangeScalar() const;
 
     TransportLayer getTransportLayer() const;
 

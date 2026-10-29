@@ -19,6 +19,10 @@ struct ChunkStreamState {
     double mComparatorDirZ = 0.0;
 };
 
+/**
+ * Streams chunks to one player: tracks which chunks are in view distance, requests missing
+ * ones from the level and sends them in view-priority order as they become ready.
+ */
 class ChunkStreamHandler {
 public:
     static constexpr int32_t FIELD_OF_VIEW_DEGREES = 70;

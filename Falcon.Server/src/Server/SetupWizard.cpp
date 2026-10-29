@@ -502,13 +502,6 @@ void SetupWizard::configureNetwork() {
     accept(tr("network.ports.set", {paint(mValues["server-port"], BOLD), paint(mValues["server-portv6"], BOLD)}));
     writeLine();
 
-    mValues["transport"] = askChoice(tr("network.transport"), {
-            {"raknet", tr("network.transport.raknet")},
-            {"nethernet", tr("network.transport.nethernet")}
-    }, mValues["transport"]);
-    accept(tr("network.transport.set", {paint(mValues["transport"], BOLD)}));
-    writeLine();
-
     const bool onlineMode = askConfirmation(tr("network.onlineMode"), true);
     mValues["online-mode"] = onlineMode ? "true" : "false";
 
@@ -641,7 +634,6 @@ void SetupWizard::printSummary() const {
                                        + tr("difficulty." + mValues.at("difficulty"))},
             {tr("summary.players"),    tr("summary.players.value", {mValues.at("max-players")})},
             {tr("summary.ports"),      mValues.at("server-port") + " / " + mValues.at("server-portv6")},
-            {tr("summary.transport"),  mValues.at("transport")},
             {tr("summary.onlineMode"), tr(mValues.at("online-mode") == "true" ? "summary.required"
                                                                               : "summary.notRequired")},
             {tr("summary.world"),      mValues.at("level-name")},
