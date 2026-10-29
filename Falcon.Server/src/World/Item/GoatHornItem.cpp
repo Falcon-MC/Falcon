@@ -10,8 +10,8 @@ FALCON_REGISTER_ITEM(GoatHornItem, 100);
 #include <algorithm>
 
 namespace {
-    // Each horn variant plays its own call; the data value picks one of horn_call0 to horn_call7.
     const char *const HORN_CALL_SOUND = "horn_call";
+    const int32_t MAX_VARIANT = 7;
 }
 
 GoatHornItem::GoatHornItem(const Item &base) : Item(base) {}
