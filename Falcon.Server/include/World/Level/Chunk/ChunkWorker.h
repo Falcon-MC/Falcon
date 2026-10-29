@@ -25,7 +25,8 @@ struct ChunkTask {
         Save = 1,
         Populate = 2,
         Barrier = 3,
-        PersistChanges = 4
+        PersistChanges = 4,
+        EraseEntities = 5
     };
 
     Kind mKind = Kind::Load;
@@ -35,6 +36,7 @@ struct ChunkTask {
     std::shared_ptr<std::promise<void>> mBarrier;
     std::vector<GeneratedBlockChange> mChanges;
     std::shared_ptr<std::promise<std::vector<GeneratedBlockChange>>> mChangesResult;
+    std::vector<int64_t> mEntityIds;
 };
 
 struct ChunkLoadResult {
@@ -83,6 +85,9 @@ public:
 
     std::future<std::vector<GeneratedBlockChange>> requestPersistChanges(
             int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes);
+
+    // Deletes stored actors off the main thread; the future completes once every deletion ran.
+    std::future<void> requestEraseEntities(std::vector<int64_t> uniqueIds);
 
     size_t getOutstandingGenerationCount() const {
         return mOutstandingGeneration.load();

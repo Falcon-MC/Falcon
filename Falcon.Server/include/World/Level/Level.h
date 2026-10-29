@@ -417,6 +417,14 @@ private:
     // Copying a chunk duplicates its whole palette, so queued saves are copied within a small time budget.
     static constexpr std::chrono::milliseconds DEFERRED_SAVE_BUDGET{3};
     std::deque<int64_t> mDeferredSaves;
+    // Actor deletions run on a worker because a LevelDB write can block for seconds while it
+    // compacts; actors still being deleted are hidden from loads so they cannot come back.
+    std::vector<int64_t> mQueuedEntityErasures;
+    std::vector<int64_t> mErasingEntityBatch;
+    std::unordered_set<int64_t> mErasingEntities;
+    std::future<void> mEntityEraseWrite;
+
+    void _flushEntityErasures(bool wait);
     std::unordered_set<int64_t> mRepopulatedChunks;
     std::unordered_map<int64_t, std::unordered_set<uint64_t>> mChunkLoaders;
     std::unordered_set<int64_t> mUnloadQueue;

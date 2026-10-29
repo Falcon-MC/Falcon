@@ -75,6 +75,10 @@ Level &Level::operator=(Level &&other) noexcept {
     mActiveColumns = std::move(other.mActiveColumns);
     mCompletedChunks = std::move(other.mCompletedChunks);
     mDeferredSaves = std::move(other.mDeferredSaves);
+    mQueuedEntityErasures = std::move(other.mQueuedEntityErasures);
+    mErasingEntityBatch = std::move(other.mErasingEntityBatch);
+    mErasingEntities = std::move(other.mErasingEntities);
+    mEntityEraseWrite = std::move(other.mEntityEraseWrite);
     mRepopulatedChunks = std::move(other.mRepopulatedChunks);
     mIncomingChanges = std::move(other.mIncomingChanges);
     mPendingBlockChanges = std::move(other.mPendingBlockChanges);
@@ -178,8 +182,10 @@ void Level::saveAll(bool wait) {
 
     size_t saved = 0;
     // A full save covers everything a background save still has queued.
-    if (wait || !async)
+    if (wait || !async) {
         mDeferredSaves.clear();
+        _flushEntityErasures(true);
+    }
 
     for (auto &entry: mChunks) {
         if (!entry.second.isDirty() && (mChunkWorker == nullptr ||
@@ -231,14 +237,56 @@ std::vector<Tag> Level::loadEntities(int32_t chunkX, int32_t chunkZ) {
     if (!mStorage.isOpen())
         return std::vector<Tag>();
 
-    return mStorage.loadEntities(chunkX, chunkZ);
+    std::vector<Tag> entities = mStorage.loadEntities(chunkX, chunkZ);
+    if (mErasingEntities.empty())
+        return entities;
+
+    entities.erase(std::remove_if(entities.begin(), entities.end(), [this](const Tag &entity) {
+        return mErasingEntities.count(entity.getLong("UniqueID", 0)) != 0;
+    }), entities.end());
+    return entities;
 }
 
 void Level::eraseEntity(int64_t uniqueId) {
     if (!mStorage.isOpen())
         return;
 
-    mStorage.eraseEntity(uniqueId);
+    if (mChunkWorker == nullptr || !mChunkWorker->isRunning()) {
+        mStorage.eraseEntity(uniqueId);
+        return;
+    }
+
+    mQueuedEntityErasures.push_back(uniqueId);
+    mErasingEntities.insert(uniqueId);
+}
+
+void Level::_flushEntityErasures(bool wait) {
+    if (mEntityEraseWrite.valid()) {
+        if (!wait && mEntityEraseWrite.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            return;
+
+        mEntityEraseWrite.get();
+        for (const int64_t uniqueId: mErasingEntityBatch)
+            mErasingEntities.erase(uniqueId);
+        mErasingEntityBatch.clear();
+    }
+
+    if (mQueuedEntityErasures.empty())
+        return;
+
+    if (mChunkWorker == nullptr || !mChunkWorker->isRunning()) {
+        for (const int64_t uniqueId: mQueuedEntityErasures) {
+            mStorage.eraseEntity(uniqueId);
+            mErasingEntities.erase(uniqueId);
+        }
+        mQueuedEntityErasures.clear();
+        return;
+    }
+
+    mErasingEntityBatch.swap(mQueuedEntityErasures);
+    mEntityEraseWrite = mChunkWorker->requestEraseEntities(mErasingEntityBatch);
+    if (wait)
+        _flushEntityErasures(true);
 }
 
 void Level::saveTickingArea(const std::string &id, const Tag &area) {
@@ -762,6 +810,8 @@ void Level::setOccupiedColumns(std::unordered_set<int64_t> columns) {
 }
 
 void Level::processDeferredSaves() {
+    _flushEntityErasures(false);
+
     const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + DEFERRED_SAVE_BUDGET;
     while (!mDeferredSaves.empty() && std::chrono::steady_clock::now() < deadline) {
         const int64_t key = mDeferredSaves.front();

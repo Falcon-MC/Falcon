@@ -201,6 +201,22 @@ std::future<std::vector<GeneratedBlockChange>> ChunkWorker::requestPersistChange
     return result;
 }
 
+std::future<void> ChunkWorker::requestEraseEntities(std::vector<int64_t> uniqueIds) {
+    ChunkTask task;
+    task.mKind = ChunkTask::Kind::EraseEntities;
+    task.mEntityIds = std::move(uniqueIds);
+    task.mBarrier = std::make_shared<std::promise<void>>();
+    std::future<void> done = task.mBarrier->get_future();
+    if (mQueues.empty() || !mRunning.load()) {
+        for (const int64_t uniqueId: task.mEntityIds)
+            mStorage.eraseEntity(uniqueId);
+        task.mBarrier->set_value();
+        return done;
+    }
+    mQueues[0]->push(std::move(task));
+    return done;
+}
+
 std::vector<ChunkLoadResult> ChunkWorker::drainCompleted() {
     auto results = mCompleted.drain();
     mOutstandingGeneration.fetch_sub(results.size());
@@ -347,6 +363,14 @@ void ChunkWorker::_run(size_t queueIndex) {
         }
         if (task.mKind == ChunkTask::Kind::PersistChanges) {
             _processPersistChanges(task);
+            continue;
+        }
+        if (task.mKind == ChunkTask::Kind::EraseEntities) {
+            for (const int64_t uniqueId: task.mEntityIds)
+                mStorage.eraseEntity(uniqueId);
+            task.mEntityIds.clear();
+            task.mBarrier->set_value();
+            task.mBarrier.reset();
             continue;
         }
         // Saves are never dropped, even when pending generation is discarded, or player
