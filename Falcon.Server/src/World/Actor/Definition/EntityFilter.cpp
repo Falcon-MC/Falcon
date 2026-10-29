@@ -56,16 +56,21 @@ namespace {
         return -1;
     }
 
-    const char *const NUMERIC_SUBJECTS[] = {"self", "other", "parent", "player", "target", "baby", "damager",
+    const std::string NUMERIC_SUBJECTS[] = {"self", "other", "parent", "player", "target", "baby", "damager",
                                             "block"};
-    const char *const NUMERIC_OPERATORS[] = {"==", "!=", "<", "<=", ">", ">="};
+    const std::string NUMERIC_OPERATORS[] = {"==", "!=", "<", "<=", ">", ">="};
 
-    std::string enumName(const json::Value *value, const char *const names[], size_t count,
-                         const std::string &fallback) {
+    const std::string &textOf(const json::Value &value) {
+        static const std::string empty;
+        return value.isString() ? value.mString : empty;
+    }
+
+    const std::string &enumName(const json::Value *value, const std::string names[], size_t count,
+                                const std::string &fallback) {
         if (value == nullptr)
             return fallback;
         if (!value->isNumber())
-            return value->string();
+            return textOf(*value);
 
         const int32_t index = value->integer(-1);
         return index >= 0 && (size_t) index < count ? names[index] : fallback;
@@ -114,11 +119,6 @@ namespace {
 
     const char *const PLAYER_FAMILY = "player";
     const char *const TYPE_FAMILY_COMPONENT = "minecraft:type_family";
-
-    const std::string &textOf(const json::Value &value) {
-        static const std::string empty;
-        return value.isString() ? value.mString : empty;
-    }
 
     /**
      * Reads the family list in place instead of copying it: `is_family` runs for every candidate a targeting or
@@ -367,22 +367,42 @@ EntityFilter::DamageScope::~DamageScope() {
     activeDamageAmount = 0.0f;
 }
 
+/**
+ * Filters run for every candidate of every targeting and sensing scan, so the keys are matched in one pass over
+ * the object instead of a hashed lookup (and a key string) per possible group. The precedence is unchanged.
+ */
 bool EntityFilter::test(const json::Value &filter, ServerNetworkHandler &owner, const MobActor &self,
                         const Actor *other) {
     if (filter.isArray())
         return _testAll(filter, owner, self, other);
-    if (const json::Value *all = filter.get("all_of"))
-        return _testAll(*all, owner, self, other);
-    if (const json::Value *all = filter.get("AND"))
-        return _testAll(*all, owner, self, other);
-    if (const json::Value *any = filter.get("any_of"))
-        return _testAny(*any, owner, self, other);
-    if (const json::Value *any = filter.get("OR"))
-        return _testAny(*any, owner, self, other);
-    if (const json::Value *none = filter.get("none_of"))
-        return !_testAny(*none, owner, self, other);
-    if (const json::Value *none = filter.get("NOT"))
-        return !_testAny(*none, owner, self, other);
+
+    const size_t GROUP_COUNT = 6;
+    const json::Value *groups[GROUP_COUNT] = {};
+    for (const auto &entry: filter.mObject) {
+        const std::string &key = entry.first;
+        if (key == "all_of")
+            groups[0] = entry.second.get();
+        else if (key == "AND")
+            groups[1] = entry.second.get();
+        else if (key == "any_of")
+            groups[2] = entry.second.get();
+        else if (key == "OR")
+            groups[3] = entry.second.get();
+        else if (key == "none_of")
+            groups[4] = entry.second.get();
+        else if (key == "NOT")
+            groups[5] = entry.second.get();
+    }
+
+    for (size_t index = 0; index < GROUP_COUNT; ++index) {
+        if (groups[index] == nullptr)
+            continue;
+        if (index < 2)
+            return _testAll(*groups[index], owner, self, other);
+        if (index < 4)
+            return _testAny(*groups[index], owner, self, other);
+        return !_testAny(*groups[index], owner, self, other);
+    }
     return _testSingle(filter, owner, self, other);
 }
 
@@ -438,16 +458,29 @@ bool EntityFilter::_testBlock(const std::string &test, const std::string &op, co
 
 bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &owner, const MobActor &self,
                                const Actor *other) {
-    const json::Value *testValue = filter.get("test");
+    const json::Value *testValue = nullptr;
+    const json::Value *operatorValue = nullptr;
+    const json::Value *value = nullptr;
+    const json::Value *subjectValue = nullptr;
+    for (const auto &entry: filter.mObject) {
+        const std::string &key = entry.first;
+        if (key == "test")
+            testValue = entry.second.get();
+        else if (key == "operator")
+            operatorValue = entry.second.get();
+        else if (key == "value")
+            value = entry.second.get();
+        else if (key == "subject")
+            subjectValue = entry.second.get();
+    }
     if (testValue == nullptr)
         return true;
 
-    const std::string test = testValue->string();
-    const std::string op = enumName(filter.get("operator"), NUMERIC_OPERATORS,
-                                    sizeof(NUMERIC_OPERATORS) / sizeof(NUMERIC_OPERATORS[0]), "==");
-    const json::Value *value = filter.get("value");
-    const std::string subject = enumName(filter.get("subject"), NUMERIC_SUBJECTS,
-                                         sizeof(NUMERIC_SUBJECTS) / sizeof(NUMERIC_SUBJECTS[0]), "self");
+    const std::string &test = textOf(*testValue);
+    const std::string &op = enumName(operatorValue, NUMERIC_OPERATORS,
+                                     sizeof(NUMERIC_OPERATORS) / sizeof(NUMERIC_OPERATORS[0]), NUMERIC_OPERATORS[0]);
+    const std::string &subject = enumName(subjectValue, NUMERIC_SUBJECTS,
+                                          sizeof(NUMERIC_SUBJECTS) / sizeof(NUMERIC_SUBJECTS[0]), NUMERIC_SUBJECTS[0]);
     const Actor *target = &self;
     if (subject == "other" || subject == "damager" || subject == "player")
         target = other;
