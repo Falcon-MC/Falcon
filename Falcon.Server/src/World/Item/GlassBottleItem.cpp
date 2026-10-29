@@ -32,6 +32,7 @@ bool GlassBottleItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pl
 
     const Vector3f center((float) blockPosition.x + 0.5f, (float) blockPosition.y + 0.5f,
                           (float) blockPosition.z + 0.5f);
+    BucketItem::sendArmSwing(owner, player, blockPosition);
     owner.playLevelSound(level, FILL_SOUND, center);
     return BucketItem::applyResult(owner, player, item, WATER_BOTTLE);
 }
