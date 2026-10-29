@@ -206,6 +206,9 @@ public:
 
     size_t processChunkUnloads();
 
+    // Hands a bounded number of the chunks queued by a background save to the workers.
+    void processDeferredSaves();
+
     // Returns freed heap pages to the system; the heap is process-wide, so one call covers every level.
     static void releaseFreedHeap();
 
@@ -411,6 +414,8 @@ private:
     std::unordered_set<int64_t> mPendingChunks;
     std::unordered_set<int64_t> mActiveColumns;
     std::deque<ChunkLoadResult> mCompletedChunks;
+    static constexpr size_t MAX_DEFERRED_SAVES_PER_TICK = 64;
+    std::deque<int64_t> mDeferredSaves;
     std::unordered_set<int64_t> mRepopulatedChunks;
     std::unordered_map<int64_t, std::unordered_set<uint64_t>> mChunkLoaders;
     std::unordered_set<int64_t> mUnloadQueue;

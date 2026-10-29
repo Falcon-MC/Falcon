@@ -74,6 +74,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mPendingChunks = std::move(other.mPendingChunks);
     mActiveColumns = std::move(other.mActiveColumns);
     mCompletedChunks = std::move(other.mCompletedChunks);
+    mDeferredSaves = std::move(other.mDeferredSaves);
     mRepopulatedChunks = std::move(other.mRepopulatedChunks);
     mIncomingChanges = std::move(other.mIncomingChanges);
     mPendingBlockChanges = std::move(other.mPendingBlockChanges);
@@ -176,10 +177,22 @@ void Level::saveAll(bool wait) {
     }
 
     size_t saved = 0;
+    // A full save covers everything a background save still has queued.
+    if (wait || !async)
+        mDeferredSaves.clear();
+
     for (auto &entry: mChunks) {
         if (!entry.second.isDirty() && (mChunkWorker == nullptr ||
                 !mChunkWorker->hasFailedSave(entry.second.getX(), entry.second.getZ())))
             continue;
+
+        // Copying every dirty chunk at once stalls the tick for seconds after a burst of
+        // generation, so a background save only queues them and processDeferredSaves() copies
+        // a few per tick.
+        if (async && !wait) {
+            mDeferredSaves.push_back(entry.first);
+            continue;
+        }
 
         if (async) {
             // The worker gets its own copy: resident chunks belong to the main thread and
@@ -726,6 +739,24 @@ void Level::_sweepOrphanChunks() {
 
 void Level::setOccupiedColumns(std::unordered_set<int64_t> columns) {
     mOccupiedColumns = std::move(columns);
+}
+
+void Level::processDeferredSaves() {
+    for (size_t handled = 0; handled < MAX_DEFERRED_SAVES_PER_TICK && !mDeferredSaves.empty(); ++handled) {
+        const int64_t key = mDeferredSaves.front();
+        mDeferredSaves.pop_front();
+
+        auto chunk = mChunks.find(key);
+        if (chunk == mChunks.end() || mChunkWorker == nullptr || !mChunkWorker->isRunning())
+            continue;
+        if (!chunk->second.isDirty() && !mChunkWorker->hasFailedSave(chunk->second.getX(), chunk->second.getZ()))
+            continue;
+
+        std::unique_ptr<LevelChunk> copy(new LevelChunk(chunk->second));
+        copy->invalidateNetworkCaches();
+        mChunkWorker->requestSave(std::move(copy));
+        chunk->second.clearDirty();
+    }
 }
 
 size_t Level::processChunkUnloads() {

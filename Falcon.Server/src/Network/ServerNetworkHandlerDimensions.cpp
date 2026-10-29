@@ -200,6 +200,7 @@ void ServerNetworkHandler::_processChunkUnloads(Level &level) {
         occupy(*item);
 
     level.setOccupiedColumns(std::move(occupied));
+    level.processDeferredSaves();
     level.processChunkUnloads();
 }
 
