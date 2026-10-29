@@ -18,5 +18,9 @@ public:
         return true;
     }
 
+    bool intrusiveDepositReplacesDeepslate() const override {
+        return true;
+    }
+
     const char *name() const override;
 };

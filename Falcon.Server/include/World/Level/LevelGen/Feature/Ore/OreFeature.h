@@ -32,6 +32,8 @@ public:
 
     virtual bool isIntrusiveDeposit() const;
 
+    virtual bool intrusiveDepositReplacesDeepslate() const;
+
     virtual const char *getExcludingBiomeTag() const;
 
     virtual bool canBeReplaced(const BlockState &state) const;

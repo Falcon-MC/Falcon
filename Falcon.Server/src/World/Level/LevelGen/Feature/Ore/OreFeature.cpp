@@ -116,6 +116,10 @@ bool OreFeature::isIntrusiveDeposit() const {
     return false;
 }
 
+bool OreFeature::intrusiveDepositReplacesDeepslate() const {
+    return false;
+}
+
 const char *OreFeature::getExcludingBiomeTag() const {
     return nullptr;
 }
@@ -230,7 +234,13 @@ bool OreFeature::_isHostBlock(const BlockState &state) {
 }
 
 bool OreFeature::_canReplace(const BlockState &state) const {
-    return canBeReplaced(state) || (mReplacesHostBlocks && _isHostBlock(state));
+    // Intrusive deposits use their own replace rules, which do not include netherrack and only include
+    // deepslate for gravel.
+    if (mReplacesHostBlocks)
+        return state == stoneState() || _isHostBlock(state)
+               || (intrusiveDepositReplacesDeepslate() && state == deepslateState());
+
+    return canBeReplaced(state);
 }
 
 void OreFeature::_spawnShape(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z,

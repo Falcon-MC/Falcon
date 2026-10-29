@@ -4,6 +4,7 @@
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/FeatureNoiseHolder.h"
+#include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/LevelGen/Noise/SimplexNoise.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Random/IRandom.h"
@@ -105,7 +106,7 @@ namespace IceCavesSupport {
         const int32_t range = max - min;
         const int32_t lower = range / 2;
         const int32_t upper = range - lower;
-        return min + random.nextBoundedInt(upper) + random.nextBoundedInt(lower);
+        return min + IFeature::randomRange(random, 0, upper) + IFeature::randomRange(random, 0, lower);
     }
 
     bool findFloor(BlockManager &manager, int32_t x, int32_t y, int32_t z, int32_t range, int32_t &floorY) {
