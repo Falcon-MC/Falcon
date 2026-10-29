@@ -429,7 +429,7 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
 
     // A synchronous read must not overtake an older pending-change write. Normal
     // streaming retries instead of waiting on the tick thread.
-    if (mPendingChangeWrite.valid() && mPersistingChangeKey == key)
+    if (mPendingChangeWrite.valid() && mPersistingChangeKeys.count(key) != 0)
         _finishPendingChangeWrite(true);
 
     LevelChunk chunk(chunkX, chunkZ);
@@ -615,15 +615,23 @@ void Level::_finishPendingChangeWrite(bool wait) {
 
     auto failed = mPendingChangeWrite.get();
     mPersistingChangeCount = 0;
+    mPersistingChangeKeys.clear();
     if (failed.empty())
         return;
 
     // Failed writes retain their payload. Older changes must precede changes received
     // while the write was running, so a retry still keeps the newest state per position.
     mPendingBlockChangeCount += failed.size();
-    auto &newer = mPendingBlockChanges[mPersistingChangeKey];
-    failed.insert(failed.end(), std::make_move_iterator(newer.begin()), std::make_move_iterator(newer.end()));
-    newer = std::move(failed);
+    std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> older;
+    for (GeneratedBlockChange &change: failed)
+        older[_packChunk(change.mX >> 4, change.mZ >> 4)].push_back(std::move(change));
+
+    for (auto &entry: older) {
+        auto &newer = mPendingBlockChanges[entry.first];
+        entry.second.insert(entry.second.end(), std::make_move_iterator(newer.begin()),
+                            std::make_move_iterator(newer.end()));
+        newer = std::move(entry.second);
+    }
 }
 
 void Level::_flushPendingBlockChanges(bool includeInFlight) {
@@ -640,12 +648,24 @@ void Level::_flushPendingBlockChanges(bool includeInFlight) {
         }
 
         if (!includeInFlight && mChunkWorker != nullptr && mChunkWorker->isRunning()) {
-            mPersistingChangeKey = it->first;
-            mPersistingChangeCount = it->second.size();
+            const int64_t first = it->first;
+            std::vector<GeneratedBlockChange> batch;
+            while (it != mPendingBlockChanges.end() && mPersistingChangeKeys.size() < MAX_PERSIST_BATCH_CHUNKS) {
+                if (mPendingChunks.find(it->first) != mPendingChunks.end()) {
+                    ++it;
+                    continue;
+                }
+
+                mPersistingChangeKeys.insert(it->first);
+                batch.insert(batch.end(), std::make_move_iterator(it->second.begin()),
+                             std::make_move_iterator(it->second.end()));
+                it = mPendingBlockChanges.erase(it);
+            }
+
+            mPersistingChangeCount = batch.size();
             mPendingBlockChangeCount -= mPersistingChangeCount;
-            mPendingChangeWrite = mChunkWorker->requestPersistChanges(
-                    (int32_t) (it->first >> 32), (int32_t) (it->first & 0xffffffff), std::move(it->second));
-            mPendingBlockChanges.erase(it);
+            mPendingChangeWrite = mChunkWorker->requestPersistChanges((int32_t) (first >> 32),
+                                                                      (int32_t) (first & 0xffffffff), std::move(batch));
             return;
         }
 
@@ -927,7 +947,7 @@ bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
     _finishPendingChangeWrite(false);
     if (_generationBacklog() >= MAX_GENERATION_BACKLOG || mCompletedChunks.size() >= MAX_COMPLETED_BACKLOG
         || mChunkWorker->getOutstandingGenerationCount() >= ChunkWorker::MAX_OUTSTANDING_GENERATION
-        || (mPendingChangeWrite.valid() && mPersistingChangeKey == key))
+        || (mPendingChangeWrite.valid() && mPersistingChangeKeys.count(key) != 0))
         return false;
 
     if (!mPendingChunks.insert(key).second)

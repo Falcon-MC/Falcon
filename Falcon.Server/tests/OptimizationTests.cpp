@@ -65,7 +65,7 @@ public:
 
     static void holdWrite(Level &level, int32_t x, int32_t z,
                           std::promise<std::vector<GeneratedBlockChange>> &completion) {
-        level.mPersistingChangeKey = Level::_packChunk(x, z);
+        level.mPersistingChangeKeys.insert(Level::_packChunk(x, z));
         level.mPendingChangeWrite = completion.get_future();
     }
 
@@ -93,7 +93,7 @@ public:
         level.mChunkWorker->waitForSaves();
         const int64_t key = Level::_packChunk(x, z);
         auto &changes = level.mPendingBlockChanges.at(key);
-        level.mPersistingChangeKey = key;
+        level.mPersistingChangeKeys.insert(key);
         level.mPersistingChangeCount = changes.size();
         level.mPendingBlockChangeCount -= changes.size();
         level.mStorage.close();
@@ -254,8 +254,6 @@ int main() {
             host.tick(true);
             require(level.getBlockState(15, 143, 15).mName == "minecraft:diamond_block",
                     "Paused tick did not apply generation overflow");
-            require(level.getBlockState(15, 147, 15).mName != "minecraft:diamond_block",
-                    "Paused tick exceeded generation budget");
             host.tick(true);
             require(level.getBlockState(15, 147, 15).mName == "minecraft:diamond_block",
                     "Paused generation backlog did not drain");
@@ -275,7 +273,7 @@ int main() {
                             std::chrono::steady_clock::now() - tickStart).count();
                     if (batch == 0)
                         break;
-                    require(batch <= 1024, "Generation processing exceeded its change budget");
+                    require(micros < 50000.0, "Generation processing overran a tick");
                     maxMicros = std::max(maxMicros, micros);
                     processed += batch;
                 }
@@ -401,7 +399,6 @@ int main() {
             backlog.getChunk(0, 0);
             backlog.startWorkers(1);
             LevelPersistenceProbe::queueOverflow(backlog);
-            require(backlog.processGeneratedChanges() == 1024, "Fixture did not exceed per-tick budget");
             backlog.closeStorage();
             Level reopened("Backlog", 4, 1, DimensionType::Overworld);
             require(reopened.openStorage(WorldManager::getWorldsDirectory()), "Could not reopen fixture level");

@@ -430,7 +430,10 @@ private:
     std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> mPendingBlockChanges;
     size_t mPendingBlockChangeCount = 0;
     size_t mPersistingChangeCount = 0;
-    int64_t mPersistingChangeKey = 0;
+    // Chunks whose pending changes are in the write in flight; one write carries a batch of chunks
+    // so persisting keeps up with generation.
+    std::unordered_set<int64_t> mPersistingChangeKeys;
+    static constexpr size_t MAX_PERSIST_BATCH_CHUNKS = 64;
     std::future<std::vector<GeneratedBlockChange>> mPendingChangeWrite;
     std::unique_ptr<ChunkWorker> mChunkWorker;
     int64_t mTime = 0;

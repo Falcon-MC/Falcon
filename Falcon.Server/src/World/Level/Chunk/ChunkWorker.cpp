@@ -307,15 +307,29 @@ void ChunkWorker::_processSave(ChunkTask &task) {
 }
 
 void ChunkWorker::_processPersistChanges(ChunkTask &task) {
-    bool saved = false;
-    try {
-        saved = mStorage.mergePendingBlockChanges(task.mX, task.mZ, task.mChanges);
-    } catch (...) {
-        saved = false;
+    // A task carries the changes of several chunks; each chunk is merged separately and only the
+    // chunks that fail to save are handed back.
+    std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> byChunk;
+    for (GeneratedBlockChange &change: task.mChanges) {
+        const int64_t key = ((int64_t) (change.mX >> 4) << 32) | (uint32_t) (change.mZ >> 4);
+        byChunk[key].push_back(std::move(change));
     }
-    if (saved)
-        std::vector<GeneratedBlockChange>().swap(task.mChanges);
-    task.mChangesResult->set_value(std::move(task.mChanges));
+
+    std::vector<GeneratedBlockChange> failed;
+    for (auto &entry: byChunk) {
+        bool saved = false;
+        try {
+            saved = mStorage.mergePendingBlockChanges((int32_t) (entry.first >> 32),
+                                                      (int32_t) (entry.first & 0xffffffff), entry.second);
+        } catch (...) {
+            saved = false;
+        }
+        if (!saved)
+            failed.insert(failed.end(), std::make_move_iterator(entry.second.begin()),
+                          std::make_move_iterator(entry.second.end()));
+    }
+
+    task.mChangesResult->set_value(std::move(failed));
     task.mChangesResult.reset();
 }
 
