@@ -12,5 +12,9 @@ public:
 
     bool isRare() const override;
 
+    bool isHostedOre() const override {
+        return true;
+    }
+
     const char *name() const override;
 };

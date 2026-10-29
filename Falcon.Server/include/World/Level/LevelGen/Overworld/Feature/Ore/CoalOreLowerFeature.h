@@ -14,5 +14,9 @@ public:
 
     float getSkipAir() const override;
 
+    bool isHostedOre() const override {
+        return true;
+    }
+
     const char *name() const override;
 };

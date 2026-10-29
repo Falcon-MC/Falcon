@@ -23,6 +23,8 @@ OverworldBiomeResult &OverworldBiomeResult::correct(int32_t y) {
                 mBiomeId = BiomeIds::DRIPSTONE_CAVES;
             } else if (mTemperature > 0.55f && mHumidity < -0.1f) {
                 mBiomeId = BiomeIds::SULFUR_CAVES;
+            } else if (mTemperature < -0.45f) {
+                mBiomeId = BiomeIds::ICE_CAVES;
             } else if (mHumidity > 0.3f) {
                 mBiomeId = BiomeIds::LUSH_CAVES;
             }

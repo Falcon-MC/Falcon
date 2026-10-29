@@ -14,5 +14,13 @@ public:
 
     int32_t getMaxHeight() const override;
 
+    bool isIntrusiveDeposit() const override {
+        return true;
+    }
+
+    const char *getExcludingBiomeTag() const override {
+        return "no_dirt";
+    }
+
     const char *name() const override;
 };

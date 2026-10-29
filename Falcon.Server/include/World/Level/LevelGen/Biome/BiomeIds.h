@@ -60,5 +60,6 @@ namespace BiomeIds {
     static constexpr int32_t CHERRY_GROVE = 192;
     static constexpr int32_t PALE_GARDEN = 193;
     static constexpr int32_t SULFUR_CAVES = 194;
+    static constexpr int32_t ICE_CAVES = 196;
 
 }
