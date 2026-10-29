@@ -23,8 +23,7 @@ namespace {
             {"minecraft:egg",                "minecraft:egg",                   1.5f, 0},
             {"minecraft:ender_pearl",        "minecraft:ender_pearl",           1.5f, 20},
             {"minecraft:experience_bottle",  "minecraft:xp_bottle",             1.0f, 0},
-            {"minecraft:wind_charge",        "minecraft:wind_charge_projectile", 1.5f, 10},
-            {"minecraft:ender_eye",          "minecraft:eye_of_ender_signal",   1.2f, 0}
+            {"minecraft:wind_charge",        "minecraft:wind_charge_projectile", 1.5f, 10}
     };
 
     const ThrowableDefinition *findThrowable(const std::string &identifier) {
