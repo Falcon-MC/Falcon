@@ -16,6 +16,7 @@
 #include "World/Level/GameRules.h"
 #include "World/Level/Storage/LevelStorage.h"
 
+#include <chrono>
 #include <cstdint>
 #include <deque>
 #include <functional>
@@ -396,7 +397,9 @@ private:
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 32;
     // Drained results waiting for insertion; new requests wait while this many are queued.
     static const size_t MAX_COMPLETED_BACKLOG = 64;
-    static const size_t MAX_GENERATED_CHANGES_PER_TICK = 1024;
+    static const size_t GENERATED_CHANGES_BATCH = 1024;
+    // Generation admission waits on this queue, so the main thread drains it for as long as this budget allows.
+    static constexpr std::chrono::milliseconds GENERATED_CHANGES_BUDGET{8};
     // Admission high-water mark; the finite set of already accepted results may overshoot it.
     static constexpr size_t MAX_GENERATION_BACKLOG = 65536;
 

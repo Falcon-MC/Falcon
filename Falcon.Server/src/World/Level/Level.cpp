@@ -571,17 +571,25 @@ size_t Level::processGeneratedChanges() {
     if (mIncomingChanges.empty())
         return 0;
 
-    // Pop only the budgeted prefix so a large backlog does not add work to every tick.
-    const size_t count = std::min(mIncomingChanges.size(), (size_t) MAX_GENERATED_CHANGES_PER_TICK);
+    // Batches are applied until the time budget is spent, always at least one, so a large backlog
+    // uses the tick's spare time without stretching a busy tick by more than one batch.
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + GENERATED_CHANGES_BUDGET;
     std::vector<GeneratedBlockChange> batch;
-    batch.reserve(count);
-    for (size_t i = 0; i < count; ++i) {
-        batch.push_back(std::move(mIncomingChanges.front()));
-        mIncomingChanges.pop_front();
-    }
+    size_t applied = 0;
+    do {
+        const size_t count = std::min(mIncomingChanges.size(), GENERATED_CHANGES_BATCH);
+        batch.clear();
+        batch.reserve(count);
+        for (size_t i = 0; i < count; ++i) {
+            batch.push_back(std::move(mIncomingChanges.front()));
+            mIncomingChanges.pop_front();
+        }
 
-    _applyGeneratedChanges(batch);
-    return batch.size();
+        _applyGeneratedChanges(batch);
+        applied += count;
+    } while (!mIncomingChanges.empty() && std::chrono::steady_clock::now() < deadline);
+
+    return applied;
 }
 
 void Level::_finishPendingChangeWrite(bool wait) {
