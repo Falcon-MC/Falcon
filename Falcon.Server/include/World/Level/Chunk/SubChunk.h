@@ -61,12 +61,12 @@ private:
     static int _bitsPerBlock(size_t paletteSize);
 
     void _writeStorage(BinaryStream &stream, bool persistent,
-                       const std::vector<BlockState> &palette,
+                       const std::vector<const BlockState *> &palette,
                        const PaletteIndices &blocks, const BlockNetworkIdMap *blockIds) const;
 
     void _writeEmptyStorage(BinaryStream &stream, bool persistent, const BlockNetworkIdMap *blockIds) const;
 
-    bool _readStorage(ReadOnlyBinaryStream &stream, std::vector<BlockState> &palette,
+    bool _readStorage(ReadOnlyBinaryStream &stream, std::vector<const BlockState *> &palette,
                       PaletteIndices &blocks, bool *replacedUnknown);
 
     void _ensureLayer1();
@@ -78,9 +78,10 @@ private:
     uint16_t _biomePaletteIndexFor(uint32_t biomeId);
 
     int8_t mY;
-    std::vector<BlockState> mPalette;
+    // Entries point at interned states shared by every sub-chunk, so a palette entry costs a pointer.
+    std::vector<const BlockState *> mPalette;
     PaletteIndices mBlocks;
-    std::vector<BlockState> mPalette2;
+    std::vector<const BlockState *> mPalette2;
     PaletteIndices mBlocks2;
     std::vector<uint32_t> mBiomePalette;
     PaletteIndices mBiomes;

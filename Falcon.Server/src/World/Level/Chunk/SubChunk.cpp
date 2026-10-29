@@ -8,8 +8,40 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Core/NBT/NbtIo.h"
 
+#include <mutex>
+#include <unordered_set>
+
+namespace {
+    struct InternedStateHash {
+        size_t operator()(const BlockState &state) const {
+            return (size_t) (uint32_t) state.getHash();
+        }
+    };
+
+    // States are shared across chunk worker threads, so their lazily cached fields are filled before
+    // the state is published.
+    const BlockState *internState(const BlockState &state) {
+        static std::mutex mutex;
+        static std::unordered_set<BlockState, InternedStateHash> states;
+
+        std::lock_guard<std::mutex> lock(mutex);
+        auto found = states.find(state);
+        if (found == states.end()) {
+            found = states.insert(state).first;
+            found->getHash();
+            BlockLightProperties::packed(*found);
+        }
+        return &*found;
+    }
+
+    const BlockState *airState() {
+        static const BlockState *air = internState(BlockState("minecraft:air"));
+        return air;
+    }
+}
+
 SubChunk::SubChunk(int8_t y) : mY(y) {
-    mPalette.push_back(BlockState("minecraft:air"));
+    mPalette.push_back(airState());
     mBiomePalette.push_back(1);
 }
 
@@ -162,9 +194,9 @@ int SubChunk::_bitsPerBlock(size_t paletteSize) {
 
 const BlockState &SubChunk::getBlock(int x, int y, int z) const {
     if (mBlocks.empty())
-        return mPalette[0];
+        return *mPalette[0];
 
-    return mPalette[mBlocks[_index(x, y, z)]];
+    return *mPalette[mBlocks[_index(x, y, z)]];
 }
 
 const BlockState &SubChunk::getBlock(int x, int y, int z, int layer) const {
@@ -178,26 +210,26 @@ const BlockState &SubChunk::getBlock(int x, int y, int z, int layer) const {
     if (mBlocks2.empty())
         return air;
 
-    return mPalette2[mBlocks2[_index(x, y, z)]];
+    return *mPalette2[mBlocks2[_index(x, y, z)]];
 }
 
 uint16_t SubChunk::_paletteIndexFor(const BlockState &state) {
     for (size_t i = 0; i < mPalette.size(); i++) {
-        if (mPalette[i] == state)
+        if (mPalette[i] == &state || *mPalette[i] == state)
             return (uint16_t) i;
     }
 
-    mPalette.push_back(state);
+    mPalette.push_back(internState(state));
     return (uint16_t) (mPalette.size() - 1);
 }
 
 uint16_t SubChunk::_paletteIndexForLayer1(const BlockState &state) {
     for (size_t i = 0; i < mPalette2.size(); i++) {
-        if (mPalette2[i] == state)
+        if (mPalette2[i] == &state || *mPalette2[i] == state)
             return (uint16_t) i;
     }
 
-    mPalette2.push_back(state);
+    mPalette2.push_back(internState(state));
     return (uint16_t) (mPalette2.size() - 1);
 }
 
@@ -205,7 +237,7 @@ void SubChunk::setBlock(int x, int y, int z, const BlockState &state) {
     // Layer 0 indices are only allocated once the section holds a second state: most
     // sections above the terrain stay uniform air and cost no 8 KB index array.
     if (mBlocks.empty()) {
-        if (mPalette[0] == state)
+        if (mPalette[0] == &state || *mPalette[0] == state)
             return;
 
         mBlocks.assign(BLOCK_COUNT, 0);
@@ -218,7 +250,7 @@ void SubChunk::_ensureLayer1() {
     if (!mBlocks2.empty())
         return;
 
-    mPalette2.push_back(BlockState("minecraft:air"));
+    mPalette2.push_back(airState());
     mBlocks2.assign(BLOCK_COUNT, 0);
 }
 
@@ -233,15 +265,15 @@ void SubChunk::setBlock(int x, int y, int z, int layer, const BlockState &state)
 }
 
 bool SubChunk::isEmpty() const {
-    if (mPalette.size() != 1 || mPalette[0].mName != "minecraft:air")
+    if (mPalette.size() != 1 || mPalette[0]->mName != "minecraft:air")
         return false;
 
     return isLayerEmpty(1);
 }
 
 bool SubChunk::hasDynamicShapes() const {
-    for (const BlockState &state: mPalette) {
-        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+    for (const BlockState *state: mPalette) {
+        const Block *block = VanillaBlocks::fromIdentifier(state->mName);
         if (block != nullptr && block->hasDynamicShape())
             return true;
     }
@@ -249,8 +281,8 @@ bool SubChunk::hasDynamicShapes() const {
 }
 
 bool SubChunk::hasLightEmitter() const {
-    for (const BlockState &state: mPalette) {
-        if (BlockLightProperties::lightLevel(BlockLightProperties::packed(state)) > 0)
+    for (const BlockState *state: mPalette) {
+        if (BlockLightProperties::lightLevel(BlockLightProperties::packed(*state)) > 0)
             return true;
     }
 
@@ -262,14 +294,14 @@ bool SubChunk::isLayerEmpty(int layer) const {
         if (mPalette.size() != 1)
             return false;
 
-        return mPalette[0].mName == "minecraft:air";
+        return mPalette[0]->mName == "minecraft:air";
     }
 
     if (mBlocks2.empty())
         return true;
 
     for (int i = 0; i < BLOCK_COUNT; i++) {
-        if (mPalette2[mBlocks2[i]].mName != "minecraft:air")
+        if (mPalette2[mBlocks2[i]]->mName != "minecraft:air")
             return false;
     }
 
@@ -277,7 +309,7 @@ bool SubChunk::isLayerEmpty(int layer) const {
 }
 
 void SubChunk::_writeStorage(BinaryStream &stream, bool persistent,
-                            const std::vector<BlockState> &palette,
+                            const std::vector<const BlockState *> &palette,
                             const PaletteIndices &blocks, const BlockNetworkIdMap *blockIds) const {
     const int bitsPerBlock = _bitsPerBlock(palette.size());
     const int blocksPerWord = 32 / bitsPerBlock;
@@ -297,14 +329,14 @@ void SubChunk::_writeStorage(BinaryStream &stream, bool persistent,
 
     if (persistent) {
         stream.putLInt((uint32_t) palette.size());
-        for (const BlockState &state: palette)
-            NbtIo::writeTag(stream, state.toNbt(), NbtVariant::LittleEndian);
+        for (const BlockState *state: palette)
+            NbtIo::writeTag(stream, state->toNbt(), NbtVariant::LittleEndian);
         return;
     }
 
     stream.putVarInt((int32_t) palette.size());
-    for (const BlockState &state: palette)
-        stream.putVarInt(blockIds == nullptr ? state.getHash() : blockIds->toClient(state.getHash()));
+    for (const BlockState *state: palette)
+        stream.putVarInt(blockIds == nullptr ? state->getHash() : blockIds->toClient(state->getHash()));
 }
 
 void SubChunk::writeNetwork(BinaryStream &stream, const BlockNetworkIdMap *blockIds) const {
@@ -351,7 +383,7 @@ void SubChunk::writePersistent(BinaryStream &stream) const {
         _writeStorage(stream, true, mPalette2, mBlocks2, nullptr);
 }
 
-bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<BlockState> &palette,
+bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<const BlockState *> &palette,
                            PaletteIndices &blocks, bool *replacedUnknown) {
     const unsigned char header = stream.getByte();
     const int bitsPerBlock = header >> 1;
@@ -400,13 +432,13 @@ bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<BlockState
         if (VanillaBlocks::fromIdentifier(name) == nullptr &&
             !CustomContentRegistry::getInstance().isCustomBlock(name)) {
             LOG_WARN(LogAreaID::Level, "Replaced unknown block %s with air while loading chunk data", name.c_str());
-            palette.push_back(BlockState("minecraft:air"));
+            palette.push_back(airState());
             if (replacedUnknown != nullptr)
                 *replacedUnknown = true;
             continue;
         }
 
-        palette.push_back(states == nullptr ? BlockState(name) : BlockState(name, *states));
+        palette.push_back(internState(states == nullptr ? BlockState(name) : BlockState(name, *states)));
     }
 
     for (int i = 0; i < BLOCK_COUNT; i++) {
@@ -437,14 +469,14 @@ bool SubChunk::readPersistent(ReadOnlyBinaryStream &stream, bool *replacedUnknow
     mBlocks2.clear();
 
     if (layers >= 2) {
-        std::vector<BlockState> palette;
+        std::vector<const BlockState *> palette;
         PaletteIndices blocks;
         if (!_readStorage(stream, palette, blocks, replacedUnknown))
             return false;
 
         bool hasContent = false;
         for (int i = 0; i < BLOCK_COUNT; i++) {
-            if (palette[blocks[i]].mName != "minecraft:air") {
+            if (palette[blocks[i]]->mName != "minecraft:air") {
                 hasContent = true;
                 break;
             }
