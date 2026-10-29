@@ -294,6 +294,7 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
         }
     }
 
+    chunk->compactBiomes();
     LightSystem::computeSkyLight(*chunk);
     LightSystem::computeBlockLight(*chunk);
 

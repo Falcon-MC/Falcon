@@ -120,6 +120,20 @@ void SubChunk::writeBiomes(BinaryStream &stream, bool persistent) const {
         stream.putVarInt((int32_t) biomeId);
 }
 
+void SubChunk::compactBiomes() {
+    if (mBiomes.empty())
+        return;
+
+    const uint16_t first = mBiomes[0];
+    for (int i = 1; i < BLOCK_COUNT; i++) {
+        if (mBiomes[i] != first)
+            return;
+    }
+
+    mBiomePalette.assign(1, mBiomePalette[first]);
+    mBiomes.clear();
+}
+
 bool SubChunk::readBiomes(ReadOnlyBinaryStream &stream) {
     const unsigned char header = stream.getByte();
     const int bitsPerBlock = header >> 1;
@@ -166,6 +180,7 @@ bool SubChunk::readBiomes(ReadOnlyBinaryStream &stream) {
             mBiomes.set(i, 0);
     }
 
+    compactBiomes();
     return true;
 }
 

@@ -104,6 +104,11 @@ void LevelChunk::compactLight() {
     mBlockLight.compact();
 }
 
+void LevelChunk::compactBiomes() {
+    for (SubChunk &subChunk: mSubChunks)
+        subChunk.compactBiomes();
+}
+
 const BlockState &LevelChunk::getBlock(int x, int32_t y, int z) const {
     static const BlockState air;
 

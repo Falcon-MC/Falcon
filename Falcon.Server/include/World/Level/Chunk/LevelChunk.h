@@ -121,6 +121,8 @@ public:
     void clearSkyLight();
 
     void compactLight();
+
+    void compactBiomes();
     void setDimension(DimensionType dimension);
 
     DimensionType getDimension() const { return mDimension; }

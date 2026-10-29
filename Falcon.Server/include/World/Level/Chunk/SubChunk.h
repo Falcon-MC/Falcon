@@ -42,6 +42,9 @@ public:
 
     void setBiome(int x, int y, int z, uint32_t biomeId);
 
+    // Drops the index array of a section that ended up holding a single biome, which is most of them.
+    void compactBiomes();
+
     void writeBiomes(BinaryStream &stream, bool persistent) const;
 
     bool readBiomes(ReadOnlyBinaryStream &stream);
