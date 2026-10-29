@@ -30,6 +30,8 @@ public:
     static bool applyResult(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &heldItem,
                             const char *resultIdentifier);
 
+    static void sendArmSwing(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
+
 private:
     static bool isReplaceable(const BlockState &state);
 
@@ -47,6 +49,4 @@ private:
     static bool isWaterloggable(Level &level, const Vector3i &position);
 
     static void sendSound(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const char *sound);
-
-    static void sendArmSwing(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 };
