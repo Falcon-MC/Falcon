@@ -94,7 +94,7 @@ namespace {
 
     std::vector<BiomeFeatureEntry> iceCavesFeatures() {
         return {
-                featureEntry("minecraft:ice_caves_surface_feature_rules", "minecraft:ice_caves_surface_feature"),
+                featureEntry("falcon:ice_caves_surface_feature_rules", "falcon:ice_caves_surface_feature"),
                 featureEntry("minecraft:ice_caves_after_surface_ice_crystal_feature_rules",
                              "minecraft:ice_crystal_scatter_feature"),
                 featureEntry("minecraft:ice_caves_after_surface_icicle_feature_rules",

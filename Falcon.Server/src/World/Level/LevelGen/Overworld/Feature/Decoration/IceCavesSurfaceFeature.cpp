@@ -23,7 +23,7 @@ namespace {
 }
 
 const char *IceCavesSurfaceFeature::name() const {
-    return "minecraft:ice_caves_surface_feature";
+    return "falcon:ice_caves_surface_feature";
 }
 
 void IceCavesSurfaceFeature::apply(ChunkGenerateContext &context) {
