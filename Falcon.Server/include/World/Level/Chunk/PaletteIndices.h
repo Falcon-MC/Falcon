@@ -8,21 +8,31 @@
  * Per-position palette indices of one sub-chunk storage, bit-packed into 32-bit words like the
  * Bedrock storage format. Entry widths are limited to 1, 2, 4, 8 and 16 bits so a lookup is two
  * shifts and a mask; the width grows on the first index that does not fit. These arrays are the
- * largest allocation of a loaded chunk, so packing them sets most of the server's memory use.
+ * largest allocation of a loaded chunk, so packing them sets most of the server's memory use. A
+ * storage whose indices are all zero, such as a single-biome section, keeps no words at all.
  */
 class PaletteIndices {
 public:
     bool empty() const {
-        return mWords.empty();
+        return mCount == 0;
     }
 
     uint16_t operator[](size_t index) const {
+        if (mWords.empty())
+            return 0;
+
         const uint32_t word = mWords[index >> (5 - mWidthLog2)];
         const uint32_t shift = (uint32_t) (index & ((1u << (5 - mWidthLog2)) - 1u)) << mWidthLog2;
         return (uint16_t) ((word >> shift) & _mask(mWidthLog2));
     }
 
     void set(size_t index, uint16_t value) {
+        if (mWords.empty()) {
+            if (value == 0)
+                return;
+
+            mWords.assign(_wordCount(mCount, mWidthLog2), 0);
+        }
         if (value > _mask(mWidthLog2))
             _widen(_widthFor(value));
 
@@ -35,6 +45,8 @@ public:
         clear();
         mCount = count;
         mWidthLog2 = _widthFor(value);
+        if (value == 0)
+            return;
 
         uint32_t word = 0;
         for (uint32_t slot = 0; slot < (1u << (5 - mWidthLog2)); ++slot)
