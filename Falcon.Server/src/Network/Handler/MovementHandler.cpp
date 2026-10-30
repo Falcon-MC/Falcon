@@ -332,7 +332,7 @@ bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkId
     const bool mayFly = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator;
 
     if (flying && !mayFly) {
-        owner._disconnect(id, player.localize("falcon.disconnect.flyingDisabled"));
+        owner._disconnect(id, DisconnectReason::Kicked, player.localize("falcon.disconnect.flyingDisabled"));
         return false;
     }
 

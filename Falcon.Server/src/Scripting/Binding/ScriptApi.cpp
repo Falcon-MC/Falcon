@@ -580,7 +580,7 @@ namespace {
             return JS_ThrowTypeError(ctx, "Player is not valid");
 
         const std::string reason = argc >= 1 ? toStdString(ctx, argv[0]) : "Kicked";
-        api->host()._disconnect(player->getNetworkIdentifier(), reason);
+        api->host()._disconnect(player->getNetworkIdentifier(), DisconnectReason::Kicked, reason);
         return JS_UNDEFINED;
     }
 

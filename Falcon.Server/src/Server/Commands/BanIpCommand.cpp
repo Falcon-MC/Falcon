@@ -61,8 +61,9 @@ bool BanIpCommand::execute(CommandOrigin &sender, const std::vector<std::string>
 
         ServerPlayer &player = entry.second;
         kicked.push_back(player.getName());
-        mHandler._disconnect(entry.first, reason.empty() ? player.localize("falcon.disconnect.banned")
-                                                         : player.localize("falcon.disconnect.bannedReason", {reason}));
+        mHandler._disconnect(entry.first, DisconnectReason::Kicked,
+                             reason.empty() ? player.localize("falcon.disconnect.banned")
+                                            : player.localize("falcon.disconnect.bannedReason", {reason}));
     }
 
     if (kicked.empty()) {

@@ -630,7 +630,7 @@ void ServerNetworkHandler::stopServerListening() {
                 if (!player.getName().empty()) _savePlayerData(player, true);
             });
             finish([this, &entry, &player]() {
-                _disconnect(entry.first, player.localize("falcon.disconnect.disconnected"));
+                _disconnect(entry.first, DisconnectReason::Shutdown, player.localize("falcon.disconnect.disconnected"));
             });
         }
 
@@ -833,7 +833,7 @@ void ServerNetworkHandler::tick(bool paused) {
             timedOut.emplace_back(entry.first, entry.second.localize("falcon.disconnect.timedOut"));
     }
     for (const auto &entry: timedOut)
-        _disconnect(entry.first, entry.second);
+        _disconnect(entry.first, DisconnectReason::Timeout, entry.second);
 
     uint32_t loadedChunks = 0;
     uint32_t pendingChunkTasks = 0;
@@ -1070,14 +1070,14 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
         // Any decode or handler failure ends that connection instead of propagating: a
         // malformed packet must never take the server down.
         LOG_WARN(LogAreaID::Network, "Malformed packet from %s: %s", id.getAddress().c_str(), exception.what());
-        _disconnect(id, "disconnectionScreen.unexpectedPacket");
+        _disconnect(id, DisconnectReason::BadPacket, "disconnectionScreen.unexpectedPacket");
     } catch (const std::exception &exception) {
         LOG_ERROR(LogAreaID::Network, "Unhandled exception while processing a packet from %s: %s",
                   id.getAddress().c_str(), exception.what());
-        _disconnect(id, "disconnectionScreen.internalError.cantConnect");
+        _disconnect(id, DisconnectReason::Unknown, "disconnectionScreen.internalError.cantConnect");
     } catch (...) {
         LOG_ERROR(LogAreaID::Network, "Unknown exception while processing a packet from %s", id.getAddress().c_str());
-        _disconnect(id, "disconnectionScreen.internalError.cantConnect");
+        _disconnect(id, DisconnectReason::Unknown, "disconnectionScreen.internalError.cantConnect");
     }
 }
 
@@ -1100,7 +1100,7 @@ bool ServerNetworkHandler::_allowPacket(const NetworkIdentifier &id, RateLimited
     // just drop the packet so a burst of chat or commands does not kick the player.
     if (category == RateLimitedPacket::Inbound && limiter->second.markFlooded()) {
         LOG_WARN(LogAreaID::Network, "Disconnecting %s for packet flooding", id.getAddress().c_str());
-        _disconnect(id, "disconnectionScreen.unexpectedPacket");
+        _disconnect(id, DisconnectReason::BadPacket, "disconnectionScreen.unexpectedPacket");
     }
 
     return false;
@@ -1187,11 +1187,12 @@ ServerPlayer *ServerNetworkHandler::_getPlayer(const NetworkIdentifier &id) {
     return it == mPlayers.end() ? nullptr : &it->second;
 }
 
-void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, const std::string &reason) {
+void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, DisconnectReason reason,
+                                       const std::string &message) {
     DisconnectPacket disconnect;
-    disconnect.mReason = 0;
+    disconnect.mReason = (int32_t) reason;
     disconnect.mMessageSkipped = false;
-    disconnect.mKickMessage = reason;
+    disconnect.mKickMessage = message;
 
     mNetworkHandler->send(id, disconnect, mCodecContext);
     mNetworkHandler->flush(id);
@@ -1199,7 +1200,7 @@ void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, const std::s
 
 void ServerNetworkHandler::_rejectBadPacket(const NetworkIdentifier &id, const std::string &reason) {
     LOG_WARN(LogAreaID::Network, "Bad packet from %s: %s", id.getAddress().c_str(), reason.c_str());
-    _disconnect(id, "disconnectionScreen.unexpectedPacket");
+    _disconnect(id, DisconnectReason::BadPacket, "disconnectionScreen.unexpectedPacket");
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestNetworkSettingsPacket &packet) {
@@ -1209,7 +1210,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestNetw
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const LoginPacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr) {
-        _disconnect(id, "disconnectionScreen.unexpectedPacket");
+        _disconnect(id, DisconnectReason::UnexpectedPacket, "disconnectionScreen.unexpectedPacket");
         return;
     }
 
@@ -1221,7 +1222,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ClientToSer
 
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr) {
-        _disconnect(id, "disconnectionScreen.unexpectedPacket");
+        _disconnect(id, DisconnectReason::UnexpectedPacket, "disconnectionScreen.unexpectedPacket");
         return;
     }
 
@@ -1230,7 +1231,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ClientToSer
 
 void ServerNetworkHandler::onConnectionFailed(const NetworkIdentifier &id) {
     LOG_WARN(LogAreaID::Network, "%s sent a batch with an invalid encryption checksum", id.getAddress().c_str());
-    _disconnect(id, "disconnectionScreen.unexpectedPacket");
+    _disconnect(id, DisconnectReason::BadPacket, "disconnectionScreen.unexpectedPacket");
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ResourcePackClientResponsePacket &packet) {
@@ -1333,7 +1334,7 @@ void ServerNetworkHandler::kickNotAllowListedPlayers() {
             continue;
 
         if (!isAllowListed(entry.second))
-            _disconnect(entry.first, NOT_ALLOW_LISTED_MESSAGE);
+            _disconnect(entry.first, DisconnectReason::NotAllowed, NOT_ALLOW_LISTED_MESSAGE);
     }
 }
 

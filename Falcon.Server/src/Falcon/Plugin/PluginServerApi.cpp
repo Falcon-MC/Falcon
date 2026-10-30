@@ -137,7 +137,7 @@ namespace {
         const NetworkIdentifier id = player(target)->getNetworkIdentifier();
         const std::string text = reason == nullptr ? std::string() : std::string(reason);
         owner().postToMainThread([id, text] {
-            owner()._disconnect(id, text);
+            owner()._disconnect(id, DisconnectReason::Kicked, text);
         });
     }
 

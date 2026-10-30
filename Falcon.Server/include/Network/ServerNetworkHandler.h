@@ -11,6 +11,7 @@
 #include "Network/PacketRateLimiter.h"
 #include "Network/PingedCompatibleServer.h"
 #include "Protocol/NetworkPacketHandler.h"
+#include "Protocol/Types/DisconnectReason.h"
 #include "Protocol/PacketCodecContext.h"
 #include "Protocol/Types/BlockDefinitionRegistry.h"
 #include "Protocol/Types/ItemDefinitionRegistry.h"
@@ -603,7 +604,7 @@ public:
 
     void _handleFallDamage(ServerPlayer &player, const Block *supportBlock = nullptr);
 
-    void _disconnect(const NetworkIdentifier &id, const std::string &reason);
+    void _disconnect(const NetworkIdentifier &id, DisconnectReason reason, const std::string &message);
 
     bool _allowPacket(const NetworkIdentifier &id, RateLimitedPacket category);
 
