@@ -26,6 +26,10 @@ public:
 
     Level *getLevel() override;
 
+    const CommandOriginData &getOriginData() const {
+        return mOrigin;
+    }
+
 private:
     ServerNetworkHandler &mHandler;
     ServerPlayer &mPlayer;

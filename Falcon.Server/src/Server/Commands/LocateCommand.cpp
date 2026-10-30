@@ -5,6 +5,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Server/Commands/PlayerCommandOrigin.h"
 
 #include <atomic>
 #include <cmath>
@@ -165,19 +166,22 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
     const int32_t originZ = (int32_t) std::floor(origin.z);
 
     const NetworkIdentifier requesterId = player->getNetworkIdentifier();
+    CommandOriginData requestOrigin;
+    if (const PlayerCommandOrigin *playerOrigin = dynamic_cast<const PlayerCommandOrigin *>(&sender))
+        requestOrigin = playerOrigin->getOriginData();
     ServerNetworkHandler &handler = mHandler;
     Level &level = handler.getLevelFor(*player);
 
-    std::thread search([&handler, &level, requesterId, biomeName, biomeId, maxRadius, searchType, teleport,
-                        originX, originY, originZ]() {
+    std::thread search([&handler, &level, requesterId, requestOrigin, biomeName, biomeId, maxRadius, searchType,
+                        teleport, originX, originY, originZ]() {
         Vector3i found;
         const bool located = searchType == SEARCH_X_AXIS
                              ? _findBiomeXAxis(level, originX, originZ, biomeId, maxRadius, found)
                              : _findBiomeSpiral(level, originX, originZ, biomeId, maxRadius, found);
         gSearchRunning = false;
 
-        handler.postToMainThread([&handler, &level, requesterId, biomeName, teleport, located, found,
-                                  originX, originY, originZ]() {
+        handler.postToMainThread([&handler, &level, requesterId, requestOrigin, biomeName, teleport, located,
+                                  found, originX, originY, originZ]() {
             auto entry = handler.getPlayers().find(requesterId);
             if (entry == handler.getPlayers().end())
                 return;
@@ -200,9 +204,11 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
             const double deltaZ = (double) result.z - (double) originZ;
             const int32_t distance = (int32_t) std::sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
 
-            target->sendTranslation("commands.locate.biome.success",
-                                    {biomeName, std::to_string(result.x), std::to_string(result.y),
-                                     std::to_string(result.z), std::to_string(distance)});
+            // The client rejects a TextPacket with more than four parameters and disconnects, so the
+            // five-parameter result goes out as command output, like the vanilla server sends it.
+            handler.sendCommandOutput(*target, requestOrigin, "commands.locate.biome.success",
+                                      {biomeName, std::to_string(result.x), std::to_string(result.y),
+                                       std::to_string(result.z), std::to_string(distance)});
 
             if (teleport)
                 target->teleport(handler, Vector3f((float) result.x, (float) result.y, (float) result.z));
