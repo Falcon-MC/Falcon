@@ -16,7 +16,7 @@ namespace MovementPhysics {
     inline constexpr float JUMP_BOOST_PER_LEVEL = 0.1f;
     inline constexpr float CONSUMING_INPUT = 0.1225f;
     inline constexpr float WALK_AIR_SPEED = 0.02f;
-    inline constexpr float SPRINT_AIR_SPEED = 0.026f;
+    inline constexpr float SPRINT_AIR_SPEED = 0.025999999f;
     inline constexpr float SPRINT_SPEED_MULTIPLIER = 1.3f;
     inline constexpr float DEFAULT_BLOCK_FRICTION = 0.6f;
     inline constexpr float IMPULSE_SCALE = 0.98f;
