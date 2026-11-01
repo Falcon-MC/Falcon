@@ -65,6 +65,8 @@ void PlayerMovementValidator::reset() {
     mTrace.clear();
     mLastCorrectionTick = 0;
     mAdjustmentCount = 0;
+    mCorrectionCheck = CorrectionCheck::None;
+    mIgnoredCorrections = 0;
     mHasMovementEffect = false;
     mLastMovementEffectTick = 0;
 }

@@ -9,6 +9,11 @@
 
 using namespace MovementPhysics;
 
+namespace {
+    // A client applies a correction on its next input; a few inputs absorb one already in flight when it arrived.
+    const uint32_t MAX_IGNORED_CORRECTIONS = 3;
+}
+
 void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     auto &state = context.state;
     auto &input = context.input;
@@ -48,6 +53,13 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     prediction.validator->trace().record(frame);
 
     const Vector3f reported = *prediction.feetPosition;
+    // Measured on every input: right after a correction the validator skips its comparison, and the server spaces
+    // its corrections, so most inputs of a dropped correction would otherwise look fine.
+    const float errorX = reported.x - state.simulated.x;
+    const float errorY = reported.y - state.simulated.y;
+    const float errorZ = reported.z - state.simulated.z;
+    const bool diverging = errorX * errorX + errorY * errorY + errorZ * errorZ
+                           > context.owner.getProperties().getPlayerPositionAcceptanceThreshold();
     MovementCorrectionDetails details;
     Vector3f acceptedPosition = state.simulated;
     const bool needsCorrection = prediction.validator->reconcile(
@@ -63,6 +75,20 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     context.player.setSimulatedVelocity(state.velocity);
     *prediction.feetPosition = state.simulated;
     context.player.setMotion(state.velocity);
+
+    // A client that keeps diverging after acknowledging a correction dropped it (a movement "disabler"), so the
+    // server could never move it back.
+    if (prediction.validator->noteInputAfterCorrection(input.getPacket().mTick, diverging) >= MAX_IGNORED_CORRECTIONS) {
+        context.owner._disconnect(context.id, DisconnectReason::KickedForExploit,
+                                  context.player.localize("falcon.disconnect.kicked"));
+        return;
+    }
+    if (needsCorrection && diverging && prediction.validator->armCorrectionCheck()) {
+        ServerPlayer &player = context.player;
+        player.getAcknowledgements().add([&player]() {
+            player.getMovementValidator().acknowledgeCorrection(player.getMovementInputs().lastReceivedTick());
+        });
+    }
 
     if (!needsCorrection)
         return;
