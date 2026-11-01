@@ -8,6 +8,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Components/BlockBehavior.h"
 #include "World/Level/Level.h"
+#include "Protocol/Types/StartGameTypes.h"
 
 #include <cmath>
 
@@ -164,7 +165,9 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
 
     travel.box = boxAt(state.start, context.pose.mHeight);
     Vector3f stuck;
-    travel.isStuck = !abilities.spectator && stuckMultiplier(context.level, context.player, travel.box, stuck);
+    // Creative flight is immune to cobweb, powder snow and berry bush slowdown.
+    const bool slowdownImmune = abilities.spectator || (abilities.flying && abilities.gameType == (int32_t) GameType::Creative);
+    travel.isStuck = !slowdownImmune && stuckMultiplier(context.level, context.player, travel.box, stuck);
     if (travel.isStuck) {
         state.velocity.x *= stuck.x;
         state.velocity.y *= stuck.y;
