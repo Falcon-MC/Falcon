@@ -15,6 +15,7 @@ FALCON_REGISTER_ITEM(SpearItem, 80);
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Protocol/Packets/SetActorMotionPacket.h"
 
 #include <algorithm>
 #include <cmath>
@@ -245,17 +246,22 @@ void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, co
     if (!getLungeImpulse(owner, player, item, impulse))
         return;
 
-    // The client only moves when it receives the motion, so the simulation takes the push once the client
-    // acknowledges it, like knockback.
+    // The client only moves when it receives the motion. Stamped with the last processed input tick, it applies
+    // the motion on the next input tick and replays from there, so the simulation takes it on that same tick.
     Vector3f motion = player.hasSimulatedVelocity() ? player.getSimulatedVelocity() : player.getMotion();
     motion.x += impulse.x;
     motion.z += impulse.z;
     player.setMotion(motion);
-    player.scheduleKnockback(motion);
+    player.queueKnockback(motion);
     const int64_t inputTick = player.getMovementInputs().lastProcessedTick();
     if (inputTick >= 0)
         player.getMovementValidator().onMovementEffect((uint64_t) inputTick);
-    owner.sendActorMotion(player);
+
+    SetActorMotionPacket packet;
+    packet.mRuntimeActorId = (int64_t) player.getRuntimeId();
+    packet.mMotion = motion;
+    packet.mTick = inputTick < 0 ? 0 : (uint64_t) inputTick;
+    owner.getNetworkHandler().send(player.getNetworkIdentifier(), packet, owner.getCodecContext());
 
     const int32_t lungeLevel = ItemEnchantments::getLevel(item, EnchantmentIds::LUNGE);
 
