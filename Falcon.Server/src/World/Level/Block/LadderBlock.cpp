@@ -30,6 +30,30 @@ bool LadderBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFa
     return BlockSupport::isAttachable(support, blockFace);
 }
 
+// A 3/16 plate against the supporting wall; without it the server lets players walk through the ladder to the
+// wall while the client stops on it and climbs.
+bool LadderBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+    if (!state.mStates.contains("facing_direction"))
+        return false;
+
+    switch (state.mStates.getInt("facing_direction")) {
+        case 2:
+            shape = AxisAlignedBB(0.0f, 0.0f, 0.8125f, 1.0f, 1.0f, 1.0f);
+            return true;
+        case 3:
+            shape = AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.1875f);
+            return true;
+        case 4:
+            shape = AxisAlignedBB(0.8125f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f);
+            return true;
+        case 5:
+            shape = AxisAlignedBB(0.0f, 0.0f, 0.0f, 0.1875f, 1.0f, 1.0f);
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool LadderBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
     if (!state.mStates.contains("facing_direction"))
         return true;

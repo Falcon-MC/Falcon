@@ -17,10 +17,14 @@ void PlayerFlightSystem::tick(PlayerMovementContext &context) {
     if (abilities.flying) {
         // Same fly speed as the ability advertised by LoginHandler; BDS doubles it when sprinting.
         travel.acceleration = FLY_SPEED * (abilities.sprinting ? 2.0f : 1.0f);
-        const bool ascend = MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantUp);
-        const bool descend = MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantDown);
-        const bool ascendSlow = MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantUpSlow);
-        const bool descendSlow = MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantDownSlow);
+        // On the input that stops flight the client still travels as flying, but its input request already has
+        // flight off, so the vertical fly controls do nothing.
+        const bool controls = !MovementPhysics::input(input.getPacket(), PlayerAuthInputData::StopFlying);
+        const bool ascend = controls && MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantUp);
+        const bool descend = controls && MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantDown);
+        const bool ascendSlow = controls && MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantUpSlow);
+        const bool descendSlow = controls
+                                 && MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantDownSlow);
         if (state.onGround) {
             const Block *ground = blockAt(context.level, state.start.x, state.start.y - GROUND_PROBE_DEPTH, state.start.z);
             travel.friction *= ground == nullptr ? DEFAULT_BLOCK_FRICTION : ground->getFrictionFactor();

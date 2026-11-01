@@ -13,8 +13,10 @@ void WaterDragSystem::tick(PlayerMovementContext &context) {
         return;
     state.velocity.y *= 0.8f;
     const MobEffectInstance *levitation = context.player.getEffects().get(MobEffectId::Levitation);
-    if (levitation != nullptr)
+    if (levitation != nullptr) {
         state.velocity.y = state.velocity.y * 0.8f + 0.01f * (float) levitation->level();
+        return;
+    }
     if (!abilities.swimming)
         state.velocity.y -= 0.005f;
 }

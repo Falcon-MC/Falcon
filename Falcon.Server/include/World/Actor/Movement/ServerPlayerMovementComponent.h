@@ -41,6 +41,10 @@ public:
         return mLastProcessedTick;
     }
 
+    int64_t lastReceivedTick() const {
+        return mLastReceivedTick;
+    }
+
     static size_t catchupSteps(double previousTickMilliseconds);
 
 private:

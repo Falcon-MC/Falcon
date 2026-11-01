@@ -11,6 +11,7 @@ FALCON_REGISTER_ITEM_CUSTOM(TridentItem, 62,
                             });
 
 #include "World/Actor/ServerActor.h"
+#include "World/Actor/Movement/MovementPhysics.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "Core/Math/MathConstants.h"
 #include "World/Level/Level.h"
@@ -48,9 +49,9 @@ bool TridentItem::applyRiptide(ServerNetworkHandler &owner, ServerPlayer &player
     const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
     const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
 
-    float x = -std::sin(yaw) * std::cos(pitch);
-    float y = -std::sin(pitch);
-    float z = std::cos(yaw) * std::cos(pitch);
+    float x = -MovementPhysics::mojangSin(yaw) * MovementPhysics::mojangCos(pitch);
+    float y = -MovementPhysics::mojangSin(pitch);
+    float z = MovementPhysics::mojangCos(yaw) * MovementPhysics::mojangCos(pitch);
     const float length = std::sqrt(x * x + y * y + z * z);
     if (length <= 0.0f)
         return false;

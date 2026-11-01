@@ -68,6 +68,12 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
                                                                  landingFallDistance);
     actor.setHorizontalCollision(result.mCollidedX || result.mCollidedZ);
 
+    if (physics.mGravityAfterMove && !isStuck) {
+        Vector3f after = actor.getMotion();
+        PreMoveTravelVelocitySystem::applyVerticalAfterMove(after, physics, feet);
+        actor.setMotion(after);
+    }
+
     if (isStuck) {
         actor.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
     } else {

@@ -16,6 +16,10 @@ namespace {
     const double MIN_FOV_CHECK_DISTANCE = 4.0;
     const double MIN_FOV_CHECK_DISTANCE_SQUARED = MIN_FOV_CHECK_DISTANCE * MIN_FOV_CHECK_DISTANCE;
 
+    int32_t streamRadius(const ChunkStreamState &state, const Level &level) {
+        return state.mRadius > 0 ? std::min(state.mRadius, level.getViewDistance()) : level.getViewDistance();
+    }
+
     void refreshComparatorContext(ChunkStreamState &state, const ServerPlayer &player) {
         const Vector3f position = player.getPosition();
         state.mComparatorChunkX = (int32_t) std::floor(position.x) >> 4;
@@ -156,6 +160,22 @@ namespace {
         }
     }
 
+    // Decorating a chunk spills features such as trees and grass into its neighbours, so a chunk is complete only
+    // once all eight neighbours are populated. Sending it earlier makes that vegetation appear in front of the player.
+    bool neighboursPopulated(Level &level, int32_t chunkX, int32_t chunkZ) {
+        bool populated = true;
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            for (int32_t dz = -1; dz <= 1; ++dz) {
+                if ((dx == 0 && dz == 0) || level.isChunkPopulated(chunkX + dx, chunkZ + dz))
+                    continue;
+
+                level.requestChunkAsync(chunkX + dx, chunkZ + dz);
+                populated = false;
+            }
+        }
+        return populated;
+    }
+
     void loadQueuedChunks(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player,
                           int32_t attempts) {
         if (state.mSendQueue.empty())
@@ -175,7 +195,10 @@ namespace {
 
             if (level.isChunkPopulated(chunkX, chunkZ)) {
                 state.mLoading.erase(hash);
-                pushQueue(state, state.mReadyToSend, hash);
+                if (neighboursPopulated(level, chunkX, chunkZ))
+                    pushQueue(state, state.mReadyToSend, hash);
+                else
+                    requeue.push_back(hash);
                 continue;
             }
 
@@ -214,7 +237,7 @@ namespace {
         // publisher update has to go out before the chunks themselves.
         NetworkChunkPublisherUpdatePacket publisher;
         publisher.mPosition = Vector3i((int32_t) position.x, (int32_t) position.y, (int32_t) position.z);
-        publisher.mRadius = (uint32_t) (level.getViewDistance() * 16);
+        publisher.mRadius = (uint32_t) (streamRadius(state, level) * 16);
         owner.getNetworkHandler().send(id, publisher, owner.getCodecContext());
 
         std::unordered_set<int64_t> &sent = player.getSentChunks();
@@ -282,7 +305,7 @@ void ChunkStreamHandler::tick(ServerNetworkHandler &owner, ServerPlayer &player)
     const int64_t loaderChunk = packChunk(state.mComparatorChunkX, state.mComparatorChunkZ);
     if (loaderChunk != state.mLastLoaderChunk) {
         state.mLastLoaderChunk = loaderChunk;
-        updateInRadiusChunks(state, owner.getLevelFor(player).getViewDistance(), state.mComparatorChunkX,
+        updateInRadiusChunks(state, streamRadius(state, owner.getLevelFor(player)), state.mComparatorChunkX,
                              state.mComparatorChunkZ);
         removeOutOfRadiusChunks(state, owner, player);
         updateChunkSendingQueue(state, player);
@@ -333,7 +356,7 @@ void ChunkStreamHandler::handleViewDistanceChange(ServerNetworkHandler &owner, S
     ChunkStreamState &state = player.getChunkStreamState();
 
     refreshComparatorContext(state, player);
-    updateInRadiusChunks(state, owner.getLevelFor(player).getViewDistance(), state.mComparatorChunkX,
+    updateInRadiusChunks(state, streamRadius(state, owner.getLevelFor(player)), state.mComparatorChunkX,
                          state.mComparatorChunkZ);
     removeOutOfRadiusChunks(state, owner, player);
     pruneQueueOutOfRadius(state, state.mSendQueue, owner.getLevelFor(player), player.getRuntimeId());

@@ -7,6 +7,7 @@
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/Level.h"
+#include "Network/ServerNetworkHandler.h"
 
 FALCON_REGISTER_BLOCK(CactusBlock, 311);
 
@@ -14,6 +15,9 @@ using namespace PlantGrowthHelpers;
 
 namespace {
     const int32_t MAX_CACTUS_HEIGHT = 3;
+    const float CACTUS_DAMAGE = 1.0f;
+    // Inset by 1/16 on the sides, so an actor pressed against a cactus overlaps its cell and touches it.
+    const float CACTUS_INSET = 0.0625f;
 
     bool isHorizontalNeighbourhoodClear(Level &level, const Vector3i &position) {
         for (int32_t face: HORIZONTAL_FACES) {
@@ -26,6 +30,21 @@ namespace {
 
 bool CactusBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:cactus";
+}
+
+bool CactusBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+    (void) state;
+
+    shape = AxisAlignedBB(CACTUS_INSET, 0.0f, CACTUS_INSET, 1.0f - CACTUS_INSET, 1.0f, 1.0f - CACTUS_INSET);
+    return true;
+}
+
+void CactusBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                                const BlockState &state) const {
+    (void) position;
+    (void) state;
+
+    owner.hurtActor(actor, CACTUS_DAMAGE, "death.attack.cactus");
 }
 
 void CactusBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

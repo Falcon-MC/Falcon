@@ -66,7 +66,8 @@ namespace {
                 {"minecraft:brown_mushroom", {PlantSupport::Mushroom, false}},
                 {"minecraft:red_mushroom", {PlantSupport::Mushroom, false}},
                 {"minecraft:reeds", {PlantSupport::Reeds, false}},
-                {"minecraft:cactus", {PlantSupport::Cactus, false}}
+                {"minecraft:cactus", {PlantSupport::Cactus, false}},
+                {"minecraft:cactus_flower", {PlantSupport::CactusFlower, false}}
         };
         return rules;
     }
@@ -137,6 +138,8 @@ bool PlantBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFac
                    && isCactusSideFree(level, position.x, position.y, position.z + 1)
                    && isCactusSideFree(level, position.x - 1, position.y, position.z)
                    && isCactusSideFree(level, position.x + 1, position.y, position.z);
+        case PlantSupport::CactusFlower:
+            return below.mName == "minecraft:cactus" || DecorationSupport::isSolid(below);
     }
 
     return true;

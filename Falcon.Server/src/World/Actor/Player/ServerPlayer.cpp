@@ -662,6 +662,22 @@ void ServerPlayer::teleport(ServerNetworkHandler &owner, const Vector3f &positio
     ChunkStreamHandler::handleTeleport(owner, *this);
 }
 
+void ServerPlayer::applyServerMotion(ServerNetworkHandler &owner, const Vector3f &motion) {
+    setMotion(motion);
+    const int64_t inputTick = std::max(mMovementInputs.lastReceivedTick(), mMovementInputs.lastProcessedTick());
+    mPendingServerMotion = motion;
+    mPendingServerMotionTick = inputTick + 1;
+    mHasPendingServerMotion = true;
+    if (inputTick >= 0)
+        getMovementValidator().onMovementEffect((uint64_t) inputTick);
+
+    SetActorMotionPacket packet;
+    packet.mRuntimeActorId = (int64_t) getRuntimeId();
+    packet.mMotion = motion;
+    packet.mTick = inputTick < 0 ? 0 : (uint64_t) inputTick;
+    owner.getNetworkHandler().send(getNetworkIdentifier(), packet, owner.getCodecContext());
+}
+
 void ServerPlayer::syncEffects() {
     if (mSender == nullptr)
         return;

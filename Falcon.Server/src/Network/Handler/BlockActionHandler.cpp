@@ -63,6 +63,9 @@ namespace {
     const float PLAYER_BASE_OFFSET = 1.62f;
     const double BREAK_SPEED_CHANGE_EPSILON = 0.0001;
     const double BREAK_PROGRESS_EPSILON = 0.000001;
+    // The server starts counting break progress on the tick after the start and counts server ticks, not input
+    // ticks, so a client-predicted destroy can arrive up to this many ticks before the server's count completes.
+    const int64_t BREAK_TICK_TOLERANCE = 2;
     const float REACH_MAX_DIFF = 6.0f;
     const uint64_t RIGHT_CLICK_DEDUP_MICROSECONDS = 100000;
 
@@ -211,7 +214,7 @@ namespace {
             return false;
 
         const int64_t elapsedTicks = owner.getCurrentTick() - player.getBreakStartTick();
-        return elapsedTicks >= expectedBreakTicks(player, blockData);
+        return elapsedTicks + BREAK_TICK_TOLERANCE >= expectedBreakTicks(player, blockData);
     }
 
     bool finiteClickPosition(const Vector3f &clickPosition) {
@@ -776,7 +779,8 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
 
         const BlockData *blockData = BlockDataTable::find(state.mName.c_str());
         if (!hasReachedBreakTime(owner, player, blockData) ||
-            player.getBreakProgress() + BREAK_PROGRESS_EPSILON < 1.0) {
+            player.getBreakProgress() + player.getBreakSpeed() * (double) BREAK_TICK_TOLERANCE
+                    + BREAK_PROGRESS_EPSILON < 1.0) {
             sendCurrentBlockState(owner, player, position);
             return;
         }

@@ -587,7 +587,7 @@ float MobActor::getMaxTurn() const {
 
 float MobActor::getJumpPower() const {
     const json::Value *jump = getComponent(STATIC_JUMP_COMPONENT);
-    return jump == nullptr ? -1.0f : numberIn(jump, "jump_power", DEFAULT_JUMP_POWER);
+    return jump == nullptr ? DEFAULT_JUMP_POWER : numberIn(jump, "jump_power", DEFAULT_JUMP_POWER);
 }
 
 bool MobActor::canSee(ServerNetworkHandler &owner, const Actor &other) const {
@@ -884,6 +884,7 @@ PhysicsComponent MobActor::getPhysics() const {
     physics.mSwims = canSwim();
     physics.mClimbsLadders = getComponent(CAN_CLIMB_COMPONENT) != nullptr;
     physics.mClimbsWalls = getComponent(CLIMB_NAVIGATION_COMPONENT) != nullptr;
+    physics.mGravityAfterMove = true;
     return physics;
 }
 

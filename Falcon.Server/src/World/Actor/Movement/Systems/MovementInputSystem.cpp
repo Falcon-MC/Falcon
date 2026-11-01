@@ -18,9 +18,9 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
 
     input.pressingSneak = input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::Sneaking);
 
+    // The client already scales the move vector it sends by the item-use slowdown (0.35 squared while eating or
+    // drawing a bow), so applying it again here would slow the simulation twice.
     float maxImpulse = 1.0f;
-    if (context.player.getFlags().get(ActorFlag::UsingItem))
-        maxImpulse *= CONSUMING_INPUT;
     const int32_t slowdownTicks = context.pose.mSneaking || context.pose.mCrawling ? context.player.getSlowdownTicks() + 1 : 0;
     context.player.setSlowdownTicks(slowdownTicks);
     if (!abilities.flying && !abilities.swimming && (context.pose.mSneaking || context.pose.mCrawling)) {

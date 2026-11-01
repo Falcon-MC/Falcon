@@ -5,10 +5,21 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "Network/ServerNetworkHandler.h"
 
+#include <cmath>
+
 namespace {
     const int32_t STUCK_TICKS = 40;
     const int32_t MAX_REPATHS = 3;
     const float STUCK_DISTANCE_SQUARED = 1.0e-4f;
+    // A partial path must bring the mob at least this much closer to an unreachable target to be worth walking.
+    const float PARTIAL_PATH_MIN_GAIN = 1.0f;
+
+    float distanceSquared(const Vector3f &left, const Vector3f &right) {
+        const float dx = left.x - right.x;
+        const float dy = left.y - right.y;
+        const float dz = left.z - right.z;
+        return dx * dx + dy * dy + dz * dz;
+    }
 }
 
 void PathNavigation::moveTo(const Vector3f &target, float speed) {
@@ -42,6 +53,17 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
         if (!direct && !PathFinder::get().findPath(level, mob, mTarget, mOptions, mPath)) {
             stop(mob);
             return;
+        }
+
+        // Out of reach (a target above a wall, across water): once at the closest point, walking a new partial
+        // path only sends the mob back and forth, so it waits until the target moves.
+        if (!mPath.reachesTarget()) {
+            const float here = std::sqrt(distanceSquared(mob.getPosition(), mTarget));
+            const float there = std::sqrt(distanceSquared(mPath.last(), mTarget));
+            if (there > here - PARTIAL_PATH_MIN_GAIN) {
+                stop(mob);
+                return;
+            }
         }
 
         mLastPosition = mob.getPosition();

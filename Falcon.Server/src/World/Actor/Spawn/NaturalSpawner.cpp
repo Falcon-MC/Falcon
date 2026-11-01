@@ -180,7 +180,8 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
             const int32_t maxChunkZ = (int32_t) std::floor((player.z + SPAWN_MAX_DISTANCE) / 16.0f);
             for (int32_t chunkX = minChunkX; chunkX <= maxChunkX && count < category.mCap; ++chunkX) {
                 for (int32_t chunkZ = minChunkZ; chunkZ <= maxChunkZ && count < category.mCap; ++chunkZ)
-                    count += _attempt(owner, level, player, chunkX, chunkZ, category, difficulty, players, nearby);
+                    count += _attempt(owner, level, player, chunkX, chunkZ, category, category.mCap - count, difficulty,
+                                      players, nearby);
             }
         }
     }
@@ -345,8 +346,8 @@ bool NaturalSpawner::_matches(Level &level, const SpawnSite &site, const SpawnCo
 }
 
 int32_t NaturalSpawner::_attempt(ServerNetworkHandler &owner, Level &level, const Vector3f &player, int32_t chunkX,
-                                 int32_t chunkZ, const Category &category, int32_t difficulty,
-                                 const std::vector<Vector3f> &players, const std::vector<NearbyActor> &nearby) {
+                                 int32_t chunkZ, const Category &category, int32_t budget, int32_t difficulty,
+                                 const std::vector<Vector3f> &players, std::vector<NearbyActor> &nearby) {
     if (!level.isChunkResident(chunkX, chunkZ))
         return 0;
 
@@ -422,8 +423,9 @@ int32_t NaturalSpawner::_attempt(ServerNetworkHandler &owner, Level &level, cons
     const SpawnHerd &herd = condition.mHerds[(size_t) _nextInt((int32_t) condition.mHerds.size())];
     const int32_t size = herd.mMinSize + _nextInt(herd.mMaxSize - herd.mMinSize + 1);
 
+    // A herd stops at the population cap instead of overshooting it by its remaining members.
     int32_t spawned = 0;
-    for (int32_t member = 0; member < size; ++member) {
+    for (int32_t member = 0; member < size && spawned < budget; ++member) {
         SpawnSite memberSite = site;
         if (member > 0) {
             Vector3i position = site.mPosition;
@@ -445,8 +447,12 @@ int32_t NaturalSpawner::_attempt(ServerNetworkHandler &owner, Level &level, cons
                                 (float) memberSite.mPosition.z + 0.5f);
         if (owner.spawnActor(level, identifier, position, [](ServerActor &actor) {
             actor.setPersistent(false);
-        }) != nullptr)
-            ++spawned;
+        }) == nullptr)
+            continue;
+
+        // Later attempts this tick, including the rest of this herd, must count it against the caps and densities.
+        nearby.push_back(NearbyActor{position, &SpawnRules::getPopulation(identifier), identifier});
+        ++spawned;
     }
     return spawned;
 }

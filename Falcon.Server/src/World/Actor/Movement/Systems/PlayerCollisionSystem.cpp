@@ -8,6 +8,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Components/BlockBehavior.h"
 #include "World/Level/Level.h"
+#include "Protocol/Types/StartGameTypes.h"
 
 #include <cmath>
 
@@ -164,7 +165,9 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
 
     travel.box = boxAt(state.start, context.pose.mHeight);
     Vector3f stuck;
-    travel.isStuck = !abilities.spectator && stuckMultiplier(context.level, context.player, travel.box, stuck);
+    // Creative flight is immune to cobweb, powder snow and berry bush slowdown.
+    const bool slowdownImmune = abilities.spectator || (abilities.flying && abilities.gameType == (int32_t) GameType::Creative);
+    travel.isStuck = !slowdownImmune && stuckMultiplier(context.level, context.player, travel.box, stuck);
     if (travel.isStuck) {
         state.velocity.x *= stuck.x;
         state.velocity.y *= stuck.y;
@@ -187,14 +190,7 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
 
     updateSupportingBlock(context.level, context.player, travel.box, state.simulated, state.onGround, state.velocity);
     const BlockBehavior &under = behaviorUnder(context.level, state.simulated, context.player);
-    if (state.simulated.y == state.start.y && state.onGround && !context.pose.mSneaking && !input.pressingSneak && under.slowsWalking()) {
-        const float vertical = std::fabs(travel.moved.mMoved.y);
-        if (vertical < WALK_SLOWDOWN_LIMIT) {
-            const float slowdown = WALK_SLOWDOWN_BASE + vertical * WALK_SLOWDOWN_PER_VELOCITY;
-            state.velocity.x *= slowdown;
-            state.velocity.z *= slowdown;
-        }
-    }
+    travel.standsOnSlowingBlock = state.onGround && under.slowsWalking();
 
     if (travel.isStuck)
         state.velocity = Vector3f(0.0f, 0.0f, 0.0f);
@@ -206,4 +202,14 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
         state.velocity.z = 0.0f;
     if (travel.moved.mCollidedY)
         state.velocity.y = wasOnGround || state.velocity.y >= 0.0f || input.pressingSneak ? 0.0f : landingVelocity(under, state.velocity.y);
+
+    // A wall bump on a climbable block lifts after the move, and that tick skips gravity and vertical drag.
+    if (!abilities.flying && !abilities.gliding && !context.waterTravel.active && !context.liquidTravel.lava
+        && (travel.moved.mCollidedX || travel.moved.mCollidedZ)) {
+        const Block *inside = blockAt(context.level, state.simulated.x, state.simulated.y, state.simulated.z);
+        if (inside != nullptr && inside->isClimbable()) {
+            state.velocity.y = CLIMB_SPEED;
+            context.autoClimb.climbing = true;
+        }
+    }
 }

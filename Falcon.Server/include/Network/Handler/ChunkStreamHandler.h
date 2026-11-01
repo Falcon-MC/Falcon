@@ -19,6 +19,9 @@ struct ChunkStreamState {
     int32_t mComparatorChunkZ = 0;
     double mComparatorDirX = 0.0;
     double mComparatorDirZ = 0.0;
+    // Radius granted to the client in ChunkRadiusUpdated, 0 until it asks. The client drops chunks beyond it,
+    // so streaming further marks chunks as sent that the client never keeps.
+    int32_t mRadius = 0;
 };
 
 /**

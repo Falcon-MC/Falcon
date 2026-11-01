@@ -43,7 +43,7 @@ void PlayerTraversalSystem::tick(PlayerMovementContext &context) {
 
     if (!abilities.flying && !abilities.gliding && inside != nullptr && inside->isClimbable() && traversal == BlockTraversal::None) {
         state.velocity.y = std::max(state.velocity.y, -CLIMB_SPEED);
-        if (input.jumpHeld || context.player.hasHorizontalCollision())
+        if (input.jumpHeld)
             state.velocity.y = CLIMB_SPEED;
         if (context.pose.mSneaking && state.velocity.y < 0.0f)
             state.velocity.y = 0.0f;
