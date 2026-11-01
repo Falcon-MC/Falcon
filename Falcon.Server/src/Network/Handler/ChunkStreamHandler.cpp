@@ -160,6 +160,22 @@ namespace {
         }
     }
 
+    // Decorating a chunk spills features such as trees and grass into its neighbours, so a chunk is complete only
+    // once all eight neighbours are populated. Sending it earlier makes that vegetation appear in front of the player.
+    bool neighboursPopulated(Level &level, int32_t chunkX, int32_t chunkZ) {
+        bool populated = true;
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            for (int32_t dz = -1; dz <= 1; ++dz) {
+                if ((dx == 0 && dz == 0) || level.isChunkPopulated(chunkX + dx, chunkZ + dz))
+                    continue;
+
+                level.requestChunkAsync(chunkX + dx, chunkZ + dz);
+                populated = false;
+            }
+        }
+        return populated;
+    }
+
     void loadQueuedChunks(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player,
                           int32_t attempts) {
         if (state.mSendQueue.empty())
@@ -179,7 +195,10 @@ namespace {
 
             if (level.isChunkPopulated(chunkX, chunkZ)) {
                 state.mLoading.erase(hash);
-                pushQueue(state, state.mReadyToSend, hash);
+                if (neighboursPopulated(level, chunkX, chunkZ))
+                    pushQueue(state, state.mReadyToSend, hash);
+                else
+                    requeue.push_back(hash);
                 continue;
             }
 
