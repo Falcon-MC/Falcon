@@ -45,6 +45,12 @@ public:
         return mLastReceivedTick;
     }
 
+    // Counts consecutive inputs whose tick does not advance past the last received one; returns the current streak.
+    uint32_t noteInputTick(int64_t tick) {
+        mStaleTicks = mLastReceivedTick >= 0 && tick <= mLastReceivedTick ? mStaleTicks + 1 : 0;
+        return mStaleTicks;
+    }
+
     static size_t catchupSteps(double previousTickMilliseconds);
 
 private:
@@ -56,6 +62,7 @@ private:
     std::deque<std::shared_ptr<const PlayerAuthInputPacket>> mInputs;
     std::deque<FlightRequest> mFlightRequests;
     int64_t mLastReceivedTick = -1;
+    uint32_t mStaleTicks = 0;
     int64_t mLastProcessedTick = -1;
     int64_t mLastServerTick = -1;
     uint64_t mCredits = 0;

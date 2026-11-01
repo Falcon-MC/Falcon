@@ -18,6 +18,10 @@ namespace {
         return std::isfinite(value) && value >= -1.001f && value <= 1.001f;
     }
 
+    // Beyond the world border; a position out here is never one the client really reached.
+    const double MAX_COORDINATE = 30000000.0;
+    const uint32_t MAX_STALE_INPUT_TICKS = 20;
+
     bool validFace(int32_t face) {
         return face >= 0 && face <= 5;
     }
@@ -31,6 +35,13 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const PlayerAuthInputPacket
     const int64_t tick = packet.mTick;
     if (tick == 0 && player.hasSeenNonZeroClientTick()) {
         outReason = "input tick returned to zero";
+        return true;
+    }
+    // The client tick always advances. A repeated or older tick is dropped from the input queue without simulation,
+    // so a client stuck on one tick would move with no validation or correction at all. A few stale ticks in a row
+    // are tolerated for reordered packets.
+    if (player.getMovementInputs().noteInputTick(tick) > MAX_STALE_INPUT_TICKS) {
+        outReason = "input tick did not advance";
         return true;
     }
     if (tick != 0)
@@ -49,7 +60,9 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const PlayerAuthInputPacket
     const double positionX = (double) packet.mPosition.x;
     const double positionZ = (double) packet.mPosition.z;
 
-    if (!std::isfinite(positionX) || !std::isfinite(positionY) || !std::isfinite(positionZ)) {
+    if (!std::isfinite(positionX) || !std::isfinite(positionY) || !std::isfinite(positionZ)
+        || std::fabs(positionX) > MAX_COORDINATE || std::fabs(positionY) > MAX_COORDINATE
+        || std::fabs(positionZ) > MAX_COORDINATE) {
         outReason = "invalid position";
         return true;
     }
