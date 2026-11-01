@@ -1956,7 +1956,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestChun
     radius.mRadius = granted;
     mNetworkHandler->send(id, radius, mCodecContext);
 
-
+    player->getChunkStreamState().mRadius = granted;
     ChunkStreamHandler::handleViewDistanceChange(*this, *player);
     _sendChunks(*player);
     _checkTerrainReady(*player);

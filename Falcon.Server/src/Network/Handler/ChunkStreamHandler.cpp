@@ -16,6 +16,10 @@ namespace {
     const double MIN_FOV_CHECK_DISTANCE = 4.0;
     const double MIN_FOV_CHECK_DISTANCE_SQUARED = MIN_FOV_CHECK_DISTANCE * MIN_FOV_CHECK_DISTANCE;
 
+    int32_t streamRadius(const ChunkStreamState &state, const Level &level) {
+        return state.mRadius > 0 ? std::min(state.mRadius, level.getViewDistance()) : level.getViewDistance();
+    }
+
     void refreshComparatorContext(ChunkStreamState &state, const ServerPlayer &player) {
         const Vector3f position = player.getPosition();
         state.mComparatorChunkX = (int32_t) std::floor(position.x) >> 4;
@@ -214,7 +218,7 @@ namespace {
         // publisher update has to go out before the chunks themselves.
         NetworkChunkPublisherUpdatePacket publisher;
         publisher.mPosition = Vector3i((int32_t) position.x, (int32_t) position.y, (int32_t) position.z);
-        publisher.mRadius = (uint32_t) (level.getViewDistance() * 16);
+        publisher.mRadius = (uint32_t) (streamRadius(state, level) * 16);
         owner.getNetworkHandler().send(id, publisher, owner.getCodecContext());
 
         std::unordered_set<int64_t> &sent = player.getSentChunks();
@@ -282,7 +286,7 @@ void ChunkStreamHandler::tick(ServerNetworkHandler &owner, ServerPlayer &player)
     const int64_t loaderChunk = packChunk(state.mComparatorChunkX, state.mComparatorChunkZ);
     if (loaderChunk != state.mLastLoaderChunk) {
         state.mLastLoaderChunk = loaderChunk;
-        updateInRadiusChunks(state, owner.getLevelFor(player).getViewDistance(), state.mComparatorChunkX,
+        updateInRadiusChunks(state, streamRadius(state, owner.getLevelFor(player)), state.mComparatorChunkX,
                              state.mComparatorChunkZ);
         removeOutOfRadiusChunks(state, owner, player);
         updateChunkSendingQueue(state, player);
@@ -333,7 +337,7 @@ void ChunkStreamHandler::handleViewDistanceChange(ServerNetworkHandler &owner, S
     ChunkStreamState &state = player.getChunkStreamState();
 
     refreshComparatorContext(state, player);
-    updateInRadiusChunks(state, owner.getLevelFor(player).getViewDistance(), state.mComparatorChunkX,
+    updateInRadiusChunks(state, streamRadius(state, owner.getLevelFor(player)), state.mComparatorChunkX,
                          state.mComparatorChunkZ);
     removeOutOfRadiusChunks(state, owner, player);
     pruneQueueOutOfRadius(state, state.mSendQueue, owner.getLevelFor(player), player.getRuntimeId());
