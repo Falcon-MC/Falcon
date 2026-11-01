@@ -33,6 +33,10 @@ public:
         return mWaypoints.empty();
     }
 
+    const Vector3f &last() const {
+        return mWaypoints.back();
+    }
+
     bool reachesTarget() const {
         return mReachesTarget;
     }
