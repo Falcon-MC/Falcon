@@ -48,7 +48,7 @@ private:
 
     int32_t _attempt(ServerNetworkHandler &owner, Level &level, const Vector3f &player, int32_t chunkX, int32_t chunkZ,
                   const Category &category, int32_t difficulty, const std::vector<Vector3f> &players,
-                  const std::vector<NearbyActor> &nearby);
+                  std::vector<NearbyActor> &nearby);
 
     bool _makeSite(Level &level, const Vector3i &position, const std::vector<Vector3f> &players, bool water,
                    SpawnSite &site);
