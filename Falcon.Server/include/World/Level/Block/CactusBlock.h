@@ -18,4 +18,9 @@ public:
     bool hasRandomTick() const override {
         return true;
     }
+
+    bool getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const override;
+
+    void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                       const BlockState &state) const override;
 };
