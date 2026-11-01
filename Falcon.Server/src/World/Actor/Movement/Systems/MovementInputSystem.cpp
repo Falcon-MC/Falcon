@@ -5,11 +5,23 @@
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/VanillaItems.h"
 
 #include <algorithm>
 #include <cmath>
 
 using namespace MovementPhysics;
+
+namespace {
+    bool slowsWhileUsing(const ServerPlayer &player) {
+        const ItemStack &held = player.getInventory().getItemInHand();
+        if (held.isAir() || held.mDefinition == nullptr)
+            return true;
+
+        const Item *item = VanillaItems::fromIdentifier(held.mDefinition->getIdentifier());
+        return item == nullptr || item->slowsMovementWhileUsing();
+    }
+}
 
 void MovementInputSystem::tick(PlayerMovementContext &context) {
     auto &input = context.input;
@@ -19,7 +31,7 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
     input.pressingSneak = input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::Sneaking);
 
     float maxImpulse = 1.0f;
-    if (context.player.getFlags().get(ActorFlag::UsingItem))
+    if (context.player.getFlags().get(ActorFlag::UsingItem) && slowsWhileUsing(context.player))
         maxImpulse *= CONSUMING_INPUT;
     const int32_t slowdownTicks = context.pose.mSneaking || context.pose.mCrawling ? context.player.getSlowdownTicks() + 1 : 0;
     context.player.setSlowdownTicks(slowdownTicks);

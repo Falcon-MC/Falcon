@@ -16,6 +16,8 @@
 #include "World/Level/Level.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/SpearItem.h"
+#include "World/Item/VanillaItems.h"
 #include "Network/Handler/BadPacketHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/NetworkHandler.h"
@@ -169,6 +171,27 @@ namespace {
         motion.mTick = inputTick < 0 ? 0 : (uint64_t) inputTick;
         owner.getNetworkHandler().send(player.getNetworkIdentifier(), motion, owner.getCodecContext());
         return true;
+    }
+
+    void applyLungeImpulse(ServerNetworkHandler &owner, ServerPlayer &player, const PlayerAuthInputPacket &packet) {
+        if (!packet.hasInputFlag((int32_t) PlayerAuthInputData::StartUsingItem)
+            || player.getFlags().get(ActorFlag::UsingItem))
+            return;
+
+        const ItemStack &held = player.getInventory().getItemInHand();
+        if (held.isAir() || held.mDefinition == nullptr || player.hasItemCooldown(held, owner.getCurrentTick()))
+            return;
+
+        const SpearItem *spear =
+                dynamic_cast<const SpearItem *>(VanillaItems::fromIdentifier(held.mDefinition->getIdentifier()));
+        Vector3f impulse;
+        if (spear == nullptr || !spear->getLungeImpulse(owner, player, held, impulse))
+            return;
+
+        Vector3f velocity = player.hasSimulatedVelocity() ? player.getSimulatedVelocity() : player.getMotion();
+        velocity.x += impulse.x;
+        velocity.z += impulse.z;
+        player.setSimulatedVelocity(velocity);
     }
 }
 
@@ -392,6 +415,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     // Player positions on the wire are at eye height; the server works with feet positions.
     Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
                           packet.mPosition.z);
+    applyLungeImpulse(owner, player, packet);
     PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition, sprinting);
     player.queueMove(feetPosition, packet.mRotation);
     if (!player.hasSimulatedVelocity())

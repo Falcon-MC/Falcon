@@ -212,35 +212,40 @@ void SpearItem::applySpearDamage(ServerNetworkHandler &owner, ServerPlayer &atta
                                   .withoutArmor());
 }
 
-void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
+bool SpearItem::getLungeImpulse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
+                                Vector3f &impulse) const {
     const int32_t lungeLevel = ItemEnchantments::getLevel(item, EnchantmentIds::LUNGE);
     if (lungeLevel <= 0)
-        return;
+        return false;
 
     if (player.getFlags().get(ActorFlag::Swimming) || player.getFlags().get(ActorFlag::Gliding))
-        return;
+        return false;
 
     if (LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition()).water)
-        return;
+        return false;
 
     const int32_t gameType = player.getGameType();
     const bool finiteResources = gameType == (int32_t) GameType::Survival
                                  || gameType == (int32_t) GameType::Adventure;
     if (finiteResources && player.getFood() < MINIMUM_LUNGE_FOOD)
-        return;
+        return false;
 
     const Vector3f direction = player.getLookDirection();
     const float length = std::sqrt(direction.x * direction.x + direction.z * direction.z);
     if (length <= 0.0f)
-        return;
+        return false;
 
     const float push = 0.5f + (float) lungeLevel * 0.4f;
+    impulse = Vector3f((direction.x / length) * push, 0.0f, (direction.z / length) * push);
+    return true;
+}
 
-    Vector3f motion = player.getMotion();
-    motion.x += (direction.x / length) * push;
-    motion.z += (direction.z / length) * push;
-    player.setMotion(motion);
-    owner.sendActorMotion(player);
+void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
+    Vector3f impulse;
+    if (!getLungeImpulse(owner, player, item, impulse))
+        return;
+
+    const int32_t lungeLevel = ItemEnchantments::getLevel(item, EnchantmentIds::LUNGE);
 
     const char *sound = lungeLevel >= 3 ? LevelSoundEvent::LUNGE_3
                                         : (lungeLevel == 2 ? LevelSoundEvent::LUNGE_2 : LevelSoundEvent::LUNGE_1);

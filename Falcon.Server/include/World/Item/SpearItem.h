@@ -21,7 +21,17 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    // A raised spear is carried at full speed: its kinetic damage needs the player to sprint.
+    bool slowsMovementWhileUsing() const override {
+        return false;
+    }
+
     float getKineticDamage(float speed) const;
+
+    // The horizontal push a lunge adds to the player's velocity. The client applies it in its own movement tick,
+    // so the server adds it to the simulated velocity of the input tick that starts using the spear.
+    bool getLungeImpulse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
+                         Vector3f &impulse) const;
 
     const std::string &getTierName() const {
         return mTierName;
