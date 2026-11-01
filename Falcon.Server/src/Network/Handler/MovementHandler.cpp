@@ -380,7 +380,10 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
         return;
 
     // Resolve sprinting before replay so physics and the advertised actor state use the same decision.
-    bool sprinting = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sprinting)
+    // The client toggles sprint on StartSprinting and keeps it until StopSprinting; the Sprinting bit can
+    // be missing on the tick after the start, so the previous state carries over.
+    bool sprinting = player.getFlags().get(ActorFlag::Sprinting)
+                     || packet.hasInputFlag((int32_t) PlayerAuthInputData::Sprinting)
                      || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
 
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSprinting) || !player.canSprint())
