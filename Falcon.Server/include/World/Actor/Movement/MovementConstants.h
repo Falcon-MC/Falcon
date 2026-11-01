@@ -11,6 +11,7 @@ namespace MovementPhysics {
     inline constexpr float GRAVITY_MULTIPLIER = 0.98f;
     inline constexpr float STEP_HEIGHT = 0.5625f;
     inline constexpr float SNEAK_INPUT = 0.3f;
+    inline constexpr float SPRINT_INPUT_AXIS = 0.70710677f;
     inline constexpr float SWIFT_SNEAK_PER_LEVEL = 0.15f;
     inline constexpr int32_t SWIFT_SNEAK_DELAY_TICKS = 2;
     inline constexpr float JUMP_BOOST_PER_LEVEL = 0.1f;

@@ -18,6 +18,15 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
 
     input.pressingSneak = input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::Sneaking);
 
+    // The client keeps sprinting only while its move vector points forward: forward > 0, a length of at least
+    // 1/sqrt(2) and no more than 1/sqrt(2) sideways, otherwise it stops sprint on its own. Sprinting in any other
+    // direction (omnisprint) is simulated as walking.
+    const float moveForward = input.getPacket().mMotionY;
+    const float moveSideways = input.getPacket().mMotionX;
+    const float moveLength = std::sqrt(moveForward * moveForward + moveSideways * moveSideways);
+    if (moveForward <= 0.0f || moveLength < SPRINT_INPUT_AXIS || std::fabs(moveSideways) > SPRINT_INPUT_AXIS)
+        abilities.sprinting = false;
+
     // The client already scales the move vector it sends by the item-use slowdown (0.35 squared while eating or
     // drawing a bow), so applying it again here would slow the simulation twice.
     float maxImpulse = 1.0f;
