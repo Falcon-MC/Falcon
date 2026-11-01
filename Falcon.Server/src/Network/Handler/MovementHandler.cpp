@@ -373,12 +373,6 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (!player.isSpawned())
         return;
 
-    // Flight transitions belong to this input tick, including replayed inputs.
-    const bool stopFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopFlying);
-    const bool startFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartFlying);
-    if ((startFlying || stopFlying) && !requestFlight(owner, id, player, startFlying && !stopFlying))
-        return;
-
     // Resolve sprinting before replay so physics and the advertised actor state use the same decision.
     // The client toggles sprint on StartSprinting and keeps it until StopSprinting. The Sprinting bit is not
     // its state: it can be missing on the tick after a start, and it stays set while a held sprint key with
@@ -393,6 +387,13 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
                           packet.mPosition.z);
     PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition, sprinting);
+
+    // The client queues a flight toggle and keeps its old travel for the input that carries it, so the new
+    // flight state applies from the next input on.
+    const bool stopFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopFlying);
+    const bool startFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartFlying);
+    if ((startFlying || stopFlying) && !requestFlight(owner, id, player, startFlying && !stopFlying))
+        return;
     player.queueMove(feetPosition, packet.mRotation);
     if (!player.hasSimulatedVelocity())
         player.setMotion(packet.mDelta);
