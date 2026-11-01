@@ -11,7 +11,8 @@ void PlayerMovementInitializationSystem::tick(PlayerMovementContext &context) {
     auto &prediction = context.prediction;
 
     prediction.strict = context.owner.getProperties().getServerAuthoritativeMovementStrict();
-    if (!context.player.takeKnockback(state.velocity))
+    if (!context.player.takeKnockback(state.velocity)
+        && !context.player.takeServerMotion(input.getPacket().mTick, state.velocity))
         state.velocity = context.player.hasSimulatedVelocity() ? context.player.getSimulatedVelocity() : context.player.getMotion();
     state.onGround = context.player.hasSimulatedGround() ? context.player.isSimulatedOnGround()
                                                         : context.player.isOnGround();

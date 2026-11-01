@@ -664,8 +664,10 @@ void ServerPlayer::teleport(ServerNetworkHandler &owner, const Vector3f &positio
 
 void ServerPlayer::applyServerMotion(ServerNetworkHandler &owner, const Vector3f &motion) {
     setMotion(motion);
-    queueKnockback(motion);
-    const int64_t inputTick = mMovementInputs.lastProcessedTick();
+    const int64_t inputTick = std::max(mMovementInputs.lastReceivedTick(), mMovementInputs.lastProcessedTick());
+    mPendingServerMotion = motion;
+    mPendingServerMotionTick = inputTick + 1;
+    mHasPendingServerMotion = true;
     if (inputTick >= 0)
         getMovementValidator().onMovementEffect((uint64_t) inputTick);
 

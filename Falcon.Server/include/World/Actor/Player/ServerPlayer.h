@@ -53,9 +53,9 @@ public:
                   MovePlayerTeleportationCause cause = MovePlayerTeleportationCause::Behavior);
 
     /**
-     * Sets a velocity the client applies itself, such as a lunge. The packet carries the last processed input
-     * tick: the client applies the motion on the next input tick and replays from there, so the movement
-     * simulation takes it on that same tick.
+     * Sets a velocity the client applies itself, such as a lunge. The packet carries the last input tick the
+     * server received: the client applies the motion on the next input tick and replays from there, so the
+     * movement simulation takes it on that same tick, even when inputs are still queued.
      */
     void applyServerMotion(ServerNetworkHandler &owner, const Vector3f &motion);
 
@@ -236,6 +236,15 @@ public:
     }
 
     void clearPendingKnockback() { mHasPendingKnockback = false; }
+
+    // The server motion due on this input tick or an earlier one, see applyServerMotion.
+    bool takeServerMotion(int64_t inputTick, Vector3f &out) {
+        if (!mHasPendingServerMotion || inputTick < mPendingServerMotionTick)
+            return false;
+        out = mPendingServerMotion;
+        mHasPendingServerMotion = false;
+        return true;
+    }
 
     void scheduleKnockback(const Vector3f &motion) {
         mAcknowledgements.add([this, motion]() {
@@ -720,6 +729,9 @@ private:
     int32_t mPendingMovementChanges = 0;
     bool mHasPendingKnockback = false;
     Vector3f mPendingKnockback;
+    bool mHasPendingServerMotion = false;
+    Vector3f mPendingServerMotion;
+    int64_t mPendingServerMotionTick = 0;
     PlayerInventory mInventory;
     uint64_t mLastHurtByRuntimeId = 0;
     int64_t mLastHurtByTick = 0;
