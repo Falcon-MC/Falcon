@@ -52,6 +52,13 @@ public:
     void teleport(ServerNetworkHandler &owner, const Vector3f &position,
                   MovePlayerTeleportationCause cause = MovePlayerTeleportationCause::Behavior);
 
+    /**
+     * Sets a velocity the client applies itself, such as a lunge. The packet carries the last processed input
+     * tick: the client applies the motion on the next input tick and replays from there, so the movement
+     * simulation takes it on that same tick.
+     */
+    void applyServerMotion(ServerNetworkHandler &owner, const Vector3f &motion);
+
     const char *getIdentifier() const override { return "minecraft:player"; }
 
     const NetworkIdentifier &getNetworkIdentifier() const { return mId; }
