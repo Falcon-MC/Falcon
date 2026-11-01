@@ -38,10 +38,11 @@ void JumpControl::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (block != nullptr)
         jumpFactor = block->getJumpFactor();
 
-    const float jumpPower = mob.getJumpPower();
-    const bool fullJump = !inWater && jumpPower > 0.0f && mHeight >= FULL_JUMP_HEIGHT;
+    // A full-block obstacle takes the mob's jump power, which clears about 1.25 blocks: stronger impulses
+    // would carry chickens and armadillos over fences.
+    const bool fullJump = !inWater && mHeight >= FULL_JUMP_HEIGHT;
     Vector3f motion = mob.getMotion();
-    motion.y += (fullJump ? jumpPower : jumpingMotion(mHeight, inWater)) * jumpFactor;
+    motion.y += (fullJump ? mob.getJumpPower() : jumpingMotion(mHeight, inWater)) * jumpFactor;
     mob.setMotion(motion);
     mCoolDown = 0;
 }
@@ -51,9 +52,5 @@ float JumpControl::jumpingMotion(float height, bool inWater) {
         return 0.1f;
     if (height > 0.0f && height < 0.2f)
         return 0.15f;
-    if (height < 0.51f)
-        return 0.35f;
-    if (height < 1.01f)
-        return 0.5f;
-    return 0.6f;
+    return 0.35f;
 }

@@ -587,7 +587,7 @@ float MobActor::getMaxTurn() const {
 
 float MobActor::getJumpPower() const {
     const json::Value *jump = getComponent(STATIC_JUMP_COMPONENT);
-    return jump == nullptr ? -1.0f : numberIn(jump, "jump_power", DEFAULT_JUMP_POWER);
+    return jump == nullptr ? DEFAULT_JUMP_POWER : numberIn(jump, "jump_power", DEFAULT_JUMP_POWER);
 }
 
 bool MobActor::canSee(ServerNetworkHandler &owner, const Actor &other) const {
