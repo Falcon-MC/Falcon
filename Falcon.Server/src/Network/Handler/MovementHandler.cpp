@@ -480,9 +480,12 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
                 player.setBreakingFace(action.mFace);
 
             player.setLastBlockAttacked(action.mBlockPosition);
-        } else if (action.mAction == PlayerActionType::AbortBreak ||
-                  action.mAction == PlayerActionType::StopBreak) {
+        } else if (action.mAction == PlayerActionType::AbortBreak) {
             BlockActionHandler::stopBreakingBlock(owner, player);
+            player.clearLastBlockAttacked();
+        } else if (action.mAction == PlayerActionType::StopBreak) {
+            // The client sends StopBreak when a break finishes, in the same input as the destroy that completes it;
+            // only AbortBreak cancels, so the break stays tracked until that destroy is validated.
             player.clearLastBlockAttacked();
         } else if (action.mAction == PlayerActionType::BlockPredictDestroy ||
                   action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock) {
