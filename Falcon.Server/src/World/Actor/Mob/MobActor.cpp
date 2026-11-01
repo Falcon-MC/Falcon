@@ -884,6 +884,7 @@ PhysicsComponent MobActor::getPhysics() const {
     physics.mSwims = canSwim();
     physics.mClimbsLadders = getComponent(CAN_CLIMB_COMPONENT) != nullptr;
     physics.mClimbsWalls = getComponent(CLIMB_NAVIGATION_COMPONENT) != nullptr;
+    physics.mGravityAfterMove = true;
     return physics;
 }
 

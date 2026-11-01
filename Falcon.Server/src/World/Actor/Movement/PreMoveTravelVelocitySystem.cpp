@@ -22,7 +22,8 @@ Vector3f PreMoveTravelVelocitySystem::apply(ServerNetworkHandler &owner, ServerA
                                             bool eyesInWater) {
     Vector3f motion = actor.getMotion();
 
-    _applyGravity(motion, physics, feet);
+    if (!physics.mGravityAfterMove)
+        _applyGravity(motion, physics, feet);
 
     if (physics.mPushable) {
         const Vector3f push = ActorPushSystem::computePush(owner, actor, motion);
@@ -94,7 +95,18 @@ void PreMoveTravelVelocitySystem::_applyPassableFriction(Vector3f &motion, const
     const float factor = feet.lava ? LAVA_FRICTION : feet.water ? waterFriction : AIR_FRICTION;
 
     motion.x = snap(motion.x * factor);
-    if (!feet.bubble)
+    if (!feet.bubble && !physics.mGravityAfterMove)
         motion.y = snap(motion.y * factor);
     motion.z = snap(motion.z * factor);
+}
+
+void PreMoveTravelVelocitySystem::applyVerticalAfterMove(Vector3f &motion, const PhysicsComponent &physics,
+                                                         const LiquidContact &feet) {
+    _applyGravity(motion, physics, feet);
+    if (feet.bubble)
+        return;
+
+    const float waterFriction = physics.mSwims ? SWIMMER_WATER_FRICTION : WATER_FRICTION;
+    const float factor = feet.lava ? LAVA_FRICTION : feet.water ? waterFriction : AIR_FRICTION;
+    motion.y = snap(motion.y * factor);
 }
