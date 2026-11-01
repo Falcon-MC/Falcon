@@ -199,4 +199,14 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
         state.velocity.z = 0.0f;
     if (travel.moved.mCollidedY)
         state.velocity.y = wasOnGround || state.velocity.y >= 0.0f || input.pressingSneak ? 0.0f : landingVelocity(under, state.velocity.y);
+
+    // A wall bump on a climbable block lifts after the move, and that tick skips gravity and vertical drag.
+    if (!abilities.flying && !abilities.gliding && !context.waterTravel.active && !context.liquidTravel.lava
+        && (travel.moved.mCollidedX || travel.moved.mCollidedZ)) {
+        const Block *inside = blockAt(context.level, state.simulated.x, state.simulated.y, state.simulated.z);
+        if (inside != nullptr && inside->isClimbable()) {
+            state.velocity.y = CLIMB_SPEED;
+            context.autoClimb.climbing = true;
+        }
+    }
 }
