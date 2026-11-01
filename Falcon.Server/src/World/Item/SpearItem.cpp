@@ -245,6 +245,18 @@ void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, co
     if (!getLungeImpulse(owner, player, item, impulse))
         return;
 
+    // The client only moves when it receives the motion, so the simulation takes the push once the client
+    // acknowledges it, like knockback.
+    Vector3f motion = player.hasSimulatedVelocity() ? player.getSimulatedVelocity() : player.getMotion();
+    motion.x += impulse.x;
+    motion.z += impulse.z;
+    player.setMotion(motion);
+    player.scheduleKnockback(motion);
+    const int64_t inputTick = player.getMovementInputs().lastProcessedTick();
+    if (inputTick >= 0)
+        player.getMovementValidator().onMovementEffect((uint64_t) inputTick);
+    owner.sendActorMotion(player);
+
     const int32_t lungeLevel = ItemEnchantments::getLevel(item, EnchantmentIds::LUNGE);
 
     const char *sound = lungeLevel >= 3 ? LevelSoundEvent::LUNGE_3

@@ -28,11 +28,6 @@ public:
 
     float getKineticDamage(float speed) const;
 
-    // The horizontal push a lunge adds to the player's velocity. The client applies it in its own movement tick,
-    // so the server adds it to the simulated velocity of the input tick that starts using the spear.
-    bool getLungeImpulse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
-                         Vector3f &impulse) const;
-
     const std::string &getTierName() const {
         return mTierName;
     }
@@ -41,6 +36,9 @@ private:
     void stab(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const;
 
     float getJabDamage(const ItemStack &item) const;
+
+    bool getLungeImpulse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
+                         Vector3f &impulse) const;
 
     void applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const;
 
