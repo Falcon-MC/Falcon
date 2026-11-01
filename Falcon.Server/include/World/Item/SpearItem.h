@@ -21,11 +21,6 @@ public:
 
     static bool matches(const std::string &identifier);
 
-    // A raised spear is carried at full speed: its kinetic damage needs the player to sprint.
-    bool slowsMovementWhileUsing() const override {
-        return false;
-    }
-
     float getKineticDamage(float speed) const;
 
     const std::string &getTierName() const {

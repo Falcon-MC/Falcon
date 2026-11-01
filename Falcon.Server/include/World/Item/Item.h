@@ -103,11 +103,6 @@ public:
         return false;
     }
 
-    // Whether the client slows its movement input while this item is in use, as it does for food and bows.
-    virtual bool slowsMovementWhileUsing() const {
-        return true;
-    }
-
     virtual bool isConsumable() const {
         return false;
     }
