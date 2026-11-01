@@ -5,6 +5,7 @@
 
 struct PlayerTravelComponent {
     bool isStuck = false;
+    bool standsOnSlowingBlock = false;
     float frictionModifier = 1.0f;
     float friction = 0.0f;
     float acceleration = 0.0f;

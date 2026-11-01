@@ -187,14 +187,7 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
 
     updateSupportingBlock(context.level, context.player, travel.box, state.simulated, state.onGround, state.velocity);
     const BlockBehavior &under = behaviorUnder(context.level, state.simulated, context.player);
-    if (state.simulated.y == state.start.y && state.onGround && !context.pose.mSneaking && !input.pressingSneak && under.slowsWalking()) {
-        const float vertical = std::fabs(travel.moved.mMoved.y);
-        if (vertical < WALK_SLOWDOWN_LIMIT) {
-            const float slowdown = WALK_SLOWDOWN_BASE + vertical * WALK_SLOWDOWN_PER_VELOCITY;
-            state.velocity.x *= slowdown;
-            state.velocity.z *= slowdown;
-        }
-    }
+    travel.standsOnSlowingBlock = state.onGround && under.slowsWalking();
 
     if (travel.isStuck)
         state.velocity = Vector3f(0.0f, 0.0f, 0.0f);
