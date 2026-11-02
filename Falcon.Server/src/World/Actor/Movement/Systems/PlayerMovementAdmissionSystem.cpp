@@ -30,9 +30,11 @@ bool PlayerMovementAdmissionSystem::prepare(PlayerMovementContext &context) {
         return false;
     }
 
-    const bool skip = context.player.isRiding() || context.player.isSleeping() || context.player.hasPendingMovementChange()
-                      || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::InClientPredictedInVehicle)
-                      || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::HandleTeleport);
+    // Only server state decides to skip: a server teleport keeps a movement change pending until the client
+    // acknowledges it, and riding is the server's own state. The client's HandleTeleport and vehicle input flags are
+    // not trusted, or a single bit would let it place itself anywhere.
+    const bool skip = context.player.isRiding() || context.player.isSleeping()
+                      || context.player.skipsForPendingMovementChange();
     if (skip || !chunkLoaded(context.level, state.start)
         || !chunkLoaded(context.level, *context.prediction.feetPosition)) {
         context.player.clearMovementSimulation();

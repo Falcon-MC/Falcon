@@ -264,6 +264,19 @@ public:
 
     bool hasPendingMovementChange() const { return mPendingMovementChanges > 0; }
 
+    /**
+     * Whether this input should skip the movement simulation for a pending movement change. A client acknowledges one
+     * within a round trip; one that holds the acknowledgement back would otherwise move unchecked until the timeout,
+     * so the simulation resumes after a bounded number of inputs.
+     */
+    bool skipsForPendingMovementChange() {
+        if (!hasPendingMovementChange()) {
+            mInputsWhilePending = 0;
+            return false;
+        }
+        return ++mInputsWhilePending <= MAX_INPUTS_WHILE_PENDING;
+    }
+
     void setFlying(bool flying) {
         if (mFlying == flying)
             return;
@@ -727,6 +740,8 @@ private:
     Vector3i mSupportingBlock;
     PlayerAcknowledgements mAcknowledgements;
     int32_t mPendingMovementChanges = 0;
+    static constexpr int32_t MAX_INPUTS_WHILE_PENDING = 20;
+    int32_t mInputsWhilePending = 0;
     bool mHasPendingKnockback = false;
     Vector3f mPendingKnockback;
     bool mHasPendingServerMotion = false;
