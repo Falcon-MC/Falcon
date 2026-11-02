@@ -65,6 +65,9 @@ void UpdateHorizontalPoseSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     context.pose = resolvePose(context.level, state.start, input.getPacket(), context.player.isSimulatedSneaking(),
                                         context.player.isSimulatedCrawling());
+    // The client stops swimming as soon as it leaves the water, so a StartSwimming outside it is not trusted.
+    if (abilities.swimming && !LiquidBlocksFetch::at(context.level, state.start, true, PLAYER_HEIGHT).water)
+        abilities.swimming = false;
     // BDS PlayerBoundingBoxStateUpdateSystem and SneakTriggerIntentSystem
     // (0x140F97340/0x140E77100) keep a horizontal pose when neither standing nor crouching fits.
     if (!abilities.flying && !abilities.gliding && !fits(context.level, state.start, PLAYER_HEIGHT)) {

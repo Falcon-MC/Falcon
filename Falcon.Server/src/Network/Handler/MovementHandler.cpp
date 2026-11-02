@@ -14,6 +14,7 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Level/Block/Systems/WaterMoveSystem.h"
 #include "World/Level/Level.h"
+#include "World/Item/ElytraItem.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "Network/Handler/BadPacketHandler.h"
@@ -244,7 +245,8 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
         player.resetFallDistance();
     } else {
-        if (wasOnGround || requestedY > 0.0f || player.getMotion().y > 0.0f)
+        // Without a simulated velocity the motion is the client's own delta, which must not clear a fall.
+        if (wasOnGround || requestedY > 0.0f || (player.hasSimulatedVelocity() && player.getMotion().y > 0.0f))
             player.resetFallDistance();
 
         if (feetPosition.y > player.getHighestPosition())
@@ -432,7 +434,9 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
             flags.set(ActorFlag::Swimming, false);
     }
 
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartGliding))
+    // The client sets StartGliding itself; without an elytra it is not gliding, and the flag also turns off critical
+    // hits and lunges and changes the liquid probe.
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartGliding) && ElytraItem::isWearingElytra(player))
         flags.set(ActorFlag::Gliding, true);
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopGliding))
         flags.set(ActorFlag::Gliding, false);
