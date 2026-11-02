@@ -6,8 +6,11 @@
 #include "SpawnRulesJson.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace {
+    const int32_t MAX_SPAWN_DISTANCE = 1024;
+
     const std::vector<std::string> UNSUPPORTED_COMPONENTS = {
             "minecraft:delay_filter", "minecraft:mob_event_filter", "minecraft:player_in_village_filter"
     };
@@ -69,8 +72,11 @@ namespace {
         result.mLava = condition.get("minecraft:spawns_lava") != nullptr;
         result.mNoBubbles = condition.get("minecraft:disallow_spawns_in_bubble") != nullptr;
 
-        if (const json::Value *weight = condition.get("minecraft:weight"))
-            result.mWeight = weight->get("default") != nullptr ? weight->get("default")->integer(0) : 0;
+        if (const json::Value *weight = condition.get("minecraft:weight")) {
+            result.mWeight = std::max(0, weight->get("default") != nullptr ? weight->get("default")->integer(100) : 100);
+            if (const json::Value *rarity = weight->get("rarity"))
+                result.mRarity = rarity->integer(5);
+        }
 
         if (const json::Value *herd = condition.get("minecraft:herd")) {
             if (herd->isArray()) {
@@ -115,9 +121,12 @@ namespace {
         }
 
         if (const json::Value *distance = condition.get("minecraft:distance_filter")) {
-            result.mHasDistance = true;
-            result.mMinDistance = (float) (distance->get("min") != nullptr ? distance->get("min")->number(0.0) : 0.0);
-            result.mMaxDistance = (float) (distance->get("max") != nullptr ? distance->get("max")->number(0.0) : 0.0);
+            int32_t minimum = distance->get("min") != nullptr ? distance->get("min")->integer(24) : 24;
+            int32_t maximum = distance->get("max") != nullptr ? distance->get("max")->integer(128) : 128;
+            if (minimum > maximum)
+                std::swap(minimum, maximum);
+            result.mMinDistance = std::max(0, minimum);
+            result.mMaxDistance = std::min(maximum, MAX_SPAWN_DISTANCE);
         }
 
         if (const json::Value *age = condition.get("minecraft:world_age_filter"))
