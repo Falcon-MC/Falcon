@@ -21,9 +21,10 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
 
     // BDS ClientAcceptanceSystem (0x141038FF0) selects the solid-shape thresholds
     // when the move's collision list contains block shapes. Defaults: 0x1402C1190.
-    const AxisAlignedBB sweep = boxAt(state.start, context.pose.mHeight).addCoord(
-            travel.moved.mRequested.x, travel.moved.mRequested.y, travel.moved.mRequested.z);
-    const bool solid = !context.level.getCollisionBoxes(sweep).empty();
+    // The floor is in every grounded sweep, so counting it would refill 0.1 per tick forever and accept a constant
+    // extra 0.1 blocks per tick of horizontal speed. Only a wall or a ceiling the move hit selects them.
+    const bool solid = travel.moved.mCollidedX || travel.moved.mCollidedZ
+                       || (travel.moved.mCollidedY && travel.moved.mRequested.y > 0.0f);
     const float refill = solid ? 0.1f : 0.035f;
     const float maximum = solid ? 1.0f : 0.5f;
     const float verticalLimit = solid ? 1.0f : 0.43f;
