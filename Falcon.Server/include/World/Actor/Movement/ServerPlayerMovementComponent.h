@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <vector>
 
 class PlayerAuthInputPacket;
 
@@ -20,6 +21,12 @@ public:
     std::shared_ptr<const PlayerAuthInputPacket> takeNext();
 
     void clearPending();
+    // Inputs dropped unprocessed since the last call; their predicted block changes must be resent to the client.
+    std::vector<std::shared_ptr<const PlayerAuthInputPacket>> takeDropped() {
+        std::vector<std::shared_ptr<const PlayerAuthInputPacket>> dropped;
+        dropped.swap(mDropped);
+        return dropped;
+    }
 
     bool hasPendingFlightRequest() const {
         return !mFlightRequests.empty();
@@ -61,6 +68,7 @@ private:
 
     std::deque<std::shared_ptr<const PlayerAuthInputPacket>> mInputs;
     std::deque<FlightRequest> mFlightRequests;
+    std::vector<std::shared_ptr<const PlayerAuthInputPacket>> mDropped;
     int64_t mLastReceivedTick = -1;
     uint32_t mStaleTicks = 0;
     int64_t mLastProcessedTick = -1;

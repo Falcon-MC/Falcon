@@ -116,6 +116,9 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
             applyFlightRequest(flying);
     }
 
+    for (const auto &dropped: inputs.takeDropped())
+        BlockActionHandler::resyncDroppedInput(*this, player, *dropped);
+
     player.tickCombat(1);
     player.tickItemCooldowns(mCurrentTick);
     player.tickShield(*this);

@@ -35,6 +35,7 @@ std::shared_ptr<const PlayerAuthInputPacket> ServerPlayerMovementComponent::take
             return nullptr;
         if (mCredits >= mInputs.size() - 1 && mBatchSize >= mInputs.size())
             break;
+        mDropped.push_back(std::move(mInputs.front()));
         mInputs.pop_front();
     }
 
@@ -67,6 +68,8 @@ bool ServerPlayerMovementComponent::takeFlightRequest(int64_t inputTick, bool in
 
 void ServerPlayerMovementComponent::clearPending() {
     // A teleport invalidates pending coordinates, but must not reopen the accepted tick sequence.
+    for (auto &input: mInputs)
+        mDropped.push_back(std::move(input));
     mInputs.clear();
     mFlightRequests.clear();
 }

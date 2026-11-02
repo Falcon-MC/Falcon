@@ -12,6 +12,7 @@ class Packet;
 class BlockState;
 class BlockActor;
 class PacketCodecContext;
+class PlayerAuthInputPacket;
 
 class BlockActionHandler {
 public:
@@ -41,6 +42,10 @@ public:
     static void stopBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
+
+    // Resends the blocks an unprocessed input predicted to break or place, so the client drops its prediction.
+    static void resyncDroppedInput(ServerNetworkHandler &owner, ServerPlayer &player,
+                                   const PlayerAuthInputPacket &packet);
 
     static void sendBreakingFx(ServerNetworkHandler &owner, ServerPlayer &player);
 

@@ -1,4 +1,5 @@
 #include "Network/Handler/BlockActionHandler.h"
+#include "Protocol/Packets/PlayerAuthInputPacket.h"
 
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockSupport.h"
@@ -744,6 +745,19 @@ void BlockActionHandler::continueBreakingBlock(ServerNetworkHandler &owner, Serv
     if (owner.getProperties().getServerAuthoritativeBlockBreaking() && player.getBreakProgress() >= 1.0) {
         completeBreakingBlock(owner, player, position);
     }
+}
+
+void BlockActionHandler::resyncDroppedInput(ServerNetworkHandler &owner, ServerPlayer &player,
+                                            const PlayerAuthInputPacket &packet) {
+    for (const PlayerBlockActionData &action: packet.mPlayerActions) {
+        if (action.mAction == PlayerActionType::BlockPredictDestroy
+            || action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock)
+            syncBlocksNearby(owner, player, action.mBlockPosition, action.mFace);
+    }
+    if (packet.mHasItemUseTransaction && (packet.mItemUseTransaction.mActionType == 0
+                                          || packet.mItemUseTransaction.mActionType == 2))
+        syncBlocksNearby(owner, player, packet.mItemUseTransaction.mBlockPosition,
+                         packet.mItemUseTransaction.mBlockFace);
 }
 
 void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player,
