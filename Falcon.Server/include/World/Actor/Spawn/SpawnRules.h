@@ -25,7 +25,8 @@ struct SpawnCondition {
     bool mUnderwater = false;
     bool mLava = false;
     bool mNoBubbles = false;
-    int32_t mWeight = 0;
+    int32_t mWeight = 100;
+    int32_t mRarity = 0;
     std::vector<SpawnHerd> mHerds;
     std::vector<SpawnPermutation> mPermutations;
     bool mHasBrightness = false;
@@ -37,9 +38,9 @@ struct SpawnCondition {
     bool mHasHeight = false;
     int32_t mMinHeight = 0;
     int32_t mMaxHeight = 0;
-    bool mHasDistance = false;
-    float mMinDistance = 0.0f;
-    float mMaxDistance = 0.0f;
+    // Without a distance_filter the dedicated server still keeps mobs between 24 and 128 blocks of a player.
+    int32_t mMinDistance = 24;
+    int32_t mMaxDistance = 128;
     int64_t mMinWorldAge = 0;
     int32_t mSurfaceDensity = -1;
     int32_t mUndergroundDensity = -1;
