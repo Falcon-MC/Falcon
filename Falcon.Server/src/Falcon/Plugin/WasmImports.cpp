@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-// canonical abi lowering of wit/falcon.wit: guest arguments are checked before the c api, which trusts its pointers
+// canonical abi lowering of falcon.wit: guest arguments checked before the c api, which trusts its pointers
 // costs: player and level handles are a scan each, strings are copied once; only when the plugin calls
 
 namespace {
