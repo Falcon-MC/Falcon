@@ -114,10 +114,15 @@ bool Level::openStorage(const std::string &worldsDirectory) {
             if (levelDat.contains("Time"))
                 setTime(levelDat.getLong("Time"));
 
-            if (levelDat.contains("RandomSeed") && levelDat.getLong("RandomSeed") != mSeed) {
+            const bool reseeded = levelDat.contains("RandomSeed") && levelDat.getLong("RandomSeed") != mSeed;
+            if (reseeded)
                 mSeed = levelDat.getLong("RandomSeed");
-                mGenerator = DimensionFactory::createGenerator(mDimension, mSeed);
-            }
+
+            const auto generator = (DimensionFactory::GeneratorType) levelDat.getInt(
+                    "Generator", (int32_t) DimensionFactory::GeneratorType::Overworld);
+            if (reseeded || generator == DimensionFactory::GeneratorType::Flat)
+                mGenerator = DimensionFactory::createGenerator(mDimension, mSeed, generator,
+                                                               levelDat.getString("FlatWorldLayers"));
 
             mWorldStartCount = (uint32_t) levelDat.getLong("worldStartCount", DEFAULT_WORLD_START_COUNT);
             mBonusChestEnabled = levelDat.getByte("bonusChestEnabled", 0) != 0;
