@@ -23,7 +23,7 @@ using namespace RangedWeaponHelpers;
 namespace {
     const float BOW_MAX_FORCE = 3.5f;
     const int32_t BOW_MINIMUM_TICKS = 3;
-    const int32_t FLAME_ARROW_FIRE_TICKS = 45 * 60;
+    const int32_t FLAME_ARROW_FIRE_TICKS = 5 * 20;
 
     void applyBowEnchantments(const ItemStack &bow, ProjectileData &data) {
         const int32_t power = ItemEnchantments::getLevel(bow, EnchantmentIds::POWER);
