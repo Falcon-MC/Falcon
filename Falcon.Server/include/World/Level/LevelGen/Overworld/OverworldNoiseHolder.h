@@ -146,7 +146,9 @@ public:
 
     IRandom &getRandomSource() const { return *mRandomSource; }
 
-    const XoroshiroPositionalFactory &getNoiseFactory() const { return mNoiseFactory; }
+    const XoroshiroPositionalFactory &getNoiseFactory() const {
+        return mNoiseFactory;
+    }
 
 private:
     IRandomPtr mRandomSource;
