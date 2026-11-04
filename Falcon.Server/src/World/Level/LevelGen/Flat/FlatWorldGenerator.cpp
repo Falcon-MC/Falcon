@@ -61,7 +61,8 @@ namespace {
 }
 
 FlatWorldGenerator::FlatWorldGenerator(int64_t seed, const std::string &layers)
-        : mSeed(seed), mAirHash(BlockStateHasher::hash(AIR)), mBiomeId(0), mSpawnY(LevelChunk::MIN_Y + 1) {
+        : mSeed(seed), mAirHash(BlockStateHasher::hash(AIR)), mBiomeId(0), mSpawnY(LevelChunk::MIN_Y + 1),
+          mStone(defaultState("minecraft:stone")), mCobblestone(defaultState("minecraft:cobblestone")) {
     if (!_parse(layers))
         _parse(DEFAULT_LAYERS);
 
@@ -156,18 +157,11 @@ void FlatWorldGenerator::generate(LevelChunk &chunk) const {
         }
     }
 
+    // The column is the same everywhere, so its top is known without scanning the chunk.
+    const int32_t height = mLayers.empty() ? LevelChunk::MIN_Y : mSpawnY - 1;
     for (int32_t x = 0; x < 16; ++x) {
-        for (int32_t z = 0; z < 16; ++z) {
-            int32_t height = LevelChunk::MIN_Y;
-            for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; --y) {
-                if (chunk.getBlock(x, y, z).mName != AIR) {
-                    height = y;
-                    break;
-                }
-            }
-
+        for (int32_t z = 0; z < 16; ++z)
             chunk.setHeight(x, z, height);
-        }
     }
 
     chunk.setBiome((uint32_t) mBiomeId);
@@ -184,14 +178,13 @@ void FlatWorldGenerator::_generateEmpty(LevelChunk &chunk) const {
 
     const int32_t maxX = chunkX == 1 ? 1 : 16;
     const int32_t maxZ = chunkZ == 1 ? 1 : 16;
-    const BlockState stone = defaultState("minecraft:stone");
     for (int32_t x = 0; x < maxX; ++x) {
         for (int32_t z = 0; z < maxZ; ++z)
-            chunk.setBlock(x, LevelChunk::MIN_Y, z, stone);
+            chunk.setBlock(x, LevelChunk::MIN_Y, z, mStone);
     }
 
     if (chunkX == 0 && chunkZ == 0)
-        chunk.setBlock(0, LevelChunk::MIN_Y, 0, defaultState("minecraft:cobblestone"));
+        chunk.setBlock(0, LevelChunk::MIN_Y, 0, mCobblestone);
 }
 
 void FlatWorldGenerator::decorate(Level &, LevelChunk &, std::vector<GeneratedBlockChange> *) const {

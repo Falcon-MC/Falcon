@@ -54,4 +54,6 @@ private:
     int32_t mSpawnY;
     std::vector<Layer> mLayers;
     std::vector<BlockState> mColumn;
+    BlockState mStone;
+    BlockState mCobblestone;
 };
