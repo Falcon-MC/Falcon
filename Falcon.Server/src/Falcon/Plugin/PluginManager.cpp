@@ -9,6 +9,7 @@
 #include "Falcon/Plugin/PluginCommand.h"
 #include "Falcon/Plugin/PluginPackets.h"
 #include "Falcon/Plugin/PluginServerApi.h"
+#include "Falcon/Plugin/WasmHost.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -106,7 +107,7 @@ void PluginManager::loadAll(const std::string &directory) {
         }
 
         if (!native && description.mRuntime != "internal" && description.mRuntime != "java"
-            && description.mRuntime != "dotnet") {
+            && description.mRuntime != "dotnet" && description.mRuntime != "wasm") {
             LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: the %s runtime is not supported yet",
                       description.mName.c_str(), description.mRuntime.c_str());
             continue;
@@ -140,6 +141,9 @@ void PluginManager::loadAll(const std::string &directory) {
                 continue;
         } else if (plugin->mDescription.mRuntime == "dotnet") {
             if (!DotnetHost::load(*plugin))
+                continue;
+        } else if (plugin->mDescription.mRuntime == "wasm") {
+            if (!WasmHost::load(*plugin))
                 continue;
         } else if (!(internal ? InternalPluginLoader::load(*plugin, mOwner) : _loadNative(*plugin))) {
             continue;

@@ -43,6 +43,20 @@ check it against its `.sha256` file and run it. On the first start, a setup wiza
 Only the newest version can join by default. Set `any-version=true` in `server.properties` to let every
 supported version join.
 
+## Plugins
+
+| Runtime  | Use it for                                                                               |
+|----------|------------------------------------------------------------------------------------------|
+| `wasm`   | New plugins: sandboxed WebAssembly, in any language with WIT bindings for core modules   |
+| `native` | Raw performance, through the C API of [PluginAPI](https://github.com/Falcon-MC/PluginAPI) |
+| `java`   | Java plugins                                                                             |
+
+The Wasm API is defined once in [`wasm/falcon.wit`](https://github.com/Falcon-MC/PluginAPI/tree/main/wasm) in
+PluginAPI and mirrors the C API. [HelloWasm](https://github.com/Falcon-MC/PluginAPI/tree/main/examples/wasm/HelloWasm)
+is a complete plugin written with its small C helper. A Wasm plugin has no file system or network access, at
+most `wasm-plugin-memory-mb` of memory and `wasm-plugin-fuel` units of fuel per server call. A plugin that runs
+out of fuel or traps is stopped.
+
 ## Related repositories
 
 - [Protocol](https://github.com/Falcon-MC/Protocol) - packets and network types

@@ -117,6 +117,8 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"max-form-responses-per-second", "20", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"max-movement-packets-per-second", "40", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"max-chat-message-length", "512", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            {"wasm-plugin-memory-mb", "64", PropertyKind::Int, 1, 4096, nullptr},
+            {"wasm-plugin-fuel", "10000000", PropertyKind::Int, 1, UNBOUNDED, nullptr},
             {"transport", "nethernet", PropertyKind::Enum, 0, 0, "nethernet"}
     };
 
