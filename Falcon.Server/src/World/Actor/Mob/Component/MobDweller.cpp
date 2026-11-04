@@ -58,6 +58,13 @@ void MobDweller::tick(ServerNetworkHandler &owner, MobActor &mob) {
         --mUpdateCountdown;
 }
 
+void MobDweller::onDeath(const MobActor &mob) {
+    const std::shared_ptr<Village> village = mVillage.lock();
+    if (village != nullptr)
+        village->removeDweller(mRole, mob.getUniqueId());
+    mVillage.reset();
+}
+
 void MobDweller::_read(const json::Value &component) {
     mRole = roleOf(component.get("dweller_role"));
     mCanFindPoi = flagIn(component, "can_find_poi");

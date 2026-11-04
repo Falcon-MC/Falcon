@@ -149,7 +149,7 @@ void ServerNetworkHandler::_tickVillages(Level &level) {
         ServerPlayer &player = entry.second;
         if (!player.isSpawned() || !player.isIn(level))
             continue;
-        villages.tickVillagesNear(*this, mCurrentTick, player.getPosition(), mProperties.getTickDistance());
+        villages.tickVillagesNear(*this, level, mCurrentTick, player.getPosition(), mProperties.getTickDistance());
     }
 }
 

@@ -314,6 +314,10 @@ public:
         return mAdmiration;
     }
 
+    const MobDweller &getDweller() const {
+        return mDweller;
+    }
+
     MobAnger &getAnger() {
         return mAnger;
     }

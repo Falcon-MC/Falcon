@@ -2,6 +2,7 @@
 
 #include "Core/Math/AxisAlignedBB.h"
 #include "Core/Math/Vector3f.h"
+#include "Core/Math/Vector3i.h"
 #include "World/Village/PoiInstance.h"
 
 #include <array>
@@ -9,6 +10,7 @@
 #include <memory>
 #include <vector>
 
+class Level;
 class MobActor;
 class ServerNetworkHandler;
 
@@ -77,7 +79,7 @@ public:
     /** Every point of interest the village holds, claimed or not. */
     std::vector<std::shared_ptr<PoiInstance>> getPois() const;
 
-    void tick(ServerNetworkHandler &owner, int64_t currentTick);
+    void tick(ServerNetworkHandler &owner, Level &level, int64_t currentTick);
 
 private:
     using PoiQueue = std::vector<std::weak_ptr<PoiInstance>>;
@@ -90,6 +92,7 @@ private:
     struct DwellerEntry {
         int64_t mId;
         int64_t mLastSeenTick;
+        Vector3i mPosition;
     };
 
     Inhabitant *_findInhabitant(int64_t id);
@@ -102,7 +105,13 @@ private:
 
     void _claimNext(ServerNetworkHandler &owner, int64_t id, PoiQueue &queue);
 
-    void _tickDwellerTimeouts(ServerNetworkHandler &owner);
+    void _claimJobSite(ServerNetworkHandler &owner, int64_t id);
+
+    void _spawnPoiParticles(ServerNetworkHandler &owner, MobActor &mob, int32_t data) const;
+
+    void _tickPoiValidity(ServerNetworkHandler &owner, Level &level);
+
+    void _tickDwellerTimeouts(ServerNetworkHandler &owner, Level &level);
 
     void _recalculateBounds();
 
