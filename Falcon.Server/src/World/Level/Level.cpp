@@ -77,6 +77,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mBlockUpdateScheduler.moveStateFrom(std::move(other.mBlockUpdateScheduler));
     mBlockUpdates.moveStateFrom(std::move(other.mBlockUpdates));
     mLiquidPhysics.moveStateFrom(std::move(other.mLiquidPhysics));
+    mVillageManager = std::move(other.mVillageManager);
     mGameRules = std::move(other.mGameRules);
     mRulesOwner = other.mRulesOwner;
     mPacketBroadcaster = std::move(other.mPacketBroadcaster);

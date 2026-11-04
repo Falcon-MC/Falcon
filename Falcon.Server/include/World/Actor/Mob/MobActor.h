@@ -13,6 +13,7 @@
 #include "World/Actor/Mob/Component/MobAdmiration.h"
 #include "World/Actor/Mob/Component/MobLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
+#include "World/Actor/Mob/Component/MobDweller.h"
 #include "World/Actor/Mob/MobEntitySpawner.h"
 #include "World/Actor/Mob/MobEquipment.h"
 #include "World/Actor/Movement/RideControlSystem.h"
@@ -543,6 +544,7 @@ private:
     mutable float mRolledJumpStrength = -1.0f;
     RideControlState mRideControl;
     MobAnger mAnger;
+    MobDweller mDweller;
     MobAdmiration mAdmiration;
     MobLeash mLeash;
     const json::Value *mAttackCooldownComponent = nullptr;

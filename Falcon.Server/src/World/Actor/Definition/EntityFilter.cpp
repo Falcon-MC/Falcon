@@ -946,8 +946,15 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     if (test == "in_caravan")
         return applyBoolean(FollowCaravanGoal::isInCaravan(target->getUniqueId()), value, op);
 
-    if (test == "is_raider" || test == "is_in_village" || test == "has_trade_supply" || test == "trusts"
-        || test == "is_leashed_to")
+    if (test == "is_in_village") {
+        if (target == nullptr)
+            return false;
+        const std::shared_ptr<Village> village =
+                owner.getLevelFor(*target).getVillageManager().getClosestVillage(blockPosition(*target), 0);
+        return applyBoolean(village != nullptr, value, op);
+    }
+
+    if (test == "is_raider" || test == "has_trade_supply" || test == "trusts" || test == "is_leashed_to")
         return applyBoolean(false, value, op);
 
     return false;
