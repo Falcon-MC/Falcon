@@ -1,0 +1,8 @@
+{
+  "name": "HelloWasm",
+  "version": "1.0.0",
+  "runtime": "wasm",
+  "main": "HelloWasm.wasm",
+  "description": "Greets players and answers /hellowasm from WebAssembly",
+  "authors": ["Falcon"]
+}

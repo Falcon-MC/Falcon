@@ -180,6 +180,10 @@ public:
 
     int getMaxChatMessageLength() const { return getInt("max-chat-message-length"); }
 
+    int getWasmPluginMemoryMb() const { return getInt("wasm-plugin-memory-mb"); }
+
+    int getWasmPluginFuel() const { return getInt("wasm-plugin-fuel"); }
+
     float getPlayerPositionAcceptanceThreshold() const {
         return getFloat("player-position-acceptance-threshold");
     }

@@ -168,7 +168,7 @@ target_include_directories(FalconCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${FALCON_GENERATED_DIR} ${FALCON_LEGACY_INCLUDE_DIR} ${ZLIB_INCLUDE_DIRS}
         ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(FalconCore PUBLIC FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic
-        Falcon::PluginAPI ${CMAKE_DL_LIBS})
+        Falcon::PluginAPI wasmtime ${CMAKE_DL_LIBS})
 
 if(WIN32)
     target_compile_definitions(FalconCore PRIVATE WIN32_LEAN_AND_MEAN)

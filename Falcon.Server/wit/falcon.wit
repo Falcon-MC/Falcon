@@ -1,0 +1,421 @@
+/// The Falcon plugin API for WebAssembly plugins.
+///
+/// Every imported function mirrors one entry of the C API table in `falcon_api.h` (API 1.3.3) and calls it,
+/// so a Wasm plugin reaches exactly what a native plugin reaches. The only C entry without a counterpart is
+/// `runAsync`: a plugin instance is not thread safe, so it cannot run on the scheduler's worker thread.
+///
+/// Handles are never pointers. Players and entities are their runtime id and are looked up on every call, so
+/// a stale id is simply not found. Levels and items are host-side handles that are checked on every call.
+/// Events and command senders have no handle: `event` and the sender functions of `commands` act on the
+/// event or command being handled and return default values outside a handler.
+package falcon:plugin@1.3.3;
+
+interface types {
+    /// The runtime id of a player. A player is also an entity, so the same id works with `entities`.
+    type player = u64;
+
+    /// The runtime id of an entity.
+    type entity = u64;
+
+    /// One of the `FALCON_DIMENSION_*` values.
+    type dimension = u32;
+
+    /// One of the `FALCON_GAME_MODE_*` values.
+    type game-mode = u32;
+
+    /// One of the `FALCON_EVENT_*` values.
+    type event-kind = u32;
+
+    record vec3 {
+        x: f64,
+        y: f64,
+        z: f64,
+    }
+
+    record block-pos {
+        x: s32,
+        y: s32,
+        z: s32,
+    }
+
+    /// `FALCON_LOG_*`, in order.
+    enum log-level {
+        info,
+        warning,
+        error,
+    }
+
+    /// `FALCON_PRIORITY_*`, in order.
+    enum priority {
+        lowest,
+        low,
+        normal,
+        high,
+        highest,
+        monitor,
+    }
+
+    /// `FALCON_PERMISSION_DEFAULT_FALSE`, `_TRUE` and `_OPERATOR`, in order.
+    enum permission-default {
+        deny,
+        allow,
+        operator,
+    }
+
+    /// `FALCON_PERMISSION_ANY` and `FALCON_PERMISSION_OPERATOR`, in order.
+    enum command-permission {
+        any,
+        operator,
+    }
+
+    /// `FALCON_ARMOR_*`, in order.
+    enum armor-slot {
+        head,
+        chest,
+        legs,
+        feet,
+    }
+
+    /// A level of a loaded world. A level whose world was unloaded behaves like a missing one.
+    resource level;
+
+    /// An item stack. Items returned by `item-create`, `item-copy` and the inventory getters are copies owned
+    /// by the plugin. Items returned by `event-item` and `event-result`, and the item passed to a custom item
+    /// handler, are the server's own stack and stop working when the handler returns.
+    resource item;
+}
+
+interface server {
+    use types.{player, log-level};
+
+    server-version: func() -> string;
+    log: func(level: log-level, message: string);
+    plugin-name: func() -> string;
+    plugin-data-folder: func() -> string;
+    online-player-count: func() -> u32;
+    online-player: func(index: u32) -> option<player>;
+    find-player: func(name: string) -> option<player>;
+    broadcast-message: func(message: string);
+}
+
+interface players {
+    use types.{player, entity, game-mode};
+
+    player-name: func(player: player) -> string;
+    player-is-operator: func(player: player) -> bool;
+    player-send-message: func(player: player, message: string);
+    player-kick: func(player: player, reason: string);
+    player-entity: func(player: player) -> option<entity>;
+    entity-player: func(entity: entity) -> option<player>;
+    player-game-mode: func(player: player) -> game-mode;
+    player-set-game-mode: func(player: player, game-mode: game-mode);
+    player-xuid: func(player: player) -> string;
+    player-uuid: func(player: player) -> string;
+    player-address: func(player: player) -> string;
+    player-send-title: func(player: player, title: string, subtitle: string);
+    player-send-action-bar: func(player: player, message: string);
+    player-food: func(player: player) -> f32;
+    player-set-food: func(player: player, food: f32);
+    player-xp-level: func(player: player) -> s32;
+    player-set-xp-level: func(player: player, level: s32);
+    player-set-operator: func(player: player, operator: bool);
+    player-send-form: func(player: player, form-json: string) -> u32;
+    player-transfer: func(player: player, address: string, port: u32) -> bool;
+    player-protocol-version: func(player: player) -> s32;
+    player-send-packet: func(player: player, packet-id: u32, data: list<u8>) -> bool;
+}
+
+interface entities {
+    use types.{entity, level, vec3};
+
+    entity-type: func(entity: entity) -> string;
+    entity-runtime-id: func(entity: entity) -> u64;
+    entity-level: func(entity: entity) -> option<level>;
+    entity-position: func(entity: entity) -> vec3;
+    entity-rotation: func(entity: entity) -> vec3;
+    entity-teleport: func(entity: entity, level: option<borrow<level>>, position: vec3);
+    entity-motion: func(entity: entity) -> vec3;
+    entity-set-motion: func(entity: entity, motion: vec3);
+    entity-health: func(entity: entity) -> f32;
+    entity-max-health: func(entity: entity) -> f32;
+    entity-set-health: func(entity: entity, health: f32);
+    entity-is-alive: func(entity: entity) -> bool;
+    entity-damage: func(entity: entity, amount: f32, cause: option<string>, attacker: option<entity>) -> bool;
+    entity-kill: func(entity: entity);
+    entity-remove: func(entity: entity);
+    entity-name-tag: func(entity: entity) -> string;
+    entity-set-name-tag: func(entity: entity, name-tag: string);
+    entity-is-on-fire: func(entity: entity) -> bool;
+    entity-set-on-fire: func(entity: entity, ticks: u32);
+    entity-is-invisible: func(entity: entity) -> bool;
+    entity-set-invisible: func(entity: entity, invisible: bool);
+    level-entity-count: func(level: borrow<level>) -> u32;
+    level-entity: func(level: borrow<level>, index: u32) -> option<entity>;
+}
+
+interface levels {
+    use types.{entity, dimension, level, item, vec3, block-pos};
+
+    server-level: func(dimension: dimension) -> option<level>;
+    level-dimension: func(level: borrow<level>) -> dimension;
+    level-name: func(level: borrow<level>) -> string;
+    level-get-block: func(level: borrow<level>, position: block-pos) -> string;
+    level-get-block-states: func(level: borrow<level>, position: block-pos) -> string;
+    level-set-block: func(level: borrow<level>, position: block-pos, name: string, states-json: option<string>) -> bool;
+    level-break-block: func(level: borrow<level>, position: block-pos, drop-items: bool) -> bool;
+    level-is-chunk-loaded: func(level: borrow<level>, chunk-x: s32, chunk-z: s32) -> bool;
+    level-highest-block-y: func(level: borrow<level>, x: s32, z: s32) -> s32;
+    level-time: func(level: borrow<level>) -> s64;
+    level-set-time: func(level: borrow<level>, time: s64);
+    level-is-raining: func(level: borrow<level>) -> bool;
+    level-set-raining: func(level: borrow<level>, raining: bool);
+    level-is-thundering: func(level: borrow<level>) -> bool;
+    level-set-thundering: func(level: borrow<level>, thundering: bool);
+    level-spawn-position: func(level: borrow<level>) -> vec3;
+    level-spawn-entity: func(level: borrow<level>, identifier: string, position: vec3) -> option<entity>;
+    level-drop-item: func(level: borrow<level>, position: vec3, item: borrow<item>);
+    level-strike-lightning: func(level: borrow<level>, position: vec3);
+    level-create-explosion: func(level: borrow<level>, position: vec3, power: f32, break-blocks: bool);
+    server-world-count: func() -> u32;
+    server-world-name: func(index: u32) -> option<string>;
+    server-default-world-name: func() -> string;
+    world-level: func(name: string, dimension: dimension) -> option<level>;
+    server-load-world: func(name: string, create: bool, seed: option<string>) -> bool;
+    server-unload-world: func(name: string) -> bool;
+}
+
+interface items {
+    use types.{player, item, armor-slot};
+
+    item-create: func(identifier: string, count: u32) -> option<item>;
+    item-copy: func(item: borrow<item>) -> option<item>;
+    item-is-empty: func(item: borrow<item>) -> bool;
+    item-identifier: func(item: borrow<item>) -> string;
+    item-count: func(item: borrow<item>) -> u32;
+    item-set-count: func(item: borrow<item>, count: u32);
+    item-damage: func(item: borrow<item>) -> s32;
+    item-set-damage: func(item: borrow<item>, damage: s32);
+    item-custom-name: func(item: borrow<item>) -> option<string>;
+    item-set-custom-name: func(item: borrow<item>, name: option<string>);
+    item-lore-count: func(item: borrow<item>) -> u32;
+    item-lore: func(item: borrow<item>, index: u32) -> option<string>;
+    item-set-lore: func(item: borrow<item>, lines: list<string>);
+    item-enchantment-level: func(item: borrow<item>, enchantment: u32) -> s32;
+    item-set-enchantment-level: func(item: borrow<item>, enchantment: u32, level: s32);
+    player-inventory-size: func(player: player) -> u32;
+    player-inventory-item: func(player: player, slot: u32) -> option<item>;
+    player-set-inventory-item: func(player: player, slot: u32, item: option<borrow<item>>);
+    player-give-item: func(player: player, item: borrow<item>) -> bool;
+    player-selected-slot: func(player: player) -> u32;
+    player-set-selected-slot: func(player: player, slot: u32);
+    player-armor-item: func(player: player, slot: armor-slot) -> option<item>;
+    player-set-armor-item: func(player: player, slot: armor-slot, item: option<borrow<item>>);
+    player-offhand-item: func(player: player) -> option<item>;
+    player-set-offhand-item: func(player: player, item: option<borrow<item>>);
+    player-clear-inventory: func(player: player);
+}
+
+interface events {
+    use types.{event-kind, priority};
+
+    record custom-event-result {
+        data: option<string>,
+        cancelled: bool,
+    }
+
+    /// Returns the subscription id, or 0 when the subscription was refused. `on-event` receives this id.
+    subscribe: func(kind: event-kind, priority: priority, ignore-cancelled: bool) -> u64;
+    subscribe-custom-event: func(name: string, priority: priority, ignore-cancelled: bool) -> u64;
+    /// Only removes subscriptions of this plugin.
+    unsubscribe: func(subscription: u64);
+    fire-custom-event: func(name: string, data: string, cancellable: bool) -> custom-event-result;
+}
+
+/// The event being handled by `on-event`.
+interface event {
+    use types.{player, entity, level, item, event-kind, game-mode, dimension, vec3, block-pos};
+
+    event-type: func() -> event-kind;
+    event-is-cancellable: func() -> bool;
+    event-is-cancelled: func() -> bool;
+    event-set-cancelled: func(cancelled: bool);
+    event-player: func() -> option<player>;
+    event-message: func() -> option<string>;
+    event-set-message: func(message: string);
+    event-entity: func() -> option<entity>;
+    event-attacker: func() -> option<entity>;
+    event-block-position: func() -> block-pos;
+    event-block-face: func() -> u32;
+    event-block-name: func() -> string;
+    event-amount: func() -> f64;
+    event-set-amount: func(amount: f64);
+    event-cause: func() -> string;
+    event-from: func() -> vec3;
+    event-to: func() -> vec3;
+    event-set-to: func(position: vec3);
+    event-item: func() -> option<item>;
+    event-packet-id: func() -> u32;
+    event-packet-data: func() -> list<u8>;
+    event-set-packet-data: func(data: list<u8>);
+    event-level: func() -> option<level>;
+    event-target: func() -> option<entity>;
+    event-position: func() -> vec3;
+    event-block-count: func() -> u32;
+    event-block-at: func(index: u32) -> block-pos;
+    event-set-blocks: func(positions: list<block-pos>);
+    event-game-mode: func() -> game-mode;
+    event-previous-game-mode: func() -> game-mode;
+    event-dimension: func() -> dimension;
+    event-previous-dimension: func() -> dimension;
+    event-tick: func() -> u64;
+    event-source-container: func() -> string;
+    event-source-slot: func() -> s32;
+    event-destination-container: func() -> string;
+    event-destination-slot: func() -> s32;
+    event-name: func() -> string;
+    event-data: func() -> string;
+    event-set-data: func(data: string);
+    event-state: func() -> bool;
+    event-previous-amount: func() -> f64;
+    event-previous-block-name: func() -> string;
+    event-chunk-x: func() -> s32;
+    event-chunk-z: func() -> s32;
+    event-result: func() -> option<item>;
+    event-set-result: func(item: borrow<item>);
+    event-world-name: func() -> string;
+    event-previous-world-name: func() -> string;
+    event-address: func() -> string;
+    event-transport: func() -> string;
+    event-client-guid: func() -> u64;
+    event-mtu-size: func() -> u32;
+    event-client-data: func() -> string;
+    event-client-data-field: func(key: string) -> string;
+    event-form-id: func() -> u32;
+    event-form-response: func() -> string;
+}
+
+/// Command registration, and the sender of the command being handled by `on-command`.
+interface commands {
+    use types.{player, command-permission};
+
+    record command-descriptor {
+        name: string,
+        description: string,
+        usage: string,
+        permission: command-permission,
+        /// Passed back to `on-command`.
+        handler: u32,
+    }
+
+    register-command: func(descriptor: command-descriptor) -> bool;
+    sender-name: func() -> string;
+    sender-player: func() -> option<player>;
+    sender-send-message: func(message: string);
+    sender-has-permission: func(node: string) -> bool;
+}
+
+interface scheduler {
+    /// `token` is passed back to `on-task`. Returns the task id, or 0 when the task was refused.
+    schedule-task: func(token: u64, delay-ticks: u64, period-ticks: u64) -> u64;
+    /// Only cancels tasks of this plugin.
+    cancel-task: func(task: u64);
+}
+
+interface permissions {
+    use types.{player, permission-default};
+
+    register-permission: func(node: string, default-value: permission-default) -> bool;
+    player-has-permission: func(player: player, node: string) -> bool;
+    player-set-permission: func(player: player, node: string, value: bool);
+    player-unset-permission: func(player: player, node: string);
+}
+
+interface services {
+    /// `on-service` is called with `name` when a plugin calls the service.
+    register-service: func(name: string) -> bool;
+    unregister-service: func(name: string);
+    has-service: func(name: string) -> bool;
+    service-provider: func(name: string) -> option<string>;
+    call-service: func(name: string, request: string) -> option<string>;
+}
+
+/// Custom content. A callback left as `none` is not registered, like a null handler in the C API; the value of
+/// a callback that is set is passed back to the matching `on-*` function.
+interface content {
+    record custom-item {
+        identifier: string,
+        display-name: string,
+        icon: string,
+        creative-category: string,
+        max-stack-size: u32,
+        max-durability: u32,
+        hand-equipped: bool,
+        on-use: option<u32>,
+        on-use-on-block: option<u32>,
+    }
+
+    record custom-block {
+        identifier: string,
+        display-name: string,
+        texture: string,
+        creative-category: string,
+        destroy-time: f32,
+        explosion-resistance: f32,
+        light-emission: u32,
+        friction: f32,
+        drop: option<string>,
+        on-interact: option<u32>,
+        on-break: option<u32>,
+    }
+
+    record custom-entity {
+        identifier: string,
+        width: f32,
+        height: f32,
+        max-health: f32,
+        summonable: bool,
+        on-tick: option<u32>,
+        on-interact: option<u32>,
+    }
+
+    register-custom-item: func(descriptor: custom-item) -> bool;
+    register-custom-block: func(descriptor: custom-block) -> bool;
+    register-custom-entity: func(descriptor: custom-entity) -> bool;
+}
+
+/// The functions the server calls: `FalconPluginCallbacks` and the C handler callbacks.
+interface plugin {
+    use types.{player, entity, item, block-pos};
+
+    on-load: func();
+    on-enable: func() -> bool;
+    on-disable: func();
+    on-event: func(subscription: u64);
+    on-command: func(handler: u32, arguments: list<string>) -> bool;
+    on-task: func(token: u64);
+    on-service: func(name: string, request: string) -> string;
+    on-item-use: func(handler: u32, player: player, item: borrow<item>) -> bool;
+    on-item-use-on-block: func(handler: u32, player: player, item: borrow<item>, position: block-pos, face: u32) -> bool;
+    on-block-interact: func(handler: u32, player: player, position: block-pos, face: u32) -> bool;
+    on-block-break: func(handler: u32, player: player, position: block-pos);
+    on-entity-tick: func(handler: u32, entity: entity);
+    on-entity-interact: func(handler: u32, entity: entity, player: player) -> bool;
+}
+
+world falcon-plugin {
+    import types;
+    import server;
+    import players;
+    import entities;
+    import levels;
+    import items;
+    import events;
+    import event;
+    import commands;
+    import scheduler;
+    import permissions;
+    import services;
+    import content;
+
+    export plugin;
+}
