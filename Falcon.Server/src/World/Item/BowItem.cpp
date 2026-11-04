@@ -21,7 +21,7 @@ FALCON_REGISTER_ITEM_CUSTOM(BowItem, 60,
 using namespace RangedWeaponHelpers;
 
 namespace {
-    const float BOW_MAX_FORCE = 3.5f;
+    const float BOW_MAX_FORCE = 3.0f;
     const int32_t BOW_MINIMUM_TICKS = 3;
     const int32_t FLAME_ARROW_FIRE_TICKS = 5 * 20;
 

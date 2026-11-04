@@ -28,7 +28,7 @@ namespace {
     const char *CHARGED_LOAD_TICK_TAG = "LoadTick";
     const int64_t CROSSBOW_FIRE_DELAY_TICKS = 5;
 
-    const float CROSSBOW_FORCE = 3.5f;
+    const float CROSSBOW_FORCE = 3.15f;
     const int32_t CROSSBOW_LOAD_TICKS = 25;
     const int32_t CROSSBOW_QUICK_CHARGE_TICKS = 5;
 
