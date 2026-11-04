@@ -25,9 +25,8 @@ namespace {
     }
 }
 
-OverworldSurfaceBuilder::OverworldSurfaceBuilder(IRandom &random) {
-    const IRandomPtr source = random.identical();
-    mNoise = std::make_shared<NormalNoise>(*source, -6, std::vector<float>{1.0f, 1.0f, 1.0f});
+OverworldSurfaceBuilder::OverworldSurfaceBuilder(const XoroshiroPositionalFactory &noiseFactory) {
+    mNoise = NormalNoise::create(noiseFactory, "minecraft:surface", -6, {1.0f, 1.0f, 1.0f});
 }
 
 void OverworldSurfaceBuilder::apply(LevelChunk &chunk) const {

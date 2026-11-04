@@ -5,7 +5,8 @@
 
 #include <utility>
 
-DensityFunctionPtr DensityNether::base3dNoise(IRandom &random) {
+DensityFunctionPtr DensityNether::base3dNoise(const XoroshiroPositionalFactory &noiseFactory) {
+    XoroshiroRandom random = noiseFactory.hashOf("minecraft:terrain");
     return DensityBase3dNoise::oldBlendedNoise(random, 0.25, 0.375, 80.0, 60.0, 8.0);
 }
 

@@ -6,12 +6,13 @@
 #include "World/Level/LevelGen/Material/OreVeinifier.h"
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
 #include "World/Level/LevelGen/Random/IRandom.h"
+#include "World/Level/LevelGen/Random/XoroshiroPositionalFactory.h"
 
 #include <memory>
 
 class OverworldBiomeNoises {
 public:
-    explicit OverworldBiomeNoises(IRandom &random);
+    explicit OverworldBiomeNoises(const XoroshiroPositionalFactory &noiseFactory);
 
     const NormalNoisePtr &getContinentalNoise() const { return mContinentalNoise; }
 
@@ -39,7 +40,8 @@ private:
 
 class OverworldTerrainNoises {
 public:
-    OverworldTerrainNoises(IRandom &random, const OverworldBiomeNoises &biomeNoises);
+    OverworldTerrainNoises(IRandom &random, const XoroshiroPositionalFactory &noiseFactory,
+                           const OverworldBiomeNoises &biomeNoises);
 
     const DensityFunctionPtr &getContinents() const { return mContinents; }
 
@@ -144,8 +146,11 @@ public:
 
     IRandom &getRandomSource() const { return *mRandomSource; }
 
+    const XoroshiroPositionalFactory &getNoiseFactory() const { return mNoiseFactory; }
+
 private:
     IRandomPtr mRandomSource;
+    XoroshiroPositionalFactory mNoiseFactory;
     std::unique_ptr<OverworldBiomeNoises> mBiomeNoises;
     std::unique_ptr<OverworldTerrainNoises> mTerrainNoises;
 };

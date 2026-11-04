@@ -86,37 +86,25 @@ namespace {
 
 }
 
-SurfaceOverwriteBuilder::SurfaceOverwriteBuilder(IRandom &random, int64_t levelSeed) {
+SurfaceOverwriteBuilder::SurfaceOverwriteBuilder(IRandom &random, const XoroshiroPositionalFactory &noiseFactory,
+                                                 int64_t levelSeed) {
     const std::vector<float> threeOctaves = {1.0f, 1.0f, 1.0f};
     const std::vector<float> oneOctave = {1.0f};
     const std::vector<float> fourOctaves = {1.0f, 1.0f, 1.0f, 1.0f};
 
-    IRandomPtr surfaceSource = random.identical();
-    mSurfaceNoise = std::make_shared<NormalNoise>(*surfaceSource, -6, threeOctaves);
+    mSurfaceNoise = NormalNoise::create(noiseFactory, "minecraft:surface", -6, threeOctaves);
 
+    // no named stream for the swamp noise in the game: old seeding kept
     IRandomPtr swampSource = random.identical();
     mSwampNoise = std::make_shared<NormalNoise>(*swampSource, -2, oneOctave);
 
-    IRandomPtr clayBandsOffsetSource = random.identical();
-    mClayBandsOffsetNoise = std::make_shared<NormalNoise>(*clayBandsOffsetSource, -8, oneOctave);
-
-    IRandomPtr badlandsPillarSource = random.identical();
-    mBadlandsPillarNoise = std::make_shared<NormalNoise>(*badlandsPillarSource, -2, threeOctaves);
-
-    IRandomPtr badlandsPillarRoofSource = random.identical();
-    mBadlandsPillarRoofNoise = std::make_shared<NormalNoise>(*badlandsPillarRoofSource, -8, oneOctave);
-
-    IRandomPtr badlandsSurfaceSource = random.identical();
-    mBadlandsSurfaceNoise = std::make_shared<NormalNoise>(*badlandsSurfaceSource, -6, threeOctaves);
-
-    IRandomPtr icebergPillarSource = random.identical();
-    mIcebergPillarNoise = std::make_shared<NormalNoise>(*icebergPillarSource, -6, fourOctaves);
-
-    IRandomPtr icebergPillarRoofSource = random.identical();
-    mIcebergPillarRoofNoise = std::make_shared<NormalNoise>(*icebergPillarRoofSource, -3, oneOctave);
-
-    IRandomPtr icebergSurfaceSource = random.identical();
-    mIcebergSurfaceNoise = std::make_shared<NormalNoise>(*icebergSurfaceSource, -6, threeOctaves);
+    mClayBandsOffsetNoise = NormalNoise::create(noiseFactory, "minecraft:clay_bands_offset", -8, oneOctave);
+    mBadlandsPillarNoise = NormalNoise::create(noiseFactory, "minecraft:badlands_pillar", -2, fourOctaves);
+    mBadlandsPillarRoofNoise = NormalNoise::create(noiseFactory, "minecraft:badlands_pillar_roof", -8, oneOctave);
+    mBadlandsSurfaceNoise = NormalNoise::create(noiseFactory, "minecraft:badlands_surface", -6, threeOctaves);
+    mIcebergPillarNoise = NormalNoise::create(noiseFactory, "minecraft:iceberg_pillar", -6, fourOctaves);
+    mIcebergPillarRoofNoise = NormalNoise::create(noiseFactory, "minecraft:iceberg_pillar_roof", -3, oneOctave);
+    mIcebergSurfaceNoise = NormalNoise::create(noiseFactory, "minecraft:iceberg_surface", -6, threeOctaves);
 
     mClayBandsCache.assign((size_t) CLAY_BANDS_SIZE, hardenedClayState());
     _generateBands(levelSeed);
