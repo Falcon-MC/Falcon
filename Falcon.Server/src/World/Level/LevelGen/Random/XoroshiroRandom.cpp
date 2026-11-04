@@ -1,15 +1,13 @@
 #include "World/Level/LevelGen/Random/XoroshiroRandom.h"
 
-#include "Core/Math/MathConstants.h"
+#include "World/Level/LevelGen/Random/XoroshiroPositionalFactory.h"
 
 #include <cmath>
 
 namespace {
 
-constexpr int64_t GOLDEN_GAMMA = static_cast<int64_t>(0x9E3779B97F4A7C15ULL);
-constexpr int64_t MIX_CONSTANT_1 = static_cast<int64_t>(0xBF58476D1CE4E5B9ULL);
-constexpr int64_t MIX_CONSTANT_2 = static_cast<int64_t>(0x94D049BB133111EBULL);
-constexpr int32_t JAVA_INTEGER_MAX_VALUE = 0x7FFFFFFF;
+constexpr int64_t GOLDEN_RATIO_64 = static_cast<int64_t>(0x9E3779B97F4A7C15ULL);
+constexpr int64_t SILVER_RATIO_64 = static_cast<int64_t>(0x6A09E667F3BCC909ULL);
 
 /**
  * The generator's random streams are defined on signed 64-bit arithmetic with logical
@@ -20,11 +18,33 @@ int64_t unsignedShiftRight(int64_t value, int32_t bits) {
     return static_cast<int64_t>(static_cast<uint64_t>(value) >> bits);
 }
 
+int64_t mixStafford13(int64_t value) {
+    uint64_t z = static_cast<uint64_t>(value);
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    return static_cast<int64_t>(z ^ (z >> 31));
+}
+
 }
 
 XoroshiroRandom::XoroshiroRandom(int64_t seed)
-    : mSeed(0), mS0(0), mS1(0) {
+    : mSeed(0), mInitialLo(0), mInitialHi(0), mS0(0), mS1(0), mNextGaussian(0.0), mHaveNextGaussian(false) {
     setSeed(seed);
+}
+
+XoroshiroRandom::XoroshiroRandom(int64_t seed, int64_t lo, int64_t hi)
+    : mSeed(seed), mInitialLo(0), mInitialHi(0), mS0(0), mS1(0), mNextGaussian(0.0), mHaveNextGaussian(false) {
+    _setState(lo, hi);
+}
+
+XoroshiroRandom XoroshiroRandom::fromState(int64_t lo, int64_t hi) {
+    return XoroshiroRandom(0, lo, hi);
+}
+
+XoroshiroPositionalFactory XoroshiroRandom::forkPositional() {
+    const int64_t lo = nextLong();
+    const int64_t hi = nextLong();
+    return XoroshiroPositionalFactory(lo, hi);
 }
 
 std::shared_ptr<IRandom> XoroshiroRandom::fork() {
@@ -32,27 +52,47 @@ std::shared_ptr<IRandom> XoroshiroRandom::fork() {
 }
 
 std::shared_ptr<IRandom> XoroshiroRandom::identical() const {
-    return std::make_shared<XoroshiroRandom>(mSeed);
+    return std::shared_ptr<XoroshiroRandom>(new XoroshiroRandom(mSeed, mInitialLo, mInitialHi));
 }
 
 int32_t XoroshiroRandom::nextInt() {
-    return static_cast<int32_t>(nextLong()) & JAVA_INTEGER_MAX_VALUE;
+    return static_cast<int32_t>(nextLong());
 }
 
 int32_t XoroshiroRandom::nextInt(int32_t max) {
-    if (max == 0) {
+    // lenient for feature placement callers
+    if (max <= 0) {
         return 0;
     }
 
-    return nextInt() % max;
+    return nextExclusiveInt(max);
 }
 
 int32_t XoroshiroRandom::nextInt(int32_t min, int32_t max) {
-    return min + (nextInt() % (max - min));
+    return min + nextExclusiveInt(max - min + 1);
 }
 
 int32_t XoroshiroRandom::nextBoundedInt(int32_t max) {
-    return nextInt(max + 1);
+    return nextExclusiveInt(max + 1);
+}
+
+int32_t XoroshiroRandom::nextExclusiveInt(int32_t bound) {
+    if (bound <= 0) {
+        return 0;
+    }
+
+    const uint64_t unsignedBound = static_cast<uint32_t>(bound);
+    uint64_t product = (static_cast<uint64_t>(nextLong()) & 0xFFFFFFFFULL) * unsignedBound;
+    uint64_t low = product & 0xFFFFFFFFULL;
+    if (low < unsignedBound) {
+        const uint64_t threshold = static_cast<uint32_t>(-static_cast<uint32_t>(bound)) % static_cast<uint32_t>(bound);
+        while (low < threshold) {
+            product = (static_cast<uint64_t>(nextLong()) & 0xFFFFFFFFULL) * unsignedBound;
+            low = product & 0xFFFFFFFFULL;
+        }
+    }
+
+    return static_cast<int32_t>(product >> 32);
 }
 
 int64_t XoroshiroRandom::nextLong() {
@@ -79,39 +119,50 @@ double XoroshiroRandom::nextDouble() {
 }
 
 double XoroshiroRandom::nextGaussian() {
-    double u1 = nextDouble();
-    double u2 = nextDouble();
-    return std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * MathConstants::PI * u2);
+    // marsaglia polar method, second value cached like the game
+    if (mHaveNextGaussian) {
+        mHaveNextGaussian = false;
+        return mNextGaussian;
+    }
+
+    double v1;
+    double v2;
+    double s;
+    do {
+        v1 = 2.0 * nextDouble() - 1.0;
+        v2 = 2.0 * nextDouble() - 1.0;
+        s = v1 * v1 + v2 * v2;
+    } while (s >= 1.0 || s == 0.0);
+
+    const double multiplier = std::sqrt(-2.0 * std::log(s) / s);
+    mNextGaussian = v2 * multiplier;
+    mHaveNextGaussian = true;
+    return v1 * multiplier;
 }
 
 void XoroshiroRandom::setSeed(int64_t seed) {
     mSeed = seed;
-
-    // The 64-bit seed is expanded into the 128-bit state with two SplitMix64 steps; an
-    // all-zero state would make xoroshiro emit zeros forever, hence the fallback below.
-    int64_t state[2] = {0, 0};
-    uint64_t z = static_cast<uint64_t>(seed);
-
-    for (int32_t i = 0; i < 2; ++i) {
-        z += static_cast<uint64_t>(GOLDEN_GAMMA);
-        uint64_t r = z;
-        r = (r ^ (r >> 30)) * static_cast<uint64_t>(MIX_CONSTANT_1);
-        r = (r ^ (r >> 27)) * static_cast<uint64_t>(MIX_CONSTANT_2);
-        r ^= (r >> 31);
-        state[i] = static_cast<int64_t>(r);
-    }
-
-    if (state[0] == 0 && state[1] == 0) {
-        state[0] = GOLDEN_GAMMA;
-        state[1] = ~state[0];
-    }
-
-    mS0 = state[0];
-    mS1 = state[1];
+    const int64_t lo = seed ^ SILVER_RATIO_64;
+    const int64_t hi = static_cast<int64_t>(static_cast<uint64_t>(lo) + static_cast<uint64_t>(GOLDEN_RATIO_64));
+    _setState(mixStafford13(lo), mixStafford13(hi));
 }
 
 int64_t XoroshiroRandom::getSeed() const {
     return mSeed;
+}
+
+void XoroshiroRandom::_setState(int64_t lo, int64_t hi) {
+    // all-zero state: xoroshiro would emit zeros forever
+    if ((lo | hi) == 0) {
+        lo = GOLDEN_RATIO_64;
+        hi = SILVER_RATIO_64;
+    }
+
+    mInitialLo = lo;
+    mInitialHi = hi;
+    mS0 = lo;
+    mS1 = hi;
+    mHaveNextGaussian = false;
 }
 
 int64_t XoroshiroRandom::_rotateLeft(int64_t x, int32_t k) {

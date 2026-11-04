@@ -1,6 +1,7 @@
 #include "World/Level/LevelGen/Nether/NetherNoiseHolder.h"
 
 #include "World/Level/LevelGen/Nether/Density/DensityNether.h"
+#include "World/Level/LevelGen/Random/XoroshiroPositionalFactory.h"
 #include "World/Level/LevelGen/Random/XoroshiroRandom.h"
 
 #include <vector>
@@ -20,8 +21,9 @@ NetherTerrainNoises::NetherTerrainNoises(IRandom &random) {
     mNetherStateNoise = makeIdentical(random, -4, {1.0f});
     mNetherwartNoise = makeIdentical(random, -3, {1.0f, 0.0f, 0.0f, 0.9f});
 
-    const IRandomPtr base3dRandom = random.identical();
-    mBase3dNoise = DensityNether::base3dNoise(*base3dRandom);
+    XoroshiroRandom noiseRandom(random.getSeed());
+    const XoroshiroPositionalFactory noiseFactory = noiseRandom.forkPositional();
+    mBase3dNoise = DensityNether::base3dNoise(noiseFactory);
     mDensityFunction = DensityNether::finalDensity(mBase3dNoise);
 }
 

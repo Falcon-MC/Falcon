@@ -1,5 +1,6 @@
 #include "World/Level/LevelGen/Density/DensityBase3dNoise.h"
 
+#include "World/Level/LevelGen/Noise/NoiseMath.h"
 #include "World/Level/LevelGen/Noise/OctavePerlinNoiseSampler.h"
 
 #include <algorithm>
@@ -13,6 +14,7 @@ namespace {
     constexpr double LIMIT_NOISE_DIVISOR = 512.0;
     constexpr double RESULT_DIVISOR = 128.0;
     constexpr double BASE_SCALE = 684.412;
+    constexpr const char *TERRAIN_NOISE_NAME = "minecraft:terrain";
 
     double clampValue(double value, double min, double max) {
         return value < min ? min : std::min(value, max);
@@ -56,13 +58,17 @@ namespace {
         double compute(FunctionContext &context) override {
             double scaledXZ = BASE_SCALE * mXzScale;
             double scaledY = BASE_SCALE * mYScale;
-            double mainScaledXZ = scaledXZ / mXzFactor;
-            double mainScaledY = scaledY / mYFactor;
-            double smearScale = scaledY * mSmearScaleMultiplier;
+            // main noise smears by this over the y factor
+            double smear = scaledY * mSmearScaleMultiplier;
+            double mainSmear = smear / mYFactor;
 
-            double x = context.blockX();
-            double y = context.blockY();
-            double z = context.blockZ();
+            double x = context.blockX() * scaledXZ;
+            double y = context.blockY() * scaledY;
+            double z = context.blockZ() * scaledXZ;
+
+            double mainX = x / mXzFactor;
+            double mainY = y / mYFactor;
+            double mainZ = z / mXzFactor;
 
             double mainValue = 0.0;
             double frequency = 1.0;
@@ -70,11 +76,11 @@ namespace {
                 const PerlinNoiseSampler *sampler = mMainNoise->getOctave(octave);
                 if (sampler != nullptr) {
                     mainValue += sampler->sample(
-                            x * mainScaledXZ * frequency,
-                            y * mainScaledY * frequency,
-                            z * mainScaledXZ * frequency,
-                            smearScale * frequency,
-                            y * mainScaledY * frequency
+                            NoiseMath::maintainPrecision(mainX * frequency),
+                            NoiseMath::maintainPrecision(mainY * frequency),
+                            NoiseMath::maintainPrecision(mainZ * frequency),
+                            mainSmear * frequency,
+                            mainY * frequency
                     ) / frequency;
                 }
                 frequency /= 2.0;
@@ -90,22 +96,24 @@ namespace {
 
             int32_t octaveCount = std::min(mMinLimitNoise->getCount(), mMaxLimitNoise->getCount());
             for (int32_t octave = 0; octave < octaveCount; octave++) {
-                double sampleX = x * scaledXZ * frequency;
-                double sampleY = y * scaledY * frequency;
-                double sampleZ = z * scaledXZ * frequency;
-                double sampleSmear = smearScale * frequency;
+                double sampleX = NoiseMath::maintainPrecision(x * frequency);
+                double sampleY = NoiseMath::maintainPrecision(y * frequency);
+                double sampleZ = NoiseMath::maintainPrecision(z * frequency);
+                double sampleSmear = smear * frequency;
+                // not wrapped, unlike the sample coordinates
+                double yLimit = y * frequency;
 
                 if (!useOnlyMax) {
                     const PerlinNoiseSampler *sampler = mMinLimitNoise->getOctave(octave);
                     if (sampler != nullptr) {
-                        minValue += sampler->sample(sampleX, sampleY, sampleZ, sampleSmear, sampleY) / frequency;
+                        minValue += sampler->sample(sampleX, sampleY, sampleZ, sampleSmear, yLimit) / frequency;
                     }
                 }
 
                 if (!useOnlyMin) {
                     const PerlinNoiseSampler *sampler = mMaxLimitNoise->getOctave(octave);
                     if (sampler != nullptr) {
-                        maxValue += sampler->sample(sampleX, sampleY, sampleZ, sampleSmear, sampleY) / frequency;
+                        maxValue += sampler->sample(sampleX, sampleY, sampleZ, sampleSmear, yLimit) / frequency;
                     }
                 }
 
@@ -138,22 +146,19 @@ namespace {
 
 }
 
-DensityFunctionPtr DensityBase3dNoise::oldBlendedNoise(IRandom &random, double xzScale, double yScale,
+DensityFunctionPtr DensityBase3dNoise::oldBlendedNoise(XoroshiroRandom &random, double xzScale, double yScale,
                                                        double xzFactor, double yFactor,
                                                        double smearScaleMultiplier) {
-    IRandomPtr minLimitRandom = random.fork();
-    OctavePerlinNoiseSamplerPtr minLimitNoise = std::make_shared<OctavePerlinNoiseSampler>(*minLimitRandom,
-                                                                                          limitOctaves());
-    IRandomPtr maxLimitRandom = random.fork();
-    OctavePerlinNoiseSamplerPtr maxLimitNoise = std::make_shared<OctavePerlinNoiseSampler>(*maxLimitRandom,
-                                                                                          limitOctaves());
-    IRandomPtr mainRandom = random.fork();
-    OctavePerlinNoiseSamplerPtr mainNoise = std::make_shared<OctavePerlinNoiseSampler>(*mainRandom, mainOctaves());
+    // order matters: one stream, no fork
+    OctavePerlinNoiseSamplerPtr minLimitNoise = std::make_shared<OctavePerlinNoiseSampler>(random, limitOctaves());
+    OctavePerlinNoiseSamplerPtr maxLimitNoise = std::make_shared<OctavePerlinNoiseSampler>(random, limitOctaves());
+    OctavePerlinNoiseSamplerPtr mainNoise = std::make_shared<OctavePerlinNoiseSampler>(random, mainOctaves());
 
     return std::make_shared<OldBlendedNoise>(std::move(minLimitNoise), std::move(maxLimitNoise), std::move(mainNoise),
                                              xzScale, yScale, xzFactor, yFactor, smearScaleMultiplier);
 }
 
-DensityFunctionPtr DensityBase3dNoise::overworld(IRandom &random) {
+DensityFunctionPtr DensityBase3dNoise::overworld(const XoroshiroPositionalFactory &noiseFactory) {
+    XoroshiroRandom random = noiseFactory.hashOf(TERRAIN_NOISE_NAME);
     return oldBlendedNoise(random, 0.25, 0.125, 80.0, 160.0, 8.0);
 }

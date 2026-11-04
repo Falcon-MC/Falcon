@@ -165,8 +165,9 @@ OverworldGenerator::OverworldGenerator(int64_t seed)
     );
 
     const IRandomPtr surfaceRandom = mNoiseHolder->getRandomSource().identical();
-    mSurfaceBuilder = std::make_unique<OverworldSurfaceBuilder>(*surfaceRandom);
-    mSurfaceOverwriteBuilder = std::make_unique<SurfaceOverwriteBuilder>(*surfaceRandom, seed);
+    mSurfaceBuilder = std::make_unique<OverworldSurfaceBuilder>(mNoiseHolder->getNoiseFactory());
+    mSurfaceOverwriteBuilder = std::make_unique<SurfaceOverwriteBuilder>(*surfaceRandom, mNoiseHolder->getNoiseFactory(),
+                                                                         seed);
 
     FeatureNoiseHolder::initialize(mNoiseHolder->getRandomSource());
 }

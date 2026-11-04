@@ -1,13 +1,13 @@
 #pragma once
 
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
-#include "World/Level/LevelGen/Random/IRandom.h"
+#include "World/Level/LevelGen/Random/XoroshiroPositionalFactory.h"
 
 class LevelChunk;
 
 class OverworldSurfaceBuilder {
 public:
-    explicit OverworldSurfaceBuilder(IRandom &random);
+    explicit OverworldSurfaceBuilder(const XoroshiroPositionalFactory &noiseFactory);
 
     void apply(LevelChunk &chunk) const;
 
