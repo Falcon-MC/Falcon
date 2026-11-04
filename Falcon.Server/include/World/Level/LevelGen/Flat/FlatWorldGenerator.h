@@ -16,17 +16,25 @@ class FlatWorldGenerator : public ChunkGenerator {
 public:
     FlatWorldGenerator(int64_t seed, const std::string &layers);
 
-    DimensionType getDimensionType() const override { return DimensionType::Overworld; }
+    DimensionType getDimensionType() const override {
+        return DimensionType::Overworld;
+    }
 
     void generate(LevelChunk &chunk) const override;
 
     void decorate(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const override;
 
-    int64_t getSeed() const override { return mSeed; }
+    int64_t getSeed() const override {
+        return mSeed;
+    }
 
-    int getSpawnY() const override { return mSpawnY; }
+    int getSpawnY() const override {
+        return mSpawnY;
+    }
 
-    int32_t getAirHash() const override { return mAirHash; }
+    int32_t getAirHash() const override {
+        return mAirHash;
+    }
 
     int32_t pickBiome(int32_t x, int32_t y, int32_t z) const override;
 
