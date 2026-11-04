@@ -379,5 +379,7 @@ bool DotnetHost::load(LoadedPlugin &plugin) {
     }
 
     LOG_INFO(LogAreaID::Server, "Loaded .NET plugin %s %s", name.c_str(), plugin.mDescription.mVersion.c_str());
+    LOG_WARN(LogAreaID::Server, ".NET plugins are deprecated and will be removed in a future release: %s should "
+                                "move to a native or Java plugin", name.c_str());
     return true;
 }
