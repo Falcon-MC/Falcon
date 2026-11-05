@@ -69,16 +69,6 @@ namespace {
         return state;
     }
 
-    const BlockState &snowBlockState() {
-        static const BlockState state = VanillaBlocks::SNOW().toBlockState();
-        return state;
-    }
-
-    const BlockState &packedIceState() {
-        static const BlockState state = VanillaBlocks::PACKED_ICE().toBlockState();
-        return state;
-    }
-
     const BlockState &stoneState() {
         static const BlockState state = VanillaBlocks::STONE().toBlockState();
         return state;
@@ -102,15 +92,12 @@ SurfaceOverwriteBuilder::SurfaceOverwriteBuilder(IRandom &random, const Xoroshir
     mBadlandsPillarNoise = NormalNoise::create(noiseFactory, "minecraft:badlands_pillar", -2, fourOctaves);
     mBadlandsPillarRoofNoise = NormalNoise::create(noiseFactory, "minecraft:badlands_pillar_roof", -8, oneOctave);
     mBadlandsSurfaceNoise = NormalNoise::create(noiseFactory, "minecraft:badlands_surface", -6, threeOctaves);
-    mIcebergPillarNoise = NormalNoise::create(noiseFactory, "minecraft:iceberg_pillar", -6, fourOctaves);
-    mIcebergPillarRoofNoise = NormalNoise::create(noiseFactory, "minecraft:iceberg_pillar_roof", -3, oneOctave);
-    mIcebergSurfaceNoise = NormalNoise::create(noiseFactory, "minecraft:iceberg_surface", -6, threeOctaves);
 
     mClayBandsCache.assign((size_t) CLAY_BANDS_SIZE, hardenedClayState());
     _generateBands(levelSeed);
 }
 
-void SurfaceOverwriteBuilder::apply(LevelChunk &chunk, int64_t levelSeed) const {
+void SurfaceOverwriteBuilder::apply(LevelChunk &chunk) const {
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++) {
             const int32_t lx = x + (chunk.getX() << 4);
@@ -164,68 +151,12 @@ void SurfaceOverwriteBuilder::apply(LevelChunk &chunk, int64_t levelSeed) const 
                     }
                     break;
                 }
-                case BiomeIds::FROZEN_OCEAN:
-                case BiomeIds::DEEP_FROZEN_OCEAN:
-                case BiomeIds::LEGACY_FROZEN_OCEAN:
-                    _frozenOceanExtension(chunk, levelSeed, x, z, lx, lz, y);
-                    break;
                 case BiomeIds::MESA_BRYCE:
                     _erodedBadlandsExtension(chunk, x, z, lx, lz, y);
                     break;
                 default:
                     break;
             }
-        }
-    }
-}
-
-void SurfaceOverwriteBuilder::_frozenOceanExtension(LevelChunk &chunk, int64_t levelSeed, int32_t localX,
-                                                    int32_t localZ, int32_t worldX, int32_t worldZ,
-                                                    int32_t height) const {
-    const double surfaceTerm = std::fabs(
-            mIcebergSurfaceNoise->getValue((double) worldX, 0.0, (double) worldZ) * 8.25);
-    const double pillarTerm = mIcebergPillarNoise->getValue(worldX * 1.28, 0.0, worldZ * 1.28) * 15.0;
-    const double iceberg = surfaceTerm < pillarTerm ? surfaceTerm : pillarTerm;
-    if (iceberg <= 1.8)
-        return;
-
-    const double icebergRoof = std::fabs(
-            mIcebergPillarRoofNoise->getValue(worldX * 1.17, 0.0, worldZ * 1.17) * 1.5);
-    const double roofTerm = std::ceil(icebergRoof * 40.0) + 14.0;
-    const double bodyTerm = iceberg * iceberg * 1.2;
-    const double top = bodyTerm < roofTerm ? bodyTerm : roofTerm;
-    if (top <= 2.0)
-        return;
-
-    const double extensionBottom = SEA_LEVEL - top - 7.0;
-    const double extensionTop = top + SEA_LEVEL;
-
-    SimpleRandom random(levelSeed
-                        ^ _chunkHash(chunk.getX(), chunk.getZ())
-                        ^ ((int64_t) worldX)
-                        ^ ((int64_t) worldZ));
-
-    const int32_t maxSnowDepth = 2 + random.nextBoundedInt(4);
-    const int32_t minSnowHeight = SEA_LEVEL + 18 + random.nextBoundedInt(10);
-    int32_t snowDepth = 0;
-
-    const int32_t startY = height > (int32_t) extensionTop + 1 ? height : (int32_t) extensionTop + 1;
-    for (int32_t y = startY; y > 0; y--) {
-        const BlockState state = chunk.getBlock(localX, y, localZ);
-        if (state == stoneState())
-            break;
-
-        const bool place = (state == airState() && y < (int32_t) extensionTop && random.nextDouble() > 0.01)
-                           || (_isWaterState(state) && y > (int32_t) extensionBottom && y <= SEA_LEVEL
-                               && random.nextDouble() > 0.15);
-        if (!place)
-            continue;
-
-        if (snowDepth <= maxSnowDepth && y > minSnowHeight) {
-            chunk.setBlock(localX, y, localZ, snowBlockState());
-            snowDepth++;
-        } else {
-            chunk.setBlock(localX, y, localZ, packedIceState());
         }
     }
 }
@@ -369,8 +300,4 @@ int32_t SurfaceOverwriteBuilder::_javaStringHash(const char *text) {
         hash = hash * 31u + (uint32_t) (unsigned char) *cursor;
 
     return (int32_t) hash;
-}
-
-int64_t SurfaceOverwriteBuilder::_chunkHash(int32_t x, int32_t z) {
-    return ((int64_t) x << 32) | ((int64_t) (uint32_t) z);
 }

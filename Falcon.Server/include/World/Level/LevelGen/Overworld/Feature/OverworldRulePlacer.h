@@ -80,10 +80,12 @@ private:
         bool mForestFoliage = false;
         // legacy:springs_feature
         bool mSprings = false;
+        // legacy:ice_feature
+        bool mLegacyIce = false;
 
         bool isPorted() const {
             return mOre != nullptr || mDisk != nullptr || mGeode != nullptr || mLegacyTree != nullptr
-                   || mPlaced.isSet() || mKelp || mForestFoliage || mSprings;
+                   || mPlaced.isSet() || mKelp || mForestFoliage || mSprings || mLegacyIce;
         }
     };
 
@@ -110,6 +112,12 @@ private:
     static void _placeSprings(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
 
     static void _placeSpring(BlockManager &blocks, int32_t x, int32_t y, int32_t z, const BlockState &liquid);
+
+    static void _placeLegacyIce(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
+
+    static void _placeIceberg(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
+
+    static bool _placeBlueIce(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 
     static void _placeForestFoliage(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
 

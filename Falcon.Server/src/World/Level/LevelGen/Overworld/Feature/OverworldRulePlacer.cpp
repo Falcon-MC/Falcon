@@ -1060,6 +1060,7 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         if (entry.mFeature == SMALL_DRIPSTONE.mIdentifier)
             feature.mPlaced.mScatter = &SMALL_DRIPSTONE;
         feature.mPlaced.mDripstoneCluster = entry.mFeature == "minecraft:dripstone_cluster_feature";
+        feature.mLegacyIce = entry.mFeature == "minecraft:legacy:ice_feature";
         for (const GeodeDefinition &geode: GEODES) {
             if (entry.mFeature == geode.mIdentifier)
                 feature.mGeode = &geode;
@@ -1246,6 +1247,8 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
             _placeForestFoliage(blocks, position[0], position[2], placement);
         else if (feature.mSprings)
             _placeSprings(blocks, position[0], position[2], placement);
+        else if (feature.mLegacyIce)
+            _placeLegacyIce(blocks, position[0], position[2], placement);
         else if (feature.mLegacyTree != nullptr)
             _placeLegacyTrees(blocks, *feature.mLegacyTree, position[0], position[2], placement);
         else if (feature.mPlaced.isSet())
@@ -2611,6 +2614,349 @@ void OverworldRulePlacer::_placeSpring(BlockManager &blocks, int32_t x, int32_t 
                          + isAir(x, y - 1, z);
     if (rock == 4 && open == 1)
         blocks.setBlockStateAt(x, y, z, liquid);
+}
+
+void OverworldRulePlacer::_placeLegacyIce(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random) {
+    // LegacyIceFeature::place (sub_14D21DBE0): one chunk in eight an iceberg 12 to 19 blocks into it, then up to 19
+    // blue ice patches 30 to 61 high
+    if (nextInt(random, 8) == 0) {
+        const int32_t offsetX = nextInt(random, 8);
+        const int32_t offsetZ = nextInt(random, 8);
+        _placeIceberg(blocks, x + offsetX + 12, z + offsetZ + 12, random);
+    }
+
+    const int32_t patches = nextInt(random, 20);
+    for (int32_t patch = 0; patch < patches; patch++) {
+        const int32_t offsetX = nextInt(random, 16);
+        const int32_t y = nextInt(random, 32) + 30;
+        const int32_t offsetZ = nextInt(random, 16);
+        _placeBlueIce(blocks, x + offsetX + 8, y, z + offsetZ + 8, random);
+    }
+}
+
+void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random) {
+    // the game's iceberg feature (sub_14D215C00, vtable 0x14F4A0F30) at sea level: a round iceberg, or one in five an
+    // elliptic one, its part under the sea, then smoothed, and most of the time a cut through it (sub_14D217330);
+    // in floats, with the game's own draws
+    static const BlockState air = VanillaBlocks::AIR().toBlockState();
+    static const BlockState water = VanillaBlocks::WATER().toBlockState();
+    static const BlockState snow = VanillaBlocks::SNOW().toBlockState();
+    static const BlockState packedIce = VanillaBlocks::PACKED_ICE().toBlockState();
+    static const BlockState blueIce = VanillaBlocks::BLUE_ICE().toBlockState();
+    constexpr int32_t SEA_LEVEL = 63;
+
+    const auto isIceberg = [](const std::string &name) {
+        return name == "minecraft:packed_ice" || name == "minecraft:snow" || name == "minecraft:blue_ice";
+    };
+
+    const int32_t widthDraw = nextInt(random, 5);
+    const int32_t depthDraw = nextInt(random, 3);
+    const int32_t ellipseHeightDraw = nextInt(random, 6);
+    const int32_t roundHeightDraw = nextInt(random, 15);
+    const bool ellipse = nextFloat(random) > 0.8f;
+    const int32_t ellipseWidth = 11 - widthDraw;
+    int32_t height = ellipseHeightDraw + 6;
+    int32_t width = ellipseWidth;
+    if (!ellipse) {
+        width = 11;
+        height = nextFloat(random) <= 0.9f ? roundHeightDraw + 3 : roundHeightDraw + nextInt(random, 19) + 10;
+    }
+    const int32_t ellipseDepth = depthDraw + 3;
+    const bool snowOnTop = nextFloat(random) > 0.7f;
+    const float angleDraw = nextFloat(random);
+    const float angle = (angleDraw + angleDraw) * PI;
+    const int32_t radiusDraw = nextInt(random, 7);
+    const int32_t radiusValue = std::min(height + radiusDraw - nextInt(random, 5), 11);
+    const BlockState &main = nextFloat(random) <= 0.01f ? blueIce : packedIce;
+
+    const float heightF = static_cast<float>(height);
+    const float radiusF = static_cast<float>(radiusValue);
+    const auto radiusD = static_cast<double>(radiusValue);
+    const float cosine = FeatureMath::sineAt(10430.378f * angle + 16384.0f);
+    const float sine = FeatureMath::sineAt(10430.378f * angle);
+
+    const auto ceilOf = [](float value) {
+        const auto truncated = static_cast<int32_t>(value);
+        return static_cast<float>(truncated) < value ? truncated + 1 : truncated;
+    };
+    // the radius of a round iceberg at a height, two shapes above 15 blocks
+    const auto roundRadius = [&](int32_t dy, float dyF) {
+        const auto spread = static_cast<float>(3.5 - static_cast<double>(nextFloat(random))) * heightF;
+        float radius = 0.0f;
+        if (height <= nextInt(random, 5) + 15) {
+            radius = static_cast<float>((1.0 - static_cast<double>(dyF * dyF / spread)) * radiusD);
+        } else {
+            const int32_t low = nextInt(random, 6) + 3;
+            radius = (static_cast<float>(dy >> (dy < low ? 1 : 0)) / (spread * -0.4f) + 1.0f) * radiusF;
+        }
+        return ceilOf(radius * 0.5f);
+    };
+    // the radius under the sea, steeper
+    const auto steepRadius = [&](int32_t below, float total) {
+        const float steep = static_cast<float>(below) / ((nextFloat(random) * 0.5f + 1.0f) * total);
+        return ceilOf((1.0f - steep) * radiusF * 0.5f);
+    };
+    // a round iceberg's distance is jittered by a draw
+    const auto circleDistance = [&](double distanceSquared, int32_t radius) {
+        const float jitter = nextFloat(random);
+        const float offset = (0.8f < jitter ? 8.0f : std::fmax(jitter, 0.2f) * 10.0f) / static_cast<float>(radius);
+        return distanceSquared - static_cast<double>(radius) * static_cast<double>(radius) + offset;
+    };
+    const auto ellipseDistance = [&](float dxF, float dzF, float a, float b, float rotationCos, float rotationSin) {
+        const auto first = static_cast<double>((rotationCos * dxF - rotationSin * dzF) / a);
+        const auto second = static_cast<double>((rotationCos * dzF + rotationSin * dxF) / b);
+        return second * second + first * first + -1.0;
+    };
+    // only in air, snow, ice or water; snow near the top when the iceberg carries some
+    const auto setIcebergBlock = [&](int32_t blockX, int32_t blockY, int32_t blockZ, int32_t fromTop, int32_t total) {
+        const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
+        if (name != "minecraft:air" && name != "minecraft:snow" && name != "minecraft:ice" && name != "minecraft:water"
+            && name != "minecraft:flowing_water")
+            return;
+
+        bool allowSnow = true;
+        int32_t divisor = 2;
+        if (ellipse) {
+            allowSnow = static_cast<double>(nextFloat(random)) > 0.05;
+            divisor = 3;
+        }
+
+        const BlockState *state = &main;
+        if (snowOnTop && name != "minecraft:water") {
+            const int32_t drawn = nextInt(random, std::max(1, total / divisor));
+            if (static_cast<double>(drawn) + static_cast<double>(total) * 0.6 >= static_cast<double>(fromTop)
+                && allowSnow)
+                state = &snow;
+        }
+        blocks.setBlockStateAt(blockX, blockY, blockZ, *state);
+    };
+
+    // above the sea
+    if (width > 0 && height > 0) {
+        for (int32_t dx = -width; dx < width; dx++) {
+            const double dxSquared = static_cast<double>(dx) * static_cast<double>(dx);
+            for (int32_t dz = -width; dz < width; dz++) {
+                const double distanceSquared = static_cast<double>(dz) * static_cast<double>(dz) + dxSquared;
+                for (int32_t dy = 0; dy < height; dy++) {
+                    double distance = 0.0;
+                    double threshold = -0.5;
+                    if (!ellipse) {
+                        const int32_t radius = roundRadius(dy, static_cast<float>(dy));
+                        if (dx >= radius)
+                            continue;
+
+                        distance = circleDistance(distanceSquared, radius);
+                        if (distance >= 0.0)
+                            continue;
+                        threshold = -6.0f - static_cast<float>(nextInt(random, 3));
+                    } else {
+                        distance = ellipseDistance(static_cast<float>(dx), static_cast<float>(dz),
+                                                   static_cast<float>(width), static_cast<float>(ellipseDepth),
+                                                   cosine, sine);
+                        if (distance >= -7.006492321624085e-46)
+                            continue;
+                    }
+
+                    if (distance > threshold && static_cast<double>(nextFloat(random)) > 0.9)
+                        continue;
+                    setIcebergBlock(x + dx, SEA_LEVEL + dy, z + dz, height - dy, height);
+                }
+            }
+        }
+    }
+
+    // floating pieces dropped, thin ones removed
+    const int32_t smoothRadius = ellipse ? ellipseWidth : radiusValue / 2;
+    if (smoothRadius >= 0 && height >= 0) {
+        for (int32_t dx = -smoothRadius; dx <= smoothRadius; dx++) {
+            for (int32_t dz = -smoothRadius; dz <= smoothRadius; dz++) {
+                for (int32_t blockY = SEA_LEVEL; blockY <= SEA_LEVEL + height; blockY++) {
+                    const int32_t blockX = x + dx;
+                    const int32_t blockZ = z + dz;
+                    const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
+                    if (!isIceberg(name) && name != "minecraft:snow_layer")
+                        continue;
+
+                    if (blocks.getBlockAt(blockX, blockY - 1, blockZ).mName == "minecraft:air") {
+                        blocks.setBlockStateAt(blockX, blockY, blockZ, air);
+                        blocks.setBlockStateAt(blockX, blockY + 1, blockZ, air);
+                    } else if (isIceberg(name)) {
+                        const int32_t open = !isIceberg(blocks.getBlockAt(blockX, blockY, blockZ + 1).mName)
+                                             + !isIceberg(blocks.getBlockAt(blockX - 1, blockY, blockZ).mName)
+                                             + !isIceberg(blocks.getBlockAt(blockX, blockY, blockZ - 1).mName)
+                                             + !isIceberg(blocks.getBlockAt(blockX + 1, blockY, blockZ).mName);
+                        if (open >= 3)
+                            blocks.setBlockStateAt(blockX, blockY, blockZ, air);
+                    }
+                }
+            }
+        }
+    }
+
+    // under the sea
+    const int32_t depthSum = height + nextInt(random, 11);
+    const int32_t depth = std::min(depthSum, 18);
+    if (width > 0 && depthSum >= 2) {
+        const float depthF = static_cast<float>(depth);
+        for (int32_t dx = -width; dx < width; dx++) {
+            const double dxSquared = static_cast<double>(dx) * static_cast<double>(dx);
+            for (int32_t dz = -width; dz < width; dz++) {
+                const double distanceSquared = static_cast<double>(dz) * static_cast<double>(dz) + dxSquared;
+                for (int32_t below = 1; -below > -depth; below++) {
+                    int32_t ringWidth = width;
+                    if (ellipse) {
+                        const auto dySquared = static_cast<double>(below) * static_cast<double>(below);
+                        ringWidth = ceilOf(static_cast<float>(
+                                (1.0 - dySquared / static_cast<double>(8.0f * depthF)) * static_cast<double>(width)));
+                    }
+
+                    const int32_t radius = steepRadius(below, depthF);
+                    if (dx >= radius)
+                        continue;
+
+                    double distance = 0.0;
+                    double threshold = -0.5;
+                    if (!ellipse) {
+                        distance = circleDistance(distanceSquared, radius);
+                        if (distance >= 0.0)
+                            continue;
+                        threshold = -6.0f - static_cast<float>(nextInt(random, 3));
+                    } else {
+                        distance = ellipseDistance(static_cast<float>(dx), static_cast<float>(dz),
+                                                   static_cast<float>(ringWidth), static_cast<float>(ellipseDepth),
+                                                   cosine, sine);
+                        if (distance >= -7.006492321624085e-46)
+                            continue;
+                    }
+
+                    if (distance <= threshold || static_cast<double>(nextFloat(random)) <= 0.9)
+                        setIcebergBlock(x + dx, SEA_LEVEL - below, z + dz, depth + below, depth);
+                }
+            }
+        }
+    }
+
+    const float cutDraw = nextFloat(random);
+    const bool cut = ellipse ? !(cutDraw <= 0.1f) : !(nextFloat(random) <= 0.7f);
+    if (!cut)
+        return;
+
+    const int32_t half = radiusValue / 2;
+    const int32_t bound = std::max(3, half) - 2;
+    int32_t offsetX = nextInt(random, bound);
+    if (nextBoolean(random))
+        offsetX = half - nextInt(random, std::max(1, radiusValue - half - 1)) + 1;
+    int32_t offsetZ = nextInt(random, bound);
+    if (nextBoolean(random))
+        offsetZ = half - nextInt(random, std::max(1, radiusValue - half - 1)) + 1;
+    if (ellipse) {
+        offsetX = nextInt(random, std::max(1, 6 - widthDraw));
+        offsetZ = offsetX;
+    }
+    const bool negativeX = nextBoolean(random);
+    const bool negativeZ = nextBoolean(random);
+    const int32_t centreX = negativeX ? -offsetX : offsetX;
+    const int32_t centreZ = negativeZ ? -offsetZ : offsetZ;
+    float cutAngle = angle + 1.5707964f;
+    if (!ellipse) {
+        const float cutAngleDraw = nextFloat(random);
+        cutAngle = (cutAngleDraw + cutAngleDraw) * PI;
+    }
+    const float cutCos = FeatureMath::sineAt(cutAngle * 10430.378f + 16384.0f);
+    const float cutSin = FeatureMath::sineAt(cutAngle * 10430.378f);
+
+    // sub_14D217330: an ellipse around the cut's centre emptied, to air above the sea and water under it
+    const auto carve = [&](int32_t radius, int32_t dy, bool underwater) {
+        const int32_t extent = radius + ellipseWidth / 3 + 1;
+        if (extent <= 0)
+            return;
+
+        const auto a = static_cast<float>(extent);
+        const auto b = static_cast<float>(std::min(radius, 6) + ellipseDepth / 2 - 4);
+        for (int32_t dx = -extent; dx < extent; dx++) {
+            for (int32_t dz = -extent; dz < extent; dz++) {
+                if (ellipseDistance(static_cast<float>(dx - centreX), static_cast<float>(dz - centreZ), a, b, cutCos,
+                                    cutSin) >= -7.006492321624085e-46)
+                    continue;
+
+                const int32_t blockX = x + dx;
+                const int32_t blockY = SEA_LEVEL + dy;
+                const int32_t blockZ = z + dz;
+                const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
+                if (!isIceberg(name) && name != "minecraft:snow_layer")
+                    continue;
+
+                if (underwater) {
+                    blocks.setBlockStateAt(blockX, blockY, blockZ, water);
+                    continue;
+                }
+                blocks.setBlockStateAt(blockX, blockY, blockZ, air);
+                if (blocks.getBlockAt(blockX, blockY + 1, blockZ).mName == "minecraft:snow_layer")
+                    blocks.setBlockStateAt(blockX, blockY + 1, blockZ, air);
+            }
+        }
+    };
+
+    for (int32_t dy = 0; dy < height - 3; dy++)
+        carve(roundRadius(dy, static_cast<float>(dy)), dy, false);
+
+    if (nextInt(random, 5) - height <= -2) {
+        int32_t dy = -1;
+        int32_t below = 1;
+        do {
+            carve(steepRadius(below, heightF), dy, true);
+            dy--;
+            below++;
+        } while (dy > nextInt(random, 5) - height);
+    }
+}
+
+bool OverworldRulePlacer::_placeBlueIce(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
+                                        std::mt19937 &random) {
+    // the game's blue ice feature (sub_147174460): under the sea, in or over water and next to packed ice, then 200
+    // tries around it that keep one to four blue ice neighbours
+    static const BlockState blueIce = VanillaBlocks::BLUE_ICE().toBlockState();
+    if (y >= 63)
+        return false;
+    if (blocks.getBlockAt(x, y, z).mName != "minecraft:water" && blocks.getBlockAt(x, y - 1, z).mName != "minecraft:water")
+        return false;
+
+    const auto isPacked = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        return blocks.getBlockAt(blockX, blockY, blockZ).mName == "minecraft:packed_ice";
+    };
+    if (!isPacked(x, y + 1, z) && !isPacked(x, y, z - 1) && !isPacked(x, y, z + 1) && !isPacked(x - 1, y, z)
+        && !isPacked(x + 1, y, z))
+        return false;
+
+    blocks.setBlockStateAt(x, y, z, blueIce);
+    for (int32_t attempt = 0; attempt < 200; attempt++) {
+        const int32_t dy = nextInt(random, 5) - nextInt(random, 6);
+        int32_t bound = 3;
+        if (dy <= 1) {
+            if (dy < -5)
+                continue;
+            bound = dy / 2 + 3;
+        }
+
+        const int32_t first = nextInt(random, bound);
+        const int32_t blockX = x + first - nextInt(random, bound);
+        const int32_t third = nextInt(random, bound);
+        const int32_t blockZ = z + third - nextInt(random, bound);
+        const int32_t blockY = y + dy;
+        const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
+        if (name != "minecraft:air" && name != "minecraft:water" && name != "minecraft:packed_ice"
+            && name != "minecraft:ice")
+            continue;
+
+        int32_t touching = 0;
+        for (const int32_t *step: FACE_STEPS) {
+            touching += blocks.getBlockAt(blockX + step[0], blockY + step[1], blockZ + step[2]).mName
+                        == "minecraft:blue_ice";
+        }
+        if (touching >= 1 && touching <= 4)
+            blocks.setBlockStateAt(blockX, blockY, blockZ, blueIce);
+    }
+    return true;
 }
 
 void OverworldRulePlacer::_placeForestFoliage(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random) {
