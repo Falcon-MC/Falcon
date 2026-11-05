@@ -15,12 +15,9 @@ struct PoiBlueprint {
     std::string mName;
     std::string mInitEvent;
     std::string mEndEvent;
-    std::string mSoundEvent;
     PoiType mType;
-    float mRadius;
     uint64_t mCapacity;
     uint64_t mWeight;
-    bool mUseAABB;
 };
 
 class PoiBlueprints {
