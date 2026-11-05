@@ -152,12 +152,8 @@ std::shared_ptr<Village> VillageManager::getDwellerVillage(DwellerRole role, int
 }
 
 MobActor *VillageManager::findMob(ServerNetworkHandler &owner, int64_t uniqueId) {
-    for (auto &entry: owner.getActors()) {
-        if (entry.second->getUniqueId() != uniqueId || entry.second->isExpired())
-            continue;
-        return dynamic_cast<MobActor *>(entry.second.get());
-    }
-    return nullptr;
+    MobActor *mob = dynamic_cast<MobActor *>(owner.getActor(uniqueId));
+    return mob == nullptr || mob->isExpired() ? nullptr : mob;
 }
 
 void VillageManager::_removeVillages() {
