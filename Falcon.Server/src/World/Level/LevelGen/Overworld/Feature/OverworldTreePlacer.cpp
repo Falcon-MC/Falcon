@@ -7,6 +7,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/LevelGen/Feature/FeatureMath.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 
@@ -202,8 +203,8 @@ bool OverworldTreePlacer::_fancyTrunk(BlockManager &blocks, const Definition &tr
             const float reach = (nextFloat(random) + 0.328f) * (fancy.mBranchDensity * radius);
             const float turn = nextFloat(random);
             const float angle = ((turn + turn) * 3.1415927f) * 10430.378f;
-            const int32_t clusterX = x + static_cast<int32_t>(reach * FeatureRandom::sineAt(angle) + 0.5f);
-            const int32_t clusterZ = z + static_cast<int32_t>(FeatureRandom::sineAt(angle + 16384.0f) * reach + 0.5f);
+            const int32_t clusterX = x + static_cast<int32_t>(reach * FeatureMath::sineAt(angle) + 0.5f);
+            const int32_t clusterZ = z + static_cast<int32_t>(FeatureMath::sineAt(angle + 16384.0f) * reach + 0.5f);
             const int32_t clusterY = y + layer - 1;
 
             const int32_t awayX = x - clusterX;

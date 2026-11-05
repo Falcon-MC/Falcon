@@ -59,7 +59,6 @@ namespace {
     using FeatureRandom::between;
     using FeatureRandom::nextFloat;
     using FeatureRandom::nextInt;
-    using FeatureRandom::sineAt;
 
     // HashedString's hash (FNV-1, 64 bits), kept by each feature rule
     uint64_t hashedString(const std::string &value) {

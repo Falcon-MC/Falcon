@@ -1,6 +1,7 @@
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 
 #include "World/Level/LevelGen/Noise/NoiseMath.h"
+#include "World/Level/LevelGen/Random/GameRandom.h"
 #include "World/Level/LevelGen/Random/XoroshiroRandom.h"
 
 #include <utility>
@@ -51,21 +52,16 @@ SurfaceSimplexNoise::SurfaceSimplexNoise(XoroshiroRandom &random) {
 }
 
 SurfaceSimplexNoise::SurfaceSimplexNoise(std::mt19937 &random) {
-    // Random::nextFloat and Random::nextInt(n) (sub_140391E90, sub_140391F20)
-    const auto nextFloat = [&random]() {
-        return static_cast<float>(static_cast<double>(random()) * 2.3283064365386963e-10);
-    };
-
     // the z offset comes first here, and a 2D octave never reads it
-    nextFloat();
-    mOffsetY = nextFloat() * 256.0f;
-    mOffsetX = nextFloat() * 256.0f;
+    GameRandom::nextFloat(random);
+    mOffsetY = GameRandom::nextFloat(random) * 256.0f;
+    mOffsetX = GameRandom::nextFloat(random) * 256.0f;
 
     for (int32_t i = 0; i < 256; i++)
         mPermutation[(size_t) i] = i;
 
     for (int32_t i = 0; i < 256; i++) {
-        const int32_t other = i + static_cast<int32_t>(random() % static_cast<uint32_t>(256 - i));
+        const int32_t other = i + GameRandom::nextInt(random, 256 - i);
         std::swap(mPermutation[(size_t) i], mPermutation[(size_t) other]);
         mPermutation[(size_t) i + 256] = mPermutation[(size_t) i];
     }
