@@ -196,5 +196,5 @@ bool BiomeSearch::_isBiomeAt(Level &level, int32_t x, int32_t y, int32_t z, int3
 
 bool BiomeSearch::_isAirAt(Level &level, int32_t x, int32_t y, int32_t z) {
     const BlockState *state = level.peekBlockPtr(x, y, z);
-    return state != nullptr && state->mName == "minecraft:air";
+    return state != nullptr && state->getHash() == level.getAirHash();
 }

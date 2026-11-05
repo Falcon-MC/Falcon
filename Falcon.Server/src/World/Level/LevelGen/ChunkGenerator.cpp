@@ -16,11 +16,11 @@ int32_t ChunkGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
     // only the nether skips its roof before looking for the surface (dimension vfunc +0xF0 in
     // sub_14A2298E0, read by sub_1435B0910)
     if (dimension == DimensionType::Nether) {
-        while (y > minY && chunk.getBlock(localX, y, localZ).mName != "minecraft:air")
+        while (y > minY && chunk.getBlock(localX, y, localZ).getHash() != getAirHash())
             y--;
     }
 
-    while (y >= minY && chunk.getBlock(localX, y, localZ).mName == "minecraft:air")
+    while (y >= minY && chunk.getBlock(localX, y, localZ).getHash() == getAirHash())
         y--;
 
     return y + 1;

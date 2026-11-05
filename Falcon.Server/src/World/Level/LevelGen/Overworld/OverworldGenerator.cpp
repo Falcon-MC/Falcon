@@ -77,7 +77,7 @@ int32_t OverworldGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
     const int32_t localX = x & 15;
     const int32_t localZ = z & 15;
     int32_t y = OverworldGeneratorConstants::MIN_Y + PRELIMINARY_HEIGHT - 1;
-    while (y >= OverworldGeneratorConstants::MIN_Y && chunk.getBlock(localX, y, localZ).mName == "minecraft:air")
+    while (y >= OverworldGeneratorConstants::MIN_Y && chunk.getBlock(localX, y, localZ).getHash() == mAirHash)
         y--;
 
     return y + 1;
