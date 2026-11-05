@@ -73,7 +73,10 @@ public:
         return !mUnclaimed[(size_t) PoiType::Bed].empty();
     }
 
-    /** Unclaimed beds plus the beds claimed by inhabitants. */
+    /**
+     * Unclaimed beds plus the beds claimed by inhabitants. Like the game (sub_1439E5420), every queued bed counts,
+     * even one that has been broken since: only claimed points of interest are checked for validity.
+     */
     size_t countBeds() const;
 
     /** Every point of interest the village holds, claimed or not. */
