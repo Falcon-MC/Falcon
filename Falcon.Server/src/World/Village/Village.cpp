@@ -362,6 +362,7 @@ void Village::_tickPoiValidity(ServerNetworkHandler &owner, Level &level) {
             if (state == nullptr)
                 continue;
 
+            // the scan's own check, so an occupied bed is lost too: a player sleeping in it frees it (0x1439d2164)
             const PoiBlueprint *blueprint = PoiScanner::findValidBlueprint(*state);
             if (blueprint != nullptr && manager.isRegistered(blueprint->mType, position, blueprint->mName))
                 continue;
