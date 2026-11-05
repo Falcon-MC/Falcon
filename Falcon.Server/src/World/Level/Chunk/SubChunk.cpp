@@ -134,8 +134,14 @@ void SubChunk::compactBiomes() {
     mBiomes.clear();
 }
 
-bool SubChunk::readBiomes(ReadOnlyBinaryStream &stream) {
+bool SubChunk::readBiomes(ReadOnlyBinaryStream &stream, const SubChunk *previous) {
     const unsigned char header = stream.getByte();
+    if (header == BIOME_COPY_PREVIOUS && previous != nullptr) {
+        mBiomePalette = previous->mBiomePalette;
+        mBiomes = previous->mBiomes;
+        return true;
+    }
+
     const int bitsPerBlock = header >> 1;
 
     if (bitsPerBlock == 0) {
