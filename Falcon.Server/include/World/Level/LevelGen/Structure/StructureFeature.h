@@ -39,6 +39,8 @@ public:
 
     StructureChunkPos getCandidate(int64_t seed, int32_t regionX, int32_t regionZ) const;
 
+    bool isStartChunk(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const;
+
     // the start nearest to the block position within the search radius, as /locate structure reports it
     bool findNearest(const ChunkGenerator &generator, int32_t blockX, int32_t blockZ, StructureChunkPos &out) const;
 
