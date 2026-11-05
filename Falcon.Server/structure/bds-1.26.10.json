@@ -5513,14 +5513,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/BushFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/BushFeature.h",
-      "sha256": "3e9d3edbe571324f85629bdd379566063ae7d68d86d8faaabf48d4819aab0d65",
-      "classes": [
-        "BushFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/CactusFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/CactusFeature.h",
       "sha256": "ec9f97706dde62149cebfc82d0346f1b8d66d1bf295b1ceea94475dd2e59f966",
@@ -5697,14 +5689,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/LegacyFlowerFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/LegacyFlowerFeature.h",
-      "sha256": "b8a5413d05c7b4df427de699b12aff66f3b8393872b26f6b190682f5dbb393ef",
-      "classes": [
-        "LegacyFlowerFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/LegacyForestRockFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/LegacyForestRockFeature.h",
       "sha256": "07ab580f25b7d310970bded3539f3ed2681aa3426ea70461b1c9b90bc429e224",
@@ -5766,14 +5750,6 @@
       "sha256": "68cb1bcc422540a2d87759fd1e3f62eab6b36a47381666e24f4acb1857e79528",
       "classes": [
         "PaleMossPatchFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/PlainsFlowerFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/PlainsFlowerFeature.h",
-      "sha256": "a3b9f0a0bb43224fd60e3c7a0be6b70c20b5b057f5e01bff9d5b9284a52e9097",
-      "classes": [
-        "PlainsFlowerFeature"
       ]
     },
     {
@@ -10063,11 +10039,6 @@
       "sha256": "5a64c985584b939d33cc3234300d159a6e1a791d5ee5ce2facf11a610c38f928"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/BushFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/BushFeature.cpp",
-      "sha256": "bfccb7ed51173eed540e023753bc31a622d75beff1d580a2c58566d716939e7b"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/CactusFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/CactusFeature.cpp",
       "sha256": "b7039cf1bfa7a5637cbd9d445c1dbf731df42bc77f64673ff5d9f19ee4d309f8"
@@ -10178,11 +10149,6 @@
       "sha256": "af92c700b7921dd0261e5902c791667b38cc840d5159ad7372abe1267eddf52e"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/LegacyFlowerFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/LegacyFlowerFeature.cpp",
-      "sha256": "a30bc72855e37bb05119cdd2780f0254a2f3d73f80e6aff76303e74aaaf2654f"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/LegacyForestRockFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/LegacyForestRockFeature.cpp",
       "sha256": "46f736563bab943cfecf34d91ce920db4019d0bf07018f607033925054478d95"
@@ -10221,11 +10187,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/PaleMossPatchFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/PaleMossPatchFeature.cpp",
       "sha256": "64beba21e3acdeb271eca01dd9acc30b4b52e67cb7b6aac66a76c071b745b5da"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/PlainsFlowerFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/PlainsFlowerFeature.cpp",
-      "sha256": "ebd5046857e0e2ac5b64b0350b94656d3377100fab00150d9384dc69433424b2"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/PumpkinFeature.cpp",
