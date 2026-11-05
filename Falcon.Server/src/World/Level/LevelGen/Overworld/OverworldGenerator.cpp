@@ -55,6 +55,7 @@ OverworldGenerator::OverworldGenerator(int64_t seed)
 
 OverworldGenerator::~OverworldGenerator() = default;
 
+// climate only, without the zoom: the game's biome search samples the same way (sub_147186890 -> sub_14CDA32A0)
 int32_t OverworldGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
     const OverworldClimate::Column column = mClimate->sampleColumn(x >> 2, z >> 2);
     const OverworldBiomeParameters::Target target = OverworldBiomeParameters::target(
