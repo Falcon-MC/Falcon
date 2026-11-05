@@ -233,11 +233,9 @@ bool LocateCommand::_findBiomeSpiral(Level &level, int32_t centerX, int32_t cent
         const int32_t checkX = centerX + (x << 4);
         const int32_t checkZ = centerZ + (z << 4);
 
-        OverworldBiomeResult result = level.pickBiomeResult(checkX, SEA_LEVEL, checkZ);
-
         int32_t height = SEA_LEVEL;
         while (height > level.getMinY()) {
-            if (result.correct(height - SEA_LEVEL).getBiomeId() == biomeId) {
+            if (level.pickBiome(checkX, height, checkZ) == biomeId) {
                 found = Vector3i(checkX, height, checkZ);
                 return true;
             }

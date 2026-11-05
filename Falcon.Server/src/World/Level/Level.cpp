@@ -36,16 +36,6 @@ void Level::decorate(LevelChunk &chunk, std::vector<GeneratedBlockChange> *overf
     mGenerator->decorate(*this, chunk, overflow);
 }
 
-OverworldBiomeResult Level::pickBiomeResult(int32_t x, int32_t y, int32_t z) const {
-    const OverworldGenerator *overworld = dynamic_cast<const OverworldGenerator *>(mGenerator.get());
-
-    if (overworld == nullptr) {
-        return OverworldBiomeResult(mGenerator->pickBiome(x, y, z), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-    }
-
-    return overworld->pickBiomeResult(x, y, z);
-}
-
 Level &Level::operator=(Level &&other) noexcept {
     if (this == &other)
         return *this;

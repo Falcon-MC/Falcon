@@ -5497,46 +5497,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Biome/OverworldBiomeResult.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Biome/OverworldBiomeResult.h",
-      "sha256": "371d686c1eed9f03297eeee86626a469fa7df709f772d50f9a357782236c7450",
-      "classes": [
-        "OverworldBiomeResult"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Biome/VanillaOverworldBiomeSource.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Biome/VanillaOverworldBiomeSource.h",
-      "sha256": "9405209d7b18f175efe1a6717a5d5ed9a5dc988fadbecf3d01714401391c2599",
-      "classes": [
-        "VanillaOverworldBiomeSource"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensityContinents.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensityContinents.h",
-      "sha256": "689c01ef2d8479727f2fe84dbed7bacf7b1f3fb2015d87d4864934660c996032",
-      "classes": [
-        "DensityContinents"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensityErosion.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensityErosion.h",
-      "sha256": "576f99285880a15a51a54d0dd2f65b1fcdbb7f5fe12fa4eb7ac8d3ca5b366c73",
-      "classes": [
-        "DensityErosion"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensityRidges.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensityRidges.h",
-      "sha256": "62bb9cfa3ffd7a3d9852ee490169af5cd3bc8c7089a09df2114adf9627909248",
-      "classes": [
-        "DensityRidges"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/AzaleaRootSystemFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/AzaleaRootSystemFeature.h",
       "sha256": "5d0f1ab66eb689d8e5f25f42f78f290b6e4b4e0faad64a0b86a9d6407a2444f7",
@@ -10523,31 +10483,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Biome/ClimateAttributes.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Biome/ClimateAttributes.cpp",
       "sha256": "9626fe9f248dec9fc31f8e95f0a856a035d949c79258eea3514311d42f92b6c3"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Biome/OverworldBiomeResult.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Biome/OverworldBiomeResult.cpp",
-      "sha256": "442d734d9c90cb90382dabecf827a937f5da200c175681c2bdd2e76a6e650bf4"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Biome/VanillaOverworldBiomeSource.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Biome/VanillaOverworldBiomeSource.cpp",
-      "sha256": "1e990b0ec45cf2eebcd3e58d9ed273ed1a90fa16194c9ebebe5564bf7a7d75cd"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensityContinents.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensityContinents.cpp",
-      "sha256": "7837ca203cf852632b3c4245753042cd7bbb3de52317446579e744efb971047e"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensityErosion.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensityErosion.cpp",
-      "sha256": "1d90a9429910166420f0c5533b173813b2883fa06d38ebf8f1af642c0ac37c33"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensityRidges.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensityRidges.cpp",
-      "sha256": "0ea6ef9e0ce95c791f11f2db88513607f9ddcb5c9a81d2736a148be7aa9c0537"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/AzaleaRootSystemFeature.cpp",

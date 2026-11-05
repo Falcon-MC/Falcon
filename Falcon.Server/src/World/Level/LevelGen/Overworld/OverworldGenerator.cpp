@@ -1,10 +1,9 @@
 #include "World/Level/LevelGen/Overworld/OverworldGenerator.h"
 
 #include "World/Level/Block/VanillaBlocks.h"
-#include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeResult.h"
+#include "World/Level/LevelGen/Overworld/Biome/BiomeZoom.h"
+#include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldFeatureBuilder.h"
-#include "World/Level/LevelGen/Overworld/Biome/VanillaOverworldBiomeSource.h"
-#include "World/Level/LevelGen/Density/DensityCommon.h"
 #include "World/Level/LevelGen/Feature/FeatureNoiseHolder.h"
 #include "World/Level/LevelGen/Random/SimpleRandom.h"
 #include "World/Level/LevelGen/Overworld/Surface/OverworldSurfaceBuilder.h"
@@ -16,6 +15,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <vector>
 
 namespace {
     const BlockState &bedrockState() {
@@ -26,22 +26,20 @@ namespace {
     bool isAirState(const BlockState &state) {
         return state.mName == "minecraft:air";
     }
+
+    // biome samples every 8 blocks from 8 blocks before the chunk, 2 extra in y (sub_147186040)
+    constexpr int32_t BIOME_SAMPLE_COUNT_XZ = 4;
+    constexpr int32_t BIOME_SAMPLE_COUNT_Y =
+            ((OverworldGeneratorConstants::MAX_Y + 1 - OverworldGeneratorConstants::MIN_Y) >> 3) + 2;
+
+    float biomeDepth(int32_t y, float offset) {
+        return static_cast<float>(static_cast<int16_t>(y)) * -0.0078125f + 1.0f + offset;
+    }
 }
 
 OverworldGenerator::OverworldGenerator(int64_t seed)
         : mSeed(seed), mAirHash(BlockStateHasher::hash("minecraft:air")) {
     mNoiseHolder = std::make_unique<OverworldNoiseHolder>(seed);
-
-    const OverworldTerrainNoises &terrain = mNoiseHolder->getTerrainNoises();
-    const OverworldBiomeNoises &biome = mNoiseHolder->getBiomeNoises();
-
-    mBiomeSource = std::make_unique<VanillaOverworldBiomeSource>(
-            terrain.getContinents(),
-            terrain.getErosion(),
-            terrain.getRidges(),
-            biome.getTemperatureNoise(),
-            biome.getHumidityNoise()
-    );
 
     const IRandomPtr surfaceRandom = mNoiseHolder->getRandomSource().identical();
     mSurfaceBuilder = std::make_unique<OverworldSurfaceBuilder>(mNoiseHolder->getNoiseFactory());
@@ -52,16 +50,18 @@ OverworldGenerator::OverworldGenerator(int64_t seed)
 
     mClimate = std::make_unique<OverworldClimate>(mNoiseHolder->getNoiseFactory());
     mTerrainFiller = std::make_unique<OverworldTerrainFiller>(mNoiseHolder->getNoiseFactory(), *mClimate);
+    mBiomeParameters = std::make_unique<OverworldBiomeParameters>();
 }
 
 OverworldGenerator::~OverworldGenerator() = default;
 
+// climate only, without the zoom: the game's biome search samples the same way (sub_147186890 -> sub_14CDA32A0)
 int32_t OverworldGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
-    return mBiomeSource->pickBiomeId(x, y, z);
-}
-
-OverworldBiomeResult OverworldGenerator::pickBiomeResult(int32_t x, int32_t y, int32_t z) const {
-    return mBiomeSource->pickRaw(x, y, z);
+    const OverworldClimate::Column column = mClimate->sampleColumn(x >> 2, z >> 2);
+    const OverworldBiomeParameters::Target target = OverworldBiomeParameters::target(
+            column.mTemperature, column.mVegetation, column.mContinentalness, column.mErosion,
+            biomeDepth(y, column.mOffset), column.mRidges);
+    return mBiomeParameters->search(target, nullptr)->mBiome;
 }
 
 void OverworldGenerator::decorate(Level &level, LevelChunk &chunk,
@@ -109,47 +109,45 @@ void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap)
     }
 }
 
-void OverworldGenerator::_generateBiomeMap(LevelChunk &chunk, DensityChunkCache &chunkCache,
-                                           const int32_t *heightMap) const {
-    const int32_t chunkX = chunk.getX();
-    const int32_t chunkZ = chunk.getZ();
+void OverworldGenerator::_generateBiomeMap(LevelChunk &chunk) const {
+    const int32_t originX = (chunk.getX() << 4) - 8;
+    const int32_t originY = OverworldGeneratorConstants::MIN_Y - 8;
+    const int32_t originZ = (chunk.getZ() << 4) - 8;
 
-    chunkCache.clear();
-    CellFunctionContext functionContext(&chunkCache);
-
-    std::vector<OverworldBiomeResult> biomes;
-    biomes.reserve(256);
-
-    for (int32_t localX = 0; localX < 16; localX++) {
-        const int32_t x = chunkX * 16 + localX;
-        for (int32_t localZ = 0; localZ < 16; localZ++) {
-            const int32_t z = chunkZ * 16 + localZ;
-            biomes.push_back(mBiomeSource->pick(
-                    x,
-                    OverworldGeneratorConstants::SEA_LEVEL,
-                    z,
-                    functionContext.set(x, OverworldGeneratorConstants::SEA_LEVEL, z),
-                    heightMap[(localX << 4) | localZ]
-            ));
+    // sub_147185D00, sub_1471AC680
+    std::vector<int32_t> samples((size_t) (BIOME_SAMPLE_COUNT_XZ * BIOME_SAMPLE_COUNT_XZ * BIOME_SAMPLE_COUNT_Y));
+    size_t index = 0;
+    for (int32_t indexX = 0; indexX < BIOME_SAMPLE_COUNT_XZ; indexX++) {
+        const int32_t x = originX + 8 * indexX;
+        for (int32_t indexZ = 0; indexZ < BIOME_SAMPLE_COUNT_XZ; indexZ++) {
+            const int32_t z = originZ + 8 * indexZ;
+            const OverworldClimate::Column column = mClimate->sampleColumn(x >> 2, z >> 2);
+            const OverworldBiomeParameters::Node *last = nullptr;
+            for (int32_t indexY = 0; indexY < BIOME_SAMPLE_COUNT_Y; indexY++) {
+                const int32_t y = originY + 8 * indexY;
+                const OverworldBiomeParameters::Target target = OverworldBiomeParameters::target(
+                        column.mTemperature, column.mVegetation, column.mContinentalness, column.mErosion,
+                        biomeDepth(y, column.mOffset), column.mRidges);
+                last = mBiomeParameters->search(target, last);
+                samples[index++] = last->mBiome;
+            }
         }
     }
 
-    for (int32_t y = OverworldGeneratorConstants::MAX_Y; y >= OverworldGeneratorConstants::MIN_Y; y--) {
-        for (int32_t x = 0; x < 16; x++) {
-            for (int32_t z = 0; z < 16; z++) {
-                OverworldBiomeResult &result = biomes[(size_t) (x * 16 + z)];
-                result.correct(y - heightMap[(x << 4) | z]);
-                chunk.setBiomeAt(x, y, z, (uint32_t) result.getBiomeId());
-                result.reset();
+    // the zoom takes the level's 32-bit seed (vfunc +0x430 in sub_147186040)
+    const BiomeZoom zoom((uint32_t) mSeed, originX, originY, originZ, BIOME_SAMPLE_COUNT_XZ, BIOME_SAMPLE_COUNT_Y,
+                         BIOME_SAMPLE_COUNT_XZ);
+    for (int32_t x = 0; x < 16; x++) {
+        for (int32_t z = 0; z < 16; z++) {
+            for (int32_t y = OverworldGeneratorConstants::MIN_Y; y <= OverworldGeneratorConstants::MAX_Y; y++) {
+                const int32_t sample = zoom.nearestSample((chunk.getX() << 4) + x, y, (chunk.getZ() << 4) + z);
+                chunk.setBiomeAt(x, y, z, (uint32_t) samples[(size_t) sample]);
             }
         }
     }
 }
 
 void OverworldGenerator::generate(LevelChunk &chunk) const {
-    DensityChunkCache chunkCache;
-    chunkCache.clear();
-
     int32_t heightMap[256];
     for (int32_t i = 0; i < 256; i++)
         heightMap[i] = 0;
@@ -161,7 +159,7 @@ void OverworldGenerator::generate(LevelChunk &chunk) const {
             chunk.setHeight(x, z, heightMap[(x << 4) | z]);
     }
 
-    _generateBiomeMap(chunk, chunkCache, heightMap);
+    _generateBiomeMap(chunk);
 
     mSurfaceBuilder->apply(chunk);
 
