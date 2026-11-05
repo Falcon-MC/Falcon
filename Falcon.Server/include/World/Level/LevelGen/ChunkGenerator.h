@@ -26,4 +26,9 @@ public:
     virtual int32_t getAirHash() const = 0;
 
     virtual int32_t pickBiome(int32_t x, int32_t y, int32_t z) const = 0;
+
+    // y above the top solid or liquid block a column gets from terrain generation alone, which is
+    // what the game reads for a column that is not loaded (sub_14A2298E0). generates a throwaway
+    // chunk, so it is safe off the main thread but not cheap.
+    virtual int32_t getPreliminaryHeight(int32_t x, int32_t z) const;
 };
