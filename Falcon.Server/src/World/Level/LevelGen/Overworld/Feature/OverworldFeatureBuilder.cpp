@@ -4,7 +4,7 @@
 #include "World/Level/LevelGen/Feature/ChunkGenerateContext.h"
 #include "World/Level/LevelGen/Feature/GenerateFeatureRegistry.h"
 #include "World/Level/LevelGen/Feature/GeneratorRoot.h"
-#include "World/Level/LevelGen/Overworld/Feature/Ore/OverworldOrePlacer.h"
+#include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 
@@ -89,7 +89,7 @@ void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, std::vector
             continue;
 
         for (const BiomeFeatureEntry &feature: *features) {
-            if (OverworldOrePlacer::handles(feature))
+            if (OverworldRulePlacer::handles(feature))
                 continue;
 
             if (!seenIdentifiers.insert(feature.mIdentifier).second)
@@ -130,11 +130,11 @@ void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, std::vector
     // the ores read the chunk itself, so the first features must be in it before they run
     root.applySubChunkUpdate();
 
-    // applied at once so the features placed after them see the ores
-    BlockManager ores(level);
-    ores.setOverflowSink(chunk.getX(), chunk.getZ(), overflow);
-    OverworldOrePlacer::apply(ores, chunk, (uint32_t) level.getSeed(), biomesInSectionOrder(chunk));
-    ores.applySubChunkUpdate();
+    // applied at once so the features placed after them see the rules' blocks
+    BlockManager rules(level);
+    rules.setOverflowSink(chunk.getX(), chunk.getZ(), overflow);
+    OverworldRulePlacer::apply(rules, chunk, (uint32_t) level.getSeed(), biomesInSectionOrder(chunk));
+    rules.applySubChunkUpdate();
 
     place(false);
 

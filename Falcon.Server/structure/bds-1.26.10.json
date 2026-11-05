@@ -6089,38 +6089,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/River/ClayFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/River/ClayFeature.h",
-      "sha256": "21efec6107c473fed0c0aac3c89450e3f324583a83abdacc0cd7733912d14ff9",
-      "classes": [
-        "ClayFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/River/DiscGenerateFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/River/DiscGenerateFeature.h",
-      "sha256": "569edb96afc0e812c821e2a7efebb59bf67953dd253cf64d1df2fb20cc4f6c37",
-      "classes": [
-        "DiscGenerateFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/River/GravelFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/River/GravelFeature.h",
-      "sha256": "7a19b97b3270644646132918cbf1541939f39c826c09617a463b06fb84d74be2",
-      "classes": [
-        "GravelFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/River/SandFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/River/SandFeature.h",
-      "sha256": "814c10abec8fb31e7622fe12b4252d098428982762f672310eaaeb75d8c5fdba",
-      "classes": [
-        "SandFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/AzaleaTree.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/AzaleaTree.h",
       "sha256": "399b24a62268764f323f1c048eccc005348bd8612ab36eeac154cfa38c147885",
@@ -10599,26 +10567,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/OverworldFeatureBuilder.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/OverworldFeatureBuilder.cpp",
       "sha256": "ab7fa78831ad16e13c1ba5ee5ce75f237d5ecda00b6264983ca9fddb5959d455"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/River/ClayFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/River/ClayFeature.cpp",
-      "sha256": "03b44d99a99ab098ec6d26093429c61746c5aa24a93ad1122f9ddafdd74a894c"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/River/DiscGenerateFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/River/DiscGenerateFeature.cpp",
-      "sha256": "b5fa65c8ecc2abc07b61e1dd0e753be3f96afc633f79e59e68cabc983befa413"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/River/GravelFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/River/GravelFeature.cpp",
-      "sha256": "054429a287f8bf0237d431f947b1668967a28005322336b9c2130f3d839513c4"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/River/SandFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/River/SandFeature.cpp",
-      "sha256": "7711d1a1aca0d6cff7e3e3776cf508fd619e08493fefee413ef10e191df91af7"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/AzaleaTree.cpp",
