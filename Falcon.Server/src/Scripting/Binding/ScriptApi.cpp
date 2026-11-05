@@ -1653,7 +1653,7 @@ bool ScriptApi::emitNamed(const std::string &name, JSValue eventObject) {
         if (JS_IsException(result)) {
             JSValue exception = JS_GetException(mContext);
             const char *message = JS_ToCString(mContext, exception);
-            LOG_ERROR(LogAreaID::Server, "Script event handler error (%s): %s", name.c_str(),
+            LOG_ERROR(LogAreaID::Script, "Script event handler error (%s): %s", name.c_str(),
                       message == nullptr ? "?" : message);
             if (message != nullptr)
                 JS_FreeCString(mContext, message);
@@ -1678,7 +1678,7 @@ void ScriptApi::_dispatch(ScriptEvent event, JSValue eventObject) {
         if (JS_IsException(result)) {
             JSValue exception = JS_GetException(mContext);
             const char *message = JS_ToCString(mContext, exception);
-            LOG_ERROR(LogAreaID::Server, "Script event handler error: %s", message == nullptr ? "?" : message);
+            LOG_ERROR(LogAreaID::Script, "Script event handler error: %s", message == nullptr ? "?" : message);
             if (message != nullptr)
                 JS_FreeCString(mContext, message);
             JS_FreeValue(mContext, exception);
@@ -1697,7 +1697,7 @@ bool ScriptApi::_dispatchCancellable(ScriptEvent event, JSValue eventObject) {
         if (JS_IsException(result)) {
             JSValue exception = JS_GetException(mContext);
             const char *message = JS_ToCString(mContext, exception);
-            LOG_ERROR(LogAreaID::Server, "Script event handler error: %s", message == nullptr ? "?" : message);
+            LOG_ERROR(LogAreaID::Script, "Script event handler error: %s", message == nullptr ? "?" : message);
             if (message != nullptr)
                 JS_FreeCString(mContext, message);
             JS_FreeValue(mContext, exception);
@@ -3937,7 +3937,7 @@ void ScriptApi::_installUiBootstrap() {
     if (JS_IsException(result)) {
         JSValue exception = JS_GetException(mContext);
         const char *message = JS_ToCString(mContext, exception);
-        LOG_ERROR(LogAreaID::Server, "UI bootstrap error: %s", message == nullptr ? "?" : message);
+        LOG_ERROR(LogAreaID::Script, "UI bootstrap error: %s", message == nullptr ? "?" : message);
         if (message != nullptr)
             JS_FreeCString(mContext, message);
         JS_FreeValue(mContext, exception);
@@ -4338,7 +4338,7 @@ void ScriptApi::_installDataBootstrap() {
     if (JS_IsException(result)) {
         JSValue exception = JS_GetException(mContext);
         const char *message = JS_ToCString(mContext, exception);
-        LOG_ERROR(LogAreaID::Server, "Data bootstrap error: %s", message == nullptr ? "?" : message);
+        LOG_ERROR(LogAreaID::Script, "Data bootstrap error: %s", message == nullptr ? "?" : message);
         if (message != nullptr)
             JS_FreeCString(mContext, message);
         JS_FreeValue(mContext, exception);

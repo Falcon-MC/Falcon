@@ -67,7 +67,7 @@ namespace {
             line << valueToString(ctx, argv[i]);
         }
 
-        LOG_INFO(LogAreaID::Server, "[script] %s", line.str().c_str());
+        LOG_INFO(LogAreaID::Script, "[script] %s", line.str().c_str());
         return JS_UNDEFINED;
     }
 
@@ -79,7 +79,7 @@ namespace {
             line << valueToString(ctx, argv[i]);
         }
 
-        LOG_WARN(LogAreaID::Server, "[script] %s", line.str().c_str());
+        LOG_WARN(LogAreaID::Script, "[script] %s", line.str().c_str());
         return JS_UNDEFINED;
     }
 }
@@ -180,7 +180,7 @@ ScriptEngine::ScriptEngine()
         : mRuntime(nullptr), mContext(nullptr), mWatchdogMs(DEFAULT_WATCHDOG_MS), mExecutionDeadlineMs(0) {
     mRuntime = JS_NewRuntime();
     if (mRuntime == nullptr) {
-        LOG_ERROR(LogAreaID::Server, "Failed to create the QuickJS runtime");
+        LOG_ERROR(LogAreaID::Script, "Failed to create the QuickJS runtime");
         return;
     }
 
@@ -189,7 +189,7 @@ ScriptEngine::ScriptEngine()
 
     mContext = JS_NewContext(mRuntime);
     if (mContext == nullptr) {
-        LOG_ERROR(LogAreaID::Server, "Failed to create the QuickJS context");
+        LOG_ERROR(LogAreaID::Script, "Failed to create the QuickJS context");
         JS_FreeRuntime(mRuntime);
         mRuntime = nullptr;
         return;
@@ -242,13 +242,13 @@ bool ScriptEngine::_checkException(bool hadError, const std::string &name) {
     JSValue exception = JS_GetException(mContext);
 
     const std::string message = valueToString(mContext, exception);
-    LOG_ERROR(LogAreaID::Server, "Script error in %s: %s", name.c_str(), message.c_str());
+    LOG_ERROR(LogAreaID::Script, "Script error in %s: %s", name.c_str(), message.c_str());
 
     JSValue stack = JS_GetPropertyStr(mContext, exception, "stack");
     if (!JS_IsUndefined(stack)) {
         const std::string trace = valueToString(mContext, stack);
         if (!trace.empty())
-            LOG_ERROR(LogAreaID::Server, "%s", trace.c_str());
+            LOG_ERROR(LogAreaID::Script, "%s", trace.c_str());
     }
     JS_FreeValue(mContext, stack);
 
@@ -274,7 +274,7 @@ bool ScriptEngine::evaluate(const std::string &source, const std::string &name, 
 bool ScriptEngine::evaluateFile(const std::string &path) {
     std::ifstream file(path.c_str(), std::ios::binary);
     if (!file.is_open()) {
-        LOG_ERROR(LogAreaID::Server, "Could not open script %s", path.c_str());
+        LOG_ERROR(LogAreaID::Script, "Could not open script %s", path.c_str());
         return false;
     }
 

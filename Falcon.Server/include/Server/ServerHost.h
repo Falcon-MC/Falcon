@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 
+class ILogEndPoint;
 class ServerNetworkHandler;
 
 struct ServerHostOptions {
@@ -63,7 +64,10 @@ public:
     unsigned short getPort() const;
 
 private:
+    void _closeContentLog();
+
     std::unique_ptr<ServerNetworkHandler> mHandler;
+    std::shared_ptr<ILogEndPoint> mContentLogEndPoint;
     unsigned short mPort = 0;
     bool mShutDown = false;
     bool mOwnsProcess = false;

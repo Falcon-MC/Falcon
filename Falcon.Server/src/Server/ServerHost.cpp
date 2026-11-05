@@ -7,6 +7,7 @@
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 #include "Core/Debug/BedrockLog.h"
+#include "Core/Debug/FileLogEndPoint.h"
 #include "Core/Utility/UUID.h"
 #include "World/Item/StringToItemParser.h"
 #include "World/Level/Storage/AutoCompaction.h"
@@ -19,6 +20,8 @@
 #include "Server/ServerPaths.h"
 
 #include <algorithm>
+#include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <future>
 #include <random>
@@ -118,6 +121,42 @@ namespace {
         LOG_INFO(LogAreaID::Server, "%s", LOADING_WORLD_BANNER);
     }
 
+    // content has no log of its own: packs and scripts are told apart from the server by their log area
+    class ContentLogFileEndPoint : public FileLogEndPoint {
+    public:
+        using FileLogEndPoint::FileLogEndPoint;
+
+        void log(const LogDetails &details) override {
+            if (details.mArea == LogAreaID::Script || details.mArea == LogAreaID::Resource)
+                FileLogEndPoint::log(details);
+        }
+    };
+
+    std::shared_ptr<ILogEndPoint> openContentLog() {
+        const std::string directory = ServerPaths::file("logs");
+        std::error_code error;
+        std::filesystem::create_directories(directory, error);
+        if (error) {
+            LOG_WARN(LogAreaID::Server, "Content logging to disk is disabled because its directory could not be "
+                                        "created: %s", directory.c_str());
+            return nullptr;
+        }
+
+        char timestamp[32];
+        const std::time_t now = std::time(nullptr);
+        std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d_%H-%M-%S", std::localtime(&now));
+
+        const std::string path = directory + "/ContentLog_" + timestamp;
+        auto endPoint = std::make_shared<ContentLogFileEndPoint>(path + ".txt");
+        if (!endPoint->isOpen()) {
+            LOG_WARN(LogAreaID::Server, "Could not open the content log %s.txt", path.c_str());
+            return nullptr;
+        }
+
+        LOG_INFO(LogAreaID::Server, "Content logging to disk is enabled. Writing log to: %s.txt", path.c_str());
+        return endPoint;
+    }
+
     void logTransportNotice(TransportLayer transport) {
         LOG_INFO(LogAreaID::Server, "==================== TRANSPORT =======================");
         LOG_INFO(LogAreaID::Server, "Connection type: %s", toString(transport));
@@ -206,6 +245,12 @@ bool ServerHost::start(const ServerHostOptions &options) {
     Localization::setServerLocale(properties.getLanguage());
     logStartupBanner(properties);
 
+    if (properties.getContentLogFileEnabled()) {
+        mContentLogEndPoint = openContentLog();
+        if (mContentLogEndPoint != nullptr)
+            BedrockLog::addEndPoint(mContentLogEndPoint);
+    }
+
     const std::vector<std::string> &invalid = properties.getInvalidProperties();
     if (std::find(invalid.begin(), invalid.end(), "transport=raknet") != invalid.end())
         LOG_ERROR(LogAreaID::Server, "RakNet is no longer supported, set transport=nethernet in %s. "
@@ -285,9 +330,20 @@ void ServerHost::shutdown() {
     BedrockLog::flush();
 }
 
-void ServerHost::stop() {
-    if (mHandler == nullptr)
+void ServerHost::_closeContentLog() {
+    if (mContentLogEndPoint == nullptr)
         return;
+
+    BedrockLog::flush();
+    BedrockLog::removeEndPoint(mContentLogEndPoint);
+    mContentLogEndPoint.reset();
+}
+
+void ServerHost::stop() {
+    if (mHandler == nullptr) {
+        _closeContentLog();
+        return;
+    }
 
     std::exception_ptr error;
     try {
@@ -302,6 +358,7 @@ void ServerHost::stop() {
     mPort = 0;
     resetProcessState();
     BedrockLog::flush();
+    _closeContentLog();
     if (error) std::rethrow_exception(error);
 }
 

@@ -86,7 +86,7 @@ void ScriptScheduler::tick(int64_t currentTick) {
         if (JS_IsException(result)) {
             JSValue exception = JS_GetException(mContext);
             const char *message = JS_ToCString(mContext, exception);
-            LOG_ERROR(LogAreaID::Server, "Script scheduled task error: %s", message == nullptr ? "?" : message);
+            LOG_ERROR(LogAreaID::Script, "Script scheduled task error: %s", message == nullptr ? "?" : message);
             if (message != nullptr)
                 JS_FreeCString(mContext, message);
 
@@ -94,7 +94,7 @@ void ScriptScheduler::tick(int64_t currentTick) {
             if (!JS_IsUndefined(stack)) {
                 const char *trace = JS_ToCString(mContext, stack);
                 if (trace != nullptr) {
-                    LOG_ERROR(LogAreaID::Server, "%s", trace);
+                    LOG_ERROR(LogAreaID::Script, "%s", trace);
                     JS_FreeCString(mContext, trace);
                 }
             }

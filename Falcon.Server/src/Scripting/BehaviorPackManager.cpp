@@ -94,7 +94,7 @@ void BehaviorPackManager::_addPackFromManifest(const std::string &packDirectory)
     pack.mPath = std::filesystem::path(packDirectory).generic_string();
 
     if (!_readManifest(manifest, pack)) {
-        LOG_WARN(LogAreaID::Server, "Behavior pack at %s has an invalid manifest.json", packDirectory.c_str());
+        LOG_WARN(LogAreaID::Resource, "Behavior pack at %s has an invalid manifest.json", packDirectory.c_str());
         return;
     }
 
@@ -105,7 +105,7 @@ void BehaviorPackManager::_addPackFromManifest(const std::string &packDirectory)
 
     for (const BehaviorPack &existing: mPacks) {
         if (existing.mUuid == pack.mUuid) {
-            LOG_WARN(LogAreaID::Server, "Skipping duplicate behavior pack (uuid %s already loaded)",
+            LOG_WARN(LogAreaID::Resource, "Skipping duplicate behavior pack (uuid %s already loaded)",
                      pack.mUuid.c_str());
             return;
         }
@@ -139,7 +139,7 @@ size_t BehaviorPackManager::pruneUnsatisfied(const std::vector<std::string> &ava
             continue;
         }
 
-        LOG_WARN(LogAreaID::Server, "Skipping behavior pack %s: missing dependency pack",
+        LOG_WARN(LogAreaID::Resource, "Skipping behavior pack %s: missing dependency pack",
                  mPacks[i].mName.c_str());
         mPacks.erase(mPacks.begin() + (long) i);
         removed++;
@@ -190,14 +190,14 @@ void BehaviorPackManager::_scanContainer(const std::string &directory, const std
 
         const std::string bytes = readFile(entry.path());
         if (!ZipArchive::isZip(bytes)) {
-            LOG_WARN(LogAreaID::Server, "Behavior pack archive %s is not a valid zip",
+            LOG_WARN(LogAreaID::Resource, "Behavior pack archive %s is not a valid zip",
                      entry.path().filename().string().c_str());
             continue;
         }
 
         const std::filesystem::path extracted = cacheRoot / entry.path().stem();
         if (!ZipArchive::extractToDirectory(bytes, extracted.string())) {
-            LOG_WARN(LogAreaID::Server, "Failed to extract behavior pack archive %s",
+            LOG_WARN(LogAreaID::Resource, "Failed to extract behavior pack archive %s",
                      entry.path().filename().string().c_str());
             continue;
         }
