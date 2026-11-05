@@ -269,9 +269,9 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
             || (instance.mAmplifier == existing->second.mAmplifier
                 && !instance.mInfinite && instance.mDuration <= existing->second.mDuration))
             return false;
-        effect(existing->second.mId).onRemove(mActor, existing->second);
+        const MobEffectInstance previous = existing->second;
         existing->second = instance;
-        effect(instance.mId).onAdd(mActor, instance);
+        effect(instance.mId).onRefresh(mActor, previous, instance);
         refreshDerivedAttributes();
         emit(instance, MobEffectEvent::Modify);
         return true;

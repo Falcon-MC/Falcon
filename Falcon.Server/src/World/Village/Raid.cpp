@@ -477,6 +477,11 @@ void Raid::tick(ServerNetworkHandler &owner, Level &level, Village &village, int
     }
 }
 
+void Raid::addRecruit(int64_t id, float health) {
+    mRaiders.insert(id);
+    mTotalHealth += (float) (int32_t) health;
+}
+
 void Raid::expireRaiders(ServerNetworkHandler &owner) const {
     for (int64_t id: mRaiders)
         fireOn(owner, id, RAID_EXPIRED_EVENT);

@@ -244,6 +244,13 @@ public:
 
     int32_t getHeightAt(int32_t x, int32_t z);
 
+    /**
+     * BlockSource::getAboveTopSolidBlock without water or leaves (0x1432D1700, LevelChunk part sub_1438650A0): the
+     * block above the first solid one found scanning down from y, looking through leaves. In the Nether the solid
+     * blocks at y are skipped first, so a column under the ceiling finds the ground.
+     */
+    int32_t getAboveTopSolidBlock(int32_t x, int32_t y, int32_t z);
+
     int32_t getSkyLightSubtracted() const { return mSkyLightSubtracted; }
 
     void updateSkyLightSubtracted();

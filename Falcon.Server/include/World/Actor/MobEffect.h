@@ -70,6 +70,13 @@ public:
 
     virtual void onAdd(Actor &, const MobEffectInstance &) const {}
     virtual void onRemove(Actor &, const MobEffectInstance &) const {}
+
+    /** A stronger or longer instance replaces the running one. */
+    virtual void onRefresh(Actor &actor, const MobEffectInstance &previous, const MobEffectInstance &instance) const {
+        onRemove(actor, previous);
+        onAdd(actor, instance);
+    }
+
     virtual void tick(Actor &, const MobEffectInstance &) const {}
     virtual int32_t getApplyInterval(const MobEffectInstance &) const { return 1; }
     virtual bool isInstantaneous() const { return false; }
@@ -149,6 +156,12 @@ class RaidOmenMobEffect final : public MobEffect {
 public:
     void onAdd(Actor &, const MobEffectInstance &) const override;
     void onRemove(Actor &, const MobEffectInstance &) const override;
+
+    /**
+     * Actor::addEffect updates a running effect in place (sub_140BCF250 -> sub_14355C370) and only refreshes its
+     * attribute modifiers (sub_14355CC80), so a refreshed omen neither stores a position nor asks for a raid.
+     */
+    void onRefresh(Actor &, const MobEffectInstance &, const MobEffectInstance &) const override {}
 };
 
 class SlownessMobEffect final : public MobEffect {};

@@ -24,6 +24,15 @@ public:
     /** Moves the dweller to the village, as raiders are bound to the village they raid. Ignored without the component. */
     void joinVillage(ServerNetworkHandler &owner, const MobActor &mob, Village &village);
 
+    /** Marks the mob as recruited by a raid; it joins once it is a hostile dweller of a raided village. */
+    void queueRaidJoin() {
+        mRaidJoinQueued = true;
+    }
+
+    bool isRaidJoinQueued() const {
+        return mRaidJoinQueued;
+    }
+
     bool isActive() const {
         return mComponent != nullptr;
     }
@@ -32,16 +41,25 @@ public:
         return mRole;
     }
 
+    std::shared_ptr<Village> getVillage() const {
+        return mVillage.lock();
+    }
+
 private:
     void _read(const json::Value &component);
 
     void _updateVillage(ServerNetworkHandler &owner, MobActor &mob);
+
+    void _recruitForRaid(ServerNetworkHandler &owner, const MobActor &mob) const;
+
+    void _tryJoinRaid(ServerNetworkHandler &owner, const MobActor &mob);
 
     const json::Value *mComponent = nullptr;
     DwellerRole mRole = DwellerRole::None;
     bool mCanFindPoi = false;
     bool mCanMigrate = false;
     bool mHasJoinedVillage = false;
+    bool mRaidJoinQueued = false;
     int64_t mUpdateIntervalBase = 0;
     int32_t mUpdateIntervalVariant = 0;
     float mBoundsTolerance = 0.0f;

@@ -126,6 +126,7 @@ namespace {
     const float PLAYER_EYE_HEIGHT = 1.62f;
     const float ENTITY_SENSOR_DEFAULT_RANGE = 10.0f;
     const char *const RIDEABLE_COMPONENT = "minecraft:rideable";
+    const char *const ADD_RIDER_COMPONENT = "minecraft:addrider";
     const char *const TAMEMOUNT_COMPONENT = "minecraft:tamemount";
     const char *const JUMP_STRENGTH_COMPONENT = "minecraft:horse.jump_strength";
     const char *const DISMOUNT_ON_TOP_CENTER = "on_top_center";
@@ -254,7 +255,10 @@ void MobActor::startDefinition(ServerNetworkHandler &owner) {
         return;
 
     mDefinitionStarted = true;
-    if (getDefinition() != nullptr) {
+    if (const json::Value *definition = getDefinition()) {
+        const json::Value *components = definition->get("components");
+        if (components != nullptr)
+            mAddRider.queue(components->get(ADD_RIDER_COMPONENT));
         fireEvent(owner, !mSpawnEvent.empty() ? mSpawnEvent : mBorn ? BORN_EVENT : SPAWNED_EVENT);
         if (!mEquipmentInherited)
             mEquipment.equipFromTable(owner, *this);
@@ -263,6 +267,7 @@ void MobActor::startDefinition(ServerNetworkHandler &owner) {
 
 void MobActor::tick(ServerNetworkHandler &owner) {
     startDefinition(owner);
+    spawnPendingRiders(owner);
 
     _tickTransformation(owner);
     if (mTransformed)
@@ -1152,6 +1157,29 @@ bool MobActor::_tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, 
     return false;
 }
 
+bool MobActor::acceptsRider(const MobActor &rider) const {
+    const json::Value *rideable = getComponent(RIDEABLE_COMPONENT);
+    if (rideable == nullptr || !isAlive() || isRiding())
+        return false;
+
+    const json::Value *seats = rideable->get("seat_count");
+    const size_t seatCount = (size_t) std::max(1, seats == nullptr ? 1 : seats->integer(1));
+    if (getPassengers().size() >= seatCount)
+        return false;
+
+    const json::Value *families = rideable->get("family_types");
+    if (families == nullptr || !families->isArray())
+        return true;
+
+    for (const std::string &family: rider.getFamilies()) {
+        for (const std::unique_ptr<json::Value> &allowed: families->mArray) {
+            if (allowed->string() == family)
+                return true;
+        }
+    }
+    return false;
+}
+
 bool MobActor::_tryMount(ServerNetworkHandler &owner, ServerPlayer &player) {
     const json::Value *rideable = getComponent(RIDEABLE_COMPONENT);
     if (rideable == nullptr || player.isRiding() || !isAlive())
@@ -1903,6 +1931,12 @@ void MobActor::addComponentGroup(const std::string &group) {
 
     mComponentGroups.push_back(group);
     _markComponentsChanged();
+
+    const json::Value *definition = getDefinition();
+    const json::Value *groups = definition == nullptr ? nullptr : definition->get("component_groups");
+    const json::Value *added = groups == nullptr ? nullptr : groups->get(group);
+    if (added != nullptr)
+        mAddRider.queue(added->get(ADD_RIDER_COMPONENT));
 }
 
 void MobActor::removeComponentGroup(const std::string &group) {

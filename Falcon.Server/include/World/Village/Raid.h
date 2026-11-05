@@ -52,6 +52,13 @@ public:
         return mRaiders;
     }
 
+    bool hasRaider(int64_t id) const {
+        return mRaiders.count(id) != 0;
+    }
+
+    /** A recruit joins the current wave, which grows by its health truncated to an int (sub_14CE8F940). */
+    void addRecruit(int64_t id, float health);
+
     /** A player who killed one of the village's hostile dwellers; rewarded if the raid is won. */
     void addHero(int64_t playerId) {
         mHeroes.insert(playerId);

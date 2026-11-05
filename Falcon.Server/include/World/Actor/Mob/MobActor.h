@@ -10,6 +10,7 @@
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/ActorSize.h"
 #include "World/Actor/Definition/LookedAtSensor.h"
+#include "World/Actor/Mob/Component/MobAddRider.h"
 #include "World/Actor/Mob/Component/MobAdmiration.h"
 #include "World/Actor/Mob/Component/MobLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
@@ -146,6 +147,11 @@ public:
 
     void removeComponentGroup(const std::string &group);
 
+    /** Spawns the riders of `minecraft:addrider` components added since the last call. */
+    void spawnPendingRiders(ServerNetworkHandler &owner) {
+        mAddRider.spawnPending(owner, *this);
+    }
+
     void fireEvent(ServerNetworkHandler &owner, const std::string &event, Actor *other = nullptr);
 
     void playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound);
@@ -281,6 +287,9 @@ public:
     Actor *getTarget(ServerNetworkHandler &owner) const;
 
     bool canTarget(const Actor &actor) const;
+
+    /** Whether rider may take a seat: `minecraft:rideable` with a free seat and a family it accepts. */
+    bool acceptsRider(const MobActor &rider) const;
 
     float distanceSquaredTo(const Actor &other) const;
 
@@ -556,6 +565,7 @@ private:
     RideControlState mRideControl;
     MobAnger mAnger;
     MobDweller mDweller;
+    MobAddRider mAddRider;
     MobAdmiration mAdmiration;
     MobLeash mLeash;
     const json::Value *mAttackCooldownComponent = nullptr;

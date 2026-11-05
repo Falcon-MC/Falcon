@@ -20,6 +20,11 @@ public:
         return !mHasTarget;
     }
 
+    /** The path being walked, or nullptr while there is no target or the path is still to be computed. */
+    const Path *getPath() const {
+        return mHasTarget && !mNeedsPath ? &mPath : nullptr;
+    }
+
     void setOptions(PathOptions options) {
         mOptions = std::move(options);
     }

@@ -4,10 +4,7 @@
 #include "World/Actor/RideSystem.h"
 #include "Network/ServerNetworkHandler.h"
 
-#include <algorithm>
-
 namespace {
-    const char *const RIDEABLE_COMPONENT = "minecraft:rideable";
     const float MOUNT_DISTANCE_SQUARED = 4.0f;
     const int32_t REPATH_INTERVAL = 10;
 }
@@ -17,36 +14,13 @@ FindMountGoal::FindMountGoal(float speed, float radius, int32_t startDelay, int3
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move);
 }
 
-bool FindMountGoal::_accepts(const MobActor &vehicle, const MobActor &rider) {
-    const json::Value *rideable = vehicle.getComponent(RIDEABLE_COMPONENT);
-    if (rideable == nullptr || !vehicle.isAlive() || vehicle.isRiding())
-        return false;
-
-    const json::Value *seats = rideable->get("seat_count");
-    const size_t seatCount = (size_t) std::max(1, seats == nullptr ? 1 : seats->integer(1));
-    if (vehicle.getPassengers().size() >= seatCount)
-        return false;
-
-    const json::Value *families = rideable->get("family_types");
-    if (families == nullptr || !families->isArray())
-        return true;
-
-    for (const std::string &family: rider.getFamilies()) {
-        for (const std::unique_ptr<json::Value> &allowed: families->mArray) {
-            if (allowed->string() == family)
-                return true;
-        }
-    }
-    return false;
-}
-
 MobActor *FindMountGoal::_findMount(ServerNetworkHandler &owner, const MobActor &mob) const {
     MobActor *nearest = nullptr;
     float nearestDistance = mRadius * mRadius;
     owner.forEachActorNear(mob.getPosition(), mRadius, [&](ServerActor &actor) {
         MobActor *candidate = dynamic_cast<MobActor *>(&actor);
         if (candidate == nullptr || candidate == &mob || !candidate->sharesLevelWith(mob)
-            || !_accepts(*candidate, mob))
+            || !candidate->acceptsRider(mob))
             return;
 
         const float distance = mob.distanceSquaredTo(*candidate);
@@ -81,7 +55,7 @@ bool FindMountGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 
 bool FindMountGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
     const MobActor *mount = _currentMount(owner);
-    return !mob.isRiding() && mount != nullptr && _accepts(*mount, mob);
+    return !mob.isRiding() && mount != nullptr && mount->acceptsRider(mob);
 }
 
 void FindMountGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
