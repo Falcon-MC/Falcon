@@ -168,7 +168,7 @@ void VillageManager::_removeVillages() {
         for (const std::shared_ptr<PoiInstance> &poi: village.getPois()) {
             PoiMap &pois = mPois[(size_t) poi->mType];
             const auto found = pois.find(poi->mPosition);
-            if (found != pois.end() && found->second.lock() == poi)
+            if (found != pois.end() && found->second == poi)
                 pois.erase(found);
         }
         it = mVillages.erase(it);
@@ -205,8 +205,7 @@ void VillageManager::_popScanRequest() {
 
 bool VillageManager::_isKnownPoi(const Vector3i &position) const {
     for (const PoiMap &pois: mPois) {
-        const auto found = pois.find(position);
-        if (found != pois.end() && !found->second.expired())
+        if (pois.find(position) != pois.end())
             return true;
     }
     return false;

@@ -19,7 +19,7 @@ class ServerNetworkHandler;
 
 /**
  * The villages of one level, the queue of dwellers waiting for a point of interest scan and the points of interest
- * already owned by a village. Main-thread only.
+ * already owned by a village. The manager holds the only strong reference to each of those points. Main-thread only.
  */
 class VillageManager {
 public:
@@ -45,7 +45,7 @@ private:
         size_t operator()(const Vector3i &position) const;
     };
 
-    using PoiMap = std::unordered_map<Vector3i, std::weak_ptr<PoiInstance>, PositionHash>;
+    using PoiMap = std::unordered_map<Vector3i, std::shared_ptr<PoiInstance>, PositionHash>;
 
     void _removeVillages();
 

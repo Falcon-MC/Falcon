@@ -39,7 +39,10 @@ public:
     /** Whether position lies in the box grown by margin on every side, edges included. */
     bool contains(float margin, const Vector3f &position) const;
 
-    /** Queues an unclaimed point of interest. Returns false when it is full or its type already holds 32. */
+    /**
+     * Queues an unclaimed point of interest. Returns false when it is full or its type already holds 32. The village
+     * only keeps weak references: the VillageManager owns every point of interest.
+     */
     bool addPoi(const std::shared_ptr<PoiInstance> &poi);
 
     void addDweller(ServerNetworkHandler &owner, DwellerRole role, int64_t id);
@@ -67,6 +70,8 @@ public:
     void tick(ServerNetworkHandler &owner, int64_t currentTick);
 
 private:
+    using PoiQueue = std::vector<std::weak_ptr<PoiInstance>>;
+
     struct Inhabitant {
         int64_t mId;
         std::array<std::weak_ptr<PoiInstance>, POI_TYPE_COUNT> mPois;
@@ -85,13 +90,13 @@ private:
 
     void _claim(ServerNetworkHandler &owner, int64_t id, const std::shared_ptr<PoiInstance> &poi);
 
-    void _claimNext(ServerNetworkHandler &owner, int64_t id, std::vector<std::shared_ptr<PoiInstance>> &queue);
+    void _claimNext(ServerNetworkHandler &owner, int64_t id, PoiQueue &queue);
 
     void _tickDwellerTimeouts(ServerNetworkHandler &owner);
 
     void _recalculateBounds();
 
-    std::array<std::vector<std::shared_ptr<PoiInstance>>, POI_TYPE_COUNT> mUnclaimed;
+    std::array<PoiQueue, POI_TYPE_COUNT> mUnclaimed;
     std::vector<Inhabitant> mInhabitants;
     std::array<std::vector<DwellerEntry>, ROLE_COUNT> mRoles;
     AxisAlignedBB mBounds;

@@ -96,7 +96,7 @@ void Village::addDweller(ServerNetworkHandler &owner, DwellerRole role, int64_t 
     // a new inhabitant takes the oldest free bed straight away, and the bed leaves the queue even if it has room left
     auto &beds = mUnclaimed[(size_t) PoiType::Bed];
     if (!beds.empty()) {
-        const std::shared_ptr<PoiInstance> bed = beds.front();
+        const std::shared_ptr<PoiInstance> bed = beds.front().lock();
         _claim(owner, id, bed);
         beds.erase(beds.begin());
     }
@@ -150,9 +150,9 @@ std::vector<std::shared_ptr<PoiInstance>> Village::getPois() const {
                 pois.push_back(poi);
         }
     }
-    for (const auto &queue: mUnclaimed) {
-        for (const std::shared_ptr<PoiInstance> &poi: queue) {
-            if (poi != nullptr)
+    for (const PoiQueue &queue: mUnclaimed) {
+        for (const std::weak_ptr<PoiInstance> &queued: queue) {
+            if (std::shared_ptr<PoiInstance> poi = queued.lock())
                 pois.push_back(poi);
         }
     }
@@ -217,7 +217,7 @@ void Village::_releaseInhabitant(int64_t id) {
         if (poi->mCapacity != 0)
             --poi->mOwnerCount;
         // released points go back to the queue without the 32 per type cap or a duplicate check
-        mUnclaimed[(size_t) poi->mType].push_back(poi);
+        mUnclaimed[(size_t) poi->mType].emplace_back(poi);
     }
 
     mInhabitants.erase(std::remove_if(mInhabitants.begin(), mInhabitants.end(),
@@ -258,9 +258,9 @@ void Village::_claim(ServerNetworkHandler &owner, int64_t id, const std::shared_
         ++poi->mOwnerCount;
 }
 
-void Village::_claimNext(ServerNetworkHandler &owner, int64_t id, std::vector<std::shared_ptr<PoiInstance>> &queue) {
+void Village::_claimNext(ServerNetworkHandler &owner, int64_t id, PoiQueue &queue) {
     while (!queue.empty()) {
-        const std::shared_ptr<PoiInstance> poi = queue.front();
+        const std::shared_ptr<PoiInstance> poi = queue.front().lock();
         if (poi == nullptr || isFull(*poi)) {
             queue.erase(queue.begin());
             continue;
