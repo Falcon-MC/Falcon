@@ -1,8 +1,11 @@
 #include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
 
 #include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/FenceBlock.h"
 #include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
 #include "World/Level/Block/LeavesBlock.h"
+#include "World/Level/Block/MagmaBlock.h"
+#include "World/Level/Block/SoulSandBlock.h"
 #include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/WaterBlock.h"
@@ -284,14 +287,12 @@ namespace {
 
     // kelp and seagrass may not stand on magma, soul sand or a fence (the list at xmmword_1529B0DB0)
     bool refusesWaterPlant(const BlockState &below) {
-        static const std::vector<std::string> REFUSED = {
-                "minecraft:magma", "minecraft:soul_sand", "minecraft:oak_fence", "minecraft:spruce_fence",
-                "minecraft:birch_fence", "minecraft:jungle_fence", "minecraft:acacia_fence",
-                "minecraft:dark_oak_fence", "minecraft:mangrove_fence", "minecraft:cherry_fence",
-                "minecraft:pale_oak_fence", "minecraft:poplar_fence", "minecraft:bamboo_fence",
-                "minecraft:nether_brick_fence", "minecraft:crimson_fence", "minecraft:warped_fence"
-        };
-        return contains(REFUSED, below);
+        static const BlockStateSet REFUSED = BlockStateSet::ofBlocks([](const Block &block) {
+            return dynamic_cast<const MagmaBlock *>(&block) != nullptr
+                   || dynamic_cast<const SoulSandBlock *>(&block) != nullptr
+                   || dynamic_cast<const FenceBlock *>(&block) != nullptr;
+        });
+        return REFUSED.contains(below);
     }
 
     // a block placed in water keeps the water as its second block when it can hold it
