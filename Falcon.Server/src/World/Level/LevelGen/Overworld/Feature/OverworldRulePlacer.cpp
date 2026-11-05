@@ -399,6 +399,18 @@ struct OverworldRulePlacer::ScatterDefinition {
     int32_t mChanceNumerator = 0;
     int32_t mChanceDenominator = 0;
     const char *mChancePercent = "100";
+
+    // parsed once with the definition, a placement only evaluates them
+    ExpressionPtr mParsedIterations = FeatureExpression::parse(mIterations);
+    ExpressionPtr mParsedChance = FeatureExpression::parse(mChancePercent);
+    std::array<Axis, 3> mParsedAxes = _parseAxes(mAxes);
+
+    static std::array<Axis, 3> _parseAxes(const AxisText (&texts)[3]) {
+        std::array<Axis, 3> axes;
+        for (size_t axis = 0; axis < 3; axis++)
+            parseAxis(texts[axis].mDistribution, texts[axis].mMin, texts[axis].mMax, axes[axis]);
+        return axes;
+    }
 };
 
 // a minecraft:single_block_feature with one block, its survival enforced, replacing only air
@@ -1115,22 +1127,14 @@ bool OverworldRulePlacer::_placeScatter(BlockManager &blocks, const ScatterDefin
                                         int32_t z, std::mt19937 &random) {
     // ScatterFeature::place (sub_14A255FC0): the iterations, positions and the placed feature all draw from the
     // rule's placement twister
-
-    Axis axes[3];
-    for (size_t axis = 0; axis < 3; axis++) {
-        const ScatterDefinition::AxisText &text = scatter.mAxes[axis];
-        parseAxis(text.mDistribution, text.mMin, text.mMax, axes[axis]);
-    }
-
     const int32_t origin[3] = {x, y, z};
     ScatterVariables variables(blocks, origin);
     const int32_t iterations = iterationsOf(scatter.mChanceNumerator, scatter.mChanceDenominator,
-                                            FeatureExpression::parse(scatter.mChancePercent),
-                                            FeatureExpression::parse(scatter.mIterations), variables, random);
+                                            scatter.mParsedChance, scatter.mParsedIterations, variables, random);
     bool placed = false;
     for (int32_t iteration = 0; iteration < iterations; iteration++) {
         int32_t position[3] = {0, 0, 0};
-        scatterPosition(axes, scatter.mEvalOrder, origin, variables, random, position);
+        scatterPosition(scatter.mParsedAxes.data(), scatter.mEvalOrder, origin, variables, random, position);
         placed = _place(blocks, scatter.mPlaces, position[0], position[1], position[2], random) || placed;
     }
     return placed;
