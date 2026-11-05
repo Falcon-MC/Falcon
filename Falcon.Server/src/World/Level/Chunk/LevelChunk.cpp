@@ -5,10 +5,6 @@ static_assert(LightStorage::SECTION_COUNT == LevelChunk::SUB_CHUNK_COUNT && Ligh
 
 #include <algorithm>
 
-namespace {
-    const unsigned char BIOME_COPY_PREVIOUS = 0xff;
-}
-
 LevelChunk::LevelChunk(int32_t x, int32_t z) : mX(x), mZ(z), mBiomeId(1), mDirty(false) {
     mSubChunks.reserve(SUB_CHUNK_COUNT);
     for (int i = 0; i < SUB_CHUNK_COUNT; i++)
@@ -235,7 +231,7 @@ std::string LevelChunk::encodeBiomes(int sectionCount) const {
 
 bool LevelChunk::readBiomesPersistent(ReadOnlyBinaryStream &stream, int sectionCount) {
     for (int i = 0; i < sectionCount && i < SUB_CHUNK_COUNT; i++) {
-        if (!mSubChunks[i].readBiomes(stream))
+        if (!mSubChunks[i].readBiomes(stream, i > 0 ? &mSubChunks[i - 1] : nullptr))
             return false;
     }
 
@@ -247,8 +243,17 @@ bool LevelChunk::readBiomesPersistent(ReadOnlyBinaryStream &stream, int sectionC
 std::string LevelChunk::encodeBiomesPersistent(int sectionCount) const {
     BinaryStream stream;
 
-    for (int i = 0; i < sectionCount; i++)
-        mSubChunks[i].writeBiomes(stream, true);
+    // like the game, sections above the highest non-empty one repeat it instead of keeping their own biomes
+    int storedCount = sectionCount;
+    while (storedCount > 1 && mSubChunks[storedCount - 1].isEmpty())
+        storedCount--;
+
+    for (int i = 0; i < sectionCount; i++) {
+        if (i < storedCount)
+            mSubChunks[i].writeBiomes(stream, true);
+        else
+            stream.putByte(SubChunk::BIOME_COPY_PREVIOUS);
+    }
 
     return stream.getBuffer();
 }
@@ -288,7 +293,7 @@ const std::string &LevelChunk::encodeNetworkAnchor() const {
     // Sections above the last non-empty one reuse the previous biome palette; 0xff is the
     // protocol's one-byte marker for that.
     for (int i = sectionCount; i < mNetworkSubChunkLimit; i++)
-        stream.putByte(BIOME_COPY_PREVIOUS);
+        stream.putByte(SubChunk::BIOME_COPY_PREVIOUS);
 
     stream.putByte(0);
 

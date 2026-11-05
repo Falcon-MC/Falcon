@@ -17,6 +17,8 @@ public:
     static const int BLOCK_COUNT = 4096;
     static const uint8_t STORAGE_VERSION = 9;
     static const uint8_t LAYER_COUNT = 2;
+    // one-byte biome section that repeats the section below
+    static const uint8_t BIOME_COPY_PREVIOUS = 0xff;
 
     explicit SubChunk(int8_t y);
 
@@ -47,7 +49,8 @@ public:
 
     void writeBiomes(BinaryStream &stream, bool persistent) const;
 
-    bool readBiomes(ReadOnlyBinaryStream &stream);
+    // a section saved as a copy of the previous one takes previous's biomes
+    bool readBiomes(ReadOnlyBinaryStream &stream, const SubChunk *previous);
 
     /**
      * Writes the section as a client sees it, with its block states translated by blockIds when it is set.
