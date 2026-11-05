@@ -100,6 +100,13 @@ void PlayerRaidState::_tickBossBar(ServerNetworkHandler &owner, ServerPlayer &pl
         mBarDimension = player.getDimension();
     }
 
+    // the village manager read above is the new dimension's, so a bar kept across a dimension change would never
+    // be removed: take it down until a raid in the new dimension offers one
+    if (!mBarVillage.expired() && player.getDimension() != mBarDimension) {
+        _hideBossBar(owner, player);
+        return;
+    }
+
     const std::shared_ptr<Village> village = mBarVillage.lock();
     const Raid *raid = village == nullptr ? nullptr : village->getRaid();
     if (raid == nullptr) {
