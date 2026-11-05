@@ -113,6 +113,38 @@ namespace {
 
         return name.substr(separator + 1);
     }
+
+    uint16_t stringIndex(std::vector<std::string> &strings, const std::string &value) {
+        const std::vector<std::string>::const_iterator found = std::find(strings.begin(), strings.end(), value);
+        if (found != strings.end())
+            return (uint16_t) (found - strings.begin());
+
+        strings.push_back(value);
+        return (uint16_t) (strings.size() - 1);
+    }
+
+    // chunk generation data is left out: the game only sends it with client-side generation, which is never on here
+    BiomeDefinitionData readDefinition(const Tag &data) {
+        BiomeDefinitionData definition;
+        if (data.contains("id", Tag::Type::Short))
+            definition.mId = (uint16_t) data.get("id")->asShort();
+        if (data.contains("temperature", Tag::Type::Float))
+            definition.mTemperature = data.get("temperature")->asFloat();
+        if (data.contains("downfall", Tag::Type::Float))
+            definition.mDownfall = data.get("downfall")->asFloat();
+        if (data.contains("foliageSnow", Tag::Type::Float))
+            definition.mFoliageSnow = data.get("foliageSnow")->asFloat();
+        if (data.contains("depth", Tag::Type::Float))
+            definition.mDepth = data.get("depth")->asFloat();
+        if (data.contains("scale", Tag::Type::Float))
+            definition.mScale = data.get("scale")->asFloat();
+        if (data.contains("mapWaterColorARGB", Tag::Type::Int))
+            definition.mMapWaterColorArgb = data.get("mapWaterColorARGB")->asInt();
+        if (data.contains("rain", Tag::Type::Byte))
+            definition.mRain = data.get("rain")->asByte() != 0;
+
+        return definition;
+    }
 }
 
 std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>> &
@@ -124,6 +156,24 @@ BiomeChunkGenDataRegistry::_featuresByBiome() {
 std::unordered_map<int32_t, std::unordered_set<std::string>> &BiomeChunkGenDataRegistry::_tagsByBiome() {
     static std::unordered_map<int32_t, std::unordered_set<std::string>> map;
     return map;
+}
+
+std::vector<BiomeDefinitionData> &BiomeChunkGenDataRegistry::_definitions() {
+    static std::vector<BiomeDefinitionData> definitions;
+    return definitions;
+}
+
+std::vector<std::string> &BiomeChunkGenDataRegistry::_definitionStrings() {
+    static std::vector<std::string> strings;
+    return strings;
+}
+
+const std::vector<BiomeDefinitionData> &BiomeChunkGenDataRegistry::getDefinitions() {
+    return _definitions();
+}
+
+const std::vector<std::string> &BiomeChunkGenDataRegistry::getDefinitionStrings() {
+    return _definitionStrings();
 }
 
 bool BiomeChunkGenDataRegistry::hasTag(int32_t biomeId, const std::string &tag) {
@@ -200,12 +250,26 @@ void BiomeChunkGenDataRegistry::initialize() {
         if (indexTag == nullptr || dataTag == nullptr)
             continue;
 
-        const int32_t biomeId = getBiomeId(stringAt((int32_t) indexTag->asShort()));
+        const std::string name = stringAt((int32_t) indexTag->asShort());
+        const Tag *tagsTag = dataTag->get("tags");
+        const Tag *tagList = tagsTag == nullptr ? nullptr : tagsTag->get("tags");
+
+        BiomeDefinitionData definition = readDefinition(*dataTag);
+        // the game puts a biome's tags in the string list before its name
+        if (tagList != nullptr) {
+            std::vector<uint16_t> tagIndexes;
+            for (const Tag &tag: tagList->getList())
+                tagIndexes.push_back(stringIndex(_definitionStrings(), stringAt((int32_t) tag.asShort())));
+            definition.mTagIndexes = tagIndexes;
+        }
+        definition.mName = name;
+        definition.mNameIndex = stringIndex(_definitionStrings(), name);
+        _definitions().push_back(definition);
+
+        const int32_t biomeId = getBiomeId(name);
         if (biomeId < 0)
             continue;
 
-        const Tag *tagsTag = dataTag->get("tags");
-        const Tag *tagList = tagsTag == nullptr ? nullptr : tagsTag->get("tags");
         if (tagList != nullptr) {
             std::unordered_set<std::string> &tags = _tagsByBiome()[biomeId];
             for (const Tag &tag: tagList->getList())

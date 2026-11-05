@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Protocol/Types/BiomeDefinitionData.h"
+
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -41,8 +43,17 @@ public:
 
     static bool hasTag(int32_t biomeId, const std::string &tag);
 
+    // every biome as the game sends it to clients; names and tags index getDefinitionStrings()
+    static const std::vector<BiomeDefinitionData> &getDefinitions();
+
+    static const std::vector<std::string> &getDefinitionStrings();
+
 private:
     static std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>> &_featuresByBiome();
 
     static std::unordered_map<int32_t, std::unordered_set<std::string>> &_tagsByBiome();
+
+    static std::vector<BiomeDefinitionData> &_definitions();
+
+    static std::vector<std::string> &_definitionStrings();
 };
