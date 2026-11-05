@@ -127,6 +127,8 @@ void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, std::vector
     };
 
     place(true);
+    // the ores read the chunk itself, so the first features must be in it before they run
+    root.applySubChunkUpdate();
 
     // applied at once so the features placed after them see the ores
     BlockManager ores(level);
