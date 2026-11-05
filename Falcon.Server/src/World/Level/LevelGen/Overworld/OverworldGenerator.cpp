@@ -5,7 +5,6 @@
 #include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldFeatureBuilder.h"
 #include "World/Level/LevelGen/Feature/FeatureNoiseHolder.h"
-#include "World/Level/LevelGen/Random/SimpleRandom.h"
 #include "World/Level/LevelGen/Overworld/Surface/OverworldSurfaceBuilder.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldTerrainFiller.h"
@@ -15,16 +14,13 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <random>
 #include <vector>
 
 namespace {
     const BlockState &bedrockState() {
         static const BlockState state = VanillaBlocks::BEDROCK().toBlockState();
         return state;
-    }
-
-    bool isAirState(const BlockState &state) {
-        return state.mName == "minecraft:air";
     }
 
     // biome samples every 8 blocks from 8 blocks before the chunk, 2 extra in y (sub_147186040)
@@ -69,10 +65,6 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk,
     OverworldFeatureBuilder::apply(level, chunk, overflow);
 }
 
-int64_t OverworldGenerator::chunkHash(int32_t chunkX, int32_t chunkZ) {
-    return (int64_t) (((uint64_t) (uint32_t) chunkX << 32) | (uint64_t) (uint32_t) chunkZ);
-}
-
 int64_t OverworldGenerator::parseSeed(const std::string &value) {
     if (value.empty())
         return 0;
@@ -94,17 +86,14 @@ void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap)
     const int32_t minY = OverworldGeneratorConstants::MIN_Y;
     mTerrainFiller->fill(chunk, heightMap);
 
-    SimpleRandom random(mSeed ^ chunkHash(chunk.getX(), chunk.getZ()));
+    // the chunk's random, seeded in sub_14CDD16A0, whose first draws lay 2 to 5 bedrock layers over whatever the
+    // noise placed (sub_14A22D380)
+    std::mt19937 random(132899541u * (uint32_t) chunk.getZ() + 341872712u * (uint32_t) chunk.getX());
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++) {
-            chunk.setBlock(x, minY, z, bedrockState());
-
-            const int32_t bedrockDepth = random.nextBoundedInt(6);
-            for (int32_t i = 0; i < bedrockDepth; i++) {
-                const int32_t y = minY + i;
-                if (!isAirState(chunk.getBlock(x, y, z)))
-                    chunk.setBlock(x, y, z, bedrockState());
-            }
+            const int32_t layers = (int32_t) (random() % 4u) + 2;
+            for (int32_t i = 0; i < layers; i++)
+                chunk.setBlock(x, minY + i, z, bedrockState());
         }
     }
 }
