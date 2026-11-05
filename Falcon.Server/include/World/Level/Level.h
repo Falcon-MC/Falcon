@@ -343,6 +343,8 @@ public:
 
     int32_t pickBiome(int32_t x, int32_t y, int32_t z) const { return mGenerator->pickBiome(x, y, z); }
 
+    const ChunkGenerator &getGenerator() const { return *mGenerator; }
+
     size_t processGeneratedChanges();
 
     std::vector<int64_t> consumeRepopulatedChunks();

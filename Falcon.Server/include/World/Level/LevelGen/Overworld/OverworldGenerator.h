@@ -42,6 +42,8 @@ public:
 
     int32_t pickBiome(int32_t x, int32_t y, int32_t z) const override;
 
+    int32_t getPreliminaryHeight(int32_t x, int32_t z) const override;
+
     static int64_t parseSeed(const std::string &value);
 
 private:

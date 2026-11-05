@@ -63,6 +63,26 @@ int32_t OverworldGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
     return mBiomeParameters->search(target, nullptr)->mBiome;
 }
 
+int32_t OverworldGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
+    // the game fills the column with its noise terrain only, before surface rules and carvers (generator
+    // vfunc +0x170 in sub_14A2298E0, which runs sub_14CDF0330), into a volume 320 blocks tall from the
+    // bottom of the world (sub_14CDD12F0): higher terrain is cut at that top
+    const int32_t PRELIMINARY_HEIGHT = 320;
+
+    int32_t heightMap[256] = {};
+    LevelChunk chunk(x >> 4, z >> 4);
+    OverworldAquifer aquifer = mTerrainFiller->createAquifer();
+    mTerrainFiller->fill(chunk, heightMap, aquifer);
+
+    const int32_t localX = x & 15;
+    const int32_t localZ = z & 15;
+    int32_t y = OverworldGeneratorConstants::MIN_Y + PRELIMINARY_HEIGHT - 1;
+    while (y >= OverworldGeneratorConstants::MIN_Y && chunk.getBlock(localX, y, localZ).mName == "minecraft:air")
+        y--;
+
+    return y + 1;
+}
+
 void OverworldGenerator::decorate(Level &level, LevelChunk &chunk,
                                  std::vector<GeneratedBlockChange> *overflow) const {
     OverworldFeatureBuilder::apply(level, chunk, overflow);
