@@ -455,21 +455,31 @@ namespace {
     // DripstoneUtils' empty or water: air, or water on either layer
     bool isEmptyOrWater(BlockManager &blocks, int32_t x, int32_t y, int32_t z) {
         const BlockState &state = blocks.getBlockAt(x, y, z);
-        return state.mName == "minecraft:air" || isWater(state) || isWater(blocks.getExtraBlockAt(x, y, z));
+        return DecorationSupport::isAir(state) || isWater(state) || isWater(blocks.getExtraBlockAt(x, y, z));
     }
 
     // the blocks dripstone replaces (xmmword_1529AA840)
     bool isDripstoneReplaceable(const BlockState &state) {
-        static const std::vector<std::string> REPLACEABLE = {
+        static const BlockStateSet REPLACEABLE = {
                 "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:stone", "minecraft:tuff", "minecraft:deepslate"
         };
-        return contains(REPLACEABLE, state);
+        return REPLACEABLE.contains(state);
+    }
+
+    bool isDripstoneBlock(const BlockState &state) {
+        static const BlockStateSet DRIPSTONE = {VanillaBlocks::DRIPSTONE_BLOCK().getIdentifier()};
+        return DRIPSTONE.contains(state);
+    }
+
+    bool isPointedDripstone(const BlockState &state) {
+        static const BlockStateSet POINTED = {VanillaBlocks::POINTED_DRIPSTONE().getIdentifier()};
+        return POINTED.contains(state);
     }
 
     // sub_14721CC10
     bool isDripstoneBaseOrLava(BlockManager &blocks, int32_t x, int32_t y, int32_t z) {
         const BlockState &state = blocks.getBlockAt(x, y, z);
-        return isDripstoneReplaceable(state) || state.mName == "minecraft:dripstone_block" || isLava(blocks, x, y, z);
+        return isDripstoneReplaceable(state) || isDripstoneBlock(state) || isLava(blocks, x, y, z);
     }
 
     // sub_1471E6440
@@ -1490,9 +1500,9 @@ bool OverworldRulePlacer::_placeDripstoneCluster(BlockManager &blocks, int32_t x
     };
     // a pool may only lie in stone, deepslate, tuff or water
     const auto holdsWater = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
-        const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
-        return name == "minecraft:stone" || name == "minecraft:deepslate" || name == "minecraft:tuff"
-               || isWater(blocks.getBlockAt(blockX, blockY, blockZ))
+        static const BlockStateSet WALLS = {"minecraft:stone", "minecraft:deepslate", "minecraft:tuff"};
+        const BlockState &state = blocks.getBlockAt(blockX, blockY, blockZ);
+        return WALLS.contains(state) || isWater(state)
                || isWater(blocks.getExtraBlockAt(blockX, blockY, blockZ));
     };
     // DripstoneUtils' biased height: a gaussian of deviation 3 around half the height, lowered away from the
@@ -1533,7 +1543,7 @@ bool OverworldRulePlacer::_placeDripstoneCluster(BlockManager &blocks, int32_t x
 
             if (wetness > nextFloat(random) && floor) {
                 const BlockState &floorState = blocks.getBlockAt(columnX, floorY, columnZ);
-                if (floorState.mName != "minecraft:dripstone_block" && floorState.mName != "minecraft:pointed_dripstone"
+                if (!isDripstoneBlock(floorState) && !isPointedDripstone(floorState)
                     && !isWater(floorState) && !isWater(blocks.getExtraBlockAt(columnX, floorY, columnZ))
                     && !isWater(blocks.getBlockAt(columnX, floorY + 1, columnZ))
                     && !isWater(blocks.getExtraBlockAt(columnX, floorY + 1, columnZ))
@@ -1606,7 +1616,7 @@ bool OverworldRulePlacer::_placePointedDripstone(BlockManager &blocks, int32_t x
     // around that base, then one or two blocks long
     const auto isBase = [&](int32_t blockY) {
         const BlockState &state = blocks.getBlockAt(x, blockY, z);
-        return isDripstoneReplaceable(state) || state.mName == "minecraft:dripstone_block";
+        return isDripstoneReplaceable(state) || isDripstoneBlock(state);
     };
     const bool below = isBase(y - 1);
     const bool above = isBase(y + 1);
@@ -1798,9 +1808,11 @@ bool OverworldRulePlacer::_placeLargeDripstone(BlockManager &blocks, int32_t x, 
                     int32_t blockX = columnX;
                     int32_t blockZ = columnZ;
                     blown(blockX, blockY, blockZ);
-                    const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
-                    if (openOrLava(blockX, blockY, blockZ) || name == "minecraft:pointed_dripstone"
-                        || name == "minecraft:sulfur_spike" || name == "minecraft:icicle") {
+                    static const BlockStateSet SPIKES = {
+                            "minecraft:pointed_dripstone", "minecraft:sulfur_spike", "minecraft:icicle"
+                    };
+                    if (openOrLava(blockX, blockY, blockZ)
+                        || SPIKES.contains(blocks.getBlockAt(blockX, blockY, blockZ))) {
                         blocks.setBlockStateAt(blockX, blockY, blockZ, dripstoneBlock);
                         placed = true;
                     } else if (placed) {
@@ -1838,7 +1850,7 @@ bool OverworldRulePlacer::_placeMultiface(BlockManager &blocks, const MultifaceD
     // the game shuffles the faces with a thread local random seeded from the system (sub_140391AB0), so which face
     // it tries first, and where it spreads, cannot be reproduced: the faces are tried in their listed order
     const BlockState &start = blocks.getBlockAt(x, y, z);
-    if (start.mName != "minecraft:air" && !isWater(start))
+    if (!DecorationSupport::isAir(start) && !isWater(start))
         return false;
 
     if (_growMultiface(blocks, multiface, x, y, z, multiface.mFaces, random))
@@ -1858,7 +1870,7 @@ bool OverworldRulePlacer::_placeMultiface(BlockManager &blocks, const MultifaceD
         const int32_t nextZ = z + FACE_STEPS[face][2];
         const BlockState &next = blocks.getBlockAt(nextX, nextY, nextZ);
         if (multiface.mSearchRange <= 0
-            || (next.mName != "minecraft:air" && !isWater(next) && next.mName != placedName))
+            || (!DecorationSupport::isAir(next) && !isWater(next) && next.mName != placedName))
             continue;
         if (_growMultiface(blocks, multiface, nextX, nextY, nextZ, others, random))
             return true;
@@ -1936,7 +1948,7 @@ bool OverworldRulePlacer::_placeSnap(BlockManager &blocks, const SnapDefinition 
             surface = (random() & 0x8000000u) != 0 ? 0 : 1;
 
         const BlockState &start = blocks.getBlockAt(x, y, z);
-        const bool open = start.mName == "minecraft:air" || isWater(start);
+        const bool open = DecorationSupport::isAir(start) || isWater(start);
         const int32_t face = open ? (surface == 0 ? 1 : 0) : (surface != 0 ? 1 : 0);
         found = _snapAlong(blocks, snap, x, y, z, face, snapped);
     }
@@ -1951,15 +1963,15 @@ bool OverworldRulePlacer::_snapAlong(BlockManager &blocks, const SnapDefinition 
     // sub_14A271850: from an open start along the face while the blocks stay open, to a surface that supports it;
     // from a solid start while they stay solid, to an open block
     const auto isOpen = [&](const BlockState &state) {
-        return (snap.mAllowAirPlacement && state.mName == "minecraft:air")
+        return (snap.mAllowAirPlacement && DecorationSupport::isAir(state))
                || (snap.mAllowUnderwaterPlacement && isWater(state));
     };
     const auto isNonAir = [&](const BlockState &state) {
-        return snap.mAllowNonAirPlacement && state.mName != "minecraft:air" && !isWater(state);
+        return snap.mAllowNonAirPlacement && !DecorationSupport::isAir(state) && !isWater(state);
     };
 
     const BlockState &start = blocks.getBlockAt(x, y, z);
-    const bool solidStart = start.mName != "minecraft:air" && !isWater(start);
+    const bool solidStart = !DecorationSupport::isAir(start) && !isWater(start);
     const LevelChunk *startChunk = blocks.getLevel().peekChunkPtr(x >> 4, z >> 4);
     if (startChunk == nullptr)
         return false;
@@ -2001,7 +2013,7 @@ bool OverworldRulePlacer::_placeBlob(BlockManager &blocks, const BlobDefinition 
     // a block and its neighbours but the exposed face must be neither air nor water, on either layer
     const auto isClosed = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
         const BlockState &state = blocks.getBlockAt(blockX, blockY, blockZ);
-        return !isWater(state) && state.mName != "minecraft:air"
+        return !isWater(state) && !DecorationSupport::isAir(state)
                && !isWater(blocks.getExtraBlockAt(blockX, blockY, blockZ));
     };
 
@@ -2587,7 +2599,7 @@ void OverworldRulePlacer::_placeSpring(BlockManager &blocks, int32_t x, int32_t 
         return contains(ROCK, blocks.getBlockAt(blockX, blockY, blockZ));
     };
     const auto isAir = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
-        return blocks.getBlockAt(blockX, blockY, blockZ).mName == "minecraft:air";
+        return DecorationSupport::isAir(blocks.getBlockAt(blockX, blockY, blockZ));
     };
 
     if (!isRock(x, y + 1, z) || !isRock(x, y - 1, z) || !(isAir(x, y, z) || isRock(x, y, z)))
