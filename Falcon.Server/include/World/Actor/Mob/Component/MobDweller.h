@@ -25,9 +25,13 @@ public:
     void joinVillage(ServerNetworkHandler &owner, const MobActor &mob, Village &village);
 
     /** Marks the mob as recruited by a raid; it joins once it is a hostile dweller of a raided village. */
-    void queueRaidJoin() { mRaidJoinQueued = true; }
+    void queueRaidJoin() {
+        mRaidJoinQueued = true;
+    }
 
-    bool isRaidJoinQueued() const { return mRaidJoinQueued; }
+    bool isRaidJoinQueued() const {
+        return mRaidJoinQueued;
+    }
 
     bool isActive() const {
         return mComponent != nullptr;
@@ -37,7 +41,9 @@ public:
         return mRole;
     }
 
-    std::shared_ptr<Village> getVillage() const { return mVillage.lock(); }
+    std::shared_ptr<Village> getVillage() const {
+        return mVillage.lock();
+    }
 
 private:
     void _read(const json::Value &component);

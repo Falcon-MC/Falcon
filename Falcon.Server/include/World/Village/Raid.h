@@ -52,7 +52,9 @@ public:
         return mRaiders;
     }
 
-    bool hasRaider(int64_t id) const { return mRaiders.count(id) != 0; }
+    bool hasRaider(int64_t id) const {
+        return mRaiders.count(id) != 0;
+    }
 
     /** A recruit joins the current wave, which grows by its health truncated to an int (sub_14CE8F940). */
     void addRecruit(int64_t id, float health);
