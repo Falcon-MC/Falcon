@@ -23,13 +23,16 @@
  *   - surface height: the highest Y whose layer 0 is not air, MIN_Y - 1 for an empty column;
  *   - biomes are sampled once per 4x4x4 cell, at the cell's lowest corner; above the highest non-empty BDS section
  *     the generated biomes are read from that section, which the game saves in place of the sections above;
+ *   - ore spills: mismatches whose two blocks are both host rocks of the underground ore rules or blocks they place.
+ *     The game drops part of the blobs an ore rule spills into a neighbour that is still generating, depending on
+ *     its thread scheduling, so these are set aside from the "outside ore spills" match;
  *   - each block position belongs to the highest category of its two blocks, in the order base terrain
  *     (air, stone, deepslate, bedrock, water, lava), surface (the blocks surface builders place), features
  *     (everything else).
  *
  * JSON summary keys (stable; every percentage is in [0, 100] and is 0 when its total is 0):
  *   seed, area {x0, z0, x1, z1}, chunks {requested, compared, missing, not_finalized, unreadable},
- *   blocks {total, match_pct, coarse_match_pct},
+ *   blocks {total, match_pct, coarse_match_pct, ore_spills, outside_ore_spills_match_pct},
  *   height {columns, match_pct, mean_abs_diff, max_abs_diff, histogram {"0", "1", "2", "3", "4-7", "8-15",
  *   "16-31", "32+"}},
  *   biomes {cells, match_pct},
@@ -407,6 +410,21 @@ namespace {
             return name.size() > 4 && name.compare(name.size() - 4, 4, "_ore") == 0 ? 2 : -1;
         }
 
+        // a host rock of the underground ore rules or a block one of them places
+        bool isOreLayer(const BlockState &state) const {
+            const std::string &name = state.mName;
+            static const char *const ORE_LAYER[] = {"minecraft:stone", "minecraft:deepslate", "minecraft:granite",
+                                                    "minecraft:diorite", "minecraft:andesite", "minecraft:tuff",
+                                                    "minecraft:dirt", "minecraft:gravel", "minecraft:clay",
+                                                    "minecraft:infested_stone", "minecraft:infested_deepslate"};
+            for (const char *ore: ORE_LAYER) {
+                if (name == ore)
+                    return true;
+            }
+
+            return name.size() > 4 && name.compare(name.size() - 4, 4, "_ore") == 0;
+        }
+
         Category category(const BlockState &state) const {
             if (mBaseTerrain.count(state.mName) != 0)
                 return CATEGORY_BASE_TERRAIN;
@@ -628,6 +646,8 @@ namespace {
 
             LOG_INFO(LogAreaID::Level, "Blocks: %.3f%% identical, %.3f%% same class (air/fluid/solid) over %llu blocks",
                                        mBlocks.percent(), mCoarse.percent(), (unsigned long long) mBlocks.mTotal);
+            LOG_INFO(LogAreaID::Level, "Blocks outside ore spills: %.3f%% identical, %llu ore layer mismatches set "
+                                       "aside", _outsideOreSpills(), (unsigned long long) mOreSpills);
             LOG_INFO(LogAreaID::Level, "Surface height: %.3f%% equal, mean |diff| %.3f, max |diff| %lld over %llu "
                                        "columns", mHeights.percent(), _meanHeightDifference(),
                                        (long long) mMaxHeightDifference, (unsigned long long) mHeights.mTotal);
@@ -730,8 +750,10 @@ namespace {
                           (unsigned long long) skipped[2]);
             out << buffer;
             std::snprintf(buffer, sizeof(buffer),
-                          "  \"blocks\": {\"total\": %llu, \"match_pct\": %.4f, \"coarse_match_pct\": %.4f},\n",
-                          (unsigned long long) mBlocks.mTotal, mBlocks.percent(), mCoarse.percent());
+                          "  \"blocks\": {\"total\": %llu, \"match_pct\": %.4f, \"coarse_match_pct\": %.4f, "
+                          "\"ore_spills\": %llu, \"outside_ore_spills_match_pct\": %.4f},\n",
+                          (unsigned long long) mBlocks.mTotal, mBlocks.percent(), mCoarse.percent(),
+                          (unsigned long long) mOreSpills, _outsideOreSpills());
             out << buffer;
             std::snprintf(buffer, sizeof(buffer),
                           "  \"height\": {\"columns\": %llu, \"match_pct\": %.4f, \"mean_abs_diff\": %.4f, "
@@ -792,6 +814,8 @@ namespace {
                     mismatch.mSamples.push_back({x, y, z});
             }
             score.mBlocks.add(matched);
+            if (!matched && mClassifier.isOreLayer(expected) && mClassifier.isOreLayer(generated))
+                mOreSpills++;
             mCoarse.add(mClassifier.coarse(expected) == mClassifier.coarse(generated));
             mCategories[std::max(mClassifier.category(expected), mClassifier.category(generated))].add(matched);
             mBands[(size_t) ((y - LevelChunk::MIN_Y) / Y_BAND_HEIGHT)].add(matched);
@@ -804,6 +828,11 @@ namespace {
                 return;
             }
             mBlockMismatches[{expected.mName, generated.mName}]++;
+        }
+
+        double _outsideOreSpills() const {
+            const uint64_t total = mBlocks.mTotal - mOreSpills;
+            return total == 0 ? 0.0 : 100.0 * (double) mBlocks.mMatched / (double) total;
         }
 
         double _meanHeightDifference() const {
@@ -854,6 +883,7 @@ namespace {
         const BlockClassifier &mClassifier;
         const BiomeNames &mBiomeNames;
         Ratio mBlocks;
+        uint64_t mOreSpills = 0;
         Ratio mCoarse;
         Ratio mShape;
 
