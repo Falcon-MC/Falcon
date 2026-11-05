@@ -5681,14 +5681,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/IcebergFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/IcebergFeature.h",
-      "sha256": "ce1a2ab0562b8aa6a09fb72a8a033dc1f3bf2857f1fc7424fcb02362f199aa09",
-      "classes": [
-        "IcebergFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/JungleGrassFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/JungleGrassFeature.h",
       "sha256": "07ef894c59131527b0efb0ccc7befd33f9b6e9887434a49520a5a4935f3e0041",
@@ -10174,11 +10166,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/IceSpikeFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IceSpikeFeature.cpp",
       "sha256": "0dc6f16b237d28bea08855bf020477d13bd0d87828832de0304f686ea7d245ce"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/IcebergFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IcebergFeature.cpp",
-      "sha256": "fd1895aff3ca5d869ad7b4abe7174521bb1f2d8986e45dcd0af5cf5d6ec3411d"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/JungleGrassFeature.cpp",
