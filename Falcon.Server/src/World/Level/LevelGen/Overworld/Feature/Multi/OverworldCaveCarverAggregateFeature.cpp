@@ -5,10 +5,8 @@ const char *OverworldCaveCarverAggregateFeature::name() const {
 }
 
 std::vector<const char *> OverworldCaveCarverAggregateFeature::getFeatures() const {
+    // the carvers themselves run in OverworldGenerator::generate, like the game's pregeneration_pass
     return {
-            "minecraft:overworld_cave",
-            "minecraft:cave_extra_underground",
-            "minecraft:canyon_carver",
             "minecraft:monster_room"
     };
 }

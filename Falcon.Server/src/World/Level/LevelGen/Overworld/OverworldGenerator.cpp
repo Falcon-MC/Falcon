@@ -6,6 +6,8 @@
 #include "World/Level/LevelGen/Overworld/Feature/OverworldFeatureBuilder.h"
 #include "World/Level/LevelGen/Feature/FeatureNoiseHolder.h"
 #include "World/Level/LevelGen/Overworld/Surface/OverworldSurfaceBuilder.h"
+#include "World/Level/LevelGen/Overworld/Terrain/OverworldAquifer.h"
+#include "World/Level/LevelGen/Overworld/Terrain/OverworldCarvers.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldTerrainFiller.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceOverwriteBuilder.h"
@@ -47,6 +49,7 @@ OverworldGenerator::OverworldGenerator(int64_t seed)
     mTerrainFiller = std::make_unique<OverworldTerrainFiller>(mNoiseHolder->getNoiseFactory(), *mClimate);
     mSurfaceBuilder = std::make_unique<OverworldSurfaceBuilder>(mNoiseHolder->getNoiseFactory(), *mClimate);
     mBiomeParameters = std::make_unique<OverworldBiomeParameters>();
+    mCarvers = std::make_unique<OverworldCarvers>(seed);
 }
 
 OverworldGenerator::~OverworldGenerator() = default;
@@ -82,9 +85,10 @@ int64_t OverworldGenerator::parseSeed(const std::string &value) {
     return (int64_t) hash;
 }
 
-void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random) const {
+void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random,
+                                          OverworldAquifer &aquifer) const {
     const int32_t minY = OverworldGeneratorConstants::MIN_Y;
-    mTerrainFiller->fill(chunk, heightMap);
+    mTerrainFiller->fill(chunk, heightMap, aquifer);
 
     // the first draws of the chunk's random lay 2 to 5 bedrock layers over whatever the noise placed
     // (sub_14A22D380)
@@ -142,7 +146,8 @@ void OverworldGenerator::generate(LevelChunk &chunk) const {
 
     // the chunk's random, seeded in sub_14CDD16A0, shared by the bedrock floor and the surface
     std::mt19937 random(132899541u * (uint32_t) chunk.getZ() + 341872712u * (uint32_t) chunk.getX());
-    _generateTerrain(chunk, heightMap, random);
+    OverworldAquifer aquifer = mTerrainFiller->createAquifer();
+    _generateTerrain(chunk, heightMap, random, aquifer);
 
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++)
@@ -154,6 +159,18 @@ void OverworldGenerator::generate(LevelChunk &chunk) const {
     mSurfaceBuilder->apply(chunk, random);
 
     mSurfaceOverwriteBuilder->apply(chunk, mSeed);
+
+    mCarvers->carve(chunk, aquifer);
+
+    // carvers can open a column from the top
+    for (int32_t x = 0; x < 16; x++) {
+        for (int32_t z = 0; z < 16; z++) {
+            int32_t y = chunk.getHeight(x, z);
+            while (y >= OverworldGeneratorConstants::MIN_Y && chunk.getBlock(x, y, z).mName == "minecraft:air")
+                y--;
+            chunk.setHeight(x, z, y);
+        }
+    }
 
     chunk.clearDirty();
 }

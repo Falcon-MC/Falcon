@@ -10,7 +10,9 @@
 #include <string>
 
 class LevelChunk;
+class OverworldAquifer;
 class OverworldBiomeParameters;
+class OverworldCarvers;
 class OverworldClimate;
 class OverworldSurfaceBuilder;
 class OverworldTerrainFiller;
@@ -43,7 +45,8 @@ public:
     static int64_t parseSeed(const std::string &value);
 
 private:
-    void _generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random) const;
+    void _generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random,
+                          OverworldAquifer &aquifer) const;
 
     void _generateBiomeMap(LevelChunk &chunk) const;
 
@@ -55,4 +58,5 @@ private:
     std::unique_ptr<OverworldClimate> mClimate;
     std::unique_ptr<OverworldTerrainFiller> mTerrainFiller;
     std::unique_ptr<OverworldBiomeParameters> mBiomeParameters;
+    std::unique_ptr<OverworldCarvers> mCarvers;
 };

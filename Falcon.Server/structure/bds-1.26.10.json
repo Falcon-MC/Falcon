@@ -6361,30 +6361,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Terrain/CanyonFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Terrain/CanyonFeature.h",
-      "sha256": "dd3c08c62bff007c0305d5b80b46a25673e7d38430b258807e657b62e0a36eb8",
-      "classes": [
-        "CanyonFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Terrain/CaveFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Terrain/CaveFeature.h",
-      "sha256": "dc3581dc3e034189e39b7e2049b388135a5741fc3b0a1c5fc788df1341d9dde1",
-      "classes": [
-        "CaveFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Terrain/ExtraUndergroundCaveFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Terrain/ExtraUndergroundCaveFeature.h",
-      "sha256": "1f3fe91e3da67d09af83587aff061efc55edacab400b19596e6d8eae5dff43c0",
-      "classes": [
-        "ExtraUndergroundCaveFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/AzaleaTree.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/AzaleaTree.h",
       "sha256": "399b24a62268764f323f1c048eccc005348bd8612ab36eeac154cfa38c147885",
@@ -11033,21 +11009,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/River/SandFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/River/SandFeature.cpp",
       "sha256": "7711d1a1aca0d6cff7e3e3776cf508fd619e08493fefee413ef10e191df91af7"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Terrain/CanyonFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Terrain/CanyonFeature.cpp",
-      "sha256": "9e7dbfeb38d09a4f0b96782cfa0c15f79db7dc0d8e667249663ca9bfe1ba9876"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Terrain/CaveFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Terrain/CaveFeature.cpp",
-      "sha256": "fad553187b8d3580d6ba85791f3d67e091a0c47092037fe6f6c7d7039f9acb4c"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Terrain/ExtraUndergroundCaveFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Terrain/ExtraUndergroundCaveFeature.cpp",
-      "sha256": "e06b715ff7e7b6828d6219d5bf945818c3163ebf9f66989236d2701bc35eb7fa"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/AzaleaTree.cpp",
