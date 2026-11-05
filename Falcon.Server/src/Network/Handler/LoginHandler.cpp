@@ -637,6 +637,7 @@ Uuid LoginHandler::playerListUuid(const ServerPlayer &player) {
 void LoginHandler::sendBiomeDefinitions(ServerNetworkHandler &owner, ServerPlayer &player) {
     BiomeDefinitionListPacket biomes;
     biomes.mBiomes = owner.getBiomes().getBiomes();
+    biomes.mStrings = owner.getBiomes().getStrings();
 
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), biomes, owner.getCodecContext());
 }
