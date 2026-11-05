@@ -393,16 +393,16 @@ void Village::_tickDwellerTimeouts(ServerNetworkHandler &owner, Level &level) {
                 continue;
             }
 
-            // a missing dweller counts as seen while its chunk is not loaded
+            // a missing dweller counts as seen while its chunk is not loaded, and leaves when the chunk is loaded
+            // without it: a transformed or despawned dweller never reaches the death handler (0x1439d2f4a)
             const MobActor *mob = VillageManager::findMob(owner, entry.mId);
-            if (mob == nullptr) {
-                if (!level.isChunkPopulated(entry.mPosition.x >> 4, entry.mPosition.z >> 4))
-                    entry.mLastSeenTick = mLastTick;
+            if (mob == nullptr && !level.isChunkPopulated(entry.mPosition.x >> 4, entry.mPosition.z >> 4)) {
+                entry.mLastSeenTick = mLastTick;
                 ++index;
                 continue;
             }
 
-            if (contains(DWELLER_BOUNDS_MARGIN, mob->getPosition())) {
+            if (mob != nullptr && contains(DWELLER_BOUNDS_MARGIN, mob->getPosition())) {
                 entry.mLastSeenTick = mLastTick;
                 ++index;
                 continue;
