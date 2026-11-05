@@ -91,7 +91,9 @@ void Village::addDweller(ServerNetworkHandler &owner, DwellerRole role, int64_t 
     if (role != DwellerRole::Inhabitant)
         return;
 
-    _findOrAddInhabitant(id).mPois = {};
+    // an inhabitant listed again gives its claims back first, so owner counts and the queues stay balanced
+    _releaseInhabitant(id);
+    _findOrAddInhabitant(id);
 
     // a new inhabitant takes the oldest free bed straight away, and the bed leaves the queue even if it has room left
     auto &beds = mUnclaimed[(size_t) PoiType::Bed];
