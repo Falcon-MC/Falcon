@@ -286,7 +286,7 @@ void OverworldCarvers::_addCaves(const CaveSettings &settings, std::mt19937 &ran
 
             // sub_14D1F56C0
             const int32_t length = 112 - nextInt(random, 28);
-            _addTunnel(random, startX, startY, startZ, thickness, yaw, pitch, 0, length, 1.0f, shape, segments);
+            _addTunnel(random, startX, startY, startZ, thickness, yaw, pitch, 0, length, shape, segments);
         }
     }
 }
@@ -320,7 +320,7 @@ void OverworldCarvers::_addRoom(const CaveSettings &settings, std::mt19937 &rand
 }
 
 void OverworldCarvers::_addTunnel(std::mt19937 &parent, float x, float y, float z, float thickness, float yaw,
-                                  float pitch, int32_t step, int32_t length, float yScale, const float *shape,
+                                  float pitch, int32_t step, int32_t length, const float *shape,
                                   std::vector<CaveSegment> &segments) {
     // sub_14D1F7A90; the radius multipliers only shape rooms
     std::mt19937 random(static_cast<uint32_t>(nextInt(parent)));
@@ -363,10 +363,10 @@ void OverworldCarvers::_addTunnel(std::mt19937 &parent, float x, float y, float 
             const float childPitch = pitch / 3.0f;
             const float firstThickness = toFloat(random()) * 0.5f + 0.5f;
             _addTunnel(random, x, y, z, firstThickness, -HALF_PI + yaw, childPitch, static_cast<int32_t>(branch),
-                       length, 1.0f, shape, segments);
+                       length, shape, segments);
             const float secondThickness = toFloat(random()) * 0.5f + 0.5f;
             _addTunnel(random, x, y, z, secondThickness, yaw + HALF_PI, childPitch, static_cast<int32_t>(branch),
-                       length, 1.0f, shape, segments);
+                       length, shape, segments);
             return;
         }
 
@@ -376,7 +376,7 @@ void OverworldCarvers::_addTunnel(std::mt19937 &parent, float x, float y, float 
             segment.mY = y;
             segment.mZ = z;
             segment.mHorizontalRadius = radius;
-            segment.mVerticalRadius = yScale * radius;
+            segment.mVerticalRadius = radius;
             segment.mFloorLevel = shape[2];
             segment.mStep = step;
             segment.mLength = length;

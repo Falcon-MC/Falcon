@@ -47,8 +47,7 @@ private:
                          const float *shape, std::vector<CaveSegment> &segments);
 
     static void _addTunnel(std::mt19937 &parent, float x, float y, float z, float thickness, float yaw, float pitch,
-                           int32_t step, int32_t length, float yScale, const float *shape,
-                           std::vector<CaveSegment> &segments);
+                           int32_t step, int32_t length, const float *shape, std::vector<CaveSegment> &segments);
 
     static void _carveSegment(const CaveSegment &segment, int32_t heightLimit, LevelChunk &chunk,
                               OverworldAquifer &aquifer);
