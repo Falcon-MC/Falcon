@@ -22,10 +22,18 @@ public:
 private:
     struct OreDefinition;
     struct DiskDefinition;
+    struct SeagrassDefinition;
+    struct ScatterDefinition;
 
     struct Feature {
         const OreDefinition *mOre = nullptr;
         const DiskDefinition *mDisk = nullptr;
+        const ScatterDefinition *mScatter = nullptr;
+        bool mKelp = false;
+
+        bool isPorted() const {
+            return mOre != nullptr || mDisk != nullptr || mScatter != nullptr || mKelp;
+        }
     };
 
     static Feature _find(const BiomeFeatureEntry &entry);
@@ -39,5 +47,11 @@ private:
     static bool _placeDisk(BlockManager &blocks, const DiskDefinition &disk, int32_t x, int32_t y, int32_t z,
                            std::mt19937 &random);
 
-    static int32_t _aboveTopSolid(BlockManager &blocks, int32_t x, int32_t z);
+    static bool _placeScatter(BlockManager &blocks, const ScatterDefinition &scatter, int32_t x, int32_t y, int32_t z,
+                              std::mt19937 &random);
+
+    static bool _placeSeagrass(BlockManager &blocks, const SeagrassDefinition &seagrass, int32_t x, int32_t y,
+                               int32_t z, std::mt19937 &random);
+
+    static bool _placeKelp(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 };

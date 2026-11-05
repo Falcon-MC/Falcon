@@ -3,18 +3,22 @@
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
 #include "World/Level/Block/LeavesBlock.h"
+#include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/WaterBlock.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Level.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/LevelGen/Feature/FeatureExpression.h"
+#include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
+#include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 
 #include <algorithm>
-#include <cerrno>
 #include <climits>
 #include <cmath>
-#include <cstdlib>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -22,7 +26,7 @@ namespace {
     constexpr float PI = 3.1415927f;
     constexpr const char *UNDERGROUND_PASS = "underground_pass";
     constexpr const char *SURFACE_PASS = "surface_pass";
-    constexpr const char *ABOVE_TOP_SOLID = "query.above_top_solid(variable.worldx, variable.worldz)";
+    constexpr const char *AFTER_SURFACE_PASS = "after_surface_pass";
 
     // the passes the game places after the carvers, in order (sub_1471CE3F0)
     const char *const PASSES[] = {
@@ -69,67 +73,65 @@ namespace {
         return hash;
     }
 
-    // a scatter bound written as a plain number; anything else is an expression this placer does not evaluate
-    bool constant(const std::string &text, float &value) {
-        if (text.empty())
-            return false;
+    using ExpressionPtr = std::shared_ptr<const FeatureExpression>;
 
-        char *end = nullptr;
-        errno = 0;
-        value = std::strtof(text.c_str(), &end);
-        return errno == 0 && end != nullptr && *end == '\0';
-    }
-
-    struct Bounds {
-        int32_t mDistribution;
-        int32_t mMin;
-        int32_t mMax;
-        bool mAboveTopSolid;
+    // one axis of a scatter: a single value or a distribution between two bounds
+    struct Axis {
+        int32_t mDistribution = 0;
+        ExpressionPtr mMin;
+        ExpressionPtr mMax;
+        bool mReadsWorld = false;
     };
 
-    bool bounds(const BiomeFeatureEntry::Coordinate &coordinate, Bounds &result) {
-        result.mAboveTopSolid = coordinate.mDistribution == 0 && coordinate.mMin == ABOVE_TOP_SOLID;
-        if (result.mAboveTopSolid) {
-            result.mDistribution = 0;
-            result.mMin = 0;
-            result.mMax = 0;
-            return true;
-        }
-
-        float min = 0.0f;
-        if (!constant(coordinate.mMin, min))
-            return false;
-
-        result.mDistribution = coordinate.mDistribution;
-        result.mMin = static_cast<int32_t>(std::round(min));
-        result.mMax = result.mMin;
-        if (coordinate.mDistribution == 0)
-            return true;
-
-        float max = 0.0f;
-        if (!constant(coordinate.mMax, max))
-            return false;
-
-        result.mMax = static_cast<int32_t>(std::round(max));
-        // uniform and triangle are the only distributions the ported rules use
-        return coordinate.mDistribution == 1 || coordinate.mDistribution == 6;
+    bool readsWorld(const std::string &text) {
+        return text.find("worldx") != std::string::npos || text.find("worldz") != std::string::npos;
     }
 
-    // sub_143815010, sub_1437FD570
-    int32_t sample(const Bounds &bounds, std::mt19937 &random) {
-        if (bounds.mDistribution == 0 || bounds.mMax <= bounds.mMin)
-            return bounds.mMin;
+    // uniform and triangle are the only distributions the ported rules use
+    bool parseAxis(int32_t distribution, const std::string &min, const std::string &max, Axis &axis) {
+        axis.mDistribution = distribution;
+        axis.mMin = FeatureExpression::parse(min);
+        axis.mReadsWorld = readsWorld(min);
+        if (axis.mMin == nullptr)
+            return false;
+        if (distribution == 0)
+            return true;
 
-        if (bounds.mDistribution == 1)
-            return nextInt(random, bounds.mMax - bounds.mMin) + bounds.mMin;
+        axis.mMax = FeatureExpression::parse(max);
+        axis.mReadsWorld = axis.mReadsWorld || readsWorld(max);
+        return axis.mMax != nullptr && (distribution == 1 || distribution == 6);
+    }
 
-        const int32_t range = bounds.mMax - bounds.mMin;
+    // sub_1437FD570
+    int32_t distribute(int32_t distribution, int32_t min, int32_t max, std::mt19937 &random) {
+        if (distribution == 1)
+            return nextInt(random, max - min) + min;
+
+        const int32_t range = max - min;
         const int32_t rest = range - range / 2;
         const int32_t first = range >= -1 ? nextInt(random, range / 2 + 1) : 0;
         const int32_t second = rest >= 0 ? nextInt(random, rest + 1) : 0;
-        return bounds.mMin + second + first;
+        return min + second + first;
     }
 
+    // query.noise: one octave of simplex noise from the game's Mersenne twister seeded with 2345 (sub_145E2C470)
+    float queryNoise(float x, float z) {
+        static const SurfaceSimplexNoise noise = [] {
+            std::mt19937 random(2345);
+            return SurfaceSimplexNoise(random);
+        }();
+        return noise.getValue(x, z);
+    }
+
+    // query.heightmap (sub_145E2C6D0) reads the chunk's heightmap, which the game computes once the terrain is
+    // carved and does not update while features are placed; the generator keeps the highest non-air block there
+    int32_t heightmapAt(Level &level, int32_t x, int32_t z) {
+        LevelChunk *chunk = level.peekChunkPtr(x >> 4, z >> 4);
+        if (chunk == nullptr)
+            return LevelChunk::MIN_Y;
+
+        return chunk->getHeight(x & 15, z & 15) + 1;
+    }
     // axis visiting order of each coordinate_eval_order (sub_1437FD990)
     const int32_t EVAL_ORDERS[6][3] = {
             {0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}
@@ -160,6 +162,165 @@ namespace {
                || blocks.getBlockAt(x - 1, y, z).mName == "minecraft:air"
                || blocks.getBlockAt(x + 1, y, z).mName == "minecraft:air";
     }
+
+    // LevelChunk::getAboveTopSolidBlock (sub_1438650A0) as the query calls it, water and leaves not counted: leaves
+    // (material type 7) are looked through, and the first solid block below them ends the scan
+    int32_t aboveTopSolid(BlockManager &blocks, int32_t x, int32_t z) {
+        for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
+            const BlockState &state = blocks.getBlockAt(x, y, z);
+            if (state.mName == "minecraft:air")
+                continue;
+            if (VanillaBlocks::getAs<LeavesBlock>(state.mName) != nullptr
+                || VanillaBlocks::getAs<FloweredAzaleaLeavesBlock>(state.mName) != nullptr)
+                continue;
+
+            if (BlockSupport::isSolid(state))
+                return y + 1;
+        }
+        return LevelChunk::MIN_Y;
+    }
+
+    // the Molang variables of a scatter: its origin, then each axis once drawn (sub_1437FBE80, sub_1437FD990)
+    class ScatterVariables : public FeatureExpression::Context {
+    public:
+        ScatterVariables(BlockManager &blocks, const int32_t origin[3]) : mBlocks(blocks) {
+            for (size_t axis = 0; axis < 3; axis++) {
+                mOrigin[axis] = static_cast<float>(origin[axis]);
+                mWorld[axis] = 0.0f;
+            }
+        }
+
+        float variable(const std::string &name) const override {
+            static const char *const ORIGINS[] = {"originx", "originy", "originz"};
+            static const char *const WORLDS[] = {"worldx", "worldy", "worldz"};
+            for (size_t axis = 0; axis < 3; axis++) {
+                if (name == ORIGINS[axis])
+                    return mOrigin[axis];
+                if (name == WORLDS[axis])
+                    return mWorld[axis];
+            }
+            // is_legacy: worlds generated before the 1.18 terrain; any other name reads as 0 too
+            return 0.0f;
+        }
+
+        float query(const std::string &name, float first, float second) const override {
+            const auto x = static_cast<int32_t>(std::round(first));
+            const auto z = static_cast<int32_t>(std::round(second));
+            if (name == "heightmap")
+                return static_cast<float>(heightmapAt(mBlocks.getLevel(), x, z));
+            if (name == "above_top_solid")
+                return static_cast<float>(aboveTopSolid(mBlocks, x, z));
+            if (name == "noise")
+                return queryNoise(first, second);
+            return 0.0f;
+        }
+
+        void setWorld(size_t axis, int32_t value) {
+            mWorld[axis] = static_cast<float>(value);
+        }
+
+    private:
+        BlockManager &mBlocks;
+        float mOrigin[3];
+        float mWorld[3];
+    };
+
+    // sub_143815010
+    int32_t sampleAxis(const Axis &axis, const ScatterVariables &variables, std::mt19937 &random) {
+        const auto min = static_cast<int32_t>(std::round(axis.mMin->evaluate(variables)));
+        if (axis.mDistribution == 0)
+            return min;
+
+        const auto max = static_cast<int32_t>(std::round(axis.mMax->evaluate(variables)));
+        return max > min ? distribute(axis.mDistribution, min, max, random) : min;
+    }
+
+    // the scatter's chance, then its iteration count (sub_1437FC150)
+    int32_t iterationsOf(int32_t numerator, int32_t denominator, const ExpressionPtr &percent,
+                         const ExpressionPtr &iterations, const ScatterVariables &variables, std::mt19937 &random) {
+        if (numerator > 0 && denominator > 0) {
+            if (numerator != denominator && nextInt(random, denominator) >= numerator)
+                return 0;
+        } else {
+            const float chance = percent->evaluate(variables);
+            if (chance < 100.0f && (chance <= 0.0f || chance <= nextFloat(random) * 100.0f))
+                return 0;
+        }
+
+        const float rounded = std::round(iterations->evaluate(variables));
+        return rounded > 0.0f ? static_cast<int32_t>(rounded) : 0;
+    }
+
+    // each axis in the scatter's order, from the origin (sub_1437FD990)
+    void scatterPosition(const Axis axes[3], int32_t evalOrder, const int32_t origin[3], ScatterVariables &variables,
+                         std::mt19937 &random, int32_t position[3]) {
+        for (int32_t axis: EVAL_ORDERS[evalOrder]) {
+            position[axis] = origin[axis] + sampleAxis(axes[axis], variables, random);
+            variables.setWorld((size_t) axis, position[axis]);
+        }
+    }
+
+    // a query reading worldx and worldz must come after both are drawn
+    bool drawnInOrder(const Axis axes[3], int32_t evalOrder) {
+        bool drawnX = false;
+        bool drawnZ = false;
+        for (int32_t axis: EVAL_ORDERS[evalOrder]) {
+            if (axes[axis].mReadsWorld && !(drawnX && drawnZ))
+                return false;
+            drawnX = drawnX || axis == 0;
+            drawnZ = drawnZ || axis == 2;
+        }
+        return true;
+    }
+
+    bool isWater(const BlockState &state) {
+        return VanillaBlocks::getAs<WaterBlock>(state.mName) != nullptr;
+    }
+
+    // the solid blocking test of the feature placers (BlockSource vfunc 432, sub_1432D1C00)
+    bool isSolidBlocking(BlockManager &blocks, int32_t x, int32_t y, int32_t z) {
+        return BlockSupport::isSolid(blocks.getBlockAt(x, y, z));
+    }
+
+    // kelp and seagrass may not stand on magma, soul sand or a fence (the list at xmmword_1529B0DB0)
+    bool refusesWaterPlant(const BlockState &below) {
+        static const std::vector<std::string> REFUSED = {
+                "minecraft:magma", "minecraft:soul_sand", "minecraft:oak_fence", "minecraft:spruce_fence",
+                "minecraft:birch_fence", "minecraft:jungle_fence", "minecraft:acacia_fence",
+                "minecraft:dark_oak_fence", "minecraft:mangrove_fence", "minecraft:cherry_fence",
+                "minecraft:pale_oak_fence", "minecraft:poplar_fence", "minecraft:bamboo_fence",
+                "minecraft:nether_brick_fence", "minecraft:crimson_fence", "minecraft:warped_fence"
+        };
+        return contains(REFUSED, below);
+    }
+
+    // a block placed in water keeps the water as its second block when it can hold it
+    void setInWater(BlockManager &blocks, int32_t x, int32_t y, int32_t z, const BlockState &state) {
+        const BlockState replaced = blocks.getBlockAt(x, y, z);
+        blocks.setBlockStateAt(x, y, z, state);
+        if (isWater(replaced) && LiquidPhysicsSystem::getWaterloggingLevel(state) > 0)
+            blocks.setExtraBlockAt(x, y, z, replaced);
+    }
+
+    BlockState withState(const BlockState &state, const char *name, int32_t value) {
+        Tag states = state.mStates;
+        states.putInt(name, value);
+        return BlockState(state.mName, states);
+    }
+
+    BlockState withState(const BlockState &state, const char *name, const char *value) {
+        Tag states = state.mStates;
+        states.putString(name, value);
+        return BlockState(state.mName, states);
+    }
+
+    // the two (sub_140391CC0 & 7) differences of the kelp and seagrass jitter, z drawn first
+    void jitter(std::mt19937 &random, int32_t &dx, int32_t &dz) {
+        const uint32_t firstZ = random() & 7u;
+        dz = static_cast<int32_t>(firstZ) - static_cast<int32_t>(random() & 7u);
+        const uint32_t firstX = random() & 7u;
+        dx = static_cast<int32_t>(firstX) - static_cast<int32_t>(random() & 7u);
+    }
 }
 
 // a minecraft:ore_feature of the behavior packs
@@ -180,6 +341,23 @@ struct OverworldRulePlacer::DiskDefinition {
     BlockStateSet mReplaces;
     // the clay disk also starts on clay, not only in water
     bool mStartsOnItself;
+};
+
+// the game's own seagrass features (SeagrassFeature, vtable 0x14F2F24E0, registered in sub_14726F340 by
+// sub_14728CFA0); the count is 1 for worlds of 1.21.60 and later
+struct OverworldRulePlacer::SeagrassDefinition {
+    const char *mIdentifier;
+    int32_t mCount;
+    // the chance of a single plant, tall seagrass otherwise
+    float mShortChance;
+};
+
+// a minecraft:scatter_feature of the behavior packs placing seagrass: x and z triangle from -8 to 8 around the
+// position, y the heightmap added to it, z then x then y
+struct OverworldRulePlacer::ScatterDefinition {
+    const char *mIdentifier;
+    int32_t mIterations;
+    const SeagrassDefinition *mPlaces;
 };
 
 OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry &entry) {
@@ -250,8 +428,34 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:mud"}, true}
     };
 
+    static const SeagrassDefinition SEAGRASS[] = {
+            {"minecraft:shortest_seagrass_feature", 1, 0.3f},
+            {"minecraft:shorter_seagrass_feature", 1, 0.4f},
+            {"minecraft:taller_seagrass_feature", 1, 0.8f},
+            {"minecraft:seagrass_feature", 1, 0.6f}
+    };
+
+    // BDS 1.26.61 behavior packs, features/scatter_*_seagrass_feature.json
+    static const ScatterDefinition SCATTERS[] = {
+            {"minecraft:scatter_cold_ocean_seagrass_feature", 32, &SEAGRASS[0]},
+            {"minecraft:scatter_deep_cold_ocean_seagrass_feature", 40, &SEAGRASS[2]},
+            {"minecraft:scatter_deep_ocean_seagrass_feature", 48, &SEAGRASS[2]},
+            {"minecraft:scatter_deep_warm_ocean_seagrass_feature", 80, &SEAGRASS[2]},
+            {"minecraft:scatter_ocean_seagrass_feature", 48, &SEAGRASS[0]},
+            {"minecraft:scatter_river_seagrass_feature", 48, &SEAGRASS[1]},
+            {"minecraft:scatter_swamp_seagrass_feature", 64, &SEAGRASS[3]},
+            {"minecraft:scatter_warm_ocean_seagrass_feature", 80, &SEAGRASS[0]}
+    };
+
     Feature feature;
-    if (entry.mPass == UNDERGROUND_PASS) {
+    if (entry.mPass == AFTER_SURFACE_PASS) {
+        // vtable 0x14F4A0F60, place sub_14D217680
+        feature.mKelp = entry.mFeature == "minecraft:kelp_feature";
+        for (const ScatterDefinition &scatter: SCATTERS) {
+            if (entry.mFeature == scatter.mIdentifier)
+                feature.mScatter = &scatter;
+        }
+    } else if (entry.mPass == UNDERGROUND_PASS) {
         for (const OreDefinition &ore: ORES) {
             if (entry.mFeature == ore.mIdentifier)
                 feature.mOre = &ore;
@@ -266,27 +470,22 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
 }
 
 bool OverworldRulePlacer::handles(const BiomeFeatureEntry &entry) {
-    const Feature feature = _find(entry);
-    if (feature.mOre == nullptr && feature.mDisk == nullptr)
+    if (!_find(entry).isPorted() || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
         return false;
 
-    float value = 0.0f;
-    if (!constant(entry.mIterations, value))
+    if (FeatureExpression::parse(entry.mIterations) == nullptr)
         return false;
-    if ((entry.mChanceNumerator <= 0 || entry.mChanceDenominator <= 0) && !constant(entry.mChancePercent, value))
-        return false;
-    if (entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
+    if ((entry.mChanceNumerator <= 0 || entry.mChanceDenominator <= 0)
+        && FeatureExpression::parse(entry.mChancePercent) == nullptr)
         return false;
 
+    Axis axes[3];
     for (size_t axis = 0; axis < 3; axis++) {
-        Bounds axisBounds{};
-        if (!bounds(entry.mCoordinates[axis], axisBounds))
-            return false;
-        // the query reads the x and z already drawn
-        if (axisBounds.mAboveTopSolid && (axis != 1 || EVAL_ORDERS[entry.mEvalOrder][2] != 1))
+        const BiomeFeatureEntry::Coordinate &coordinate = entry.mCoordinates[axis];
+        if (!parseAxis(coordinate.mDistribution, coordinate.mMin, coordinate.mMax, axes[axis]))
             return false;
     }
-    return true;
+    return drawnInOrder(axes, entry.mEvalOrder);
 }
 
 void OverworldRulePlacer::apply(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed,
@@ -322,45 +521,25 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
     const uint32_t seed = decorationSeed ^ ((decorationSeed >> 2) + hash + (decorationSeed << 6) + 0x9E3779B9u);
     std::mt19937 scatter(seed);
 
-    // sub_1437FC150
-    int32_t iterations = 0;
-    bool chosen = true;
-    if (entry.mChanceNumerator > 0 && entry.mChanceDenominator > 0) {
-        if (entry.mChanceNumerator != entry.mChanceDenominator
-            && nextInt(scatter, entry.mChanceDenominator) >= entry.mChanceNumerator)
-            chosen = false;
-    } else {
-        float percent = 0.0f;
-        constant(entry.mChancePercent, percent);
-        if (percent < 100.0f && (percent <= 0.0f || percent <= nextFloat(scatter) * 100.0f))
-            chosen = false;
-    }
-
-    if (chosen) {
-        float value = 0.0f;
-        constant(entry.mIterations, value);
-        const float rounded = std::round(value);
-        if (rounded > 0.0f)
-            iterations = static_cast<int32_t>(rounded);
-    }
-
+    const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
+    ScatterVariables variables(blocks, origin);
+    int32_t iterations = iterationsOf(entry.mChanceNumerator, entry.mChanceDenominator,
+                                      FeatureExpression::parse(entry.mChancePercent),
+                                      FeatureExpression::parse(entry.mIterations), variables, scatter);
     if (iterations == 0)
         return;
 
-    Bounds axes[3];
-    for (size_t axis = 0; axis < 3; axis++)
-        bounds(entry.mCoordinates[axis], axes[axis]);
+    Axis axes[3];
+    for (size_t axis = 0; axis < 3; axis++) {
+        const BiomeFeatureEntry::Coordinate &coordinate = entry.mCoordinates[axis];
+        parseAxis(coordinate.mDistribution, coordinate.mMin, coordinate.mMax, axes[axis]);
+    }
 
-    const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
     // the feature draws from a second twister on the same seed, shared by every iteration
     std::mt19937 placement(seed);
     while (iterations-- > 0) {
         int32_t position[3] = {0, 0, 0};
-        for (int32_t axis: EVAL_ORDERS[entry.mEvalOrder]) {
-            position[axis] = origin[axis] + (axes[axis].mAboveTopSolid
-                                             ? _aboveTopSolid(blocks, position[0], position[2])
-                                             : sample(axes[axis], scatter));
-        }
+        scatterPosition(axes, entry.mEvalOrder, origin, variables, scatter, position);
 
         if (biomeFilter >= 0
             && static_cast<int32_t>(chunk.getBiomeAt(position[0] & 15, position[1], position[2] & 15)) != biomeFilter)
@@ -368,8 +547,12 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
 
         if (feature.mOre != nullptr)
             _placeOre(blocks, *feature.mOre, position[0], position[1], position[2], placement);
-        else
+        else if (feature.mDisk != nullptr)
             _placeDisk(blocks, *feature.mDisk, position[0], position[1], position[2], placement);
+        else if (feature.mScatter != nullptr)
+            _placeScatter(blocks, *feature.mScatter, position[0], position[1], position[2], placement);
+        else
+            _placeKelp(blocks, position[0], position[1], position[2], placement);
     }
 }
 
@@ -559,19 +742,147 @@ bool OverworldRulePlacer::_placeDisk(BlockManager &blocks, const DiskDefinition 
     return true;
 }
 
-int32_t OverworldRulePlacer::_aboveTopSolid(BlockManager &blocks, int32_t x, int32_t z) {
-    // LevelChunk::getAboveTopSolidBlock (sub_1438650A0) as the query calls it, water and leaves not counted: leaves
-    // (material type 7) are looked through, and the first solid block below them ends the scan
-    for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
-        const BlockState &state = blocks.getBlockAt(x, y, z);
-        if (state.mName == "minecraft:air")
-            continue;
-        if (VanillaBlocks::getAs<LeavesBlock>(state.mName) != nullptr
-            || VanillaBlocks::getAs<FloweredAzaleaLeavesBlock>(state.mName) != nullptr)
+bool OverworldRulePlacer::_placeScatter(BlockManager &blocks, const ScatterDefinition &scatter, int32_t x, int32_t y,
+                                        int32_t z, std::mt19937 &random) {
+    // ScatterFeature::place (sub_14A255FC0): the iterations, positions and the placed feature all draw from the
+    // rule's placement twister
+    static const ExpressionPtr TRIANGLE_MIN = FeatureExpression::parse("-8");
+    static const ExpressionPtr TRIANGLE_MAX = FeatureExpression::parse("8");
+    static const ExpressionPtr HEIGHTMAP = FeatureExpression::parse("query.heightmap(variable.worldx, variable.worldz)");
+    // z, x, y
+    static const int32_t EVAL_ORDER = 4;
+
+    Axis axes[3];
+    axes[0] = Axis{6, TRIANGLE_MIN, TRIANGLE_MAX, false};
+    axes[1] = Axis{0, HEIGHTMAP, nullptr, true};
+    axes[2] = Axis{6, TRIANGLE_MIN, TRIANGLE_MAX, false};
+
+    const int32_t origin[3] = {x, y, z};
+    ScatterVariables variables(blocks, origin);
+    bool placed = false;
+    for (int32_t iteration = 0; iteration < scatter.mIterations; iteration++) {
+        int32_t position[3] = {0, 0, 0};
+        scatterPosition(axes, EVAL_ORDER, origin, variables, random, position);
+        placed = _placeSeagrass(blocks, *scatter.mPlaces, position[0], position[1], position[2], random) || placed;
+    }
+    return placed;
+}
+
+bool OverworldRulePlacer::_placeSeagrass(BlockManager &blocks, const SeagrassDefinition &seagrass, int32_t x,
+                                         int32_t y, int32_t z, std::mt19937 &random) {
+    // SeagrassFeature::place (sub_1471E5DC0): down to the floor, then up through the water, a single or tall plant,
+    // and a jitter around the floor block for the next one
+    int32_t floorY = y;
+    while (!isSolidBlocking(blocks, x, floorY, z) && floorY > LevelChunk::MIN_Y)
+        floorY--;
+    if (!isSolidBlocking(blocks, x, floorY, z))
+        return false;
+
+    // the temperature of the biome at the position it was given; cold water needs water above the plant
+    LevelChunk *chunk = blocks.getLevel().peekChunkPtr(x >> 4, z >> 4);
+    const int32_t biome = chunk != nullptr ? (int32_t) chunk->getBiomeAt(x & 15, y, z & 15) : -1;
+    const bool cold = BiomeTemperature::forFeature(biome, x, y, z) < 0.15f;
+
+    static const BlockState seagrassState = VanillaBlocks::SEAGRASS().toBlockState();
+    static const BlockState lowerState = withState(seagrassState, "sea_grass_type", "double_bot");
+    static const BlockState upperState = withState(seagrassState, "sea_grass_type", "double_top");
+
+    int32_t plantX = x;
+    int32_t plantY = floorY;
+    int32_t plantZ = z;
+    for (int32_t i = 0; i < seagrass.mCount; i++) {
+        while (!isWater(blocks.getBlockAt(plantX, plantY, plantZ))
+               && blocks.getBlockAt(plantX, plantY, plantZ).mName != "minecraft:air")
+            plantY++;
+
+        // SeagrassBlock::mayPlace (sub_14B2635C0): not on magma, soul sand or a fence, on a block with a solid top,
+        // in a water source
+        const BlockState &below = blocks.getBlockAt(plantX, plantY - 1, plantZ);
+        const BlockState &at = blocks.getBlockAt(plantX, plantY, plantZ);
+        const bool mayPlace = isWater(at) && WaterBlock::isSource(at) && !refusesWaterPlant(below)
+                              && BlockSupport::isSolid(below);
+        if (mayPlace) {
+            if (seagrass.mShortChance <= nextFloat(random)) {
+                if (!cold || isWater(blocks.getBlockAt(plantX, plantY + 1, plantZ)))
+                    setInWater(blocks, plantX, plantY, plantZ, seagrassState);
+            } else if (isWater(blocks.getBlockAt(plantX, plantY + 1, plantZ))
+                       && (!cold || isWater(blocks.getBlockAt(plantX, plantY + 2, plantZ)))) {
+                setInWater(blocks, plantX, plantY, plantZ, lowerState);
+                setInWater(blocks, plantX, plantY + 1, plantZ, upperState);
+            }
+        }
+
+        int32_t dx = 0;
+        int32_t dz = 0;
+        jitter(random, dx, dz);
+        plantX = x + dx;
+        plantY = floorY;
+        plantZ = z + dz;
+    }
+    return true;
+}
+
+bool OverworldRulePlacer::_placeKelp(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
+    // KelpFeature::place (sub_14D217680), with its count of 1 for worlds of 1.21.60 and later
+    const int32_t count = 1;
+    // the values of kelp_age (qword_1529E3AA8), and the tallest water column measured
+    const int32_t ageValues = 26;
+
+    static const BlockState kelpState = VanillaBlocks::KELP().toBlockState();
+
+    int32_t baseY = y;
+    if (!isSolidBlocking(blocks, x, baseY - 1, z)) {
+        do {
+            if (blocks.getBlockAt(x, baseY, z).mName == kelpState.mName || baseY <= LevelChunk::MIN_Y)
+                break;
+            baseY--;
+        } while (!isSolidBlocking(blocks, x, baseY - 1, z));
+    }
+    if (!isSolidBlocking(blocks, x, baseY - 1, z))
+        return false;
+
+    int32_t plantX = x;
+    int32_t plantY = baseY;
+    int32_t plantZ = z;
+    for (int32_t i = 0; i < count; i++) {
+        while (!isWater(blocks.getBlockAt(plantX, plantY, plantZ))
+               && blocks.getBlockAt(plantX, plantY, plantZ).mName != "minecraft:air")
+            plantY++;
+
+        const BlockState &at = blocks.getBlockAt(plantX, plantY, plantZ);
+        if (at.mName == "minecraft:air" || isWater(blocks.getBlockAt(plantX, plantY - 1, plantZ))
+            || at.mName == kelpState.mName)
             continue;
 
-        if (BlockSupport::isSolid(state))
-            return y + 1;
+        int32_t water = 0;
+        while (water < ageValues && isWater(blocks.getBlockAt(plantX, plantY + water, plantZ)))
+            water++;
+        if (water < 3)
+            continue;
+
+        const int32_t length = water >= 4 ? nextInt(random, water - 3) + 3 : 3;
+        const int32_t baseAge = ageValues - 1 - length;
+
+        // KelpBlock::mayPlace (sub_143C82A70): not on magma, soul sand or a fence, in a water source, on kelp or a
+        // solid block
+        const BlockState &below = blocks.getBlockAt(plantX, plantY - 1, plantZ);
+        const bool mayPlace = !refusesWaterPlant(below) && WaterBlock::isSource(at)
+                              && (below.mName == kelpState.mName || isSolidBlocking(blocks, plantX, plantY - 1, plantZ));
+        if (below.mName != kelpState.mName && mayPlace) {
+            setInWater(blocks, plantX, plantY, plantZ, withState(kelpState, "kelp_age", baseAge));
+            for (int32_t step = 1; step < length; step++) {
+                if (!isWater(blocks.getBlockAt(plantX, plantY + step, plantZ)))
+                    break;
+                setInWater(blocks, plantX, plantY + step, plantZ, withState(kelpState, "kelp_age", baseAge + step));
+            }
+        }
+
+        int32_t dx = 0;
+        int32_t dz = 0;
+        jitter(random, dx, dz);
+        plantX = x + dx;
+        plantY = baseY;
+        plantZ = z + dz;
     }
-    return LevelChunk::MIN_Y;
+    return true;
 }

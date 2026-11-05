@@ -7,4 +7,11 @@
 class BiomeTemperature {
 public:
     static float at(int32_t biomeId, int32_t x, int32_t y, int32_t z);
+
+    // the variant some features read, with the column offset taken straight from its noise instead of the chunk's
+    // rounded copy (sub_145D3BE00 with sub_145D3C410)
+    static float forFeature(int32_t biomeId, int32_t x, int32_t y, int32_t z);
+
+private:
+    static float _temperature(int32_t biomeId, int32_t x, int32_t y, int32_t z, bool rounded);
 };
