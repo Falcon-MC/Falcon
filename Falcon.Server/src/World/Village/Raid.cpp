@@ -6,6 +6,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Village/Village.h"
+#include "World/Village/VillageManager.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/OnScreenTextureAnimationPacket.h"
 
@@ -104,13 +105,8 @@ namespace {
         return closest;
     }
 
-    MobActor *findRaidMob(ServerNetworkHandler &owner, int64_t id) {
-        MobActor *mob = dynamic_cast<MobActor *>(owner.getActor(id));
-        return mob == nullptr || mob->isExpired() ? nullptr : mob;
-    }
-
     void fireOn(ServerNetworkHandler &owner, int64_t id, const char *event) {
-        if (MobActor *mob = findRaidMob(owner, id))
+        if (MobActor *mob = VillageManager::findMob(owner, id))
             mob->fireEvent(owner, event);
     }
 
@@ -516,7 +512,7 @@ float Raid::_sumRaiderHealth(ServerNetworkHandler &owner) const {
     // each raider counts its health truncated to an int (0x1439F51B0)
     float total = 0.0f;
     for (int64_t id: mRaiders) {
-        if (const MobActor *mob = findRaidMob(owner, id))
+        if (const MobActor *mob = VillageManager::findMob(owner, id))
             total += (float) (int32_t) mob->getHealth();
     }
     return total;
@@ -550,7 +546,7 @@ bool Raid::_spawnWave(ServerNetworkHandler &owner, Level &level, Village &villag
     if (elapsed == 1) {
         std::vector<int64_t> riders;
         for (int64_t id: mRaiders) {
-            MobActor *raider = findRaidMob(owner, id);
+            MobActor *raider = VillageManager::findMob(owner, id);
             if (raider == nullptr)
                 continue;
 
@@ -558,7 +554,7 @@ bool Raid::_spawnWave(ServerNetworkHandler &owner, Level &level, Village &villag
             if (raider->getPassengers().empty())
                 continue;
 
-            MobActor *rider = findRaidMob(owner, raider->getPassengers().front());
+            MobActor *rider = VillageManager::findMob(owner, raider->getPassengers().front());
             if (rider == nullptr)
                 continue;
 
@@ -618,7 +614,7 @@ void Raid::_rewardHero(ServerNetworkHandler &owner, int64_t playerId) const {
 void Raid::_soundHornNearRaider(ServerNetworkHandler &owner, Level &level) const {
     std::vector<Vector3f> positions;
     for (int64_t id: mRaiders) {
-        if (const MobActor *raider = findRaidMob(owner, id))
+        if (const MobActor *raider = VillageManager::findMob(owner, id))
             positions.push_back(raider->getPosition());
     }
     if (positions.empty())
