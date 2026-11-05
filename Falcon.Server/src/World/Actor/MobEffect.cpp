@@ -9,6 +9,7 @@
 #include "World/Actor/Mob/Hostile/WitherActor.h"
 #include "World/Actor/Mob/Hostile/EnderDragon.h"
 #include "World/Item/ItemData.h"
+#include "Protocol/Types/StartGameTypes.h"
 
 #include <algorithm>
 #include <cctype>
@@ -61,6 +62,7 @@ const char *getMobEffectName(MobEffectId id) {
         case MobEffectId::VillageHero: return "village_hero";
         case MobEffectId::Darkness: return "darkness";
         case MobEffectId::Weaving: return "weaving";
+        case MobEffectId::RaidOmen: return "raid_omen";
         case MobEffectId::Freezing: return "freezing";
     }
     return "unknown";
@@ -134,6 +136,22 @@ void InstantHealthMobEffect::tick(Actor &actor, const MobEffectInstance &instanc
 
 void InstantDamageMobEffect::tick(Actor &actor, const MobEffectInstance &instance) const {
     actor.reduceHealth((float) (6 << std::min(instance.mAmplifier, 7)));
+}
+
+void RaidOmenMobEffect::onAdd(Actor &actor, const MobEffectInstance &) const {
+    ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor);
+    if (player == nullptr || player->getGameType() == (int32_t) GameType::Spectator)
+        return;
+
+    const Vector3f &position = player->getPosition();
+    player->getRaidState().onRaidOmenAdded(Vector3i((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
+                                                    (int32_t) std::floor(position.z)));
+}
+
+void RaidOmenMobEffect::onRemove(Actor &actor, const MobEffectInstance &) const {
+    ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor);
+    if (player != nullptr && player->getGameType() != (int32_t) GameType::Spectator)
+        player->getRaidState().onRaidOmenRemoved();
 }
 
 void InvisibilityMobEffect::onAdd(Actor &actor, const MobEffectInstance &) const {
@@ -211,7 +229,7 @@ std::unique_ptr<MobEffect> MobEffectManager::create(MobEffectId id) {
         case MobEffectId::Speed: return std::make_unique<SpeedMobEffect>();
         case MobEffectId::Wither: return std::make_unique<WitherMobEffect>();
         case MobEffectId::Strength: return std::make_unique<AttackDamageMobEffect>();
-        case MobEffectId::BadOmen: return std::make_unique<RaidOmenMobEffect>();
+        case MobEffectId::RaidOmen: return std::make_unique<RaidOmenMobEffect>();
         case MobEffectId::Weaving: return std::make_unique<WeavingMobEffect>();
         case MobEffectId::Freezing: return std::make_unique<FreezingMobEffect>();
         default: return std::make_unique<MobEffect>();

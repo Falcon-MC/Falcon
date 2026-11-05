@@ -1,6 +1,7 @@
 #include "World/Actor/Mob/Component/MobDweller.h"
 
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
 #include "World/Village/VillageManager.h"
 #include "Network/ServerNetworkHandler.h"
@@ -58,11 +59,38 @@ void MobDweller::tick(ServerNetworkHandler &owner, MobActor &mob) {
         --mUpdateCountdown;
 }
 
-void MobDweller::onDeath(const MobActor &mob) {
+void MobDweller::onDeath(const MobActor &mob, const ServerPlayer *killer) {
     const std::shared_ptr<Village> village = mVillage.lock();
-    if (village != nullptr)
+    if (village != nullptr) {
+        Raid *raid = village->getRaid();
+        if (mRole == DwellerRole::Hostile && killer != nullptr && raid != nullptr)
+            raid->addHero(killer->getUniqueId());
         village->removeDweller(mRole, mob.getUniqueId());
+    }
     mVillage.reset();
+}
+
+void MobDweller::joinVillage(ServerNetworkHandler &owner, const MobActor &mob, Village &village) {
+    // the raid_configuration group that adds the component may have been added after the last tick read it
+    const json::Value *component = mob.getComponent(DWELLER_COMPONENT);
+    if (component != mComponent) {
+        mComponent = component;
+        if (component != nullptr)
+            _read(*component);
+    }
+    if (mComponent == nullptr || mRole == DwellerRole::None)
+        return;
+
+    const std::shared_ptr<Village> current = mVillage.lock();
+    if (current.get() == &village)
+        return;
+
+    const int64_t id = mob.getUniqueId();
+    if (current != nullptr)
+        current->removeDweller(mRole, id);
+    village.addDweller(owner, mRole, id);
+    mVillage = village.shared_from_this();
+    mHasJoinedVillage = true;
 }
 
 void MobDweller::_read(const json::Value &component) {

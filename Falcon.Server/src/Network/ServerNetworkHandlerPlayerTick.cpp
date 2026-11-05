@@ -157,6 +157,8 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
         _sendEntityData(player);
     }
 
+    player.getRaidState().tick(*this, player);
+
     if (player.isBreakingBlock()) {
         const Vector3i breakingPosition = player.getBreakingBlockPosition();
         if (!BlockActionHandler::canBreakBlock(*this, player, breakingPosition)) {

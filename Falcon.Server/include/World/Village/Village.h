@@ -4,6 +4,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "World/Village/PoiInstance.h"
+#include "World/Village/Raid.h"
 
 #include <array>
 #include <cstdint>
@@ -27,7 +28,7 @@ enum class DwellerRole : int32_t {
  * A village: the points of interest it owns, the dwellers registered with it and the box they span. Villages are
  * created and removed by the VillageManager of their level.
  */
-class Village {
+class Village : public std::enable_shared_from_this<Village> {
 public:
     static const size_t POI_TYPE_COUNT = 3;
     static const size_t ROLE_COUNT = 4;
@@ -57,6 +58,8 @@ public:
 
     bool hasDweller(DwellerRole role, int64_t id) const;
 
+    std::vector<int64_t> getDwellerIds(DwellerRole role) const;
+
     size_t getInhabitantCount() const {
         return mRoles[(size_t) DwellerRole::Inhabitant].size();
     }
@@ -83,6 +86,25 @@ public:
     std::vector<std::shared_ptr<PoiInstance>> getPois() const;
 
     void tick(ServerNetworkHandler &owner, Level &level, int64_t currentTick);
+
+    Raid *getRaid() { return mRaid.get(); }
+
+    const Raid *getRaid() const { return mRaid.get(); }
+
+    /** Whether the raid has been won or lost and only waits for its celebration to end. */
+    bool isRaidFinished() const { return mRaid != nullptr && mRaid->getResult() != Raid::Result::None; }
+
+    /** The village box grown by 32 on every side when the raid started: players inside it follow the raid. */
+    const AxisAlignedBB &getRaidBounds() const { return mRaidBounds; }
+
+    /** Whether position lies in the raid bounds, edges included. */
+    bool isInRaidBounds(const Vector3f &position) const;
+
+    /** Starts a raid, unless one is running or the difficulty is peaceful. */
+    void tryStartRaid(ServerNetworkHandler &owner);
+
+    /** Expires the raid after a wave of 48001 ticks, drops it on peaceful, or advances it. */
+    void tickRaid(ServerNetworkHandler &owner, Level &level, int64_t currentTick);
 
 private:
     using PoiQueue = std::vector<std::weak_ptr<PoiInstance>>;
@@ -122,6 +144,8 @@ private:
     std::vector<Inhabitant> mInhabitants;
     std::array<std::vector<DwellerEntry>, ROLE_COUNT> mRoles;
     AxisAlignedBB mBounds;
+    AxisAlignedBB mRaidBounds;
+    std::unique_ptr<Raid> mRaid;
     int64_t mLastTick = 0;
     int32_t mTickCount = 0;
     bool mInitialized = false;

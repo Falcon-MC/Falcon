@@ -79,6 +79,9 @@ public:
 
     void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0) override;
 
+    /** Fires the spawn event and equips the mob now instead of on its first tick, at most once. */
+    void startDefinition(ServerNetworkHandler &owner);
+
     void applyDefaults(Difficulty difficulty);
 
     static int randomRange(int minimum, int maximum);
@@ -312,6 +315,10 @@ public:
 
     const MobAdmiration &getAdmiration() const {
         return mAdmiration;
+    }
+
+    MobDweller &getDweller() {
+        return mDweller;
     }
 
     const MobDweller &getDweller() const {

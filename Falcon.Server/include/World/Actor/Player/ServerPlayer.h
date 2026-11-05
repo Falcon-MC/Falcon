@@ -20,6 +20,7 @@
 #include "Protocol/Types/SerializedSkin.h"
 #include "World/Actor/MobEffect.h"
 #include "World/Actor/Player/PlayerAcknowledgements.h"
+#include "World/Actor/Player/PlayerRaidState.h"
 
 #include <chrono>
 #include <memory>
@@ -338,6 +339,8 @@ public:
     PacketSender *getPacketSender() const { return mSender; }
 
     void setEffectsNetworkReady(bool ready) { mEffectsNetworkReady = ready; }
+
+    PlayerRaidState &getRaidState() { return mRaidState; }
 
     void syncEffects();
 
@@ -755,6 +758,7 @@ private:
     InventoryManager mInventoryManager;
     PacketSender *mSender;
     bool mEffectsNetworkReady = false;
+    PlayerRaidState mRaidState;
     std::unordered_map<std::string, int64_t> mItemCooldowns;
     int32_t mShieldTransitionTicks = 0;
     int32_t mShieldInterruptTicks = 0;

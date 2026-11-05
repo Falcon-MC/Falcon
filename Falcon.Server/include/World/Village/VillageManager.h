@@ -30,7 +30,10 @@ public:
     /** The level part of the tick: removes dead villages, advances the dweller scan and files what it found. */
     void tick(ServerNetworkHandler &owner, Level &level, int64_t currentTick);
 
-    /** Ticks the villages around a player: their box grown by half the chunk tick range on every side. */
+    /**
+     * Ticks the villages around a player, whose box grown by half the chunk tick range holds the player, then their
+     * raids. A raid of a village out of range only advances once the village is lost or the raid is over.
+     */
     void tickVillagesNear(ServerNetworkHandler &owner, Level &level, int64_t currentTick, const Vector3f &position,
                           int32_t chunkTickRange);
 
@@ -41,6 +44,9 @@ public:
     void releasePoi(const PoiInstance &poi);
 
     std::shared_ptr<Village> getClosestVillage(const Vector3i &position, int32_t radius) const;
+
+    /** The village with a raid whose centre is closest to position, at any distance. */
+    std::shared_ptr<Village> getClosestRaidingVillage(const Vector3i &position) const;
 
     /** Like getClosestVillage, but a village with a free bed wins over one without. */
     std::shared_ptr<Village> getClosestVillageForDweller(const Vector3i &position, int32_t radius) const;
