@@ -473,6 +473,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     player.getAttributes() = ActorAttributes::createPlayerDefaults();
     player.setGameType((int32_t) owner.getProperties().getGameType());
     owner._loadPlayerData(player);
+    if (owner.getProperties().getForceGameType())
+        player.setGameType((int32_t) owner.getProperties().getGameType());
     player.setHungerEnabled(player.getGameType() == (int32_t) GameType::Survival
                             || player.getGameType() == (int32_t) GameType::Adventure);
 
