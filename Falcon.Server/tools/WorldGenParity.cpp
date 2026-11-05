@@ -383,6 +383,12 @@ namespace {
             for (const Block &block: base)
                 mBaseTerrain.insert(block.getIdentifier());
 
+            // the rock the noise fills these dimensions with: left out, their whole terrain would count as features
+            if (gDimension == DimensionType::Nether)
+                mBaseTerrain.insert(VanillaBlocks::NETHERRACK().getIdentifier());
+            if (gDimension == DimensionType::TheEnd)
+                mBaseTerrain.insert(VanillaBlocks::END_STONE().getIdentifier());
+
             const Block surface[] = {
                     VanillaBlocks::GRASS_BLOCK(), VanillaBlocks::DIRT(), VanillaBlocks::COARSE_DIRT(),
                     VanillaBlocks::PODZOL(), VanillaBlocks::MYCELIUM(), VanillaBlocks::MUD(),
@@ -425,7 +431,8 @@ namespace {
             static const char *const SOLID[] = {"minecraft:stone", "minecraft:deepslate", "minecraft:granite",
                                                  "minecraft:diorite", "minecraft:andesite", "minecraft:tuff",
                                                  "minecraft:dirt", "minecraft:gravel", "minecraft:bedrock",
-                                                 "minecraft:raw_iron_block", "minecraft:raw_copper_block"};
+                                                 "minecraft:raw_iron_block", "minecraft:raw_copper_block",
+                                                 "minecraft:netherrack", "minecraft:end_stone"};
             for (const char *solid: SOLID) {
                 if (name == solid)
                     return 2;
