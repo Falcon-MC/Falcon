@@ -1,7 +1,9 @@
 #include "World/Level/LevelGen/Overworld/Surface/OverworldSurfaceBuilder.h"
 
+#include "World/Level/Block/LiquidBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Overworld/Biome/ClimateAttributes.h"
 #include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceMaterialAttributes.h"
@@ -48,10 +50,11 @@ namespace {
     }
 
     bool isLiquid(const BlockState &state) {
-        return state.mName == VanillaBlocks::WATER().getIdentifier()
-               || state.mName == VanillaBlocks::FLOWING_WATER().getIdentifier()
-               || state.mName == VanillaBlocks::LAVA().getIdentifier()
-               || state.mName == VanillaBlocks::FLOWING_LAVA().getIdentifier();
+        static const BlockStateSet LIQUIDS = BlockStateSet::ofBlocks([](const Block &block) {
+            const LiquidBlock *liquid = dynamic_cast<const LiquidBlock *>(&block);
+            return liquid != nullptr && liquid->isLiquid();
+        });
+        return LIQUIDS.contains(state);
     }
 
     // the game's starting value for the column's liquid top, far below any height (0x800003E8 in sub_14A22BF80)
@@ -59,20 +62,26 @@ namespace {
 
     // the only blocks the builder replaces (list at 0x1529AB1B8, filled from 0x14F1F5B40)
     bool isReplaceable(const BlockState &state) {
-        static const std::string NAMES[] = {
+        static const BlockStateSet REPLACEABLE = {
                 VanillaBlocks::STONE().getIdentifier(), VanillaBlocks::GRANITE().getIdentifier(),
                 VanillaBlocks::POLISHED_GRANITE().getIdentifier(), VanillaBlocks::DIORITE().getIdentifier(),
                 VanillaBlocks::POLISHED_DIORITE().getIdentifier(), VanillaBlocks::ANDESITE().getIdentifier(),
                 VanillaBlocks::POLISHED_ANDESITE().getIdentifier()
         };
-        return std::find(std::begin(NAMES), std::end(NAMES), state.mName) != std::end(NAMES);
+        return REPLACEABLE.contains(state);
     }
 
     // a mid material that turns to sandstone where its layer ends (list at 0x1529B0DF8, filled from 0x14F1F6538)
     bool isSand(const BlockState &state) {
-        return state.mName == VanillaBlocks::SAND().getIdentifier()
-               || state.mName == VanillaBlocks::RED_SAND().getIdentifier()
-               || state.mName == VanillaBlocks::SUSPICIOUS_SAND().getIdentifier();
+        static const BlockStateSet SAND = {
+                VanillaBlocks::SAND().getIdentifier(), VanillaBlocks::RED_SAND().getIdentifier(),
+                VanillaBlocks::SUSPICIOUS_SAND().getIdentifier()
+        };
+        return SAND.contains(state);
+    }
+
+    bool isAirState(const BlockState &state) {
+        return state.getHash() == airState().getHash();
     }
 
     // Random::nextFloat of the game's chunk random (sub_141A7E230)
@@ -129,7 +138,7 @@ void OverworldSurfaceBuilder::apply(LevelChunk &chunk, std::mt19937 &random) con
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++) {
             int32_t top = LevelChunk::MAX_Y;
-            while (top >= LevelChunk::MIN_Y && chunk.getBlock(x, top, z).mName == airState().mName)
+            while (top >= LevelChunk::MIN_Y && isAirState(chunk.getBlock(x, top, z)))
                 top--;
 
             const int32_t height = std::max(0, top + 1);
@@ -200,24 +209,31 @@ void OverworldSurfaceBuilder::_buildOverworldColumn(LevelChunk &chunk, int32_t x
     int32_t remaining = -1;
     const BlockState *layerTop = top;
     const BlockState *layerMid = mid;
+    static const BlockStateSet BEDROCK = {VanillaBlocks::BEDROCK().getIdentifier()};
+    static const BlockStateSet NETHERRACK = {VanillaBlocks::NETHERRACK().getIdentifier()};
+    static const BlockStateSet SAND = {VanillaBlocks::SAND().getIdentifier()};
+    static const BlockStateSet RED_SAND = {VanillaBlocks::RED_SAND().getIdentifier()};
+    static const BlockStateSet GRAVEL = {VanillaBlocks::GRAVEL().getIdentifier()};
+    static const BlockStateSet SEA_ICE = {VanillaBlocks::PACKED_ICE().getIdentifier(),
+                                          VanillaBlocks::BLUE_ICE().getIdentifier()};
     for (int32_t y = std::min(height, LevelChunk::MAX_Y); y > lowest; y--) {
         const BlockState &state = chunk.getBlock(x, y, z);
-        if (state.mName == VanillaBlocks::BEDROCK().getIdentifier())
+        if (BEDROCK.contains(state))
             continue;
 
         // a sand or gravel layer left over a cave or a liquid would float: harden it
-        if (remaining >= 0 && foundation->mName != VanillaBlocks::NETHERRACK().getIdentifier()
-            && (state.mName == airState().mName || isLiquid(state)) && y < LevelChunk::MAX_Y) {
-            const std::string &above = chunk.getBlock(x, y + 1, z).mName;
-            if (above == VanillaBlocks::SAND().getIdentifier())
+        if (remaining >= 0 && !NETHERRACK.contains(*foundation) && (isAirState(state) || isLiquid(state))
+            && y < LevelChunk::MAX_Y) {
+            const BlockState &above = chunk.getBlock(x, y + 1, z);
+            if (SAND.contains(above))
                 chunk.setBlock(x, y + 1, z, sandstoneState());
-            else if (above == VanillaBlocks::RED_SAND().getIdentifier())
+            else if (RED_SAND.contains(above))
                 chunk.setBlock(x, y + 1, z, redSandstoneState());
-            else if (above == VanillaBlocks::GRAVEL().getIdentifier())
+            else if (GRAVEL.contains(above))
                 chunk.setBlock(x, y + 1, z, *foundation);
         }
 
-        if (state.mName == airState().mName) {
+        if (isAirState(state)) {
             remaining = -1;
             seaLevel = NO_LIQUID;
             continue;
@@ -226,8 +242,7 @@ void OverworldSurfaceBuilder::_buildOverworldColumn(LevelChunk &chunk, int32_t x
         if (!isReplaceable(state)) {
             if (isWaterState(state) && sea != &waterState())
                 chunk.setBlock(x, y, z, *sea);
-            if (isLiquid(state) || state.mName == VanillaBlocks::PACKED_ICE().getIdentifier()
-                || state.mName == VanillaBlocks::BLUE_ICE().getIdentifier())
+            if (isLiquid(state) || SEA_ICE.contains(state))
                 seaLevel = std::max(seaLevel, y + 1);
             continue;
         }
@@ -241,7 +256,7 @@ void OverworldSurfaceBuilder::_buildOverworldColumn(LevelChunk &chunk, int32_t x
                 nextTop = outside ? layerTop : top;
             }
 
-            if (y < seaLevel && nextTop->mName == airState().mName)
+            if (y < seaLevel && isAirState(*nextTop))
                 nextTop = isWaterState(*sea) && temperature < 0.15f ? &iceState() : sea;
 
             remaining = runDepth;
