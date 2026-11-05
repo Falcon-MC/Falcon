@@ -6,6 +6,8 @@ class PerlinNoiseSampler : public Noise {
 public:
     explicit PerlinNoiseSampler(IRandom &rand);
 
+    explicit PerlinNoiseSampler(std::mt19937 &random);
+
     double sample(double x, double y, double z, double yAmplification, double minY) const;
 
     // already-scaled coordinates

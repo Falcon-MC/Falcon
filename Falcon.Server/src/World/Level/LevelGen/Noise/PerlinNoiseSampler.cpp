@@ -50,6 +50,13 @@ PerlinNoiseSampler::PerlinNoiseSampler(IRandom &rand)
       mOriginZFloat(static_cast<float>(mOriginZ)) {
 }
 
+PerlinNoiseSampler::PerlinNoiseSampler(std::mt19937 &random)
+    : Noise(random),
+      mOriginXFloat(static_cast<float>(mOriginX)),
+      mOriginYFloat(static_cast<float>(mOriginY)),
+      mOriginZFloat(static_cast<float>(mOriginZ)) {
+}
+
 double PerlinNoiseSampler::sample(double x, double y, double z, double yAmplification, double minY) const {
     const double offsetX = x + mOriginX;
     const double offsetY = y + mOriginY;

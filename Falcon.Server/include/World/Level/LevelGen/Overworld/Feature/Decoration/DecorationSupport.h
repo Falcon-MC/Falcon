@@ -52,6 +52,9 @@ namespace DecorationSupport {
 
     bool canBeReplaced(const BlockState &state);
 
+    // the blocks the game tags not_feature_replaceable (sub_14CE9AD30)
+    bool isNotFeatureReplaceable(const BlockState &state);
+
     void setBlockKeepingWater(LevelChunk &chunk, int32_t x, int32_t y, int32_t z, const BlockState &state);
 
     int32_t getBiomeAt(Level &level, int32_t x, int32_t y, int32_t z);

@@ -62,6 +62,33 @@ PerlinNoise::PerlinNoise(const XoroshiroPositionalFactory &factory, int32_t firs
     mMaxValue = _edgeValue(2.0);
 }
 
+// sub_145C2AF90 with its legacy mode
+PerlinNoise::PerlinNoise(std::mt19937 &random, int32_t firstOctave, const std::vector<double> &amplitudes)
+    : mNoiseLevels(),
+      mAmplitudes(amplitudes),
+      mLowestFreqValueFactor(0.0),
+      mMaxValue(0.0) {
+    const int32_t octaves = static_cast<int32_t>(amplitudes.size());
+    const int32_t zeroOctaveIndex = -firstOctave;
+
+    mNoiseLevels.assign(static_cast<size_t>(octaves), nullptr);
+
+    std::shared_ptr<PerlinNoiseSampler> zeroOctave = std::make_shared<PerlinNoiseSampler>(random);
+    if (zeroOctaveIndex >= 0 && zeroOctaveIndex < octaves && mAmplitudes[static_cast<size_t>(zeroOctaveIndex)] != 0.0)
+        mNoiseLevels[static_cast<size_t>(zeroOctaveIndex)] = zeroOctave;
+
+    for (int32_t ix = zeroOctaveIndex - 1; ix >= 0; --ix) {
+        if (ix < octaves && mAmplitudes[static_cast<size_t>(ix)] != 0.0)
+            mNoiseLevels[static_cast<size_t>(ix)] = std::make_shared<PerlinNoiseSampler>(random);
+        else
+            random.discard(262);
+    }
+
+    _computeOctaveFactors(firstOctave);
+    mLowestFreqValueFactor = std::pow(2.0, static_cast<double>(octaves - 1)) / (std::pow(2.0, static_cast<double>(octaves)) - 1.0);
+    mMaxValue = _edgeValue(2.0);
+}
+
 void PerlinNoise::_skipOctave(IRandom &random) {
     random.setSeed(LinearCongruentialGenerator::skip262().nextSeed(random.getSeed()));
 }
