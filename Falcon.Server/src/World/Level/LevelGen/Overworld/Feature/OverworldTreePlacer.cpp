@@ -4,11 +4,15 @@
 #include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
 #include "World/Level/Block/LeavesBlock.h"
 #include "World/Level/Block/PlantBlock.h"
+#include "World/Level/Block/SnowLayerBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Block/VineBlock.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/FeatureMath.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 
 #include <algorithm>
@@ -27,7 +31,7 @@ namespace {
     }
 
     bool isAir(const BlockState &state) {
-        return state.mName == "minecraft:air";
+        return DecorationSupport::isAir(state);
     }
 
     bool isLeaves(const BlockState &state) {
@@ -37,8 +41,12 @@ namespace {
 
     // may_replace of the vanilla trees: air, snow layers, the leaves tag, wildflowers and leaf litter
     bool mayReplace(const BlockState &state) {
-        return isAir(state) || state.mName == "minecraft:snow_layer" || isLeaves(state)
-               || state.mName == "minecraft:wildflowers" || state.mName == "minecraft:leaf_litter";
+        static const BlockStateSet GROUND_COVER = BlockStateSet::ofBlocks([](const Block &block) {
+            return dynamic_cast<const SnowLayerBlock *>(&block) != nullptr
+                   || block.getIdentifier() == VanillaBlocks::WILDFLOWERS().getIdentifier()
+                   || block.getIdentifier() == VanillaBlocks::LEAF_LITTER().getIdentifier();
+        });
+        return isAir(state) || isLeaves(state) || GROUND_COVER.contains(state);
     }
 
     // may_grow_on of the vanilla trees, the dirt tag
@@ -49,8 +57,19 @@ namespace {
     // the leaves of the simple and spruce canopies go into air, leaves (material types 0 and 7) and replaceable
     // plants (type 8), vines among them
     bool canopyReplaces(const BlockState &state) {
-        return isAir(state) || isLeaves(state) || state.mName == "minecraft:vine"
+        static const BlockStateSet VINES = BlockStateSet::ofBlocks([](const Block &block) {
+            return dynamic_cast<const VineBlock *>(&block) != nullptr;
+        });
+        return isAir(state) || isLeaves(state) || VINES.contains(state)
                || (PlantBlock::matches(state.mName) && BlockSupport::isReplaceable(state));
+    }
+
+    // the trunk's base blocks, left as they are under it
+    bool isBaseBlock(const BlockState &state) {
+        static const BlockStateSet BASE = {
+                VanillaBlocks::DIRT().getIdentifier(), VanillaBlocks::COARSE_DIRT().getIdentifier()
+        };
+        return BASE.contains(state);
     }
 
     BlockState withAxis(const BlockState &log, const char *axis) {
@@ -152,7 +171,7 @@ bool OverworldTreePlacer::_simpleTrunk(BlockManager &blocks, const Definition &t
 
     // the block under the trunk becomes the first base block unless it is one already
     const BlockState &below = blocks.getBlockAt(x, y - 1, z);
-    if (below.mName != "minecraft:dirt" && below.mName != "minecraft:coarse_dirt")
+    if (!isBaseBlock(below))
         blocks.setBlockStateAt(x, y - 1, z, VanillaBlocks::DIRT().toBlockState());
     return true;
 }
@@ -331,7 +350,7 @@ bool OverworldTreePlacer::_fallenTrunk(BlockManager &blocks, const Definition &t
     }
 
     const BlockState &below = blocks.getBlockAt(x, y - 1, z);
-    if (below.mName != "minecraft:dirt" && below.mName != "minecraft:coarse_dirt")
+    if (!isBaseBlock(below))
         blocks.setBlockStateAt(x, y - 1, z, VanillaBlocks::DIRT().toBlockState());
     return placed;
 }

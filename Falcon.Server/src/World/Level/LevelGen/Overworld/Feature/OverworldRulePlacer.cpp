@@ -5,6 +5,7 @@
 #include "World/Level/Block/FenceBlock.h"
 #include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
 #include "World/Level/Block/IceBlock.h"
+#include "World/Level/Block/KelpBlock.h"
 #include "World/Level/Block/LavaBlock.h"
 #include "World/Level/Block/LeavesBlock.h"
 #include "World/Level/Block/MagmaBlock.h"
@@ -160,12 +161,12 @@ namespace {
 
     // sub_14A2C9860
     bool exposedToAir(BlockManager &blocks, int32_t x, int32_t y, int32_t z) {
-        return blocks.getBlockAt(x, y - 1, z).mName == "minecraft:air"
-               || blocks.getBlockAt(x, y + 1, z).mName == "minecraft:air"
-               || blocks.getBlockAt(x, y, z - 1).mName == "minecraft:air"
-               || blocks.getBlockAt(x, y, z + 1).mName == "minecraft:air"
-               || blocks.getBlockAt(x - 1, y, z).mName == "minecraft:air"
-               || blocks.getBlockAt(x + 1, y, z).mName == "minecraft:air";
+        return DecorationSupport::isAir(blocks.getBlockAt(x, y - 1, z))
+               || DecorationSupport::isAir(blocks.getBlockAt(x, y + 1, z))
+               || DecorationSupport::isAir(blocks.getBlockAt(x, y, z - 1))
+               || DecorationSupport::isAir(blocks.getBlockAt(x, y, z + 1))
+               || DecorationSupport::isAir(blocks.getBlockAt(x - 1, y, z))
+               || DecorationSupport::isAir(blocks.getBlockAt(x + 1, y, z));
     }
 
     // LevelChunk::getAboveTopSolidBlock (sub_1438650A0) as the query calls it, water and leaves not counted: leaves
@@ -173,7 +174,7 @@ namespace {
     int32_t aboveTopSolid(BlockManager &blocks, int32_t x, int32_t z) {
         for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
             const BlockState &state = blocks.getBlockAt(x, y, z);
-            if (state.mName == "minecraft:air")
+            if (DecorationSupport::isAir(state))
                 continue;
             if (VanillaBlocks::getAs<LeavesBlock>(state.mName) != nullptr
                 || VanillaBlocks::getAs<FloweredAzaleaLeavesBlock>(state.mName) != nullptr)
@@ -291,6 +292,13 @@ namespace {
         return VanillaBlocks::getAs<WaterBlock>(state.mName) != nullptr;
     }
 
+    bool isKelp(const BlockState &state) {
+        static const BlockStateSet KELP = BlockStateSet::ofBlocks([](const Block &block) {
+            return dynamic_cast<const KelpBlock *>(&block) != nullptr;
+        });
+        return KELP.contains(state);
+    }
+
     // the solid blocking test of the feature placers (BlockSource vfunc 432, sub_1432D1C00)
     bool isSolidBlocking(BlockManager &blocks, int32_t x, int32_t y, int32_t z) {
         return BlockSupport::isSolid(blocks.getBlockAt(x, y, z));
@@ -339,8 +347,10 @@ namespace {
     // a geode point may not land in air, a liquid, ice, bedrock, packed or blue ice (qword_1529B1E50,
     // qword_1529BAF38, qword_1529BAF08, materials of xmmword_152B18A30)
     bool refusesGeodePoint(const BlockState &state) {
-        return state.mName == "minecraft:air" || state.mName == "minecraft:bedrock"
-               || state.mName == "minecraft:packed_ice" || state.mName == "minecraft:blue_ice" || isWater(state)
+        static const BlockStateSet REFUSED = {
+                "minecraft:air", "minecraft:bedrock", "minecraft:packed_ice", "minecraft:blue_ice"
+        };
+        return REFUSED.contains(state) || isWater(state)
                || LavaBlock::matches(state.mName) || IceBlock::matches(state.mName);
     }
 
@@ -1148,11 +1158,12 @@ bool OverworldRulePlacer::_placeSingleBlock(BlockManager &blocks, const SingleBl
     const bool supported = IFeature::isSupportDirt(blocks.getBlockAt(x, y - 1, z));
     if (single.mSurvival && !supported)
         return false;
-    if (single.mDoublePlant && (!supported || blocks.getBlockAt(x, y + 1, z).mName != "minecraft:air"))
+    if (single.mDoublePlant && (!supported || !DecorationSupport::isAir(blocks.getBlockAt(x, y + 1, z))))
         return false;
 
-    const std::string &replaced = blocks.getBlockAt(x, y, z).mName;
-    if (replaced != "minecraft:air" && !(single.mReplacesShortGrass && replaced == "minecraft:short_grass"))
+    static const BlockStateSet SHORT_GRASS = {VanillaBlocks::SHORT_GRASS().getIdentifier()};
+    const BlockState &replaced = blocks.getBlockAt(x, y, z);
+    if (!DecorationSupport::isAir(replaced) && !(single.mReplacesShortGrass && SHORT_GRASS.contains(replaced)))
         return false;
 
     const BlockState state = single.mBlock().toBlockState();
@@ -1207,7 +1218,7 @@ bool OverworldRulePlacer::_placeSeagrass(BlockManager &blocks, const SeagrassDef
     int32_t plantZ = z;
     for (int32_t i = 0; i < seagrass.mCount; i++) {
         while (!isWater(blocks.getBlockAt(plantX, plantY, plantZ))
-               && blocks.getBlockAt(plantX, plantY, plantZ).mName != "minecraft:air")
+               && !DecorationSupport::isAir(blocks.getBlockAt(plantX, plantY, plantZ)))
             plantY++;
 
         // SeagrassBlock::mayPlace (sub_14B2635C0): not on magma, soul sand or a fence, on a block with a solid top,
@@ -1248,7 +1259,7 @@ bool OverworldRulePlacer::_placeKelp(BlockManager &blocks, int32_t x, int32_t y,
     int32_t baseY = y;
     if (!isSolidBlocking(blocks, x, baseY - 1, z)) {
         do {
-            if (blocks.getBlockAt(x, baseY, z).mName == kelpState.mName || baseY <= LevelChunk::MIN_Y)
+            if (isKelp(blocks.getBlockAt(x, baseY, z)) || baseY <= LevelChunk::MIN_Y)
                 break;
             baseY--;
         } while (!isSolidBlocking(blocks, x, baseY - 1, z));
@@ -1261,12 +1272,12 @@ bool OverworldRulePlacer::_placeKelp(BlockManager &blocks, int32_t x, int32_t y,
     int32_t plantZ = z;
     for (int32_t i = 0; i < count; i++) {
         while (!isWater(blocks.getBlockAt(plantX, plantY, plantZ))
-               && blocks.getBlockAt(plantX, plantY, plantZ).mName != "minecraft:air")
+               && !DecorationSupport::isAir(blocks.getBlockAt(plantX, plantY, plantZ)))
             plantY++;
 
         const BlockState &at = blocks.getBlockAt(plantX, plantY, plantZ);
-        if (at.mName == "minecraft:air" || isWater(blocks.getBlockAt(plantX, plantY - 1, plantZ))
-            || at.mName == kelpState.mName)
+        if (DecorationSupport::isAir(at) || isWater(blocks.getBlockAt(plantX, plantY - 1, plantZ))
+            || isKelp(at))
             continue;
 
         int32_t water = 0;
@@ -1282,8 +1293,8 @@ bool OverworldRulePlacer::_placeKelp(BlockManager &blocks, int32_t x, int32_t y,
         // solid block
         const BlockState &below = blocks.getBlockAt(plantX, plantY - 1, plantZ);
         const bool mayPlace = !refusesWaterPlant(below) && WaterBlock::isSource(at)
-                              && (below.mName == kelpState.mName || isSolidBlocking(blocks, plantX, plantY - 1, plantZ));
-        if (below.mName != kelpState.mName && mayPlace) {
+                              && (isKelp(below) || isSolidBlocking(blocks, plantX, plantY - 1, plantZ));
+        if (!isKelp(below) && mayPlace) {
             setInWater(blocks, plantX, plantY, plantZ, withState(kelpState, "kelp_age", baseAge));
             for (int32_t step = 1; step < length; step++) {
                 if (!isWater(blocks.getBlockAt(plantX, plantY + step, plantZ)))
@@ -1335,7 +1346,7 @@ bool OverworldRulePlacer::_placeGeode(BlockManager &blocks, const GeodeDefinitio
         // the block and its liquid, which is the block itself when the second layer is empty
         const BlockState &extra = blocks.getExtraBlockAt(pointX, pointY, pointZ);
         if (refusesGeodePoint(blocks.getBlockAt(pointX, pointY, pointZ))
-            || (extra.mName != "minecraft:air" && refusesGeodePoint(extra))) {
+            || (!DecorationSupport::isAir(extra) && refusesGeodePoint(extra))) {
             if (invalid >= geode.mInvalidBlocksThreshold)
                 return false;
             invalid++;
@@ -1370,7 +1381,7 @@ bool OverworldRulePlacer::_placeGeode(BlockManager &blocks, const GeodeDefinitio
     const auto setNow = [&](int32_t blockX, int32_t blockY, int32_t blockZ, const BlockState &state) {
         if (blockY < LevelChunk::MIN_Y || blockY > LevelChunk::MAX_Y)
             return false;
-        if (blocks.getExtraBlockAt(blockX, blockY, blockZ).mName != "minecraft:air")
+        if (!DecorationSupport::isAir(blocks.getExtraBlockAt(blockX, blockY, blockZ)))
             blocks.setExtraBlockAt(blockX, blockY, blockZ, airState);
         if (DecorationSupport::isNotFeatureReplaceable(blocks.getBlockAt(blockX, blockY, blockZ)))
             return false;
@@ -1488,7 +1499,7 @@ bool OverworldRulePlacer::_placeGeode(BlockManager &blocks, const GeodeDefinitio
             const int32_t budZ = position[2] + FACES[face][2];
             const BlockState &replaced = blocks.getBlockAt(budX, budY, budZ);
             // the bud stands on the block it grows from, the geode's own layer
-            if ((replaced.mName != "minecraft:air" && !isWater(replaced))
+            if ((!DecorationSupport::isAir(replaced) && !isWater(replaced))
                 || !BlockSupport::isSolid(blocks.getBlockAt(position[0], position[1], position[2])))
                 continue;
 
@@ -1563,7 +1574,7 @@ bool OverworldRulePlacer::_placeLeafLitter(BlockManager &blocks, int32_t x, int3
     static const char *const DIRECTIONS[4] = {"south", "west", "north", "east"};
     const int32_t growth = nextInt(random, 4);
     const int32_t direction = nextInt(random, 4);
-    if (blocks.getBlockAt(x, y, z).mName != "minecraft:air" || !BlockSupport::isSolid(blocks.getBlockAt(x, y - 1, z)))
+    if (!DecorationSupport::isAir(blocks.getBlockAt(x, y, z)) || !BlockSupport::isSolid(blocks.getBlockAt(x, y - 1, z)))
         return false;
 
     const BlockState litter = withState(withState(VanillaBlocks::LEAF_LITTER().toBlockState(), "growth", growth),
@@ -1573,7 +1584,7 @@ bool OverworldRulePlacer::_placeLeafLitter(BlockManager &blocks, int32_t x, int3
 }
 
 bool OverworldRulePlacer::_placeMushroom(BlockManager &blocks, Block (*mushroom)(), int32_t x, int32_t y, int32_t z) {
-    if (blocks.getBlockAt(x, y, z).mName != "minecraft:air" || !BlockSupport::isSolid(blocks.getBlockAt(x, y - 1, z)))
+    if (!DecorationSupport::isAir(blocks.getBlockAt(x, y, z)) || !BlockSupport::isSolid(blocks.getBlockAt(x, y - 1, z)))
         return false;
 
     blocks.setBlockStateAt(x, y, z, mushroom().toBlockState());
@@ -1588,10 +1599,15 @@ bool OverworldRulePlacer::_placeBeehiveSearch(BlockManager &blocks, int32_t x, i
     static const int32_t SOUTH[2] = {0, 1};
     static const int32_t WEST[2] = {-1, 0};
     static const int32_t *const ORDERS[3][3] = {{EAST, SOUTH, WEST}, {SOUTH, WEST, EAST}, {WEST, EAST, SOUTH}};
+    // the may_attach_to blocks of beehive_feature
+    static const BlockStateSet TRUNKS = {
+            "minecraft:oak_log", "minecraft:birch_log", "minecraft:mangrove_roots", "minecraft:cherry_log"
+    };
+    static const BlockStateSet LEAVES = {
+            "minecraft:oak_leaves", "minecraft:birch_leaves", "minecraft:mangrove_leaves", "minecraft:cherry_leaves"
+    };
     const auto isTrunk = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
-        const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
-        return name == "minecraft:oak_log" || name == "minecraft:birch_log" || name == "minecraft:mangrove_roots"
-               || name == "minecraft:cherry_log";
+        return TRUNKS.contains(blocks.getBlockAt(blockX, blockY, blockZ));
     };
     for (int32_t offsetY = 0; offsetY <= 12; offsetY++) {
         const int32_t order = nextInt(random, 3);
@@ -1600,13 +1616,11 @@ bool OverworldRulePlacer::_placeBeehiveSearch(BlockManager &blocks, int32_t x, i
             const int32_t nestX = x + side[0];
             const int32_t nestY = y + offsetY;
             const int32_t nestZ = z + side[1];
-            if (blocks.getBlockAt(nestX, nestY, nestZ).mName != "minecraft:air"
-                || blocks.getBlockAt(nestX, nestY, nestZ + 1).mName != "minecraft:air")
+            if (!DecorationSupport::isAir(blocks.getBlockAt(nestX, nestY, nestZ))
+                || !DecorationSupport::isAir(blocks.getBlockAt(nestX, nestY, nestZ + 1)))
                 continue;
 
-            const std::string &top = blocks.getBlockAt(nestX, nestY + 1, nestZ).mName;
-            const int32_t attached = (top == "minecraft:oak_leaves" || top == "minecraft:birch_leaves"
-                                      || top == "minecraft:mangrove_leaves" || top == "minecraft:cherry_leaves")
+            const int32_t attached = LEAVES.contains(blocks.getBlockAt(nestX, nestY + 1, nestZ))
                                      + isTrunk(nestX - 1, nestY, nestZ) + isTrunk(nestX, nestY, nestZ - 1)
                                      + isTrunk(nestX + 1, nestY, nestZ);
             if (attached < 2)
@@ -1676,8 +1690,8 @@ void OverworldRulePlacer::_placeLegacyDoublePlant(BlockManager &blocks, Block (*
         const int32_t plantY = y + offsetY;
         const int32_t plantZ = z + offsetZ;
         // DoublePlantBlock::mayPlace: air with air above, on a block a plant grows on
-        if (blocks.getBlockAt(plantX, plantY, plantZ).mName != "minecraft:air"
-            || blocks.getBlockAt(plantX, plantY + 1, plantZ).mName != "minecraft:air"
+        if (!DecorationSupport::isAir(blocks.getBlockAt(plantX, plantY, plantZ))
+            || !DecorationSupport::isAir(blocks.getBlockAt(plantX, plantY + 1, plantZ))
             || !IFeature::isSupportDirt(blocks.getBlockAt(plantX, plantY - 1, plantZ)))
             continue;
 
