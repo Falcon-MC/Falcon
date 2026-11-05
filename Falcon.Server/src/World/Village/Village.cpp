@@ -17,8 +17,8 @@ namespace {
     // claims and dweller timeouts run on the ticks where tick % 30 == 15
     const int64_t CLAIM_INTERVAL = 30;
     const int64_t CLAIM_PHASE = 15;
-    const int64_t DWELLER_TIMEOUT = 24000;
-    const float DWELLER_BOUNDS_MARGIN = 48.0f;
+    const int64_t DWELLER_TIMEOUT = 24000; // 0x1439d2bb1
+    const float DWELLER_BOUNDS_MARGIN = 48.0f; // xmmword at 0x14f1b3850, read at 0x1439d2bba
     const int32_t CLAIM_PARTICLE_EVENT = 2009;
     const int32_t CLAIM_PARTICLE_DATA = 41;
     const int32_t CLAIM_PARTICLE_COUNT = 5;

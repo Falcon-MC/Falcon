@@ -11,8 +11,8 @@
 
 namespace {
     const char *const DWELLER_COMPONENT = "minecraft:dweller";
-    const float DEFAULT_BOUNDS_TOLERANCE = 10.0f;
-    const int32_t MIGRATION_RADIUS = 64;
+    const float DEFAULT_BOUNDS_TOLERANCE = 10.0f; // 0x14efd22ac
+    const int32_t MIGRATION_RADIUS = 64; // 0x14ce82c3b
 
     std::mt19937 &dwellerRandom() {
         static std::mt19937 generator(std::random_device{}());

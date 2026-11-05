@@ -9,12 +9,12 @@
 #include <functional>
 
 namespace {
-    const size_t MAX_SCAN_REQUESTS = 64;
-    const int32_t POI_FILING_RADIUS = 64;
-    const float NEW_VILLAGE_DISTANCE = 16.0f;
-    const int32_t UNINITIALIZED_REMOVAL_TICKS = 121;
-    const float SQUARE_EPSILON = 1.1920929e-7f;
-    const float FLAT_RADIUS_SCALE = 0.6f;
+    const size_t MAX_SCAN_REQUESTS = 64; // 0x1439e9c03
+    const int32_t POI_FILING_RADIUS = 64; // 0x1439ec654
+    const float NEW_VILLAGE_DISTANCE = 16.0f; // 0x1439ec84f
+    const int32_t UNINITIALIZED_REMOVAL_TICKS = 121; // 0x1439e54a5
+    const float SQUARE_EPSILON = 1.1920929e-7f; // 0x1439ec7ff
+    const float FLAT_RADIUS_SCALE = 0.6f; // 0x1439ec843
 
     struct Candidate {
         bool mInside;
