@@ -1,4 +1,5 @@
 #include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
+#include "World/Level/Block/Actor/BeehiveBlockActor.h"
 
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/FenceBlock.h"
@@ -16,11 +17,12 @@
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
-#include "World/Level/LevelGen/Feature/FeatureMath.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Feature/FeatureExpression.h"
+#include "World/Level/LevelGen/Feature/FeatureMath.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
+#include "World/Level/LevelGen/Feature/Tree/BeeNestGenerator.h"
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldTreePlacer.h"
 #include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
@@ -1584,8 +1586,6 @@ bool OverworldRulePlacer::_placeBeehiveSearch(BlockManager &blocks, int32_t x, i
     static const int32_t SOUTH[2] = {0, 1};
     static const int32_t WEST[2] = {-1, 0};
     static const int32_t *const ORDERS[3][3] = {{EAST, SOUTH, WEST}, {SOUTH, WEST, EAST}, {WEST, EAST, SOUTH}};
-    static const BlockState nest = withState(VanillaBlocks::BEE_NEST().toBlockState(), "direction", 0);
-
     const auto isTrunk = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
         const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
         return name == "minecraft:oak_log" || name == "minecraft:birch_log" || name == "minecraft:mangrove_roots"
@@ -1610,7 +1610,8 @@ bool OverworldRulePlacer::_placeBeehiveSearch(BlockManager &blocks, int32_t x, i
             if (attached < 2)
                 continue;
 
-            blocks.setBlockStateAt(nestX, nestY, nestZ, nest);
+            // a south-facing nest with its bees, as the mangroves place theirs
+            BeeNestGenerator::placeAt(blocks, nestX, nestY, nestZ, BeehiveBlockActor::MAX_OCCUPANTS);
             return true;
         }
     }
