@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
 
 class FeatureExpressionParser {
@@ -202,13 +203,16 @@ private:
 };
 
 std::shared_ptr<const FeatureExpression> FeatureExpression::parse(const std::string &text) {
-    static std::mutex mutex;
+    // the chunk workers ask for the same few texts over and over: they share the lock until a new text shows up
+    static std::shared_mutex mutex;
     static std::unordered_map<std::string, std::shared_ptr<const FeatureExpression>> cache;
 
-    const std::lock_guard<std::mutex> lock(mutex);
-    const auto found = cache.find(text);
-    if (found != cache.end())
-        return found->second;
+    {
+        const std::shared_lock<std::shared_mutex> lock(mutex);
+        const auto found = cache.find(text);
+        if (found != cache.end())
+            return found->second;
+    }
 
     std::shared_ptr<FeatureExpression> expression = std::make_shared<FeatureExpression>();
     FeatureExpressionParser parser(text, *expression);
@@ -216,8 +220,8 @@ std::shared_ptr<const FeatureExpression> FeatureExpression::parse(const std::str
     if (!text.empty() && parser.parse())
         result = expression;
 
-    cache.emplace(text, result);
-    return result;
+    const std::unique_lock<std::shared_mutex> lock(mutex);
+    return cache.emplace(text, result).first->second;
 }
 
 float FeatureExpression::evaluate(const Context &context) const {
