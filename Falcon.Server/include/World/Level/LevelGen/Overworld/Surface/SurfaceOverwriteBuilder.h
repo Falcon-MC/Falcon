@@ -16,12 +16,9 @@ public:
 
     SurfaceOverwriteBuilder(IRandom &random, const XoroshiroPositionalFactory &noiseFactory, int64_t levelSeed);
 
-    void apply(LevelChunk &chunk, int64_t levelSeed) const;
+    void apply(LevelChunk &chunk) const;
 
 private:
-    void _frozenOceanExtension(LevelChunk &chunk, int64_t levelSeed, int32_t localX, int32_t localZ, int32_t worldX,
-                               int32_t worldZ, int32_t height) const;
-
     void _erodedBadlandsExtension(LevelChunk &chunk, int32_t localX, int32_t localZ, int32_t worldX, int32_t worldZ,
                                   int32_t height) const;
 
@@ -42,16 +39,11 @@ private:
 
     static int32_t _javaStringHash(const char *text);
 
-    static int64_t _chunkHash(int32_t x, int32_t z);
-
     NormalNoisePtr mSurfaceNoise;
     NormalNoisePtr mSwampNoise;
     NormalNoisePtr mClayBandsOffsetNoise;
     NormalNoisePtr mBadlandsPillarNoise;
     NormalNoisePtr mBadlandsPillarRoofNoise;
     NormalNoisePtr mBadlandsSurfaceNoise;
-    NormalNoisePtr mIcebergPillarNoise;
-    NormalNoisePtr mIcebergPillarRoofNoise;
-    NormalNoisePtr mIcebergSurfaceNoise;
     std::vector<BlockState> mClayBandsCache;
 };

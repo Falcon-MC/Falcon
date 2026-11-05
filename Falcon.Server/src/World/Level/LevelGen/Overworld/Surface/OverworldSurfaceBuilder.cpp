@@ -4,6 +4,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/BlockStateSet.h"
+#include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
 #include "World/Level/LevelGen/Overworld/Biome/ClimateAttributes.h"
 #include "World/Level/LevelGen/Overworld/OverworldBlockLists.h"
 #include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
@@ -14,6 +15,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -86,15 +88,28 @@ namespace {
     }
 }
 
+namespace {
+    // sub_1471334C0 takes the seed as an int and sign-extends it
+    XoroshiroPositionalFactory icebergFactory(int64_t levelSeed) {
+        XoroshiroRandom random(static_cast<int64_t>(static_cast<int32_t>(levelSeed)));
+        return random.forkPositional();
+    }
+}
+
 OverworldSurfaceBuilder::OverworldSurfaceBuilder(const XoroshiroPositionalFactory &noiseFactory,
-                                                 const OverworldClimate &climate)
-        : mClimate(climate) {
+                                                 const OverworldClimate &climate, int64_t levelSeed)
+        : mClimate(climate), mIcebergFactory(icebergFactory(levelSeed)) {
     XoroshiroRandom random = noiseFactory.hashOf("minecraft:surface");
     mSurfaceNoise.reserve(SURFACE_NOISE_OCTAVES);
     for (int32_t i = 0; i < SURFACE_NOISE_OCTAVES; i++)
         mSurfaceNoise.emplace_back(random);
 
     mNoise = NormalNoise::create(noiseFactory, "minecraft:surface", -6, {1.0f, 1.0f, 1.0f});
+
+    // the frozen ocean builder's noises (sub_1471334C0)
+    mIcebergPillarNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_pillar", -6, {1.0f, 1.0f, 1.0f, 1.0f});
+    mIcebergPillarRoofNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_pillar_roof", -3, {1.0f});
+    mIcebergSurfaceNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_surface", -6, {1.0f, 1.0f, 1.0f});
 }
 
 // per column x + 16 * z, in sub_14CDD16A0
@@ -135,7 +150,10 @@ void OverworldSurfaceBuilder::apply(LevelChunk &chunk, std::mt19937 &random) con
             if (component == nullptr)
                 continue;
 
-            if (component->mType == SurfaceBuilderType::Overworld)
+            // the frozen ocean builder (vtable 0x14F2EF500) raises its ice, then builds like the overworld one
+            if (component->mType == SurfaceBuilderType::FrozenOcean)
+                _buildIcebergColumn(chunk, x, z, height);
+            if (component->mType == SurfaceBuilderType::Overworld || component->mType == SurfaceBuilderType::FrozenOcean)
                 _buildOverworldColumn(chunk, x, z, height, *component, noise[x + 16 * z], random);
             else
                 _buildLegacyColumn(chunk, x, z, *component);
@@ -186,11 +204,7 @@ void OverworldSurfaceBuilder::_buildOverworldColumn(LevelChunk &chunk, int32_t x
     const int32_t runDepth = static_cast<int32_t>((noise / 3.0f + 3.0f) + GameRandom::nextFloat(random) * 0.25f);
     const int32_t seaFloorDepth = material.mSeaFloorDepth + runDepth;
 
-    // nothing more than 8 blocks under the column's preliminary surface is touched (sub_14A22FC50)
-    const int32_t preliminary = static_cast<int16_t>(mClimate.preliminarySurfaceLevel(worldX >> 2, worldZ >> 2) - 8);
-    int32_t lowest = LevelChunk::MAX_Y;
-    if (preliminary <= LevelChunk::MAX_Y)
-        lowest = std::max(preliminary, LevelChunk::MIN_Y);
+    const int32_t lowest = _lowestSurfaceY(worldX, worldZ);
 
     // the game's sea level here is the top of the liquid met since the last air, not the dimension's
     int32_t seaLevel = NO_LIQUID;
@@ -279,6 +293,77 @@ void OverworldSurfaceBuilder::_buildOverworldColumn(LevelChunk &chunk, int32_t x
             remaining = static_cast<int32_t>(std::max<int64_t>(0, (int64_t) y - seaLevel)) + extra;
             layerMid = &sandstoneState();
         }
+    }
+}
+
+int32_t OverworldSurfaceBuilder::_lowestSurfaceY(int32_t worldX, int32_t worldZ) const {
+    // nothing more than 8 blocks under the column's preliminary surface is touched
+    const int32_t preliminary = static_cast<int16_t>(mClimate.preliminarySurfaceLevel(worldX >> 2, worldZ >> 2) - 8);
+    if (preliminary > LevelChunk::MAX_Y)
+        return LevelChunk::MAX_Y;
+    return std::max(preliminary, LevelChunk::MIN_Y);
+}
+
+void OverworldSurfaceBuilder::_buildIcebergColumn(LevelChunk &chunk, int32_t x, int32_t z, int32_t height) const {
+    // sub_147135EC0, in floats: a pillar where the noises rise above 1.8, packed ice into the air above the sea and
+    // into the water a little under it, a few snow blocks on top, each block drawn from the column's own random
+    constexpr int32_t SEA_LEVEL = 63;
+    const int32_t worldX = (chunk.getX() << 4) + x;
+    const int32_t worldZ = (chunk.getZ() << 4) + z;
+    const auto blockX = static_cast<float>(worldX);
+    const auto blockZ = static_cast<float>(worldZ);
+    const float pillar = mIcebergPillarNoise->getValue(1.28f * blockX, 0.0, blockZ * 1.28f) * 15.0f;
+    float iceberg = std::fmin(std::fabs(mIcebergSurfaceNoise->getValue(blockX, 0.0, blockZ) * 8.25f), pillar);
+    if (!(iceberg > 1.8f))
+        return;
+
+    const float roof = std::fabs(mIcebergPillarRoofNoise->getValue(blockX * 1.17f, 0.0, blockZ * 1.17f) * 1.5f) * 40.0f;
+    const auto roofTruncated = static_cast<int32_t>(roof);
+    const int32_t roofCeiling = static_cast<float>(roofTruncated) < roof ? roofTruncated + 1 : roofTruncated;
+    iceberg = std::fmin(iceberg * iceberg * 1.2f, static_cast<float>(roofCeiling + 14.0));
+
+    // shouldMeltFrozenOceanIcebergSlightly: the temperature at sea level
+    const auto biome = static_cast<int32_t>(chunk.getBiomeAt(x, SEA_LEVEL, z));
+    if (0.1f < BiomeTemperature::at(biome, worldX, SEA_LEVEL, worldZ))
+        iceberg = iceberg + -2.0f;
+
+    const auto sea = static_cast<float>(SEA_LEVEL);
+    const float bottom = iceberg > 2.0f ? (sea - iceberg) + -7.0f : 0.0f;
+    const float top = 2.0f < iceberg ? sea + iceberg : 0.0f;
+
+    XoroshiroRandom random = mIcebergFactory.at(worldX, 0, worldZ);
+    const int32_t maxSnow = random.nextExclusiveInt(4) + 2;
+    const int32_t snowLine = SEA_LEVEL + 18 + random.nextExclusiveInt(10);
+
+    static const BlockState packedIce = VanillaBlocks::PACKED_ICE().toBlockState();
+    static const BlockState snow = VanillaBlocks::SNOW().toBlockState();
+    static const BlockStateSet WATER = {VanillaBlocks::WATER().getIdentifier(),
+                                        VanillaBlocks::FLOWING_WATER().getIdentifier()};
+    const int32_t lowest = _lowestSurfaceY(worldX, worldZ);
+    auto y = static_cast<int32_t>(std::fmax(static_cast<float>(height), top + 1.0f));
+    if (lowest > y)
+        return;
+
+    int32_t snowPlaced = 0;
+    for (;; y--) {
+        const BlockState &state = chunk.getBlock(x, y, z);
+        bool place = false;
+        if (isAirState(state) && y < static_cast<int32_t>(top))
+            place = random.nextFloat() > 0.01f;
+        else if (WATER.contains(state) && y > static_cast<int32_t>(bottom) && y < SEA_LEVEL && bottom != 0.0f)
+            place = random.nextFloat() > 0.15f;
+
+        if (place) {
+            if (snowPlaced > maxSnow || y <= snowLine) {
+                chunk.setBlock(x, y, z, packedIce);
+            } else {
+                chunk.setBlock(x, y, z, snow);
+                snowPlaced++;
+            }
+        }
+
+        if (y <= lowest)
+            break;
     }
 }
 

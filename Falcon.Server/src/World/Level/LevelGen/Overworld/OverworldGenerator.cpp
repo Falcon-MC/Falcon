@@ -47,7 +47,7 @@ OverworldGenerator::OverworldGenerator(int64_t seed)
 
     mClimate = std::make_unique<OverworldClimate>(mNoiseHolder->getNoiseFactory());
     mTerrainFiller = std::make_unique<OverworldTerrainFiller>(mNoiseHolder->getNoiseFactory(), *mClimate);
-    mSurfaceBuilder = std::make_unique<OverworldSurfaceBuilder>(mNoiseHolder->getNoiseFactory(), *mClimate);
+    mSurfaceBuilder = std::make_unique<OverworldSurfaceBuilder>(mNoiseHolder->getNoiseFactory(), *mClimate, seed);
     mBiomeParameters = std::make_unique<OverworldBiomeParameters>();
     mCarvers = std::make_unique<OverworldCarvers>(seed);
 }
@@ -178,7 +178,7 @@ void OverworldGenerator::generate(LevelChunk &chunk) const {
 
     mSurfaceBuilder->apply(chunk, random);
 
-    mSurfaceOverwriteBuilder->apply(chunk, mSeed);
+    mSurfaceOverwriteBuilder->apply(chunk);
 
     mCarvers->carve(chunk, aquifer);
 

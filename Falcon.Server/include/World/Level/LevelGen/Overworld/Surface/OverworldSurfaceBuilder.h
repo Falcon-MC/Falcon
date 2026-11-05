@@ -14,7 +14,8 @@ class SurfaceBuilderComponent;
 
 class OverworldSurfaceBuilder {
 public:
-    OverworldSurfaceBuilder(const XoroshiroPositionalFactory &noiseFactory, const OverworldClimate &climate);
+    OverworldSurfaceBuilder(const XoroshiroPositionalFactory &noiseFactory, const OverworldClimate &climate,
+                            int64_t levelSeed);
 
     // random is the chunk's random, already past the bedrock floor
     void apply(LevelChunk &chunk, std::mt19937 &random) const;
@@ -29,10 +30,20 @@ private:
     void _buildOverworldColumn(LevelChunk &chunk, int32_t x, int32_t z, int32_t height,
                                const SurfaceBuilderComponent &component, float noise, std::mt19937 &random) const;
 
+    void _buildIcebergColumn(LevelChunk &chunk, int32_t x, int32_t z, int32_t height) const;
+
+    // the lowest block a column's builders may change (sub_14A22FC50)
+    int32_t _lowestSurfaceY(int32_t worldX, int32_t worldZ) const;
+
     // builders other than the overworld one, not ported yet
     void _buildLegacyColumn(LevelChunk &chunk, int32_t x, int32_t z, const SurfaceBuilderComponent &component) const;
 
     const OverworldClimate &mClimate;
+    // the frozen ocean builder's own factory, from the level seed cut to 32 bits
+    XoroshiroPositionalFactory mIcebergFactory;
     std::vector<SurfaceSimplexNoise> mSurfaceNoise;
     NormalNoisePtr mNoise;
+    NormalNoisePtr mIcebergPillarNoise;
+    NormalNoisePtr mIcebergPillarRoofNoise;
+    NormalNoisePtr mIcebergSurfaceNoise;
 };
