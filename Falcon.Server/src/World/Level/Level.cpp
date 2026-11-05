@@ -10,8 +10,6 @@
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/BlockSupport.h"
-#include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
-#include "World/Level/Block/LeavesBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Falcon/Plugin/PluginEvent.h"
@@ -966,8 +964,7 @@ int32_t Level::getAboveTopSolidBlock(int32_t x, int32_t y, int32_t z) {
     const int localZ = z & 15;
     const auto isLeaves = [](const BlockState &state) {
         const Block *block = VanillaBlocks::fromState(state);
-        return dynamic_cast<const LeavesBlock *>(block) != nullptr
-               || dynamic_cast<const FloweredAzaleaLeavesBlock *>(block) != nullptr;
+        return block != nullptr && block->isLeaves();
     };
 
     int32_t current = std::min(y, getMaxY());
