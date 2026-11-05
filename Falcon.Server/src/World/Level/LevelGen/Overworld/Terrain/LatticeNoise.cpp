@@ -65,6 +65,7 @@ void LatticeNoise::addLattice(float *output, const float *start, int32_t countX,
     const int32_t originSection = NoiseMath::truncateToInt(originY);
     const float originFraction = originY - static_cast<float>(NoiseMath::truncateToInt(originY));
 
+    // set once per call like the game (sub_145C2A210), so a column can reuse the previous column's corners
     int32_t cachedSection = -1;
     float corners[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     size_t index = 0;
