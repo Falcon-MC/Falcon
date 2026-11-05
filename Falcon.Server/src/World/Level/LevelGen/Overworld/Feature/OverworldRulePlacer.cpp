@@ -1147,11 +1147,13 @@ void OverworldRulePlacer::_drawUnported(BlockManager &blocks, const LevelChunk &
                                         uint32_t decorationSeed) {
     // a rule the placer does not port still draws its math.random from the decoration random the ported rules
     // after it share, for its chance, its iterations and, when they draw, its coordinates
+    // runs for every unported rule of every chunk: searched in place, without a lowercased copy
     const auto draws = [](const std::string &text) {
-        std::string lower = text;
-        std::transform(lower.begin(), lower.end(), lower.begin(),
-                       [](unsigned char character) { return (char) std::tolower(character); });
-        return lower.find("math.random") != std::string::npos;
+        static const std::string RANDOM = "math.random";
+        const auto sameLetter = [](char left, char right) {
+            return std::tolower(static_cast<unsigned char>(left)) == right;
+        };
+        return std::search(text.begin(), text.end(), RANDOM.begin(), RANDOM.end(), sameLetter) != text.end();
     };
 
     bool coordinatesDraw = false;
