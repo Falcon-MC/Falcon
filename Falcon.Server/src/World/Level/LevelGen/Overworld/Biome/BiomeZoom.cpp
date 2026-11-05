@@ -1,5 +1,7 @@
 #include "World/Level/LevelGen/Overworld/Biome/BiomeZoom.h"
 
+#include <cstddef>
+
 namespace {
 
     constexpr uint64_t LCG_MULTIPLIER = 0x5DEECE66DULL;
