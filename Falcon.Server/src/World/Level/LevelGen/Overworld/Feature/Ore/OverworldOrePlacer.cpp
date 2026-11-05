@@ -160,7 +160,6 @@ const OverworldOrePlacer::OreDefinition *OverworldOrePlacer::_find(const BiomeFe
             {"minecraft:copper_ore_feature", 10, 0.0f, {{&VanillaBlocks::COPPER_ORE, {"minecraft:stone"}},
                                                         {&VanillaBlocks::DEEPSLATE_COPPER_ORE,
                                                          {"minecraft:deepslate"}}}},
-            {"minecraft:deepslate_feature", 33, 0.0f, {{&VanillaBlocks::DEEPSLATE, {"minecraft:stone"}}}},
             {"minecraft:diamond_ore_buried_feature", 8, 1.0f, {{&VanillaBlocks::DIAMOND_ORE, {"minecraft:stone"}},
                                                                {&VanillaBlocks::DEEPSLATE_DIAMOND_ORE,
                                                                 {"minecraft:deepslate"}}}},
@@ -203,9 +202,6 @@ const OverworldOrePlacer::OreDefinition *OverworldOrePlacer::_find(const BiomeFe
             {"minecraft:redstone_ore_feature", 8, 0.0f, {{&VanillaBlocks::REDSTONE_ORE, {"minecraft:stone"}},
                                                          {&VanillaBlocks::DEEPSLATE_REDSTONE_ORE,
                                                           {"minecraft:deepslate"}}}},
-            {"minecraft:silverfish_feature", 8, 0.0f, {{&VanillaBlocks::INFESTED_STONE, {"minecraft:stone"}},
-                                                       {&VanillaBlocks::INFESTED_DEEPSLATE,
-                                                        {"minecraft:deepslate"}}}},
             {"minecraft:tuff_feature", 64, 0.0f, {{&VanillaBlocks::TUFF, {"minecraft:stone", "minecraft:deepslate"}}}}
     };
 
