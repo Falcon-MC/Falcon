@@ -1,7 +1,8 @@
 #include "World/Level/LevelGen/Noise/PerlinNoiseSampler.h"
 
+#include "World/Level/LevelGen/Noise/NoiseMath.h"
+
 #include <cmath>
-#include <limits>
 
 namespace {
 
@@ -23,15 +24,6 @@ const double FLAT_SIMPLEX_GRAD[64] = {
     -1, 1, 0, 0,
     0, -1, -1, 0
 };
-
-// cvttss2si gives INT32_MIN for nan and out-of-range values; a plain cast is undefined there
-int32_t truncateToInt(float value) {
-    if (!(value >= -2147483648.0f && value < 2147483648.0f)) {
-        return std::numeric_limits<int32_t>::min();
-    }
-
-    return static_cast<int32_t>(value);
-}
 
 float fade(float t) {
     return ((t * 6.0f + -15.0f) * t + 10.0f) * (t * t * t);
@@ -141,9 +133,9 @@ float PerlinNoiseSampler::sampleFloat(float x, float y, float z) const {
     const float offsetX = x + mOriginXFloat;
     const float offsetY = y + mOriginYFloat;
     const float offsetZ = z + mOriginZFloat;
-    const int32_t sectionX = truncateToInt(std::floor(offsetX));
-    const int32_t sectionY = truncateToInt(std::floor(offsetY));
-    const int32_t sectionZ = truncateToInt(std::floor(offsetZ));
+    const int32_t sectionX = NoiseMath::truncateToInt(std::floor(offsetX));
+    const int32_t sectionY = NoiseMath::truncateToInt(std::floor(offsetY));
+    const int32_t sectionZ = NoiseMath::truncateToInt(std::floor(offsetZ));
     return _sampleFloat(sectionX, sectionY, sectionZ, offsetX - static_cast<float>(sectionX),
                         offsetY - static_cast<float>(sectionY), offsetZ - static_cast<float>(sectionZ));
 }

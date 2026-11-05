@@ -1,5 +1,7 @@
 #include "World/Level/LevelGen/Noise/NoiseMath.h"
 
+#include <limits>
+
 double NoiseMath::grad(int32_t hash, double x, double y, double z) {
     switch (hash & 0xF) {
         case 0x0:
@@ -45,6 +47,22 @@ int64_t NoiseMath::lfloor(double d) {
 int32_t NoiseMath::floor(double d) {
     int32_t i = static_cast<int32_t>(d);
     return d < static_cast<double>(i) ? i - 1 : i;
+}
+
+int32_t NoiseMath::floorDiv(int32_t value, int32_t divisor) {
+    int32_t quotient = value / divisor;
+    if ((value % divisor != 0) && ((value < 0) != (divisor < 0)))
+        quotient--;
+
+    return quotient;
+}
+
+// cvttss2si gives INT32_MIN for nan and out-of-range values; a plain cast is undefined there
+int32_t NoiseMath::truncateToInt(float value) {
+    if (!(value >= -2147483648.0f && value < 2147483648.0f))
+        return std::numeric_limits<int32_t>::min();
+
+    return static_cast<int32_t>(value);
 }
 
 double NoiseMath::lerp(double delta, double start, double end) {

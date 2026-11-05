@@ -1,5 +1,6 @@
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldAquifer.h"
 
+#include "World/Level/LevelGen/Noise/NoiseMath.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
 
 #include <cmath>
@@ -17,14 +18,6 @@ namespace {
             {-3, 0}, {-2, 0}, {-1, 0}, {0, 0}, {1, 0},
             {-2, 1}, {-1, 1}, {0, 1}, {1, 1}
     };
-
-    int32_t floorDiv(int32_t value, int32_t divisor) {
-        int32_t quotient = value / divisor;
-        if ((value % divisor != 0) && ((value < 0) != (divisor < 0)))
-            quotient--;
-
-        return quotient;
-    }
 
     XoroshiroPositionalFactory locationFactory(const XoroshiroPositionalFactory &noiseFactory) {
         XoroshiroRandom random = noiseFactory.hashOf("minecraft:aquifer");
@@ -71,7 +64,8 @@ OverworldAquifer::Location OverworldAquifer::_location(int32_t cellX, int32_t ce
 }
 
 OverworldAquifer::FluidStatus OverworldAquifer::_fluidStatus(const Location &location) {
-    const int64_t key = _cellKey(floorDiv(location.mX, 16), floorDiv(location.mY, 12), floorDiv(location.mZ, 16));
+    const int64_t key = _cellKey(NoiseMath::floorDiv(location.mX, 16), NoiseMath::floorDiv(location.mY, 12),
+                                 NoiseMath::floorDiv(location.mZ, 16));
     const std::unordered_map<int64_t, FluidStatus>::const_iterator found = mStatuses.find(key);
     if (found != mStatuses.end())
         return found->second;
@@ -141,18 +135,18 @@ OverworldAquifer::FluidStatus OverworldAquifer::_computeFluid(const Location &lo
     if (flooding * 1.2f + -0.8f > floodedness)
         return FluidStatus{NO_FLUID_LEVEL, false};
 
-    const int32_t spreadCellY = floorDiv(location.mY, 40);
-    float spread = mNoises.mSpread->getValue(static_cast<float>(floorDiv(location.mX, 16)),
+    const int32_t spreadCellY = NoiseMath::floorDiv(location.mY, 40);
+    float spread = mNoises.mSpread->getValue(static_cast<float>(NoiseMath::floorDiv(location.mX, 16)),
                                              static_cast<float>(spreadCellY) / 1.4f,
-                                             static_cast<float>(floorDiv(location.mZ, 16)));
+                                             static_cast<float>(NoiseMath::floorDiv(location.mZ, 16)));
     spread = spread * 10.0f / 3.0f;
     const int32_t truncated = static_cast<int32_t>(spread);
     const int32_t quantized = truncated - (static_cast<float>(truncated) > spread ? 1 : 0);
     const int32_t level = 3 * quantized + 8 * (5 * spreadCellY) + 20;
 
     const bool lava = level <= -10 && std::fabs(mNoises.mLava->getValue(
-            static_cast<float>(floorDiv(location.mX, 64)), static_cast<float>(spreadCellY),
-            static_cast<float>(floorDiv(location.mZ, 64)))) > 0.3f;
+            static_cast<float>(NoiseMath::floorDiv(location.mX, 64)), static_cast<float>(spreadCellY),
+            static_cast<float>(NoiseMath::floorDiv(location.mZ, 64)))) > 0.3f;
     return FluidStatus{level < lowestSurface ? level : static_cast<int32_t>(lowestSurface), lava};
 }
 
@@ -191,9 +185,9 @@ OverworldAquifer::Substance OverworldAquifer::compute(int32_t x, int32_t y, int3
     if (y <= LAVA_FLOOR_Y)
         return Substance{LAVA_FLOOR_Y + 1, 0.0f, true};
 
-    const int32_t cellX = floorDiv(x - 5, 16);
-    const int32_t cellY = floorDiv(y + 1, 12);
-    const int32_t cellZ = floorDiv(z - 5, 16);
+    const int32_t cellX = NoiseMath::floorDiv(x - 5, 16);
+    const int32_t cellY = NoiseMath::floorDiv(y + 1, 12);
+    const int32_t cellZ = NoiseMath::floorDiv(z - 5, 16);
 
     int64_t distances[3] = {
             std::numeric_limits<int64_t>::max(),

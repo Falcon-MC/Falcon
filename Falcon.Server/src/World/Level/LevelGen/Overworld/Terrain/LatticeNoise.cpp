@@ -1,7 +1,8 @@
 #include "World/Level/LevelGen/Overworld/Terrain/LatticeNoise.h"
 
+#include "World/Level/LevelGen/Noise/NoiseMath.h"
+
 #include <cmath>
-#include <limits>
 
 namespace {
 
@@ -23,14 +24,6 @@ namespace {
             {-1.0f, 1.0f,  0.0f},
             {0.0f,  -1.0f, -1.0f}
     };
-
-    // cvttss2si gives INT32_MIN for nan and out-of-range values; a plain cast is undefined there
-    int32_t truncateToInt(float value) {
-        if (!(value >= -2147483648.0f && value < 2147483648.0f))
-            return std::numeric_limits<int32_t>::min();
-
-        return static_cast<int32_t>(value);
-    }
 
     float gradient(int32_t hash, float x, float y, float z) {
         const float *g = GRADIENTS[hash & 15];
@@ -69,8 +62,8 @@ void LatticeNoise::addLattice(float *output, const float *start, int32_t countX,
 
     // y lattice points in the origin's own unit keep the origin's fraction instead of their own
     const float originY = scale[1] * 0.0f + mOriginY;
-    const int32_t originSection = truncateToInt(originY);
-    const float originFraction = originY - static_cast<float>(truncateToInt(originY));
+    const int32_t originSection = NoiseMath::truncateToInt(originY);
+    const float originFraction = originY - static_cast<float>(NoiseMath::truncateToInt(originY));
 
     int32_t cachedSection = -1;
     float corners[4] = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -79,7 +72,7 @@ void LatticeNoise::addLattice(float *output, const float *start, int32_t countX,
     for (int32_t ix = 0; ix < countX; ix++) {
         const float fx = (static_cast<float>(ix) + start[0]) * scale[0] + mOriginX;
         const float floorX = std::floor(fx);
-        const int32_t sectionX = truncateToInt(floorX) & 0xFF;
+        const int32_t sectionX = NoiseMath::truncateToInt(floorX) & 0xFF;
         const float localX = fx - floorX;
         const float fadeX = fadePolynomial(localX) * (localX * localX * localX);
         const float localX1 = localX + -1.0f;
@@ -87,7 +80,7 @@ void LatticeNoise::addLattice(float *output, const float *start, int32_t countX,
         for (int32_t iz = 0; iz < countZ; iz++) {
             const float fz = (static_cast<float>(iz) + start[2]) * scale[2] + mOriginZ;
             const float floorZ = std::floor(fz);
-            const int32_t sectionZ = truncateToInt(floorZ) & 0xFF;
+            const int32_t sectionZ = NoiseMath::truncateToInt(floorZ) & 0xFF;
             const float localZ = fz - floorZ;
             const float fadeZ = fadePolynomial(localZ) * (localZ * localZ * localZ);
             const float localZ1 = localZ + -1.0f;
@@ -95,12 +88,12 @@ void LatticeNoise::addLattice(float *output, const float *start, int32_t countX,
             for (int32_t iy = 0; iy < countY; iy++) {
                 const float fy = (static_cast<float>(iy) + start[1]) * scale[1] + mOriginY;
                 const float floorY = std::floor(fy);
-                const int32_t sectionY = truncateToInt(floorY) & 0xFF;
+                const int32_t sectionY = NoiseMath::truncateToInt(floorY) & 0xFF;
                 const float localY = fy - floorY;
 
                 bool compute = true;
                 float gradientY = originFraction;
-                if (originSection != truncateToInt(fy)) {
+                if (originSection != NoiseMath::truncateToInt(fy)) {
                     if (sectionY == cachedSection) {
                         // the game reuses the corner values of the first point of a y section
                         compute = false;
