@@ -11,7 +11,6 @@
 #include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
 
 namespace {
-    const int32_t MAX_BLOCK_LIGHT = 9;
     const int32_t FULL_SNOW_HEIGHT = 7;
 
     const BlockState &iceState() {
@@ -91,11 +90,9 @@ bool OverworldFreezer::_isCold(const LevelChunk &chunk, int32_t x, int32_t y, in
 
     const int32_t worldX = (chunk.getX() << 4) + x;
     const int32_t worldZ = (chunk.getZ() << 4) + z;
-    if (BiomeTemperature::at((int32_t) chunk.getBiomeAt(x, y, z), worldX, y, worldZ) > 0.15f)
-        return false;
-
-    // the stored block light, which the chunk does not have yet while it is post-processed
-    return chunk.getBlockLight(x, y, z) <= MAX_BLOCK_LIGHT;
+    // the game also wants a stored block light of at most 9, always true here: the chunk has no light yet while it
+    // is post-processed
+    return BiomeTemperature::at((int32_t) chunk.getBiomeAt(x, y, z), worldX, y, worldZ) <= 0.15f;
 }
 
 bool OverworldFreezer::_shouldFreeze(const LevelChunk &chunk, int32_t x, int32_t y, int32_t z) {
