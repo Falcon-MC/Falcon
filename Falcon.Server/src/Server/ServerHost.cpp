@@ -124,15 +124,34 @@ namespace {
     // content has no log of its own: packs and scripts are told apart from the server by their log area
     class ContentLogFileEndPoint : public FileLogEndPoint {
     public:
-        using FileLogEndPoint::FileLogEndPoint;
+        ContentLogFileEndPoint(const std::string &path, LogLevel minimumLevel)
+                : FileLogEndPoint(path), mMinimumLevel(minimumLevel) {}
 
         void log(const LogDetails &details) override {
+            if (details.mLevel < mMinimumLevel)
+                return;
             if (details.mArea == LogAreaID::Script || details.mArea == LogAreaID::Resource)
                 FileLogEndPoint::log(details);
         }
+
+    private:
+        LogLevel mMinimumLevel;
     };
 
-    std::shared_ptr<ILogEndPoint> openContentLog() {
+    LogLevel toLogLevel(ContentLogLevel level) {
+        switch (level) {
+            case ContentLogLevel::Error:
+                return LogLevel::Error;
+            case ContentLogLevel::Warning:
+                return LogLevel::Warning;
+            case ContentLogLevel::Verbose:
+                return LogLevel::Verbose;
+            default:
+                return LogLevel::Info;
+        }
+    }
+
+    std::shared_ptr<ILogEndPoint> openContentLog(ContentLogLevel level) {
         const std::string directory = ServerPaths::file("logs");
         std::error_code error;
         std::filesystem::create_directories(directory, error);
@@ -147,7 +166,7 @@ namespace {
         std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d_%H-%M-%S", std::localtime(&now));
 
         const std::string path = directory + "/ContentLog_" + timestamp;
-        auto endPoint = std::make_shared<ContentLogFileEndPoint>(path + ".txt");
+        auto endPoint = std::make_shared<ContentLogFileEndPoint>(path + ".txt", toLogLevel(level));
         if (!endPoint->isOpen()) {
             LOG_WARN(LogAreaID::Server, "Could not open the content log %s.txt", path.c_str());
             return nullptr;
@@ -246,7 +265,7 @@ bool ServerHost::start(const ServerHostOptions &options) {
     logStartupBanner(properties);
 
     if (properties.getContentLogFileEnabled()) {
-        mContentLogEndPoint = openContentLog();
+        mContentLogEndPoint = openContentLog(properties.getContentLogLevel());
         if (mContentLogEndPoint != nullptr)
             BedrockLog::addEndPoint(mContentLogEndPoint);
     }
