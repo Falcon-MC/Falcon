@@ -19,6 +19,8 @@ falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE FalconItemData S
         DELIMITER falconitems OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ItemPaletteJson.h")
 falcon_bedrock_data_embed_binary(FILE item_components.nbt NAMESPACE FalconItemData SYMBOL kItemComponentsNbt
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ItemComponentsNbt.h")
+falcon_bedrock_data_embed_binary(FILE structures.pack NAMESPACE FalconStructureData SYMBOL kStructuresPack
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/StructuresPack.h")
 set(FALCON_OLDER_DATA_PROTOCOLS 2169)
 set(FALCON_OLDER_DATA_INCLUDES "")
 set(FALCON_OLDER_DATA_ENTRIES "")
