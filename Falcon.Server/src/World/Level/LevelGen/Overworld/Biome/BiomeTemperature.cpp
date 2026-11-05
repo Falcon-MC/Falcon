@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace {
-    // Dimension sea level (dimension +204)
+    // dimension +204, set to 63 by the overworld dimension (5 in flat worlds, sub_14717BC50)
     constexpr int32_t SEA_LEVEL = 63;
     // 17 for worlds of 1.18 and later, 1 before (version 1.18.0 at qword_1528D9DD0)
     constexpr int32_t COOLING_START = SEA_LEVEL + 17;
