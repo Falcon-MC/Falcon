@@ -10,7 +10,9 @@
 #include <string>
 
 class LevelChunk;
+class OverworldClimate;
 class OverworldSurfaceBuilder;
+class OverworldTerrainFiller;
 class SurfaceOverwriteBuilder;
 class VanillaOverworldBiomeSource;
 
@@ -45,7 +47,7 @@ public:
     static int64_t chunkHash(int32_t chunkX, int32_t chunkZ);
 
 private:
-    void _generateTerrain(LevelChunk &chunk, DensityChunkCache &chunkCache, int32_t *heightMap) const;
+    void _generateTerrain(LevelChunk &chunk, int32_t *heightMap) const;
 
     void _generateBiomeMap(LevelChunk &chunk, DensityChunkCache &chunkCache, const int32_t *heightMap) const;
 
@@ -55,4 +57,6 @@ private:
     std::unique_ptr<VanillaOverworldBiomeSource> mBiomeSource;
     std::unique_ptr<OverworldSurfaceBuilder> mSurfaceBuilder;
     std::unique_ptr<SurfaceOverwriteBuilder> mSurfaceOverwriteBuilder;
+    std::unique_ptr<OverworldClimate> mClimate;
+    std::unique_ptr<OverworldTerrainFiller> mTerrainFiller;
 };

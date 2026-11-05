@@ -14,7 +14,6 @@ namespace {
     constexpr double LIMIT_NOISE_DIVISOR = 512.0;
     constexpr double RESULT_DIVISOR = 128.0;
     constexpr double BASE_SCALE = 684.412;
-    constexpr const char *TERRAIN_NOISE_NAME = "minecraft:terrain";
 
     double clampValue(double value, double min, double max) {
         return value < min ? min : std::min(value, max);
@@ -156,9 +155,4 @@ DensityFunctionPtr DensityBase3dNoise::oldBlendedNoise(XoroshiroRandom &random, 
 
     return std::make_shared<OldBlendedNoise>(std::move(minLimitNoise), std::move(maxLimitNoise), std::move(mainNoise),
                                              xzScale, yScale, xzFactor, yFactor, smearScaleMultiplier);
-}
-
-DensityFunctionPtr DensityBase3dNoise::overworld(const XoroshiroPositionalFactory &noiseFactory) {
-    XoroshiroRandom random = noiseFactory.hashOf(TERRAIN_NOISE_NAME);
-    return oldBlendedNoise(random, 0.25, 0.125, 80.0, 160.0, 8.0);
 }

@@ -5129,38 +5129,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Material/Aquifer.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Material/Aquifer.h",
-      "sha256": "a0482691bf11ce90f8a3aa7401d9826bd8e6707d81e409288e0c8fac48fdbcdb",
-      "classes": [
-        "Aquifer",
-        "FluidStatus"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Material/MaterialRule.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Material/MaterialRule.h",
-      "sha256": "3f18e6ca16b340f746ae4a30fd2813a312718a9a33428444eb19562937895d97",
-      "classes": []
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Material/MultiMaterial.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Material/MultiMaterial.h",
-      "sha256": "6c982d6452fa55cb939360b101c5e2108246a5785110202d13e9329a629be5fa",
-      "classes": [
-        "MultiMaterial"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Material/OreVeinifier.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Material/OreVeinifier.h",
-      "sha256": "9ff995c49419690705c15c6bf9138854d48078baca4687e625e3c5f6d1fe8a30",
-      "classes": [
-        "OreVeinifier",
-        "VeinType"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Nether/Biome/NetherBiomeResult.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Biome/NetherBiomeResult.h",
       "sha256": "514c121cfe134fff221a5bf8ae94e4bd452c8a08fed4575ddcbbfcc565377a61",
@@ -5553,14 +5521,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensityDepth.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensityDepth.h",
-      "sha256": "86e5a678ac7d983f1071d654d8eddfd7b5fd1601ce3e2cf062ddbc8cbb506dc8",
-      "classes": [
-        "DensityDepth"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensityErosion.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensityErosion.h",
       "sha256": "576f99285880a15a51a54d0dd2f65b1fcdbb7f5fe12fa4eb7ac8d3ca5b366c73",
@@ -5569,67 +5529,11 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensityFactor.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensityFactor.h",
-      "sha256": "2bbd6332da6bf6c6f762d9fc703abfb23202b9d34dfacfec8acba7f13338b43f",
-      "classes": [
-        "DensityFactor"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensityJaggedness.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensityJaggedness.h",
-      "sha256": "bdceecffc8e9956055adced520859df0a8e2d47cc3c6820ff0f2e785adf5f597",
-      "classes": [
-        "DensityJaggedness"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensityOffset.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensityOffset.h",
-      "sha256": "2659cbfffc9a49c76744574ac90ca3828965dae756068106fe7ae49d3c328fb7",
-      "classes": [
-        "DensityOffset"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensityOreVeins.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensityOreVeins.h",
-      "sha256": "b0d855cdb9b4cce4476b63d60f8c64e9766c0c964bc35859b227cc95f56375ac",
-      "classes": [
-        "DensityOreVeins"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensityRidges.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensityRidges.h",
       "sha256": "62bb9cfa3ffd7a3d9852ee490169af5cd3bc8c7089a09df2114adf9627909248",
       "classes": [
         "DensityRidges"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensityRidgesFolded.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensityRidgesFolded.h",
-      "sha256": "6d158657487d5f073e991b15888130b13cf40056edc0e86ae0c20e0894fef8d0",
-      "classes": [
-        "DensityRidgesFolded"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Density/DensitySlopedCheese.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/DensitySlopedCheese.h",
-      "sha256": "281e9423142cfb6ba486759e013f5c7b8c3f9123819a56da5a1df66114e886a5",
-      "classes": [
-        "DensitySlopedCheese"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Density/OverworldCavesDensity.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Density/OverworldCavesDensity.h",
-      "sha256": "ba83c096e4936f1302199d236c9404498572ea12b4b090f576516beded848a12",
-      "classes": [
-        "OverworldCavesDensity"
       ]
     },
     {
@@ -10406,21 +10310,6 @@
       "sha256": "b504561e376cc54ebfb1ecd38b538f3f83e9f1347e56b24d0dbf0addaaab472b"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Material/Aquifer.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Material/Aquifer.cpp",
-      "sha256": "841d71a1c1b37fbaefdfaaaec5432dae1f43bee38db5b88ed36b979101be2e24"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Material/MultiMaterial.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Material/MultiMaterial.cpp",
-      "sha256": "a2ae203c90ba26faa0f5b28bf94b7133f9d2c43757465a5413801461e5e2b1c5"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Material/OreVeinifier.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Material/OreVeinifier.cpp",
-      "sha256": "1f1c5faf5cd7f772c139d4ac5be3cd09aedba1a46c790d247db5867c2b5b5c5f"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Nether/Biome/VanillaNetherBiomeSource.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Biome/VanillaNetherBiomeSource.cpp",
       "sha256": "ced555bf09ed6babad5e8393095471dfc3f806704e68828767d6dc2f11c92bcd"
@@ -10651,54 +10540,14 @@
       "sha256": "7837ca203cf852632b3c4245753042cd7bbb3de52317446579e744efb971047e"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensityDepth.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensityDepth.cpp",
-      "sha256": "bc932ec3e21390b85c11b8ba802a0cad83af42956fa1403e93bf31abeca01d2b"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensityErosion.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensityErosion.cpp",
       "sha256": "1d90a9429910166420f0c5533b173813b2883fa06d38ebf8f1af642c0ac37c33"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensityFactor.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensityFactor.cpp",
-      "sha256": "5aa54646a0dad95154c56d6377834b89ddd5774c526a322e344044df0cf2dca6"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensityJaggedness.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensityJaggedness.cpp",
-      "sha256": "d375a33a85df1e66c46784f862639e24462f52e7fd010816e892c759d76d62ac"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensityOffset.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensityOffset.cpp",
-      "sha256": "89459c85933cc88af9c5b8ee8b4d4cd0e5330328dbeaa45e529a7736c5cdc83c"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensityOreVeins.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensityOreVeins.cpp",
-      "sha256": "fcbb4ca4a84020092a72c7f6cc57a3187f04307b7c28df87b196513e0fda0e55"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensityRidges.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensityRidges.cpp",
       "sha256": "0ea6ef9e0ce95c791f11f2db88513607f9ddcb5c9a81d2736a148be7aa9c0537"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensityRidgesFolded.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensityRidgesFolded.cpp",
-      "sha256": "03e5c3c840c389255cba9df3efcb6b64cf2fa45a2e2ff6f5951e6a45a4d600d5"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Density/DensitySlopedCheese.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/DensitySlopedCheese.cpp",
-      "sha256": "7194857e1837c0443f8824955f7208cb19143c999cc292c3a8cba6fc69d0668e"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Density/OverworldCavesDensity.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Density/OverworldCavesDensity.cpp",
-      "sha256": "5cd715eb647dfe5200ebe6adf1aaf712c1476bcd56e8e8b11b7de58eaf937346"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/AzaleaRootSystemFeature.cpp",
