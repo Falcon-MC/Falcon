@@ -10,6 +10,8 @@ public:
     const BlockState *mTopBlock = nullptr;
     const BlockState *mMidBlock = nullptr;
     const BlockState *mSeaFloorBlock = nullptr;
+    const BlockState *mFoundationBlock = nullptr;
+    const BlockState *mSeaBlock = nullptr;
     int32_t mSeaFloorDepth = 0;
 };
 
@@ -22,8 +24,17 @@ public:
     const BlockState *mSeaFloorBlock = nullptr;
 };
 
+// the "type" of a biome's minecraft:surface_builder
+enum class SurfaceBuilderType {
+    Overworld,
+    Mesa,
+    Swamp,
+    FrozenOcean
+};
+
 class SurfaceBuilderComponent {
 public:
+    SurfaceBuilderType mType = SurfaceBuilderType::Overworld;
     SurfaceMaterialAttributes mSurfaceMaterial;
     std::vector<SurfaceMaterialAdjustmentAttributes> mSurfaceMaterialAdjustments;
 

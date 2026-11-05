@@ -36,6 +36,11 @@ namespace {
         return state;
     }
 
+    const BlockState &waterState() {
+        static const BlockState state = VanillaBlocks::WATER().toBlockState();
+        return state;
+    }
+
     const BlockState &snowState() {
         static const BlockState state = VanillaBlocks::SNOW().toBlockState();
         return state;
@@ -88,12 +93,17 @@ namespace {
 
     using ComponentMap = std::unordered_map<int32_t, SurfaceBuilderComponent>;
 
+    // every biome here has a stone foundation and a water sea in the BDS 1.26.61 biome definitions
     void addComponent(ComponentMap &components, int32_t biomeId, const BlockState &topBlock,
-                      const BlockState &midBlock, const BlockState &seaFloorBlock, int32_t seaFloorDepth) {
+                      const BlockState &midBlock, const BlockState &seaFloorBlock, int32_t seaFloorDepth,
+                      SurfaceBuilderType type = SurfaceBuilderType::Overworld) {
         SurfaceBuilderComponent component;
+        component.mType = type;
         component.mSurfaceMaterial.mTopBlock = &topBlock;
         component.mSurfaceMaterial.mMidBlock = &midBlock;
         component.mSurfaceMaterial.mSeaFloorBlock = &seaFloorBlock;
+        component.mSurfaceMaterial.mFoundationBlock = &stoneState();
+        component.mSurfaceMaterial.mSeaBlock = &waterState();
         component.mSurfaceMaterial.mSeaFloorDepth = seaFloorDepth;
         components.emplace(biomeId, component);
     }
@@ -121,7 +131,8 @@ namespace {
                           &stoneState(), &stoneState(), nullptr);
             addComponent(result, BiomeIds::FOREST, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::TAIGA, grassBlockState(), dirtState(), gravelState(), 7);
-            addComponent(result, BiomeIds::SWAMPLAND, grassBlockState(), dirtState(), gravelState(), 7);
+            addComponent(result, BiomeIds::SWAMPLAND, grassBlockState(), dirtState(), gravelState(), 7,
+                         SurfaceBuilderType::Swamp);
             addComponent(result, BiomeIds::RIVER, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::FROZEN_RIVER, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::ICE_PLAINS, grassBlockState(), dirtState(), gravelState(), 7);
@@ -145,15 +156,19 @@ namespace {
             addComponent(result, BiomeIds::EXTREME_HILLS_PLUS_TREES, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::SAVANNA, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::SAVANNA_PLATEAU, grassBlockState(), dirtState(), gravelState(), 7);
-            addComponent(result, BiomeIds::MESA, redSandState(), hardenedClayState(), gravelState(), 7);
-            addComponent(result, BiomeIds::MESA_PLATEAU_STONE, redSandState(), hardenedClayState(), gravelState(), 7);
+            addComponent(result, BiomeIds::MESA, redSandState(), hardenedClayState(), gravelState(), 7,
+                         SurfaceBuilderType::Mesa);
+            addComponent(result, BiomeIds::MESA_PLATEAU_STONE, redSandState(), hardenedClayState(), gravelState(), 7,
+                         SurfaceBuilderType::Mesa);
             addComponent(result, BiomeIds::WARM_OCEAN, grassBlockState(), dirtState(), sandState(), 3);
             addComponent(result, BiomeIds::LUKEWARM_OCEAN, grassBlockState(), dirtState(), sandState(), 3);
             addComponent(result, BiomeIds::DEEP_LUKEWARM_OCEAN, grassBlockState(), dirtState(), sandState(), 7);
             addComponent(result, BiomeIds::COLD_OCEAN, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::DEEP_COLD_OCEAN, grassBlockState(), dirtState(), gravelState(), 7);
-            addComponent(result, BiomeIds::FROZEN_OCEAN, grassBlockState(), dirtState(), gravelState(), 7);
-            addComponent(result, BiomeIds::DEEP_FROZEN_OCEAN, grassBlockState(), dirtState(), gravelState(), 7);
+            addComponent(result, BiomeIds::FROZEN_OCEAN, grassBlockState(), dirtState(), gravelState(), 7,
+                         SurfaceBuilderType::FrozenOcean);
+            addComponent(result, BiomeIds::DEEP_FROZEN_OCEAN, grassBlockState(), dirtState(), gravelState(), 7,
+                         SurfaceBuilderType::FrozenOcean);
             addComponent(result, BiomeIds::BAMBOO_JUNGLE, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::SUNFLOWER_PLAINS, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::EXTREME_HILLS_MUTATED, grassBlockState(), dirtState(), gravelState(), 7);
@@ -174,7 +189,8 @@ namespace {
                           &stoneState(), &stoneState(), nullptr);
             addAdjustment(result, BiomeIds::SAVANNA_MUTATED, -0.061000000685453415f, 0.21199999749660492f,
                           &coarseDirtState(), nullptr, nullptr);
-            addComponent(result, BiomeIds::MESA_BRYCE, redSandState(), hardenedClayState(), gravelState(), 7);
+            addComponent(result, BiomeIds::MESA_BRYCE, redSandState(), hardenedClayState(), gravelState(), 7,
+                         SurfaceBuilderType::Mesa);
             addComponent(result, BiomeIds::JAGGED_PEAKS, snowState(), stoneState(), stoneState(), 7);
             addComponent(result, BiomeIds::FROZEN_PEAKS, snowState(), snowState(), iceState(), 7);
             addAdjustment(result, BiomeIds::FROZEN_PEAKS, -0.5f, 0.20000000298023224f,
@@ -202,7 +218,8 @@ namespace {
             addAdjustment(result, BiomeIds::STONY_PEAKS, -0.012500000186264515f, 0.012500000186264515f,
                           &calciteState(), &calciteState(), nullptr);
             addComponent(result, BiomeIds::DEEP_DARK, grassBlockState(), dirtState(), gravelState(), 7);
-            addComponent(result, BiomeIds::MANGROVE_SWAMP, mudState(), mudState(), mudState(), 7);
+            addComponent(result, BiomeIds::MANGROVE_SWAMP, mudState(), mudState(), mudState(), 7,
+                         SurfaceBuilderType::Swamp);
             addComponent(result, BiomeIds::CHERRY_GROVE, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::PALE_GARDEN, grassBlockState(), dirtState(), gravelState(), 7);
 
