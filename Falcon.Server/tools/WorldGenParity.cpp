@@ -21,7 +21,8 @@
  *   - blocks compare layer 0 only; waterlogging (layer 1) is ignored;
  *   - coarse class: air, fluid (water or lava, still or flowing) or solid (everything else);
  *   - surface height: the highest Y whose layer 0 is not air, MIN_Y - 1 for an empty column;
- *   - biomes are sampled once per 4x4x4 cell, at the cell's lowest corner;
+ *   - biomes are sampled once per 4x4x4 cell, at the cell's lowest corner; above the highest non-empty BDS section
+ *     the generated biomes are read from that section, which the game saves in place of the sections above;
  *   - each block position belongs to the highest category of its two blocks, in the order base terrain
  *     (air, stone, deepslate, bedrock, water, lava), surface (the blocks surface builders place), features
  *     (everything else).
@@ -426,6 +427,19 @@ namespace {
         return state.mName + " " + state.mStates.toString();
     }
 
+    /**
+     * The game saves no biomes above the highest non-empty section and repeats that section instead, so a generated
+     * biome there is read from the section the saved world repeats, whatever blocks the generated chunk has.
+     */
+    uint32_t savedBiomeAt(const LevelChunk &generated, const LevelChunk &expected, int x, int32_t y, int z) {
+        const int32_t savedSections = std::max(1, expected.getNetworkSubChunkCount());
+        const int32_t section = (y - LevelChunk::MIN_Y) >> 4;
+        if (section < savedSections)
+            return generated.getBiomeAt(x, y, z);
+
+        return generated.getBiomeAt(x, LevelChunk::MIN_Y + ((savedSections - 1) << 4) + ((y - LevelChunk::MIN_Y) & 15), z);
+    }
+
     int32_t surfaceHeight(const LevelChunk &chunk, int x, int z, const BlockClassifier &classifier) {
         for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
             if (!classifier.isAir(chunk.getBlock(x, y, z)))
@@ -580,11 +594,15 @@ namespace {
                 for (int z = 0; z < 16; z += BIOME_CELL_SIZE) {
                     for (int32_t y = LevelChunk::MIN_Y; y <= LevelChunk::MAX_Y; y += BIOME_CELL_SIZE) {
                         const uint32_t expectedBiome = expected.getBiomeAt(x, y, z);
-                        const uint32_t generatedBiome = generated.getBiomeAt(x, y, z);
+                        const uint32_t generatedBiome = savedBiomeAt(generated, expected, x, y, z);
                         score.mBiomes.add(expectedBiome == generatedBiome);
                         mBiomesByExpected[expectedBiome].add(expectedBiome == generatedBiome);
-                        if (expectedBiome != generatedBiome)
-                            mBiomeMismatches[{mBiomeNames.get(expectedBiome), mBiomeNames.get(generatedBiome)}]++;
+                        if (expectedBiome != generatedBiome) {
+                            const std::pair<std::string, std::string> pair{mBiomeNames.get(expectedBiome),
+                                                                           mBiomeNames.get(generatedBiome)};
+                            if (mBiomeMismatches[pair]++ < 3)
+                                mBiomeSamples[pair].push_back({expected.getX() * 16 + x, y, expected.getZ() * 16 + z});
+                        }
                     }
                 }
             }
@@ -669,9 +687,16 @@ namespace {
                                            (unsigned long long) entry.second.mTotal, entry.second.percent());
 
             LOG_INFO(LogAreaID::Level, "Top biome confusions (expected -> generated)");
-            for (const std::pair<std::pair<std::string, std::string>, uint64_t> &entry: _top(mBiomeMismatches))
-                LOG_INFO(LogAreaID::Level, "  %10llu  %s -> %s", (unsigned long long) entry.second,
-                                           entry.first.first.c_str(), entry.first.second.c_str());
+            for (const std::pair<std::pair<std::string, std::string>, uint64_t> &entry: _top(mBiomeMismatches)) {
+                std::string line = formatted("  %10llu  %s -> %s", (unsigned long long) entry.second,
+                                             entry.first.first.c_str(), entry.first.second.c_str());
+                const auto samples = mBiomeSamples.find(entry.first);
+                if (samples != mBiomeSamples.end()) {
+                    for (const std::array<int32_t, 3> &sample: samples->second)
+                        line += formatted("  (%d %d %d)", sample[0], sample[1], sample[2]);
+                }
+                LOG_INFO(LogAreaID::Level, "%s", line.c_str());
+            }
         }
 
         bool writeCsv(const std::string &path) const {
@@ -838,6 +863,7 @@ namespace {
         };
 
         std::map<std::pair<int, int>, ShapeMismatch> mShapeMismatches;
+        std::map<std::pair<std::string, std::string>, std::vector<std::array<int32_t, 3>>> mBiomeSamples;
         Ratio mHeights;
         Ratio mBiomes;
         Ratio mCategories[CATEGORY_COUNT];
@@ -879,7 +905,7 @@ namespace {
                 const BlockState &expectedBlock = expected.getBlock(x, y, z);
                 const BlockState &generatedBlock = generated.getBlock(x, y, z);
                 const uint32_t expectedBiome = expected.getBiomeAt(x, y, z);
-                const uint32_t generatedBiome = generated.getBiomeAt(x, y, z);
+                const uint32_t generatedBiome = savedBiomeAt(generated, expected, x, y, z);
                 LOG_INFO(LogAreaID::Level, "%c%c %4d  %-40s %-40s %-22s %s",
                                            expectedBlock == generatedBlock ? ' ' : '*',
                                            expectedBiome == generatedBiome ? ' ' : '*', y,

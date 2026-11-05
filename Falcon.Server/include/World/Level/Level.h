@@ -343,8 +343,6 @@ public:
 
     int32_t pickBiome(int32_t x, int32_t y, int32_t z) const { return mGenerator->pickBiome(x, y, z); }
 
-    OverworldBiomeResult pickBiomeResult(int32_t x, int32_t y, int32_t z) const;
-
     size_t processGeneratedChanges();
 
     std::vector<int64_t> consumeRepopulatedChunks();

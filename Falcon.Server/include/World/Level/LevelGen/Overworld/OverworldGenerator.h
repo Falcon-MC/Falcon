@@ -1,7 +1,6 @@
 #pragma once
 
 #include "World/Level/LevelGen/ChunkGenerator.h"
-#include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeResult.h"
 #include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/OverworldNoiseHolder.h"
 
@@ -10,11 +9,11 @@
 #include <string>
 
 class LevelChunk;
+class OverworldBiomeParameters;
 class OverworldClimate;
 class OverworldSurfaceBuilder;
 class OverworldTerrainFiller;
 class SurfaceOverwriteBuilder;
-class VanillaOverworldBiomeSource;
 
 class OverworldGenerator : public ChunkGenerator {
 public:
@@ -40,8 +39,6 @@ public:
 
     int32_t pickBiome(int32_t x, int32_t y, int32_t z) const override;
 
-    OverworldBiomeResult pickBiomeResult(int32_t x, int32_t y, int32_t z) const;
-
     static int64_t parseSeed(const std::string &value);
 
     static int64_t chunkHash(int32_t chunkX, int32_t chunkZ);
@@ -49,14 +46,14 @@ public:
 private:
     void _generateTerrain(LevelChunk &chunk, int32_t *heightMap) const;
 
-    void _generateBiomeMap(LevelChunk &chunk, DensityChunkCache &chunkCache, const int32_t *heightMap) const;
+    void _generateBiomeMap(LevelChunk &chunk) const;
 
     int64_t mSeed;
     int32_t mAirHash;
     std::unique_ptr<OverworldNoiseHolder> mNoiseHolder;
-    std::unique_ptr<VanillaOverworldBiomeSource> mBiomeSource;
     std::unique_ptr<OverworldSurfaceBuilder> mSurfaceBuilder;
     std::unique_ptr<SurfaceOverwriteBuilder> mSurfaceOverwriteBuilder;
     std::unique_ptr<OverworldClimate> mClimate;
     std::unique_ptr<OverworldTerrainFiller> mTerrainFiller;
+    std::unique_ptr<OverworldBiomeParameters> mBiomeParameters;
 };
