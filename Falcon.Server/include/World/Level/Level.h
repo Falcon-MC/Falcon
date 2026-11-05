@@ -345,6 +345,11 @@ public:
 
     const ChunkGenerator &getGenerator() const { return *mGenerator; }
 
+    // for work that may outlive the level, such as a biome search on its own thread
+    std::shared_ptr<const ChunkGenerator> shareGenerator() const {
+        return mGenerator;
+    }
+
     size_t processGeneratedChanges();
 
     std::vector<int64_t> consumeRepopulatedChunks();
@@ -395,7 +400,7 @@ private:
     int64_t mSeed;
     DimensionType mDimension;
     uint32_t mWorldId = 0;
-    std::unique_ptr<ChunkGenerator> mGenerator;
+    std::shared_ptr<ChunkGenerator> mGenerator;
     LevelStorage mStorage;
     BlockUpdateScheduler mBlockUpdateScheduler;
     LiquidPhysicsSystem mLiquidPhysics;

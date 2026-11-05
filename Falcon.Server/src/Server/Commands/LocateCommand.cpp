@@ -130,15 +130,16 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
     ServerNetworkHandler &handler = mHandler;
     Level &level = handler.getLevelFor(*player);
 
-    const ChunkGenerator &generator = level.getGenerator();
+    // shared so a world unloaded during the search does not take the generator with it
+    const std::shared_ptr<const ChunkGenerator> generator = level.shareGenerator();
 
-    std::thread search([&handler, &level, &generator, requesterId, requestOrigin, biomeName, biomeId, teleport,
+    std::thread search([&handler, &level, generator, requesterId, requestOrigin, biomeName, biomeId, teleport,
                         originX, originY, originZ]() {
-        BiomeSearch::Result result = BiomeSearch::findNearest(generator, Vector3i(originX, originY, originZ),
+        BiomeSearch::Result result = BiomeSearch::findNearest(*generator, Vector3i(originX, originY, originZ),
                                                               biomeId);
         if (!result.mFound) {
-            result = BiomeSearch::findNearest(generator, Vector3i(originX + RETRY_OFFSET, originY + RETRY_OFFSET,
-                                                                  originZ + RETRY_OFFSET), biomeId);
+            result = BiomeSearch::findNearest(*generator, Vector3i(originX + RETRY_OFFSET, originY + RETRY_OFFSET,
+                                                                   originZ + RETRY_OFFSET), biomeId);
         }
         gSearchRunning = false;
 
