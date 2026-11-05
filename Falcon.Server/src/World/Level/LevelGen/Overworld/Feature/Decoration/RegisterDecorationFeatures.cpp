@@ -17,7 +17,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/FlowerBedFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/FlowerForestFoliageFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/ForestFlowerFoliageFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/GeodeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/HugeMushroomFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/IcePatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/IceSpikeFeature.h"
@@ -83,7 +82,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<FlowerBedFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<FlowerForestFoliageFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<ForestFlowerFoliageFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<GeodeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<HugeMushroomFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<IcePatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<IceSpikeFeature>());

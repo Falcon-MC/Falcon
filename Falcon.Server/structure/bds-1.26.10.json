@@ -5657,14 +5657,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/GeodeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/GeodeFeature.h",
-      "sha256": "7f242dd8192e42f4aa8dbf46d53a2d26dbc1b7c4076732a52b4ad7f900eef3e5",
-      "classes": [
-        "GeodeFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/HugeMushroomFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/HugeMushroomFeature.h",
       "sha256": "055833a0192091cf3f9c608dd9b2f0da2f943e9303aaf396d511b0866d265eb2",
@@ -10239,11 +10231,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/ForestFlowerFoliageFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/ForestFlowerFoliageFeature.cpp",
       "sha256": "c2345162d98064617b9efddcbd18136ee87d0ba194f72377c0f9fc38dc7e6f20"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/GeodeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/GeodeFeature.cpp",
-      "sha256": "0173c5d7f4aa66d7f3c9fabea4e7a0152639bddd909cd67ceddd96e539e31afb"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/HugeMushroomFeature.cpp",
