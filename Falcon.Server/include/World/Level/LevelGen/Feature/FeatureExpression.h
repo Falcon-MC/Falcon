@@ -6,7 +6,8 @@
 #include <vector>
 
 // the Molang subset the overworld feature rules and scatter features write their scatter with: numbers, the
-// variables and queries below, math.ceil and math.max, arithmetic, comparisons, && and || and the ternary;
+// variables and queries below, query.has_biome_tag, math.ceil and math.max, arithmetic, comparisons, && and ||
+// and the ternary;
 // evaluated in floats like the game
 class FeatureExpression {
 public:
@@ -19,12 +20,16 @@ public:
 
         // query.heightmap, query.above_top_solid and query.noise, each with two arguments
         virtual float query(const std::string &name, float first, float second) const = 0;
+
+        // query.has_biome_tag, for the biome at the position the expression is evaluated at
+        virtual bool hasBiomeTag(const std::string &tag) const = 0;
     };
 
     enum class Operation : uint8_t {
         Constant,
         Variable,
         Query,
+        BiomeTag,
         Ceil,
         Max,
         Negate,
