@@ -72,7 +72,7 @@ void PlayerRaidState::_tickTrigger(ServerNetworkHandler &owner, ServerPlayer &pl
         return;
 
     // the omen position is used once, then the player's own position until a village takes the raid (sub_147737BD0,
-    // then the legacy trigger sub_14CE891B0)
+    // then the legacy trigger sub_14CE891B0): player.json only drops raid_trigger through its triggered_event
     const Vector3i position = mHasOmenPosition ? mOmenPosition : floored(player.getPosition());
     mHasOmenPosition = false;
 
