@@ -82,6 +82,13 @@ void MobDweller::_updateVillage(ServerNetworkHandler &owner, MobActor &mob) {
                          : 0;
     mUpdateCountdown = mUpdateIntervalBase + roll;
 
+    // the game saves the dweller's village with the actor; a reloaded dweller finds it again here instead of joining
+    // anew, which would drop its claims without releasing them
+    if (!mHasJoinedVillage) {
+        mVillage = villages.getDwellerVillage(mRole, id);
+        mHasJoinedVillage = !mVillage.expired();
+    }
+
     const std::shared_ptr<Village> current = mVillage.lock();
     const Vector3f &position = mob.getPosition();
     const bool mayMove = mCanMigrate || !mHasJoinedVillage;

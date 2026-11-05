@@ -143,6 +143,14 @@ std::shared_ptr<Village> VillageManager::getClosestVillageForDweller(const Vecto
     return best;
 }
 
+std::shared_ptr<Village> VillageManager::getDwellerVillage(DwellerRole role, int64_t id) const {
+    for (const std::shared_ptr<Village> &village: mVillages) {
+        if (village->hasDweller(role, id))
+            return village;
+    }
+    return nullptr;
+}
+
 MobActor *VillageManager::findMob(ServerNetworkHandler &owner, int64_t uniqueId) {
     for (auto &entry: owner.getActors()) {
         if (entry.second->getUniqueId() != uniqueId || entry.second->isExpired())

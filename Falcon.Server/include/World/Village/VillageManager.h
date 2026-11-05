@@ -38,6 +38,9 @@ public:
     /** Like getClosestVillage, but a village with a free bed wins over one without. */
     std::shared_ptr<Village> getClosestVillageForDweller(const Vector3i &position, int32_t radius) const;
 
+    /** The village that lists the dweller with that role, if any. */
+    std::shared_ptr<Village> getDwellerVillage(DwellerRole role, int64_t id) const;
+
     static MobActor *findMob(ServerNetworkHandler &owner, int64_t uniqueId);
 
 private:
