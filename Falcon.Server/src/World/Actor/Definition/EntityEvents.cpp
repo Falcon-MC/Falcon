@@ -60,8 +60,11 @@ void EntityEvents::fire(ServerNetworkHandler &owner, MobActor &mob, const std::s
     const json::Value *definition = mob.getDefinition();
     const json::Value *events = definition == nullptr ? nullptr : definition->get("events");
     const json::Value *node = events == nullptr ? nullptr : events->get(event);
-    if (node != nullptr)
-        _run(owner, mob, *node, depth, other);
+    if (node == nullptr)
+        return;
+
+    _run(owner, mob, *node, depth, other);
+    mob.spawnPendingRiders(owner);
 }
 
 void EntityEvents::fireTrigger(ServerNetworkHandler &owner, MobActor &mob, const json::Value *trigger, Actor *other,

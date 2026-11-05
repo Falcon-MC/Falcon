@@ -25,8 +25,6 @@ private:
 
     MobActor *_currentMount(ServerNetworkHandler &owner) const;
 
-    static bool _accepts(const MobActor &vehicle, const MobActor &rider);
-
     float mSpeed;
     float mRadius;
     int32_t mStartDelay;
