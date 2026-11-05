@@ -15,6 +15,7 @@
 #include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/FeatureExpression.h"
+#include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 
@@ -353,12 +354,34 @@ struct OverworldRulePlacer::SeagrassDefinition {
     float mShortChance;
 };
 
-// a minecraft:scatter_feature of the behavior packs placing seagrass: x and z triangle from -8 to 8 around the
-// position, y the heightmap added to it, z then x then y
+// a minecraft:scatter_feature: each axis a single value or a distribution around the position it is given
 struct OverworldRulePlacer::ScatterDefinition {
+    struct AxisText {
+        int32_t mDistribution;
+        const char *mMin;
+        const char *mMax;
+    };
+
     const char *mIdentifier;
-    int32_t mIterations;
-    const SeagrassDefinition *mPlaces;
+    const char *mIterations;
+    AxisText mAxes[3];
+    int32_t mEvalOrder;
+    Placed mPlaces;
+    // scatter_chance as a fraction, every time when 0
+    int32_t mChanceNumerator = 0;
+    int32_t mChanceDenominator = 0;
+};
+
+// a minecraft:single_block_feature with one block, its survival enforced, replacing only air
+struct OverworldRulePlacer::SingleBlockDefinition {
+    const char *mIdentifier;
+    Block (*mBlock)();
+};
+
+// a minecraft:weighted_random_feature
+struct OverworldRulePlacer::WeightedDefinition {
+    const char *mIdentifier;
+    std::vector<std::pair<Placed, int32_t>> mFeatures;
 };
 
 OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry &entry) {
@@ -436,26 +459,68 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:seagrass_feature", 1, 0.6f}
     };
 
-    // BDS 1.26.61 behavior packs, features/scatter_*_seagrass_feature.json
+    // the game's definitions/features: tall_grass_feature and fern_feature place minecraft:tallgrass, upgraded to
+    // these blocks
+    static const SingleBlockDefinition SINGLE_BLOCKS[] = {
+            {"minecraft:tall_grass_feature", &VanillaBlocks::SHORT_GRASS},
+            {"minecraft:fern_feature", &VanillaBlocks::FERN}
+    };
+
+    static const auto single = [](size_t index) {
+        Placed placed;
+        placed.mSingleBlock = &SINGLE_BLOCKS[index];
+        return placed;
+    };
+    static const auto seagrass = [](size_t index) {
+        Placed placed;
+        placed.mSeagrass = &SEAGRASS[index];
+        return placed;
+    };
+
+    // BDS 1.26.61 behavior packs, features/select_taiga_plant_feature.json
+    static const WeightedDefinition WEIGHTED[] = {
+            {"minecraft:select_taiga_plant_feature", {{single(1), 4}, {single(0), 1}}}
+    };
+
+    static const auto weighted = [](size_t index) {
+        Placed placed;
+        placed.mWeighted = &WEIGHTED[index];
+        return placed;
+    };
+
+    using AxisText = ScatterDefinition::AxisText;
+    static const AxisText SEAGRASS_SIDE = {6, "-8", "8"};
+    static const AxisText SEAGRASS_HEIGHT = {0, "query.heightmap(variable.worldx, variable.worldz)", ""};
+    static const AxisText GRASS_SIDE = {6, "-7", "7"};
+    static const AxisText GRASS_HEIGHT = {6, "-3", "3"};
+
+    // BDS 1.26.61 behavior packs, features/scatter_*.json; eval order 4 is zxy, 5 zyx
     static const ScatterDefinition SCATTERS[] = {
-            {"minecraft:scatter_cold_ocean_seagrass_feature", 32, &SEAGRASS[0]},
-            {"minecraft:scatter_deep_cold_ocean_seagrass_feature", 40, &SEAGRASS[2]},
-            {"minecraft:scatter_deep_ocean_seagrass_feature", 48, &SEAGRASS[2]},
-            {"minecraft:scatter_deep_warm_ocean_seagrass_feature", 80, &SEAGRASS[2]},
-            {"minecraft:scatter_ocean_seagrass_feature", 48, &SEAGRASS[0]},
-            {"minecraft:scatter_river_seagrass_feature", 48, &SEAGRASS[1]},
-            {"minecraft:scatter_swamp_seagrass_feature", 64, &SEAGRASS[3]},
-            {"minecraft:scatter_warm_ocean_seagrass_feature", 80, &SEAGRASS[0]}
+            {"minecraft:scatter_cold_ocean_seagrass_feature", "32", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+             seagrass(0)},
+            {"minecraft:scatter_deep_cold_ocean_seagrass_feature", "40", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
+             4, seagrass(2)},
+            {"minecraft:scatter_deep_ocean_seagrass_feature", "48", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+             seagrass(2)},
+            {"minecraft:scatter_deep_warm_ocean_seagrass_feature", "80", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
+             4, seagrass(2)},
+            {"minecraft:scatter_ocean_seagrass_feature", "48", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+             seagrass(0)},
+            {"minecraft:scatter_river_seagrass_feature", "48", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+             seagrass(1)},
+            {"minecraft:scatter_swamp_seagrass_feature", "64", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+             seagrass(3)},
+            {"minecraft:scatter_warm_ocean_seagrass_feature", "80", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+             seagrass(0)},
+            {"minecraft:scatter_tall_grass_feature", "32", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, single(0)},
+            {"minecraft:scatter_meadow_tall_grass_feature", "16", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, single(0)},
+            {"minecraft:scatter_taiga_plant_feature", "32", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, weighted(0)}
     };
 
     Feature feature;
     if (entry.mPass == AFTER_SURFACE_PASS) {
         // vtable 0x14F4A0F60, place sub_14D217680
         feature.mKelp = entry.mFeature == "minecraft:kelp_feature";
-        for (const ScatterDefinition &scatter: SCATTERS) {
-            if (entry.mFeature == scatter.mIdentifier)
-                feature.mScatter = &scatter;
-        }
     } else if (entry.mPass == UNDERGROUND_PASS) {
         for (const OreDefinition &ore: ORES) {
             if (entry.mFeature == ore.mIdentifier)
@@ -465,6 +530,12 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         for (const DiskDefinition &disk: DISKS) {
             if (entry.mFeature == disk.mIdentifier)
                 feature.mDisk = &disk;
+        }
+    }
+    if (entry.mPass == SURFACE_PASS || entry.mPass == AFTER_SURFACE_PASS) {
+        for (const ScatterDefinition &scatter: SCATTERS) {
+            if (entry.mFeature == scatter.mIdentifier)
+                feature.mPlaced.mScatter = &scatter;
         }
     }
     return feature;
@@ -550,8 +621,8 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
             _placeOre(blocks, *feature.mOre, position[0], position[1], position[2], placement);
         else if (feature.mDisk != nullptr)
             _placeDisk(blocks, *feature.mDisk, position[0], position[1], position[2], placement);
-        else if (feature.mScatter != nullptr)
-            _placeScatter(blocks, *feature.mScatter, position[0], position[1], position[2], placement);
+        else if (feature.mPlaced.isSet())
+            _place(blocks, feature.mPlaced, position[0], position[1], position[2], placement);
         else
             _placeKelp(blocks, position[0], position[1], position[2], placement);
     }
@@ -743,30 +814,70 @@ bool OverworldRulePlacer::_placeDisk(BlockManager &blocks, const DiskDefinition 
     return true;
 }
 
+bool OverworldRulePlacer::_place(BlockManager &blocks, const Placed &placed, int32_t x, int32_t y, int32_t z,
+                                 std::mt19937 &random) {
+    if (placed.mSeagrass != nullptr)
+        return _placeSeagrass(blocks, *placed.mSeagrass, x, y, z, random);
+    if (placed.mScatter != nullptr)
+        return _placeScatter(blocks, *placed.mScatter, x, y, z, random);
+    if (placed.mSingleBlock != nullptr)
+        return _placeSingleBlock(blocks, *placed.mSingleBlock, x, y, z, random);
+    return _placeWeighted(blocks, *placed.mWeighted, x, y, z, random);
+}
+
 bool OverworldRulePlacer::_placeScatter(BlockManager &blocks, const ScatterDefinition &scatter, int32_t x, int32_t y,
                                         int32_t z, std::mt19937 &random) {
     // ScatterFeature::place (sub_14A255FC0): the iterations, positions and the placed feature all draw from the
     // rule's placement twister
-    static const ExpressionPtr TRIANGLE_MIN = FeatureExpression::parse("-8");
-    static const ExpressionPtr TRIANGLE_MAX = FeatureExpression::parse("8");
-    static const ExpressionPtr HEIGHTMAP = FeatureExpression::parse("query.heightmap(variable.worldx, variable.worldz)");
-    // z, x, y
-    static const int32_t EVAL_ORDER = 4;
+    static const ExpressionPtr EVERY_TIME = FeatureExpression::parse("100");
 
     Axis axes[3];
-    axes[0] = Axis{6, TRIANGLE_MIN, TRIANGLE_MAX, false};
-    axes[1] = Axis{0, HEIGHTMAP, nullptr, true};
-    axes[2] = Axis{6, TRIANGLE_MIN, TRIANGLE_MAX, false};
+    for (size_t axis = 0; axis < 3; axis++) {
+        const ScatterDefinition::AxisText &text = scatter.mAxes[axis];
+        parseAxis(text.mDistribution, text.mMin, text.mMax, axes[axis]);
+    }
 
     const int32_t origin[3] = {x, y, z};
     ScatterVariables variables(blocks, origin);
+    const int32_t iterations = iterationsOf(scatter.mChanceNumerator, scatter.mChanceDenominator, EVERY_TIME,
+                                            FeatureExpression::parse(scatter.mIterations), variables, random);
     bool placed = false;
-    for (int32_t iteration = 0; iteration < scatter.mIterations; iteration++) {
+    for (int32_t iteration = 0; iteration < iterations; iteration++) {
         int32_t position[3] = {0, 0, 0};
-        scatterPosition(axes, EVAL_ORDER, origin, variables, random, position);
-        placed = _placeSeagrass(blocks, *scatter.mPlaces, position[0], position[1], position[2], random) || placed;
+        scatterPosition(axes, scatter.mEvalOrder, origin, variables, random, position);
+        placed = _place(blocks, scatter.mPlaces, position[0], position[1], position[2], random) || placed;
     }
     return placed;
+}
+
+bool OverworldRulePlacer::_placeSingleBlock(BlockManager &blocks, const SingleBlockDefinition &single, int32_t x,
+                                            int32_t y, int32_t z, std::mt19937 &random) {
+    // SingleBlockFeature::place (sub_14A267E10): the block is drawn by weight even when it is the only one, then its
+    // survival is enforced and only air is replaced; a short grass or fern survives on the blocks of PlantSupport::Dirt
+    nextInt(random, 1);
+    if (!IFeature::isSupportDirt(blocks.getBlockAt(x, y - 1, z)))
+        return false;
+    if (blocks.getBlockAt(x, y, z).mName != "minecraft:air")
+        return false;
+
+    blocks.setBlockStateAt(x, y, z, single.mBlock().toBlockState());
+    return true;
+}
+
+bool OverworldRulePlacer::_placeWeighted(BlockManager &blocks, const WeightedDefinition &weighted, int32_t x,
+                                         int32_t y, int32_t z, std::mt19937 &random) {
+    // WeightedRandomFeature::place (sub_14A28A040)
+    int32_t total = 0;
+    for (const std::pair<Placed, int32_t> &feature: weighted.mFeatures)
+        total += feature.second;
+
+    int32_t roll = total != 0 ? nextInt(random, total) : 0;
+    for (const std::pair<Placed, int32_t> &feature: weighted.mFeatures) {
+        roll -= feature.second;
+        if (roll < 0)
+            return _place(blocks, feature.first, x, y, z, random);
+    }
+    return false;
 }
 
 bool OverworldRulePlacer::_placeSeagrass(BlockManager &blocks, const SeagrassDefinition &seagrass, int32_t x,

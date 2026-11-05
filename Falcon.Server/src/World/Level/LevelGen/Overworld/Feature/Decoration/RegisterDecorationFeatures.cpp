@@ -57,7 +57,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/TaigaGrassFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/TallGrassDoublePlantFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/UnderwaterMagmaFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/VegetationFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/VegetationPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/WaterlilyFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/WildflowersBedFeature.h"
@@ -124,7 +123,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<TaigaGrassFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<TallGrassDoublePlantFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<UnderwaterMagmaFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<VegetationFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<VegetationPatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<WaterlilyFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<WildflowersBedFeature>());

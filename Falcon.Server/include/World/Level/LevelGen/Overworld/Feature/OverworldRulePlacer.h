@@ -24,15 +24,29 @@ private:
     struct DiskDefinition;
     struct SeagrassDefinition;
     struct ScatterDefinition;
+    struct SingleBlockDefinition;
+    struct WeightedDefinition;
+
+    // one of the game's features a rule or another feature places
+    struct Placed {
+        const SeagrassDefinition *mSeagrass = nullptr;
+        const ScatterDefinition *mScatter = nullptr;
+        const SingleBlockDefinition *mSingleBlock = nullptr;
+        const WeightedDefinition *mWeighted = nullptr;
+
+        bool isSet() const {
+            return mSeagrass != nullptr || mScatter != nullptr || mSingleBlock != nullptr || mWeighted != nullptr;
+        }
+    };
 
     struct Feature {
         const OreDefinition *mOre = nullptr;
         const DiskDefinition *mDisk = nullptr;
-        const ScatterDefinition *mScatter = nullptr;
+        Placed mPlaced;
         bool mKelp = false;
 
         bool isPorted() const {
-            return mOre != nullptr || mDisk != nullptr || mScatter != nullptr || mKelp;
+            return mOre != nullptr || mDisk != nullptr || mPlaced.isSet() || mKelp;
         }
     };
 
@@ -47,10 +61,19 @@ private:
     static bool _placeDisk(BlockManager &blocks, const DiskDefinition &disk, int32_t x, int32_t y, int32_t z,
                            std::mt19937 &random);
 
+    static bool _place(BlockManager &blocks, const Placed &placed, int32_t x, int32_t y, int32_t z,
+                       std::mt19937 &random);
+
     static bool _placeScatter(BlockManager &blocks, const ScatterDefinition &scatter, int32_t x, int32_t y, int32_t z,
                               std::mt19937 &random);
 
     static bool _placeSeagrass(BlockManager &blocks, const SeagrassDefinition &seagrass, int32_t x, int32_t y,
+                               int32_t z, std::mt19937 &random);
+
+    static bool _placeSingleBlock(BlockManager &blocks, const SingleBlockDefinition &single, int32_t x, int32_t y,
+                                  int32_t z, std::mt19937 &random);
+
+    static bool _placeWeighted(BlockManager &blocks, const WeightedDefinition &weighted, int32_t x, int32_t y,
                                int32_t z, std::mt19937 &random);
 
     static bool _placeKelp(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
