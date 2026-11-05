@@ -8,9 +8,23 @@
 
 class BiomeFeatureEntry {
 public:
+    // one axis of the rule's scatter; bounds are the game's expression strings
+    struct Coordinate {
+        int32_t mDistribution = 0;
+        std::string mMin;
+        std::string mMax;
+    };
+
     std::string mIdentifier;
     std::string mFeature;
+    std::string mPass;
+    // the order the scatter evaluates x, y and z in
     int32_t mEvalOrder = 0;
+    Coordinate mCoordinates[3];
+    int32_t mChanceNumerator = 0;
+    int32_t mChanceDenominator = 0;
+    std::string mChancePercent;
+    std::string mIterations;
 };
 
 class BiomeChunkGenDataRegistry {

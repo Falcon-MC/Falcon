@@ -236,10 +236,47 @@ void BiomeChunkGenDataRegistry::initialize() {
             data.mIdentifier = stringAt((int32_t) identifierTag->asShort());
             data.mFeature = stringAt((int32_t) featureNameTag->asShort());
 
+            const Tag *passTag = featureTag.get("pass");
+            if (passTag != nullptr)
+                data.mPass = stringAt((int32_t) passTag->asShort());
+
             if (scatterTag != nullptr) {
                 const Tag *evalOrderTag = scatterTag->get("evalOrder");
                 if (evalOrderTag != nullptr)
                     data.mEvalOrder = evalOrderTag->asInt();
+
+                const Tag *coordinatesTag = scatterTag->get("coordinates");
+                if (coordinatesTag != nullptr) {
+                    size_t axis = 0;
+                    for (const Tag &coordinateTag: coordinatesTag->getList()) {
+                        if (axis >= 3)
+                            break;
+
+                        BiomeFeatureEntry::Coordinate &coordinate = data.mCoordinates[axis++];
+                        const Tag *distributionTag = coordinateTag.get("distribution");
+                        const Tag *minTag = coordinateTag.get("minValue");
+                        const Tag *maxTag = coordinateTag.get("maxValue");
+                        if (distributionTag != nullptr)
+                            coordinate.mDistribution = distributionTag->asInt();
+                        if (minTag != nullptr)
+                            coordinate.mMin = stringAt((int32_t) minTag->asShort());
+                        if (maxTag != nullptr)
+                            coordinate.mMax = stringAt((int32_t) maxTag->asShort());
+                    }
+                }
+
+                const Tag *numeratorTag = scatterTag->get("chanceNumerator");
+                const Tag *denominatorTag = scatterTag->get("chanceDenominator");
+                const Tag *percentTag = scatterTag->get("chancePercent");
+                const Tag *iterationsTag = scatterTag->get("iterations");
+                if (numeratorTag != nullptr)
+                    data.mChanceNumerator = numeratorTag->asInt();
+                if (denominatorTag != nullptr)
+                    data.mChanceDenominator = denominatorTag->asInt();
+                if (percentTag != nullptr)
+                    data.mChancePercent = stringAt((int32_t) percentTag->asShort());
+                if (iterationsTag != nullptr)
+                    data.mIterations = stringAt((int32_t) iterationsTag->asShort());
             }
 
             features.push_back(data);
