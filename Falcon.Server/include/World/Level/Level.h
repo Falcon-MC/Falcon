@@ -343,7 +343,9 @@ public:
 
     int32_t pickBiome(int32_t x, int32_t y, int32_t z) const { return mGenerator->pickBiome(x, y, z); }
 
-    const ChunkGenerator &getGenerator() const { return *mGenerator; }
+    const ChunkGenerator &getGenerator() const {
+        return *mGenerator;
+    }
 
     // for work that may outlive the level, such as a biome search on its own thread
     std::shared_ptr<const ChunkGenerator> shareGenerator() const {
