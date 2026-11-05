@@ -5705,14 +5705,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/KelpFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/KelpFeature.h",
-      "sha256": "50b7ad6ed14674638d9d7279b9d8fe935c54787c8e9afce63ab4f6cc599438ce",
-      "classes": [
-        "KelpFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/LakeFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/LakeFeature.h",
       "sha256": "2aa4de19e66f1fdeca6c861a492a95b3894117d5e315ff94074e9512fda06a48",
@@ -5809,14 +5801,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/OceanSeagrassFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/OceanSeagrassFeature.h",
-      "sha256": "82e05d623b421b8bd1739a1ba6a981a53a9f51689368a0a58f09882d593a641f",
-      "classes": [
-        "OceanSeagrassFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/PaleMossPatchFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/PaleMossPatchFeature.h",
       "sha256": "68cb1bcc422540a2d87759fd1e3f62eab6b36a47381666e24f4acb1857e79528",
@@ -5881,14 +5865,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/SeagrassFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/SeagrassFeature.h",
-      "sha256": "38b382505febdf8f3ed53ff64f456a8496c422a480b02b0c61feef4569ae8207",
-      "classes": [
-        "SeagrassFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/SpeleothemClusterFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/SpeleothemClusterFeature.h",
       "sha256": "395bdf3335953c478f79fee2ddf5f66a4103a3a0d9c967db2823c74f40f3e06c",
@@ -5945,14 +5921,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/SwampSeagrassFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/SwampSeagrassFeature.h",
-      "sha256": "98ac476b81ac39d155c4a421819e99d331accb4466863a8071f347bb81f675f6",
-      "classes": [
-        "SwampSeagrassFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/SweetBerryBushFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/SweetBerryBushFeature.h",
       "sha256": "e551fb91590be3f07283fbaa874c58faf325d7c2fa2756b1377867a2199a9688",
@@ -5998,14 +5966,6 @@
       "sha256": "b48f60204b24a170878376c0dad22125ea63e554aa9b1033c827b6a102a57b04",
       "classes": [
         "VegetationPatchFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/WarmOceanSeagrassFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/WarmOceanSeagrassFeature.h",
-      "sha256": "c652bbf6da2f8c0d02e77bdbc8d46b09d5cdfbf046456ca871ff09d1da718173",
-      "classes": [
-        "WarmOceanSeagrassFeature"
       ]
     },
     {
@@ -10319,11 +10279,6 @@
       "sha256": "9ad44c0323d5b3d561fe2795b3568a3ab344f7deaa88b1ede90ae269a9b5ee90"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/KelpFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/KelpFeature.cpp",
-      "sha256": "d08cb6a8782a95e98b16cabe70cd5a7d05b1c1823273a5a51a490ddf3e595028"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/LakeFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/LakeFeature.cpp",
       "sha256": "af92c700b7921dd0261e5902c791667b38cc840d5159ad7372abe1267eddf52e"
@@ -10384,11 +10339,6 @@
       "sha256": "216331d47d00d02b0689c401cc0a42c4e6389817c44a4eea727100825dfe7794"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/OceanSeagrassFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/OceanSeagrassFeature.cpp",
-      "sha256": "1314aa91e5c6443c038ad812d4377db430823c84bb3b1bfc598471116716288c"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/PaleMossPatchFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/PaleMossPatchFeature.cpp",
       "sha256": "64beba21e3acdeb271eca01dd9acc30b4b52e67cb7b6aac66a76c071b745b5da"
@@ -10434,11 +10384,6 @@
       "sha256": "f4ed5d0d12e72654425845d371b72bc40e8ea94dab651a435472eadf240b9dd8"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/SeagrassFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/SeagrassFeature.cpp",
-      "sha256": "73e8cd7390d3f6c1d5260f02a4e2d0417b0ee92af03b41d56800183a316dfad9"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/SpeleothemClusterFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/SpeleothemClusterFeature.cpp",
       "sha256": "5653fed402f353a49a91e4217e31524e887ba909bf810e54fee75881c0168860"
@@ -10474,11 +10419,6 @@
       "sha256": "1f988b06c5f6dfd255519551dc07b21ae142724cb917e85f70cdf34c9253c729"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/SwampSeagrassFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/SwampSeagrassFeature.cpp",
-      "sha256": "7c47523597f16274fa88c61f19fe1922c8ac7292d39969e7365cbb4f1358aa4b"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/SweetBerryBushFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/SweetBerryBushFeature.cpp",
       "sha256": "f0f24e73384e144376f4f4c88c9ac2f2c69ccce31fbba2c0f88e79f75bf1e672"
@@ -10507,11 +10447,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/VegetationPatchFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/VegetationPatchFeature.cpp",
       "sha256": "5e0f404e929e596f68647c26f8f31e79362b71e50acafc87bff2f28c8e2948ea"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/WarmOceanSeagrassFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/WarmOceanSeagrassFeature.cpp",
-      "sha256": "2079bbe748312061467a314b6823255c9ac63711c08654b8df0c39d9b5713928"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/WaterVegetationFeature.cpp",

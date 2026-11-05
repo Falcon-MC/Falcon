@@ -23,7 +23,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/IceSpikeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/IcebergFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/JungleGrassFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/KelpFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/LargeFernDoublePlantFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/LegacyFlowerFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/LegacyForestFoliageFeature.h"
@@ -35,7 +34,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/MonsterRoomFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/MossCeilingPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/MultifaceFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/OceanSeagrassFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/PaleMossPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/PlainsFlowerFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/PumpkinFeature.h"
@@ -43,7 +41,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SculkPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SeaAnemoneFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SeaPickleFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/SeagrassFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SpeleothemClusterFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SpringFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SulfurPoolSnapToSurfaceFeature.h"
@@ -56,14 +53,12 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/IcicleClusterFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/LargeIcicleFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SwampFlowerDiscFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/SwampSeagrassFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SweetBerryBushFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/TaigaGrassFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/TallGrassDoublePlantFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/UnderwaterMagmaFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/VegetationFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/VegetationPatchFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/WarmOceanSeagrassFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/WaterlilyFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/WildflowersBedFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Multi/JunglePlantAggregateFeature.h"
@@ -95,7 +90,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<IceSpikeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<IcebergFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<JungleGrassFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<KelpFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<LargeFernDoublePlantFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<LegacyFlowerFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<LegacyForestFoliageFeature>());
@@ -114,10 +108,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<SculkPatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SeaAnemoneFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SeaPickleFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<SeagrassFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<OceanSeagrassFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<WarmOceanSeagrassFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<SwampSeagrassFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SpeleothemClusterFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SpringFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SulfurPoolSnapToSurfaceFeature>());
