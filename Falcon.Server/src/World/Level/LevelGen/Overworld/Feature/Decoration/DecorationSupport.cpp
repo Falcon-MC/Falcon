@@ -6,6 +6,7 @@
 #include "World/Level/Block/WaterBlock.h"
 #include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
+#include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/Level.h"
@@ -77,6 +78,21 @@ namespace DecorationSupport {
 
     bool canBeReplaced(const BlockState &state) {
         return isAir(state) || isLiquid(state);
+    }
+
+    bool isNotFeatureReplaceable(const BlockState &state) {
+        static const BlockStateSet TAGGED = {
+                "minecraft:bedrock", "minecraft:chest", "minecraft:mob_spawner", "minecraft:end_portal_frame",
+                "minecraft:chiseled_bookshelf", "minecraft:trial_spawner", "minecraft:vault",
+                "minecraft:copper_chest", "minecraft:exposed_copper_chest", "minecraft:weathered_copper_chest",
+                "minecraft:oxidized_copper_chest", "minecraft:waxed_copper_chest",
+                "minecraft:waxed_exposed_copper_chest", "minecraft:waxed_weathered_copper_chest",
+                "minecraft:waxed_oxidized_copper_chest", "minecraft:oak_shelf", "minecraft:spruce_shelf",
+                "minecraft:birch_shelf", "minecraft:jungle_shelf", "minecraft:acacia_shelf", "minecraft:dark_oak_shelf",
+                "minecraft:mangrove_shelf", "minecraft:cherry_shelf", "minecraft:pale_oak_shelf",
+                "minecraft:bamboo_shelf", "minecraft:crimson_shelf", "minecraft:warped_shelf", "minecraft:poplar_shelf"
+        };
+        return TAGGED.contains(state);
     }
 
     void setBlockKeepingWater(LevelChunk &chunk, int32_t x, int32_t y, int32_t z, const BlockState &state) {

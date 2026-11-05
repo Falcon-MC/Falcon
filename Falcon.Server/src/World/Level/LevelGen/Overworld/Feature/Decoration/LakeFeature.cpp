@@ -7,14 +7,6 @@
 
 #include <algorithm>
 
-namespace {
-
-    bool isNotFeatureReplaceable(const BlockState &state) {
-        return state.mName == "minecraft:bedrock";
-    }
-
-}
-
 int32_t LakeFeature::placementAttempts() const {
     return 1;
 }
@@ -32,7 +24,7 @@ bool LakeFeature::canPlaceFeature(BlockManager &manager, int32_t x, int32_t y, i
 }
 
 bool LakeFeature::canReplaceWithAirOrFluid(BlockManager &manager, int32_t x, int32_t y, int32_t z) const {
-    return !isNotFeatureReplaceable(manager.getBlockAt(x, y, z));
+    return !DecorationSupport::isNotFeatureReplaceable(manager.getBlockAt(x, y, z));
 }
 
 bool LakeFeature::canReplaceWithBarrier(BlockManager &manager, int32_t x, int32_t y, int32_t z) const {

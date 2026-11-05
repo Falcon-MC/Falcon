@@ -17,6 +17,7 @@
 #include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/FeatureMath.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Feature/FeatureExpression.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
@@ -305,22 +306,6 @@ namespace {
         Tag states = state.mStates;
         states.putString(name, value);
         return BlockState(state.mName, states);
-    }
-
-    // the blocks the game tags not_feature_replaceable (sub_14CE9AD30)
-    bool isNotFeatureReplaceable(const BlockState &state) {
-        static const std::vector<std::string> TAGGED = {
-                "minecraft:bedrock", "minecraft:chest", "minecraft:mob_spawner", "minecraft:end_portal_frame",
-                "minecraft:chiseled_bookshelf", "minecraft:trial_spawner", "minecraft:vault",
-                "minecraft:copper_chest", "minecraft:exposed_copper_chest", "minecraft:weathered_copper_chest",
-                "minecraft:oxidized_copper_chest", "minecraft:waxed_copper_chest",
-                "minecraft:waxed_exposed_copper_chest", "minecraft:waxed_weathered_copper_chest",
-                "minecraft:waxed_oxidized_copper_chest", "minecraft:oak_shelf", "minecraft:spruce_shelf",
-                "minecraft:birch_shelf", "minecraft:jungle_shelf", "minecraft:acacia_shelf", "minecraft:dark_oak_shelf",
-                "minecraft:mangrove_shelf", "minecraft:cherry_shelf", "minecraft:pale_oak_shelf",
-                "minecraft:bamboo_shelf", "minecraft:crimson_shelf", "minecraft:warped_shelf", "minecraft:poplar_shelf"
-        };
-        return contains(TAGGED, state);
     }
 
     // min + nextInt(max - min), min alone when the range is empty: the maximum is never drawn
@@ -1138,7 +1123,7 @@ bool OverworldRulePlacer::_placeGeode(BlockManager &blocks, const GeodeDefinitio
             return false;
         if (blocks.getExtraBlockAt(blockX, blockY, blockZ).mName != "minecraft:air")
             blocks.setExtraBlockAt(blockX, blockY, blockZ, airState);
-        if (isNotFeatureReplaceable(blocks.getBlockAt(blockX, blockY, blockZ)))
+        if (DecorationSupport::isNotFeatureReplaceable(blocks.getBlockAt(blockX, blockY, blockZ)))
             return false;
 
         blocks.setBlockStateAt(blockX, blockY, blockZ, state);
