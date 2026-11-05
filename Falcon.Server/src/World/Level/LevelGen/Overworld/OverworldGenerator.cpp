@@ -166,7 +166,7 @@ void OverworldGenerator::generate(LevelChunk &chunk) const {
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++) {
             int32_t y = chunk.getHeight(x, z);
-            while (y >= OverworldGeneratorConstants::MIN_Y && chunk.getBlock(x, y, z).mName == "minecraft:air")
+            while (y >= OverworldGeneratorConstants::MIN_Y && chunk.getBlock(x, y, z).getHash() == mAirHash)
                 y--;
             chunk.setHeight(x, z, y);
         }
