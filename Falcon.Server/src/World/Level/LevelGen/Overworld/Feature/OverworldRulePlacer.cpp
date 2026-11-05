@@ -7,6 +7,7 @@
 #include "World/Level/Block/WaterBlock.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+#include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 
 #include <algorithm>
@@ -175,8 +176,8 @@ struct OverworldRulePlacer::DiskDefinition {
     Block (*mPlaces)();
     int32_t mRadius;
     int32_t mHalfHeight;
-    // replaced besides dirt and coarse dirt
-    const char *mAlsoReplaces;
+    // dirt, coarse dirt and one block of the disk's own
+    BlockStateSet mReplaces;
     // the clay disk also starts on clay, not only in water
     bool mStartsOnItself;
 };
@@ -241,9 +242,12 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
 
     // vtables 0x14F4A0DC0 (clay, place sub_14D1FBFA0) and 0x14F4A1710 (sand and gravel, place sub_14D22F1B0)
     static const DiskDefinition DISKS[] = {
-            {"minecraft:sand_feature", &VanillaBlocks::SAND, 7, 2, "minecraft:grass_block", false},
-            {"minecraft:gravel_feature", &VanillaBlocks::GRAVEL, 6, 2, "minecraft:grass_block", false},
-            {"minecraft:clay_feature", &VanillaBlocks::CLAY, 4, 1, "minecraft:mud", true}
+            {"minecraft:sand_feature", &VanillaBlocks::SAND, 7, 2,
+             {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:grass_block"}, false},
+            {"minecraft:gravel_feature", &VanillaBlocks::GRAVEL, 6, 2,
+             {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:grass_block"}, false},
+            {"minecraft:clay_feature", &VanillaBlocks::CLAY, 4, 1,
+             {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:mud"}, true}
     };
 
     Feature feature;
@@ -547,8 +551,7 @@ bool OverworldRulePlacer::_placeDisk(BlockManager &blocks, const DiskDefinition 
                 continue;
 
             for (int32_t blockY = y - disk.mHalfHeight; blockY <= y + disk.mHalfHeight; blockY++) {
-                const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
-                if (name == "minecraft:dirt" || name == "minecraft:coarse_dirt" || name == disk.mAlsoReplaces)
+                if (disk.mReplaces.contains(blocks.getBlockAt(blockX, blockY, blockZ)))
                     blocks.setBlockStateAt(blockX, blockY, blockZ, state);
             }
         }
