@@ -31,6 +31,16 @@ enum class BlockDropKind : uint8_t {
     Other = 2
 };
 
+// what rain and snow do at a block (sub_145C617E0); the game sets an interaction for about 190 blocks
+// (sub_14CE9AD30) and air (sub_1431FA960), every other block obstructs them, as ice, packed ice and grass path do
+// with their explicit obstruct_rain
+enum class BlockPrecipitationInteraction : uint8_t {
+    ObstructRain,
+    None,
+    // a snow layer may be placed in the block's position
+    Snowlogging
+};
+
 struct BlockData {
     int32_t mTypeId;
     const char *mIdentifier;
@@ -51,6 +61,7 @@ struct BlockData {
     const char *mDropIdentifier;
     uint8_t mDropMin;
     uint8_t mDropMax;
+    BlockPrecipitationInteraction mPrecipitation = BlockPrecipitationInteraction::ObstructRain;
     const char *mBehaviorIdentifier = nullptr;
     int32_t mMaxStackSize = 64;
 };
