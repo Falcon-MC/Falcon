@@ -2,7 +2,6 @@
 
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Core/Math/MathConstants.h"
-#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/FeatureMath.h"
 #include "World/Level/Level.h"
@@ -58,20 +57,6 @@ namespace {
         std::vector<OrePosition> mPositions;
     };
 
-    const int32_t HOST_CLUSTER_SIZE = 20;
-    const char *const HOSTED_ORES_TAG = "hosted_ores";
-    const char *const INTRUSIVE_DEPOSITS_TAG = "intrusive_deposits";
-
-    const BlockState &hostPackedIceState() {
-        static const BlockState state = VanillaBlocks::PACKED_ICE().toBlockState();
-        return state;
-    }
-
-    const BlockState &hostCalciteState() {
-        static const BlockState state = VanillaBlocks::CALCITE().toBlockState();
-        return state;
-    }
-
     bool isAirAt(Level &level, int32_t x, int32_t y, int32_t z) {
         const BlockState *state = level.peekBlockPtr(x, y, z);
         if (state == nullptr)
@@ -104,26 +89,6 @@ OreFeature::ConcentrationType OreFeature::getConcentration() const {
     return ConcentrationType::UNIFORM;
 }
 
-bool OreFeature::isRare() const {
-    return false;
-}
-
-bool OreFeature::isHostedOre() const {
-    return false;
-}
-
-bool OreFeature::isIntrusiveDeposit() const {
-    return false;
-}
-
-bool OreFeature::intrusiveDepositReplacesDeepslate() const {
-    return false;
-}
-
-const char *OreFeature::getExcludingBiomeTag() const {
-    return nullptr;
-}
-
 bool OreFeature::canBeReplaced(const BlockState &state) const {
     return state == stoneState() || state == deepslateState() || state == netherrackState();
 }
@@ -140,9 +105,7 @@ void OreFeature::apply(ChunkGenerateContext &context) {
     const int32_t startZ = chunkZ << 4;
     BlockManager manager(level);
 
-    for (int32_t i = 0;
-         i < (isRare() ? (mRandom.nextInt(getClusterCount()) == 0 ? 1 : 0) : getClusterCount());
-         i++) {
+    for (int32_t i = 0; i < getClusterCount(); i++) {
         OrePlacementManager object(level);
         const int32_t maxY = std::min(getMaxHeight(), (int32_t) LevelChunk::MAX_Y);
         const int32_t minY = std::max(getMinHeight(), (int32_t) LevelChunk::MIN_Y);
@@ -155,43 +118,18 @@ void OreFeature::apply(ChunkGenerateContext &context) {
         else
             y = minY + mRandom.nextBoundedInt((maxY - minY) + 1);
 
-        const int32_t biomeId = (int32_t) chunk.getBiomeAt(x & 0x0f, y, z & 0x0f);
-        const char *excludingTag = getExcludingBiomeTag();
-        if (excludingTag != nullptr && BiomeChunkGenDataRegistry::hasTag(biomeId, excludingTag))
+        const BlockState *originalPtr = level.peekBlockPtr(x, y, z);
+        const BlockState original = originalPtr == nullptr ? BlockState() : *originalPtr;
+        if (!canBeReplaced(original))
             continue;
-
-        const bool hosted = isHostedOre() && BiomeChunkGenDataRegistry::hasTag(biomeId, HOSTED_ORES_TAG);
-        mReplacesHostBlocks = isIntrusiveDeposit()
-                              && BiomeChunkGenDataRegistry::hasTag(biomeId, INTRUSIVE_DEPOSITS_TAG);
-
-        const bool readsPending = hosted || mReplacesHostBlocks;
-        if (readsPending)
-            object.readPendingFrom(mRoot);
-
-        if (hosted) {
-            mRandom.setSeed(level.getSeed() ^ chunkHash(chunkX, chunkZ) ^ (x + y + z));
-            _spawnHost(object, mRandom, x, y, z);
-        }
-
-        const BlockState *originalPtr = readsPending ? nullptr : level.peekBlockPtr(x, y, z);
-        const BlockState original = readsPending ? object.getBlockAt(x, y, z)
-                                                 : originalPtr == nullptr ? BlockState() : *originalPtr;
-        if (!_canReplace(original)) {
-            if (hosted)
-                mRandom.setSeed(level.getSeed() ^ chunkHash(chunkX, chunkZ));
-            continue;
-        }
 
         if (getClusterSize() == 1) {
             object.setBlockStateAt(x, y, z, getState(original));
         } else {
-            if (!hosted)
-                mRandom.setSeed(level.getSeed() ^ chunkHash(chunkX, chunkZ) ^ (x + y + z));
+            mRandom.setSeed(level.getSeed() ^ chunkHash(chunkX, chunkZ) ^ (x + y + z));
             spawn(object, mRandom, x, y, z);
-        }
-
-        if (hosted || getClusterSize() != 1)
             mRandom.setSeed(level.getSeed() ^ chunkHash(chunkX, chunkZ));
+        }
 
         bool skip = false;
         if (getSkipAir() != 0.0f) {
@@ -222,29 +160,7 @@ void OreFeature::apply(ChunkGenerateContext &context) {
 }
 
 void OreFeature::spawn(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z) {
-    _spawnShape(manager, random, x, y, z, getClusterSize(), nullptr);
-}
-
-void OreFeature::_spawnHost(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z) {
-    _spawnShape(manager, random, x, y, z, HOST_CLUSTER_SIZE, y >= 0 ? &stoneState() : &deepslateState());
-}
-
-bool OreFeature::_isHostBlock(const BlockState &state) {
-    return state == hostPackedIceState() || state == hostCalciteState();
-}
-
-bool OreFeature::_canReplace(const BlockState &state) const {
-    // Intrusive deposits use their own replace rules, which do not include netherrack and only include
-    // deepslate for gravel.
-    if (mReplacesHostBlocks)
-        return state == stoneState() || _isHostBlock(state)
-               || (intrusiveDepositReplacesDeepslate() && state == deepslateState());
-
-    return canBeReplaced(state);
-}
-
-void OreFeature::_spawnShape(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z,
-                             int32_t clusterSize, const BlockState *hostState) {
+    const int32_t clusterSize = getClusterSize();
     const float piScaled = random.nextFloat() * MathConstants::PI_F;
 
     const float maxXFloat = (float) (x + 8) + FeatureMath::sinLookup(piScaled) * (float) clusterSize / 8.0f;
@@ -296,12 +212,8 @@ void OreFeature::_spawnShape(BlockManager &manager, IRandom &random, int32_t x, 
                         continue;
 
                     const BlockState &original = manager.getBlockAt(xSeg, ySeg, zSeg);
-                    if (hostState != nullptr) {
-                        if (_isHostBlock(original))
-                            manager.setBlockStateAt(xSeg, ySeg, zSeg, *hostState);
-                    } else if (_canReplace(original)) {
+                    if (canBeReplaced(original))
                         manager.setBlockStateAt(xSeg, ySeg, zSeg, getState(original));
-                    }
                 }
             }
         }
