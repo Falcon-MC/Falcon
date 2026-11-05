@@ -85,7 +85,8 @@ void PlayerRaidState::_tickTrigger(ServerNetworkHandler &owner, ServerPlayer &pl
 }
 
 void PlayerRaidState::_tickBossBar(ServerNetworkHandler &owner, ServerPlayer &player) {
-    // RaidBossSystem, sub_1477374B0
+    // RaidBossSystem, sub_1477374B0: the bar stays with its village until the raid ends or a closer raid takes over,
+    // even out of range, and its name and fill are sent every tick (sub_142CD7210)
     VillageManager &villages = owner.getLevelFor(player).getVillageManager();
     const std::shared_ptr<Village> closest = villages.getClosestRaidingVillage(floored(player.getPosition()));
     if (closest != nullptr && closest != mBarVillage.lock()) {
