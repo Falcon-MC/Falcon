@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <random>
 #include <string>
 
 class LevelChunk;
@@ -42,7 +43,7 @@ public:
     static int64_t parseSeed(const std::string &value);
 
 private:
-    void _generateTerrain(LevelChunk &chunk, int32_t *heightMap) const;
+    void _generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random) const;
 
     void _generateBiomeMap(LevelChunk &chunk) const;
 

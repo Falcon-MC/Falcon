@@ -38,7 +38,6 @@ OverworldGenerator::OverworldGenerator(int64_t seed)
     mNoiseHolder = std::make_unique<OverworldNoiseHolder>(seed);
 
     const IRandomPtr surfaceRandom = mNoiseHolder->getRandomSource().identical();
-    mSurfaceBuilder = std::make_unique<OverworldSurfaceBuilder>(mNoiseHolder->getNoiseFactory());
     mSurfaceOverwriteBuilder = std::make_unique<SurfaceOverwriteBuilder>(*surfaceRandom, mNoiseHolder->getNoiseFactory(),
                                                                          seed);
 
@@ -46,6 +45,7 @@ OverworldGenerator::OverworldGenerator(int64_t seed)
 
     mClimate = std::make_unique<OverworldClimate>(mNoiseHolder->getNoiseFactory());
     mTerrainFiller = std::make_unique<OverworldTerrainFiller>(mNoiseHolder->getNoiseFactory(), *mClimate);
+    mSurfaceBuilder = std::make_unique<OverworldSurfaceBuilder>(mNoiseHolder->getNoiseFactory(), *mClimate);
     mBiomeParameters = std::make_unique<OverworldBiomeParameters>();
 }
 
@@ -82,13 +82,12 @@ int64_t OverworldGenerator::parseSeed(const std::string &value) {
     return (int64_t) hash;
 }
 
-void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap) const {
+void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random) const {
     const int32_t minY = OverworldGeneratorConstants::MIN_Y;
     mTerrainFiller->fill(chunk, heightMap);
 
-    // the chunk's random, seeded in sub_14CDD16A0, whose first draws lay 2 to 5 bedrock layers over whatever the
-    // noise placed (sub_14A22D380)
-    std::mt19937 random(132899541u * (uint32_t) chunk.getZ() + 341872712u * (uint32_t) chunk.getX());
+    // the first draws of the chunk's random lay 2 to 5 bedrock layers over whatever the noise placed
+    // (sub_14A22D380)
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++) {
             const int32_t layers = (int32_t) (random() % 4u) + 2;
@@ -141,7 +140,9 @@ void OverworldGenerator::generate(LevelChunk &chunk) const {
     for (int32_t i = 0; i < 256; i++)
         heightMap[i] = 0;
 
-    _generateTerrain(chunk, heightMap);
+    // the chunk's random, seeded in sub_14CDD16A0, shared by the bedrock floor and the surface
+    std::mt19937 random(132899541u * (uint32_t) chunk.getZ() + 341872712u * (uint32_t) chunk.getX());
+    _generateTerrain(chunk, heightMap, random);
 
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++)
@@ -150,7 +151,7 @@ void OverworldGenerator::generate(LevelChunk &chunk) const {
 
     _generateBiomeMap(chunk);
 
-    mSurfaceBuilder->apply(chunk);
+    mSurfaceBuilder->apply(chunk, random);
 
     mSurfaceOverwriteBuilder->apply(chunk, mSeed);
 
