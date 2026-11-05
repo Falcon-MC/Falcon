@@ -4,7 +4,6 @@
 #include "World/Actor/RideSystem.h"
 #include "Network/ServerNetworkHandler.h"
 
-
 namespace {
     std::string textOf(const json::Value &object, const char *key) {
         const json::Value *value = object.get(key);
