@@ -16,6 +16,7 @@
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/LevelGen/Feature/FeatureMath.h"
 #include "World/Level/LevelGen/Feature/FeatureExpression.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
@@ -57,21 +58,6 @@ namespace {
     // Random::nextFloat (sub_141A7E230)
     float nextFloat(std::mt19937 &random) {
         return static_cast<float>(static_cast<double>(random()) * 2.3283064365386963e-10);
-    }
-
-    // the game's sine table, filled with sinf (sub_14199D950)
-    const std::vector<float> &sineTable() {
-        static const std::vector<float> table = [] {
-            std::vector<float> values(65536);
-            for (int32_t i = 0; i < 65536; i++)
-                values[(size_t) i] = std::sin(static_cast<float>(i) / 10430.378f);
-            return values;
-        }();
-        return table;
-    }
-
-    float sineAt(float scaled) {
-        return sineTable()[static_cast<uint16_t>(static_cast<int32_t>(scaled))];
     }
 
     // HashedString's hash (FNV-1, 64 bits), kept by each feature rule
@@ -718,8 +704,8 @@ bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &o
     const float inverse = 1.0f / size;
 
     const float angle = (nextFloat(random) * PI) * 10430.378f;
-    const float sine = sineAt(angle);
-    const float cosine = sineAt(angle + 16384.0f);
+    const float sine = FeatureMath::sineAt(angle);
+    const float cosine = FeatureMath::sineAt(angle + 16384.0f);
     const float reach = size * 0.125f;
     const float alongX = reach * sine;
     const float alongZ = reach * cosine;
@@ -758,7 +744,7 @@ bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &o
         sphere.mX = inverse * (deltaX * step) + startX;
         sphere.mY = inverse * (deltaY * step) + startY;
         const float roll = nextFloat(random);
-        const float wave = sineAt((step * waveStep) * 10430.378f);
+        const float wave = FeatureMath::sineAt((step * waveStep) * 10430.378f);
         const float radius = ((wave + 1.0f) * ((roll * size) * 0.0625f) + 1.0f) * 0.5f;
         sphere.mRadiusSquared = radius * radius;
         sphere.mRadius = std::sqrt(sphere.mRadiusSquared);
