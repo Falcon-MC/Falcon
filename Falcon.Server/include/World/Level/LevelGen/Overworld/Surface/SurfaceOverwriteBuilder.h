@@ -39,7 +39,6 @@ private:
 
     static int32_t _javaStringHash(const char *text);
 
-
     NormalNoisePtr mSurfaceNoise;
     NormalNoisePtr mSwampNoise;
     NormalNoisePtr mClayBandsOffsetNoise;

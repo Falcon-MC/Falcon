@@ -69,11 +69,6 @@ namespace {
         return state;
     }
 
-    const BlockState &stoneState() {
-        static const BlockState state = VanillaBlocks::STONE().toBlockState();
-        return state;
-    }
-
 }
 
 SurfaceOverwriteBuilder::SurfaceOverwriteBuilder(IRandom &random, const XoroshiroPositionalFactory &noiseFactory,
