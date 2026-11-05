@@ -37,6 +37,7 @@ private:
     struct SnapDefinition;
     struct BlobDefinition;
     struct MultifaceDefinition;
+    struct LegacyFlowerDefinition;
 
     // one of the game's features a rule or another feature places
     struct Placed {
@@ -60,12 +61,14 @@ private:
         bool mDripstoneCluster = false;
         bool mPointedDripstone = false;
         bool mLargeDripstone = false;
+        const LegacyFlowerDefinition *mLegacyFlower = nullptr;
 
         bool isSet() const {
             return mSeagrass != nullptr || mScatter != nullptr || mSingleBlock != nullptr || mWeighted != nullptr
                    || mAggregate != nullptr || mTree != nullptr || mLeafLitter || mMushroom != nullptr
                    || mBeehiveSearch || mThreshold != nullptr || mSnap != nullptr || mBlob != nullptr
-                   || mMultiface != nullptr || mDripstoneCluster || mPointedDripstone || mLargeDripstone;
+                   || mMultiface != nullptr || mDripstoneCluster || mPointedDripstone || mLargeDripstone
+                   || mLegacyFlower != nullptr;
         }
     };
 
@@ -174,6 +177,9 @@ private:
     static bool _placePointedDripstone(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 
     static bool _placeLargeDripstone(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
+
+    static bool _placeLegacyFlower(BlockManager &blocks, const LegacyFlowerDefinition &flower, int32_t x, int32_t y,
+                                   int32_t z, std::mt19937 &random);
 
     static bool _placeKelp(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 };

@@ -711,6 +711,13 @@ struct OverworldRulePlacer::MultifaceDefinition {
     std::vector<std::string> mCanPlaceOn;
 };
 
+// one of the game's legacy flower features (LegacyFlowerFeature, vtable 0x14F4A1490, place sub_14D21CB80); type 1 is
+// the forest, 2 the overworld and 3 the plains
+struct OverworldRulePlacer::LegacyFlowerDefinition {
+    const char *mIdentifier;
+    int32_t mType;
+};
+
 OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry &entry) {
     // BDS 1.26.61 behavior packs, features/*.json
     static const std::vector<OreDefinition> ORES = {
@@ -794,7 +801,8 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:fern_double_plant_lower_feature", &VanillaBlocks::LARGE_FERN, false, true, 0},
             {"minecraft:fern_double_plant_upper_feature", &VanillaBlocks::LARGE_FERN, false, false, 1},
             {"minecraft:grass_double_plant_lower_feature", &VanillaBlocks::TALL_GRASS, false, true, 0, true},
-            {"minecraft:grass_double_plant_upper_feature", &VanillaBlocks::TALL_GRASS, false, false, 1}
+            {"minecraft:grass_double_plant_upper_feature", &VanillaBlocks::TALL_GRASS, false, false, 1},
+            {"minecraft:bush_feature", &VanillaBlocks::BUSH}
     };
 
     static const auto single = [](size_t index) {
@@ -845,7 +853,26 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              seagrass(0)},
             {"minecraft:scatter_tall_grass_feature", "32", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, single(0)},
             {"minecraft:scatter_meadow_tall_grass_feature", "16", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, single(0)},
-            {"minecraft:scatter_taiga_plant_feature", "32", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, weighted(0)}
+            {"minecraft:scatter_taiga_plant_feature", "32", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, weighted(0)},
+            {"minecraft:scatter_bush_feature", "24", {{6, "-5", "5"}, {6, "-3", "3"}, {6, "-5", "5"}}, 5, single(6)}
+    };
+
+    // registered in sub_14726F340
+    static const LegacyFlowerDefinition LEGACY_FLOWERS[] = {
+            {"minecraft:legacy:overworld_flower_feature", 2},
+            {"minecraft:legacy:plains_flower_feature", 3}
+    };
+    static const auto legacyFlower = [](size_t index) {
+        Placed placed;
+        placed.mLegacyFlower = &LEGACY_FLOWERS[index];
+        return placed;
+    };
+    // BDS 1.26.61 behavior packs, features/scatter_overworld_flower_feature.json and scatter_plains_flower_feature.json
+    static const ScatterDefinition FLOWER_SCATTERS[] = {
+            {"minecraft:scatter_overworld_flower_feature", "64", {{6, "-7", "7"}, {6, "-3", "3"}, {6, "-7", "7"}}, 5,
+             legacyFlower(0)},
+            {"minecraft:scatter_plains_flower_feature", "64", {{6, "-6", "6"}, {6, "-2", "2"}, {6, "-6", "6"}}, 5,
+             legacyFlower(1)}
     };
 
     static const auto scatter = [](const ScatterDefinition &definition) {
@@ -1094,6 +1121,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     }
     if (entry.mPass == SURFACE_PASS || entry.mPass == AFTER_SURFACE_PASS) {
         for (const ScatterDefinition &scatter: SCATTERS) {
+            if (entry.mFeature == scatter.mIdentifier)
+                feature.mPlaced.mScatter = &scatter;
+        }
+        for (const ScatterDefinition &scatter: FLOWER_SCATTERS) {
             if (entry.mFeature == scatter.mIdentifier)
                 feature.mPlaced.mScatter = &scatter;
         }
@@ -1476,7 +1507,45 @@ bool OverworldRulePlacer::_place(BlockManager &blocks, const Placed &placed, int
         return _placePointedDripstone(blocks, x, y, z, random);
     if (placed.mLargeDripstone)
         return _placeLargeDripstone(blocks, x, y, z, random);
+    if (placed.mLegacyFlower != nullptr)
+        return _placeLegacyFlower(blocks, *placed.mLegacyFlower, x, y, z, random);
     return _placeBeehiveSearch(blocks, x, y, z, random);
+}
+
+bool OverworldRulePlacer::_placeLegacyFlower(BlockManager &blocks, const LegacyFlowerDefinition &flower, int32_t x,
+                                             int32_t y, int32_t z, std::mt19937 &random) {
+    if (!DecorationSupport::isAir(blocks.getBlockAt(x, y, z)))
+        return false;
+
+    // sub_14A293B00 picks the flower before the tries
+    Block (*picked)() = &VanillaBlocks::POPPY;
+    if (flower.mType == 1) {
+        picked = nextBoolean(random) ? &VanillaBlocks::LILY_OF_THE_VALLEY : &VanillaBlocks::DANDELION;
+    } else if (flower.mType == 2) {
+        picked = nextInt(random, 3) == 0 ? &VanillaBlocks::DANDELION : &VanillaBlocks::POPPY;
+    } else {
+        // sub_14A2934C0: tulips where the 2345 simplex noise at a two hundredth of the position is under -0.8
+        static Block (*const TULIPS[4])() = {&VanillaBlocks::RED_TULIP, &VanillaBlocks::ORANGE_TULIP,
+                                             &VanillaBlocks::WHITE_TULIP, &VanillaBlocks::PINK_TULIP};
+        static Block (*const OTHERS[4])() = {&VanillaBlocks::POPPY, &VanillaBlocks::AZURE_BLUET,
+                                             &VanillaBlocks::OXEYE_DAISY, &VanillaBlocks::CORNFLOWER};
+        const float noise = queryNoise(static_cast<float>(x) / 200.0f, static_cast<float>(z) / 200.0f);
+        if (static_cast<double>(noise) < -0.8)
+            picked = TULIPS[nextInt(random, 4)];
+        else if (nextInt(random, 4) > 0)
+            picked = OTHERS[nextInt(random, 4)];
+        else
+            picked = &VanillaBlocks::DANDELION;
+    }
+
+    // one try for worlds of 1.21.60 and later, at the position itself, where the flower may stand
+    if (IFeature::isSupportDirt(blocks.getBlockAt(x, y - 1, z)))
+        blocks.setBlockStateAt(x, y, z, picked().toBlockState());
+
+    // the jitter of the next try is drawn after each one: (g & 7) - (g & 7) on z, (g & 3) - (g & 3) on y, x last
+    for (int32_t draw = 0; draw < 6; draw++)
+        random();
+    return true;
 }
 
 bool OverworldRulePlacer::_placeDripstoneCluster(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
