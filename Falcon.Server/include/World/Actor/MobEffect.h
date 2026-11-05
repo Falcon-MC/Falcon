@@ -41,6 +41,7 @@ enum class MobEffectId : int32_t {
     VillageHero = 29,
     Darkness = 30,
     Weaving = 33,
+    RaidOmen = 36,
     Freezing = 38
 };
 
@@ -140,6 +141,16 @@ public:
     void tick(Actor &, const MobEffectInstance &) const override;
 };
 
+/**
+ * Raid Omen: the position where it was first applied is kept on the player, and its removal asks for a raid at the
+ * village there.
+ */
+class RaidOmenMobEffect final : public MobEffect {
+public:
+    void onAdd(Actor &, const MobEffectInstance &) const override;
+    void onRemove(Actor &, const MobEffectInstance &) const override;
+};
+
 class SlownessMobEffect final : public MobEffect {};
 class SpeedMobEffect final : public MobEffect {};
 class FreezingMobEffect final : public MobEffect {
@@ -158,7 +169,6 @@ public:
 class AttackDamageMobEffect final : public MobEffect {};
 class InfestedMobEffect final : public MobEffect {};
 class OozingMobEffect final : public MobEffect {};
-class RaidOmenMobEffect final : public MobEffect {};
 class WeavingMobEffect final : public MobEffect {};
 class WindChargedMobEffect final : public MobEffect {};
 

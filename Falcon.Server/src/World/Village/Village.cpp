@@ -2,6 +2,7 @@
 
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Level.h"
 #include "World/Village/PoiScanner.h"
@@ -27,6 +28,10 @@ namespace {
     const int32_t LOSS_PARTICLE_DATA = 40;
     const int32_t CLAIM_PARTICLE_COUNT = 5;
     const char *const NITWIT_FAMILY = "nitwit";
+    const float RAID_BOUNDS_MARGIN = 32.0f;
+    // a wave that is not cleared within this many ticks expires the raid (0x1439e90e6)
+    const int64_t RAID_EXPIRY_TICKS = 48001;
+    const char *const RAID_EXPIRY_MESSAGE = R"({"rawtext":[{"text":"\u00a77"},{"translate":"raid.expiry"}]})";
 
     std::mt19937 &villageRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -151,6 +156,16 @@ bool Village::hasDweller(DwellerRole role, int64_t id) const {
     const size_t index = (size_t) std::min(std::max((int32_t) role, 0), (int32_t) ROLE_COUNT - 1);
     const auto &entries = mRoles[index];
     return std::any_of(entries.begin(), entries.end(), [id](const DwellerEntry &entry) { return entry.mId == id; });
+}
+
+std::vector<int64_t> Village::getDwellerIds(DwellerRole role) const {
+    std::vector<int64_t> ids;
+    if (role == DwellerRole::None)
+        return ids;
+
+    for (const DwellerEntry &entry: mRoles[(size_t) role])
+        ids.push_back(entry.mId);
+    return ids;
 }
 
 size_t Village::countBeds() const {
@@ -443,4 +458,53 @@ void Village::_recalculateBounds() {
                                     std::max(mBounds.mMaxY, y), std::max(mBounds.mMaxZ, z));
         }
     }
+}
+
+void Village::tryStartRaid(ServerNetworkHandler &owner) {
+    if (mRaid != nullptr || owner.getProperties().getDifficulty() == Difficulty::Peaceful)
+        return;
+
+    mRaidBounds = mBounds.expand(RAID_BOUNDS_MARGIN, RAID_BOUNDS_MARGIN, RAID_BOUNDS_MARGIN);
+
+    // three, five or seven waves on easy, normal and hard (0x07050300 >> 8 * difficulty)
+    const uint32_t difficulty = (uint32_t) owner.getProperties().getDifficulty();
+    const uint8_t waves = difficulty < 4 ? (uint8_t) (0x07050300u >> (8 * difficulty)) : 0;
+    mRaid = std::make_unique<Raid>(waves);
+}
+
+bool Village::isInRaidBounds(const Vector3f &position) const {
+    return mRaidBounds.mMinX <= position.x && position.x <= mRaidBounds.mMaxX && mRaidBounds.mMinY <= position.y
+           && position.y <= mRaidBounds.mMaxY && mRaidBounds.mMinZ <= position.z && position.z <= mRaidBounds.mMaxZ;
+}
+
+void Village::tickRaid(ServerNetworkHandler &owner, Level &level, int64_t currentTick) {
+    if (mRaid == nullptr)
+        return;
+
+    if (mRaid->getState() == Raid::State::Ongoing) {
+        if (mRaid->getTicksInState() >= RAID_EXPIRY_TICKS) {
+            for (auto &entry: owner.getPlayers()) {
+                ServerPlayer &player = entry.second;
+                if (player.isSpawned() && player.isIn(level) && isInRaidBounds(player.getPosition()))
+                    owner.sendJsonMessage(player, RAID_EXPIRY_MESSAGE);
+            }
+
+            mRaid->expireRaiders(owner);
+            mRaid.reset();
+            return;
+        }
+    } else if (mRaid->getState() == Raid::State::Removed) {
+        mRaid.reset();
+        return;
+    }
+
+    if (owner.getProperties().getDifficulty() == Difficulty::Peaceful) {
+        const std::unordered_set<int64_t> raiders = mRaid->getRaiders();
+        for (int64_t id: raiders)
+            owner.removeActor(id);
+        mRaid.reset();
+        return;
+    }
+
+    mRaid->tick(owner, level, *this, currentTick);
 }

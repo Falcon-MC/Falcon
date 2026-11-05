@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <limits>
 
 namespace {
     const size_t MAX_SCAN_REQUESTS = 64; // 0x1439e9c03
@@ -94,9 +95,36 @@ void VillageManager::tickVillagesNear(ServerNetworkHandler &owner, Level &level,
                                       const Vector3f &position, int32_t chunkTickRange) {
     const float margin = (float) (uint32_t) (16 * chunkTickRange) * 0.5f;
     for (const std::shared_ptr<Village> &village: mVillages) {
-        if (village->contains(margin, position))
+        if (village->contains(margin, position)) {
             village->tick(owner, level, currentTick);
+        } else if (village->getRaid() == nullptr
+                   || (village->countBeds() != 0 && village->getInhabitantCount() != 0 && !village->isRaidFinished())) {
+            // out of range, a raid only advances once its village is lost or the raid is over (0x1439e9060)
+            continue;
+        }
+        village->tickRaid(owner, level, currentTick);
     }
+}
+
+std::shared_ptr<Village> VillageManager::getClosestRaidingVillage(const Vector3i &position) const {
+    const Vector3f point = toVector(position);
+    std::shared_ptr<Village> closest;
+    float best = std::numeric_limits<float>::max();
+    for (const std::shared_ptr<Village> &village: mVillages) {
+        if (village == nullptr || village->getRaid() == nullptr)
+            continue;
+
+        const Vector3f center = village->getCenter();
+        const float dx = point.x - center.x;
+        const float dy = point.y - center.y;
+        const float dz = point.z - center.z;
+        const float distance = dx * dx + dy * dy + dz * dz;
+        if (best > distance) {
+            best = distance;
+            closest = village;
+        }
+    }
+    return closest;
 }
 
 bool VillageManager::isRegistered(PoiType type, const Vector3i &position, const std::string &name) const {
@@ -175,7 +203,9 @@ void VillageManager::_removeVillages() {
         const bool neverInhabited = !village.isInitialized()
                                     && village.getTickCount() >= UNINITIALIZED_REMOVAL_TICKS
                                     && village.getInhabitantCount() == 0;
-        const bool abandoned = village.isInitialized()
+        // a village under raid is kept until the raid is over, so that it can be lost (0x1439e55a2)
+        const Raid *raid = village.getRaid();
+        const bool abandoned = village.isInitialized() && (raid == nullptr || raid->getState() == Raid::State::Removed)
                                && (village.getInhabitantCount() == 0 || village.countBeds() == 0);
         if (!neverInhabited && !abandoned) {
             ++it;

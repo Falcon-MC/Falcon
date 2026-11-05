@@ -249,15 +249,20 @@ namespace {
 MobActor::MobActor(uint64_t runtimeId, const std::string &identifier) : ServerActor(runtimeId, identifier) {
 }
 
-void MobActor::tick(ServerNetworkHandler &owner) {
-    if (!mDefinitionStarted) {
-        mDefinitionStarted = true;
-        if (getDefinition() != nullptr) {
-            fireEvent(owner, !mSpawnEvent.empty() ? mSpawnEvent : mBorn ? BORN_EVENT : SPAWNED_EVENT);
-            if (!mEquipmentInherited)
-                mEquipment.equipFromTable(owner, *this);
-        }
+void MobActor::startDefinition(ServerNetworkHandler &owner) {
+    if (mDefinitionStarted)
+        return;
+
+    mDefinitionStarted = true;
+    if (getDefinition() != nullptr) {
+        fireEvent(owner, !mSpawnEvent.empty() ? mSpawnEvent : mBorn ? BORN_EVENT : SPAWNED_EVENT);
+        if (!mEquipmentInherited)
+            mEquipment.equipFromTable(owner, *this);
     }
+}
+
+void MobActor::tick(ServerNetworkHandler &owner) {
+    startDefinition(owner);
 
     _tickTransformation(owner);
     if (mTransformed)
@@ -2185,7 +2190,7 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
     if (isDead())
         return;
 
-    mDweller.onDeath(*this);
+    mDweller.onDeath(*this, source);
 
     MobActor *killer = mLastHurtBy == 0 ? nullptr : dynamic_cast<MobActor *>(findActor(owner, mLastHurtBy));
     if (killer != nullptr)
