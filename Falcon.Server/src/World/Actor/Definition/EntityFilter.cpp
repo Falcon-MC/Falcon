@@ -120,36 +120,8 @@ namespace {
     const char *const PLAYER_FAMILY = "player";
     const char *const TYPE_FAMILY_COMPONENT = "minecraft:type_family";
 
-    /**
-     * Reads the family list in place instead of copying it: `is_family` runs for every candidate a targeting or
-     * sensing scan looks at, every tick.
-     */
-    bool hasFamily(const Actor *actor, const json::Value *value) {
-        if (actor == nullptr || value == nullptr)
-            return false;
-
-        const std::string &expected = textOf(*value);
-        if (actor->isPlayer())
-            return expected == PLAYER_FAMILY;
-
-        const json::Value *typeFamily = nullptr;
-        if (const MobActor *mob = dynamic_cast<const MobActor *>(actor)) {
-            typeFamily = mob->getComponent(TYPE_FAMILY_COMPONENT);
-        } else if (const ServerActor *serverActor = dynamic_cast<const ServerActor *>(actor)) {
-            const json::Value *definition = EntityDefinitions::find(serverActor->getIdentifier());
-            const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
-            typeFamily = components == nullptr ? nullptr : components->get(TYPE_FAMILY_COMPONENT);
-        }
-
-        const json::Value *family = typeFamily == nullptr ? nullptr : typeFamily->get("family");
-        if (family == nullptr)
-            return false;
-
-        for (const std::unique_ptr<json::Value> &entry: family->mArray) {
-            if (textOf(*entry) == expected)
-                return true;
-        }
-        return false;
+    bool matchesFamily(const Actor *actor, const json::Value *value) {
+        return actor != nullptr && value != nullptr && EntityFilter::hasFamily(*actor, textOf(*value));
     }
 
     Vector3i blockPosition(const Actor &actor) {
@@ -357,6 +329,34 @@ namespace {
     }
 }
 
+/**
+ * Reads the family list in place instead of copying it: `is_family` runs for every candidate a targeting or sensing
+ * scan looks at, every tick.
+ */
+bool EntityFilter::hasFamily(const Actor &actor, const std::string &family) {
+    if (actor.isPlayer())
+        return family == PLAYER_FAMILY;
+
+    const json::Value *typeFamily = nullptr;
+    if (const MobActor *mob = dynamic_cast<const MobActor *>(&actor)) {
+        typeFamily = mob->getComponent(TYPE_FAMILY_COMPONENT);
+    } else if (const ServerActor *serverActor = dynamic_cast<const ServerActor *>(&actor)) {
+        const json::Value *definition = EntityDefinitions::find(serverActor->getIdentifier());
+        const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
+        typeFamily = components == nullptr ? nullptr : components->get(TYPE_FAMILY_COMPONENT);
+    }
+
+    const json::Value *families = typeFamily == nullptr ? nullptr : typeFamily->get("family");
+    if (families == nullptr)
+        return false;
+
+    for (const std::unique_ptr<json::Value> &entry: families->mArray) {
+        if (textOf(*entry) == family)
+            return true;
+    }
+    return false;
+}
+
 EntityFilter::DamageScope::DamageScope(const ActorDamageSource &source, float amount) {
     activeDamage = &source;
     activeDamageAmount = amount;
@@ -558,17 +558,17 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     }
 
     if (test == "is_family") {
-        const bool result = hasFamily(target, value);
+        const bool result = matchesFamily(target, value);
         return isNegation(op) ? !result : result;
     }
 
     if (test == "is_vehicle_family") {
-        const bool result = hasFamily(vehicleOf(owner, *target), value);
+        const bool result = matchesFamily(vehicleOf(owner, *target), value);
         return isNegation(op) ? !result : result;
     }
 
     if (test == "is_controlling_passenger_family") {
-        const bool result = hasFamily(controllerOf(owner, *target), value);
+        const bool result = matchesFamily(controllerOf(owner, *target), value);
         return isNegation(op) ? !result : result;
     }
 

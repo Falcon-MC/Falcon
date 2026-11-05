@@ -1,7 +1,10 @@
 #include "World/Village/Village.h"
 
+#include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Level/Block/BlockState.h"
 #include "World/Level/Level.h"
+#include "World/Village/PoiScanner.h"
 #include "World/Village/VillageManager.h"
 #include "Network/ServerNetworkHandler.h"
 
@@ -21,7 +24,9 @@ namespace {
     const float DWELLER_BOUNDS_MARGIN = 48.0f; // xmmword at 0x14f1b3850, read at 0x1439d2bba
     const int32_t CLAIM_PARTICLE_EVENT = 2009;
     const int32_t CLAIM_PARTICLE_DATA = 41;
+    const int32_t LOSS_PARTICLE_DATA = 40;
     const int32_t CLAIM_PARTICLE_COUNT = 5;
+    const char *const NITWIT_FAMILY = "nitwit";
 
     std::mt19937 &villageRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -32,8 +37,18 @@ namespace {
         return std::uniform_real_distribution<float>(0.0f, 1.0f)(villageRandom());
     }
 
+    // the level random's nextInt: the raw 32 bit draw modulo the bound, 0 for a bound of 0 (0x140391F20)
+    uint32_t nextInt(uint32_t bound) {
+        return bound == 0 ? 0 : (uint32_t) villageRandom()() % bound;
+    }
+
     bool isFull(const PoiInstance &poi) {
         return poi.mOwnerCount == poi.mCapacity;
+    }
+
+    Vector3i floored(const Vector3f &position) {
+        return Vector3i((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
+                        (int32_t) std::floor(position.z));
     }
 }
 
@@ -82,11 +97,14 @@ void Village::addDweller(ServerNetworkHandler &owner, DwellerRole role, int64_t 
     if (role == DwellerRole::None)
         return;
 
+    // the entry remembers where the dweller joined, or the village centre when it cannot be found
+    const MobActor *mob = VillageManager::findMob(owner, id);
+    const Vector3i position = floored(mob != nullptr ? mob->getPosition() : getCenter());
     auto &entries = mRoles[(size_t) role];
     const auto existing = std::find_if(entries.begin(), entries.end(),
                                        [id](const DwellerEntry &entry) { return entry.mId == id; });
     if (existing == entries.end())
-        entries.push_back({id, 0});
+        entries.push_back({id, 0, position});
 
     if (role != DwellerRole::Inhabitant)
         return;
@@ -161,7 +179,7 @@ std::vector<std::shared_ptr<PoiInstance>> Village::getPois() const {
     return pois;
 }
 
-void Village::tick(ServerNetworkHandler &owner, int64_t currentTick) {
+void Village::tick(ServerNetworkHandler &owner, Level &level, int64_t currentTick) {
     if (mLastTick == currentTick)
         return;
 
@@ -169,24 +187,31 @@ void Village::tick(ServerNetworkHandler &owner, int64_t currentTick) {
         ++mTickCount;
     mLastTick = currentTick;
 
+    _tickPoiValidity(owner, level);
+
     if (currentTick % CLAIM_INTERVAL != CLAIM_PHASE)
         return;
 
-    _tickDwellerTimeouts(owner);
+    _tickDwellerTimeouts(owner, level);
 
     // types that had nothing to claim when the pass started are skipped for every inhabitant
-    const size_t bed = (size_t) PoiType::Bed;
-    const size_t meetingArea = (size_t) PoiType::MeetingArea;
-    const bool noBeds = mUnclaimed[bed].empty();
-    const bool noMeetingAreas = mUnclaimed[meetingArea].empty();
+    std::array<bool, POI_TYPE_COUNT> skipped{};
+    for (size_t type = 0; type < POI_TYPE_COUNT; ++type)
+        skipped[type] = mUnclaimed[type].empty();
 
-    // an inhabitant tries one missing type per pass, beds first; job sites are not claimed here yet
+    // an inhabitant only tries the first type it misses, in bed, meeting area, job site order
     for (size_t index = 0; index < mInhabitants.size(); ++index) {
         const int64_t id = mInhabitants[index].mId;
-        if (!noBeds && mInhabitants[index].mPois[bed].expired())
-            _claimNext(owner, id, mUnclaimed[bed]);
-        else if (!noMeetingAreas && mInhabitants[index].mPois[meetingArea].expired())
-            _claimNext(owner, id, mUnclaimed[meetingArea]);
+        size_t type = 0;
+        while (type < POI_TYPE_COUNT && (skipped[type] || !mInhabitants[index].mPois[type].expired()))
+            ++type;
+        if (type == POI_TYPE_COUNT)
+            continue;
+
+        if (type == (size_t) PoiType::JobSite)
+            _claimJobSite(owner, id);
+        else
+            _claimNext(owner, id, mUnclaimed[type]);
     }
 }
 
@@ -240,19 +265,7 @@ void Village::_claim(ServerNetworkHandler &owner, int64_t id, const std::shared_
     if (!poi->mInitEvent.empty())
         mob->fireEvent(owner, poi->mInitEvent);
 
-    const Vector3f &position = mob->getPosition();
-    const ActorSize size = mob->getSize();
-    Level &level = owner.getLevelFor(*mob);
-    for (int32_t index = 0; index < CLAIM_PARTICLE_COUNT; ++index) {
-        // the z offset is rolled first, then y, then x
-        const float rollZ = nextFloat();
-        const float rollY = nextFloat();
-        const float rollX = nextFloat();
-        const Vector3f particle(position.x + 2.0f * (rollX * size.mWidth) - size.mWidth,
-                                position.y + rollY * size.mHeight + 1.0f,
-                                position.z + 2.0f * (rollZ * size.mWidth) - size.mWidth);
-        owner.broadcastLevelEvent(level, CLAIM_PARTICLE_EVENT, particle, CLAIM_PARTICLE_DATA);
-    }
+    _spawnPoiParticles(owner, *mob, CLAIM_PARTICLE_DATA);
 
     _recalculateBounds();
 
@@ -275,7 +288,103 @@ void Village::_claimNext(ServerNetworkHandler &owner, int64_t id, PoiQueue &queu
     }
 }
 
-void Village::_tickDwellerTimeouts(ServerNetworkHandler &owner) {
+void Village::_claimJobSite(ServerNetworkHandler &owner, int64_t id) {
+    MobActor *mob = VillageManager::findMob(owner, id);
+    if (mob == nullptr || mob->getFlags().get(ActorFlag::Baby))
+        return;
+
+    const MobDweller &dweller = mob->getDweller();
+    if (!dweller.isActive() || dweller.getRole() != DwellerRole::Inhabitant)
+        return;
+
+    if (EntityFilter::hasFamily(*mob, NITWIT_FAMILY))
+        return;
+
+    // a villager that has traded only takes a job site of its preferred profession; trades are not tracked yet, so
+    // every villager takes the weighted roll
+    PoiQueue &queue = mUnclaimed[(size_t) PoiType::JobSite];
+    std::vector<std::shared_ptr<PoiInstance>> candidates;
+    uint32_t totalWeight = 0;
+    for (auto it = queue.begin(); it != queue.end();) {
+        std::shared_ptr<PoiInstance> poi = it->lock();
+        if (poi == nullptr || isFull(*poi)) {
+            it = queue.erase(it);
+            continue;
+        }
+
+        totalWeight += (uint32_t) poi->mWeight;
+        candidates.push_back(std::move(poi));
+        ++it;
+    }
+
+    // the queue now holds exactly the candidates, so the rolled index is used on both
+    int32_t roll = (int32_t) nextInt(totalWeight);
+    for (size_t index = 0; index < candidates.size(); ++index) {
+        roll -= (int32_t) candidates[index]->mWeight;
+        if (roll >= 0)
+            continue;
+
+        _claim(owner, id, candidates[index]);
+        if (isFull(*candidates[index]))
+            queue.erase(queue.begin() + (std::ptrdiff_t) index);
+        return;
+    }
+}
+
+void Village::_spawnPoiParticles(ServerNetworkHandler &owner, MobActor &mob, int32_t data) const {
+    const Vector3f &position = mob.getPosition();
+    const ActorSize size = mob.getSize();
+    Level &level = owner.getLevelFor(mob);
+    for (int32_t index = 0; index < CLAIM_PARTICLE_COUNT; ++index) {
+        // the z offset is rolled first, then y, then x
+        const float rollZ = nextFloat();
+        const float rollY = nextFloat();
+        const float rollX = nextFloat();
+        const Vector3f particle(position.x + 2.0f * (rollX * size.mWidth) - size.mWidth,
+                                position.y + rollY * size.mHeight + 1.0f,
+                                position.z + 2.0f * (rollZ * size.mWidth) - size.mWidth);
+        owner.broadcastLevelEvent(level, CLAIM_PARTICLE_EVENT, particle, data);
+    }
+}
+
+void Village::_tickPoiValidity(ServerNetworkHandler &owner, Level &level) {
+    VillageManager &manager = level.getVillageManager();
+    bool released = false;
+    for (size_t index = 0; index < mInhabitants.size(); ++index) {
+        for (size_t type = 0; type < POI_TYPE_COUNT; ++type) {
+            const std::shared_ptr<PoiInstance> poi = mInhabitants[index].mPois[type].lock();
+            if (poi == nullptr)
+                continue;
+
+            // a point in a chunk that is not loaded is left alone
+            const Vector3i &position = poi->mPosition;
+            const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
+            if (state == nullptr)
+                continue;
+
+            // the scan's own check, so an occupied bed is lost too: a player sleeping in it frees it (0x1439d2164)
+            const PoiBlueprint *blueprint = PoiScanner::findValidBlueprint(*state);
+            if (blueprint != nullptr && manager.isRegistered(blueprint->mType, position, blueprint->mName))
+                continue;
+
+            MobActor *mob = VillageManager::findMob(owner, mInhabitants[index].mId);
+            if (mob != nullptr && mob->getDweller().isActive()) {
+                if (!poi->mEndEvent.empty())
+                    mob->fireEvent(owner, poi->mEndEvent);
+                _spawnPoiParticles(owner, *mob, LOSS_PARTICLE_DATA);
+            }
+
+            // the manager holds the only strong reference, so this expires the claim and any queue entry
+            manager.releasePoi(*poi);
+            released = true;
+        }
+    }
+
+    if (released)
+        _recalculateBounds();
+}
+
+void Village::_tickDwellerTimeouts(ServerNetworkHandler &owner, Level &level) {
     for (size_t role = 0; role < ROLE_COUNT; ++role) {
         auto &entries = mRoles[role];
         for (size_t index = 0; index < entries.size();) {
@@ -285,14 +394,16 @@ void Village::_tickDwellerTimeouts(ServerNetworkHandler &owner) {
                 continue;
             }
 
-            // an actor that is gone is left for a later pass
+            // a missing dweller counts as seen while its chunk is not loaded, and leaves when the chunk is loaded
+            // without it: a transformed or despawned dweller never reaches the death handler (0x1439d2f4a)
             const MobActor *mob = VillageManager::findMob(owner, entry.mId);
-            if (mob == nullptr) {
+            if (mob == nullptr && !level.isChunkPopulated(entry.mPosition.x >> 4, entry.mPosition.z >> 4)) {
+                entry.mLastSeenTick = mLastTick;
                 ++index;
                 continue;
             }
 
-            if (contains(DWELLER_BOUNDS_MARGIN, mob->getPosition())) {
+            if (mob != nullptr && contains(DWELLER_BOUNDS_MARGIN, mob->getPosition())) {
                 entry.mLastSeenTick = mLastTick;
                 ++index;
                 continue;

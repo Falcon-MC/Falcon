@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -30,8 +31,14 @@ public:
     void tick(ServerNetworkHandler &owner, Level &level, int64_t currentTick);
 
     /** Ticks the villages around a player: their box grown by half the chunk tick range on every side. */
-    void tickVillagesNear(ServerNetworkHandler &owner, int64_t currentTick, const Vector3f &position,
+    void tickVillagesNear(ServerNetworkHandler &owner, Level &level, int64_t currentTick, const Vector3f &position,
                           int32_t chunkTickRange);
+
+    /** Whether a village owns a point of interest of that type and name at position. */
+    bool isRegistered(PoiType type, const Vector3i &position, const std::string &name) const;
+
+    /** Forgets a point of interest, which expires every claim and queue entry referring to it. */
+    void releasePoi(const PoiInstance &poi);
 
     std::shared_ptr<Village> getClosestVillage(const Vector3i &position, int32_t radius) const;
 

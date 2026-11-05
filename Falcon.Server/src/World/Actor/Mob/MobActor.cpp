@@ -2185,6 +2185,8 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
     if (isDead())
         return;
 
+    mDweller.onDeath(*this);
+
     MobActor *killer = mLastHurtBy == 0 ? nullptr : dynamic_cast<MobActor *>(findActor(owner, mLastHurtBy));
     if (killer != nullptr)
         killer->onKilledActor(owner, *this);

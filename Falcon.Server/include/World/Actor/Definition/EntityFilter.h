@@ -29,6 +29,9 @@ public:
     static bool test(const json::Value &filter, ServerNetworkHandler &owner, const MobActor &self,
                      const Actor *other = nullptr);
 
+    /** Whether the actor's `minecraft:type_family` lists family; a player is only of the `player` family. */
+    static bool hasFamily(const Actor &actor, const std::string &family);
+
 private:
     static bool _testAll(const json::Value &filters, ServerNetworkHandler &owner, const MobActor &self,
                          const Actor *other);

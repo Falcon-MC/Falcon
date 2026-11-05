@@ -90,13 +90,26 @@ void VillageManager::tick(ServerNetworkHandler &owner, Level &level, int64_t cur
     mFound.clear();
 }
 
-void VillageManager::tickVillagesNear(ServerNetworkHandler &owner, int64_t currentTick, const Vector3f &position,
-                                      int32_t chunkTickRange) {
+void VillageManager::tickVillagesNear(ServerNetworkHandler &owner, Level &level, int64_t currentTick,
+                                      const Vector3f &position, int32_t chunkTickRange) {
     const float margin = (float) (uint32_t) (16 * chunkTickRange) * 0.5f;
     for (const std::shared_ptr<Village> &village: mVillages) {
         if (village->contains(margin, position))
-            village->tick(owner, currentTick);
+            village->tick(owner, level, currentTick);
     }
+}
+
+bool VillageManager::isRegistered(PoiType type, const Vector3i &position, const std::string &name) const {
+    const PoiMap &pois = mPois[(size_t) type];
+    const auto found = pois.find(position);
+    return found != pois.end() && found->second->mName == name;
+}
+
+void VillageManager::releasePoi(const PoiInstance &poi) {
+    PoiMap &pois = mPois[(size_t) poi.mType];
+    const auto found = pois.find(poi.mPosition);
+    if (found != pois.end() && found->second.get() == &poi)
+        pois.erase(found);
 }
 
 std::shared_ptr<Village> VillageManager::getClosestVillage(const Vector3i &position, int32_t radius) const {
