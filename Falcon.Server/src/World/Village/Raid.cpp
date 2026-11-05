@@ -24,8 +24,7 @@ namespace {
     const int32_t HERO_DURATION_TICKS = 48000;
     const float NO_POSITION = std::numeric_limits<float>::max();
 
-    // the level's closest player searches, as squared distances: 64, 128 and 1024 blocks
-    const float SPAWN_REGION_NEAR = 64.0f;
+    // the level's closest player searches, as squared distances: 128 and 1024 blocks
     const float SPAWN_PLAYER_RANGE = 128.0f;
     const float FAR_PLAYER_RANGE = 1024.0f;
 
@@ -235,9 +234,9 @@ namespace {
             const float z = fromEdge ? dz * scale + directionZ * distance : directionZ * distance * scale;
             Vector3f candidate(x + origin.x, origin.y, z + origin.z);
 
-            // the block source comes from the closest player within 64 blocks, else within 1024 (sub_1439D88C0)
-            if (closestPlayer(owner, level, candidate, SPAWN_REGION_NEAR) == nullptr
-                && closestPlayer(owner, level, candidate, FAR_PLAYER_RANGE) == nullptr)
+            // the game takes its block source from the closest player within 64 blocks, else within 1024
+            // (sub_1439D88C0): only whether one exists matters here
+            if (closestPlayer(owner, level, candidate, FAR_PLAYER_RANGE) == nullptr)
                 continue;
 
             if (onHeightmap) {
@@ -577,8 +576,7 @@ bool Raid::_spawnWave(ServerNetworkHandler &owner, Level &level, Village &villag
     if (elapsed != 0)
         return true;
 
-    if (closestPlayer(owner, level, mSpawnPosition, SPAWN_REGION_NEAR) == nullptr
-        && closestPlayer(owner, level, mSpawnPosition, FAR_PLAYER_RANGE) == nullptr)
+    if (closestPlayer(owner, level, mSpawnPosition, FAR_PLAYER_RANGE) == nullptr)
         return false;
 
     const bool scatter = isAreaLoaded(level, mSpawnPosition, GROUP_SCATTER_RANGE);

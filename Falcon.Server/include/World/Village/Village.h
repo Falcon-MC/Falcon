@@ -94,10 +94,10 @@ public:
     /** Whether the raid has been won or lost and only waits for its celebration to end. */
     bool isRaidFinished() const { return mRaid != nullptr && mRaid->getResult() != Raid::Result::None; }
 
-    /** The village box grown by 32 on every side when the raid started: players inside it follow the raid. */
-    const AxisAlignedBB &getRaidBounds() const { return mRaidBounds; }
-
-    /** Whether position lies in the raid bounds, edges included. */
+    /**
+     * Whether position lies in the raid bounds, edges included: the village box grown by 32 on every side when the
+     * raid started. Players inside it follow the raid.
+     */
     bool isInRaidBounds(const Vector3f &position) const;
 
     /** Starts a raid, unless one is running or the difficulty is peaceful. */
