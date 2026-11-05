@@ -76,7 +76,8 @@ OverworldAquifer::FluidStatus OverworldAquifer::_fluidStatus(const Location &loc
 }
 
 int32_t OverworldAquifer::_surfaceLevel(int32_t quartX, int32_t quartZ) {
-    const int64_t key = (static_cast<int64_t>(quartX) << 32) | static_cast<uint32_t>(quartZ);
+    const int64_t key = static_cast<int64_t>((static_cast<uint64_t>(static_cast<uint32_t>(quartX)) << 32)
+                                             | static_cast<uint32_t>(quartZ));
     const std::unordered_map<int64_t, int32_t>::const_iterator found = mSurfaceLevels.find(key);
     if (found != mSurfaceLevels.end())
         return found->second;
