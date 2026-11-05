@@ -1,19 +1,35 @@
 #include "World/Actor/Mob/Component/MobDweller.h"
 
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Movement/ActorPushSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
 #include "World/Village/VillageManager.h"
 #include "Network/ServerNetworkHandler.h"
 
+#include <algorithm>
 #include <cmath>
 #include <random>
 #include <string>
+#include <vector>
 
 namespace {
     const char *const DWELLER_COMPONENT = "minecraft:dweller";
     const float DEFAULT_BOUNDS_TOLERANCE = 10.0f; // 0x14efd22ac
     const int32_t MIGRATION_RADIUS = 64; // 0x14ce82c3b
+    const char *const CAN_JOIN_RAID_COMPONENT = "minecraft:can_join_raid";
+    const char *const SPAWN_FOR_RAID_EVENT = "minecraft:spawn_for_raid";
+    // recruits are looked for in the recruiter's box grown by 16 on every axis (sub_1477465E0)
+    const float RECRUIT_RANGE = 16.0f;
+
+    std::shared_ptr<Village> raidedVillageAt(ServerNetworkHandler &owner, const MobActor &mob) {
+        // the village whose own box holds the mob, without margin
+        const Vector3f &position = mob.getPosition();
+        const Vector3i origin((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
+                              (int32_t) std::floor(position.z));
+        std::shared_ptr<Village> village = owner.getLevelFor(mob).getVillageManager().getClosestVillage(origin, 0);
+        return village != nullptr && village->getRaid() != nullptr ? village : nullptr;
+    }
 
     std::mt19937 &dwellerRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -48,15 +64,21 @@ void MobDweller::tick(ServerNetworkHandler &owner, MobActor &mob) {
             _read(*component);
     }
 
-    if (mComponent == nullptr || mob.isExpired() || !mob.isAlive())
-        return;
+    if (mComponent != nullptr && !mob.isExpired() && mob.isAlive()) {
+        // the raid recruitment runs for a hostile dweller on the tick its update comes due
+        if (mUpdateCountdown == 0 && mRole == DwellerRole::Hostile)
+            _recruitForRaid(owner, mob);
 
-    if (mUpdateCountdown == 0)
-        _updateVillage(owner, mob);
+        if (mUpdateCountdown == 0)
+            _updateVillage(owner, mob);
 
-    // the countdown set by an update is already decremented on the same tick
-    if (mUpdateCountdown != 0)
-        --mUpdateCountdown;
+        // the countdown set by an update is already decremented on the same tick
+        if (mUpdateCountdown != 0)
+            --mUpdateCountdown;
+    }
+
+    if (mRaidJoinQueued)
+        _tryJoinRaid(owner, mob);
 }
 
 void MobDweller::onDeath(const MobActor &mob, const ServerPlayer *killer) {
@@ -145,4 +167,45 @@ void MobDweller::_updateVillage(ServerNetworkHandler &owner, MobActor &mob) {
     const std::shared_ptr<Village> joined = mVillage.lock();
     if (joined == nullptr || !joined->hasDweller(mRole, id))
         mVillage.reset();
+}
+
+void MobDweller::_recruitForRaid(ServerNetworkHandler &owner, const MobActor &mob) const {
+    // sub_1477465E0: a raider of a village under raid, standing in that village, calls the mobs around it that can
+    // join a raid and are not queued or raiding already
+    const std::shared_ptr<Village> village = raidedVillageAt(owner, mob);
+    if (village == nullptr || !village->hasDweller(DwellerRole::Hostile, mob.getUniqueId()))
+        return;
+
+    const Raid &raid = *village->getRaid();
+    const AxisAlignedBB area = ActorPushSystem::boundingBoxOf(mob).expand(RECRUIT_RANGE, RECRUIT_RANGE, RECRUIT_RANGE);
+    // the whole width of the area reaches any candidate whose own box overlaps it
+    const float reach = std::max(area.mMaxX - area.mMinX, area.mMaxZ - area.mMinZ);
+    std::vector<MobActor *> recruits;
+    owner.forEachActorNear(mob.getPosition(), reach, [&](ServerActor &actor) {
+        MobActor *candidate = dynamic_cast<MobActor *>(&actor);
+        if (candidate == nullptr || candidate == &mob || !candidate->sharesLevelWith(mob) || candidate->isExpired()
+            || !candidate->isAlive() || candidate->getComponent(CAN_JOIN_RAID_COMPONENT) == nullptr
+            || candidate->getDweller().isRaidJoinQueued() || raid.hasRaider(candidate->getUniqueId())
+            || !ActorPushSystem::boundingBoxOf(*candidate).intersectsWith(area))
+            return;
+        recruits.push_back(candidate);
+    });
+
+    for (MobActor *recruit: recruits) {
+        recruit->fireEvent(owner, SPAWN_FOR_RAID_EVENT);
+        recruit->getDweller().queueRaidJoin();
+    }
+}
+
+void MobDweller::_tryJoinRaid(ServerNetworkHandler &owner, const MobActor &mob) {
+    // sub_14CE8F940: the recruit stays queued until it is a hostile dweller of the raided village it stands in
+    if (mob.isExpired())
+        return;
+
+    const std::shared_ptr<Village> village = raidedVillageAt(owner, mob);
+    if (village == nullptr || !village->hasDweller(DwellerRole::Hostile, mob.getUniqueId()))
+        return;
+
+    village->getRaid()->addRecruit(mob.getUniqueId(), mob.getHealth());
+    mRaidJoinQueued = false;
 }
