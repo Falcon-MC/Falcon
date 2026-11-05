@@ -3,8 +3,6 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockShape.h"
-#include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
-#include "World/Level/Block/LeavesBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Village/Village.h"
@@ -126,10 +124,8 @@ namespace {
 
         // material 7, leaves, is rejected even though it collides
         const Block *block = VanillaBlocks::fromState(*ground);
-        const bool leaves = dynamic_cast<const LeavesBlock *>(block) != nullptr
-                            || dynamic_cast<const FloweredAzaleaLeavesBlock *>(block) != nullptr;
-        return !leaves && BlockShape::hasCollision(*ground) && !BlockShape::hasCollision(*body)
-               && !BlockShape::hasCollision(*head);
+        return (block == nullptr || !block->isLeaves()) && BlockShape::hasCollision(*ground)
+               && !BlockShape::hasCollision(*body) && !BlockShape::hasCollision(*head);
     }
 
     /**

@@ -125,6 +125,10 @@ public:
         return false;
     }
 
+    virtual bool isLeaves() const {
+        return false;
+    }
+
     virtual bool suppressesFreezing() const {
         return false;
     }

@@ -6,8 +6,6 @@ FALCON_REGISTER_ITEM(ShearsItem, 130);
 
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/CobwebBlock.h"
-#include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
-#include "World/Level/Block/LeavesBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/VineBlock.h"
 
@@ -25,8 +23,7 @@ bool ShearsItem::matches(const std::string &identifier) {
 
 bool ShearsItem::getDestroySpeed(const std::string &blockIdentifier, float &speed) const {
     const Block *block = VanillaBlocks::fromIdentifier(blockIdentifier);
-    if (dynamic_cast<const CobwebBlock *>(block) != nullptr || dynamic_cast<const LeavesBlock *>(block) != nullptr
-        || dynamic_cast<const FloweredAzaleaLeavesBlock *>(block) != nullptr) {
+    if (dynamic_cast<const CobwebBlock *>(block) != nullptr || (block != nullptr && block->isLeaves())) {
         speed = WEB_AND_LEAVES_SPEED;
         return true;
     }
