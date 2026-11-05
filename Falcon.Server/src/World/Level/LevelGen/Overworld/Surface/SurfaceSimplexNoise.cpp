@@ -1,5 +1,6 @@
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 
+#include "World/Level/LevelGen/Noise/NoiseMath.h"
 #include "World/Level/LevelGen/Random/XoroshiroRandom.h"
 
 #include <utility>
@@ -19,7 +20,7 @@ namespace {
 
     // the game subtracts one from every value that is not above zero, integers included
     int32_t gameFloor(float value) {
-        return static_cast<int32_t>(value) - (value > 0.0f ? 0 : 1);
+        return NoiseMath::truncateToInt(value) - (value > 0.0f ? 0 : 1);
     }
 
     float corner(int32_t gradient, float x, float y) {
