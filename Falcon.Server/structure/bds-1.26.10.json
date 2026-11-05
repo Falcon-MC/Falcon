@@ -5953,14 +5953,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/VegetationFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/VegetationFeature.h",
-      "sha256": "19e083b888adeadf562831e8058909a96dc916ec2c12c44d51be0fcfdde9c654",
-      "classes": [
-        "VegetationFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/VegetationPatchFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/VegetationPatchFeature.h",
       "sha256": "b48f60204b24a170878376c0dad22125ea63e554aa9b1033c827b6a102a57b04",
@@ -10437,11 +10429,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/UnderwaterMagmaFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/UnderwaterMagmaFeature.cpp",
       "sha256": "6d29e9fe1c3f137e31c1377d10eb331c589a67a3667d1cba6ea0fd8eb7f19705"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/VegetationFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/VegetationFeature.cpp",
-      "sha256": "fdf1cdf84358d1ff8111be69ec1f940bacba858de6192112861cdf06f551cc87"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/VegetationPatchFeature.cpp",
