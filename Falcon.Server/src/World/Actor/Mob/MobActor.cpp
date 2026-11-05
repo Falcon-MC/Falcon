@@ -882,6 +882,7 @@ bool MobActor::canSwim() const {
 PhysicsComponent MobActor::getPhysics() const {
     PhysicsComponent physics = ServerActor::getPhysics();
     physics.mSwims = canSwim();
+    physics.mFloatsInLiquid = mGoalSelector.keepsAfloat();
     physics.mClimbsLadders = getComponent(CAN_CLIMB_COMPONENT) != nullptr;
     physics.mClimbsWalls = getComponent(CLIMB_NAVIGATION_COMPONENT) != nullptr;
     physics.mGravityAfterMove = true;
