@@ -12,9 +12,6 @@ FeatureNoiseHolder::FeatureNoiseHolder(IRandom &random) {
     mRandomClayWithDripleavesSnapToFloor =
             std::make_shared<SimplexF>(*clayRandom, 1.0f, 2.0f / 4.0f, 1.0f / 15.0f);
 
-    const IRandomPtr dripstoneRandom = random.identical();
-    mDripstoneCluster = std::make_shared<SimplexF>(*dripstoneRandom, 30.0f, 1.0f / 99.0f, 1.0f / 15.0f);
-
     const IRandomPtr mossFloorRandom = random.identical();
     mMossPatchSnapToFloor = std::make_shared<SimplexF>(*mossFloorRandom, 2.0f, 2.0f / 4.0f, 1.0f / 10.0f);
 

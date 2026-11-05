@@ -30,7 +30,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/MesaFoliageFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/MonsterRoomFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/MossCeilingPatchFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/MultifaceFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/PaleMossPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/PlainsFlowerFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/PumpkinFeature.h"
@@ -38,8 +37,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SculkPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SeaAnemoneFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SeaPickleFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/SpeleothemClusterFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/SpringFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SulfurPoolSnapToSurfaceFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SulfurSpikeClusterFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SulfurSpikeFeature.h"
@@ -52,7 +49,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SwampFlowerDiscFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SweetBerryBushFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/TaigaGrassFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/UnderwaterMagmaFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/VegetationPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/WaterlilyFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/WildflowersBedFeature.h"
@@ -92,7 +88,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<MesaFoliageFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<MonsterRoomFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<MossCeilingPatchFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<MultifaceFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<PaleMossPatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<PlainsFlowerFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<PumpkinFeature>());
@@ -100,8 +95,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<SculkPatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SeaAnemoneFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SeaPickleFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<SpeleothemClusterFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<SpringFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SulfurPoolSnapToSurfaceFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SulfurSpikeClusterFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SulfurSpikeFeature>());
@@ -114,7 +107,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<SwampFlowerDiscFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SweetBerryBushFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<TaigaGrassFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<UnderwaterMagmaFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<VegetationPatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<WaterlilyFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<WildflowersBedFeature>());

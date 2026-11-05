@@ -5769,14 +5769,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/MultifaceFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/MultifaceFeature.h",
-      "sha256": "e8c05576ca8e4b117c2e0e5cf5b9d48d4f9e60de9089e09f8202dc5808220d55",
-      "classes": [
-        "MultifaceFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/PaleMossPatchFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/PaleMossPatchFeature.h",
       "sha256": "68cb1bcc422540a2d87759fd1e3f62eab6b36a47381666e24f4acb1857e79528",
@@ -5841,22 +5833,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/SpeleothemClusterFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/SpeleothemClusterFeature.h",
-      "sha256": "395bdf3335953c478f79fee2ddf5f66a4103a3a0d9c967db2823c74f40f3e06c",
-      "classes": [
-        "SpeleothemClusterFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/SpringFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/SpringFeature.h",
-      "sha256": "eb34a0fa4102f5df347f9f8fb99f0198f5844ab0c492f9aacc02b4c5386849e2",
-      "classes": [
-        "SpringFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/SulfurPoolSnapToSurfaceFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/SulfurPoolSnapToSurfaceFeature.h",
       "sha256": "73897524475d0f600ba25b2bf612f7a8ca9577c2d1dfe6114d440493a5e1dc02",
@@ -5910,14 +5886,6 @@
       "sha256": "26e983141a49ec30d91663e4eadfe211c6e298f591d0721e7d0f5881fd6cccfb",
       "classes": [
         "TaigaGrassFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/UnderwaterMagmaFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/UnderwaterMagmaFeature.h",
-      "sha256": "162c9ce028127e6dff3e30770c1fface6e9e3f2df3e08b17cd02018d2f1e631c",
-      "classes": [
-        "UnderwaterMagmaFeature"
       ]
     },
     {
@@ -10263,11 +10231,6 @@
       "sha256": "b0343788c789ea7515dbfbd397d2b3b2e9e8c109e8b5543088412f52c58525f0"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/MultifaceFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/MultifaceFeature.cpp",
-      "sha256": "216331d47d00d02b0689c401cc0a42c4e6389817c44a4eea727100825dfe7794"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/PaleMossPatchFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/PaleMossPatchFeature.cpp",
       "sha256": "64beba21e3acdeb271eca01dd9acc30b4b52e67cb7b6aac66a76c071b745b5da"
@@ -10313,16 +10276,6 @@
       "sha256": "f4ed5d0d12e72654425845d371b72bc40e8ea94dab651a435472eadf240b9dd8"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/SpeleothemClusterFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/SpeleothemClusterFeature.cpp",
-      "sha256": "5653fed402f353a49a91e4217e31524e887ba909bf810e54fee75881c0168860"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/SpringFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/SpringFeature.cpp",
-      "sha256": "faeaba05079b63593310e539940b790ee7e75c9b86ca249a231059ee593205c3"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/SulfurPoolSnapToSurfaceFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/SulfurPoolSnapToSurfaceFeature.cpp",
       "sha256": "f3f1220ca8865d9b1e09b7e88dd6cc4b7a246bc1ffb270edcea71c40f4380062"
@@ -10356,11 +10309,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/TaigaGrassFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/TaigaGrassFeature.cpp",
       "sha256": "9a73694696e2643b5ee476e2b12a01de9d2a9f60fdc6d3f13b1e88d7e3aa6ecc"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/UnderwaterMagmaFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/UnderwaterMagmaFeature.cpp",
-      "sha256": "6d29e9fe1c3f137e31c1377d10eb331c589a67a3667d1cba6ea0fd8eb7f19705"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/VegetationPatchFeature.cpp",

@@ -148,6 +148,25 @@ private:
         return name;
     }
 
+    // between two numbers the game folds the bounds when it compiles the call (sub_1416A29C0, opcodes 0x21 and
+    // 0x22), which rounds the draw differently from the call between two expressions
+    int32_t _random(Operation operation, int32_t first, int32_t second) {
+        const int32_t index = _node(operation, first, second);
+        if (!mValid)
+            return index;
+
+        const FeatureExpression::Node &low = mExpression.mNodes[(size_t) first];
+        const FeatureExpression::Node &high = mExpression.mNodes[(size_t) second];
+        if (low.mOperation != Operation::Constant || high.mOperation != Operation::Constant)
+            return index;
+
+        FeatureExpression::Node &node = mExpression.mNodes[(size_t) index];
+        node.mValue = std::fmin(high.mValue, low.mValue);
+        node.mSecondValue = std::fmax(high.mValue, low.mValue);
+        node.mFolded = true;
+        return index;
+    }
+
     // the tag is a single-quoted string
     int32_t _biomeTag() {
         _expect("'");
@@ -209,6 +228,9 @@ private:
             return _node(Operation::Ceil, arguments[0]);
         if (name == "math.max" && arguments.size() == 2)
             return _node(Operation::Max, arguments[0], arguments[1]);
+        if ((name == "math.random" || name == "math.random_integer") && arguments.size() == 2)
+            return _random(name == "math.random" ? Operation::Random : Operation::RandomInteger, arguments[0],
+                           arguments[1]);
         if ((name.rfind("query.", 0) == 0 || name.rfind("q.", 0) == 0) && arguments.size() == 2) {
             const int32_t index = _node(Operation::Query, arguments[0], arguments[1]);
             mExpression.mNodes[(size_t) index].mName = name.substr(name.find('.') + 1);
@@ -265,6 +287,10 @@ float FeatureExpression::_evaluate(int32_t index, const Context &context) const 
             return std::ceil(operand(0));
         case Operation::Max:
             return std::fmax(operand(0), operand(1));
+        case Operation::Random:
+            return _random(node, context);
+        case Operation::RandomInteger:
+            return _randomInteger(node, context);
         case Operation::Negate:
             return -operand(0);
         case Operation::Not:
@@ -297,4 +323,32 @@ float FeatureExpression::_evaluate(int32_t index, const Context &context) const 
             return operand(0) != 0.0f ? operand(1) : operand(2);
     }
     return 0.0f;
+}
+
+float FeatureExpression::_random(const Node &node, const Context &context) const {
+    // sub_1416E2C00 between two numbers, sub_1416E2F30 between two expressions evaluated before the draw
+    if (node.mFolded)
+        return context.random() * (node.mSecondValue - node.mValue) + node.mValue;
+
+    const float first = _evaluate(node.mOperands[0], context);
+    const float second = _evaluate(node.mOperands[1], context);
+    const float draw = context.random();
+    return std::fmax(first, second) * draw + (1.0f - draw) * std::fmin(second, first);
+}
+
+float FeatureExpression::_randomInteger(const Node &node, const Context &context) const {
+    // sub_1416E3270 and sub_1416E3580: the upper bound pushed just under the next integer so it can be floored to
+    float low = node.mValue;
+    float high = node.mSecondValue;
+    if (!node.mFolded) {
+        const float first = _evaluate(node.mOperands[0], context);
+        const float second = _evaluate(node.mOperands[1], context);
+        low = std::fmin(second, first);
+        high = std::fmax(first, second);
+    }
+
+    const float above = (-1.1920929e-7f * high + 1.0f) + high;
+    const float draw = context.random();
+    const float value = std::floor(above * draw + (1.0f - draw) * low);
+    return high < value ? high : std::fmax(value, low);
 }
