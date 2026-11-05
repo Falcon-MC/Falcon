@@ -85,7 +85,7 @@ int32_t OverworldGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
 
 void OverworldGenerator::decorate(Level &level, LevelChunk &chunk,
                                  std::vector<GeneratedBlockChange> *overflow) const {
-    OverworldFeatureBuilder::apply(level, chunk, overflow);
+    OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }
 
 int64_t OverworldGenerator::parseSeed(const std::string &value) {

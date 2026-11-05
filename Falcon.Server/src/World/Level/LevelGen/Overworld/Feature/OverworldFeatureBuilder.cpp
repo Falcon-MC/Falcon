@@ -72,7 +72,8 @@ namespace {
     }
 }
 
-void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) {
+void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, const OverworldClimate &climate,
+                                    std::vector<GeneratedBlockChange> *overflow) {
     if (!BiomeChunkGenDataRegistry::isLoaded())
         return;
 
@@ -134,7 +135,7 @@ void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, std::vector
     // applied at once so the features placed after them see the rules' blocks
     BlockManager rules(level);
     rules.setOverflowSink(chunk.getX(), chunk.getZ(), overflow);
-    OverworldRulePlacer::apply(rules, chunk, (uint32_t) level.getSeed(), biomesInSectionOrder(chunk));
+    OverworldRulePlacer::apply(rules, chunk, climate, (uint32_t) level.getSeed(), biomesInSectionOrder(chunk));
     rules.applySubChunkUpdate();
 
     place(false);

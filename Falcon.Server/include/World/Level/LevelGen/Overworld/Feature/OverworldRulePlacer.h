@@ -9,6 +9,7 @@
 class BiomeFeatureEntry;
 class BlockManager;
 class LevelChunk;
+class OverworldClimate;
 
 // the feature rules whose feature is ported, scattered and shaped like the game's feature rules (sub_14A22D800)
 class OverworldRulePlacer {
@@ -18,8 +19,8 @@ public:
 
     // pass by pass, biomes in the order the game visits them; with more than one, each rule only places in its own
     // biome
-    static void apply(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed,
-                      const std::vector<int32_t> &biomes);
+    static void apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate &climate,
+                      uint32_t levelSeed, const std::vector<int32_t> &biomes);
 
 private:
     struct OreDefinition;
@@ -32,6 +33,10 @@ private:
     struct AggregateDefinition;
     struct TreeDefinition;
     struct LegacyTreeDefinition;
+    struct ThresholdDefinition;
+    struct SnapDefinition;
+    struct BlobDefinition;
+    struct MultifaceDefinition;
 
     // one of the game's features a rule or another feature places
     struct Placed {
@@ -47,11 +52,20 @@ private:
         Block (*mMushroom)() = nullptr;
         // beehive_search_feature
         bool mBeehiveSearch = false;
+        const ThresholdDefinition *mThreshold = nullptr;
+        const SnapDefinition *mSnap = nullptr;
+        const BlobDefinition *mBlob = nullptr;
+        const MultifaceDefinition *mMultiface = nullptr;
+        // the game's own dripstone_cluster_feature, pointed_dripstone_feature and large_dripstone_feature
+        bool mDripstoneCluster = false;
+        bool mPointedDripstone = false;
+        bool mLargeDripstone = false;
 
         bool isSet() const {
             return mSeagrass != nullptr || mScatter != nullptr || mSingleBlock != nullptr || mWeighted != nullptr
                    || mAggregate != nullptr || mTree != nullptr || mLeafLitter || mMushroom != nullptr
-                   || mBeehiveSearch;
+                   || mBeehiveSearch || mThreshold != nullptr || mSnap != nullptr || mBlob != nullptr
+                   || mMultiface != nullptr || mDripstoneCluster || mPointedDripstone || mLargeDripstone;
         }
     };
 
@@ -64,14 +78,19 @@ private:
         bool mKelp = false;
         // legacy:forest_foliage_feature
         bool mForestFoliage = false;
+        // legacy:springs_feature
+        bool mSprings = false;
 
         bool isPorted() const {
             return mOre != nullptr || mDisk != nullptr || mGeode != nullptr || mLegacyTree != nullptr
-                   || mPlaced.isSet() || mKelp || mForestFoliage;
+                   || mPlaced.isSet() || mKelp || mForestFoliage || mSprings;
         }
     };
 
     static Feature _find(const BiomeFeatureEntry &entry);
+
+    static void _drawUnported(BlockManager &blocks, const LevelChunk &chunk, const BiomeFeatureEntry &entry,
+                              uint32_t decorationSeed);
 
     static void _placeRule(BlockManager &blocks, const LevelChunk &chunk, const BiomeFeatureEntry &entry,
                            const Feature &feature, uint32_t decorationSeed, int32_t biomeFilter);
@@ -87,6 +106,10 @@ private:
 
     static void _placeLegacyTrees(BlockManager &blocks, const LegacyTreeDefinition &trees, int32_t x, int32_t z,
                                   std::mt19937 &random);
+
+    static void _placeSprings(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
+
+    static void _placeSpring(BlockManager &blocks, int32_t x, int32_t y, int32_t z, const BlockState &liquid);
 
     static void _placeForestFoliage(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
 
@@ -119,6 +142,30 @@ private:
 
     static bool _placeWeighted(BlockManager &blocks, const WeightedDefinition &weighted, int32_t x, int32_t y,
                                int32_t z, std::mt19937 &random);
+
+    static bool _placeThreshold(BlockManager &blocks, const ThresholdDefinition &threshold, int32_t x, int32_t y,
+                                int32_t z, std::mt19937 &random);
+
+    static bool _placeSnap(BlockManager &blocks, const SnapDefinition &snap, int32_t x, int32_t y, int32_t z,
+                           std::mt19937 &random);
+
+    static bool _snapAlong(BlockManager &blocks, const SnapDefinition &snap, int32_t x, int32_t y, int32_t z,
+                           int32_t face, int32_t snapped[3]);
+
+    static bool _placeBlob(BlockManager &blocks, const BlobDefinition &blob, int32_t x, int32_t y, int32_t z,
+                           std::mt19937 &random);
+
+    static bool _placeMultiface(BlockManager &blocks, const MultifaceDefinition &multiface, int32_t x, int32_t y,
+                                int32_t z, std::mt19937 &random);
+
+    static bool _growMultiface(BlockManager &blocks, const MultifaceDefinition &multiface, int32_t x, int32_t y,
+                               int32_t z, const std::vector<int32_t> &faces, std::mt19937 &random);
+
+    static bool _placeDripstoneCluster(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
+
+    static bool _placePointedDripstone(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
+
+    static bool _placeLargeDripstone(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 
     static bool _placeKelp(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 };

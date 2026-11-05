@@ -16,6 +16,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+#include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/FeatureExpression.h"
@@ -28,9 +29,11 @@
 #include "World/Level/LevelGen/Overworld/Feature/OverworldTreePlacer.h"
 #include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
+#include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <climits>
 #include <cmath>
 #include <cstring>
@@ -186,6 +189,84 @@ namespace {
         return LevelChunk::MIN_Y;
     }
 
+    // what the game hands every rule and the features it places besides their position and random: the chunk's
+    // decoration random of sub_14CDD4880 in the render params, which math.random draws its nextFloat from
+    // (sub_1437FBE80, sub_140AE3310), and the generator's preliminary surface levels (sub_145C321F0)
+    struct PlacementContext {
+        std::mt19937 *mDecoration = nullptr;
+        const OverworldClimate *mClimate = nullptr;
+        // the second value of Random::nextGaussian, which the Random keeps for its next call
+        const std::mt19937 *mGaussianOwner = nullptr;
+        float mGaussian = 0.0f;
+    };
+    thread_local PlacementContext placementContext;
+
+    using FeatureRandom::nextBoolean;
+    using FeatureRandom::nextDouble;
+
+    // Random::nextGaussian in floats (inlined in sub_145A3BFE0): the polar method on two raw draws, the second
+    // value kept for the next call
+    float nextGaussian(std::mt19937 &random) {
+        if (placementContext.mGaussianOwner == &random) {
+            placementContext.mGaussianOwner = nullptr;
+            return placementContext.mGaussian;
+        }
+
+        float first = 0.0f;
+        float second = 0.0f;
+        float square = 0.0f;
+        do {
+            do {
+                const uint32_t firstDraw = random();
+                const uint32_t secondDraw = random();
+                first = static_cast<float>(static_cast<double>(firstDraw) * 2.3283064365386963e-10);
+                second = static_cast<float>(static_cast<double>(secondDraw) * 2.3283064365386963e-10);
+                first = (first + first) + -1.0f;
+                second = (second + second) + -1.0f;
+                square = second * second + first * first;
+            } while (square >= 1.0f);
+        } while (square == 0.0f);
+
+        const float scale = std::sqrt(std::log(square) * -2.0f / square);
+        placementContext.mGaussianOwner = &random;
+        placementContext.mGaussian = second * scale;
+        return first * scale;
+    }
+
+    // the result of sub_14A290200: whether the start passed, then whether the walk ended on a surface and how many
+    // blocks it passed before it
+    struct ColumnEnd {
+        bool mValid = false;
+        bool mFound = false;
+        int32_t mSteps = 0;
+    };
+
+    // sub_14A290200: from a start that passes, along the step while the blocks pass, at most range - 1 of them,
+    // then the block it stopped at is tested as the surface
+    template<typename Continues, typename Ends>
+    ColumnEnd walkColumn(int32_t x, int32_t y, int32_t z, const int32_t step[3], int32_t range,
+                         const Continues &continues, const Ends &ends) {
+        ColumnEnd end;
+        if (!continues(x, y, z))
+            return end;
+
+        end.mValid = true;
+        int32_t blockX = x + step[0];
+        int32_t blockY = y + step[1];
+        int32_t blockZ = z + step[2];
+        while (end.mSteps < range - 1 && continues(blockX, blockY, blockZ)) {
+            blockX += step[0];
+            blockY += step[1];
+            blockZ += step[2];
+            end.mSteps++;
+        }
+        end.mFound = ends(blockX, blockY, blockZ);
+        return end;
+    }
+
+    // the six faces in the game's order: down, up, north, south, west, east
+    const int32_t FACE_STEPS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+
     // the Molang variables of a scatter: its origin, then each axis once drawn (sub_1437FBE80, sub_1437FD990)
     class ScatterVariables : public FeatureExpression::Context {
     public:
@@ -228,6 +309,10 @@ namespace {
             if (name == "noise")
                 return queryNoise(first, second);
             return 0.0f;
+        }
+
+        float random() const override {
+            return placementContext.mDecoration != nullptr ? nextFloat(*placementContext.mDecoration) : 0.0f;
         }
 
         void setWorld(size_t axis, int32_t value) {
@@ -360,6 +445,83 @@ namespace {
         dz = static_cast<int32_t>(firstZ) - static_cast<int32_t>(random() & 7u);
         const uint32_t firstX = random() & 7u;
         dx = static_cast<int32_t>(firstX) - static_cast<int32_t>(random() & 7u);
+    }
+
+    bool isLava(BlockManager &blocks, int32_t x, int32_t y, int32_t z) {
+        return LavaBlock::matches(blocks.getBlockAt(x, y, z).mName)
+               || LavaBlock::matches(blocks.getExtraBlockAt(x, y, z).mName);
+    }
+
+    // DripstoneUtils' empty or water: air, or water on either layer
+    bool isEmptyOrWater(BlockManager &blocks, int32_t x, int32_t y, int32_t z) {
+        const BlockState &state = blocks.getBlockAt(x, y, z);
+        return state.mName == "minecraft:air" || isWater(state) || isWater(blocks.getExtraBlockAt(x, y, z));
+    }
+
+    // the blocks dripstone replaces (xmmword_1529AA840)
+    bool isDripstoneReplaceable(const BlockState &state) {
+        static const std::vector<std::string> REPLACEABLE = {
+                "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:stone", "minecraft:tuff", "minecraft:deepslate"
+        };
+        return contains(REPLACEABLE, state);
+    }
+
+    // sub_14721CC10
+    bool isDripstoneBaseOrLava(BlockManager &blocks, int32_t x, int32_t y, int32_t z) {
+        const BlockState &state = blocks.getBlockAt(x, y, z);
+        return isDripstoneReplaceable(state) || state.mName == "minecraft:dripstone_block" || isLava(blocks, x, y, z);
+    }
+
+    // sub_1471E6440
+    bool placeDripstoneBlock(BlockManager &blocks, int32_t x, int32_t y, int32_t z) {
+        if (!isDripstoneReplaceable(blocks.getBlockAt(x, y, z)))
+            return false;
+
+        static const BlockState dripstone = VanillaBlocks::DRIPSTONE_BLOCK().toBlockState();
+        blocks.setBlockStateAt(x, y, z, dripstone);
+        return true;
+    }
+
+    // sub_1471E6570: from its base, base, middle, frustum and the tip or merge, as long as the blocks are open
+    void growPointedDripstone(BlockManager &blocks, int32_t x, int32_t y, int32_t z, bool up, int32_t length,
+                              bool merge) {
+        if (length <= 0)
+            return;
+
+        // sub_14721CE00: thickness 0 tip, 1 frustum, 2 middle, 3 base, 4 merge
+        static const char *const THICKNESS[5] = {"tip", "frustum", "middle", "base", "merge"};
+        static const BlockState pointed = VanillaBlocks::POINTED_DRIPSTONE().toBlockState();
+        const auto place = [&](int32_t blockY, int32_t thickness) {
+            BlockState state = withState(pointed, "dripstone_thickness", THICKNESS[thickness]);
+            Tag states = state.mStates;
+            states.putByte("hanging", up ? 0 : 1);
+            setInWater(blocks, x, blockY, z, BlockState(state.mName, states));
+        };
+        const auto open = [&](int32_t blockY) {
+            return isEmptyOrWater(blocks, x, blockY, z) && !isLava(blocks, x, blockY, z);
+        };
+
+        if (!open(y))
+            return;
+
+        const int32_t step = up ? 1 : -1;
+        place(y, length == 2 ? 1 : (length == 1 ? (merge ? 4 : 0) : 3));
+        int32_t blockY = y + step;
+        for (int32_t remaining = length; remaining > 1 && open(blockY); remaining--) {
+            place(blockY, remaining == 3 ? 1 : (remaining == 2 ? (merge ? 4 : 0) : 2));
+            blockY += step;
+            if (remaining <= 2)
+                break;
+        }
+    }
+
+    // LargeDripstone's height at a distance from its axis (sub_14721CD00), in doubles rounded to a float
+    float largeDripstoneHeight(float distance, float radius, float scale, float bluntness) {
+        const double ratio = static_cast<double>(std::fmax(bluntness, distance) / radius) * 0.384;
+        const double height = std::pow(ratio, 1.3333333333333333) * 0.75 - std::pow(ratio, 0.6666666666666666)
+                              + std::log(ratio) * -0.3333333333333333;
+        return static_cast<float>(static_cast<double>(radius)
+                                  * (std::fmax(height * static_cast<double>(scale), 0.0) / 0.384));
     }
 }
 
@@ -497,6 +659,46 @@ struct OverworldRulePlacer::GeodeDefinition {
     float mUseAlternateLayer0Chance;
     bool mPlacementsRequireLayer0Alternate;
     int32_t mInvalidBlocksThreshold;
+};
+
+// a minecraft:surface_relative_threshold_feature (place sub_14A280DE0)
+struct OverworldRulePlacer::ThresholdDefinition {
+    const char *mIdentifier;
+    Placed mPlaces;
+    int32_t mMinimumDistanceBelowSurface;
+};
+
+// a minecraft:snap_to_surface_feature (place sub_14A2714C0); surface 0 is ceiling, 1 floor, 2 wall and 3
+// random_horizontal
+struct OverworldRulePlacer::SnapDefinition {
+    const char *mIdentifier;
+    Placed mPlaces;
+    int32_t mVerticalSearchRange;
+    int32_t mSurface;
+    bool mAllowAirPlacement;
+    bool mAllowNonAirPlacement;
+    bool mAllowUnderwaterPlacement;
+    bool mEmbedInSurface;
+    std::vector<std::string> mAllowedSurfaceBlocks;
+};
+
+// a minecraft:partially_exposed_blob_feature (place sub_14D22BD50); faces 0 down to 5 east
+struct OverworldRulePlacer::BlobDefinition {
+    const char *mIdentifier;
+    Block (*mPlaces)();
+    int32_t mPlacementRadiusAroundFloor;
+    float mPlacementProbabilityPerValidPosition;
+    int32_t mExposedFace;
+};
+
+// a minecraft:multiface_feature (place sub_14A2CD220); faces 0 down to 5 east
+struct OverworldRulePlacer::MultifaceDefinition {
+    const char *mIdentifier;
+    Block (*mPlaces)();
+    int32_t mSearchRange;
+    std::vector<int32_t> mFaces;
+    float mChanceOfSpreading;
+    std::vector<std::string> mCanPlaceOn;
 };
 
 OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry &entry) {
@@ -661,6 +863,21 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         placed.mLeafLitter = true;
         return placed;
     }();
+    static const auto blob = [](const BlobDefinition &definition) {
+        Placed placed;
+        placed.mBlob = &definition;
+        return placed;
+    };
+    static const auto multiface = [](const MultifaceDefinition &definition) {
+        Placed placed;
+        placed.mMultiface = &definition;
+        return placed;
+    };
+    static const auto snap = [](const SnapDefinition &definition) {
+        Placed placed;
+        placed.mSnap = &definition;
+        return placed;
+    };
     static const Placed BEEHIVE_SEARCH = [] {
         Placed placed;
         placed.mBeehiveSearch = true;
@@ -784,6 +1001,37 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              aggregate(DOUBLE_PLANTS[1])}
     };
 
+    // BDS 1.26.61 behavior packs, features/underwater_magma_*.json
+    static const BlobDefinition UNDERWATER_MAGMA = {
+            "minecraft:underwater_magma_feature", &VanillaBlocks::MAGMA, 1, 0.5f, 1};
+    static const SnapDefinition UNDERWATER_MAGMA_SNAP = {
+            "minecraft:underwater_magma_snap_to_surface_feature", blob(UNDERWATER_MAGMA), 5, 1, false, false, true,
+            false, {}};
+    static const ThresholdDefinition UNDERWATER_MAGMA_UNDERGROUND = {
+            "minecraft:underwater_magma_underground_feature", snap(UNDERWATER_MAGMA_SNAP), 2};
+
+    // BDS 1.26.61 behavior packs, features/*glow_lichen_feature.json: the ceiling and the four walls
+    static const MultifaceDefinition GLOW_LICHEN = {
+            "minecraft:glow_lichen_feature", &VanillaBlocks::GLOW_LICHEN, 20, {1, 2, 3, 4, 5}, 0.5f,
+            {"minecraft:stone", "minecraft:andesite", "minecraft:diorite", "minecraft:granite",
+             "minecraft:dripstone_block", "minecraft:calcite", "minecraft:tuff", "minecraft:deepslate",
+             "minecraft:sulfur", "minecraft:cinnabar"}};
+    static const ThresholdDefinition UNDERGROUND_GLOW_LICHEN = {
+            "minecraft:underground_glow_lichen_feature", multiface(GLOW_LICHEN), 2};
+
+    // BDS 1.26.61 behavior packs, features/small_dripstone*.json; the scatter keeps the default xyz order
+    static const Placed POINTED_DRIPSTONE = [] {
+        Placed placed;
+        placed.mPointedDripstone = true;
+        return placed;
+    }();
+    static const SnapDefinition SMALL_DRIPSTONE_SNAP = {
+            "minecraft:small_dripstone_snap_to_surface_feature", POINTED_DRIPSTONE, 12, 3, true, false, true, false,
+            {}};
+    static const ScatterDefinition SMALL_DRIPSTONE = {
+            "minecraft:small_dripstone_feature", "Math.Random(1, 5)",
+            {{2, "-10", "10"}, {2, "-2", "2"}, {2, "-10", "10"}}, 0, snap(SMALL_DRIPSTONE_SNAP)};
+
     // BDS 1.26.61 behavior packs, features/amethyst_geode_feature.json
     static const GeodeDefinition GEODES[] = {
             {"minecraft:amethyst_geode_feature", &VanillaBlocks::AIR, &VanillaBlocks::AMETHYST_BLOCK,
@@ -797,6 +1045,11 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     if (entry.mPass == AFTER_SURFACE_PASS) {
         // vtable 0x14F4A0F60, place sub_14D217680
         feature.mKelp = entry.mFeature == "minecraft:kelp_feature";
+        if (entry.mFeature == UNDERWATER_MAGMA_UNDERGROUND.mIdentifier)
+            feature.mPlaced.mThreshold = &UNDERWATER_MAGMA_UNDERGROUND;
+        if (entry.mFeature == SMALL_DRIPSTONE.mIdentifier)
+            feature.mPlaced.mScatter = &SMALL_DRIPSTONE;
+        feature.mPlaced.mDripstoneCluster = entry.mFeature == "minecraft:dripstone_cluster_feature";
         for (const GeodeDefinition &geode: GEODES) {
             if (entry.mFeature == geode.mIdentifier)
                 feature.mGeode = &geode;
@@ -811,11 +1064,15 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             if (entry.mFeature == disk.mIdentifier)
                 feature.mDisk = &disk;
         }
+        feature.mPlaced.mLargeDripstone = entry.mFeature == "minecraft:large_dripstone_feature";
+        feature.mSprings = entry.mFeature == "minecraft:legacy:springs_feature";
         for (const LegacyTreeDefinition &trees: LEGACY_TREES) {
             if (entry.mFeature == trees.mIdentifier)
                 feature.mLegacyTree = &trees;
         }
     }
+    if (entry.mPass == "after_underground_pass" && entry.mFeature == UNDERGROUND_GLOW_LICHEN.mIdentifier)
+        feature.mPlaced.mThreshold = &UNDERGROUND_GLOW_LICHEN;
     if (entry.mPass == FIRST_PASS)
         feature.mForestFoliage = entry.mFeature == "minecraft:legacy:forest_foliage_feature";
     if (entry.mPass == FIRST_PASS || entry.mPass == SURFACE_PASS || entry.mPass == AFTER_SURFACE_PASS) {
@@ -852,14 +1109,18 @@ bool OverworldRulePlacer::handles(const BiomeFeatureEntry &entry) {
     return drawnInOrder(axes, entry.mEvalOrder);
 }
 
-void OverworldRulePlacer::apply(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed,
-                               const std::vector<int32_t> &biomes) {
+void OverworldRulePlacer::apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate &climate,
+                               uint32_t levelSeed, const std::vector<int32_t> &biomes) {
     // the decoration seed of sub_14CDD4880, from the level seed and the chunk position
     std::mt19937 random(levelSeed);
     const uint32_t multiplierX = (random() >> 1) | 1u;
     const uint32_t multiplierZ = (random() >> 1) | 1u;
     const uint32_t decorationSeed = (multiplierZ * static_cast<uint32_t>(chunk.getZ())
                                      + multiplierX * static_cast<uint32_t>(chunk.getX())) ^ levelSeed;
+
+    std::mt19937 decoration(decorationSeed);
+    placementContext.mDecoration = &decoration;
+    placementContext.mClimate = &climate;
 
     // sub_14CDDF960, sub_14A22E1E0, sub_14A22E470: each pass, every biome of the chunk, then its rules in order
     for (const char *pass: PASSES) {
@@ -869,12 +1130,65 @@ void OverworldRulePlacer::apply(BlockManager &blocks, const LevelChunk &chunk, u
                 continue;
 
             for (const BiomeFeatureEntry &entry: *rules) {
-                if (entry.mPass != pass || !handles(entry))
+                if (entry.mPass != pass)
                     continue;
 
-                _placeRule(blocks, chunk, entry, _find(entry), decorationSeed, biomes.size() > 1 ? biome : -1);
+                if (handles(entry))
+                    _placeRule(blocks, chunk, entry, _find(entry), decorationSeed, biomes.size() > 1 ? biome : -1);
+                else
+                    _drawUnported(blocks, chunk, entry, decorationSeed);
             }
         }
+    }
+    placementContext = PlacementContext();
+}
+
+void OverworldRulePlacer::_drawUnported(BlockManager &blocks, const LevelChunk &chunk, const BiomeFeatureEntry &entry,
+                                        uint32_t decorationSeed) {
+    // a rule the placer does not port still draws its math.random from the decoration random the ported rules
+    // after it share, for its chance, its iterations and, when they draw, its coordinates
+    const auto draws = [](const std::string &text) {
+        std::string lower = text;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char character) { return (char) std::tolower(character); });
+        return lower.find("math.random") != std::string::npos;
+    };
+
+    bool coordinatesDraw = false;
+    for (const BiomeFeatureEntry::Coordinate &coordinate: entry.mCoordinates)
+        coordinatesDraw = coordinatesDraw || draws(coordinate.mMin) || draws(coordinate.mMax);
+    const bool percentDraws = (entry.mChanceNumerator <= 0 || entry.mChanceDenominator <= 0)
+                              && draws(entry.mChancePercent);
+    if (!coordinatesDraw && !percentDraws && !draws(entry.mIterations))
+        return;
+
+    const ExpressionPtr iterationsExpression = FeatureExpression::parse(entry.mIterations);
+    const ExpressionPtr percent = FeatureExpression::parse(entry.mChancePercent);
+    if (iterationsExpression == nullptr
+        || ((entry.mChanceNumerator <= 0 || entry.mChanceDenominator <= 0) && percent == nullptr)
+        || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
+        return;
+
+    Axis axes[3];
+    for (size_t axis = 0; axis < 3; axis++) {
+        const BiomeFeatureEntry::Coordinate &coordinate = entry.mCoordinates[axis];
+        if (!parseAxis(coordinate.mDistribution, coordinate.mMin, coordinate.mMax, axes[axis]) && coordinatesDraw)
+            return;
+    }
+
+    const uint32_t hash = static_cast<uint32_t>(hashedString(entry.mIdentifier));
+    const uint32_t seed = decorationSeed ^ ((decorationSeed >> 2) + hash + (decorationSeed << 6) + 0x9E3779B9u);
+    std::mt19937 scatter(seed);
+    const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
+    ScatterVariables variables(blocks, origin);
+    int32_t iterations = iterationsOf(entry.mChanceNumerator, entry.mChanceDenominator, percent,
+                                      iterationsExpression, variables, scatter);
+    if (!coordinatesDraw)
+        return;
+
+    while (iterations-- > 0) {
+        int32_t position[3] = {0, 0, 0};
+        scatterPosition(axes, entry.mEvalOrder, origin, variables, scatter, position);
     }
 }
 
@@ -901,6 +1215,7 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
 
     // the feature draws from a second twister on the same seed, shared by every iteration
     std::mt19937 placement(seed);
+    placementContext.mGaussianOwner = nullptr;
     while (iterations-- > 0) {
         int32_t position[3] = {0, 0, 0};
         scatterPosition(axes, entry.mEvalOrder, origin, variables, scatter, position);
@@ -917,6 +1232,8 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
             _placeGeode(blocks, *feature.mGeode, position[0], position[1], position[2], placement);
         else if (feature.mForestFoliage)
             _placeForestFoliage(blocks, position[0], position[2], placement);
+        else if (feature.mSprings)
+            _placeSprings(blocks, position[0], position[2], placement);
         else if (feature.mLegacyTree != nullptr)
             _placeLegacyTrees(blocks, *feature.mLegacyTree, position[0], position[2], placement);
         else if (feature.mPlaced.isSet())
@@ -1130,7 +1447,600 @@ bool OverworldRulePlacer::_place(BlockManager &blocks, const Placed &placed, int
         return _placeLeafLitter(blocks, x, y, z, random);
     if (placed.mMushroom != nullptr)
         return _placeMushroom(blocks, placed.mMushroom, x, y, z);
+    if (placed.mThreshold != nullptr)
+        return _placeThreshold(blocks, *placed.mThreshold, x, y, z, random);
+    if (placed.mSnap != nullptr)
+        return _placeSnap(blocks, *placed.mSnap, x, y, z, random);
+    if (placed.mBlob != nullptr)
+        return _placeBlob(blocks, *placed.mBlob, x, y, z, random);
+    if (placed.mMultiface != nullptr)
+        return _placeMultiface(blocks, *placed.mMultiface, x, y, z, random);
+    if (placed.mDripstoneCluster)
+        return _placeDripstoneCluster(blocks, x, y, z, random);
+    if (placed.mPointedDripstone)
+        return _placePointedDripstone(blocks, x, y, z, random);
+    if (placed.mLargeDripstone)
+        return _placeLargeDripstone(blocks, x, y, z, random);
     return _placeBeehiveSearch(blocks, x, y, z, random);
+}
+
+bool OverworldRulePlacer::_placeDripstoneCluster(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
+                                                 std::mt19937 &random) {
+    // the game's dripstone cluster (sub_1471E6910, built in sub_14726F340 by sub_14728CE10): height 3 to 5,
+    // wetness a clamped normal of mean 0.1 and deviation 0.3 between 0.1 and 1, density 0.3 to 0.7, radius 2 to 7,
+    // columns searched 12 blocks up and down; open blocks are air or water
+    if (!isEmptyOrWater(blocks, x, y, z))
+        return false;
+
+    const int32_t height = 3 + nextInt(random, 3);
+    float wetness = 0.1f + 0.3f * nextGaussian(random);
+    wetness = 1.0f < wetness ? 1.0f : std::fmax(wetness, 0.1f);
+    const float densityDraw = nextFloat(random);
+    const int32_t radiusX = 2 + nextInt(random, 6);
+    const int32_t radiusZ = 2 + nextInt(random, 6);
+    const float density = (0.7f - 0.3f) * densityDraw + 0.3f;
+
+    const auto open = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        return isEmptyOrWater(blocks, blockX, blockY, blockZ);
+    };
+    const auto surface = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        return isDripstoneBaseOrLava(blocks, blockX, blockY, blockZ);
+    };
+    // a pool may only lie in stone, deepslate, tuff or water
+    const auto holdsWater = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
+        return name == "minecraft:stone" || name == "minecraft:deepslate" || name == "minecraft:tuff"
+               || isWater(blocks.getBlockAt(blockX, blockY, blockZ))
+               || isWater(blocks.getExtraBlockAt(blockX, blockY, blockZ));
+    };
+    // DripstoneUtils' biased height: a gaussian of deviation 3 around half the height, lowered away from the
+    // centre over 8 blocks
+    const auto biased = [&](int32_t maxHeight, int32_t offsetX, int32_t offsetZ) {
+        const float limit = static_cast<float>(maxHeight);
+        const float half = limit * 0.5f;
+        const float away = static_cast<float>(std::abs(offsetZ) + std::abs(offsetX)) * 0.125f;
+        const float mean = 1.0f < away ? 0.0f : (0.0f - half) * away + half;
+        const float value = nextGaussian(random) * 3.0f + mean;
+        return static_cast<int32_t>(limit < value ? limit : std::fmax(value, 0.0f));
+    };
+    const auto countOpen = [&](int32_t blockX, int32_t fromY, int32_t blockZ, int32_t step, int32_t length) {
+        int32_t count = 0;
+        while (count < length && open(blockX, fromY + count * step, blockZ))
+            count++;
+        return count;
+    };
+
+    for (int32_t offsetX = -radiusX; offsetX <= radiusX; offsetX++) {
+        for (int32_t offsetZ = -radiusZ; offsetZ <= radiusZ; offsetZ++) {
+            const int32_t edge = std::min(radiusX - std::abs(offsetX), radiusZ - std::abs(offsetZ));
+            const float ratio = static_cast<float>(edge) / 3.0f;
+            const double columnChance = ratio < 0.0f ? static_cast<double>(0.1f)
+                                                     : (ratio > 1.0f ? 1.0 : static_cast<double>(ratio * 0.9f + 0.1f));
+
+            const int32_t columnX = x + offsetX;
+            const int32_t columnZ = z + offsetZ;
+            const ColumnEnd up = walkColumn(columnX, y, columnZ, FACE_STEPS[1], 12, open, surface);
+            const ColumnEnd down = walkColumn(columnX, y, columnZ, FACE_STEPS[0], 12, open, surface);
+            if (!up.mValid || (!up.mFound && !down.mFound))
+                continue;
+
+            const bool ceiling = up.mFound;
+            const bool floor = down.mFound;
+            const int32_t ceilingY = y + up.mSteps + 1;
+            int32_t floorY = y - down.mSteps - 1;
+
+            if (wetness > nextFloat(random) && floor) {
+                const BlockState &floorState = blocks.getBlockAt(columnX, floorY, columnZ);
+                if (floorState.mName != "minecraft:dripstone_block" && floorState.mName != "minecraft:pointed_dripstone"
+                    && !isWater(floorState) && !isWater(blocks.getExtraBlockAt(columnX, floorY, columnZ))
+                    && !isWater(blocks.getBlockAt(columnX, floorY + 1, columnZ))
+                    && !isWater(blocks.getExtraBlockAt(columnX, floorY + 1, columnZ))
+                    && holdsWater(columnX, floorY, columnZ - 1) && holdsWater(columnX + 1, floorY, columnZ)
+                    && holdsWater(columnX, floorY, columnZ + 1) && holdsWater(columnX - 1, floorY, columnZ)
+                    && holdsWater(columnX, floorY - 1, columnZ)) {
+                    static const BlockState water = VanillaBlocks::WATER().toBlockState();
+                    blocks.setBlockStateAt(columnX, floorY, columnZ, water);
+                    floorY--;
+                }
+            }
+
+            int32_t stalactite = 0;
+            if (columnChance > nextDouble(random) && ceiling && !isLava(blocks, columnX, ceilingY, columnZ)) {
+                const int32_t layers = nextInt(random, 2) + 2;
+                for (int32_t layer = 0; layer < layers; layer++) {
+                    if (!placeDripstoneBlock(blocks, columnX, ceilingY + layer, columnZ))
+                        break;
+                }
+
+                const int32_t maxHeight = floor ? std::min(height, ceilingY - floorY) : height;
+                if (nextFloat(random) <= density)
+                    stalactite = biased(maxHeight, offsetX, offsetZ);
+            }
+
+            int32_t stalagmite = 0;
+            if (columnChance > nextDouble(random) && floor && !isLava(blocks, columnX, floorY, columnZ)) {
+                const int32_t layers = nextInt(random, 2) + 2;
+                for (int32_t layer = 0; layer < layers; layer++) {
+                    if (!placeDripstoneBlock(blocks, columnX, floorY - layer, columnZ))
+                        break;
+                }
+
+                if (ceiling) {
+                    stalagmite = std::max(0, nextInt(random, 3) + stalactite - 1);
+                } else if (nextFloat(random) <= density) {
+                    stalagmite = biased(height, offsetX, offsetZ);
+                }
+            }
+
+            if (ceiling) {
+                // when the two would cross they meet at a drawn height between them
+                if (floor && ceilingY - stalactite <= stalagmite + floorY) {
+                    int32_t low = std::max(ceilingY - stalactite, floorY + 1);
+                    const int32_t high = std::min(stalagmite + floorY, ceilingY - 1);
+                    if (low <= high + 1)
+                        low += nextInt(random, high - low + 2);
+                    stalactite = ceilingY - low;
+                    stalagmite = low - 1 - floorY;
+                }
+                stalactite = countOpen(columnX, ceilingY - 1, columnZ, -1, stalactite);
+            }
+            if (floor)
+                stalagmite = countOpen(columnX, floorY + 1, columnZ, 1, stalagmite);
+
+            const bool merge = nextBoolean(random) && stalactite > 0 && stalagmite > 0 && floor && ceiling
+                               && stalactite + stalagmite == ceilingY - floorY - 1;
+            if (ceiling)
+                growPointedDripstone(blocks, columnX, ceilingY - 1, columnZ, false, stalactite, merge);
+            if (floor)
+                growPointedDripstone(blocks, columnX, floorY + 1, columnZ, true, stalagmite, merge);
+        }
+    }
+    return true;
+}
+
+bool OverworldRulePlacer::_placePointedDripstone(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
+                                                 std::mt19937 &random) {
+    // the game's pointed dripstone (sub_1471E82A0): grows from the base below or above, a patch of dripstone blocks
+    // around that base, then one or two blocks long
+    const auto isBase = [&](int32_t blockY) {
+        const BlockState &state = blocks.getBlockAt(x, blockY, z);
+        return isDripstoneReplaceable(state) || state.mName == "minecraft:dripstone_block";
+    };
+    const bool below = isBase(y - 1);
+    const bool above = isBase(y + 1);
+    bool up = false;
+    if (below && above)
+        up = nextBoolean(random);
+    else if (below)
+        up = true;
+    else if (!above)
+        return false;
+
+    const int32_t baseY = up ? y - 1 : y + 1;
+    placeDripstoneBlock(blocks, x, baseY, z);
+    // down, up, north, south, west then east, each spreading up to two more blocks in drawn faces
+    for (const int32_t *step: FACE_STEPS) {
+        if (nextFloat(random) < 0.3f)
+            continue;
+
+        int32_t spreadX = x + step[0];
+        int32_t spreadY = baseY + step[1];
+        int32_t spreadZ = z + step[2];
+        placeDripstoneBlock(blocks, spreadX, spreadY, spreadZ);
+        for (int32_t further = 0; further < 2; further++) {
+            if (nextBoolean(random))
+                break;
+
+            const int32_t *drawn = FACE_STEPS[nextInt(random, 6)];
+            spreadX += drawn[0];
+            spreadY += drawn[1];
+            spreadZ += drawn[2];
+            placeDripstoneBlock(blocks, spreadX, spreadY, spreadZ);
+        }
+    }
+
+    const float taller = nextFloat(random);
+    const int32_t nextY = up ? y + 1 : y - 1;
+    const int32_t length = isEmptyOrWater(blocks, x, nextY, z) && taller < 0.2f ? 2 : 1;
+    growPointedDripstone(blocks, x, y, z, up, length, false);
+    return true;
+}
+
+bool OverworldRulePlacer::_placeLargeDripstone(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
+                                               std::mt19937 &random) {
+    // the game's large dripstone (sub_14D21B810, vtable 0x14F4A1470): radius 3 to 18 at most a third of the cave,
+    // stalactite bluntness 0.3 to 0.9, stalagmite bluntness 0.4 to 1, height scale 0.4 to 2, a wind of 0 to 0.3
+    // from radius 4 and bluntness 0.6
+    struct LargeDripstone {
+        int32_t mX;
+        int32_t mY;
+        int32_t mZ;
+        bool mUp;
+        int32_t mRadius;
+        float mBluntness;
+        float mScale;
+
+        float heightAt(float distance) const {
+            return largeDripstoneHeight(distance, static_cast<float>(mRadius), mScale, mBluntness);
+        }
+    };
+    struct Wind {
+        bool mBlows = false;
+        int32_t mOriginY = 0;
+        float mX = 0.0f;
+        float mZ = 0.0f;
+    };
+
+    if (!isEmptyOrWater(blocks, x, y, z))
+        return false;
+
+    const auto open = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        return blockY <= LevelChunk::MAX_Y + 1 && blockY >= LevelChunk::MIN_Y
+               && isEmptyOrWater(blocks, blockX, blockY, blockZ);
+    };
+    const auto surface = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        return isDripstoneBaseOrLava(blocks, blockX, blockY, blockZ);
+    };
+    const ColumnEnd up = walkColumn(x, y, z, FACE_STEPS[1], 30, open, surface);
+    const ColumnEnd down = walkColumn(x, y, z, FACE_STEPS[0], 30, open, surface);
+    if (!up.mValid || !up.mFound || !down.mFound)
+        return false;
+
+    const int32_t ceilingY = y + up.mSteps + 1;
+    const int32_t floorY = y - down.mSteps - 1;
+    if (floorY - ceilingY >= -4)
+        return false;
+
+    const int32_t widest = static_cast<int32_t>(static_cast<float>(ceilingY - floorY - 1) * 0.33f);
+    const int32_t maxRadius = widest > 18 ? 18 : std::max(widest, 3);
+    const int32_t radius = 3 + nextInt(random, maxRadius - 3 + 1);
+    const float hangingBluntness = nextFloat(random) * (0.9f - 0.3f) + 0.3f;
+    const float hangingScale = nextFloat(random) * (2.0f - 0.4f) + 0.4f;
+    const float standingBluntness = nextFloat(random) * (1.0f - 0.4f) + 0.4f;
+    const float standingScale = nextFloat(random) * (2.0f - 0.4f) + 0.4f;
+    LargeDripstone hanging = {x, ceilingY - 1, z, false, radius, hangingBluntness, hangingScale};
+    LargeDripstone standing = {x, floorY + 1, z, true, radius, standingBluntness, standingScale};
+
+    Wind wind;
+    if (radius >= 4 && hangingBluntness >= 0.6f && standingBluntness >= 0.6f) {
+        const float speed = (0.3f - 0.0f) * nextFloat(random) + 0.0f;
+        const float angle = (nextFloat(random) * PI + 0.0f) * 10430.378f;
+        wind.mBlows = true;
+        wind.mOriginY = y;
+        wind.mX = FeatureMath::sineAt(angle + 16384.0f) * speed;
+        wind.mZ = FeatureMath::sineAt(angle) * speed;
+    }
+    const auto blown = [&](int32_t &blockX, int32_t blockY, int32_t &blockZ) {
+        if (!wind.mBlows)
+            return;
+
+        const float rise = static_cast<float>(wind.mOriginY - blockY);
+        blockZ += static_cast<int32_t>(wind.mZ * rise);
+        blockX += static_cast<int32_t>(rise * wind.mX);
+    };
+    const auto openOrLava = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        return isEmptyOrWater(blocks, blockX, blockY, blockZ) || isLava(blocks, blockX, blockY, blockZ);
+    };
+
+    // sub_14721C980: the block and a ring of the radius around it are all solid
+    const auto embedded = [&](int32_t blockX, int32_t blockY, int32_t blockZ, int32_t ringRadius) {
+        if (openOrLava(blockX, blockY, blockZ))
+            return false;
+
+        const float ring = static_cast<float>(ringRadius);
+        const auto step = static_cast<float>(6.0 / static_cast<double>(ring));
+        for (float angle = 0.0f; angle < 6.2831855f; angle += step) {
+            const float scaled = angle * 10430.378f;
+            const int32_t ringX = blockX + static_cast<int32_t>(FeatureMath::sineAt(scaled + 16384.0f) * ring);
+            const int32_t ringZ = blockZ + static_cast<int32_t>(FeatureMath::sineAt(scaled) * ring);
+            if (openOrLava(ringX, blockY, ringZ))
+                return false;
+        }
+        return true;
+    };
+
+    // sub_14D21BE40: the base moved into the rock, the radius halved while it does not fit
+    const auto settle = [&](LargeDripstone &dripstone) {
+        while (dripstone.mRadius >= 2) {
+            const auto height = static_cast<int32_t>(dripstone.heightAt(0.0f));
+            const int32_t steps = std::min(height, 10);
+            for (int32_t i = 0; i < steps; i++) {
+                const int32_t blockY = dripstone.mY + (dripstone.mUp ? -i : i);
+                if (isLava(blocks, dripstone.mX, blockY, dripstone.mZ))
+                    return false;
+
+                int32_t blockX = dripstone.mX;
+                int32_t blockZ = dripstone.mZ;
+                blown(blockX, blockY, blockZ);
+                if (embedded(blockX, blockY, blockZ, dripstone.mRadius)) {
+                    dripstone.mY = blockY;
+                    return true;
+                }
+            }
+
+            const int32_t previous = dripstone.mRadius;
+            dripstone.mRadius = previous / 2;
+            if (previous <= 3)
+                return false;
+        }
+        return false;
+    };
+
+    // sub_14D21C170: column by column, a stalagmite no higher than the generation heightmap; speleothems are
+    // replaced, and a column ends at the first other solid block once it has placed one
+    static const BlockState dripstoneBlock = VanillaBlocks::DRIPSTONE_BLOCK().toBlockState();
+    const auto placeBlocks = [&](const LargeDripstone &dripstone) {
+        const int32_t r = dripstone.mRadius;
+        for (int32_t offsetX = -r; offsetX <= r; offsetX++) {
+            for (int32_t offsetZ = -r; offsetZ <= r; offsetZ++) {
+                const float distance = std::sqrt(static_cast<float>(offsetX * offsetX + offsetZ * offsetZ));
+                if (distance > static_cast<float>(r))
+                    continue;
+
+                auto height = static_cast<int32_t>(dripstone.heightAt(distance));
+                if (height <= 0)
+                    continue;
+                if (static_cast<double>(nextFloat(random)) < 0.2)
+                    height = static_cast<int32_t>((nextFloat(random) * 0.19999999f + 0.8f)
+                                                  * static_cast<float>(height));
+
+                const int32_t columnX = dripstone.mX + offsetX;
+                const int32_t columnZ = dripstone.mZ + offsetZ;
+                const int32_t limit = dripstone.mUp ? heightmapAt(blocks.getLevel(), columnX, columnZ) : INT32_MAX;
+                int32_t blockY = dripstone.mY;
+                if (height <= 0 || blockY >= limit)
+                    continue;
+
+                bool placed = false;
+                for (int32_t i = 0;;) {
+                    int32_t blockX = columnX;
+                    int32_t blockZ = columnZ;
+                    blown(blockX, blockY, blockZ);
+                    const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
+                    if (openOrLava(blockX, blockY, blockZ) || name == "minecraft:pointed_dripstone"
+                        || name == "minecraft:sulfur_spike" || name == "minecraft:icicle") {
+                        blocks.setBlockStateAt(blockX, blockY, blockZ, dripstoneBlock);
+                        placed = true;
+                    } else if (placed) {
+                        break;
+                    }
+
+                    if (++i >= height)
+                        break;
+                    blockY += dripstone.mUp ? 1 : -1;
+                    if (blockY >= limit)
+                        break;
+                }
+            }
+        }
+    };
+
+    const bool hangingFits = settle(hanging);
+    const bool standingFits = settle(standing);
+    bool placed = false;
+    if (hangingFits
+        && hanging.mY - static_cast<int32_t>(hanging.heightAt(0.0f)) > LevelChunk::MIN_Y) {
+        placeBlocks(hanging);
+        placed = true;
+    }
+    if (standingFits
+        && standing.mY + static_cast<int32_t>(standing.heightAt(0.0f)) < LevelChunk::MAX_Y + 1) {
+        placeBlocks(standing);
+        placed = true;
+    }
+    return placed;
+}
+
+bool OverworldRulePlacer::_placeMultiface(BlockManager &blocks, const MultifaceDefinition &multiface, int32_t x,
+                                          int32_t y, int32_t z, std::mt19937 &random) {
+    // the game shuffles the faces with a thread local random seeded from the system (sub_140391AB0), so which face
+    // it tries first, and where it spreads, cannot be reproduced: the faces are tried in their listed order
+    const BlockState &start = blocks.getBlockAt(x, y, z);
+    if (start.mName != "minecraft:air" && !isWater(start))
+        return false;
+
+    if (_growMultiface(blocks, multiface, x, y, z, multiface.mFaces, random))
+        return true;
+
+    const std::string placedName = multiface.mPlaces().toBlockState().mName;
+    for (int32_t face: multiface.mFaces) {
+        std::vector<int32_t> others;
+        for (int32_t other: multiface.mFaces) {
+            if (other != (face ^ 1))
+                others.push_back(other);
+        }
+
+        // every step of the search range offsets the start once, so they all try the same block
+        const int32_t nextX = x + FACE_STEPS[face][0];
+        const int32_t nextY = y + FACE_STEPS[face][1];
+        const int32_t nextZ = z + FACE_STEPS[face][2];
+        const BlockState &next = blocks.getBlockAt(nextX, nextY, nextZ);
+        if (multiface.mSearchRange <= 0
+            || (next.mName != "minecraft:air" && !isWater(next) && next.mName != placedName))
+            continue;
+        if (_growMultiface(blocks, multiface, nextX, nextY, nextZ, others, random))
+            return true;
+    }
+    return false;
+}
+
+bool OverworldRulePlacer::_growMultiface(BlockManager &blocks, const MultifaceDefinition &multiface, int32_t x,
+                                         int32_t y, int32_t z, const std::vector<int32_t> &faces,
+                                         std::mt19937 &random) {
+    // sub_14A2CDE20: the first face whose neighbour it may grow on, the bits in down, up, south, west, north, east
+    // order
+    static const int32_t BITS[6] = {1, 2, 16, 4, 8, 32};
+    int32_t chosen = -1;
+    for (int32_t face: faces) {
+        if (contains(multiface.mCanPlaceOn, blocks.getBlockAt(x + FACE_STEPS[face][0], y + FACE_STEPS[face][1],
+                                                               z + FACE_STEPS[face][2]))) {
+            chosen = face;
+            break;
+        }
+    }
+    if (chosen < 0)
+        return false;
+
+    const BlockState placedState = multiface.mPlaces().toBlockState();
+    const BlockState &current = blocks.getBlockAt(x, y, z);
+    const int32_t bits = current.mName == placedState.mName
+                         ? current.mStates.getInt("multi_face_direction_bits", 0) : 0;
+    if ((bits | BITS[chosen]) == bits)
+        return false;
+
+    setInWater(blocks, x, y, z, withState(placedState, "multi_face_direction_bits", bits | BITS[chosen]));
+    // the spread this draw allows picks its block with the same thread local random, and is left out
+    nextFloat(random);
+    return true;
+}
+
+bool OverworldRulePlacer::_placeThreshold(BlockManager &blocks, const ThresholdDefinition &threshold, int32_t x,
+                                          int32_t y, int32_t z, std::mt19937 &random) {
+    // the generator's preliminary surface of the quart column, not the blocks
+    const auto surface = static_cast<int16_t>(placementContext.mClimate->preliminarySurfaceLevel(x >> 2, z >> 2));
+    if (surface - threshold.mMinimumDistanceBelowSurface <= y)
+        return false;
+
+    return _place(blocks, threshold.mPlaces, x, y, z, random);
+}
+
+bool OverworldRulePlacer::_placeSnap(BlockManager &blocks, const SnapDefinition &snap, int32_t x, int32_t y, int32_t z,
+                                     std::mt19937 &random) {
+    int32_t snapped[3] = {x, y, z};
+    bool found = false;
+    int32_t surface = snap.mSurface;
+    if (surface == 2) {
+        // north, east, south and west, shuffled with raw draws
+        int32_t faces[4] = {2, 5, 3, 4};
+        if ((random() & 1u) == 0) {
+            faces[0] = 5;
+            faces[1] = 2;
+        }
+        const uint32_t third = random() % 3u;
+        if (third != 2)
+            std::swap(faces[third], faces[2]);
+        const uint32_t fourth = random() & 3u;
+        if (fourth != 3)
+            std::swap(faces[fourth], faces[3]);
+
+        for (int32_t face: faces) {
+            found = _snapAlong(blocks, snap, x, y, z, face, snapped);
+            if (found)
+                break;
+        }
+    } else {
+        // random_horizontal picks the ceiling or the floor, with nextBoolean's bit 27
+        if (surface == 3)
+            surface = (random() & 0x8000000u) != 0 ? 0 : 1;
+
+        const BlockState &start = blocks.getBlockAt(x, y, z);
+        const bool open = start.mName == "minecraft:air" || isWater(start);
+        const int32_t face = open ? (surface == 0 ? 1 : 0) : (surface != 0 ? 1 : 0);
+        found = _snapAlong(blocks, snap, x, y, z, face, snapped);
+    }
+
+    if (!found)
+        return false;
+    return _place(blocks, snap.mPlaces, snapped[0], snapped[1], snapped[2], random);
+}
+
+bool OverworldRulePlacer::_snapAlong(BlockManager &blocks, const SnapDefinition &snap, int32_t x, int32_t y, int32_t z,
+                                     int32_t face, int32_t snapped[3]) {
+    // sub_14A271850: from an open start along the face while the blocks stay open, to a surface that supports it;
+    // from a solid start while they stay solid, to an open block
+    const auto isOpen = [&](const BlockState &state) {
+        return (snap.mAllowAirPlacement && state.mName == "minecraft:air")
+               || (snap.mAllowUnderwaterPlacement && isWater(state));
+    };
+    const auto isNonAir = [&](const BlockState &state) {
+        return snap.mAllowNonAirPlacement && state.mName != "minecraft:air" && !isWater(state);
+    };
+
+    const BlockState &start = blocks.getBlockAt(x, y, z);
+    const bool solidStart = start.mName != "minecraft:air" && !isWater(start);
+    const LevelChunk *startChunk = blocks.getLevel().peekChunkPtr(x >> 4, z >> 4);
+    if (startChunk == nullptr)
+        return false;
+
+    // the walk stays in the start's biome (BlockSource vfunc 192)
+    const uint32_t biome = startChunk->getBiomeAt(x & 15, y, z & 15);
+    const auto continues = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        const LevelChunk *chunk = blocks.getLevel().peekChunkPtr(blockX >> 4, blockZ >> 4);
+        if (chunk == nullptr || blockY < LevelChunk::MIN_Y || blockY > LevelChunk::MAX_Y
+            || chunk->getBiomeAt(blockX & 15, blockY, blockZ & 15) != biome)
+            return false;
+
+        const BlockState &state = blocks.getBlockAt(blockX, blockY, blockZ);
+        return solidStart ? isNonAir(state) : isOpen(state);
+    };
+    // the surface is a full block, the game's face support of any type (sub_14A2A0010) approximated
+    const auto ends = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        const BlockState &end = blocks.getBlockAt(blockX, blockY, blockZ);
+        if (!snap.mAllowedSurfaceBlocks.empty())
+            return contains(snap.mAllowedSurfaceBlocks, end);
+        return solidStart ? isOpen(end) : BlockSupport::isSolid(end);
+    };
+
+    const int32_t *step = FACE_STEPS[face];
+    const ColumnEnd end = walkColumn(x, y, z, step, snap.mVerticalSearchRange, continues, ends);
+    if (!end.mFound)
+        return false;
+
+    const int32_t distance = end.mSteps + ((snap.mEmbedInSurface != solidStart) ? 1 : 0);
+    snapped[0] = x + step[0] * distance;
+    snapped[1] = y + step[1] * distance;
+    snapped[2] = z + step[2] * distance;
+    return true;
+}
+
+bool OverworldRulePlacer::_placeBlob(BlockManager &blocks, const BlobDefinition &blob, int32_t x, int32_t y, int32_t z,
+                                     std::mt19937 &random) {
+    // around the block under the position, nearest first (sub_142D32730), each one drawn before it is checked;
+    // a block and its neighbours but the exposed face must be neither air nor water, on either layer
+    const auto isClosed = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        const BlockState &state = blocks.getBlockAt(blockX, blockY, blockZ);
+        return !isWater(state) && state.mName != "minecraft:air"
+               && !isWater(blocks.getExtraBlockAt(blockX, blockY, blockZ));
+    };
+
+    const BlockState state = blob.mPlaces().toBlockState();
+    const int32_t centerY = y - 1;
+    const int32_t radius = blob.mPlacementRadiusAroundFloor;
+    int32_t placed = 0;
+    // BlockPos within Manhattan distance: depth by depth, x then y rising, z on both sides
+    for (int32_t depth = 0; depth <= 3 * radius; depth++) {
+        const int32_t maxX = std::min(radius, depth);
+        for (int32_t offsetX = -maxX; offsetX <= maxX; offsetX++) {
+            const int32_t maxY = std::min(radius, depth - std::abs(offsetX));
+            for (int32_t offsetY = -maxY; offsetY <= maxY; offsetY++) {
+                const int32_t offsetZ = depth - std::abs(offsetX) - std::abs(offsetY);
+                if (offsetZ > radius)
+                    continue;
+
+                for (int32_t side = 0; side < (offsetZ != 0 ? 2 : 1); side++) {
+                    const int32_t blockX = x + offsetX;
+                    const int32_t blockY = centerY + offsetY;
+                    const int32_t blockZ = z + (side == 0 ? offsetZ : -offsetZ);
+                    if (nextFloat(random) > blob.mPlacementProbabilityPerValidPosition
+                        || !isClosed(blockX, blockY, blockZ))
+                        continue;
+
+                    bool covered = true;
+                    for (int32_t face = 0; face < 6 && covered; face++) {
+                        if (face != blob.mExposedFace)
+                            covered = isClosed(blockX + FACE_STEPS[face][0], blockY + FACE_STEPS[face][1],
+                                               blockZ + FACE_STEPS[face][2]);
+                    }
+                    if (!covered)
+                        continue;
+
+                    blocks.setBlockStateAt(blockX, blockY, blockZ, state);
+                    placed++;
+                }
+            }
+        }
+    }
+    return placed != 0;
 }
 
 bool OverworldRulePlacer::_placeScatter(BlockManager &blocks, const ScatterDefinition &scatter, int32_t x, int32_t y,
@@ -1632,6 +2542,61 @@ bool OverworldRulePlacer::_placeBeehiveSearch(BlockManager &blocks, int32_t x, i
         }
     }
     return false;
+}
+
+void OverworldRulePlacer::_placeSprings(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random) {
+    // LegacySpringsFeature::place (sub_14D21E680) for worlds of the 1.18 terrain: 25 water springs anywhere from
+    // the bottom of the world up to 192, then 20 lava springs biased towards the bottom, kept out of the deep dark;
+    // z, then y, then x
+    static const BlockState water = VanillaBlocks::WATER().toBlockState();
+    static const BlockState lava = VanillaBlocks::LAVA().toBlockState();
+    for (int32_t spring = 0; spring < 25; spring++) {
+        const int32_t offsetZ = nextInt(random, 16);
+        const int32_t y = LevelChunk::MIN_Y + nextInt(random, 192 - LevelChunk::MIN_Y);
+        const int32_t offsetX = nextInt(random, 16);
+        _placeSpring(blocks, x + offsetX, y, z + offsetZ, water);
+    }
+
+    for (int32_t spring = 0; spring < 20; spring++) {
+        const int32_t offsetZ = nextInt(random, 16);
+        const int32_t y = LevelChunk::MIN_Y + 8
+                          + nextInt(random, nextInt(random, nextInt(random, 192 - 16 - LevelChunk::MIN_Y)));
+        const int32_t offsetX = nextInt(random, 16);
+        const int32_t springX = x + offsetX;
+        const int32_t springZ = z + offsetZ;
+        const LevelChunk *chunk = blocks.getLevel().peekChunkPtr(springX >> 4, springZ >> 4);
+        if (chunk == nullptr || y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y
+            || chunk->getBiomeAt(springX & 15, y, springZ & 15) == BiomeIds::DEEP_DARK)
+            continue;
+
+        _placeSpring(blocks, springX, y, springZ, lava);
+    }
+}
+
+void OverworldRulePlacer::_placeSpring(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
+                                       const BlockState &liquid) {
+    // the spring feature (sub_1471E9B40): rock above and below, four rock sides around one opening
+    const auto isRock = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        // sub_1471E9FF0 for worlds of the 1.18 terrain
+        static const std::vector<std::string> ROCK = {
+                "minecraft:stone", "minecraft:deepslate", "minecraft:tuff", "minecraft:calcite", "minecraft:snow",
+                "minecraft:powder_snow", "minecraft:packed_ice", "minecraft:dirt", "minecraft:coarse_dirt"
+        };
+        return contains(ROCK, blocks.getBlockAt(blockX, blockY, blockZ));
+    };
+    const auto isAir = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
+        return blocks.getBlockAt(blockX, blockY, blockZ).mName == "minecraft:air";
+    };
+
+    if (!isRock(x, y + 1, z) || !isRock(x, y - 1, z) || !(isAir(x, y, z) || isRock(x, y, z)))
+        return;
+
+    const int32_t rock = isRock(x - 1, y, z) + isRock(x + 1, y, z) + isRock(x, y, z - 1) + isRock(x, y, z + 1)
+                         + isRock(x, y - 1, z);
+    const int32_t open = isAir(x - 1, y, z) + isAir(x + 1, y, z) + isAir(x, y, z - 1) + isAir(x, y, z + 1)
+                         + isAir(x, y - 1, z);
+    if (rock == 4 && open == 1)
+        blocks.setBlockStateAt(x, y, z, liquid);
 }
 
 void OverworldRulePlacer::_placeForestFoliage(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random) {

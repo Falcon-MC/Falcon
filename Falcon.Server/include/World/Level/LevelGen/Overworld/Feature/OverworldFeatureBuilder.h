@@ -6,8 +6,10 @@
 
 class Level;
 class LevelChunk;
+class OverworldClimate;
 
 class OverworldFeatureBuilder {
 public:
-    static void apply(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow = nullptr);
+    static void apply(Level &level, LevelChunk &chunk, const OverworldClimate &climate,
+                      std::vector<GeneratedBlockChange> *overflow = nullptr);
 };
