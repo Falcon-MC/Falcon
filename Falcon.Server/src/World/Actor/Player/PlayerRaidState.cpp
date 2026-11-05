@@ -95,6 +95,7 @@ void PlayerRaidState::_tickBossBar(ServerNetworkHandler &owner, ServerPlayer &pl
         mBarVillage.reset();
         _sendBossEvent(owner, player, BossEventPacket::Action::Remove);
         mBarVillage = closest;
+        mBarDimension = player.getDimension();
     }
 
     const std::shared_ptr<Village> village = mBarVillage.lock();
@@ -142,8 +143,9 @@ void PlayerRaidState::_refreshBossBarRegistration(ServerNetworkHandler &owner, S
         return;
     mLastBarCheck = now;
 
-    // the bar is only offered while the player stands in the raid area it was shown for
-    if (mBarSent || !village.isInRaidBounds(player.getPosition()))
+    // the bar is only offered while the player stands in the raid area it was shown for, in its dimension
+    // (sub_142CD90D0)
+    if (mBarSent || player.getDimension() != mBarDimension || !village.isInRaidBounds(player.getPosition()))
         return;
 
     mBarSent = true;

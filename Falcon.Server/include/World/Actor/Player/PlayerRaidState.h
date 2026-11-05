@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Math/Vector3i.h"
+#include "World/Level/Dimension/Dimension.h"
 #include "Protocol/Packets/BossEventPacket.h"
 
 #include <chrono>
@@ -45,6 +46,7 @@ private:
     bool mTriggerPending = false;
 
     std::weak_ptr<Village> mBarVillage;
+    DimensionType mBarDimension = DimensionType::Overworld;
     bool mBarShowsRemaining = false;
     bool mBarActive = false;
     bool mBarSent = false;
