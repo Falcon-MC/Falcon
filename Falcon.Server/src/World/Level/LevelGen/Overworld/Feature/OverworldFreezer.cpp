@@ -9,6 +9,7 @@
 #include "World/Level/Block/WaterBlock.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 
 namespace {
     const int32_t FULL_SNOW_HEIGHT = 7;
@@ -21,10 +22,6 @@ namespace {
     const BlockState &snowState() {
         static const BlockState state = VanillaBlocks::SNOW_LAYER().toBlockState();
         return state;
-    }
-
-    bool isAir(const BlockState &state) {
-        return state.mName == "minecraft:air";
     }
 
     // TopSnowBlock::mayPlace (sub_14B27CB10) on the block below; the block property flags it also rejects
@@ -56,7 +53,7 @@ void OverworldFreezer::apply(LevelChunk &chunk) {
             // a snowlogged plant stays under the snow in the second layer; covered_bit stays unset because the
             // game's post-processing places the default snow layer (sub_14CDD4880)
             const BlockState covered = chunk.getBlock(x, y, z);
-            if (!isAir(covered))
+            if (!DecorationSupport::isAir(covered))
                 chunk.setBlock(x, y, z, 1, covered);
             chunk.setBlock(x, y, z, snowState());
         }
@@ -79,7 +76,7 @@ int32_t OverworldFreezer::_topRainBlock(const LevelChunk &chunk, int32_t x, int3
             return y + 1;
 
         const BlockState &extra = chunk.getBlock(x, y, z, 1);
-        if (!isAir(extra) && !BlockPrecipitation::letsRainThrough(extra))
+        if (!DecorationSupport::isAir(extra) && !BlockPrecipitation::letsRainThrough(extra))
             return y + 1;
     }
     return LevelChunk::MIN_Y - 1;
@@ -107,7 +104,7 @@ bool OverworldFreezer::_shouldSnow(const LevelChunk &chunk, int32_t x, int32_t y
         return false;
 
     const BlockState &state = chunk.getBlock(x, y, z);
-    if (!isAir(state) && !BlockPrecipitation::isSnowloggable(state))
+    if (!DecorationSupport::isAir(state) && !BlockPrecipitation::isSnowloggable(state))
         return false;
 
     return supportsSnow(chunk.getBlock(x, y - 1, z));
