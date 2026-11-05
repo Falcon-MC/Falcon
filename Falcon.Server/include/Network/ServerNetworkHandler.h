@@ -830,6 +830,8 @@ private:
 
     void _broadcastFluidChanges(Level &level);
 
+    void _tickVillages(Level &level);
+
     void _sendWorldState(ServerPlayer &player);
 
     void _sendDimensionChange(ServerPlayer &player, DimensionType dimension, const Vector3f &position);

@@ -26,6 +26,11 @@ public:
     bool scan(Level &level, const Vector3i &origin, const KnownPredicate &isKnown,
               std::vector<std::shared_ptr<PoiInstance>> &found);
 
+    /** Makes the next scan start over from the corner of a new box. */
+    void restart() {
+        mRestart = true;
+    }
+
     /** The blueprint of a block that can become a point of interest: a bed must be a free head piece. */
     static const PoiBlueprint *findValidBlueprint(const BlockState &state);
 

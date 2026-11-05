@@ -283,6 +283,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     _tickCelebration(owner);
     mAnger.tick(owner, *this);
     mAdmiration.tick(owner, *this);
+    mDweller.tick(owner, *this);
 
     if (RideControlSystem::tick(owner, *this)) {
         ServerActor::tick(owner);

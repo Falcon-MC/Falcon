@@ -119,6 +119,8 @@ void ServerNetworkHandler::_tickOverworld(World &world) {
     level.tick();
     mProfiler.endSection(ProfilerSection::Fluids);
 
+    _tickVillages(level);
+
     mProfiler.beginSection(ProfilerSection::FluidBroadcast);
     _broadcastFluidChanges(level);
     mProfiler.endSection(ProfilerSection::FluidBroadcast);
@@ -136,6 +138,18 @@ void ServerNetworkHandler::_broadcastFluidChanges(Level &level) {
                                                         (float) change.position.y + 0.5f,
                                                         (float) change.position.z + 0.5f),
                                                update);
+    }
+}
+
+void ServerNetworkHandler::_tickVillages(Level &level) {
+    VillageManager &villages = level.getVillageManager();
+    villages.tick(*this, level, mCurrentTick);
+
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (!player.isSpawned() || !player.isIn(level))
+            continue;
+        villages.tickVillagesNear(*this, mCurrentTick, player.getPosition(), mProperties.getTickDistance());
     }
 }
 
@@ -174,6 +188,7 @@ void ServerNetworkHandler::_tickDimension(World &world, Level &level) {
     level.setActiveColumns(activeColumns);
     syncActorPersistence(level, activeColumns);
     level.tick();
+    _tickVillages(level);
     _broadcastFluidChanges(level);
     _processChunkUnloads(level);
 }

@@ -15,6 +15,7 @@
 #include "World/Level/LevelGen/Overworld/OverworldGenerator.h"
 #include "World/Level/GameRules.h"
 #include "World/Level/Storage/LevelStorage.h"
+#include "World/Village/VillageManager.h"
 
 #include <chrono>
 #include <cstdint>
@@ -295,6 +296,10 @@ public:
 
     void tick();
 
+    VillageManager &getVillageManager() {
+        return mVillageManager;
+    }
+
     void scheduleBlockUpdate(const Vector3i &position, int64_t delay = 1);
 
     void setOwner(ServerNetworkHandler *owner) { mOwner = owner; }
@@ -406,6 +411,7 @@ private:
     LevelStorage mStorage;
     BlockUpdateScheduler mBlockUpdateScheduler;
     LiquidPhysicsSystem mLiquidPhysics;
+    VillageManager mVillageManager;
     std::unordered_map<int64_t, LevelChunk> mChunks;
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 32;
     // Drained results waiting for insertion; new requests wait while this many are queued.
