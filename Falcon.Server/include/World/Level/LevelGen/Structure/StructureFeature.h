@@ -24,7 +24,14 @@ public:
         Triangular
     };
 
-    StructureFeature(std::string name, int32_t spacing, int32_t separation, int32_t salt, Spread spread);
+    enum class Generator {
+        MersenneTwister,
+        // a 48-bit linear congruential generator seeded with the whole region seed
+        Congruential
+    };
+
+    StructureFeature(std::string name, int32_t spacing, int32_t separation, int32_t salt, Spread spread,
+                     Generator generator = Generator::MersenneTwister);
 
     virtual ~StructureFeature() = default;
 
@@ -50,4 +57,5 @@ private:
     int32_t mSeparation;
     int32_t mSalt;
     Spread mSpread;
+    Generator mGenerator;
 };
