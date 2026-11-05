@@ -1514,7 +1514,7 @@ bool OverworldRulePlacer::_place(BlockManager &blocks, const Placed &placed, int
 
 bool OverworldRulePlacer::_placeLegacyFlower(BlockManager &blocks, const LegacyFlowerDefinition &flower, int32_t x,
                                              int32_t y, int32_t z, std::mt19937 &random) {
-    if (blocks.getBlockAt(x, y, z).mName != "minecraft:air")
+    if (!DecorationSupport::isAir(blocks.getBlockAt(x, y, z)))
         return false;
 
     // sub_14A293B00 picks the flower before the tries
