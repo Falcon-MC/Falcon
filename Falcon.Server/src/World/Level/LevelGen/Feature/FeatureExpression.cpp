@@ -148,6 +148,22 @@ private:
         return name;
     }
 
+    // the tag is a single-quoted string
+    int32_t _biomeTag() {
+        _expect("'");
+        const size_t end = mText.find('\'', mPosition);
+        if (!mValid || end == std::string::npos) {
+            mValid = false;
+            return -1;
+        }
+
+        const int32_t index = _node(Operation::BiomeTag);
+        mExpression.mNodes[(size_t) index].mName = mText.substr(mPosition, end - mPosition);
+        mPosition = end + 1;
+        _expect(")");
+        return index;
+    }
+
     int32_t _primary() {
         if (_accept("(")) {
             const int32_t inner = _ternary();
@@ -180,6 +196,8 @@ private:
 
         std::vector<int32_t> arguments;
         _expect("(");
+        if (name == "query.has_biome_tag" || name == "q.has_biome_tag")
+            return _biomeTag();
         if (!_accept(")")) {
             do
                 arguments.push_back(_ternary());
@@ -241,6 +259,8 @@ float FeatureExpression::_evaluate(int32_t index, const Context &context) const 
             return context.variable(node.mName);
         case Operation::Query:
             return context.query(node.mName, operand(0), operand(1));
+        case Operation::BiomeTag:
+            return context.hasBiomeTag(node.mName) ? 1.0f : 0.0f;
         case Operation::Ceil:
             return std::ceil(operand(0));
         case Operation::Max:
