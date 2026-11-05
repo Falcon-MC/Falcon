@@ -79,6 +79,7 @@ private:
     uint8_t mWaveCount = 0;
     int64_t mLastTick = -1;
     int64_t mTicksInState = 0;
+    // timers {300, 40, 40, 600} from xmmword_14F1B3880, then 600 and 600 (0x1439d7ce8), in _createRaid sub_1439D7BF0
     int32_t mCooldownTicks = 300;
     int32_t mNextWaveDelay = 40;
     int32_t mNextWaveCountdown = 40;
@@ -88,7 +89,7 @@ private:
     Vector3f mSpawnPosition;
     std::unordered_set<int64_t> mRaiders;
     float mTotalHealth = 0.0f;
-    uint8_t mMaxSpawnFailures = 5;
+    uint8_t mMaxSpawnFailures = 5; // 0x1439d7d43
     uint8_t mSpawnFailures = 0;
     std::unordered_set<int64_t> mHeroes;
 };

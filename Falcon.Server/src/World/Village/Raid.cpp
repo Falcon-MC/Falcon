@@ -20,7 +20,7 @@ namespace {
     const char *const RAID_HORN_SOUND = "raid.horn";
     const char *const START_CELEBRATING_EVENT = "minecraft:start_celebrating";
     const char *const RAID_EXPIRED_EVENT = "minecraft:raid_expired";
-    const int32_t HERO_DURATION_TICKS = 48000;
+    const int32_t HERO_DURATION_TICKS = 48000; // 0x1439f4f59
     const float NO_POSITION = std::numeric_limits<float>::max();
 
     // the level's closest player searches, as squared distances: 128 and 1024 blocks
