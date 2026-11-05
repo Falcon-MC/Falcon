@@ -316,7 +316,9 @@ namespace {
             return true;
         }
 
-        std::string getWorldsDirectory() const { return mRoot.string(); }
+        std::string getWorldsDirectory() const {
+            return mRoot.string();
+        }
 
         static constexpr const char *LEVEL_NAME = "source";
 
@@ -577,31 +579,33 @@ namespace {
             return score;
         }
 
-        const Ratio &getBlocks() const { return mBlocks; }
+        const Ratio &getBlocks() const {
+            return mBlocks;
+        }
 
         void printText(int64_t seed, const ChunkArea &area, const uint64_t *skipped) const {
-            std::printf("World generation parity, seed %lld, chunks %d,%d to %d,%d\n", (long long) seed, area.mX0,
-                        area.mZ0, area.mX1, area.mZ1);
-            std::printf("Chunks: %lld requested, %zu compared, %llu never saved by BDS, %llu not finalized, "
-                        "%llu unreadable\n\n", (long long) area.count(), mChunks.size(),
-                        (unsigned long long) skipped[0], (unsigned long long) skipped[1],
-                        (unsigned long long) skipped[2]);
+            std::fprintf(stdout, "World generation parity, seed %lld, chunks %d,%d to %d,%d\n", (long long) seed,
+                                 area.mX0, area.mZ0, area.mX1, area.mZ1);
+            std::fprintf(stdout, "Chunks: %lld requested, %zu compared, %llu never saved by BDS, %llu not finalized, "
+                                 "%llu unreadable\n\n", (long long) area.count(), mChunks.size(),
+                                 (unsigned long long) skipped[0], (unsigned long long) skipped[1],
+                                 (unsigned long long) skipped[2]);
 
-            std::printf("Blocks: %.3f%% identical, %.3f%% same class (air/fluid/solid) over %llu blocks\n",
-                        mBlocks.percent(), mCoarse.percent(), (unsigned long long) mBlocks.mTotal);
-            std::printf("Surface height: %.3f%% equal, mean |diff| %.3f, max |diff| %lld over %llu columns\n",
-                        mHeights.percent(), _meanHeightDifference(), (long long) mMaxHeightDifference,
-                        (unsigned long long) mHeights.mTotal);
-            std::printf("  |diff|  columns\n");
+            std::fprintf(stdout, "Blocks: %.3f%% identical, %.3f%% same class (air/fluid/solid) over %llu blocks\n",
+                                 mBlocks.percent(), mCoarse.percent(), (unsigned long long) mBlocks.mTotal);
+            std::fprintf(stdout, "Surface height: %.3f%% equal, mean |diff| %.3f, max |diff| %lld over %llu columns\n",
+                                 mHeights.percent(), _meanHeightDifference(), (long long) mMaxHeightDifference,
+                                 (unsigned long long) mHeights.mTotal);
+            std::fprintf(stdout, "  |diff|  columns\n");
             for (size_t bucket = 0; bucket < HEIGHT_BUCKETS; bucket++)
-                std::printf("  %-6s  %llu\n", HEIGHT_BUCKET_NAMES[bucket],
-                            (unsigned long long) mHeightHistogram[bucket]);
-            std::printf("Biomes: %.3f%% equal over %llu 4x4x4 cells\n\n", mBiomes.percent(),
-                        (unsigned long long) mBiomes.mTotal);
+                std::fprintf(stdout, "  %-6s  %llu\n", HEIGHT_BUCKET_NAMES[bucket],
+                                     (unsigned long long) mHeightHistogram[bucket]);
+            std::fprintf(stdout, "Biomes: %.3f%% equal over %llu 4x4x4 cells\n\n", mBiomes.percent(),
+                                 (unsigned long long) mBiomes.mTotal);
 
             static const char *const SHAPES[3] = {"open", "fluid", "solid"};
-            std::printf("Terrain shape: %.3f%% same (open/fluid/solid) over %llu blocks\n", mShape.percent(),
-                        (unsigned long long) mShape.mTotal);
+            std::fprintf(stdout, "Terrain shape: %.3f%% same (open/fluid/solid) over %llu blocks\n", mShape.percent(),
+                                 (unsigned long long) mShape.mTotal);
             std::vector<std::pair<std::pair<int, int>, ShapeMismatch>> shapes(mShapeMismatches.begin(),
                                                                               mShapeMismatches.end());
             std::sort(shapes.begin(), shapes.end(), [](const std::pair<std::pair<int, int>, ShapeMismatch> &a,
@@ -611,45 +615,46 @@ namespace {
             for (size_t i = 0; i < shapes.size() && i < 16; i++) {
                 const int pair = shapes[i].first.first;
                 const int32_t minY = LevelChunk::MIN_Y + shapes[i].first.second * Y_BAND_HEIGHT;
-                std::printf("  %10llu  %-5s -> %-5s y %4d..%-4d", (unsigned long long) shapes[i].second.mCount,
-                            SHAPES[pair / 3], SHAPES[pair % 3], minY, minY + Y_BAND_HEIGHT - 1);
+                std::fprintf(stdout, "  %10llu  %-5s -> %-5s y %4d..%-4d", (unsigned long long) shapes[i].second.mCount,
+                                     SHAPES[pair / 3], SHAPES[pair % 3], minY, minY + Y_BAND_HEIGHT - 1);
                 for (const std::array<int32_t, 3> &sample: shapes[i].second.mSamples)
-                    std::printf("  (%d %d %d)", sample[0], sample[1], sample[2]);
-                std::printf("\n");
+                    std::fprintf(stdout, "  (%d %d %d)", sample[0], sample[1], sample[2]);
+                std::fprintf(stdout, "\n");
             }
-            std::printf("\n");
+            std::fprintf(stdout, "\n");
 
-            std::printf("By category        blocks       match\n");
+            std::fprintf(stdout, "By category        blocks       match\n");
             for (int category = 0; category < CATEGORY_COUNT; category++)
-                std::printf("  %-14s %12llu  %8.3f%%\n", CATEGORY_KEYS[category],
-                            (unsigned long long) mCategories[category].mTotal, mCategories[category].percent());
+                std::fprintf(stdout, "  %-14s %12llu  %8.3f%%\n", CATEGORY_KEYS[category],
+                                     (unsigned long long) mCategories[category].mTotal,
+                                     mCategories[category].percent());
 
-            std::printf("\nBy Y band          blocks       match\n");
+            std::fprintf(stdout, "\nBy Y band          blocks       match\n");
             for (size_t band = 0; band < mBands.size(); band++) {
                 const int32_t minY = LevelChunk::MIN_Y + (int32_t) band * Y_BAND_HEIGHT;
-                std::printf("  %4d..%-4d    %12llu  %8.3f%%\n", minY, minY + Y_BAND_HEIGHT - 1,
-                            (unsigned long long) mBands[band].mTotal, mBands[band].percent());
+                std::fprintf(stdout, "  %4d..%-4d    %12llu  %8.3f%%\n", minY, minY + Y_BAND_HEIGHT - 1,
+                                     (unsigned long long) mBands[band].mTotal, mBands[band].percent());
             }
 
-            std::printf("\nTop block mismatches (expected -> generated)\n");
+            std::fprintf(stdout, "\nTop block mismatches (expected -> generated)\n");
             for (const std::pair<std::pair<std::string, std::string>, uint64_t> &entry: _top(mBlockMismatches))
-                std::printf("  %10llu  %s -> %s\n", (unsigned long long) entry.second, entry.first.first.c_str(),
-                            entry.first.second.c_str());
+                std::fprintf(stdout, "  %10llu  %s -> %s\n", (unsigned long long) entry.second,
+                                     entry.first.first.c_str(), entry.first.second.c_str());
 
-            std::printf("\nBiome accuracy by expected biome\n");
+            std::fprintf(stdout, "\nBiome accuracy by expected biome\n");
             std::vector<std::pair<uint32_t, Ratio>> byBiome(mBiomesByExpected.begin(), mBiomesByExpected.end());
             std::sort(byBiome.begin(), byBiome.end(),
                       [](const std::pair<uint32_t, Ratio> &a, const std::pair<uint32_t, Ratio> &b) {
                           return a.second.mTotal > b.second.mTotal;
                       });
             for (const std::pair<uint32_t, Ratio> &entry: byBiome)
-                std::printf("  %-28s %10llu cells  %8.3f%%\n", mBiomeNames.get(entry.first).c_str(),
-                            (unsigned long long) entry.second.mTotal, entry.second.percent());
+                std::fprintf(stdout, "  %-28s %10llu cells  %8.3f%%\n", mBiomeNames.get(entry.first).c_str(),
+                                     (unsigned long long) entry.second.mTotal, entry.second.percent());
 
-            std::printf("\nTop biome confusions (expected -> generated)\n");
+            std::fprintf(stdout, "\nTop biome confusions (expected -> generated)\n");
             for (const std::pair<std::pair<std::string, std::string>, uint64_t> &entry: _top(mBiomeMismatches))
-                std::printf("  %10llu  %s -> %s\n", (unsigned long long) entry.second, entry.first.first.c_str(),
-                            entry.first.second.c_str());
+                std::fprintf(stdout, "  %10llu  %s -> %s\n", (unsigned long long) entry.second,
+                                     entry.first.first.c_str(), entry.first.second.c_str());
         }
 
         bool writeCsv(const std::string &path) const {
@@ -841,7 +846,7 @@ namespace {
             return EXIT_INVALID;
         }
         if (loaded == LoadResult::NotFinalized)
-            std::printf("note: BDS has not finished populating chunk %d %d\n", chunkX, chunkZ);
+            std::fprintf(stdout, "note: BDS has not finished populating chunk %d %d\n", chunkX, chunkZ);
 
         ChunkArea area;
         area.mX0 = area.mX1 = chunkX;
@@ -850,17 +855,17 @@ namespace {
         const int z = options.mColumnZ & 15;
 
         generateArea(options.mSeed, area, options.mTerrainOnly, [&](LevelChunk &generated) {
-            std::printf("Column %d,%d (chunk %d %d), seed %lld; '*' marks a difference\n", options.mColumnX,
-                        options.mColumnZ, chunkX, chunkZ, (long long) options.mSeed);
+            std::fprintf(stdout, "Column %d,%d (chunk %d %d), seed %lld; '*' marks a difference\n", options.mColumnX,
+                                 options.mColumnZ, chunkX, chunkZ, (long long) options.mSeed);
             for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
                 const BlockState &expectedBlock = expected.getBlock(x, y, z);
                 const BlockState &generatedBlock = generated.getBlock(x, y, z);
                 const uint32_t expectedBiome = expected.getBiomeAt(x, y, z);
                 const uint32_t generatedBiome = generated.getBiomeAt(x, y, z);
-                std::printf("%c%c %4d  %-40s %-40s %-22s %s\n", expectedBlock == generatedBlock ? ' ' : '*',
-                            expectedBiome == generatedBiome ? ' ' : '*', y, describeState(expectedBlock).c_str(),
-                            describeState(generatedBlock).c_str(), biomes.get(expectedBiome).c_str(),
-                            biomes.get(generatedBiome).c_str());
+                std::fprintf(stdout, "%c%c %4d  %-40s %-40s %-22s %s\n", expectedBlock == generatedBlock ? ' ' : '*',
+                                     expectedBiome == generatedBiome ? ' ' : '*', y,
+                                     describeState(expectedBlock).c_str(), describeState(generatedBlock).c_str(),
+                                     biomes.get(expectedBiome).c_str(), biomes.get(generatedBiome).c_str());
             }
         });
 
