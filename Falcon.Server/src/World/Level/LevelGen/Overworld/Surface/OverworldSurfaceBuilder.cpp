@@ -337,6 +337,8 @@ void OverworldSurfaceBuilder::_buildIcebergColumn(LevelChunk &chunk, int32_t x, 
 
     static const BlockState packedIce = VanillaBlocks::PACKED_ICE().toBlockState();
     static const BlockState snow = VanillaBlocks::SNOW().toBlockState();
+    static const BlockStateSet WATER = {VanillaBlocks::WATER().getIdentifier(),
+                                        VanillaBlocks::FLOWING_WATER().getIdentifier()};
     const int32_t lowest = _lowestSurfaceY(worldX, worldZ);
     auto y = static_cast<int32_t>(std::fmax(static_cast<float>(height), top + 1.0f));
     if (lowest > y)
@@ -346,11 +348,9 @@ void OverworldSurfaceBuilder::_buildIcebergColumn(LevelChunk &chunk, int32_t x, 
     for (;; y--) {
         const BlockState &state = chunk.getBlock(x, y, z);
         bool place = false;
-        if (state.mName == airState().mName && y < static_cast<int32_t>(top))
+        if (isAirState(state) && y < static_cast<int32_t>(top))
             place = random.nextFloat() > 0.01f;
-        else if ((state.mName == VanillaBlocks::WATER().getIdentifier()
-                  || state.mName == VanillaBlocks::FLOWING_WATER().getIdentifier())
-                 && y > static_cast<int32_t>(bottom) && y < SEA_LEVEL && bottom != 0.0f)
+        else if (WATER.contains(state) && y > static_cast<int32_t>(bottom) && y < SEA_LEVEL && bottom != 0.0f)
             place = random.nextFloat() > 0.15f;
 
         if (place) {
