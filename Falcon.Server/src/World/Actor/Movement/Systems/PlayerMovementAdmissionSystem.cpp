@@ -25,7 +25,7 @@ bool PlayerMovementAdmissionSystem::prepare(PlayerMovementContext &context) {
                             ? 0.03f + 0.0105f * (float) enchantmentLevel : 0.0f;
         context.player.getEffects().setMovementSpeedBonus(bonus);
     }
-    if (!context.owner.getProperties().getSimulation()) {
+    if (!context.owner.getProperties().getMovementSimulation()) {
         context.player.clearMovementSimulation();
         return false;
     }

@@ -211,6 +211,10 @@ bool ServerHost::start(const ServerHostOptions &options) {
         LOG_ERROR(LogAreaID::Server, "RakNet is no longer supported, set transport=nethernet in %s. "
                                      "Falling back to NetherNet.", PROPERTIES_FILE);
 
+    if (properties.getServerAuthoritativeMovementStrict() && !properties.getMovementSimulation())
+        LOG_WARN(LogAreaID::Server, "server-authoritative-movement-strict has no effect while movement-simulation "
+                                    "is false in %s", PROPERTIES_FILE);
+
     const TransportLayer transport = properties.getTransportLayer();
 
     if (transport == TransportLayer::Unknown) {

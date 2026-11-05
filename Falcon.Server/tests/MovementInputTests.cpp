@@ -58,12 +58,20 @@ namespace {
         return packet;
     }
 
+    void enableMovementSimulation(ServerNetworkHandler &owner) {
+        PropertiesSettings settings;
+        settings.setProperty("movement-simulation", "true");
+        owner.setProperties(settings);
+    }
+
     void checkTimeline() {
         PropertiesSettings defaults;
-        require(defaults.getSimulation() && !defaults.getServerAuthoritativeMovementStrict(),
-                "Simulation must be enabled independently of strict mode by default");
-        require(PropertiesSettings::getDefaultContents().find("simulation=true\n") != std::string::npos,
-                "Generated server.properties omitted the simulation switch");
+        require(!defaults.getMovementSimulation() && !defaults.getServerAuthoritativeMovementStrict(),
+                "Movement simulation and strict mode must be disabled by default");
+        require(PropertiesSettings::getDefaultContents().find("movement-simulation=false\n") != std::string::npos,
+                "Generated server.properties omitted the movement simulation switch");
+        require(PropertiesSettings::getDefaultContents().find("\nsimulation=") == std::string::npos,
+                "Generated server.properties kept the former simulation name");
         require(defaults.getPlayerTickThrottledInputBatchSize() == -1
                 && defaults.getPlayerTickThrottledMaxTickCredits() == -1, "BDS tick policy defaults differ");
         ServerPlayerMovementComponent timeline;
@@ -223,6 +231,7 @@ namespace {
 
     void checkPredictionVelocityFeedback() {
         ServerNetworkHandler owner("Prediction feedback regression", "", 1);
+        enableMovementSimulation(owner);
         NetworkIdentifier id;
         ServerPlayer player(id, 7400);
         PlayerAuthInputPacket packet;
@@ -330,6 +339,7 @@ namespace {
         BedrockLog::flush();
         BedrockLog::addEndPoint(log);
         ServerNetworkHandler owner("Correction logging regression", "", 1);
+        enableMovementSimulation(owner);
         NetworkIdentifier id;
         ServerPlayer player(id, 7200);
         player.setName("CorrectionProbe");
@@ -576,6 +586,7 @@ namespace {
 
     void checkAnalogInputSlowdown() {
         ServerNetworkHandler owner("Analog input regression", "", 1);
+        enableMovementSimulation(owner);
         NetworkIdentifier id;
         ServerPlayer player(id, 7299);
         PlayerAuthInputPacket packet;
@@ -618,6 +629,7 @@ namespace {
 
     void checkConfinedSwimmingPose() {
         ServerNetworkHandler owner("Confined pose regression", "", 1);
+        enableMovementSimulation(owner);
         NetworkIdentifier id;
         ServerPlayer locator(id, 7360);
         Level &level = owner.getLevelFor(locator);
@@ -666,6 +678,7 @@ namespace {
 
     void checkClientAcceptance() {
         ServerNetworkHandler owner("Client acceptance regression", "", 1);
+        enableMovementSimulation(owner);
         NetworkIdentifier id;
         ServerPlayer player(id, 7370);
         Level &level = owner.getLevelFor(player);
@@ -745,6 +758,7 @@ namespace {
 
     void checkLoadingScreenMovement() {
         ServerNetworkHandler owner("Loading movement regression", "", 1);
+        enableMovementSimulation(owner);
         NetworkIdentifier id;
         ServerPlayer player(id, 7360);
         player.setLoginState(ServerPlayer::LoginState::StartGameSent);
@@ -936,6 +950,7 @@ namespace {
 
     void checkShallowWaterWalking() {
         ServerNetworkHandler owner("Shallow walking regression", "", 1);
+        enableMovementSimulation(owner);
         NetworkIdentifier id;
         ServerPlayer locator(id, 6000);
         Level &level = owner.getLevelFor(locator);
@@ -1128,14 +1143,27 @@ namespace {
 
     void checkSimulationSettings() {
         ServerNetworkHandler owner("Simulation settings regression", "", 1);
+        enableMovementSimulation(owner);
         const auto path = ServerPaths::getRoot() / "switch.properties";
-        std::ofstream(path) << "simulation=invalid\n";
+        std::ofstream(path) << "movement-simulation=invalid\n";
         const PropertiesSettings invalid(path.string());
-        require(invalid.getSimulation() && invalid.getInvalidProperties().size() == 1,
-                "Invalid simulation setting did not fall back to enabled");
-        for (const std::string configuration: {"", "simulation=true\n",
-                                               "simulation=true\nserver-authoritative-movement-strict=true\n",
-                                               "simulation=false\nserver-authoritative-movement-strict=true\n"}) {
+        require(!invalid.getMovementSimulation() && invalid.getInvalidProperties().size() == 1,
+                "Invalid movement simulation setting did not fall back to disabled");
+        const auto simulationFor = [&](const char *contents) {
+            std::ofstream(path) << contents;
+            return PropertiesSettings(path.string()).getMovementSimulation();
+        };
+        require(!simulationFor(""), "An empty file enabled the movement simulation");
+        require(simulationFor("server-authoritative-movement-strict=true\n"),
+                "Strict mode lost the simulation it had in a file without a simulation setting");
+        require(simulationFor("simulation=true\n") && !simulationFor("simulation=false\n"),
+                "The former simulation name was not honoured");
+        require(!simulationFor("movement-simulation=false\nsimulation=true\n"
+                               "server-authoritative-movement-strict=true\n"),
+                "movement-simulation did not take precedence over the settings it replaces");
+        for (const std::string configuration: {"", "movement-simulation=true\n",
+                                               "movement-simulation=true\nserver-authoritative-movement-strict=true\n",
+                                               "movement-simulation=false\nserver-authoritative-movement-strict=true\n"}) {
             std::ofstream(path) << configuration;
             const PropertiesSettings settings(path.string());
             owner.setProperties(settings);
@@ -1157,9 +1185,9 @@ namespace {
             packet.mDelta = Vector3f(100, 100, 100);
             Vector3f feet(66.6f, 250.0f, 2.5f);
             PlayerMovementSimulator::apply(owner, id, player, packet, feet, false);
-            if (!settings.getSimulation()) {
+            if (!settings.getMovementSimulation()) {
                 require(!player.hasSimulatedPosition() && !player.hasSimulatedVelocity(),
-                        "simulation=false did not clear replay state when strict was enabled");
+                        "movement-simulation=false did not clear replay state");
                 require(feet.x == 66.6f, "Disabled simulation changed the reported coordinates");
                 continue;
             }
