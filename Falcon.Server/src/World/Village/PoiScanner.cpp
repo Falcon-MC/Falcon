@@ -43,6 +43,7 @@ bool PoiScanner::scan(Level &level, const Vector3i &origin, const KnownPredicate
         mRestart = false;
     }
 
+    // the bounds follow the dweller every tick while the cursor persists: the game lets the box drift the same way
     int visited = 0;
     while (mCursor.x < origin.x + SCAN_RADIUS_XZ) {
         while (mCursor.y < origin.y + SCAN_RADIUS_Y) {
