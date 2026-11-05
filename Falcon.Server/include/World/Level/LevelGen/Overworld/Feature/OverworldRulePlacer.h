@@ -85,8 +85,8 @@ private:
     static bool _placeGeode(BlockManager &blocks, const GeodeDefinition &geode, int32_t x, int32_t y, int32_t z,
                             std::mt19937 &random);
 
-    static void _placeLegacyTrees(BlockManager &blocks, const LegacyTreeDefinition &trees, int32_t x, int32_t y,
-                                  int32_t z, std::mt19937 &random);
+    static void _placeLegacyTrees(BlockManager &blocks, const LegacyTreeDefinition &trees, int32_t x, int32_t z,
+                                  std::mt19937 &random);
 
     static void _placeForestFoliage(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
 

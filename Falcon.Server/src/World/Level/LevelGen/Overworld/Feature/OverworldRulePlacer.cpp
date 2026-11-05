@@ -908,7 +908,7 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
         else if (feature.mForestFoliage)
             _placeForestFoliage(blocks, position[0], position[2], placement);
         else if (feature.mLegacyTree != nullptr)
-            _placeLegacyTrees(blocks, *feature.mLegacyTree, position[0], position[1], position[2], placement);
+            _placeLegacyTrees(blocks, *feature.mLegacyTree, position[0], position[2], placement);
         else if (feature.mPlaced.isSet())
             _place(blocks, feature.mPlaced, position[0], position[1], position[2], placement);
         else
@@ -1500,10 +1500,9 @@ bool OverworldRulePlacer::_placeGeode(BlockManager &blocks, const GeodeDefinitio
 }
 
 void OverworldRulePlacer::_placeLegacyTrees(BlockManager &blocks, const LegacyTreeDefinition &trees, int32_t x,
-                                            int32_t y, int32_t z, std::mt19937 &random) {
+                                            int32_t z, std::mt19937 &random) {
     // LegacyTreeFeature::place (sub_14D224440): nine times in ten the density plus up to 2 more, or for a density
-    // below 1 one tree with that chance; otherwise the density scaled by a float
-    (void) y;
+    // below 1 one tree with that chance; otherwise the density scaled by a float; the rule's y is not read
     const float density = trees.mDensity;
     int32_t count = 0;
     if (nextInt(random, 10) != 0) {
