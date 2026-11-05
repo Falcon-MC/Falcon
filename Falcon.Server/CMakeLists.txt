@@ -157,12 +157,10 @@ list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_EXECUTABLE_SOURCES})
 # initialisers, and a static library would let the linker drop every object nothing references by name.
 add_library(FalconCore OBJECT ${FALCON_CORE_SOURCES})
 
-# no fused multiply-adds: the game's float noise rounds every step, fma changes the terrain
-set_source_files_properties(
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/World/Level/LevelGen/Noise/PerlinNoiseSampler.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/World/Level/LevelGen/Noise/PerlinNoise.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/World/Level/LevelGen/Noise/NormalNoise.cpp"
-        PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+# no fused multiply-adds anywhere in generation: the game rounds every float step, fma changes the terrain
+file(GLOB_RECURSE FALCON_LEVELGEN_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/World/Level/LevelGen/*.cpp")
+set_source_files_properties(${FALCON_LEVELGEN_SOURCES} PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 
 include(cmake/FalconLegacyHeaders.cmake)
 
