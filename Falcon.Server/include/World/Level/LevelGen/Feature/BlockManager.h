@@ -17,9 +17,14 @@ public:
 
     const BlockState &getBlockAt(int32_t x, int32_t y, int32_t z);
 
-    const BlockState *getCachedBlock(int32_t x, int32_t y, int32_t z) const;
+    // the second block of the position, the water of a waterlogged block
+    const BlockState &getExtraBlockAt(int32_t x, int32_t y, int32_t z);
+
+    const BlockState *getCachedBlock(int32_t x, int32_t y, int32_t z, int32_t layer = 0) const;
 
     virtual void setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockState &state);
+
+    void setExtraBlockAt(int32_t x, int32_t y, int32_t z, const BlockState &state);
 
     bool isCached(int32_t x, int32_t y, int32_t z) const;
 
@@ -40,7 +45,10 @@ public:
     static int64_t hashXYZ(int32_t x, int32_t y, int32_t z);
 
 protected:
+    const BlockState &_getBlockAt(int32_t x, int32_t y, int32_t z, int32_t layer);
+
     Level *mLevel;
+    // keyed by hashXYZ with the layer in the lowest bit
     std::unordered_map<int64_t, BlockState> mCaches;
     std::unordered_map<int64_t, BlockState> mPlaces;
     std::vector<GeneratedBlockChange> *mOverflowSink = nullptr;

@@ -354,10 +354,11 @@ bool LevelStorage::mergePendingBlockChanges(int32_t chunkX, int32_t chunkZ,
     std::unordered_map<int64_t, size_t> index;
 
     for (size_t position = 0; position < merged.size(); position++)
-        index[packBlockPosition(merged[position].mX, merged[position].mY, merged[position].mZ)] = position;
+        index[packBlockPosition(merged[position].mX, merged[position].mY, merged[position].mZ)
+              | merged[position].mLayer] = position;
 
     for (const GeneratedBlockChange &change: changes) {
-        const int64_t packed = packBlockPosition(change.mX, change.mY, change.mZ);
+        const int64_t packed = packBlockPosition(change.mX, change.mY, change.mZ) | change.mLayer;
         const std::unordered_map<int64_t, size_t>::const_iterator found = index.find(packed);
 
         if (found != index.end()) {
@@ -377,6 +378,8 @@ bool LevelStorage::mergePendingBlockChanges(int32_t chunkX, int32_t chunkZ,
         entry.putInt("x", change.mX);
         entry.putInt("y", change.mY);
         entry.putInt("z", change.mZ);
+        if (change.mLayer != 0)
+            entry.putInt("layer", change.mLayer);
         entry.put("block", change.mState.toNbt());
         list.addToList(entry);
     }
@@ -431,6 +434,7 @@ std::vector<GeneratedBlockChange> LevelStorage::loadPendingBlockChanges(int32_t 
             change.mX = entry.getInt("x");
             change.mY = entry.getInt("y");
             change.mZ = entry.getInt("z");
+            change.mLayer = entry.getInt("layer", 0) == 1 ? 1 : 0;
             change.mState = BlockState(block->getString("name", "minecraft:air"),
                                        states == nullptr ? Tag::ofCompound() : *states);
             changes.push_back(change);

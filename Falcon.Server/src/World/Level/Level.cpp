@@ -615,10 +615,10 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
         const int32_t localX = change.mX & 15;
         const int32_t localZ = change.mZ & 15;
 
-        if (chunk->getBlock(localX, change.mY, localZ) == change.mState)
+        if (chunk->getBlock(localX, change.mY, localZ, change.mLayer) == change.mState)
             continue;
 
-        chunk->setBlock(localX, change.mY, localZ, change.mState);
+        chunk->setBlock(localX, change.mY, localZ, change.mLayer, change.mState);
         LightSystem::onBlockChanged(*this, change.mX, change.mY, change.mZ);
         mRepopulatedChunks.insert(key);
     }

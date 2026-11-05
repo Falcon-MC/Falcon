@@ -287,7 +287,7 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
                 if (change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y)
                     continue;
 
-                chunk->setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mState);
+                chunk->setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, change.mState);
             }
 
             mStorage.erasePendingBlockChanges(result.mX, result.mZ);
