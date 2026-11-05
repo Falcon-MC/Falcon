@@ -133,7 +133,7 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
     // shared so a world unloaded during the search does not take the generator with it
     const std::shared_ptr<const ChunkGenerator> generator = level.shareGenerator();
 
-    std::thread search([&handler, &level, generator, requesterId, requestOrigin, biomeName, biomeId, teleport,
+    std::thread search([&handler, generator, requesterId, requestOrigin, biomeName, biomeId, teleport,
                         originX, originY, originZ]() {
         BiomeSearch::Result result = BiomeSearch::findNearest(*generator, Vector3i(originX, originY, originZ),
                                                               biomeId);
@@ -143,14 +143,20 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
         }
         gSearchRunning = false;
 
-        handler.postToMainThread([&handler, &level, requesterId, requestOrigin, biomeName, biomeId, teleport, result,
+        handler.postToMainThread([&handler, generator, requesterId, requestOrigin, biomeName, biomeId, teleport, result,
                                   originX, originZ]() {
             auto entry = handler.getPlayers().find(requesterId);
             if (entry == handler.getPlayers().end())
                 return;
 
             ServerPlayer *target = &entry->second;
-            if (!target->isSpawned() || !target->isIn(level))
+            if (!target->isSpawned())
+                return;
+
+            // the searched world may have been unloaded meanwhile: resolve the level again here, and the held
+            // generator tells whether it is still the one searched
+            Level &level = handler.getLevelFor(*target);
+            if (!target->isIn(level) || level.shareGenerator() != generator)
                 return;
 
             if (!result.mFound) {
