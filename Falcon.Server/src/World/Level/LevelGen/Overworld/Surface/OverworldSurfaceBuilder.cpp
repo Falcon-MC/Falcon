@@ -5,6 +5,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Overworld/Biome/ClimateAttributes.h"
+#include "World/Level/LevelGen/Overworld/OverworldBlockLists.h"
 #include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceMaterialAttributes.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
@@ -70,15 +71,6 @@ namespace {
                 VanillaBlocks::POLISHED_ANDESITE().getIdentifier()
         };
         return REPLACEABLE.contains(state);
-    }
-
-    // a mid material that turns to sandstone where its layer ends (list at 0x1529B0DF8, filled from 0x14F1F6538)
-    bool isSand(const BlockState &state) {
-        static const BlockStateSet SAND = {
-                VanillaBlocks::SAND().getIdentifier(), VanillaBlocks::RED_SAND().getIdentifier(),
-                VanillaBlocks::SUSPICIOUS_SAND().getIdentifier()
-        };
-        return SAND.contains(state);
     }
 
     bool isAirState(const BlockState &state) {
@@ -281,7 +273,8 @@ void OverworldSurfaceBuilder::_buildOverworldColumn(LevelChunk &chunk, int32_t x
         if (--remaining != 0)
             continue;
 
-        if (isSand(*layerMid)) {
+        // a mid material that turns to sandstone where its layer ends
+        if (OverworldBlockLists::sand().contains(*layerMid)) {
             const int32_t extra = static_cast<int32_t>(random() % 4u);
             remaining = static_cast<int32_t>(std::max<int64_t>(0, (int64_t) y - seaLevel)) + extra;
             layerMid = &sandstoneState();

@@ -2,13 +2,13 @@
 
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/LevelGen/BlockStateSet.h"
+#include "World/Level/LevelGen/Overworld/OverworldBlockLists.h"
 #include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldAquifer.h"
 #include "World/Level/LevelGen/Random/GameRandom.h"
 
 #include <cmath>
-#include <string>
-#include <unordered_set>
 
 namespace {
     constexpr int32_t MIN_Y = OverworldGeneratorConstants::MIN_Y;
@@ -34,15 +34,9 @@ namespace {
         return range[0] + (range[1] - range[0]) * nextFloat(random);
     }
 
-    using NameSet = std::unordered_set<std::string>;
-
-    bool contains(const NameSet &names, const BlockState &state) {
-        return names.count(state.mName) != 0;
-    }
-
     // the cave carver's replaceable blocks (sub_14D1F5960); glazed terracotta stands where terracotta is expected
-    const NameSet &caveReplaceable() {
-        static const NameSet names = {
+    const BlockStateSet &caveReplaceable() {
+        static const BlockStateSet names = {
                 "minecraft:stone", "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:podzol",
                 "minecraft:grass_block", "minecraft:white_glazed_terracotta", "minecraft:orange_glazed_terracotta",
                 "minecraft:magenta_glazed_terracotta", "minecraft:light_blue_glazed_terracotta",
@@ -64,8 +58,8 @@ namespace {
     }
 
     // the canyon's carvable blocks (list at 0x1529AA8D0, filled from 0x14F1F6CA8)
-    const NameSet &canyonReplaceable() {
-        static const NameSet names = {
+    const BlockStateSet &canyonReplaceable() {
+        static const BlockStateSet names = {
                 "minecraft:stone", "minecraft:granite", "minecraft:diorite", "minecraft:andesite", "minecraft:tuff",
                 "minecraft:deepslate", "minecraft:calcite", "minecraft:dirt", "minecraft:coarse_dirt",
                 "minecraft:mud", "minecraft:podzol", "minecraft:mycelium", "minecraft:grass_block",
@@ -88,14 +82,8 @@ namespace {
     }
 
     // list at 0x1529B3B88
-    const NameSet &dirt() {
-        static const NameSet names = {"minecraft:dirt", "minecraft:coarse_dirt"};
-        return names;
-    }
-
-    // list at 0x1529B0DF8
-    const NameSet &sand() {
-        static const NameSet names = {"minecraft:sand", "minecraft:red_sand", "minecraft:suspicious_sand"};
+    const BlockStateSet &dirt() {
+        static const BlockStateSet names = {"minecraft:dirt", "minecraft:coarse_dirt"};
         return names;
     }
 
@@ -119,9 +107,28 @@ namespace {
         return state;
     }
 
+    const BlockState &myceliumState() {
+        static const BlockState state = VanillaBlocks::MYCELIUM().toBlockState();
+        return state;
+    }
+
     const BlockState &sandstoneState() {
         static const BlockState state = VanillaBlocks::SANDSTONE().toBlockState();
         return state;
+    }
+
+    bool isGrassBlock(const BlockState &state) {
+        static const BlockStateSet GRASS = {VanillaBlocks::GRASS_BLOCK().getIdentifier()};
+        return GRASS.contains(state);
+    }
+
+    // what a carved grass or mycelium leaves on the dirt below it, null for any other block
+    const BlockState *spreadingTop(const BlockState &state) {
+        static const BlockStateSet MYCELIUM = {VanillaBlocks::MYCELIUM().getIdentifier()};
+        if (isGrassBlock(state))
+            return &grassState();
+
+        return MYCELIUM.contains(state) ? &myceliumState() : nullptr;
     }
 
     // fluid below the aquifer's level, air above it, nothing where the aquifer keeps a barrier
@@ -163,12 +170,12 @@ namespace {
 
                     const int32_t y = row + MIN_Y;
                     const BlockState &block = chunk.getBlock(x, y, z);
-                    grassAbove |= block.mName == "minecraft:grass_block";
-                    if (!contains(canyonReplaceable(), block))
+                    grassAbove |= isGrassBlock(block);
+                    if (!canyonReplaceable().contains(block))
                         continue;
 
                     fillCarved(chunk, aquifer, x, y, z, baseX + x, baseZ + z);
-                    if (grassAbove && contains(dirt(), chunk.getBlock(x, y - 1, z)))
+                    if (grassAbove && dirt().contains(chunk.getBlock(x, y - 1, z)))
                         chunk.setBlock(x, y - 1, z, grassState());
                 }
             }
@@ -438,20 +445,20 @@ void OverworldCarvers::_carveSegment(const CaveSegment &segment, int32_t heightL
 
                 const int32_t y = row + MIN_Y;
                 const BlockState &block = chunk.getBlock(x, y, z);
-                if (!contains(caveReplaceable(), block))
+                if (!caveReplaceable().contains(block))
                     continue;
 
                 // the carved grass or mycelium spreads onto the dirt below
-                const bool spreads = block.mName == "minecraft:grass_block" || block.mName == "minecraft:mycelium";
-                const BlockState carved = spreads ? block : airState();
+                const BlockState *spread = spreadingTop(block);
 
-                if (row <= VOLUME_HEIGHT - 3 && contains(sand(), chunk.getBlock(x, y + 1, z))
-                    && contains(sand(), chunk.getBlock(x, y + 2, z)) && contains(sand(), chunk.getBlock(x, y + 3, z)))
+                const BlockStateSet &sand = OverworldBlockLists::sand();
+                if (row <= VOLUME_HEIGHT - 3 && sand.contains(chunk.getBlock(x, y + 1, z))
+                    && sand.contains(chunk.getBlock(x, y + 2, z)) && sand.contains(chunk.getBlock(x, y + 3, z)))
                     chunk.setBlock(x, y + 1, z, sandstoneState());
 
                 fillCarved(chunk, aquifer, x, y, z, baseX + x, baseZ + z);
-                if (spreads && contains(dirt(), chunk.getBlock(x, y - 1, z)))
-                    chunk.setBlock(x, y - 1, z, carved);
+                if (spread != nullptr && dirt().contains(chunk.getBlock(x, y - 1, z)))
+                    chunk.setBlock(x, y - 1, z, *spread);
             }
         }
     }
