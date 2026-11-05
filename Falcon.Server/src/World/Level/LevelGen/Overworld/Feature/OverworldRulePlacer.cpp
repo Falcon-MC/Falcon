@@ -2645,8 +2645,10 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
     static const BlockState blueIce = VanillaBlocks::BLUE_ICE().toBlockState();
     constexpr int32_t SEA_LEVEL = 63;
 
-    const auto isIceberg = [](const std::string &name) {
-        return name == "minecraft:packed_ice" || name == "minecraft:snow" || name == "minecraft:blue_ice";
+    static const BlockStateSet ICEBERG = {"minecraft:packed_ice", "minecraft:snow", "minecraft:blue_ice"};
+    static const BlockStateSet SNOW_LAYER = {VanillaBlocks::SNOW_LAYER().getIdentifier()};
+    const auto isIceberg = [](const BlockState &state) {
+        return ICEBERG.contains(state);
     };
 
     const int32_t widthDraw = nextInt(random, 5);
@@ -2709,9 +2711,12 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
     };
     // only in air, snow, ice or water; snow near the top when the iceberg carries some
     const auto setIcebergBlock = [&](int32_t blockX, int32_t blockY, int32_t blockZ, int32_t fromTop, int32_t total) {
-        const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
-        if (name != "minecraft:air" && name != "minecraft:snow" && name != "minecraft:ice" && name != "minecraft:water"
-            && name != "minecraft:flowing_water")
+        static const BlockStateSet TAKES_ICEBERG = {
+                "minecraft:air", "minecraft:snow", "minecraft:ice", "minecraft:water", "minecraft:flowing_water"
+        };
+        static const BlockStateSet STILL_WATER = {VanillaBlocks::WATER().getIdentifier()};
+        const BlockState &replaced = blocks.getBlockAt(blockX, blockY, blockZ);
+        if (!TAKES_ICEBERG.contains(replaced))
             return;
 
         bool allowSnow = true;
@@ -2722,7 +2727,7 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
         }
 
         const BlockState *state = &main;
-        if (snowOnTop && name != "minecraft:water") {
+        if (snowOnTop && !STILL_WATER.contains(replaced)) {
             const int32_t drawn = nextInt(random, std::max(1, total / divisor));
             if (static_cast<double>(drawn) + static_cast<double>(total) * 0.6 >= static_cast<double>(fromTop)
                 && allowSnow)
@@ -2773,18 +2778,18 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
                 for (int32_t blockY = SEA_LEVEL; blockY <= SEA_LEVEL + height; blockY++) {
                     const int32_t blockX = x + dx;
                     const int32_t blockZ = z + dz;
-                    const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
-                    if (!isIceberg(name) && name != "minecraft:snow_layer")
+                    const BlockState &state = blocks.getBlockAt(blockX, blockY, blockZ);
+                    if (!isIceberg(state) && !SNOW_LAYER.contains(state))
                         continue;
 
-                    if (blocks.getBlockAt(blockX, blockY - 1, blockZ).mName == "minecraft:air") {
+                    if (DecorationSupport::isAir(blocks.getBlockAt(blockX, blockY - 1, blockZ))) {
                         blocks.setBlockStateAt(blockX, blockY, blockZ, air);
                         blocks.setBlockStateAt(blockX, blockY + 1, blockZ, air);
-                    } else if (isIceberg(name)) {
-                        const int32_t open = !isIceberg(blocks.getBlockAt(blockX, blockY, blockZ + 1).mName)
-                                             + !isIceberg(blocks.getBlockAt(blockX - 1, blockY, blockZ).mName)
-                                             + !isIceberg(blocks.getBlockAt(blockX, blockY, blockZ - 1).mName)
-                                             + !isIceberg(blocks.getBlockAt(blockX + 1, blockY, blockZ).mName);
+                    } else if (isIceberg(state)) {
+                        const int32_t open = !isIceberg(blocks.getBlockAt(blockX, blockY, blockZ + 1))
+                                             + !isIceberg(blocks.getBlockAt(blockX - 1, blockY, blockZ))
+                                             + !isIceberg(blocks.getBlockAt(blockX, blockY, blockZ - 1))
+                                             + !isIceberg(blocks.getBlockAt(blockX + 1, blockY, blockZ));
                         if (open >= 3)
                             blocks.setBlockStateAt(blockX, blockY, blockZ, air);
                     }
@@ -2882,8 +2887,8 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
                 const int32_t blockX = x + dx;
                 const int32_t blockY = SEA_LEVEL + dy;
                 const int32_t blockZ = z + dz;
-                const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
-                if (!isIceberg(name) && name != "minecraft:snow_layer")
+                const BlockState &state = blocks.getBlockAt(blockX, blockY, blockZ);
+                if (!isIceberg(state) && !SNOW_LAYER.contains(state))
                     continue;
 
                 if (underwater) {
@@ -2891,7 +2896,7 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
                     continue;
                 }
                 blocks.setBlockStateAt(blockX, blockY, blockZ, air);
-                if (blocks.getBlockAt(blockX, blockY + 1, blockZ).mName == "minecraft:snow_layer")
+                if (SNOW_LAYER.contains(blocks.getBlockAt(blockX, blockY + 1, blockZ)))
                     blocks.setBlockStateAt(blockX, blockY + 1, blockZ, air);
             }
         }
@@ -2918,11 +2923,17 @@ bool OverworldRulePlacer::_placeBlueIce(BlockManager &blocks, int32_t x, int32_t
     static const BlockState blueIce = VanillaBlocks::BLUE_ICE().toBlockState();
     if (y >= 63)
         return false;
-    if (blocks.getBlockAt(x, y, z).mName != "minecraft:water" && blocks.getBlockAt(x, y - 1, z).mName != "minecraft:water")
+    static const BlockStateSet STILL_WATER = {VanillaBlocks::WATER().getIdentifier()};
+    static const BlockStateSet PACKED_ICE = {VanillaBlocks::PACKED_ICE().getIdentifier()};
+    static const BlockStateSet BLUE_ICE = {VanillaBlocks::BLUE_ICE().getIdentifier()};
+    static const BlockStateSet TAKES_BLUE_ICE = {
+            "minecraft:air", "minecraft:water", "minecraft:packed_ice", "minecraft:ice"
+    };
+    if (!STILL_WATER.contains(blocks.getBlockAt(x, y, z)) && !STILL_WATER.contains(blocks.getBlockAt(x, y - 1, z)))
         return false;
 
     const auto isPacked = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
-        return blocks.getBlockAt(blockX, blockY, blockZ).mName == "minecraft:packed_ice";
+        return PACKED_ICE.contains(blocks.getBlockAt(blockX, blockY, blockZ));
     };
     if (!isPacked(x, y + 1, z) && !isPacked(x, y, z - 1) && !isPacked(x, y, z + 1) && !isPacked(x - 1, y, z)
         && !isPacked(x + 1, y, z))
@@ -2943,15 +2954,12 @@ bool OverworldRulePlacer::_placeBlueIce(BlockManager &blocks, int32_t x, int32_t
         const int32_t third = nextInt(random, bound);
         const int32_t blockZ = z + third - nextInt(random, bound);
         const int32_t blockY = y + dy;
-        const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
-        if (name != "minecraft:air" && name != "minecraft:water" && name != "minecraft:packed_ice"
-            && name != "minecraft:ice")
+        if (!TAKES_BLUE_ICE.contains(blocks.getBlockAt(blockX, blockY, blockZ)))
             continue;
 
         int32_t touching = 0;
         for (const int32_t *step: FACE_STEPS) {
-            touching += blocks.getBlockAt(blockX + step[0], blockY + step[1], blockZ + step[2]).mName
-                        == "minecraft:blue_ice";
+            touching += BLUE_ICE.contains(blocks.getBlockAt(blockX + step[0], blockY + step[1], blockZ + step[2]));
         }
         if (touching >= 1 && touching <= 4)
             blocks.setBlockStateAt(blockX, blockY, blockZ, blueIce);
