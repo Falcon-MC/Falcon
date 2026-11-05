@@ -296,7 +296,9 @@ public:
 
     void tick();
 
-    VillageManager &getVillageManager() { return mVillageManager; }
+    VillageManager &getVillageManager() {
+        return mVillageManager;
+    }
 
     void scheduleBlockUpdate(const Vector3i &position, int64_t delay = 1);
 

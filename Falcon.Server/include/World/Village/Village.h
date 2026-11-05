@@ -32,7 +32,9 @@ public:
 
     Village();
 
-    const AxisAlignedBB &getBounds() const { return mBounds; }
+    const AxisAlignedBB &getBounds() const {
+        return mBounds;
+    }
 
     Vector3f getCenter() const;
 
@@ -53,13 +55,21 @@ public:
 
     bool hasDweller(DwellerRole role, int64_t id) const;
 
-    size_t getInhabitantCount() const { return mRoles[(size_t) DwellerRole::Inhabitant].size(); }
+    size_t getInhabitantCount() const {
+        return mRoles[(size_t) DwellerRole::Inhabitant].size();
+    }
 
-    bool isInitialized() const { return mInitialized; }
+    bool isInitialized() const {
+        return mInitialized;
+    }
 
-    int32_t getTickCount() const { return mTickCount; }
+    int32_t getTickCount() const {
+        return mTickCount;
+    }
 
-    bool hasUnclaimedBed() const { return !mUnclaimed[(size_t) PoiType::Bed].empty(); }
+    bool hasUnclaimedBed() const {
+        return !mUnclaimed[(size_t) PoiType::Bed].empty();
+    }
 
     /** Unclaimed beds plus the beds claimed by inhabitants. */
     size_t countBeds() const;
