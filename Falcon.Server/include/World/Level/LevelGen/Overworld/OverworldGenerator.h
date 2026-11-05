@@ -41,8 +41,6 @@ public:
 
     static int64_t parseSeed(const std::string &value);
 
-    static int64_t chunkHash(int32_t chunkX, int32_t chunkZ);
-
 private:
     void _generateTerrain(LevelChunk &chunk, int32_t *heightMap) const;
 
