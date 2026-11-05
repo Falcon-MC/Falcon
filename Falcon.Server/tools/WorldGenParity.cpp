@@ -23,7 +23,8 @@
  *   - surface height: the highest Y whose layer 0 is not air, MIN_Y - 1 for an empty column;
  *   - biomes are sampled once per 4x4x4 cell, at the cell's lowest corner; above the highest non-empty BDS section
  *     the generated biomes are read from that section, which the game saves in place of the sections above;
- *   - ore spills: mismatches whose two blocks are both host rocks of the underground ore rules or blocks they place.
+ *   - ore spills: mismatches between a block the underground ore rules place and either another such block or one of
+ *     their host rocks (stone, deepslate); stone against deepslate stays a terrain mismatch.
  *     The game drops part of the blobs an ore rule spills into a neighbour that is still generating, depending on
  *     its thread scheduling, so these are set aside from the "outside ore spills" match;
  *   - each block position belongs to the highest category of its two blocks, in the order base terrain
@@ -410,19 +411,28 @@ namespace {
             return name.size() > 4 && name.compare(name.size() - 4, 4, "_ore") == 0 ? 2 : -1;
         }
 
-        // a host rock of the underground ore rules or a block one of them places
-        bool isOreLayer(const BlockState &state) const {
+        // a block one of the underground ore rules places
+        bool isOrePlaced(const BlockState &state) const {
             const std::string &name = state.mName;
-            static const char *const ORE_LAYER[] = {"minecraft:stone", "minecraft:deepslate", "minecraft:granite",
-                                                    "minecraft:diorite", "minecraft:andesite", "minecraft:tuff",
-                                                    "minecraft:dirt", "minecraft:gravel", "minecraft:clay",
-                                                    "minecraft:infested_stone", "minecraft:infested_deepslate"};
-            for (const char *ore: ORE_LAYER) {
-                if (name == ore)
+            static const char *const PLACED[] = {"minecraft:granite", "minecraft:diorite", "minecraft:andesite",
+                                                 "minecraft:tuff", "minecraft:dirt", "minecraft:gravel",
+                                                 "minecraft:clay", "minecraft:infested_stone",
+                                                 "minecraft:infested_deepslate"};
+            for (const char *placed: PLACED) {
+                if (name == placed)
                     return true;
             }
 
             return name.size() > 4 && name.compare(name.size() - 4, 4, "_ore") == 0;
+        }
+
+        // a mismatch an ore blob explains: a placed block against another one or against its host rock
+        bool isOreSpill(const BlockState &expected, const BlockState &generated) const {
+            const auto hostOrPlaced = [this](const BlockState &state) {
+                return state.mName == "minecraft:stone" || state.mName == "minecraft:deepslate" || isOrePlaced(state);
+            };
+            return (isOrePlaced(expected) || isOrePlaced(generated)) && hostOrPlaced(expected)
+                   && hostOrPlaced(generated);
         }
 
         Category category(const BlockState &state) const {
@@ -814,7 +824,7 @@ namespace {
                     mismatch.mSamples.push_back({x, y, z});
             }
             score.mBlocks.add(matched);
-            if (!matched && mClassifier.isOreLayer(expected) && mClassifier.isOreLayer(generated))
+            if (!matched && mClassifier.isOreSpill(expected, generated))
                 mOreSpills++;
             mCoarse.add(mClassifier.coarse(expected) == mClassifier.coarse(generated));
             mCategories[std::max(mClassifier.category(expected), mClassifier.category(generated))].add(matched);
