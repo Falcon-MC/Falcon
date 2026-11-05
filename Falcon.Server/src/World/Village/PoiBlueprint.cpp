@@ -9,7 +9,7 @@ namespace {
         return {name, initEvent, BECOME_UNSKILLED, PoiType::JobSite, 1, weight};
     }
 
-    // Registered by the vanilla village manager constructor, keyed by block type. Beds and bells carry no events.
+    // the game's hard-coded table from the village manager constructor, keyed by block type
     const std::unordered_map<std::string, PoiBlueprint> &blueprints() {
         static const std::unordered_map<std::string, PoiBlueprint> table = {
                 {"minecraft:bed", {"villager", "", "", PoiType::Bed, 1, 1}},
@@ -27,7 +27,7 @@ namespace {
                 {"minecraft:smithing_table", jobSite("toolsmith", "minecraft:become_toolsmith", 5)},
                 {"minecraft:cauldron", jobSite("leatherworker", "minecraft:become_leatherworker", 5)},
                 {"minecraft:barrel", jobSite("fisherman", "minecraft:become_fisherman", 3)},
-                // The vanilla shepherd event name is misspelled.
+                // misspelled in the game
                 {"minecraft:loom", jobSite("shepherd", "minecraft:become_sheperd", 3)},
                 {"minecraft:stonecutter_block", jobSite("mason", "minecraft:become_mason", 3)},
         };

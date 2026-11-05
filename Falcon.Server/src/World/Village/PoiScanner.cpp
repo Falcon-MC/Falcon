@@ -6,8 +6,7 @@
 namespace {
     const int SCAN_RADIUS_XZ = 16;
     const int SCAN_RADIUS_Y = 4;
-    // Vanilla checks the budget after visiting a block and returns before advancing the cursor: 1025 blocks are
-    // visited per tick and the last one is visited again on the next tick.
+    // budget checked after the visit and before the cursor moves: 1025 blocks per tick, the last one visited again
     const int VISIT_BUDGET_LIMIT = 1023;
 }
 
@@ -16,7 +15,7 @@ const PoiBlueprint *PoiScanner::findValidBlueprint(const BlockState &state) {
     if (blueprint == nullptr)
         return nullptr;
 
-    // The bed blueprint is the only Bed one; vanilla only claims the head piece of an unoccupied bed.
+    // only the head piece of an unoccupied bed, as in the game
     if (blueprint->mType == PoiType::Bed
         && (state.mStates.getByte("head_piece_bit", 0) == 0 || state.mStates.getByte("occupied_bit", 0) != 0))
         return nullptr;
