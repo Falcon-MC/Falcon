@@ -32,6 +32,8 @@ public:
         return mRole;
     }
 
+    std::shared_ptr<Village> getVillage() const { return mVillage.lock(); }
+
 private:
     void _read(const json::Value &component);
 

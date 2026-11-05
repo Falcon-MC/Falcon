@@ -8,6 +8,7 @@
 #include "World/Actor/AI/Goal/BehaviorItems.h"
 #include "World/Actor/AI/Goal/BreakDoorGoal.h"
 #include "World/Actor/AI/Goal/BreedGoal.h"
+#include "World/Actor/AI/Goal/CelebrateGoal.h"
 #include "World/Actor/AI/Goal/ChargeHeldItemGoal.h"
 #include "World/Actor/AI/Goal/CircleAroundAnchorGoal.h"
 #include "World/Actor/AI/Goal/EatBlockGoal.h"
@@ -30,6 +31,7 @@
 #include "World/Actor/AI/Goal/MeleeAttackGoal.h"
 #include "World/Actor/AI/Goal/MountPathingGoal.h"
 #include "World/Actor/AI/Goal/MoveToBlockGoal.h"
+#include "World/Actor/AI/Goal/MoveToVillageGoal.h"
 #include "World/Actor/AI/Goal/MoveToWaterGoal.h"
 #include "World/Actor/AI/Goal/MoveTowardsHomeRestrictionGoal.h"
 #include "World/Actor/AI/Goal/NearestAttackableTargetGoal.h"
@@ -161,6 +163,15 @@ namespace {
     const float TAKE_DEFAULT_MAX_XZ = 1.0f;
     const float TAKE_DEFAULT_MIN_Y = 0.0f;
     const float TAKE_DEFAULT_MAX_Y = 2.0f;
+    // the comprehensive goal definition defaults (sub_147C0AC20)
+    const float MOVE_TO_VILLAGE_DEFAULT_RADIUS = 0.5f;
+    // the celebrate definition defaults (sub_147685170, xmmword_14F30CC20), sound 286
+    const char *const CELEBRATE_DEFAULT_SOUND = "celebrate";
+    const float CELEBRATE_DEFAULT_SOUND_MIN = 2.0f;
+    const float CELEBRATE_DEFAULT_SOUND_MAX = 7.0f;
+    const float CELEBRATE_DEFAULT_JUMP_MIN = 1.0f;
+    const float CELEBRATE_DEFAULT_JUMP_MAX = 3.5f;
+    const float CELEBRATE_DEFAULT_DURATION = 30.0f;
     const float STOMP_DEFAULT_RANGE_MULTIPLIER = 2.0f;
     const float STOMP_DEFAULT_NO_DAMAGE_MULTIPLIER = 2.0f;
 
@@ -845,6 +856,30 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         if (settings.mTargetBlocks.empty())
             return nullptr;
         return std::make_unique<MoveToBlockGoal>(std::move(settings));
+    }
+
+    if (behavior == "move_to_village") {
+        // sub_147534DC0 turns the cooldown into ticks after dropping its fraction of a second. search_range only
+        // seeds the closest-village search (sub_1439EA7F0), which takes its first candidate regardless
+        MoveToVillageGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mCooldownTicks = TICKS_PER_SECOND * (int64_t) std::fabs(numberOf(component, "cooldown_time", 0.0f));
+        settings.mGoalRadius = numberOf(component, "goal_radius", MOVE_TO_VILLAGE_DEFAULT_RADIUS);
+        settings.mFollowRange = followRange(mob);
+        return std::make_unique<MoveToVillageGoal>(settings);
+    }
+
+    if (behavior == "celebrate") {
+        CelebrateGoal::Settings settings;
+        const json::Value *sound = component.get("celebration_sound");
+        settings.mSound = sound == nullptr ? CELEBRATE_DEFAULT_SOUND : sound->string();
+        settings.mSoundIntervalMin = rangeValue(component, "sound_interval", "range_min", CELEBRATE_DEFAULT_SOUND_MIN);
+        settings.mSoundIntervalMax = rangeValue(component, "sound_interval", "range_max", CELEBRATE_DEFAULT_SOUND_MAX);
+        settings.mJumpIntervalMin = rangeValue(component, "jump_interval", "range_min", CELEBRATE_DEFAULT_JUMP_MIN);
+        settings.mJumpIntervalMax = rangeValue(component, "jump_interval", "range_max", CELEBRATE_DEFAULT_JUMP_MAX);
+        settings.mDuration = numberOf(component, "duration", CELEBRATE_DEFAULT_DURATION);
+        settings.mOnEnd = cloneOf(component.get("on_celebration_end_event"));
+        return std::make_unique<CelebrateGoal>(std::move(settings));
     }
 
     if (behavior == "go_home")
