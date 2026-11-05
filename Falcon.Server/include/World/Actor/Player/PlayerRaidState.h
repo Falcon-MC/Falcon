@@ -22,7 +22,9 @@ public:
     void onRaidOmenAdded(const Vector3i &position);
 
     /** Raid Omen removed: the raid is asked for on the next tick (`minecraft:trigger_raid`, sub_14355FD20). */
-    void onRaidOmenRemoved() { mTriggerPending = true; }
+    void onRaidOmenRemoved() {
+        mTriggerPending = true;
+    }
 
     void tick(ServerNetworkHandler &owner, ServerPlayer &player);
 

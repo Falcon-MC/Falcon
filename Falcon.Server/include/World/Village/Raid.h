@@ -36,16 +36,26 @@ public:
 
     void tick(ServerNetworkHandler &owner, Level &level, Village &village, int64_t currentTick);
 
-    State getState() const { return mState; }
+    State getState() const {
+        return mState;
+    }
 
-    Result getResult() const { return mResult; }
+    Result getResult() const {
+        return mResult;
+    }
 
-    int64_t getTicksInState() const { return mTicksInState; }
+    int64_t getTicksInState() const {
+        return mTicksInState;
+    }
 
-    const std::unordered_set<int64_t> &getRaiders() const { return mRaiders; }
+    const std::unordered_set<int64_t> &getRaiders() const {
+        return mRaiders;
+    }
 
     /** A player who killed one of the village's hostile dwellers; rewarded if the raid is won. */
-    void addHero(int64_t playerId) { mHeroes.insert(playerId); }
+    void addHero(int64_t playerId) {
+        mHeroes.insert(playerId);
+    }
 
     /** Fires `minecraft:raid_expired` on every loaded raider, so they lose their raid persistence. */
     void expireRaiders(ServerNetworkHandler &owner) const;

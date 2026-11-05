@@ -87,12 +87,18 @@ public:
 
     void tick(ServerNetworkHandler &owner, Level &level, int64_t currentTick);
 
-    Raid *getRaid() { return mRaid.get(); }
+    Raid *getRaid() {
+        return mRaid.get();
+    }
 
-    const Raid *getRaid() const { return mRaid.get(); }
+    const Raid *getRaid() const {
+        return mRaid.get();
+    }
 
     /** Whether the raid has been won or lost and only waits for its celebration to end. */
-    bool isRaidFinished() const { return mRaid != nullptr && mRaid->getResult() != Raid::Result::None; }
+    bool isRaidFinished() const {
+        return mRaid != nullptr && mRaid->getResult() != Raid::Result::None;
+    }
 
     /**
      * Whether position lies in the raid bounds, edges included: the village box grown by 32 on every side when the

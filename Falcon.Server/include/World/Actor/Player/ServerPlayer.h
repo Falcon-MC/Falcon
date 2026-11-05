@@ -340,7 +340,9 @@ public:
 
     void setEffectsNetworkReady(bool ready) { mEffectsNetworkReady = ready; }
 
-    PlayerRaidState &getRaidState() { return mRaidState; }
+    PlayerRaidState &getRaidState() {
+        return mRaidState;
+    }
 
     void syncEffects();
 
