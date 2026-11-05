@@ -1,6 +1,10 @@
-#include "World/Level/LevelGen/Overworld/Feature/Ore/OverworldOrePlacer.h"
+#include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
 
+#include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
+#include "World/Level/Block/LeavesBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Block/WaterBlock.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
@@ -16,6 +20,15 @@
 namespace {
     constexpr float PI = 3.1415927f;
     constexpr const char *UNDERGROUND_PASS = "underground_pass";
+    constexpr const char *SURFACE_PASS = "surface_pass";
+    constexpr const char *ABOVE_TOP_SOLID = "query.above_top_solid(variable.worldx, variable.worldz)";
+
+    // the passes the game places after the carvers, in order (sub_1471CE3F0)
+    const char *const PASSES[] = {
+            "first_pass", "before_underground_pass", UNDERGROUND_PASS, "after_underground_pass",
+            "before_surface_pass", SURFACE_PASS, "after_surface_pass", "before_sky_pass", "sky_pass",
+            "after_sky_pass", "final_pass"
+    };
 
     struct ReplaceRule {
         Block (*mPlaces)();
@@ -70,9 +83,18 @@ namespace {
         int32_t mDistribution;
         int32_t mMin;
         int32_t mMax;
+        bool mAboveTopSolid;
     };
 
     bool bounds(const BiomeFeatureEntry::Coordinate &coordinate, Bounds &result) {
+        result.mAboveTopSolid = coordinate.mDistribution == 0 && coordinate.mMin == ABOVE_TOP_SOLID;
+        if (result.mAboveTopSolid) {
+            result.mDistribution = 0;
+            result.mMin = 0;
+            result.mMax = 0;
+            return true;
+        }
+
         float min = 0.0f;
         if (!constant(coordinate.mMin, min))
             return false;
@@ -88,7 +110,7 @@ namespace {
             return false;
 
         result.mMax = static_cast<int32_t>(std::round(max));
-        // uniform and triangle are the only distributions the overworld ore rules use
+        // uniform and triangle are the only distributions the ported rules use
         return coordinate.mDistribution == 1 || coordinate.mDistribution == 6;
     }
 
@@ -140,14 +162,26 @@ namespace {
 }
 
 // a minecraft:ore_feature of the behavior packs
-struct OverworldOrePlacer::OreDefinition {
+struct OverworldRulePlacer::OreDefinition {
     const char *mIdentifier;
     int32_t mCount;
     float mDiscardChanceOnAirExposure;
     std::vector<ReplaceRule> mRules;
 };
 
-const OverworldOrePlacer::OreDefinition *OverworldOrePlacer::_find(const BiomeFeatureEntry &entry) {
+// one of the game's own disk features, registered in sub_14726F340
+struct OverworldRulePlacer::DiskDefinition {
+    const char *mIdentifier;
+    Block (*mPlaces)();
+    int32_t mRadius;
+    int32_t mHalfHeight;
+    // replaced besides dirt and coarse dirt
+    const char *mAlsoReplaces;
+    // the clay disk also starts on clay, not only in water
+    bool mStartsOnItself;
+};
+
+OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry &entry) {
     // BDS 1.26.61 behavior packs, features/*.json
     static const std::vector<OreDefinition> ORES = {
             {"minecraft:andesite_feature", 64, 0.0f, {{&VanillaBlocks::ANDESITE, {"minecraft:stone"}}}},
@@ -205,18 +239,31 @@ const OverworldOrePlacer::OreDefinition *OverworldOrePlacer::_find(const BiomeFe
             {"minecraft:tuff_feature", 64, 0.0f, {{&VanillaBlocks::TUFF, {"minecraft:stone", "minecraft:deepslate"}}}}
     };
 
-    if (entry.mPass != UNDERGROUND_PASS)
-        return nullptr;
+    // vtables 0x14F4A0DC0 (clay, place sub_14D1FBFA0) and 0x14F4A1710 (sand and gravel, place sub_14D22F1B0)
+    static const DiskDefinition DISKS[] = {
+            {"minecraft:sand_feature", &VanillaBlocks::SAND, 7, 2, "minecraft:grass_block", false},
+            {"minecraft:gravel_feature", &VanillaBlocks::GRAVEL, 6, 2, "minecraft:grass_block", false},
+            {"minecraft:clay_feature", &VanillaBlocks::CLAY, 4, 1, "minecraft:mud", true}
+    };
 
-    for (const OreDefinition &ore: ORES) {
-        if (entry.mFeature == ore.mIdentifier)
-            return &ore;
+    Feature feature;
+    if (entry.mPass == UNDERGROUND_PASS) {
+        for (const OreDefinition &ore: ORES) {
+            if (entry.mFeature == ore.mIdentifier)
+                feature.mOre = &ore;
+        }
+    } else if (entry.mPass == SURFACE_PASS) {
+        for (const DiskDefinition &disk: DISKS) {
+            if (entry.mFeature == disk.mIdentifier)
+                feature.mDisk = &disk;
+        }
     }
-    return nullptr;
+    return feature;
 }
 
-bool OverworldOrePlacer::handles(const BiomeFeatureEntry &entry) {
-    if (_find(entry) == nullptr)
+bool OverworldRulePlacer::handles(const BiomeFeatureEntry &entry) {
+    const Feature feature = _find(entry);
+    if (feature.mOre == nullptr && feature.mDisk == nullptr)
         return false;
 
     float value = 0.0f;
@@ -227,15 +274,18 @@ bool OverworldOrePlacer::handles(const BiomeFeatureEntry &entry) {
     if (entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
         return false;
 
-    for (const BiomeFeatureEntry::Coordinate &coordinate: entry.mCoordinates) {
-        Bounds unused{};
-        if (!bounds(coordinate, unused))
+    for (size_t axis = 0; axis < 3; axis++) {
+        Bounds axisBounds{};
+        if (!bounds(entry.mCoordinates[axis], axisBounds))
+            return false;
+        // the query reads the x and z already drawn
+        if (axisBounds.mAboveTopSolid && (axis != 1 || EVAL_ORDERS[entry.mEvalOrder][2] != 1))
             return false;
     }
     return true;
 }
 
-void OverworldOrePlacer::apply(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed,
+void OverworldRulePlacer::apply(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed,
                                const std::vector<int32_t> &biomes) {
     // the decoration seed of sub_14CDD4880, from the level seed and the chunk position
     std::mt19937 random(levelSeed);
@@ -244,23 +294,25 @@ void OverworldOrePlacer::apply(BlockManager &blocks, const LevelChunk &chunk, ui
     const uint32_t decorationSeed = (multiplierZ * static_cast<uint32_t>(chunk.getZ())
                                      + multiplierX * static_cast<uint32_t>(chunk.getX())) ^ levelSeed;
 
-    // sub_14CDDF960, sub_14A22E470: every biome of the chunk, then its rules in order
-    for (int32_t biome: biomes) {
-        const std::vector<BiomeFeatureEntry> *rules = BiomeChunkGenDataRegistry::getConsolidatedFeatures(biome);
-        if (rules == nullptr)
-            continue;
-
-        for (const BiomeFeatureEntry &entry: *rules) {
-            if (!handles(entry))
+    // sub_14CDDF960, sub_14A22E1E0, sub_14A22E470: each pass, every biome of the chunk, then its rules in order
+    for (const char *pass: PASSES) {
+        for (int32_t biome: biomes) {
+            const std::vector<BiomeFeatureEntry> *rules = BiomeChunkGenDataRegistry::getConsolidatedFeatures(biome);
+            if (rules == nullptr)
                 continue;
 
-            _placeRule(blocks, chunk, entry, *_find(entry), decorationSeed, biomes.size() > 1 ? biome : -1);
+            for (const BiomeFeatureEntry &entry: *rules) {
+                if (entry.mPass != pass || !handles(entry))
+                    continue;
+
+                _placeRule(blocks, chunk, entry, _find(entry), decorationSeed, biomes.size() > 1 ? biome : -1);
+            }
         }
     }
 }
 
-void OverworldOrePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chunk, const BiomeFeatureEntry &entry,
-                                    const OreDefinition &ore, uint32_t decorationSeed, int32_t biomeFilter) {
+void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chunk, const BiomeFeatureEntry &entry,
+                                     const Feature &feature, uint32_t decorationSeed, int32_t biomeFilter) {
     // sub_14A22D800: boost-style combine of the decoration seed with the rule's hash
     const uint32_t hash = static_cast<uint32_t>(hashedString(entry.mIdentifier));
     const uint32_t seed = decorationSeed ^ ((decorationSeed >> 2) + hash + (decorationSeed << 6) + 0x9E3779B9u);
@@ -300,19 +352,25 @@ void OverworldOrePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chun
     std::mt19937 placement(seed);
     while (iterations-- > 0) {
         int32_t position[3] = {0, 0, 0};
-        for (int32_t axis: EVAL_ORDERS[entry.mEvalOrder])
-            position[axis] = origin[axis] + sample(axes[axis], scatter);
+        for (int32_t axis: EVAL_ORDERS[entry.mEvalOrder]) {
+            position[axis] = origin[axis] + (axes[axis].mAboveTopSolid
+                                             ? _aboveTopSolid(blocks, position[0], position[2])
+                                             : sample(axes[axis], scatter));
+        }
 
         if (biomeFilter >= 0
             && static_cast<int32_t>(chunk.getBiomeAt(position[0] & 15, position[1], position[2] & 15)) != biomeFilter)
             continue;
 
-        _placeOre(blocks, ore, position[0], position[1], position[2], placement);
+        if (feature.mOre != nullptr)
+            _placeOre(blocks, *feature.mOre, position[0], position[1], position[2], placement);
+        else
+            _placeDisk(blocks, *feature.mDisk, position[0], position[1], position[2], placement);
     }
 }
 
-bool OverworldOrePlacer::_placeOre(BlockManager &blocks, const OreDefinition &ore, int32_t x, int32_t y, int32_t z,
-                                   std::mt19937 &random) {
+bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &ore, int32_t x, int32_t y, int32_t z,
+                                    std::mt19937 &random) {
     // OreFeature::place (sub_14A2D6E50)
     const float size = static_cast<float>(ore.mCount);
     const float inverse = 1.0f / size;
@@ -470,4 +528,47 @@ bool OverworldOrePlacer::_placeOre(BlockManager &blocks, const OreDefinition &or
         }
     }
     return placed;
+}
+
+bool OverworldRulePlacer::_placeDisk(BlockManager &blocks, const DiskDefinition &disk, int32_t x, int32_t y, int32_t z,
+                                     std::mt19937 &random) {
+    const BlockState state = disk.mPlaces().toBlockState();
+    // only the material of the block the rule landed on is checked, water (type 5) on layer 0
+    const BlockState &origin = blocks.getBlockAt(x, y, z);
+    if (VanillaBlocks::getAs<WaterBlock>(origin.mName) == nullptr
+        && !(disk.mStartsOnItself && origin.mName == state.mName))
+        return false;
+
+    const int32_t radius = nextInt(random, disk.mRadius - 2) + 2;
+    const int32_t radiusSquared = radius * radius;
+    for (int32_t blockX = x - radius; blockX <= x + radius; blockX++) {
+        for (int32_t blockZ = z - radius; blockZ <= z + radius; blockZ++) {
+            if ((blockX - x) * (blockX - x) + (blockZ - z) * (blockZ - z) > radiusSquared)
+                continue;
+
+            for (int32_t blockY = y - disk.mHalfHeight; blockY <= y + disk.mHalfHeight; blockY++) {
+                const std::string &name = blocks.getBlockAt(blockX, blockY, blockZ).mName;
+                if (name == "minecraft:dirt" || name == "minecraft:coarse_dirt" || name == disk.mAlsoReplaces)
+                    blocks.setBlockStateAt(blockX, blockY, blockZ, state);
+            }
+        }
+    }
+    return true;
+}
+
+int32_t OverworldRulePlacer::_aboveTopSolid(BlockManager &blocks, int32_t x, int32_t z) {
+    // LevelChunk::getAboveTopSolidBlock (sub_1438650A0) as the query calls it, water and leaves not counted: leaves
+    // (material type 7) are looked through, and the first solid block below them ends the scan
+    for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
+        const BlockState &state = blocks.getBlockAt(x, y, z);
+        if (state.mName == "minecraft:air")
+            continue;
+        if (VanillaBlocks::getAs<LeavesBlock>(state.mName) != nullptr
+            || VanillaBlocks::getAs<FloweredAzaleaLeavesBlock>(state.mName) != nullptr)
+            continue;
+
+        if (BlockSupport::isSolid(state))
+            return y + 1;
+    }
+    return LevelChunk::MIN_Y;
 }
