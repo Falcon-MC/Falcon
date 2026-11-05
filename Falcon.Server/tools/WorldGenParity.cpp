@@ -37,6 +37,8 @@
  *   top_block_mismatches [{expected, generated, count}], top_biome_mismatches [{expected, generated, count}].
  */
 
+#include "Core/Debug/BedrockLog.h"
+#include "Core/Debug/ContentLogEndPoint.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -51,6 +53,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cstdarg>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -68,6 +71,24 @@
 #include <vector>
 
 namespace {
+    // the report lines that gather samples in a loop are built here, then logged once
+    std::string formatted(const char *format, ...) BEDROCK_LOG_PRINTF_FORMAT(1, 2);
+
+    std::string formatted(const char *format, ...) {
+        va_list args;
+        va_start(args, format);
+        va_list argsCopy;
+        va_copy(argsCopy, args);
+        const int length = std::vsnprintf(nullptr, 0, format, argsCopy);
+        va_end(argsCopy);
+
+        std::string out(length > 0 ? (size_t) length : 0, '\0');
+        if (length > 0)
+            std::vsnprintf(&out[0], (size_t) length + 1, format, args);
+        va_end(args);
+        return out;
+    }
+
     const int EXIT_INVALID = 1;
     const int EXIT_BELOW_THRESHOLD = 2;
     const int64_t MAX_AREA_CHUNKS = 65536;
@@ -175,11 +196,10 @@ namespace {
     }
 
     void printUsage() {
-        std::fprintf(stderr,
-                     "Usage: FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1\n"
-                     "                            [--csv file] [--json file] [--min-block-match pct]\n"
-                     "                            [--terrain-only]\n"
-                     "       FalconWorldGenParity --db <path> --seed <int64> --column x,z\n");
+        LOG_ERROR(LogAreaID::Level, "Usage: FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1");
+        LOG_ERROR(LogAreaID::Level, "                            [--csv file] [--json file] [--min-block-match pct]");
+        LOG_ERROR(LogAreaID::Level, "                            [--terrain-only]");
+        LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --column x,z");
     }
 
     bool parseOptions(int argc, char **argv, Options &options) {
@@ -191,7 +211,7 @@ namespace {
             }
 
             if (i + 1 >= argc) {
-                std::fprintf(stderr, "error: %s needs a value\n", flag.c_str());
+                LOG_ERROR(LogAreaID::Level, "%s needs a value", flag.c_str());
                 return false;
             }
 
@@ -202,14 +222,14 @@ namespace {
                 options.mDb = value;
             } else if (flag == "--seed") {
                 if (!parseInt64(value, options.mSeed)) {
-                    std::fprintf(stderr, "error: --seed must be a 64-bit integer, got '%s'\n", value.c_str());
+                    LOG_ERROR(LogAreaID::Level, "--seed must be a 64-bit integer, got '%s'", value.c_str());
                     return false;
                 }
                 options.mHasSeed = true;
             } else if (flag == "--area") {
                 if (!parseInt32List(value, 4, numbers)) {
-                    std::fprintf(stderr, "error: --area must be x0,z0,x1,z1 in chunk coordinates, got '%s'\n",
-                                 value.c_str());
+                    LOG_ERROR(LogAreaID::Level, "--area must be x0,z0,x1,z1 in chunk coordinates, got '%s'",
+                                                value.c_str());
                     return false;
                 }
                 options.mArea.mX0 = std::min(numbers[0], numbers[2]);
@@ -219,8 +239,7 @@ namespace {
                 options.mHasArea = true;
             } else if (flag == "--column") {
                 if (!parseInt32List(value, 2, numbers)) {
-                    std::fprintf(stderr, "error: --column must be x,z in block coordinates, got '%s'\n",
-                                 value.c_str());
+                    LOG_ERROR(LogAreaID::Level, "--column must be x,z in block coordinates, got '%s'", value.c_str());
                     return false;
                 }
                 options.mColumnX = numbers[0];
@@ -235,30 +254,29 @@ namespace {
                 options.mMinBlockMatch = std::strtod(value.c_str(), &end);
                 if (value.empty() || *end != '\0' || !(options.mMinBlockMatch >= 0.0)
                     || options.mMinBlockMatch > 100.0) {
-                    std::fprintf(stderr, "error: --min-block-match must be a percentage, got '%s'\n",
-                                 value.c_str());
+                    LOG_ERROR(LogAreaID::Level, "--min-block-match must be a percentage, got '%s'", value.c_str());
                     return false;
                 }
                 options.mHasMinimum = true;
             } else {
-                std::fprintf(stderr, "error: unknown option %s\n", flag.c_str());
+                LOG_ERROR(LogAreaID::Level, "unknown option %s", flag.c_str());
                 return false;
             }
         }
 
         if (options.mDb.empty() || !options.mHasSeed) {
-            std::fprintf(stderr, "error: --db and --seed are required\n");
+            LOG_ERROR(LogAreaID::Level, "--db and --seed are required");
             return false;
         }
 
         if (options.mHasArea == options.mHasColumn) {
-            std::fprintf(stderr, "error: give exactly one of --area and --column\n");
+            LOG_ERROR(LogAreaID::Level, "give exactly one of --area and --column");
             return false;
         }
 
         if (options.mHasArea && options.mArea.count() > MAX_AREA_CHUNKS) {
-            std::fprintf(stderr, "error: the area covers %lld chunks, the limit is %lld\n",
-                         (long long) options.mArea.count(), (long long) MAX_AREA_CHUNKS);
+            LOG_ERROR(LogAreaID::Level, "the area covers %lld chunks, the limit is %lld",
+                                        (long long) options.mArea.count(), (long long) MAX_AREA_CHUNKS);
             return false;
         }
 
@@ -512,8 +530,7 @@ namespace {
             if (!storage.loadChunk(chunk))
                 return LoadResult::Missing;
         } catch (const std::exception &exception) {
-            std::fprintf(stderr, "warning: chunk %d %d is unreadable: %s\n", chunk.getX(), chunk.getZ(),
-                         exception.what());
+            LOG_WARN(LogAreaID::Level, "chunk %d %d is unreadable: %s", chunk.getX(), chunk.getZ(), exception.what());
             return LoadResult::Unreadable;
         }
 
@@ -584,28 +601,28 @@ namespace {
         }
 
         void printText(int64_t seed, const ChunkArea &area, const uint64_t *skipped) const {
-            std::fprintf(stdout, "World generation parity, seed %lld, chunks %d,%d to %d,%d\n", (long long) seed,
-                                 area.mX0, area.mZ0, area.mX1, area.mZ1);
-            std::fprintf(stdout, "Chunks: %lld requested, %zu compared, %llu never saved by BDS, %llu not finalized, "
-                                 "%llu unreadable\n\n", (long long) area.count(), mChunks.size(),
-                                 (unsigned long long) skipped[0], (unsigned long long) skipped[1],
-                                 (unsigned long long) skipped[2]);
+            LOG_INFO(LogAreaID::Level, "World generation parity, seed %lld, chunks %d,%d to %d,%d", (long long) seed,
+                                       area.mX0, area.mZ0, area.mX1, area.mZ1);
+            LOG_INFO(LogAreaID::Level, "Chunks: %lld requested, %zu compared, %llu never saved by BDS, %llu not "
+                                       "finalized, %llu unreadable", (long long) area.count(), mChunks.size(),
+                                       (unsigned long long) skipped[0], (unsigned long long) skipped[1],
+                                       (unsigned long long) skipped[2]);
 
-            std::fprintf(stdout, "Blocks: %.3f%% identical, %.3f%% same class (air/fluid/solid) over %llu blocks\n",
-                                 mBlocks.percent(), mCoarse.percent(), (unsigned long long) mBlocks.mTotal);
-            std::fprintf(stdout, "Surface height: %.3f%% equal, mean |diff| %.3f, max |diff| %lld over %llu columns\n",
-                                 mHeights.percent(), _meanHeightDifference(), (long long) mMaxHeightDifference,
-                                 (unsigned long long) mHeights.mTotal);
-            std::fprintf(stdout, "  |diff|  columns\n");
+            LOG_INFO(LogAreaID::Level, "Blocks: %.3f%% identical, %.3f%% same class (air/fluid/solid) over %llu blocks",
+                                       mBlocks.percent(), mCoarse.percent(), (unsigned long long) mBlocks.mTotal);
+            LOG_INFO(LogAreaID::Level, "Surface height: %.3f%% equal, mean |diff| %.3f, max |diff| %lld over %llu "
+                                       "columns", mHeights.percent(), _meanHeightDifference(),
+                                       (long long) mMaxHeightDifference, (unsigned long long) mHeights.mTotal);
+            LOG_INFO(LogAreaID::Level, "  |diff|  columns");
             for (size_t bucket = 0; bucket < HEIGHT_BUCKETS; bucket++)
-                std::fprintf(stdout, "  %-6s  %llu\n", HEIGHT_BUCKET_NAMES[bucket],
-                                     (unsigned long long) mHeightHistogram[bucket]);
-            std::fprintf(stdout, "Biomes: %.3f%% equal over %llu 4x4x4 cells\n\n", mBiomes.percent(),
-                                 (unsigned long long) mBiomes.mTotal);
+                LOG_INFO(LogAreaID::Level, "  %-6s  %llu", HEIGHT_BUCKET_NAMES[bucket],
+                                           (unsigned long long) mHeightHistogram[bucket]);
+            LOG_INFO(LogAreaID::Level, "Biomes: %.3f%% equal over %llu 4x4x4 cells", mBiomes.percent(),
+                                       (unsigned long long) mBiomes.mTotal);
 
             static const char *const SHAPES[3] = {"open", "fluid", "solid"};
-            std::fprintf(stdout, "Terrain shape: %.3f%% same (open/fluid/solid) over %llu blocks\n", mShape.percent(),
-                                 (unsigned long long) mShape.mTotal);
+            LOG_INFO(LogAreaID::Level, "Terrain shape: %.3f%% same (open/fluid/solid) over %llu blocks",
+                                       mShape.percent(), (unsigned long long) mShape.mTotal);
             std::vector<std::pair<std::pair<int, int>, ShapeMismatch>> shapes(mShapeMismatches.begin(),
                                                                               mShapeMismatches.end());
             std::sort(shapes.begin(), shapes.end(), [](const std::pair<std::pair<int, int>, ShapeMismatch> &a,
@@ -615,46 +632,46 @@ namespace {
             for (size_t i = 0; i < shapes.size() && i < 16; i++) {
                 const int pair = shapes[i].first.first;
                 const int32_t minY = LevelChunk::MIN_Y + shapes[i].first.second * Y_BAND_HEIGHT;
-                std::fprintf(stdout, "  %10llu  %-5s -> %-5s y %4d..%-4d", (unsigned long long) shapes[i].second.mCount,
-                                     SHAPES[pair / 3], SHAPES[pair % 3], minY, minY + Y_BAND_HEIGHT - 1);
+                std::string line = formatted("  %10llu  %-5s -> %-5s y %4d..%-4d",
+                                             (unsigned long long) shapes[i].second.mCount, SHAPES[pair / 3],
+                                             SHAPES[pair % 3], minY, minY + Y_BAND_HEIGHT - 1);
                 for (const std::array<int32_t, 3> &sample: shapes[i].second.mSamples)
-                    std::fprintf(stdout, "  (%d %d %d)", sample[0], sample[1], sample[2]);
-                std::fprintf(stdout, "\n");
+                    line += formatted("  (%d %d %d)", sample[0], sample[1], sample[2]);
+                LOG_INFO(LogAreaID::Level, "%s", line.c_str());
             }
-            std::fprintf(stdout, "\n");
 
-            std::fprintf(stdout, "By category        blocks       match\n");
+            LOG_INFO(LogAreaID::Level, "By category        blocks       match");
             for (int category = 0; category < CATEGORY_COUNT; category++)
-                std::fprintf(stdout, "  %-14s %12llu  %8.3f%%\n", CATEGORY_KEYS[category],
-                                     (unsigned long long) mCategories[category].mTotal,
-                                     mCategories[category].percent());
+                LOG_INFO(LogAreaID::Level, "  %-14s %12llu  %8.3f%%", CATEGORY_KEYS[category],
+                                           (unsigned long long) mCategories[category].mTotal,
+                                           mCategories[category].percent());
 
-            std::fprintf(stdout, "\nBy Y band          blocks       match\n");
+            LOG_INFO(LogAreaID::Level, "By Y band          blocks       match");
             for (size_t band = 0; band < mBands.size(); band++) {
                 const int32_t minY = LevelChunk::MIN_Y + (int32_t) band * Y_BAND_HEIGHT;
-                std::fprintf(stdout, "  %4d..%-4d    %12llu  %8.3f%%\n", minY, minY + Y_BAND_HEIGHT - 1,
-                                     (unsigned long long) mBands[band].mTotal, mBands[band].percent());
+                LOG_INFO(LogAreaID::Level, "  %4d..%-4d    %12llu  %8.3f%%", minY, minY + Y_BAND_HEIGHT - 1,
+                                           (unsigned long long) mBands[band].mTotal, mBands[band].percent());
             }
 
-            std::fprintf(stdout, "\nTop block mismatches (expected -> generated)\n");
+            LOG_INFO(LogAreaID::Level, "Top block mismatches (expected -> generated)");
             for (const std::pair<std::pair<std::string, std::string>, uint64_t> &entry: _top(mBlockMismatches))
-                std::fprintf(stdout, "  %10llu  %s -> %s\n", (unsigned long long) entry.second,
-                                     entry.first.first.c_str(), entry.first.second.c_str());
+                LOG_INFO(LogAreaID::Level, "  %10llu  %s -> %s", (unsigned long long) entry.second,
+                                           entry.first.first.c_str(), entry.first.second.c_str());
 
-            std::fprintf(stdout, "\nBiome accuracy by expected biome\n");
+            LOG_INFO(LogAreaID::Level, "Biome accuracy by expected biome");
             std::vector<std::pair<uint32_t, Ratio>> byBiome(mBiomesByExpected.begin(), mBiomesByExpected.end());
             std::sort(byBiome.begin(), byBiome.end(),
                       [](const std::pair<uint32_t, Ratio> &a, const std::pair<uint32_t, Ratio> &b) {
                           return a.second.mTotal > b.second.mTotal;
                       });
             for (const std::pair<uint32_t, Ratio> &entry: byBiome)
-                std::fprintf(stdout, "  %-28s %10llu cells  %8.3f%%\n", mBiomeNames.get(entry.first).c_str(),
-                                     (unsigned long long) entry.second.mTotal, entry.second.percent());
+                LOG_INFO(LogAreaID::Level, "  %-28s %10llu cells  %8.3f%%", mBiomeNames.get(entry.first).c_str(),
+                                           (unsigned long long) entry.second.mTotal, entry.second.percent());
 
-            std::fprintf(stdout, "\nTop biome confusions (expected -> generated)\n");
+            LOG_INFO(LogAreaID::Level, "Top biome confusions (expected -> generated)");
             for (const std::pair<std::pair<std::string, std::string>, uint64_t> &entry: _top(mBiomeMismatches))
-                std::fprintf(stdout, "  %10llu  %s -> %s\n", (unsigned long long) entry.second,
-                                     entry.first.first.c_str(), entry.first.second.c_str());
+                LOG_INFO(LogAreaID::Level, "  %10llu  %s -> %s", (unsigned long long) entry.second,
+                                           entry.first.first.c_str(), entry.first.second.c_str());
         }
 
         bool writeCsv(const std::string &path) const {
@@ -841,12 +858,13 @@ namespace {
 
         const LoadResult loaded = loadExpected(storage, expected);
         if (loaded == LoadResult::Missing || loaded == LoadResult::Unreadable) {
-            std::fprintf(stderr, "error: chunk %d %d holding column %d,%d is %s in the BDS world\n", chunkX, chunkZ,
-                         options.mColumnX, options.mColumnZ, loaded == LoadResult::Missing ? "absent" : "unreadable");
+            LOG_ERROR(LogAreaID::Level, "chunk %d %d holding column %d,%d is %s in the BDS world", chunkX, chunkZ,
+                                        options.mColumnX, options.mColumnZ,
+                                        loaded == LoadResult::Missing ? "absent" : "unreadable");
             return EXIT_INVALID;
         }
         if (loaded == LoadResult::NotFinalized)
-            std::fprintf(stdout, "note: BDS has not finished populating chunk %d %d\n", chunkX, chunkZ);
+            LOG_INFO(LogAreaID::Level, "BDS has not finished populating chunk %d %d", chunkX, chunkZ);
 
         ChunkArea area;
         area.mX0 = area.mX1 = chunkX;
@@ -855,17 +873,18 @@ namespace {
         const int z = options.mColumnZ & 15;
 
         generateArea(options.mSeed, area, options.mTerrainOnly, [&](LevelChunk &generated) {
-            std::fprintf(stdout, "Column %d,%d (chunk %d %d), seed %lld; '*' marks a difference\n", options.mColumnX,
-                                 options.mColumnZ, chunkX, chunkZ, (long long) options.mSeed);
+            LOG_INFO(LogAreaID::Level, "Column %d,%d (chunk %d %d), seed %lld; '*' marks a difference",
+                                       options.mColumnX, options.mColumnZ, chunkX, chunkZ, (long long) options.mSeed);
             for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
                 const BlockState &expectedBlock = expected.getBlock(x, y, z);
                 const BlockState &generatedBlock = generated.getBlock(x, y, z);
                 const uint32_t expectedBiome = expected.getBiomeAt(x, y, z);
                 const uint32_t generatedBiome = generated.getBiomeAt(x, y, z);
-                std::fprintf(stdout, "%c%c %4d  %-40s %-40s %-22s %s\n", expectedBlock == generatedBlock ? ' ' : '*',
-                                     expectedBiome == generatedBiome ? ' ' : '*', y,
-                                     describeState(expectedBlock).c_str(), describeState(generatedBlock).c_str(),
-                                     biomes.get(expectedBiome).c_str(), biomes.get(generatedBiome).c_str());
+                LOG_INFO(LogAreaID::Level, "%c%c %4d  %-40s %-40s %-22s %s",
+                                           expectedBlock == generatedBlock ? ' ' : '*',
+                                           expectedBiome == generatedBiome ? ' ' : '*', y,
+                                           describeState(expectedBlock).c_str(), describeState(generatedBlock).c_str(),
+                                           biomes.get(expectedBiome).c_str(), biomes.get(generatedBiome).c_str());
             }
         });
 
@@ -876,21 +895,21 @@ namespace {
         WorldCopy copy;
         std::string message;
         if (!copy.create(options.mDb, message)) {
-            std::fprintf(stderr, "error: %s\n", message.c_str());
+            LOG_ERROR(LogAreaID::Level, "%s", message.c_str());
             return EXIT_INVALID;
         }
 
         LevelStorage storage;
         if (!storage.open(copy.getWorldsDirectory(), WorldCopy::LEVEL_NAME, Dimension::toId(DimensionType::Overworld))) {
-            std::fprintf(stderr, "error: could not open '%s' as a LevelDB database\n", options.mDb.c_str());
+            LOG_ERROR(LogAreaID::Level, "could not open '%s' as a LevelDB database", options.mDb.c_str());
             return EXIT_INVALID;
         }
 
         Tag levelDat;
         if (storage.readLevelDat(levelDat) && levelDat.contains("RandomSeed")
             && levelDat.getLong("RandomSeed") != options.mSeed)
-            std::fprintf(stderr, "warning: level.dat records seed %lld, comparing with --seed %lld\n",
-                         (long long) levelDat.getLong("RandomSeed"), (long long) options.mSeed);
+            LOG_WARN(LogAreaID::Level, "level.dat records seed %lld, comparing with --seed %lld",
+                                       (long long) levelDat.getLong("RandomSeed"), (long long) options.mSeed);
 
         BlockPaletteRegistry::getInstance().initialize();
         BiomeChunkGenDataRegistry::initialize();
@@ -915,25 +934,25 @@ namespace {
         });
 
         if (report.getBlocks().mTotal == 0) {
-            std::fprintf(stderr, "error: BDS saved no finalized chunk in this area\n");
+            LOG_ERROR(LogAreaID::Level, "BDS saved no finalized chunk in this area");
             return EXIT_INVALID;
         }
 
         report.printText(options.mSeed, options.mArea, skipped);
 
         if (!options.mCsv.empty() && !report.writeCsv(options.mCsv)) {
-            std::fprintf(stderr, "error: could not write %s\n", options.mCsv.c_str());
+            LOG_ERROR(LogAreaID::Level, "could not write %s", options.mCsv.c_str());
             return EXIT_INVALID;
         }
 
         if (!options.mJson.empty() && !report.writeJson(options.mJson, options.mSeed, options.mArea, skipped)) {
-            std::fprintf(stderr, "error: could not write %s\n", options.mJson.c_str());
+            LOG_ERROR(LogAreaID::Level, "could not write %s", options.mJson.c_str());
             return EXIT_INVALID;
         }
 
         if (options.mHasMinimum && report.getBlocks().percent() < options.mMinBlockMatch) {
-            std::fprintf(stderr, "block match %.3f%% is below the required %.3f%%\n", report.getBlocks().percent(),
-                         options.mMinBlockMatch);
+            LOG_ERROR(LogAreaID::Level, "block match %.3f%% is below the required %.3f%%", report.getBlocks().percent(),
+                                        options.mMinBlockMatch);
             return EXIT_BELOW_THRESHOLD;
         }
 
@@ -942,16 +961,21 @@ namespace {
 }
 
 int main(int argc, char **argv) {
+    BedrockLog::addEndPoint(std::make_shared<ContentLogEndPoint>(false));
+
+    int result = EXIT_INVALID;
     Options options;
     if (!parseOptions(argc, argv, options)) {
         printUsage();
-        return EXIT_INVALID;
+    } else {
+        try {
+            result = run(options);
+        } catch (const std::exception &exception) {
+            LOG_ERROR(LogAreaID::Level, "%s", exception.what());
+        }
     }
 
-    try {
-        return run(options);
-    } catch (const std::exception &exception) {
-        std::fprintf(stderr, "error: %s\n", exception.what());
-        return EXIT_INVALID;
-    }
+    // the log endpoints write from a worker thread, so the report must be drained before the process exits
+    BedrockLog::flush();
+    return result;
 }
