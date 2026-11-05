@@ -32,9 +32,8 @@ public:
 
     const TheEndTerrainNoises &getTerrainNoises() const { return *mTerrainNoises; }
 
-    const TheEndSimplexNoise &getDecorationIslandNoise() const { return *mDecorationIslandNoise; }
+    const TheEndSimplexNoise &getDecorationIslandNoise() const { return mTerrainNoises->getIslandNoise(); }
 
 private:
     std::unique_ptr<TheEndTerrainNoises> mTerrainNoises;
-    std::unique_ptr<TheEndSimplexNoise> mDecorationIslandNoise;
 };

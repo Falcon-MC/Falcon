@@ -1,28 +1,21 @@
 #pragma once
 
-#include "World/Level/LevelGen/Random/IRandom.h"
-
 #include <array>
 #include <cstdint>
-#include <vector>
+#include <random>
 
+// one octave of the game's legacy perlin noise, float from start to end (sub_145C2A210)
 class TheEndImprovedNoise {
 public:
-    explicit TheEndImprovedNoise(IRandom &random);
+    explicit TheEndImprovedNoise(std::mt19937 &random);
 
-    void populateNoiseArray(std::vector<double> &noiseArray, double xOffset, double yOffset, double zOffset,
-                            int32_t xSize, int32_t ySize, int32_t zSize, double xScale, double yScale, double zScale,
-                            double noiseScale) const;
+    // adds an octave to an array ordered x, z, y
+    void addOctave(float *noiseArray, const float *position, int32_t xSize, int32_t ySize, int32_t zSize,
+                   const float *scale, float weight) const;
 
 private:
-    static double _lerp(double delta, double start, double end);
-
-    double _grad2(int32_t hash, double x, double z) const;
-
-    double _grad(int32_t hash, double x, double y, double z) const;
-
     std::array<int32_t, 512> mPermutations;
-    double mXCoord;
-    double mYCoord;
-    double mZCoord;
+    float mXCoord;
+    float mYCoord;
+    float mZCoord;
 };
