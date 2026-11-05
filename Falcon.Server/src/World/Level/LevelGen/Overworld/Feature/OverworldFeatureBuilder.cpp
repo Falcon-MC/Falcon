@@ -4,6 +4,7 @@
 #include "World/Level/LevelGen/Feature/ChunkGenerateContext.h"
 #include "World/Level/LevelGen/Feature/GenerateFeatureRegistry.h"
 #include "World/Level/LevelGen/Feature/GeneratorRoot.h"
+#include "World/Level/LevelGen/Overworld/Feature/OverworldFreezer.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -139,4 +140,5 @@ void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, std::vector
     place(false);
 
     root.applySubChunkUpdate();
+    OverworldFreezer::apply(chunk);
 }

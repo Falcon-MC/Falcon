@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <random>
 
 class XoroshiroRandom;
 
@@ -9,6 +10,9 @@ class XoroshiroRandom;
 class SurfaceSimplexNoise {
 public:
     explicit SurfaceSimplexNoise(XoroshiroRandom &random);
+
+    // drawn from the game's Mersenne twister Random instead, offsets in the other order (sub_145C2D720)
+    explicit SurfaceSimplexNoise(std::mt19937 &random);
 
     float getValue(float x, float y) const;
 
