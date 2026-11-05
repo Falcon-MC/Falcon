@@ -3,6 +3,8 @@
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/FenceBlock.h"
 #include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
+#include "World/Level/Block/IceBlock.h"
+#include "World/Level/Block/LavaBlock.h"
 #include "World/Level/Block/LeavesBlock.h"
 #include "World/Level/Block/MagmaBlock.h"
 #include "World/Level/Block/SoulSandBlock.h"
@@ -16,12 +18,15 @@
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/FeatureExpression.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
+#include "World/Level/LevelGen/Noise/NormalNoise.h"
 #include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 
 #include <algorithm>
+#include <array>
 #include <climits>
 #include <cmath>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
@@ -316,6 +321,45 @@ namespace {
         return BlockState(state.mName, states);
     }
 
+    // the blocks the game tags not_feature_replaceable (sub_14CE9AD30)
+    bool isNotFeatureReplaceable(const BlockState &state) {
+        static const std::vector<std::string> TAGGED = {
+                "minecraft:bedrock", "minecraft:chest", "minecraft:mob_spawner", "minecraft:end_portal_frame",
+                "minecraft:chiseled_bookshelf", "minecraft:trial_spawner", "minecraft:vault",
+                "minecraft:copper_chest", "minecraft:exposed_copper_chest", "minecraft:weathered_copper_chest",
+                "minecraft:oxidized_copper_chest", "minecraft:waxed_copper_chest",
+                "minecraft:waxed_exposed_copper_chest", "minecraft:waxed_weathered_copper_chest",
+                "minecraft:waxed_oxidized_copper_chest", "minecraft:oak_shelf", "minecraft:spruce_shelf",
+                "minecraft:birch_shelf", "minecraft:jungle_shelf", "minecraft:acacia_shelf", "minecraft:dark_oak_shelf",
+                "minecraft:mangrove_shelf", "minecraft:cherry_shelf", "minecraft:pale_oak_shelf",
+                "minecraft:bamboo_shelf", "minecraft:crimson_shelf", "minecraft:warped_shelf", "minecraft:poplar_shelf"
+        };
+        return contains(TAGGED, state);
+    }
+
+    // min + nextInt(max - min), min alone when the range is empty: the maximum is never drawn
+    int32_t between(std::mt19937 &random, int32_t min, int32_t max) {
+        return max > min ? min + nextInt(random, max - min) : min;
+    }
+
+    // the geode sums its distances with the bit trick and one Newton step
+    float fastInverseSqrt(float value) {
+        uint32_t bits = 0;
+        std::memcpy(&bits, &value, sizeof(bits));
+        bits = 0x5F3759DFu - (bits >> 1);
+        float estimate = 0.0f;
+        std::memcpy(&estimate, &bits, sizeof(estimate));
+        return (((value * -0.5f) * estimate) * estimate + 1.5f) * estimate;
+    }
+
+    // a geode point may not land in air, a liquid, ice, bedrock, packed or blue ice (qword_1529B1E50,
+    // qword_1529BAF38, qword_1529BAF08, materials of xmmword_152B18A30)
+    bool refusesGeodePoint(const BlockState &state) {
+        return state.mName == "minecraft:air" || state.mName == "minecraft:bedrock"
+               || state.mName == "minecraft:packed_ice" || state.mName == "minecraft:blue_ice" || isWater(state)
+               || LavaBlock::matches(state.mName) || IceBlock::matches(state.mName);
+    }
+
     // the two (sub_140391CC0 & 7) differences of the kelp and seagrass jitter, z drawn first
     void jitter(std::mt19937 &random, int32_t &dx, int32_t &dz) {
         const uint32_t firstZ = random() & 7u;
@@ -382,6 +426,30 @@ struct OverworldRulePlacer::SingleBlockDefinition {
 struct OverworldRulePlacer::WeightedDefinition {
     const char *mIdentifier;
     std::vector<std::pair<Placed, int32_t>> mFeatures;
+};
+
+// a minecraft:geode_feature (GeodeFeature, place sub_14D20B390)
+struct OverworldRulePlacer::GeodeDefinition {
+    const char *mIdentifier;
+    Block (*mFiller)();
+    Block (*mInnerLayer)();
+    Block (*mAlternateInnerLayer)();
+    Block (*mMiddleLayer)();
+    Block (*mOuterLayer)();
+    std::vector<Block (*)()> mInnerPlacements;
+    int32_t mMinOuterWallDistance;
+    int32_t mMaxOuterWallDistance;
+    int32_t mMinDistributionPoints;
+    int32_t mMaxDistributionPoints;
+    int32_t mMinPointOffset;
+    int32_t mMaxPointOffset;
+    int32_t mMaxRadius;
+    int32_t mCrackPointOffset;
+    float mNoiseMultiplier;
+    float mUsePotentialPlacementsChance;
+    float mUseAlternateLayer0Chance;
+    bool mPlacementsRequireLayer0Alternate;
+    int32_t mInvalidBlocksThreshold;
 };
 
 OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry &entry) {
@@ -517,10 +585,23 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:scatter_taiga_plant_feature", "32", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, weighted(0)}
     };
 
+    // BDS 1.26.61 behavior packs, features/amethyst_geode_feature.json
+    static const GeodeDefinition GEODES[] = {
+            {"minecraft:amethyst_geode_feature", &VanillaBlocks::AIR, &VanillaBlocks::AMETHYST_BLOCK,
+             &VanillaBlocks::BUDDING_AMETHYST, &VanillaBlocks::CALCITE, &VanillaBlocks::SMOOTH_BASALT,
+             {&VanillaBlocks::AMETHYST_CLUSTER, &VanillaBlocks::LARGE_AMETHYST_BUD, &VanillaBlocks::MEDIUM_AMETHYST_BUD,
+              &VanillaBlocks::SMALL_AMETHYST_BUD},
+             4, 7, 3, 5, 1, 3, 16, 2, 0.025f, 0.35f, 0.083f, true, 1}
+    };
+
     Feature feature;
     if (entry.mPass == AFTER_SURFACE_PASS) {
         // vtable 0x14F4A0F60, place sub_14D217680
         feature.mKelp = entry.mFeature == "minecraft:kelp_feature";
+        for (const GeodeDefinition &geode: GEODES) {
+            if (entry.mFeature == geode.mIdentifier)
+                feature.mGeode = &geode;
+        }
     } else if (entry.mPass == UNDERGROUND_PASS) {
         for (const OreDefinition &ore: ORES) {
             if (entry.mFeature == ore.mIdentifier)
@@ -621,6 +702,8 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
             _placeOre(blocks, *feature.mOre, position[0], position[1], position[2], placement);
         else if (feature.mDisk != nullptr)
             _placeDisk(blocks, *feature.mDisk, position[0], position[1], position[2], placement);
+        else if (feature.mGeode != nullptr)
+            _placeGeode(blocks, *feature.mGeode, position[0], position[1], position[2], placement);
         else if (feature.mPlaced.isSet())
             _place(blocks, feature.mPlaced, position[0], position[1], position[2], placement);
         else
@@ -997,4 +1080,201 @@ bool OverworldRulePlacer::_placeKelp(BlockManager &blocks, int32_t x, int32_t y,
         plantZ = z + dz;
     }
     return true;
+}
+
+bool OverworldRulePlacer::_placeGeode(BlockManager &blocks, const GeodeDefinition &geode, int32_t x, int32_t y,
+                                      int32_t z, std::mt19937 &random) {
+    // GeodeFeature::place (sub_14D20B390); the structure overlap test that comes first has no counterpart here
+    const int32_t pointCount = between(random, geode.mMinDistributionPoints, geode.mMaxDistributionPoints);
+    const NormalNoise noise(random, -4, {1.0f});
+
+    // the layer thresholds of sub_14D20B390: the filling one is the constant 1 / sqrt(1.7)
+    const float share = static_cast<float>(pointCount) / static_cast<float>(geode.mMaxOuterWallDistance);
+    const float filling = 0x1.88afa2p-1f;
+    const float inner = 1.0f / std::sqrt(share + 2.2f);
+    const float middle = 1.0f / std::sqrt(share + 3.2f);
+    const float outer = 1.0f / std::sqrt(share + 4.2f);
+    // the game reads neither generate_crack_chance nor base_crack_size and uses these constants
+    const float crackBase = nextFloat(random) * 0.5f + 2.0f;
+    const float crackSize = 1.0f / std::sqrt((pointCount >= 4 ? share : 0.0f) + crackBase);
+    const bool crack = nextFloat(random) < 0.95f;
+
+    struct Point {
+        int32_t mX;
+        int32_t mY;
+        int32_t mZ;
+        int32_t mOffset;
+    };
+    std::vector<Point> points;
+    int32_t invalid = 0;
+    for (int32_t i = 0; i < pointCount; i++) {
+        const int32_t pointX = x + between(random, geode.mMinOuterWallDistance, geode.mMaxOuterWallDistance);
+        const int32_t pointY = y + between(random, geode.mMinOuterWallDistance, geode.mMaxOuterWallDistance);
+        const int32_t pointZ = z + between(random, geode.mMinOuterWallDistance, geode.mMaxOuterWallDistance);
+
+        // the block and its liquid, which is the block itself when the second layer is empty
+        const BlockState &extra = blocks.getExtraBlockAt(pointX, pointY, pointZ);
+        if (refusesGeodePoint(blocks.getBlockAt(pointX, pointY, pointZ))
+            || (extra.mName != "minecraft:air" && refusesGeodePoint(extra))) {
+            if (invalid >= geode.mInvalidBlocksThreshold)
+                return false;
+            invalid++;
+        }
+
+        points.push_back({pointX, pointY, pointZ, between(random, geode.mMinPointOffset, geode.mMaxPointOffset)});
+    }
+
+    std::vector<std::array<int32_t, 3>> crackPoints;
+    if (crack) {
+        const int32_t side = 2 * pointCount + 1;
+        const int32_t direction = nextInt(random, 4);
+        const int32_t crackX = direction == 0 || direction == 2 ? side : 0;
+        const int32_t crackZ = direction == 1 || direction == 2 ? side : 0;
+        for (int32_t height: {7, 5, 1})
+            crackPoints.push_back({x + crackX, y + height, z + crackZ});
+    }
+
+    static const BlockState airState = VanillaBlocks::AIR().toBlockState();
+    const BlockState fillerState = geode.mFiller().toBlockState();
+    const BlockState innerState = geode.mInnerLayer().toBlockState();
+    const BlockState alternateState = geode.mAlternateInnerLayer().toBlockState();
+    const BlockState middleState = geode.mMiddleLayer().toBlockState();
+    const BlockState outerState = geode.mOuterLayer().toBlockState();
+
+    // a layer is set once the scan ends; the crack's air is set at once
+    std::vector<std::pair<std::array<int32_t, 3>, const BlockState *>> layers;
+    std::vector<std::array<int32_t, 3>> potentials;
+    bool placed = false;
+
+    // the second layer is emptied first, the block kept when the tag protects it
+    const auto setNow = [&](int32_t blockX, int32_t blockY, int32_t blockZ, const BlockState &state) {
+        if (blockY < LevelChunk::MIN_Y || blockY > LevelChunk::MAX_Y)
+            return false;
+        if (blocks.getExtraBlockAt(blockX, blockY, blockZ).mName != "minecraft:air")
+            blocks.setExtraBlockAt(blockX, blockY, blockZ, airState);
+        if (isNotFeatureReplaceable(blocks.getBlockAt(blockX, blockY, blockZ)))
+            return false;
+
+        blocks.setBlockStateAt(blockX, blockY, blockZ, state);
+        return true;
+    };
+
+    // one row along z (sub_14D20D740); a row past the shape stops its column once the geode has placed a block
+    const auto row = [&](int32_t blockX, int32_t blockY, bool &columnPlaced, bool &placedBefore) {
+        bool placedHere = false;
+        for (int32_t blockZ = z - geode.mMaxRadius; blockZ <= z + geode.mMaxRadius; blockZ++) {
+            const float value = noise.getValue(blockX, blockY, blockZ);
+
+            float distance = 0.0f;
+            for (const Point &point: points) {
+                const int64_t dx = (int64_t) blockX - point.mX;
+                const int64_t dy = (int64_t) blockY - point.mY;
+                const int64_t dz = (int64_t) blockZ - point.mZ;
+                distance += fastInverseSqrt(static_cast<float>(point.mOffset)
+                                            + static_cast<float>(dx * dx + dy * dy + dz * dz));
+            }
+
+            const float shift = value * geode.mNoiseMultiplier;
+            const float density = static_cast<float>(pointCount) * shift + distance;
+            if (density < outer)
+                continue;
+
+            float crackDistance = 0.0f;
+            for (const std::array<int32_t, 3> &point: crackPoints) {
+                const int64_t dx = (int64_t) blockX - point[0];
+                const int64_t dy = (int64_t) blockY - point[1];
+                const int64_t dz = (int64_t) blockZ - point[2];
+                crackDistance += fastInverseSqrt(static_cast<float>(dx * dx + dy * dy + dz * dz)
+                                                 + static_cast<float>(geode.mCrackPointOffset));
+            }
+
+            const std::array<int32_t, 3> position = {blockX, blockY, blockZ};
+            if (crack && crackDistance + shift * static_cast<float>(crackPoints.size()) >= crackSize
+                && filling > density) {
+                placed = setNow(blockX, blockY, blockZ, airState) || placed;
+            } else if (density >= filling) {
+                layers.emplace_back(position, &fillerState);
+            } else if (density >= inner) {
+                const bool alternate = geode.mUseAlternateLayer0Chance > nextFloat(random);
+                layers.emplace_back(position, alternate ? &alternateState : &innerState);
+                if ((alternate || !geode.mPlacementsRequireLayer0Alternate)
+                    && geode.mUsePotentialPlacementsChance > nextFloat(random))
+                    potentials.push_back(position);
+            } else if (density >= middle) {
+                layers.emplace_back(position, &middleState);
+            } else {
+                layers.emplace_back(position, &outerState);
+            }
+
+            if (placed) {
+                placedBefore = true;
+                placedHere = true;
+            }
+        }
+
+        if (!placedBefore && !placedHere)
+            return false;
+
+        columnPlaced = true;
+        return placedBefore && !placedHere;
+    };
+
+    // the columns from the origin outwards, east then west, up then down in each
+    bool stopped = false;
+    const auto column = [&](int32_t blockX) {
+        bool columnPlaced = false;
+        bool placedUp = false;
+        for (int32_t blockY = y; blockY <= y + geode.mMaxRadius; blockY++) {
+            if (row(blockX, blockY, columnPlaced, placedUp))
+                break;
+        }
+
+        bool placedDown = false;
+        for (int32_t blockY = y - 1; blockY >= y - geode.mMaxRadius; blockY--) {
+            if (row(blockX, blockY, columnPlaced, placedDown))
+                break;
+        }
+
+        stopped = stopped || placedUp || placedDown;
+        return !columnPlaced && stopped;
+    };
+
+    for (int32_t blockX = x; blockX <= x + geode.mMaxRadius; blockX++) {
+        if (column(blockX))
+            break;
+    }
+    for (int32_t blockX = x - 1; blockX >= x - geode.mMaxRadius; blockX--) {
+        if (column(blockX))
+            break;
+    }
+
+    for (const std::pair<std::array<int32_t, 3>, const BlockState *> &layer: layers) {
+        const std::array<int32_t, 3> &position = layer.first;
+        placed = setNow(position[0], position[1], position[2], *layer.second) || placed;
+    }
+
+    // a bud on the first open face, up, down, north, south, west then east (qword_14F1A9250)
+    static const int32_t FACES[6][3] = {{0, 1, 0}, {0, -1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+    static const char *const FACE_NAMES[6] = {"up", "down", "north", "south", "west", "east"};
+    if (geode.mInnerPlacements.empty())
+        return placed;
+
+    for (const std::array<int32_t, 3> &position: potentials) {
+        const BlockState bud = geode.mInnerPlacements[(size_t) nextInt(
+                random, (int32_t) geode.mInnerPlacements.size())]().toBlockState();
+        for (size_t face = 0; face < 6; face++) {
+            const int32_t budX = position[0] + FACES[face][0];
+            const int32_t budY = position[1] + FACES[face][1];
+            const int32_t budZ = position[2] + FACES[face][2];
+            const BlockState &replaced = blocks.getBlockAt(budX, budY, budZ);
+            // the bud stands on the block it grows from, the geode's own layer
+            if ((replaced.mName != "minecraft:air" && !isWater(replaced))
+                || !BlockSupport::isSolid(blocks.getBlockAt(position[0], position[1], position[2])))
+                continue;
+
+            placed = setNow(budX, budY, budZ, withState(bud, "minecraft:block_face", FACE_NAMES[face])) || placed;
+            break;
+        }
+    }
+    return placed;
 }

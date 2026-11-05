@@ -5,6 +5,7 @@
 #include "World/Level/LevelGen/Random/XoroshiroPositionalFactory.h"
 
 #include <memory>
+#include <random>
 #include <vector>
 
 class PerlinNoise {
@@ -12,6 +13,9 @@ public:
     PerlinNoise(IRandom &random, int32_t firstOctave, const std::vector<double> &amplitudes);
 
     PerlinNoise(const XoroshiroPositionalFactory &factory, int32_t firstOctave, const std::vector<double> &amplitudes);
+
+    // the legacy octaves drawn from the game's Mersenne twister Random, a skipped octave consuming 262 draws
+    PerlinNoise(std::mt19937 &random, int32_t firstOctave, const std::vector<double> &amplitudes);
 
     float getValue(float x, float y, float z) const;
 

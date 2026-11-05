@@ -22,6 +22,7 @@ public:
 private:
     struct OreDefinition;
     struct DiskDefinition;
+    struct GeodeDefinition;
     struct SeagrassDefinition;
     struct ScatterDefinition;
     struct SingleBlockDefinition;
@@ -42,11 +43,12 @@ private:
     struct Feature {
         const OreDefinition *mOre = nullptr;
         const DiskDefinition *mDisk = nullptr;
+        const GeodeDefinition *mGeode = nullptr;
         Placed mPlaced;
         bool mKelp = false;
 
         bool isPorted() const {
-            return mOre != nullptr || mDisk != nullptr || mPlaced.isSet() || mKelp;
+            return mOre != nullptr || mDisk != nullptr || mGeode != nullptr || mPlaced.isSet() || mKelp;
         }
     };
 
@@ -60,6 +62,9 @@ private:
 
     static bool _placeDisk(BlockManager &blocks, const DiskDefinition &disk, int32_t x, int32_t y, int32_t z,
                            std::mt19937 &random);
+
+    static bool _placeGeode(BlockManager &blocks, const GeodeDefinition &geode, int32_t x, int32_t y, int32_t z,
+                            std::mt19937 &random);
 
     static bool _place(BlockManager &blocks, const Placed &placed, int32_t x, int32_t y, int32_t z,
                        std::mt19937 &random);
