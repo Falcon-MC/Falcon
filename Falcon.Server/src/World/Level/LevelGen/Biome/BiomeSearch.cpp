@@ -100,6 +100,13 @@ Vector3i BiomeSearch::findOpening(Level &level, const Vector3i &position, int32_
     return position;
 }
 
+void BiomeSearch::loadOpeningArea(Level &level, const Vector3i &position) {
+    for (int32_t chunkX = (position.x - OPENING_RANGE) >> 4; chunkX <= (position.x + OPENING_RANGE) >> 4; chunkX++) {
+        for (int32_t chunkZ = (position.z - OPENING_RANGE) >> 4; chunkZ <= (position.z + OPENING_RANGE) >> 4; chunkZ++)
+            level.getChunk(chunkX, chunkZ);
+    }
+}
+
 bool BiomeSearch::_search(const ChunkGenerator &generator, int32_t biomeId, const Vector3i &center, Vector3i min,
                           Vector3i max, int32_t step, Vector3i &found) {
     const int32_t countX = cellCount(min.x, max.x, step);

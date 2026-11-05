@@ -172,8 +172,18 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
                                       {biomeName, std::to_string(found.x), std::to_string(found.y),
                                        std::to_string(found.z), std::to_string(distance)});
 
-            if (teleport)
-                target->teleport(handler, Vector3f((float) found.x, (float) found.y, (float) found.z));
+            if (!teleport)
+                return;
+
+            // the report keeps the game's read of loaded chunks only, but a teleport into unloaded rock would
+            // suffocate: load the area, look for the opening again and land on a standable block
+            Vector3i destination = found;
+            if (result.mNeedsOpening) {
+                BiomeSearch::loadOpeningArea(level, result.mPosition);
+                destination = BiomeSearch::findOpening(level, result.mPosition, biomeId);
+            }
+            destination = level.findSafeSpawn(destination);
+            target->teleport(handler, Vector3f((float) destination.x, (float) destination.y, (float) destination.z));
         });
     });
 

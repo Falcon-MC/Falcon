@@ -27,6 +27,9 @@ public:
     // sub_14A229EC0
     static Vector3i findOpening(Level &level, const Vector3i &position, int32_t biomeId);
 
+    // loads the chunks findOpening reads around the position, main thread only
+    static void loadOpeningArea(Level &level, const Vector3i &position);
+
 private:
     // sub_14A228EB0
     static bool _search(const ChunkGenerator &generator, int32_t biomeId, const Vector3i &center, Vector3i min,
