@@ -5,9 +5,11 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Overworld/Biome/ClimateAttributes.h"
+#include "World/Level/LevelGen/Overworld/OverworldBlockLists.h"
 #include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceMaterialAttributes.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
+#include "World/Level/LevelGen/Random/GameRandom.h"
 #include "World/Level/LevelGen/Random/XoroshiroRandom.h"
 
 #include <algorithm>
@@ -71,22 +73,8 @@ namespace {
         return REPLACEABLE.contains(state);
     }
 
-    // a mid material that turns to sandstone where its layer ends (list at 0x1529B0DF8, filled from 0x14F1F6538)
-    bool isSand(const BlockState &state) {
-        static const BlockStateSet SAND = {
-                VanillaBlocks::SAND().getIdentifier(), VanillaBlocks::RED_SAND().getIdentifier(),
-                VanillaBlocks::SUSPICIOUS_SAND().getIdentifier()
-        };
-        return SAND.contains(state);
-    }
-
     bool isAirState(const BlockState &state) {
         return state.getHash() == airState().getHash();
-    }
-
-    // Random::nextFloat of the game's chunk random (sub_141A7E230)
-    float nextFloat(std::mt19937 &random) {
-        return static_cast<float>(static_cast<double>(random()) * 2.3283064365386963e-10);
     }
 
     float remap(float input, float inMin, float inMax, float outMin, float outMax) {
@@ -195,7 +183,7 @@ void OverworldSurfaceBuilder::_buildOverworldColumn(LevelChunk &chunk, int32_t x
             (int32_t) chunk.getBiomeAt(x, std::min(height, LevelChunk::MAX_Y), z));
     const float temperature = climate != nullptr ? climate->mTemperature : 0.5f;
 
-    const int32_t runDepth = static_cast<int32_t>((noise / 3.0f + 3.0f) + nextFloat(random) * 0.25f);
+    const int32_t runDepth = static_cast<int32_t>((noise / 3.0f + 3.0f) + GameRandom::nextFloat(random) * 0.25f);
     const int32_t seaFloorDepth = material.mSeaFloorDepth + runDepth;
 
     // nothing more than 8 blocks under the column's preliminary surface is touched (sub_14A22FC50)
@@ -285,7 +273,8 @@ void OverworldSurfaceBuilder::_buildOverworldColumn(LevelChunk &chunk, int32_t x
         if (--remaining != 0)
             continue;
 
-        if (isSand(*layerMid)) {
+        // a mid material that turns to sandstone where its layer ends
+        if (OverworldBlockLists::sand().contains(*layerMid)) {
             const int32_t extra = static_cast<int32_t>(random() % 4u);
             remaining = static_cast<int32_t>(std::max<int64_t>(0, (int64_t) y - seaLevel)) + extra;
             layerMid = &sandstoneState();

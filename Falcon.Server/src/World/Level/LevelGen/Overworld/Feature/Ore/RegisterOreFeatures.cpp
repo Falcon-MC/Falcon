@@ -33,9 +33,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/River/ClayFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/River/GravelFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/River/SandFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Terrain/CanyonFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Terrain/CaveFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Terrain/ExtraUndergroundCaveFeature.h"
 
 #include <memory>
 
@@ -74,7 +71,4 @@ void registerOreFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<ClayFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<GravelFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SandFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<CanyonFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<CaveFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<ExtraUndergroundCaveFeature>());
 }

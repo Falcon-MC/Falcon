@@ -365,7 +365,11 @@ void OverworldTerrainFiller::_sampleCorners(int32_t chunkX, int32_t chunkZ, Corn
     }
 }
 
-void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap) const {
+OverworldAquifer OverworldTerrainFiller::createAquifer() const {
+    return OverworldAquifer(mAquiferNoises, mClimate, SEA_LEVEL);
+}
+
+void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, OverworldAquifer &aquifer) const {
     const int32_t chunkX = chunk.getX();
     const int32_t chunkZ = chunk.getZ();
     const int32_t baseX = chunkX << 4;
@@ -374,7 +378,6 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap) const {
     Corners corners;
     _sampleCorners(chunkX, chunkZ, corners);
 
-    OverworldAquifer aquifer(mAquiferNoises, mClimate, SEA_LEVEL);
     CellInterpolator density;
     CellInterpolator noodleToggle;
     CellInterpolator noodleThickness;

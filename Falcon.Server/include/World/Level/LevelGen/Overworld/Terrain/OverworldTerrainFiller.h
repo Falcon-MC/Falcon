@@ -16,8 +16,11 @@ class OverworldTerrainFiller {
 public:
     OverworldTerrainFiller(const XoroshiroPositionalFactory &noiseFactory, const OverworldClimate &climate);
 
+    // one per chunk, shared by the fill and the carvers
+    OverworldAquifer createAquifer() const;
+
     // heightMap is indexed (x << 4) | z and receives the highest non-air y of each column
-    void fill(LevelChunk &chunk, int32_t *heightMap) const;
+    void fill(LevelChunk &chunk, int32_t *heightMap, OverworldAquifer &aquifer) const;
 
 private:
     // corners per chunk: 5 x 41 x 5, y varying fastest
