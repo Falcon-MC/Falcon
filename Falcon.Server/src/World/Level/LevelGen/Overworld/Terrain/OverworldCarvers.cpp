@@ -4,6 +4,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldAquifer.h"
+#include "World/Level/LevelGen/Random/GameRandom.h"
 
 #include <cmath>
 #include <string>
@@ -21,28 +22,10 @@ namespace {
     constexpr int32_t CANYON_MAX_Y = 312;
     constexpr int32_t CANYON_WIDTH_ROWS = 320;
 
-    uint32_t nextUnsigned(std::mt19937 &random) {
-        return random();
-    }
-
-    // Random::nextInt() (sub_141A7E1C0)
-    int32_t nextInt(std::mt19937 &random) {
-        return static_cast<int32_t>(random() >> 1);
-    }
-
-    // Random::nextInt(n) (sub_141A7E190)
-    int32_t nextInt(std::mt19937 &random, int32_t bound) {
-        return bound != 0 ? static_cast<int32_t>(random() % static_cast<uint32_t>(bound)) : 0;
-    }
-
-    float toFloat(uint32_t value) {
-        return static_cast<float>(static_cast<double>(value) * 2.3283064365386963e-10);
-    }
-
-    // Random::nextFloat (sub_141A7E230)
-    float nextFloat(std::mt19937 &random) {
-        return toFloat(random());
-    }
+    using GameRandom::nextFloat;
+    using GameRandom::nextInt;
+    using GameRandom::nextUnsigned;
+    using GameRandom::toFloat;
 
     float lerp(const float *range, std::mt19937 &random) {
         if (range[0] == range[1])

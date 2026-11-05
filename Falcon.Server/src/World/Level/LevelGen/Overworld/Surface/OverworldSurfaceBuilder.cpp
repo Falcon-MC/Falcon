@@ -8,6 +8,7 @@
 #include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceMaterialAttributes.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
+#include "World/Level/LevelGen/Random/GameRandom.h"
 #include "World/Level/LevelGen/Random/XoroshiroRandom.h"
 
 #include <algorithm>
@@ -82,11 +83,6 @@ namespace {
 
     bool isAirState(const BlockState &state) {
         return state.getHash() == airState().getHash();
-    }
-
-    // Random::nextFloat of the game's chunk random (sub_141A7E230)
-    float nextFloat(std::mt19937 &random) {
-        return static_cast<float>(static_cast<double>(random()) * 2.3283064365386963e-10);
     }
 
     float remap(float input, float inMin, float inMax, float outMin, float outMax) {
@@ -195,7 +191,7 @@ void OverworldSurfaceBuilder::_buildOverworldColumn(LevelChunk &chunk, int32_t x
             (int32_t) chunk.getBiomeAt(x, std::min(height, LevelChunk::MAX_Y), z));
     const float temperature = climate != nullptr ? climate->mTemperature : 0.5f;
 
-    const int32_t runDepth = static_cast<int32_t>((noise / 3.0f + 3.0f) + nextFloat(random) * 0.25f);
+    const int32_t runDepth = static_cast<int32_t>((noise / 3.0f + 3.0f) + GameRandom::nextFloat(random) * 0.25f);
     const int32_t seaFloorDepth = material.mSeaFloorDepth + runDepth;
 
     // nothing more than 8 blocks under the column's preliminary surface is touched (sub_14A22FC50)
