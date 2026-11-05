@@ -117,6 +117,19 @@ public:
 
     void setGameType(int32_t gameType) { mGameType = gameType; }
 
+    int64_t getLastActiveTick() const { return mLastActiveTick; }
+
+    void markActive(int64_t tick) { mLastActiveTick = tick; }
+
+    /**
+     * Records the look direction of an input and tells whether it moved since the previous one.
+     */
+    bool updateInputRotation(const Vector3f &rotation) {
+        const bool changed = rotation.x != mLastInputRotation.x || rotation.y != mLastInputRotation.y;
+        mLastInputRotation = rotation;
+        return changed;
+    }
+
     bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId);
 
     Vector3f getLookDirection() const;
@@ -726,6 +739,8 @@ private:
     bool mHasChunkPosition = false;
     SerializedSkin mSkin;
     int32_t mGameType = 0;
+    int64_t mLastActiveTick = 0;
+    Vector3f mLastInputRotation;
     int64_t mFirstPlayed = 0;
     bool mIsOp = false;
     bool mFlying = false;

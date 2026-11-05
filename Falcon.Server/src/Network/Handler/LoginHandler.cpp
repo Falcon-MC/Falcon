@@ -1227,6 +1227,7 @@ void LoginHandler::removeFromPlayerList(ServerNetworkHandler &owner, ServerPlaye
 
 void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner, ServerPlayer &player) {
     player.setLoginState(ServerPlayer::LoginState::Spawned);
+    player.markActive(owner.getCurrentTick());
     player.grantSpawnInvulnerability();
     BonusChest::placeIfPending(owner, owner.getWorldFor(player).getOverworld());
     LOG_INFO(LogAreaID::Server, "Player %s spawned", player.getName().c_str());
