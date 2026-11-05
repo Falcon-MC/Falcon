@@ -170,7 +170,7 @@ const OverworldOrePlacer::OreDefinition *OverworldOrePlacer::_find(const BiomeFe
             {"minecraft:diamond_ore_large_feature", 12, 0.7f, {{&VanillaBlocks::DIAMOND_ORE, {"minecraft:stone"}},
                                                                {&VanillaBlocks::DEEPSLATE_DIAMOND_ORE,
                                                                 {"minecraft:deepslate"}}}},
-            // built into the game, not in the packs: count and rule matched against BDS worlds
+            // not in the packs, only in the game's definitions/features/dirt_feature.json
             {"minecraft:dirt_feature", 33, 0.0f, {{&VanillaBlocks::DIRT, {"minecraft:stone"}}}},
             {"minecraft:diorite_feature", 64, 0.0f, {{&VanillaBlocks::DIORITE, {"minecraft:stone"}}}},
             {"minecraft:dripstone_caves_copper_ore_feature", 20, 0.0f,
