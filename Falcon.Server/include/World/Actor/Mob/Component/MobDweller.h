@@ -17,9 +17,13 @@ public:
     /** Leaves the village on death, releasing everything the dweller claimed. */
     void onDeath(const MobActor &mob);
 
-    bool isActive() const { return mComponent != nullptr; }
+    bool isActive() const {
+        return mComponent != nullptr;
+    }
 
-    DwellerRole getRole() const { return mRole; }
+    DwellerRole getRole() const {
+        return mRole;
+    }
 
 private:
     void _read(const json::Value &component);
