@@ -171,7 +171,7 @@ void MobDweller::_updateVillage(ServerNetworkHandler &owner, MobActor &mob) {
 
 void MobDweller::_recruitForRaid(ServerNetworkHandler &owner, const MobActor &mob) const {
     // sub_1477465E0: a raider of a village under raid, standing in that village, calls the mobs around it that can
-    // join a raid and are not queued or raiding already
+    // join a raid and are not queued or raiding already; a won or lost raid still recruits while it celebrates
     const std::shared_ptr<Village> village = raidedVillageAt(owner, mob);
     if (village == nullptr || !village->hasDweller(DwellerRole::Hostile, mob.getUniqueId()))
         return;
@@ -198,7 +198,8 @@ void MobDweller::_recruitForRaid(ServerNetworkHandler &owner, const MobActor &mo
 }
 
 void MobDweller::_tryJoinRaid(ServerNetworkHandler &owner, const MobActor &mob) {
-    // sub_14CE8F940: the recruit stays queued until it is a hostile dweller of the raided village it stands in
+    // sub_14CE8F940: the recruit stays queued until it is a hostile dweller of the raided village it stands in, even
+    // after that raid ends; only a successful join drops the request (sub_1484BC3F0)
     if (mob.isExpired())
         return;
 
