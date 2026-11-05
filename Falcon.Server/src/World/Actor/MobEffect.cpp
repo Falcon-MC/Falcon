@@ -148,6 +148,7 @@ void RaidOmenMobEffect::onAdd(Actor &actor, const MobEffectInstance &) const {
                                                     (int32_t) std::floor(position.z)));
 }
 
+// any removal asks for the raid, milk and death included: the game does not check for expiry (sub_14355FD20)
 void RaidOmenMobEffect::onRemove(Actor &actor, const MobEffectInstance &) const {
     ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor);
     if (player != nullptr && player->getGameType() != (int32_t) GameType::Spectator)
