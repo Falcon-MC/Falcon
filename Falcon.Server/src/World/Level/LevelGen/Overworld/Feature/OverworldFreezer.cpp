@@ -53,7 +53,8 @@ void OverworldFreezer::apply(LevelChunk &chunk) {
             if (!_shouldSnow(chunk, x, y, z))
                 continue;
 
-            // a snowlogged plant stays under the snow in the second layer
+            // a snowlogged plant stays under the snow in the second layer; covered_bit stays unset because the
+            // game's post-processing places the default snow layer (sub_14CDD4880)
             const BlockState covered = chunk.getBlock(x, y, z);
             if (!isAir(covered))
                 chunk.setBlock(x, y, z, 1, covered);
