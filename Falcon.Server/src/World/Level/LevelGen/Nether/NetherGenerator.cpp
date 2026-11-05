@@ -4,6 +4,7 @@
 #include "World/Level/LevelGen/Nether/Biome/VanillaNetherBiomeSource.h"
 #include "World/Level/LevelGen/Nether/Feature/NetherFeatureBuilder.h"
 #include "World/Level/LevelGen/Nether/NetherBiomeIds.h"
+#include "World/Level/LevelGen/Noise/NoiseMath.h"
 #include "World/Level/LevelGen/Random/SimpleRandom.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
@@ -79,14 +80,6 @@ namespace {
 
     bool isNetherrack(const BlockState &state) {
         return state.mName == "minecraft:netherrack";
-    }
-
-    int32_t floorDiv(int32_t value, int32_t divisor) {
-        int32_t quotient = value / divisor;
-        if ((value % divisor != 0) && ((value < 0) != (divisor < 0)))
-            quotient--;
-
-        return quotient;
     }
 
     int32_t clampInt(int32_t value, int32_t min, int32_t max) {
@@ -182,9 +175,9 @@ void NetherGenerator::_generateTerrain(LevelChunk &chunk, DensityChunkCache &chu
     const int32_t chunkBaseZ = chunk.getZ() << 4;
     const int32_t minDensityY = NetherGeneratorConstants::MIN_DENSITY_Y;
     const int32_t maxDensityY = NetherGeneratorConstants::MAX_DENSITY_Y;
-    const int32_t cellMinY = floorDiv(minDensityY, NetherGeneratorConstants::CELL_HEIGHT)
+    const int32_t cellMinY = NoiseMath::floorDiv(minDensityY, NetherGeneratorConstants::CELL_HEIGHT)
                              * NetherGeneratorConstants::CELL_HEIGHT;
-    const int32_t cellMaxY = floorDiv(maxDensityY, NetherGeneratorConstants::CELL_HEIGHT)
+    const int32_t cellMaxY = NoiseMath::floorDiv(maxDensityY, NetherGeneratorConstants::CELL_HEIGHT)
                              * NetherGeneratorConstants::CELL_HEIGHT;
 
     CellFunctionContext functionContext(&chunkCache);

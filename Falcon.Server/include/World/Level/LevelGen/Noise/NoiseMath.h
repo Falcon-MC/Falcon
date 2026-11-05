@@ -10,6 +10,10 @@ public:
 
     static int32_t floor(double d);
 
+    static int32_t floorDiv(int32_t value, int32_t divisor);
+
+    static int32_t truncateToInt(float value);
+
     static double lerp(double delta, double start, double end);
 
     static double lerp2(double deltaX, double deltaY, double val00, double val10, double val01, double val11);

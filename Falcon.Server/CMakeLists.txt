@@ -157,6 +157,11 @@ list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_EXECUTABLE_SOURCES})
 # initialisers, and a static library would let the linker drop every object nothing references by name.
 add_library(FalconCore OBJECT ${FALCON_CORE_SOURCES})
 
+# no fused multiply-adds anywhere in generation: the game rounds every float step, fma changes the terrain
+file(GLOB_RECURSE FALCON_LEVELGEN_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/World/Level/LevelGen/*.cpp")
+set_source_files_properties(${FALCON_LEVELGEN_SOURCES} PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+
 include(cmake/FalconLegacyHeaders.cmake)
 
 find_package(ZLIB REQUIRED)
@@ -222,6 +227,15 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     endif()
     add_test(NAME optimization-regressions COMMAND FalconOptimizationTests)
     set_tests_properties(optimization-regressions PROPERTIES TIMEOUT 120)
+endif()
+
+option(FALCON_BUILD_WORLDGEN_PARITY "Build the tool comparing generated terrain with a world saved by BDS" OFF)
+if(FALCON_BUILD_WORLDGEN_PARITY)
+    add_executable(FalconWorldGenParity tools/WorldGenParity.cpp)
+    target_link_libraries(FalconWorldGenParity PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconWorldGenParity PRIVATE -static -fuse-ld=lld)
+    endif()
 endif()
 
 if(NOT FALCON_BUILD_SERVER_EXECUTABLE)

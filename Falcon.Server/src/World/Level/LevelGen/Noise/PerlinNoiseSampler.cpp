@@ -1,5 +1,7 @@
 #include "World/Level/LevelGen/Noise/PerlinNoiseSampler.h"
 
+#include "World/Level/LevelGen/Noise/NoiseMath.h"
+
 #include <cmath>
 
 namespace {
@@ -23,10 +25,29 @@ const double FLAT_SIMPLEX_GRAD[64] = {
     0, -1, -1, 0
 };
 
+float fade(float t) {
+    return ((t * 6.0f + -15.0f) * t + 10.0f) * (t * t * t);
 }
 
+float dot(int32_t gradient, float x, float y, float z) {
+    const float gx = static_cast<float>(FLAT_SIMPLEX_GRAD[gradient]);
+    const float gy = static_cast<float>(FLAT_SIMPLEX_GRAD[gradient | 1]);
+    const float gz = static_cast<float>(FLAT_SIMPLEX_GRAD[gradient | 2]);
+    return gz * z + (gx * x + gy * y);
+}
+
+float lerp(float delta, float start, float end) {
+    return (end - start) * delta + start;
+}
+
+}
+
+// drawn as doubles, stored as floats (sub_145C2AF90)
 PerlinNoiseSampler::PerlinNoiseSampler(IRandom &rand)
-    : Noise(rand) {
+    : Noise(rand),
+      mOriginXFloat(static_cast<float>(mOriginX)),
+      mOriginYFloat(static_cast<float>(mOriginY)),
+      mOriginZFloat(static_cast<float>(mOriginZ)) {
 }
 
 double PerlinNoiseSampler::sample(double x, double y, double z, double yAmplification, double minY) const {
@@ -105,4 +126,50 @@ double PerlinNoiseSampler::_sample(int32_t sectionX, int32_t sectionY, int32_t s
     const double y1 = x01 + fadeY * (x11 - x01);
 
     return y0 + fadeZ * (y1 - y0);
+}
+
+// sub_145C2C790, sub_145C2CA80: float in the game's order; built with -ffp-contract=off
+float PerlinNoiseSampler::sampleFloat(float x, float y, float z) const {
+    const float offsetX = x + mOriginXFloat;
+    const float offsetY = y + mOriginYFloat;
+    const float offsetZ = z + mOriginZFloat;
+    const int32_t sectionX = NoiseMath::truncateToInt(std::floor(offsetX));
+    const int32_t sectionY = NoiseMath::truncateToInt(std::floor(offsetY));
+    const int32_t sectionZ = NoiseMath::truncateToInt(std::floor(offsetZ));
+    return _sampleFloat(sectionX, sectionY, sectionZ, offsetX - static_cast<float>(sectionX),
+                        offsetY - static_cast<float>(sectionY), offsetZ - static_cast<float>(sectionZ));
+}
+
+float PerlinNoiseSampler::_sampleFloat(int32_t sectionX, int32_t sectionY, int32_t sectionZ, float localX, float localY, float localZ) const {
+    const int32_t a = lookup(sectionX);
+    const int32_t b = lookup(sectionX + 1);
+    const int32_t aa = lookup(a + sectionY);
+    const int32_t ab = lookup(a + sectionY + 1);
+    const int32_t ba = lookup(b + sectionY);
+    const int32_t bb = lookup(b + sectionY + 1);
+
+    const float xMinusOne = localX - 1.0f;
+    const float yMinusOne = localY - 1.0f;
+    const float zMinusOne = localZ - 1.0f;
+
+    const float grad000 = dot((lookup(aa + sectionZ) & 15) << 2, localX, localY, localZ);
+    const float grad100 = dot((lookup(ba + sectionZ) & 15) << 2, xMinusOne, localY, localZ);
+    const float grad010 = dot((lookup(ab + sectionZ) & 15) << 2, localX, yMinusOne, localZ);
+    const float grad110 = dot((lookup(bb + sectionZ) & 15) << 2, xMinusOne, yMinusOne, localZ);
+    const float grad001 = dot((lookup(aa + sectionZ + 1) & 15) << 2, localX, localY, zMinusOne);
+    const float grad101 = dot((lookup(ba + sectionZ + 1) & 15) << 2, xMinusOne, localY, zMinusOne);
+    const float grad011 = dot((lookup(ab + sectionZ + 1) & 15) << 2, localX, yMinusOne, zMinusOne);
+    const float grad111 = dot((lookup(bb + sectionZ + 1) & 15) << 2, xMinusOne, yMinusOne, zMinusOne);
+
+    const float fadeX = fade(localX);
+    const float fadeY = fade(localY);
+    const float fadeZ = fade(localZ);
+
+    const float x00 = lerp(fadeX, grad000, grad100);
+    const float x10 = lerp(fadeX, grad010, grad110);
+    const float x01 = lerp(fadeX, grad001, grad101);
+    const float x11 = lerp(fadeX, grad011, grad111);
+    const float y0 = lerp(fadeY, x00, x10);
+    const float y1 = lerp(fadeY, x01, x11);
+    return lerp(fadeZ, y0, y1);
 }

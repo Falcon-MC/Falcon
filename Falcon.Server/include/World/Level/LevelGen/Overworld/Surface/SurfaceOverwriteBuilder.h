@@ -3,6 +3,7 @@
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
 #include "World/Level/LevelGen/Random/IRandom.h"
+#include "World/Level/LevelGen/Random/XoroshiroPositionalFactory.h"
 #include "World/Level/Chunk/LevelChunk.h"
 
 #include <cstdint>
@@ -13,7 +14,7 @@ public:
     static constexpr int32_t SEA_LEVEL = 63;
     static constexpr int32_t CLAY_BANDS_SIZE = 192;
 
-    SurfaceOverwriteBuilder(IRandom &random, int64_t levelSeed);
+    SurfaceOverwriteBuilder(IRandom &random, const XoroshiroPositionalFactory &noiseFactory, int64_t levelSeed);
 
     void apply(LevelChunk &chunk, int64_t levelSeed) const;
 
