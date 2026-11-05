@@ -21,14 +21,22 @@ int64_t BlockManager::hashXYZ(int32_t x, int32_t y, int32_t z) {
 }
 
 const BlockState &BlockManager::getBlockAt(int32_t x, int32_t y, int32_t z) {
-    const int64_t key = hashXYZ(x, y, z);
+    return _getBlockAt(x, y, z, 0);
+}
+
+const BlockState &BlockManager::getExtraBlockAt(int32_t x, int32_t y, int32_t z) {
+    return _getBlockAt(x, y, z, 1);
+}
+
+const BlockState &BlockManager::_getBlockAt(int32_t x, int32_t y, int32_t z, int32_t layer) {
+    const int64_t key = hashXYZ(x, y, z) | layer;
 
     const std::unordered_map<int64_t, BlockState>::const_iterator cached = mCaches.find(key);
     if (cached != mCaches.end())
         return cached->second;
 
     if (mPending != nullptr) {
-        const BlockState *pending = mPending->getCachedBlock(x, y, z);
+        const BlockState *pending = mPending->getCachedBlock(x, y, z, layer);
         if (pending != nullptr)
             return *pending;
     }
@@ -40,11 +48,11 @@ const BlockState &BlockManager::getBlockAt(int32_t x, int32_t y, int32_t z) {
     if (chunk == nullptr)
         return airState();
 
-    return chunk->getBlock(x & 15, y, z & 15);
+    return chunk->getBlock(x & 15, y, z & 15, layer);
 }
 
-const BlockState *BlockManager::getCachedBlock(int32_t x, int32_t y, int32_t z) const {
-    const std::unordered_map<int64_t, BlockState>::const_iterator cached = mCaches.find(hashXYZ(x, y, z));
+const BlockState *BlockManager::getCachedBlock(int32_t x, int32_t y, int32_t z, int32_t layer) const {
+    const std::unordered_map<int64_t, BlockState>::const_iterator cached = mCaches.find(hashXYZ(x, y, z) | layer);
     if (cached == mCaches.end())
         return nullptr;
 
@@ -56,6 +64,15 @@ void BlockManager::setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockS
         return;
 
     const int64_t key = hashXYZ(x, y, z);
+    mPlaces[key] = state;
+    mCaches[key] = state;
+}
+
+void BlockManager::setExtraBlockAt(int32_t x, int32_t y, int32_t z, const BlockState &state) {
+    if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
+        return;
+
+    const int64_t key = hashXYZ(x, y, z) | 1;
     mPlaces[key] = state;
     mCaches[key] = state;
 }
@@ -84,12 +101,14 @@ void BlockManager::applySubChunkUpdate() {
         const int32_t x = (int32_t) ((key >> 37) & 0x3FFFFFFLL) - 30000000;
         const int32_t z = (int32_t) ((key >> 11) & 0x3FFFFFFLL) - 30000000;
         const int32_t y = (int32_t) ((key >> 1) & 0x3FFLL) - 400;
+        const int32_t layer = (int32_t) (key & 1);
 
         if (mOverflowSink != nullptr && ((x >> 4) != mCenterChunkX || (z >> 4) != mCenterChunkZ)) {
             GeneratedBlockChange change;
             change.mX = x;
             change.mY = y;
             change.mZ = z;
+            change.mLayer = layer;
             change.mState = entry.second;
             mOverflowSink->push_back(change);
             continue;
@@ -99,7 +118,7 @@ void BlockManager::applySubChunkUpdate() {
         if (chunk == nullptr)
             continue;
 
-        chunk->setBlock(x & 15, y, z & 15, entry.second);
+        chunk->setBlock(x & 15, y, z & 15, layer, entry.second);
     }
 
     mPlaces.clear();

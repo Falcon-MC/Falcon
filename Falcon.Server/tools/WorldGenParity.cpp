@@ -520,7 +520,7 @@ namespace {
                         spilled.find(key);
                 if (changes != spilled.end()) {
                     for (const GeneratedBlockChange &change: changes->second)
-                        finished.setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mState);
+                        finished.setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, change.mState);
                     spilled.erase(changes);
                 }
 

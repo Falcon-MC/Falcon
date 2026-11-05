@@ -45,15 +45,26 @@ namespace {
     }
 
     // the chunk keeps it per column as a signed byte in eighths (sub_145D3C5D0)
-    float columnNoise(int32_t x, int32_t z) {
+    float columnNoise(int32_t x, int32_t z, bool rounded) {
         static const OctaveNoise noise(1234, 1);
         const float value = noise.getValue(static_cast<float>(x) * 0.125f, static_cast<float>(z) * 0.125f);
+        if (!rounded)
+            return value * COLUMN_NOISE_SCALE;
+
         const auto stored = static_cast<int8_t>(static_cast<int32_t>((value * COLUMN_NOISE_SCALE) * 8.0f));
         return static_cast<float>(stored) * 0.125f;
     }
 }
 
 float BiomeTemperature::at(int32_t biomeId, int32_t x, int32_t y, int32_t z) {
+    return _temperature(biomeId, x, y, z, true);
+}
+
+float BiomeTemperature::forFeature(int32_t biomeId, int32_t x, int32_t y, int32_t z) {
+    return _temperature(biomeId, x, y, z, false);
+}
+
+float BiomeTemperature::_temperature(int32_t biomeId, int32_t x, int32_t y, int32_t z, bool rounded) {
     const ClimateAttributes *climate = ClimateAttributes::getForBiome(biomeId);
     float temperature = climate != nullptr ? climate->mTemperature : 0.5f;
 
@@ -68,7 +79,7 @@ float BiomeTemperature::at(int32_t biomeId, int32_t x, int32_t y, int32_t z) {
     }
 
     if (y > COOLING_START) {
-        const float above = (static_cast<float>(y) + columnNoise(x, z)) - static_cast<float>(COOLING_START);
+        const float above = (static_cast<float>(y) + columnNoise(x, z, rounded)) - static_cast<float>(COOLING_START);
         temperature = temperature + (above * -0.05f) / 40.0f;
     }
     return temperature;
