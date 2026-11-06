@@ -1032,7 +1032,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (interactPluginEvent.mCancelled)
         return false;
 
-    scripts.onPlayerInteractWithBlock(player, transaction.mBlockPosition, face);
+    scripts.onPlayerInteractWithBlock(player, clickedState.mName, transaction.mBlockPosition, face);
 
     owner.getScriptEngine().onItemUseOnBlock(player, transaction.mBlockPosition.x,
                                              transaction.mBlockPosition.y, transaction.mBlockPosition.z);

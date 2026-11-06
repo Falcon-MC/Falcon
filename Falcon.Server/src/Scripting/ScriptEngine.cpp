@@ -389,10 +389,18 @@ void ScriptEngine::onEntityItemDrop(Actor &entity, const ItemStack &item) {
     });
 }
 
-void ScriptEngine::onPlayerInteractWithBlock(ServerPlayer &player, const Vector3i &position, int32_t face) {
+void ScriptEngine::onPlayerInteractWithBlock(ServerPlayer &player, const std::string &blockId,
+                                             const Vector3i &position, int32_t face) {
     _emit("playerInteractWithBlock", false, [&](ScriptApi &api, JSValue event) {
         fillBlockInteraction(mContext, api, event, player, position, face);
     });
+
+    if (mApi == nullptr)
+        return;
+
+    mExecutionDeadlineMs = nowMs() + mWatchdogMs;
+    mApi->emitBlockInteract(player, blockId, position);
+    _pumpJobs();
 }
 
 void ScriptEngine::onEntitySpawn(ServerActor &entity) {

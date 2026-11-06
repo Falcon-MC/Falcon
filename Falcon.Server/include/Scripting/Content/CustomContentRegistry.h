@@ -60,6 +60,7 @@ struct CustomBlockDefinition {
     bool mHasFriction = false;
     CustomBlockBox mCollision;
     CustomBlockBox mSelection;
+    std::vector<std::string> mCustomComponents;
 };
 
 struct CustomActorDefinition {

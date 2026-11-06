@@ -53,7 +53,8 @@ public:
 
     void onEntityItemDrop(Actor &entity, const ItemStack &item);
 
-    void onPlayerInteractWithBlock(ServerPlayer &player, const Vector3i &position, int32_t face);
+    void onPlayerInteractWithBlock(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
+                                   int32_t face);
 
     void onEntitySpawn(ServerActor &entity);
 

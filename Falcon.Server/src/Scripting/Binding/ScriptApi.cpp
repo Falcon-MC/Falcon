@@ -1550,6 +1550,23 @@ void ScriptApi::fireHeldItemComponents(ServerPlayer &player, const char *hook, J
         }
     }
 
+    _fireComponents("__falconFireItemComponents", components, hook, event);
+}
+
+void ScriptApi::fireBlockComponents(const std::string &blockId, const char *hook, JSValue event) {
+    const std::vector<std::string> *components = nullptr;
+    for (const CustomBlockDefinition &definition: CustomContentRegistry::getInstance().getBlocks()) {
+        if (definition.mIdentifier == blockId) {
+            components = &definition.mCustomComponents;
+            break;
+        }
+    }
+
+    _fireComponents("__falconFireBlockComponents", components, hook, event);
+}
+
+void ScriptApi::_fireComponents(const char *dispatcher, const std::vector<std::string> *components, const char *hook,
+                                JSValue event) {
     if (components == nullptr || components->empty()) {
         JS_FreeValue(mContext, event);
         return;
@@ -1561,7 +1578,7 @@ void ScriptApi::fireHeldItemComponents(ServerPlayer &player, const char *hook, J
         JS_SetPropertyUint32(mContext, ids, index++, jsString(mContext, id));
 
     JSValue global = JS_GetGlobalObject(mContext);
-    JSValue fn = JS_GetPropertyStr(mContext, global, "__falconFireItemComponents");
+    JSValue fn = JS_GetPropertyStr(mContext, global, dispatcher);
     if (JS_IsFunction(mContext, fn)) {
         JSValue hookValue = jsString(mContext, hook);
         JSValue args[3] = {hookValue, ids, event};
@@ -1591,6 +1608,13 @@ void ScriptApi::emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, i
         emitNamed("before.itemUseOn", JS_DupValue(mContext, event));
 
     fireHeldItemComponents(player, "onUseOn", event);
+}
+
+void ScriptApi::emitBlockInteract(ServerPlayer &player, const std::string &blockId, const Vector3i &position) {
+    JSValue event = JS_NewObject(mContext);
+    JS_SetPropertyStr(mContext, event, "player", makePlayer(player));
+    JS_SetPropertyStr(mContext, event, "block", makeBlock(mHost.getLevelFor(player), position.x, position.y, position.z));
+    fireBlockComponents(blockId, "onPlayerInteract", event);
 }
 
 void ScriptApi::emitWorldInitialize() {
@@ -1732,6 +1756,18 @@ void ScriptApi::_subscribeGameEvents() {
                           makeVector3(mContext, (float) event.mBlockPosition.x, (float) event.mBlockPosition.y,
                                       (float) event.mBlockPosition.z));
         fireHeldItemComponents(event.mPlayer, "onMineBlock", mineEvent);
+
+        // scripts written for older modules name the same hook onPlayerDestroy
+        for (const char *hook: {"onPlayerBreak", "onPlayerDestroy"}) {
+            JSValue breakEvent = JS_NewObject(mContext);
+            JS_SetPropertyStr(mContext, breakEvent, "player", makePlayer(event.mPlayer));
+            JS_SetPropertyStr(mContext, breakEvent, "block",
+                              makeBlock(mHost.getLevelFor(event.mPlayer), event.mBlockPosition.x,
+                                        event.mBlockPosition.y, event.mBlockPosition.z));
+            JS_SetPropertyStr(mContext, breakEvent, "brokenBlockPermutation",
+                              makeBlockType(mContext, event.mBrokenBlockIdentifier));
+            fireBlockComponents(event.mBrokenBlockIdentifier, hook, breakEvent);
+        }
     });
 
     bus.after().mPlayerPlaceBlock.subscribe([this](PlayerPlaceBlockAfterEvent &event) {
@@ -1742,6 +1778,12 @@ void ScriptApi::_subscribeGameEvents() {
                                       (float) event.mBlockPosition.z));
         JS_SetPropertyStr(mContext, object, "permutation", makeBlockType(mContext, event.mBlockIdentifier));
         _dispatch(ScriptEvent::AfterPlayerPlaceBlock, object);
+
+        JSValue placeEvent = JS_NewObject(mContext);
+        JS_SetPropertyStr(mContext, placeEvent, "block",
+                          makeBlock(mHost.getLevelFor(event.mPlayer), event.mBlockPosition.x, event.mBlockPosition.y,
+                                    event.mBlockPosition.z));
+        fireBlockComponents(event.mBlockIdentifier, "onPlace", placeEvent);
     });
 
     bus.after().mPlayerSpawn.subscribe([this](PlayerSpawnAfterEvent &event) {
@@ -3884,10 +3926,18 @@ globalThis.__falconBlockComponentRegistry = {
     }
 };
 
+globalThis.__falconFireBlockComponents = function (hook, ids, event) {
+    globalThis.__falconFireComponents(globalThis.__falconBlockComponentHandlers, hook, ids, event);
+};
+
 globalThis.__falconFireItemComponents = function (hook, ids, event) {
+    globalThis.__falconFireComponents(globalThis.__falconItemComponentHandlers, hook, ids, event);
+};
+
+globalThis.__falconFireComponents = function (handlers, hook, ids, event) {
     if (!ids) return;
     for (const id of ids) {
-        const handler = globalThis.__falconItemComponentHandlers[id];
+        const handler = handlers[id];
         if (handler && typeof handler[hook] === "function") {
             try {
                 handler[hook](event);
