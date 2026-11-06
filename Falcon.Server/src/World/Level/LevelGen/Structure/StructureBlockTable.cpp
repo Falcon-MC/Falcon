@@ -1,6 +1,9 @@
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
 
+#include "World/Level/Block/BlockPaletteRegistry.h"
+
 #include <array>
+#include <cstdlib>
 #include <string>
 #include <unordered_map>
 
@@ -143,6 +146,182 @@ namespace {
 
         return false;
     }
+
+    // a facing_direction value: down 0, up 1, north 2, south 3, west 4, east 5; horizontal faces turn
+    int32_t sixFacing(const std::string &facing, int32_t quarterTurns) {
+        if (facing == "down")
+            return 0;
+        if (facing == "up")
+            return 1;
+        return facingDirection(CARDINALS[(size_t) ((cardinalIndex(facing) + quarterTurns) & 3)]);
+    }
+
+    // renames whose bedrock block carries the same states, so the generic pass can finish them
+    const std::unordered_map<std::string, std::string> &generalNames() {
+        static const std::unordered_map<std::string, std::string> names = {
+                {"minecraft:bricks", "minecraft:brick_block"},
+                {"minecraft:terracotta", "minecraft:hardened_clay"},
+                {"minecraft:grass", "minecraft:short_grass"},
+                {"minecraft:melon", "minecraft:melon_block"},
+                {"minecraft:cobblestone_stairs", "minecraft:stone_stairs"},
+                {"minecraft:oak_fence_gate", "minecraft:fence_gate"},
+                {"minecraft:oak_pressure_plate", "minecraft:wooden_pressure_plate"},
+                {"minecraft:attached_melon_stem", "minecraft:melon_stem"}};
+        return names;
+    }
+
+    // maps one template property onto the state the resolved block carries; false when the property has no
+    // known mapping, so the caller leaves the block out rather than placing a wrong one
+    bool applyProperty(Tag &states, const std::string &key, const std::string &value, int32_t quarterTurns) {
+        // states the game recomputes from neighbours, reads from block layer 1, or does not carry
+        if (key == "waterlogged" || key == "distance" || key == "snowy" || key == "persistent" || key == "stage"
+            || key == "signal_fire" || key == "occupied" || key == "has_book" || key == "east" || key == "north"
+            || key == "south" || key == "west" || key == "up" || key == "variant")
+            return true;
+
+        if (key == "axis") {
+            if (!states.contains("pillar_axis"))
+                return false;
+            std::string axis = value;
+            if ((quarterTurns & 1) != 0 && axis != "y")
+                axis = axis == "x" ? "z" : "x";
+            states.putString("pillar_axis", axis);
+            return true;
+        }
+
+        if (key == "half") {
+            if (states.contains("minecraft:vertical_half")) {
+                states.putString("minecraft:vertical_half", value == "top" ? "top" : "bottom");
+                return true;
+            }
+            if (states.contains("upside_down_bit")) {
+                states.putByte("upside_down_bit", value == "top" ? 1 : 0);
+                return true;
+            }
+            if (states.contains("upper_block_bit")) {
+                states.putByte("upper_block_bit", value == "upper" ? 1 : 0);
+                return true;
+            }
+            return false;
+        }
+
+        if (key == "type") {
+            if (value == "double" || !states.contains("minecraft:vertical_half"))
+                return false;
+            states.putString("minecraft:vertical_half", value == "top" ? "top" : "bottom");
+            return true;
+        }
+
+        if (key == "shape") {
+            if (!states.contains("weirdo_direction"))
+                return false;
+            if (value != "straight" && value != "inner_left" && value != "inner_right" && value != "outer_left"
+                && value != "outer_right")
+                return false;
+            states.putString("minecraft:corner", value == "straight" ? "none" : value);
+            return true;
+        }
+
+        if (key == "open" || key == "in_wall") {
+            const char *bit = key == "open" ? "open_bit" : "in_wall_bit";
+            if (!states.contains(bit))
+                return false;
+            states.putByte(bit, value == "true" ? 1 : 0);
+            return true;
+        }
+
+        if (key == "lit") {
+            if (states.contains("lit")) {
+                states.putByte("lit", value == "true" ? 1 : 0);
+                return true;
+            }
+            if (states.contains("extinguished")) {
+                states.putByte("extinguished", value == "true" ? 0 : 1);
+                return true;
+            }
+            return false;
+        }
+
+        if (key == "hanging") {
+            if (!states.contains("hanging"))
+                return false;
+            states.putByte("hanging", value == "true" ? 1 : 0);
+            return true;
+        }
+
+        if (key == "moisture") {
+            if (!states.contains("moisturized_amount"))
+                return false;
+            states.putInt("moisturized_amount", std::atoi(value.c_str()));
+            return true;
+        }
+
+        if (key == "level") {
+            if (!states.contains("composter_fill_level"))
+                return false;
+            states.putInt("composter_fill_level", std::atoi(value.c_str()));
+            return true;
+        }
+
+        if (key == "age" || key == "growth") {
+            if (states.contains("growth")) {
+                states.putInt("growth", std::atoi(value.c_str()));
+                return true;
+            }
+            if (states.contains("age")) {
+                states.putInt("age", std::atoi(value.c_str()));
+                return true;
+            }
+            return false;
+        }
+
+        if (key == "facing") {
+            const std::string rotated = CARDINALS[(size_t) ((cardinalIndex(value) + quarterTurns) & 3)];
+            if (states.contains("minecraft:cardinal_direction")) {
+                states.putString("minecraft:cardinal_direction", rotated);
+                return true;
+            }
+            if (states.contains("weirdo_direction")) {
+                states.putInt("weirdo_direction", weirdoDirection(rotated));
+                return true;
+            }
+            if (states.contains("facing_direction")) {
+                states.putInt("facing_direction", sixFacing(value, quarterTurns));
+                return true;
+            }
+            // an int direction with its own basis (loom, bell, grindstone) needs its own case
+            return false;
+        }
+
+        return false;
+    }
+
+    // falls back to the block's default states and maps each template property onto them; the caller only
+    // places the block when every property is understood
+    bool translateGeneric(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, BlockState &out) {
+        std::string name = entry.mName;
+        const auto renamed = generalNames().find(name);
+        if (renamed != generalNames().end())
+            name = renamed->second;
+
+        const Tag *defaults = BlockPaletteRegistry::getInstance().getDefaultStates(name);
+        if (defaults == nullptr)
+            return false;
+
+        // doors, beds and neighbour-connected blocks carry a direction basis or a shape the game only works out
+        // on placement, so the generic path leaves them to their own case
+        if (defaults->contains("door_hinge_bit") || defaults->contains("head_piece_bit")
+            || defaults->contains("minecraft:connection_east") || defaults->contains("wall_connection_type_east"))
+            return false;
+
+        Tag states = *defaults;
+        for (const auto &kv : entry.mProperties)
+            if (!applyProperty(states, kv.first, kv.second, quarterTurns))
+                return false;
+
+        out = BlockState(name, states);
+        return true;
+    }
 }
 
 bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns,
@@ -270,5 +449,5 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
         return true;
     }
 
-    return false;
+    return translateGeneric(entry, quarterTurns, out);
 }
