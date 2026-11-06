@@ -12,7 +12,9 @@ public:
 
     std::vector<CommandOverloadData> getOverloads() const override;
 
-    CommandPermission getRequiredPermission() const override { return CommandPermission::GameDirectors; }
+    CommandPermission getRequiredPermission() const override {
+        return CommandPermission::GameDirectors;
+    }
 
 private:
     ServerNetworkHandler &mHandler;
