@@ -133,6 +133,24 @@ namespace {
         return 1;
     }
 
+    PlayerBossBars::Color bossBarColor(uint32_t color) {
+        return color > (uint32_t) PlayerBossBars::Color::White ? PlayerBossBars::Color::Purple
+                                                               : (PlayerBossBars::Color) color;
+    }
+
+    uint32_t playerAddBossBar(FalconPlayer *target, const char *title, float percent, uint32_t color) {
+        return player(target)->getBossBars().add(title == nullptr ? "" : title, percent, bossBarColor(color));
+    }
+
+    int playerUpdateBossBar(FalconPlayer *target, uint32_t bar, const char *title, float percent, uint32_t color) {
+        return player(target)->getBossBars().update(bar, title == nullptr ? "" : title, percent,
+                                                    bossBarColor(color)) ? 1 : 0;
+    }
+
+    int playerRemoveBossBar(FalconPlayer *target, uint32_t bar) {
+        return player(target)->getBossBars().remove(bar) ? 1 : 0;
+    }
+
     void playerKick(FalconPlayer *target, const char *reason) {
         const NetworkIdentifier id = player(target)->getNetworkIdentifier();
         const std::string text = reason == nullptr ? std::string() : std::string(reason);
@@ -226,6 +244,9 @@ void PluginServerApi::fillCore(FalconServerApi &api) {
     api.playerKick = &playerKick;
     api.playerSendForm = &playerSendForm;
     api.playerTransfer = &playerTransfer;
+    api.playerAddBossBar = &playerAddBossBar;
+    api.playerUpdateBossBar = &playerUpdateBossBar;
+    api.playerRemoveBossBar = &playerRemoveBossBar;
     api.broadcastMessage = &broadcastMessage;
     api.subscribe = &subscribe;
     api.unsubscribe = &unsubscribe;

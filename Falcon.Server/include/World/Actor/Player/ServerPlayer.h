@@ -20,6 +20,8 @@
 #include "Protocol/Types/SerializedSkin.h"
 #include "World/Actor/MobEffect.h"
 #include "World/Actor/Player/PlayerAcknowledgements.h"
+#include "Server/Debug/DebugHud.h"
+#include "World/Actor/Player/PlayerBossBars.h"
 #include "World/Actor/Player/PlayerRaidState.h"
 
 #include <chrono>
@@ -356,6 +358,14 @@ public:
     PacketSender *getPacketSender() const { return mSender; }
 
     void setEffectsNetworkReady(bool ready) { mEffectsNetworkReady = ready; }
+
+    PlayerBossBars &getBossBars() {
+        return mBossBars;
+    }
+
+    DebugHud &getDebugHud() {
+        return mDebugHud;
+    }
 
     PlayerRaidState &getRaidState() {
         return mRaidState;
@@ -796,6 +806,8 @@ private:
     PacketSender *mSender;
     bool mEffectsNetworkReady = false;
     PlayerRaidState mRaidState;
+    PlayerBossBars mBossBars;
+    DebugHud mDebugHud;
     std::unordered_map<std::string, int64_t> mItemCooldowns;
     int32_t mShieldTransitionTicks = 0;
     int32_t mShieldInterruptTicks = 0;

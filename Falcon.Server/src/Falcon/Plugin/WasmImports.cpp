@@ -398,6 +398,26 @@ namespace {
                     const bool read = call.string(1, address);
                     call.resultS32(read && target != nullptr && api().playerTransfer(target, address.c_str(), port) != 0);
                 }},
+                {"players", "player-add-boss-bar", "Iiifi:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string title;
+                    const bool read = call.string(1, title);
+                    const bool usable = finite(call, call.f32(3)) && read && target != nullptr;
+                    call.resultS32(usable ? (int32_t) api().playerAddBossBar(target, title.c_str(), call.f32(3),
+                                                                             call.u32(4)) : 0);
+                }},
+                {"players", "player-update-boss-bar", "Iiiifi:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string title;
+                    const bool read = call.string(2, title);
+                    const bool usable = finite(call, call.f32(4)) && read && target != nullptr;
+                    call.resultS32(usable && api().playerUpdateBossBar(target, call.u32(1), title.c_str(), call.f32(4),
+                                                                       call.u32(5)) != 0 ? 1 : 0);
+                }},
+                {"players", "player-remove-boss-bar", "Ii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS32(target != nullptr && api().playerRemoveBossBar(target, call.u32(1)) != 0 ? 1 : 0);
+                }},
                 {"players", "player-protocol-version", "I:i", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
                     call.resultS32(target == nullptr ? 0 : api().playerProtocolVersion(target));

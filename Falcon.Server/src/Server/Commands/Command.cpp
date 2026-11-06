@@ -1,5 +1,7 @@
 #include "Server/Commands/Command.h"
 
+#include "World/Actor/Player/ServerPlayer.h"
+
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
@@ -102,4 +104,14 @@ std::string Command::joinArguments(const std::vector<std::string> &arguments, si
         joined += arguments[index];
     }
     return joined;
+}
+
+std::string Command::joinPlayerNames(const std::vector<ServerPlayer *> &players) {
+    std::string names;
+    for (const ServerPlayer *player: players) {
+        if (!names.empty())
+            names += ", ";
+        names += player->getName();
+    }
+    return names;
 }

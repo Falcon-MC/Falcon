@@ -40,6 +40,9 @@
 #include "Server/Commands/SetMaxPlayersCommand.h"
 #include "Server/Commands/SetWorldSpawnCommand.h"
 #include "Server/Commands/SpawnPointCommand.h"
+#include "Server/Commands/AimAssistCommand.h"
+#include "Server/Commands/CameraShakeCommand.h"
+#include "Server/Commands/DebugHudCommand.h"
 #include "Server/Commands/StatusCommand.h"
 #include "Server/Commands/StopCommand.h"
 #include "Server/Commands/StopSoundCommand.h"
@@ -267,6 +270,9 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<SaveCommand>(*this, SaveCommand::Mode::On));
     mCommands.registerCommand(std::make_shared<SaveCommand>(*this, SaveCommand::Mode::Off));
     mCommands.registerCommand(std::make_shared<StatusCommand>(*this));
+    mCommands.registerCommand(std::make_shared<DebugHudCommand>(*this));
+    mCommands.registerCommand(std::make_shared<CameraShakeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<AimAssistCommand>(*this));
     mCommands.registerCommand(std::make_shared<TransferCommand>(*this));
     mCommands.registerCommand(std::make_shared<PlaySoundCommand>(*this));
     mCommands.registerCommand(std::make_shared<StopSoundCommand>(*this));
