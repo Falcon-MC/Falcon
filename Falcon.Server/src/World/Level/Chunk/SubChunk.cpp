@@ -408,25 +408,30 @@ bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<const Bloc
                            PaletteIndices &blocks, bool *replacedUnknown) {
     const unsigned char header = stream.getByte();
     const int bitsPerBlock = header >> 1;
-    if (bitsPerBlock <= 0 || bitsPerBlock > 16)
+    if (bitsPerBlock < 0 || bitsPerBlock > 16)
         return false;
-
-    const int blocksPerWord = 32 / bitsPerBlock;
-    const int wordCount = (BLOCK_COUNT + blocksPerWord - 1) / blocksPerWord;
-    const uint32_t mask = bitsPerBlock == 32 ? 0xffffffffu : ((1u << bitsPerBlock) - 1u);
 
     blocks.assign(BLOCK_COUNT, 0);
 
-    int blockIndex = 0;
-    for (int word = 0; word < wordCount; word++) {
-        const uint32_t packed = stream.getLInt();
-        for (int slot = 0; slot < blocksPerWord && blockIndex < BLOCK_COUNT; slot++) {
-            blocks.set(blockIndex, (uint16_t) ((packed >> (slot * bitsPerBlock)) & mask));
-            blockIndex++;
+    // the game saves a section holding a single block with no indices and no palette size
+    uint32_t paletteSize = 1;
+    if (bitsPerBlock > 0) {
+        const int blocksPerWord = 32 / bitsPerBlock;
+        const int wordCount = (BLOCK_COUNT + blocksPerWord - 1) / blocksPerWord;
+        const uint32_t mask = (1u << bitsPerBlock) - 1u;
+
+        int blockIndex = 0;
+        for (int word = 0; word < wordCount; word++) {
+            const uint32_t packed = stream.getLInt();
+            for (int slot = 0; slot < blocksPerWord && blockIndex < BLOCK_COUNT; slot++) {
+                blocks.set(blockIndex, (uint16_t) ((packed >> (slot * bitsPerBlock)) & mask));
+                blockIndex++;
+            }
         }
+
+        paletteSize = stream.getLInt();
     }
 
-    const uint32_t paletteSize = stream.getLInt();
     if (paletteSize == 0 || paletteSize > BLOCK_COUNT)
         return false;
 
