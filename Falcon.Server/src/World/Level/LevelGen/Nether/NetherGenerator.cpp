@@ -3,6 +3,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Nether/Biome/VanillaNetherBiomeSource.h"
 #include "World/Level/LevelGen/Nether/Feature/NetherFeatureBuilder.h"
+#include "World/Level/LevelGen/Nether/NetherCarvers.h"
 #include "World/Level/LevelGen/Nether/Surface/NetherSurfaceBuilder.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
@@ -41,6 +42,8 @@ NetherGenerator::NetherGenerator(int64_t seed)
     const NetherTerrainNoises &noises = mNoiseHolder->getTerrainNoises();
     mSurfaceBuilder = std::make_unique<NetherSurfaceBuilder>((uint32_t) seed, noises.getDepthNoise(),
                                                              noises.getAdjustmentNoise());
+
+    mCarvers = std::make_unique<NetherCarvers>(seed);
 
     NetherNoiseHolder::setInstance(mNoiseHolder.get());
 }
@@ -165,6 +168,8 @@ void NetherGenerator::generate(LevelChunk &chunk) const {
     _generateTerrain(chunk);
 
     mSurfaceBuilder->apply(chunk);
+
+    mCarvers->carve(chunk);
 
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++) {

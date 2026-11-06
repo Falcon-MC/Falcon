@@ -8,6 +8,7 @@
 #include <memory>
 
 class LevelChunk;
+class NetherCarvers;
 class NetherSurfaceBuilder;
 class VanillaNetherBiomeSource;
 
@@ -47,4 +48,5 @@ private:
     std::unique_ptr<NetherNoiseHolder> mNoiseHolder;
     std::unique_ptr<VanillaNetherBiomeSource> mBiomeSource;
     std::unique_ptr<NetherSurfaceBuilder> mSurfaceBuilder;
+    std::unique_ptr<NetherCarvers> mCarvers;
 };
