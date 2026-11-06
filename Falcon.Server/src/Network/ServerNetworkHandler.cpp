@@ -913,6 +913,7 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
     mRateLimiters.erase(id);
 
     ServerPlayer *player = _getPlayer(id);
+    World *playerWorld = player != nullptr ? &getWorldFor(*player) : nullptr;
     const std::string playerName = player != nullptr && !player->getName().empty()
                                    ? player->getName()
                                    : id.toString();
@@ -942,6 +943,9 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
 
     mModalFormCallbacks.erase(id);
     erasePlayer(id);
+    // an awake player leaving can bring the remaining sleepers up to the threshold.
+    if (playerWorld != nullptr)
+        _updateSleepingPlayerList(*playerWorld);
     LOG_INFO(LogAreaID::Network, "%s disconnected, reason: %s", playerName.c_str(), toString(reason));
 }
 
