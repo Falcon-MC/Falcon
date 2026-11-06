@@ -48,7 +48,7 @@ namespace {
             return choice;
 
         choice.mShaftPieces = FeatureRandom::nextInt(random, SHAFT_PIECE_RANGE) + SHAFT_MIN_PIECES;
-        // measured, not located in the code: one draw goes by while the bottom piece is placed
+        // placing a chest draws a loot seed of its own (sub_14775E430), which the marker of the piece then replaces
         random();
         choice.mLootSeed = FeatureRandom::nextInt(random);
         return choice;

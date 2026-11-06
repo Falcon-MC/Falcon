@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <random>
 #include <string>
 #include <vector>
@@ -57,7 +58,7 @@ protected:
 
     // true when the biomes sampled every four blocks in the cube of the given radius around the block pass the filter
     static bool _hasOnlyBiomes(const ChunkGenerator &generator, int32_t blockX, int32_t blockY, int32_t blockZ,
-                               int32_t radius, bool (*filter)(int32_t biomeId));
+                               int32_t radius, const std::function<bool(int32_t biomeId)> &filter);
 
 private:
     static std::vector<const StructureFeature *> &_registry();

@@ -16,6 +16,7 @@ namespace BiomeIds {
     static constexpr int32_t FROZEN_RIVER = 11;
     static constexpr int32_t ICE_PLAINS = 12;
     static constexpr int32_t MUSHROOM_ISLAND = 14;
+    static constexpr int32_t MUSHROOM_ISLAND_SHORE = 15;
     static constexpr int32_t BEACH = 16;
     static constexpr int32_t DESERT_HILLS = 17;
     static constexpr int32_t JUNGLE = 21;

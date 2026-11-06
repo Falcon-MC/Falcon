@@ -35,17 +35,24 @@ int32_t ChunkGenerator::getPreliminaryLowestHeight(int32_t chunkX, int32_t chunk
     return getPreliminaryHeight(chunkX * 16, chunkZ * 16);
 }
 
-int32_t ChunkGenerator::getGeneratedSolidHeight(int32_t x, int32_t z) const {
+std::unique_ptr<LevelChunk> ChunkGenerator::generateTerrain(int32_t chunkX, int32_t chunkZ) const {
+    auto chunk = std::make_unique<LevelChunk>(chunkX, chunkZ);
+    chunk->setDimension(getDimensionType());
+    generate(*chunk);
+    return chunk;
+}
+
+int32_t ChunkGenerator::solidHeight(const LevelChunk &chunk, int32_t localX, int32_t localZ) {
     static const BlockStateSet SKIPPED{"minecraft:air", "minecraft:water", "minecraft:flowing_water",
                                        "minecraft:lava", "minecraft:flowing_lava", "minecraft:snow_layer"};
 
-    LevelChunk chunk(x >> 4, z >> 4);
-    chunk.setDimension(getDimensionType());
-    generate(chunk);
-
     int32_t y = LevelChunk::MAX_Y;
-    while (y >= LevelChunk::MIN_Y && SKIPPED.contains(chunk.getBlock(x & 15, y, z & 15)))
+    while (y >= LevelChunk::MIN_Y && SKIPPED.contains(chunk.getBlock(localX, y, localZ)))
         y--;
 
     return y + 1;
+}
+
+int32_t ChunkGenerator::getGeneratedSolidHeight(int32_t x, int32_t z) const {
+    return solidHeight(*generateTerrain(x >> 4, z >> 4), x & 15, z & 15);
 }

@@ -5,6 +5,7 @@
 #include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldFeatureBuilder.h"
 #include "World/Level/LevelGen/Structure/IglooStructure.h"
+#include "World/Level/LevelGen/Structure/ShipwreckStructure.h"
 #include "World/Level/LevelGen/Feature/FeatureNoiseHolder.h"
 #include "World/Level/LevelGen/Overworld/Surface/OverworldSurfaceBuilder.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldAquifer.h"
@@ -111,6 +112,7 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk,
                                  std::vector<GeneratedBlockChange> *overflow) const {
     // structures go first: the game post processes them before any feature runs
     IglooStructure::place(*this, level, chunk);
+    ShipwreckStructure::place(*this, level, chunk);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }
 

@@ -127,7 +127,7 @@ bool StructureFeature::findNearest(const ChunkGenerator &generator, int32_t bloc
 }
 
 bool StructureFeature::_hasOnlyBiomes(const ChunkGenerator &generator, int32_t blockX, int32_t blockY, int32_t blockZ,
-                                      int32_t radius, bool (*filter)(int32_t biomeId)) {
+                                      int32_t radius, const std::function<bool(int32_t biomeId)> &filter) {
     // the volume is walked one biome cell at a time from its low corner, so the far faces are not always reached
     const int32_t minY = std::max(blockY - radius, LevelChunk::MIN_Y);
     const int32_t maxY = std::min(blockY + radius, LevelChunk::MAX_Y);
