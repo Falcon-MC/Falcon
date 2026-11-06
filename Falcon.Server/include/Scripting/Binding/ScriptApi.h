@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Math/Vector3i.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "Protocol/Types/ItemStack.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
@@ -116,11 +117,18 @@ public:
 
     void emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, int32_t z);
 
+    void emitBlockInteract(ServerPlayer &player, const std::string &blockId, const Vector3i &position);
+
     void emitWorldInitialize();
 
     void emitWorldLoad();
 
     void fireHeldItemComponents(ServerPlayer &player, const char *hook, JSValue event);
+
+    void fireBlockComponents(const std::string &blockId, const char *hook, JSValue event);
+
+    void _fireComponents(const char *dispatcher, const std::vector<std::string> *components, const char *hook,
+                         JSValue event);
 
     JSValue moduleWorld() const { return mWorld; }
 

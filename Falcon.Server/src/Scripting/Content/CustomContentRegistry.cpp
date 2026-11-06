@@ -693,6 +693,14 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
 
         const json::Value *components = block->get("components");
         if (components != nullptr && components->isObject()) {
+            const json::Value *customComponents = components->get("minecraft:custom_components");
+            if (customComponents != nullptr && customComponents->isArray()) {
+                for (const std::unique_ptr<json::Value> &entry: customComponents->mArray) {
+                    if (entry->isString())
+                        definition.mCustomComponents.push_back(entry->string());
+                }
+            }
+
             const json::Value *destructible = components->get("minecraft:destructible_by_mining");
             if (destructible != nullptr && destructible->isObject() &&
                 destructible->get("seconds_to_destroy") != nullptr) {
