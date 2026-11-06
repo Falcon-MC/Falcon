@@ -23,8 +23,10 @@ public:
     static void apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate &climate,
                       uint32_t levelSeed, const std::vector<int32_t> &biomes);
 
-    // every pass of one biome's rules, for the generators without a climate that decorate with a single biome
-    static void applyBiome(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed, int32_t biome);
+    // every pass of one biome's rules, for the generators without a climate that decorate with a single biome; the
+    // rules' math.random draws from that generator's decoration random, which its decoration goes on with
+    static void applyBiome(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed, int32_t biome,
+                           std::mt19937 &decoration);
 
     /**
      * Draws the rules of one biome from the random a generator's own decoration goes on with afterwards, without
@@ -122,7 +124,7 @@ private:
     static Feature _find(const BiomeFeatureEntry &entry);
 
     static void _apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate *climate,
-                       uint32_t levelSeed, const std::vector<int32_t> &biomes);
+                       uint32_t levelSeed, const std::vector<int32_t> &biomes, std::mt19937 *decoration);
 
     static void _drawUnported(BlockManager &blocks, const LevelChunk &chunk, const BiomeFeatureEntry &entry,
                               uint32_t decorationSeed);

@@ -1256,16 +1256,17 @@ bool OverworldRulePlacer::handles(const BiomeFeatureEntry &entry) {
 
 void OverworldRulePlacer::apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate &climate,
                                uint32_t levelSeed, const std::vector<int32_t> &biomes) {
-    _apply(blocks, chunk, &climate, levelSeed, biomes);
+    _apply(blocks, chunk, &climate, levelSeed, biomes, nullptr);
 }
 
 void OverworldRulePlacer::applyBiome(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed,
-                                     int32_t biome) {
-    _apply(blocks, chunk, nullptr, levelSeed, {biome});
+                                     int32_t biome, std::mt19937 &decoration) {
+    _apply(blocks, chunk, nullptr, levelSeed, {biome}, &decoration);
 }
 
 void OverworldRulePlacer::_apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate *climate,
-                                 uint32_t levelSeed, const std::vector<int32_t> &biomes) {
+                                 uint32_t levelSeed, const std::vector<int32_t> &biomes,
+                                 std::mt19937 *decoration) {
     // the decoration seed of sub_14CDD4880, from the level seed and the chunk position
     std::mt19937 random(levelSeed);
     const uint32_t multiplierX = (random() >> 1) | 1u;
@@ -1273,8 +1274,8 @@ void OverworldRulePlacer::_apply(BlockManager &blocks, const LevelChunk &chunk, 
     const uint32_t decorationSeed = (multiplierZ * static_cast<uint32_t>(chunk.getZ())
                                      + multiplierX * static_cast<uint32_t>(chunk.getX())) ^ levelSeed;
 
-    std::mt19937 decoration(decorationSeed);
-    placementContext.mDecoration = &decoration;
+    std::mt19937 ownDecoration(decorationSeed);
+    placementContext.mDecoration = decoration != nullptr ? decoration : &ownDecoration;
     placementContext.mClimate = climate;
 
     // sub_14CDDF960, sub_14A22E1E0, sub_14A22E470: each pass, every biome of the chunk, then its rules in order
