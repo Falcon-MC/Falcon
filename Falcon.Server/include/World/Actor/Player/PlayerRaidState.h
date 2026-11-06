@@ -28,6 +28,10 @@ public:
 
     void tick(ServerNetworkHandler &owner, ServerPlayer &player);
 
+    bool isBossBarShown() const {
+        return mBarSent;
+    }
+
 private:
     void _tickBadOmen(ServerNetworkHandler &owner, ServerPlayer &player);
 
