@@ -65,7 +65,7 @@ public:
     std::vector<int64_t> mActiveCenters;
     int mActiveTickDistance = -1;
     bool mActorPersistencePending = true;
-    int32_t mSleepTicks = 0;
+    bool mEnoughPlayersSleeping = false;
 
 private:
     uint32_t mId;

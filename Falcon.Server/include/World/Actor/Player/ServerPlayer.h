@@ -444,6 +444,19 @@ public:
         mSleeping = false;
     }
 
+    void resetSleepCounter() {
+        mSleepCounter = 0;
+    }
+
+    void tickSleepCounter() {
+        if (mSleepCounter < DEEP_SLEEP_TICKS)
+            mSleepCounter++;
+    }
+
+    bool isSleepingLongEnough() const {
+        return mSleepCounter >= DEEP_SLEEP_TICKS;
+    }
+
     bool hasSpawnPoint() const {
         return mHasSpawnPoint;
     }
@@ -697,7 +710,10 @@ private:
     ChunkStreamState mChunkStreamState;
     bool mAwaitingDimensionAck = false;
     bool mPendingDimensionHop = false;
+    static constexpr int32_t DEEP_SLEEP_TICKS = 100;
+
     bool mSleeping = false;
+    int32_t mSleepCounter = 0;
     Vector3i mSleepingPosition;
     bool mHasSpawnPoint = false;
     Vector3i mSpawnPoint;

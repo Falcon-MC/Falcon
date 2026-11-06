@@ -495,6 +495,8 @@ public:
 
     void wakeSleepersAt(const Vector3i &head);
 
+    static int32_t getRequiredSleepers(int32_t players, int32_t percentage);
+
     void setAllowListEnabled(bool enabled);
 
     void kickNotAllowListedPlayers();
@@ -788,6 +790,8 @@ private:
     void _respawnPlayer(ServerPlayer &player);
 
     Vector3f _respawnPositionFor(ServerPlayer &player);
+
+    void _updateSleepingPlayerList(World &world);
 
     void _tickSleep();
 

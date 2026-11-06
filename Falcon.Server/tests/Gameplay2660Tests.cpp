@@ -1,3 +1,4 @@
+#include "Network/ServerNetworkHandler.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/VanillaActorTable.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
@@ -42,6 +43,14 @@ namespace {
         const Block *value = VanillaBlocks::fromIdentifier(name);
         require(value != nullptr, "missing block registration");
         return value->toBlockState();
+    }
+
+    void sleepThreshold() {
+        require(ServerNetworkHandler::getRequiredSleepers(1, 100) == 1, "lone player must be enough");
+        require(ServerNetworkHandler::getRequiredSleepers(2, 50) == 1, "half of two players is one");
+        require(ServerNetworkHandler::getRequiredSleepers(3, 50) == 2, "required sleepers must round up");
+        require(ServerNetworkHandler::getRequiredSleepers(4, 100) == 4, "everyone must sleep at 100 percent");
+        require(ServerNetworkHandler::getRequiredSleepers(4, 0) == 1, "at least one sleeper is always required");
     }
 
     void freezing() {
@@ -278,6 +287,7 @@ int main() {
         migration();
         gameplay();
         freezing();
+        sleepThreshold();
         std::cout << "26.60 migration and gameplay regressions passed\n";
         return 0;
     } catch (const std::exception &error) {

@@ -271,9 +271,12 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
     }
 
     Level &previous = getLevelFor(player);
+    World &previousWorld = getWorldFor(player);
     previous.unregisterAllChunkLoaders(player.getRuntimeId());
 
     player.moveToLevel(destinationLevel);
+    // an awake player leaving the overworld can bring the remaining sleepers up to the threshold.
+    _updateSleepingPlayerList(previousWorld);
     player.getVisibleActors().clear();
     player.getVisiblePlayers().clear();
     player.setAwaitingDimensionAck(true);
