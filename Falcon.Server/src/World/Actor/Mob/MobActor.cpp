@@ -34,6 +34,12 @@
 #include <random>
 
 namespace {
+    const float FALL_BLOCK_PROBE_DEPTH = 0.2f;
+    const float FALL_BIG_DAMAGE = 4.0f;
+    const char *const FALL_SOUND = "fall";
+    const char *const FALL_BIG_SOUND = "fall.big";
+    const char *const FALL_SMALL_SOUND = "fall.small";
+
     struct InteractParticle {
         const char *mType;
         const char *mEffect;
@@ -610,6 +616,35 @@ bool MobActor::canSee(ServerNetworkHandler &owner, const Actor &other) const {
     return !Explosion::isRayCollidingWithBlocks(owner.getLevelFor(*this), from.x,
                                                 from.y + getSize().mHeight * mScale * SIGHT_EYE_RATIO, from.z, to.x,
                                                 to.y + otherEyes, to.z, SIGHT_STEP);
+}
+
+void MobActor::causeFallDamage(ServerNetworkHandler &owner, float distance) {
+    Level &level = owner.getLevelFor(*this);
+    const Vector3f position = getPosition();
+    // the game takes the landing block a little under the feet rather than at them
+    const Vector3f below(position.x, position.y - FALL_BLOCK_PROBE_DEPTH, position.z);
+    const BlockState *landedOn = level.peekBlockPtr((int32_t) std::floor(below.x), (int32_t) std::floor(below.y),
+                                                    (int32_t) std::floor(below.z));
+
+    float damage = computeFallDamage(distance);
+
+    const Block *block = landedOn == nullptr ? nullptr : VanillaBlocks::fromIdentifier(landedOn->mName);
+    if (block != nullptr) {
+        const std::optional<float> blockDamage = block->getFallDamage(*this, damage);
+        if (blockDamage.has_value())
+            damage = *blockDamage;
+    }
+
+    if (damage <= 0.0f)
+        return;
+
+    if (!hurt(owner, damage, ActorDamageSource::environment("death.fell.accident.generic", getName())))
+        return;
+
+    owner.playLevelSound(level, damage > FALL_BIG_DAMAGE ? FALL_BIG_SOUND : FALL_SMALL_SOUND, position, getIdentifier());
+    if (landedOn != nullptr)
+        owner.playBlockSound(level, FALL_SOUND, position, BlockStateHasher::hash(landedOn->mName, landedOn->mStates),
+                             getIdentifier());
 }
 
 bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {

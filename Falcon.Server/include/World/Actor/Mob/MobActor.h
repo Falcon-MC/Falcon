@@ -115,6 +115,8 @@ public:
 
     bool senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) override;
 
+    void causeFallDamage(ServerNetworkHandler &owner, float distance) override;
+
     float absorbDamage(float amount, const ActorDamageSource &source) const override {
         return mEquipment.absorbDamage(amount, source);
     }

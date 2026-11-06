@@ -64,8 +64,7 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
     }
 
     float landingFallDistance = 0.0f;
-    const float fallDamage = PostMoveTravelVelocitySystem::apply(actor, physics, box, motion, result, feet,
-                                                                 landingFallDistance);
+    PostMoveTravelVelocitySystem::apply(actor, physics, box, motion, result, feet, landingFallDistance);
     actor.setHorizontalCollision(result.mCollidedX || result.mCollidedZ);
 
     if (physics.mGravityAfterMove && !isStuck) {
@@ -90,8 +89,8 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
 
     BlockContactSystem::land(owner, actor, landingFallDistance);
 
-    if (fallDamage > 0.0f)
-        actor.hurt(owner, fallDamage, ActorDamageSource::environment("death.fell.accident.generic", actor.getName()));
+    if (landingFallDistance > 0.0f)
+        actor.causeFallDamage(owner, landingFallDistance);
 }
 
 const Block *ActorMovementSystem::_blockAt(Level &level, const Vector3f &position) {

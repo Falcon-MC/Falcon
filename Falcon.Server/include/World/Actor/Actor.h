@@ -307,7 +307,7 @@ public:
 
     float getMovementSpeedMultiplier() const { return mEffects.movementSpeedMultiplier(); }
 
-    float computeFallDamage() const;
+    float computeFallDamage(float distance) const;
 
 protected:
     void _changeFood(float food);

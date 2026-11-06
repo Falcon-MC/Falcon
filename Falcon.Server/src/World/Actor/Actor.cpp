@@ -515,11 +515,10 @@ float Actor::heal(float amount) {
     return getHealth();
 }
 
-float Actor::computeFallDamage() const {
+float Actor::computeFallDamage(float distance) const {
     if (hasEffect(MobEffectId::SlowFalling))
         return 0.0f;
 
-    const float distance = getFallDistance();
     const MobEffectInstance *jumpBoost = getEffect(MobEffectId::JumpBoost);
     const float jumpBoostLevel = jumpBoost == nullptr ? 0.0f : (float) jumpBoost->level();
     const float damage = std::ceil(distance - FALL_DAMAGE_THRESHOLD - jumpBoostLevel);
