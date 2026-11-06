@@ -62,7 +62,13 @@ void PlayerBossBars::tick(ServerNetworkHandler &owner, ServerPlayer &player) {
         }
     }
 
-    if (!hasBar || player.getRaidState().isBossBarShown()) {
+    if (player.getRaidState().isBossBarShown()) {
+        // the raid's create for the same actor already replaced this bar, so a remove would delete the raid bar
+        mShown = false;
+        return;
+    }
+
+    if (!hasBar) {
         if (mShown)
             _send(owner, player, BossEventPacket::Action::Remove, mDisplayed);
         mShown = false;
