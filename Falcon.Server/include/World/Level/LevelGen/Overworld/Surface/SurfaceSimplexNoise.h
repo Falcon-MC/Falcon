@@ -16,6 +16,9 @@ public:
 
     float getValue(float x, float y) const;
 
+    // the 3D form reads the position as it is, without the octave's offsets (sub_145C2DCF0)
+    float getValue3D(float x, float y, float z) const;
+
     float getOffsetX() const {
         return mOffsetX;
     }

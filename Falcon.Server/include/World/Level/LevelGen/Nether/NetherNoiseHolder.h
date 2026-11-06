@@ -1,25 +1,17 @@
 #pragma once
 
 #include "World/Level/LevelGen/End/Noise/TheEndOctaveNoise.h"
+#include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
 #include "World/Level/LevelGen/Random/IRandom.h"
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 class NetherTerrainNoises {
 public:
-    NetherTerrainNoises(IRandom &random, uint32_t seed);
-
-    const NormalNoisePtr &getSurfaceNoise() const { return mSurfaceNoise; }
-
-    const NormalNoisePtr &getPatchNoise() const { return mPatchNoise; }
-
-    const NormalNoisePtr &getSoulsandNoise() const { return mSoulsandNoise; }
-
-    const NormalNoisePtr &getNetherStateNoise() const { return mNetherStateNoise; }
-
-    const NormalNoisePtr &getNetherwartNoise() const { return mNetherwartNoise; }
+    explicit NetherTerrainNoises(uint32_t seed);
 
     const TheEndOctaveNoise &getMinLimitNoise() const { return *mMinLimitNoise; }
 
@@ -27,15 +19,16 @@ public:
 
     const TheEndOctaveNoise &getMainNoise() const { return *mMainNoise; }
 
+    const std::vector<SurfaceSimplexNoise> &getDepthNoise() const { return mDepthNoise; }
+
+    const std::vector<SurfaceSimplexNoise> &getAdjustmentNoise() const { return mAdjustmentNoise; }
+
 private:
-    NormalNoisePtr mSurfaceNoise;
-    NormalNoisePtr mPatchNoise;
-    NormalNoisePtr mSoulsandNoise;
-    NormalNoisePtr mNetherStateNoise;
-    NormalNoisePtr mNetherwartNoise;
     std::unique_ptr<TheEndOctaveNoise> mMinLimitNoise;
     std::unique_ptr<TheEndOctaveNoise> mMaxLimitNoise;
     std::unique_ptr<TheEndOctaveNoise> mMainNoise;
+    std::vector<SurfaceSimplexNoise> mDepthNoise;
+    std::vector<SurfaceSimplexNoise> mAdjustmentNoise;
 };
 
 class NetherDeltaNoises {

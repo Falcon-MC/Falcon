@@ -3,8 +3,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Nether/Biome/VanillaNetherBiomeSource.h"
 #include "World/Level/LevelGen/Nether/Feature/NetherFeatureBuilder.h"
-#include "World/Level/LevelGen/Nether/NetherBiomeIds.h"
-#include "World/Level/LevelGen/Random/SimpleRandom.h"
+#include "World/Level/LevelGen/Nether/Surface/NetherSurfaceBuilder.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
 
@@ -19,58 +18,8 @@ namespace {
     const float MAIN_XZ_SCALE = 0x1.11c3cap+3f;
     const float MAIN_Y_SCALE = 0x1.11c3c8p+5f;
 
-    const BlockState &bedrockState() {
-        static const BlockState state = VanillaBlocks::BEDROCK().toBlockState();
-        return state;
-    }
-
     const BlockState &netherrackState() {
         static const BlockState state = VanillaBlocks::NETHERRACK().toBlockState();
-        return state;
-    }
-
-    const BlockState &basaltState() {
-        static const BlockState state = VanillaBlocks::BASALT().toBlockState();
-        return state;
-    }
-
-    const BlockState &blackstoneState() {
-        static const BlockState state = VanillaBlocks::BLACKSTONE().toBlockState();
-        return state;
-    }
-
-    const BlockState &gravelState() {
-        static const BlockState state = VanillaBlocks::GRAVEL().toBlockState();
-        return state;
-    }
-
-    const BlockState &soulSandState() {
-        static const BlockState state = VanillaBlocks::SOUL_SAND().toBlockState();
-        return state;
-    }
-
-    const BlockState &soulSoilState() {
-        static const BlockState state = VanillaBlocks::SOUL_SOIL().toBlockState();
-        return state;
-    }
-
-    const BlockState &warpedWartState() {
-        static const BlockState state = VanillaBlocks::WARPED_WART_BLOCK().toBlockState();
-        return state;
-    }
-
-    const BlockState &warpedNyliumState() {
-        static const BlockState state = VanillaBlocks::WARPED_NYLIUM().toBlockState();
-        return state;
-    }
-
-    const BlockState &netherWartBlockState() {
-        static const BlockState state = VanillaBlocks::NETHER_WART_BLOCK().toBlockState();
-        return state;
-    }
-
-    const BlockState &crimsonNyliumState() {
-        static const BlockState state = VanillaBlocks::CRIMSON_NYLIUM().toBlockState();
         return state;
     }
 
@@ -82,52 +31,16 @@ namespace {
     bool isAirState(const BlockState &state) {
         return state.mName == "minecraft:air";
     }
-
-    bool isNetherrack(const BlockState &state) {
-        return state.mName == "minecraft:netherrack";
-    }
-
-    int32_t clampInt(int32_t value, int32_t min, int32_t max) {
-        if (value < min)
-            return min;
-
-        if (value > max)
-            return max;
-
-        return value;
-    }
-
-    bool isTop(const LevelChunk &chunk, int32_t x, int32_t y, int32_t z) {
-        for (int32_t i = 0; i < 5; i++) {
-            const int32_t sampleY = y + i;
-            if (clampInt(sampleY, 1, 127) != sampleY)
-                continue;
-
-            if (isAirState(chunk.getBlock(x, sampleY, z)))
-                return true;
-        }
-
-        return false;
-    }
-
-    bool isCeil(const LevelChunk &chunk, int32_t x, int32_t y, int32_t z) {
-        for (int32_t i = 0; i < 5; i++) {
-            const int32_t sampleY = y - i;
-            if (clampInt(sampleY, 1, 127) != sampleY)
-                continue;
-
-            if (isAirState(chunk.getBlock(x, sampleY, z)))
-                return true;
-        }
-
-        return false;
-    }
 }
 
 NetherGenerator::NetherGenerator(int64_t seed)
         : mSeed(seed), mAirHash(BlockStateHasher::hash("minecraft:air")) {
     mNoiseHolder = std::make_unique<NetherNoiseHolder>(seed);
     mBiomeSource = std::make_unique<VanillaNetherBiomeSource>(seed);
+
+    const NetherTerrainNoises &noises = mNoiseHolder->getTerrainNoises();
+    mSurfaceBuilder = std::make_unique<NetherSurfaceBuilder>((uint32_t) seed, noises.getDepthNoise(),
+                                                             noises.getAdjustmentNoise());
 
     NetherNoiseHolder::setInstance(mNoiseHolder.get());
 }
@@ -246,125 +159,12 @@ void NetherGenerator::_generateTerrain(LevelChunk &chunk) const {
     }
 }
 
-void NetherGenerator::_applySurface(LevelChunk &chunk) const {
-    const NetherTerrainNoises &terrain = mNoiseHolder->getTerrainNoises();
-    const NormalNoisePtr &netherStateNoise = terrain.getNetherStateNoise();
-    const NormalNoisePtr &patchNoise = terrain.getPatchNoise();
-    const NormalNoisePtr &netherwartNoise = terrain.getNetherwartNoise();
-    const NormalNoisePtr &soulsandNoise = terrain.getSoulsandNoise();
-
-    const int32_t chunkBaseX = chunk.getX() << 4;
-    const int32_t chunkBaseZ = chunk.getZ() << 4;
-
-    SimpleRandom random(mSeed ^ chunkHash(chunk.getX(), chunk.getZ()));
-
-    for (int32_t x = 0; x < 16; x++) {
-        for (int32_t z = 0; z < 16; z++) {
-            const int32_t worldX = chunkBaseX + x;
-            const int32_t worldZ = chunkBaseZ + z;
-            const int32_t biomeId = (int32_t) chunk.getBiomeAt(x, 0, z);
-
-            chunk.setBlock(x, 0, z, bedrockState());
-            chunk.setBlock(x, 126, z, netherrackState());
-            chunk.setBlock(x, 127, z, bedrockState());
-
-            for (int32_t y = 1; y < 127; y++) {
-                if (biomeId == NetherBiomeIds::BASALT_DELTAS) {
-                    if (!isNetherrack(chunk.getBlock(x, y, z)))
-                        continue;
-
-                    if (isCeil(chunk, x, y, z)) {
-                        chunk.setBlock(x, y, z, basaltState());
-                        continue;
-                    }
-
-                    if (isAirState(chunk.getBlock(x, y + 1, z))
-                        && (netherStateNoise->getValue(worldX, y, worldZ) >= 0.0f
-                            || (y <= 35 && y >= 30 && patchNoise->getValue(worldX, y, worldZ) >= -0.012f))) {
-                        chunk.setBlock(x, y, z, gravelState());
-                        continue;
-                    }
-
-                    if (isTop(chunk, x, y, z) || isCeil(chunk, x, y, z))
-                        chunk.setBlock(x, y, z, blackstoneState());
-
-                    continue;
-                }
-
-                if (biomeId == NetherBiomeIds::SOULSAND_VALLEY) {
-                    if (!isNetherrack(chunk.getBlock(x, y, z)))
-                        continue;
-
-                    if (isCeil(chunk, x, y, z)) {
-                        chunk.setBlock(x, y, z, netherStateNoise->getValue(worldX, y, worldZ) >= 0.0f
-                                                ? soulSandState() : soulSoilState());
-                        continue;
-                    }
-
-                    if (isTop(chunk, x, y, z)) {
-                        if (netherStateNoise->getValue(worldX, y, worldZ) >= 0.0f
-                            || (y <= 35 && y >= 30 && patchNoise->getValue(worldX, y, worldZ) >= -0.012f))
-                            chunk.setBlock(x, y, z, soulSandState());
-                        else
-                            chunk.setBlock(x, y, z, soulSoilState());
-                    }
-
-                    continue;
-                }
-
-                if (biomeId == NetherBiomeIds::WARPED_FOREST) {
-                    if (isNetherrack(chunk.getBlock(x, y, z))
-                        && isAirState(chunk.getBlock(x, y + 1, z))
-                        && y > 31
-                        && netherStateNoise->getValue(worldX, y, worldZ) <= 0.0f) {
-                        chunk.setBlock(x, y, z, netherwartNoise->getValue(worldX, y, worldZ) >= 1.17f
-                                                ? warpedWartState() : warpedNyliumState());
-                    }
-
-                    continue;
-                }
-
-                if (biomeId == NetherBiomeIds::CRIMSON_FOREST) {
-                    if (isNetherrack(chunk.getBlock(x, y, z))
-                        && isAirState(chunk.getBlock(x, y + 1, z))
-                        && y > 31
-                        && netherStateNoise->getValue(worldX, y, worldZ) <= 0.54f) {
-                        chunk.setBlock(x, y, z, netherwartNoise->getValue(worldX, y, worldZ) >= 1.17f
-                                                ? netherWartBlockState() : crimsonNyliumState());
-                    }
-
-                    continue;
-                }
-
-                if (biomeId == NetherBiomeIds::HELL) {
-                    if (!isNetherrack(chunk.getBlock(x, y, z)) || !isTop(chunk, x, y, z))
-                        continue;
-
-                    if (y > 31 && y < 35 && soulsandNoise->getValue(worldX, y, worldZ) >= -0.012f) {
-                        chunk.setBlock(x, y, z, gravelState());
-                        continue;
-                    }
-
-                    if (y <= 35 && y >= 30 && soulsandNoise->getValue(worldX, y, worldZ) >= -0.012f)
-                        chunk.setBlock(x, y, z, soulSandState());
-                }
-            }
-
-            for (int32_t i = 0; i < random.nextBoundedInt(6); i++) {
-                if (isNetherrack(chunk.getBlock(x, 126 - i, z))
-                    && !isAirState(chunk.getBlock(x, 125 - i, z)))
-                    chunk.setBlock(x, 126 - i, z, bedrockState());
-            }
-        }
-    }
-}
-
 void NetherGenerator::generate(LevelChunk &chunk) const {
     _generateBiomeMap(chunk);
 
     _generateTerrain(chunk);
 
-    _applySurface(chunk);
+    mSurfaceBuilder->apply(chunk);
 
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++) {
