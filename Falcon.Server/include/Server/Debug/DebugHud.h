@@ -5,7 +5,7 @@
 class ServerNetworkHandler;
 class ServerPlayer;
 
-/** A boss bar with live server numbers for one operator. Nothing is measured while the page is Off. */
+/** nothing is measured while the page is off, so the hud costs nothing for players who never open it */
 class DebugHud {
 public:
     enum class Page {

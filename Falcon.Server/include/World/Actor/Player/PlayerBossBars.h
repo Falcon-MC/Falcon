@@ -11,9 +11,8 @@ class ServerNetworkHandler;
 class ServerPlayer;
 
 /**
- * The boss bars the server and plugins show to one player. The client draws one bar per boss actor and the player is
- * the only actor every client knows, so the newest bar is displayed and the others wait behind it. A raid bar uses the
- * same actor and takes the place of all of them while it is up.
+ * the client draws one bar per boss actor and the player is the only actor every client knows, so only the newest bar
+ * is displayed and the others wait behind it; a raid bar uses the same actor and takes the place of all of them
  */
 class PlayerBossBars {
 public:
