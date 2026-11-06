@@ -4824,44 +4824,11 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/End/Feature/ChorusPlantFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/End/Feature/ChorusPlantFeature.h",
-      "sha256": "84d86f6654d1a3972a7985e9130d4d29e5ad502cddd42a4ec90819793540ca27",
-      "classes": [
-        "ChorusPlantFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/End/Feature/EndGatewayFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/End/Feature/EndGatewayFeature.h",
-      "sha256": "81fb3b8449e34c88c8af652e27c7795697894dc2e908214d3202867212eabe5b",
-      "classes": [
-        "EndGatewayFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/End/Feature/EndIslandFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/End/Feature/EndIslandFeature.h",
-      "sha256": "1c8b91dd4acefcfa32c2b9426d4e788e31dcfa6b8e1c82eb5917e3ebaa1c38f7",
-      "classes": [
-        "EndIslandFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/End/Feature/EndPodiumFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/End/Feature/EndPodiumFeature.h",
       "sha256": "5c54891e76aa2e3e5c3558df84b56da7d5b47009ea1048d1d3494ca1e64a4a37",
       "classes": [
         "EndPodiumFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/End/Feature/SpikeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/End/Feature/SpikeFeature.h",
-      "sha256": "0dfb887b61a70f876f7dcbb2d9c44ee02a66d5e71dca0db26bbec009edb1ee7e",
-      "classes": [
-        "EndSpikeData",
-        "SpikeFeature"
       ]
     },
     {
@@ -4897,35 +4864,11 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/End/Object/EndGatewayObject.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/End/Object/EndGatewayObject.h",
-      "sha256": "37f995318aee8470c0f04814897d7e8fc73e86f27f98b5b615be39fc9da410a0",
-      "classes": [
-        "EndGatewayObject"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/End/Object/EndIslandObject.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/End/Object/EndIslandObject.h",
-      "sha256": "d676fc25b41a3f30c53a509e537208e3d2869da2cdf142941c366e7b7cac3079",
-      "classes": [
-        "EndIslandObject"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/End/Object/EndPodiumObject.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/End/Object/EndPodiumObject.h",
       "sha256": "9fd8d7d22bb0c40cf9d81b5edc312622267ceaa1e6f00ea256e2f53232852f57",
       "classes": [
         "EndPodiumObject"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/End/Object/EndSpikeObject.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/End/Object/EndSpikeObject.h",
-      "sha256": "bdba8deea4ffe86a18d7fe425115a73197706cf5c9c0f155392ba72a402159ba",
-      "classes": [
-        "EndSpikeObject"
       ]
     },
     {
@@ -4949,14 +4892,6 @@
       "classes": [
         "TheEndTerrainNoises",
         "TheEndNoiseHolder"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/End/Tree/LegacyChorusTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/End/Tree/LegacyChorusTree.h",
-      "sha256": "6ab698ebd44454158b17d32b98a9cca220b69e7960a8ba96c31863d168346e7e",
-      "classes": [
-        "LegacyChorusTree"
       ]
     },
     {
@@ -9644,29 +9579,9 @@
       "sha256": "76186ad2d7ab5cb10fccb315fb169b1423f594fc59c9ebab64bb92041c13926b"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/End/Feature/ChorusPlantFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/End/Feature/ChorusPlantFeature.cpp",
-      "sha256": "8bf219c64885d8b8bab9bde17e1168b887550e318d9432dc6a2a0fdd27d2e002"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/End/Feature/EndGatewayFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/End/Feature/EndGatewayFeature.cpp",
-      "sha256": "4969f457443ac20a43310109b4a77631715db791dbe9fdea16a339f6a5d9e38e"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/End/Feature/EndIslandFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/End/Feature/EndIslandFeature.cpp",
-      "sha256": "61953caff54a1246743f4985028824e7f5cb563890f9e89d7bc4b9954a3e4eeb"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/End/Feature/EndPodiumFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/End/Feature/EndPodiumFeature.cpp",
       "sha256": "29e5f86a1441397e33fbc218d51e283e2fbc9de886f21b14fde11d27e8e8834c"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/End/Feature/SpikeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/End/Feature/SpikeFeature.cpp",
-      "sha256": "823de1eba4b21b9e0ba20ffa144644b8987a76d3eb132ecc820bd86845c780de"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/End/Feature/TheEndFeatureBuilder.cpp",
@@ -9689,24 +9604,9 @@
       "sha256": "ca065a471a82a4ba43edacdf37b3ccefefd18d0dcadfa54903f3c78bdb42dd8c"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/End/Object/EndGatewayObject.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/End/Object/EndGatewayObject.cpp",
-      "sha256": "54c96986ae052eca6ec0e02737355e796ce033e567ebceb43824f414d47ac473"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/End/Object/EndIslandObject.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/End/Object/EndIslandObject.cpp",
-      "sha256": "fd8804f3e941ea8b149ed49a78dafa87525332d23496729bbf3f1e725e507a1f"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/End/Object/EndPodiumObject.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/End/Object/EndPodiumObject.cpp",
       "sha256": "8305a9b4c41b58ade07a9f658bc71d12e3e8d1ca06fbbfdfdf928cbff92526d8"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/End/Object/EndSpikeObject.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/End/Object/EndSpikeObject.cpp",
-      "sha256": "528ae0f445b8d4a132a46b37d7d2669e91622a535dd98a4a206fc89a290255b0"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/End/TheEndGenerator.cpp",
@@ -9717,11 +9617,6 @@
       "old": "Falcon.Server/src/Level/Generator/End/TheEndNoiseHolder.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/End/TheEndNoiseHolder.cpp",
       "sha256": "07b61af0a6c208a51b76275ccf1910947476c51a050929c9b512d21f186e44f8"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/End/Tree/LegacyChorusTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/End/Tree/LegacyChorusTree.cpp",
-      "sha256": "8808c3c2a39be66397d3fbc4934daccd580cae6f5c9ea71430c90b7354014af7"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Feature/BlockManager.cpp",
