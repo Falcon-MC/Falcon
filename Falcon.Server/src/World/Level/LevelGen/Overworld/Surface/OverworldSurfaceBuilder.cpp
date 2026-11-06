@@ -24,6 +24,15 @@ namespace {
     // octaves of minecraft:surface built in sub_14CDE1490
     constexpr int32_t SURFACE_NOISE_OCTAVES = 4;
 
+    // the surface_material_adjustments stack of sub_14CDDFC50 and the draws its twister made before it
+    constexpr int32_t ADJUSTMENT_NOISE_OCTAVES = 3;
+    constexpr unsigned long long ADJUSTMENT_NOISE_DRAWS = 20202;
+
+    // the swamp builder's stack (sub_1471363F0) and its sampling scale (sub_147136880)
+    constexpr int32_t SWAMP_NOISE_OCTAVES = 2;
+    constexpr float SWAMP_NOISE_SCALE = 0.25f;
+    constexpr int32_t SWAMP_SEA_LEVEL = 63;
+
     const BlockState &waterState() {
         static const BlockState state = VanillaBlocks::WATER().toBlockState();
         return state;
@@ -106,6 +115,16 @@ OverworldSurfaceBuilder::OverworldSurfaceBuilder(const XoroshiroPositionalFactor
 
     mNoise = NormalNoise::create(noiseFactory, "minecraft:surface", -6, {1.0f, 1.0f, 1.0f});
 
+    // the generator's adjustment stack (ctor sub_14CDDFC50, +3408): its twister has drawn for every stack before it
+    std::mt19937 adjustmentRandom(static_cast<uint32_t>(levelSeed));
+    adjustmentRandom.discard(ADJUSTMENT_NOISE_DRAWS);
+    for (int32_t i = 0; i < ADJUSTMENT_NOISE_OCTAVES; i++)
+        mAdjustmentNoise.emplace_back(adjustmentRandom);
+
+    std::mt19937 swampRandom(static_cast<uint32_t>(levelSeed));
+    for (int32_t i = 0; i < SWAMP_NOISE_OCTAVES; i++)
+        mSwampNoise.emplace_back(swampRandom);
+
     // the frozen ocean builder's noises (sub_1471334C0)
     mIcebergPillarNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_pillar", -6, {1.0f, 1.0f, 1.0f, 1.0f});
     mIcebergPillarRoofNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_pillar_roof", -3, {1.0f});
@@ -153,7 +172,11 @@ void OverworldSurfaceBuilder::apply(LevelChunk &chunk, std::mt19937 &random) con
             // the frozen ocean builder (vtable 0x14F2EF500) raises its ice, then builds like the overworld one
             if (component->mType == SurfaceBuilderType::FrozenOcean)
                 _buildIcebergColumn(chunk, x, z, height);
-            if (component->mType == SurfaceBuilderType::Overworld || component->mType == SurfaceBuilderType::FrozenOcean)
+            // the swamp builder (sub_147136880) floods its puddle, then builds like the overworld one
+            if (component->mType == SurfaceBuilderType::Swamp)
+                _digSwampPuddle(chunk, x, z, height, component->mMaxPuddleDepth);
+            if (component->mType == SurfaceBuilderType::Overworld || component->mType == SurfaceBuilderType::FrozenOcean
+                || component->mType == SurfaceBuilderType::Swamp)
                 _buildOverworldColumn(chunk, x, z, height, *component, noise[x + 16 * z], random);
             else
                 _buildLegacyColumn(chunk, x, z, *component);
@@ -167,9 +190,21 @@ void OverworldSurfaceBuilder::_adjustMaterials(const SurfaceBuilderComponent &co
     if (component.mSurfaceMaterialAdjustments.empty())
         return;
 
-    const float value = mNoise->getValue(worldX, 0.0, worldZ);
+    // sub_145D43EF0: one 3D simplex sum per adjustment at its own frequency, the low bound included
     for (const SurfaceMaterialAdjustmentAttributes &element: component.mSurfaceMaterialAdjustments) {
-        if (value >= element.mNoiseUpperBound || value <= element.mNoiseLowerBound)
+        float value = 0.0f;
+        float amplitude = 1.0f;
+        float amplitudeSum = 0.0f;
+        const float x = static_cast<float>(worldX) * element.mNoiseFrequencyScale;
+        const float z = static_cast<float>(worldZ) * element.mNoiseFrequencyScale;
+        for (const SurfaceSimplexNoise &octave: mAdjustmentNoise) {
+            value += octave.getValue3D(x * amplitude, 0.0f, z * amplitude) / amplitude;
+            amplitudeSum += 1.0f / amplitude;
+            amplitude *= 0.5f;
+        }
+        value *= 1.0f / amplitudeSum;
+
+        if (value < element.mNoiseLowerBound || value >= element.mNoiseUpperBound)
             continue;
 
         if (element.mTopBlock != nullptr)
@@ -302,6 +337,31 @@ int32_t OverworldSurfaceBuilder::_lowestSurfaceY(int32_t worldX, int32_t worldZ)
     if (preliminary > LevelChunk::MAX_Y)
         return LevelChunk::MAX_Y;
     return std::max(preliminary, LevelChunk::MIN_Y);
+}
+
+void OverworldSurfaceBuilder::_digSwampPuddle(LevelChunk &chunk, int32_t x, int32_t z, int32_t height,
+                                              int32_t maxDepth) const {
+    const auto worldX = static_cast<float>((chunk.getX() << 4) + x);
+    const auto worldZ = static_cast<float>((chunk.getZ() << 4) + z);
+    float value = 0.0f;
+    float amplitude = 1.0f;
+    for (const SurfaceSimplexNoise &octave: mSwampNoise) {
+        value += octave.getValue(worldX * SWAMP_NOISE_SCALE * amplitude, worldZ * SWAMP_NOISE_SCALE * amplitude)
+                 / amplitude;
+        amplitude *= 0.5f;
+    }
+
+    const int32_t lowest = SWAMP_SEA_LEVEL - maxDepth;
+    if (value <= 0.0f || height > SWAMP_SEA_LEVEL || lowest >= height)
+        return;
+
+    // the highest block that is not water yet, down to the puddle's depth
+    for (int32_t y = height - 1; y >= lowest; y--) {
+        if (!isWaterState(chunk.getBlock(x, y, z))) {
+            chunk.setBlock(x, y, z, waterState());
+            return;
+        }
+    }
 }
 
 void OverworldSurfaceBuilder::_buildIcebergColumn(LevelChunk &chunk, int32_t x, int32_t z, int32_t height) const {

@@ -14,7 +14,7 @@ public:
     static constexpr int32_t SEA_LEVEL = 63;
     static constexpr int32_t CLAY_BANDS_SIZE = 192;
 
-    SurfaceOverwriteBuilder(IRandom &random, const XoroshiroPositionalFactory &noiseFactory, int64_t levelSeed);
+    SurfaceOverwriteBuilder(const XoroshiroPositionalFactory &noiseFactory, int64_t levelSeed);
 
     void apply(LevelChunk &chunk) const;
 
@@ -40,7 +40,6 @@ private:
     static int32_t _javaStringHash(const char *text);
 
     NormalNoisePtr mSurfaceNoise;
-    NormalNoisePtr mSwampNoise;
     NormalNoisePtr mClayBandsOffsetNoise;
     NormalNoisePtr mBadlandsPillarNoise;
     NormalNoisePtr mBadlandsPillarRoofNoise;

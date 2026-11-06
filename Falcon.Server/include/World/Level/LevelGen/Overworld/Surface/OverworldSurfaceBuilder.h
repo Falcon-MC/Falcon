@@ -23,7 +23,7 @@ public:
 private:
     void _fillSurfaceNoise(int32_t chunkX, int32_t chunkZ, float *noise) const;
 
-    // the column's own materials with Falcon's noise ranges, not yet the game's adjustments
+    // the column's materials after the biome's surface_material_adjustments
     void _adjustMaterials(const SurfaceBuilderComponent &component, int32_t worldX, int32_t worldZ,
                           const BlockState *&top, const BlockState *&mid, const BlockState *&seaFloor) const;
 
@@ -31,6 +31,8 @@ private:
                                const SurfaceBuilderComponent &component, float noise, std::mt19937 &random) const;
 
     void _buildIcebergColumn(LevelChunk &chunk, int32_t x, int32_t z, int32_t height) const;
+
+    void _digSwampPuddle(LevelChunk &chunk, int32_t x, int32_t z, int32_t height, int32_t maxDepth) const;
 
     // the lowest block a column's builders may change (sub_14A22FC50)
     int32_t _lowestSurfaceY(int32_t worldX, int32_t worldZ) const;
@@ -43,6 +45,8 @@ private:
     XoroshiroPositionalFactory mIcebergFactory;
     std::vector<SurfaceSimplexNoise> mSurfaceNoise;
     NormalNoisePtr mNoise;
+    std::vector<SurfaceSimplexNoise> mAdjustmentNoise;
+    std::vector<SurfaceSimplexNoise> mSwampNoise;
     NormalNoisePtr mIcebergPillarNoise;
     NormalNoisePtr mIcebergPillarRoofNoise;
     NormalNoisePtr mIcebergSurfaceNoise;
