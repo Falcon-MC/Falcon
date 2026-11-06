@@ -14,11 +14,6 @@ namespace {
         return state;
     }
 
-    const BlockState &waterState() {
-        static const BlockState state = VanillaBlocks::WATER().toBlockState();
-        return state;
-    }
-
     const BlockState &coarseDirtState() {
         static const BlockState state = VanillaBlocks::COARSE_DIRT().toBlockState();
         return state;
@@ -71,17 +66,12 @@ namespace {
 
 }
 
-SurfaceOverwriteBuilder::SurfaceOverwriteBuilder(IRandom &random, const XoroshiroPositionalFactory &noiseFactory,
-                                                 int64_t levelSeed) {
+SurfaceOverwriteBuilder::SurfaceOverwriteBuilder(const XoroshiroPositionalFactory &noiseFactory, int64_t levelSeed) {
     const std::vector<float> threeOctaves = {1.0f, 1.0f, 1.0f};
     const std::vector<float> oneOctave = {1.0f};
     const std::vector<float> fourOctaves = {1.0f, 1.0f, 1.0f, 1.0f};
 
     mSurfaceNoise = NormalNoise::create(noiseFactory, "minecraft:surface", -6, threeOctaves);
-
-    // no named stream for the swamp noise in the game: old seeding kept
-    IRandomPtr swampSource = random.identical();
-    mSwampNoise = std::make_shared<NormalNoise>(*swampSource, -2, oneOctave);
 
     mClayBandsOffsetNoise = NormalNoise::create(noiseFactory, "minecraft:clay_bands_offset", -8, oneOctave);
     mBadlandsPillarNoise = NormalNoise::create(noiseFactory, "minecraft:badlands_pillar", -2, fourOctaves);
@@ -111,20 +101,6 @@ void SurfaceOverwriteBuilder::apply(LevelChunk &chunk) const {
             }
 
             switch (biomeId) {
-                case BiomeIds::SWAMPLAND: {
-                    if (mSwampNoise->getValue((double) lx, (double) y, (double) lz) > 0.0f) {
-                        if (y == SEA_LEVEL - 1)
-                            chunk.setBlock(x, y, z, waterState());
-                    }
-                    break;
-                }
-                case BiomeIds::MANGROVE_SWAMP: {
-                    if (mSwampNoise->getValue((double) lx, (double) y, (double) lz) > 0.0f) {
-                        if (y >= SEA_LEVEL - 2 && y < SEA_LEVEL)
-                            chunk.setBlock(x, y, z, waterState());
-                    }
-                    break;
-                }
                 case BiomeIds::MESA_PLATEAU_STONE: {
                     if (y > 97) {
                         const float noise = mSurfaceNoise->getValue((double) ((float) lx * 0.25f), (double) y,

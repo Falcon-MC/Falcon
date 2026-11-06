@@ -42,9 +42,7 @@ OverworldGenerator::OverworldGenerator(int64_t seed)
         : mSeed(seed), mAirHash(BlockStateHasher::hash("minecraft:air")) {
     mNoiseHolder = std::make_unique<OverworldNoiseHolder>(seed);
 
-    const IRandomPtr surfaceRandom = mNoiseHolder->getRandomSource().identical();
-    mSurfaceOverwriteBuilder = std::make_unique<SurfaceOverwriteBuilder>(*surfaceRandom, mNoiseHolder->getNoiseFactory(),
-                                                                         seed);
+    mSurfaceOverwriteBuilder = std::make_unique<SurfaceOverwriteBuilder>(mNoiseHolder->getNoiseFactory(), seed);
 
     FeatureNoiseHolder::initialize(mNoiseHolder->getRandomSource());
 
