@@ -5080,14 +5080,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Density/DensityNether.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Density/DensityNether.h",
-      "sha256": "5c3ec6427944f417c0a8d2d7d6f4f6e31554d0ea356be22171f9d32496151c3c",
-      "classes": [
-        "DensityNether"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Nether/Feature/BasaltDelta/BasaltPillarFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/BasaltDelta/BasaltPillarFeature.h",
       "sha256": "50c668b17e9587a6426bc11bd1a8884f26c5c0aedcca526211cf8b9a5d20b5f6",
@@ -9712,11 +9704,6 @@
       "old": "Falcon.Server/src/Level/Generator/Nether/Biome/VanillaNetherBiomeSource.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Biome/VanillaNetherBiomeSource.cpp",
       "sha256": "ced555bf09ed6babad5e8393095471dfc3f806704e68828767d6dc2f11c92bcd"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Density/DensityNether.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Density/DensityNether.cpp",
-      "sha256": "08e266b4a02bf32201c2e39304c66e8b87d509a9725c124b0c5d43438e400c6b"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Nether/Feature/BasaltDelta/BasaltPillarFeature.cpp",

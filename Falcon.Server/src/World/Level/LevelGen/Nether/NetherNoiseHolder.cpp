@@ -1,9 +1,8 @@
 #include "World/Level/LevelGen/Nether/NetherNoiseHolder.h"
 
-#include "World/Level/LevelGen/Nether/Density/DensityNether.h"
-#include "World/Level/LevelGen/Random/XoroshiroPositionalFactory.h"
 #include "World/Level/LevelGen/Random/XoroshiroRandom.h"
 
+#include <random>
 #include <vector>
 
 namespace {
@@ -13,7 +12,7 @@ namespace {
     }
 }
 
-NetherTerrainNoises::NetherTerrainNoises(IRandom &random) {
+NetherTerrainNoises::NetherTerrainNoises(IRandom &random, uint32_t seed) {
     mSurfaceNoise = makeIdentical(random, -6, {1.0f, 1.0f, 1.0f});
     mPatchNoise = makeIdentical(random, -5, {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.013333333333333334f});
     mSoulsandNoise = makeIdentical(random, -8, {1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
@@ -21,10 +20,11 @@ NetherTerrainNoises::NetherTerrainNoises(IRandom &random) {
     mNetherStateNoise = makeIdentical(random, -4, {1.0f});
     mNetherwartNoise = makeIdentical(random, -3, {1.0f, 0.0f, 0.0f, 0.9f});
 
-    XoroshiroRandom noiseRandom(random.getSeed());
-    const XoroshiroPositionalFactory noiseFactory = noiseRandom.forkPositional();
-    mBase3dNoise = DensityNether::base3dNoise(noiseFactory);
-    mDensityFunction = DensityNether::finalDensity(mBase3dNoise);
+    // one Mersenne twister seeded with the low half of the level seed feeds the stacks in this order
+    std::mt19937 terrainRandom(seed);
+    mMinLimitNoise.reset(new TheEndOctaveNoise(terrainRandom, 16));
+    mMaxLimitNoise.reset(new TheEndOctaveNoise(terrainRandom, 16));
+    mMainNoise.reset(new TheEndOctaveNoise(terrainRandom, 8));
 }
 
 NetherDeltaNoises::NetherDeltaNoises(IRandom &random) {
@@ -49,6 +49,6 @@ const NetherNoiseHolder *NetherNoiseHolder::get() {
 
 NetherNoiseHolder::NetherNoiseHolder(int64_t seed) {
     mRandomSource = std::make_shared<XoroshiroRandom>(seed);
-    mTerrainNoises = std::make_unique<NetherTerrainNoises>(*mRandomSource);
+    mTerrainNoises = std::make_unique<NetherTerrainNoises>(*mRandomSource, (uint32_t) seed);
     mDeltaNoises = std::make_unique<NetherDeltaNoises>(*mRandomSource);
 }

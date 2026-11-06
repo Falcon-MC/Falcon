@@ -1,7 +1,6 @@
 #pragma once
 
 #include "World/Level/LevelGen/ChunkGenerator.h"
-#include "World/Level/LevelGen/Density/DensityFunction.h"
 #include "World/Level/LevelGen/Nether/Biome/NetherBiomeResult.h"
 #include "World/Level/LevelGen/Nether/NetherGeneratorConstants.h"
 #include "World/Level/LevelGen/Nether/NetherNoiseHolder.h"
@@ -43,7 +42,7 @@ public:
 private:
     void _generateBiomeMap(LevelChunk &chunk) const;
 
-    void _generateTerrain(LevelChunk &chunk, DensityChunkCache &chunkCache) const;
+    void _generateTerrain(LevelChunk &chunk) const;
 
     void _applySurface(LevelChunk &chunk) const;
 
