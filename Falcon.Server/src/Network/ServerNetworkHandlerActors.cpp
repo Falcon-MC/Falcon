@@ -627,8 +627,10 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         ServerActor *victimActor = dynamic_cast<ServerActor *>(&target);
         if (victimActor != nullptr) {
             ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimActor->getName());
-            source.mAttacker = shooter;
+            source.mAttacker = shooter != nullptr ? (Actor *) shooter : (Actor *) getActor(projectile.getOwnerUniqueId());
             applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile(), data.mLootingLevel);
+            if (!isTrident && victimActor->stopsProjectiles())
+                return true;
         }
     }
 
@@ -810,6 +812,8 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
 
     if (MobActor *mob = dynamic_cast<MobActor *>(&actor))
         mob->getEquipment().sendTo(*this, player, actor);
+    else
+        actor.sendEquipmentTo(*this, player);
 }
 
 void ServerNetworkHandler::_sendActorRemove(ServerPlayer &player, const ServerActor &actor) {

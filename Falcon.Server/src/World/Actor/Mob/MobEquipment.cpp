@@ -194,9 +194,11 @@ bool MobEquipment::_isEmpty() const {
 }
 
 void MobEquipment::sendTo(ServerNetworkHandler &owner, const ServerPlayer &player, const Actor &actor) const {
-    if (_isEmpty())
-        return;
+    if (!_isEmpty())
+        sendAllTo(owner, player, actor);
+}
 
+void MobEquipment::sendAllTo(ServerNetworkHandler &owner, const ServerPlayer &player, const Actor &actor) const {
     const int64_t runtimeId = (int64_t) actor.getRuntimeId();
     const NetworkIdentifier &id = player.getNetworkIdentifier();
 
@@ -230,7 +232,7 @@ void MobEquipment::broadcast(ServerNetworkHandler &owner, const Actor &actor) co
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
         if (player.isSpawned() && player.getVisibleActors().count(actor.getRuntimeId()) != 0)
-            sendTo(owner, player, actor);
+            sendAllTo(owner, player, actor);
     }
 }
 

@@ -572,7 +572,14 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
 
         if (packet.mActionType == 0) {
             ServerActor *target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-            if (target != nullptr && !owner.getScriptEngine().beforePlayerInteractWithEntity(player, *target)) {
+            // The client predicted the click, and the actor may have gone since it was sent.
+            if (target == nullptr) {
+                player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
+                                                      player.getInventory().getSelectedSlot());
+                return;
+            }
+
+            if (!owner.getScriptEngine().beforePlayerInteractWithEntity(player, *target)) {
                 target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
                 if (target == nullptr)
                     return;
@@ -588,7 +595,7 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
 
                 target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
                 if (target != nullptr)
-                    target->onInteract(owner, player);
+                    target->onInteractAt(owner, player, packet.mClickPosition);
             }
         }
         return;
