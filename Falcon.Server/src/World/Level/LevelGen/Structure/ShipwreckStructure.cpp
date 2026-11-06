@@ -8,8 +8,10 @@
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Structure/ShipwreckFeature.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
+#include "World/Level/LevelGen/Structure/StructureConnections.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 #include "World/Level/LevelGen/Structure/StructureMarkers.h"
+#include "World/Level/LevelGen/Structure/StructureTerrain.h"
 #include "World/Level/LevelGen/Structure/StructureTemplate.h"
 
 #include <array>
@@ -41,24 +43,6 @@ namespace {
     const std::array<std::pair<int32_t, int32_t>, WOOD_PAIR_COUNT> WOOD_PAIRS = {
             {{0, 1}, {3, 1}, {5, 3}, {5, 1}, {1, 0}, {1, 3}, {1, 5}, {0, 2}, {1, 4}}};
 
-    // a wreck reads many columns of few chunks, and a throwaway chunk is the expensive part
-    class GeneratedColumns {
-    public:
-        explicit GeneratedColumns(const ChunkGenerator &generator) : mGenerator(generator) {}
-
-        int32_t getSolidHeight(int32_t x, int32_t z) {
-            std::unique_ptr<LevelChunk> &chunk = mChunks[{x >> 4, z >> 4}];
-            if (chunk == nullptr)
-                chunk = mGenerator.generateTerrain(x >> 4, z >> 4);
-
-            return ChunkGenerator::solidHeight(*chunk, x & 15, z & 15);
-        }
-
-    private:
-        const ChunkGenerator &mGenerator;
-        std::map<std::pair<int32_t, int32_t>, std::unique_ptr<LevelChunk>> mChunks;
-    };
-
     BlockState waterState() {
         Tag states = Tag::ofCompound();
         states.putInt("liquid_depth", 0);
@@ -74,7 +58,7 @@ namespace {
     }
 
     // the mean height of the middle half of the wreck
-    int32_t meanHeight(GeneratedColumns &columns, int32_t startX, int32_t startZ, int32_t turns, int32_t sizeX,
+    int32_t meanHeight(StructureTerrain &terrain, int32_t startX, int32_t startZ, int32_t turns, int32_t sizeX,
                        int32_t sizeZ) {
         const bool flippedX = turns == 1 || turns == 2;
         const bool flippedZ = turns == 2 || turns == 3;
@@ -87,7 +71,7 @@ namespace {
         int32_t count = 0;
         for (int32_t x = fromX; x <= toX; ++x) {
             for (int32_t z = fromZ; z <= toZ; ++z) {
-                total += columns.getSolidHeight(x, z);
+                total += terrain.getSolidHeight(x, z);
                 ++count;
             }
         }
@@ -157,34 +141,37 @@ namespace {
     }
 
     // the files keep shapes from the editor; the game works them out from the neighbours once the piece is down
-    void connectShapes(std::vector<ShipwreckStructure::PlacedBlock> &blocks) {
+    void connectShapes(std::vector<ShipwreckStructure::PlacedBlock> &blocks, StructureTerrain &terrain) {
         BlockIndex index;
         for (size_t i = 0; i < blocks.size(); ++i)
             index[{blocks[i].x, blocks[i].y, blocks[i].z}] = i;
 
-        const auto solid = [&](int32_t x, int32_t y, int32_t z) {
-            const ShipwreckStructure::PlacedBlock *block = at(blocks, index, x, y, z);
-            return block != nullptr && block->mState.mName != "minecraft:air"
-                   && block->mState.mName != "minecraft:water";
-        };
-
         std::vector<ShipwreckStructure::PlacedBlock> shaped = blocks;
         for (ShipwreckStructure::PlacedBlock &block : shaped) {
-            Tag states = block.mState.mStates;
-            if (isStair(block.mState)) {
-                states.putString("minecraft:corner", stairCorner(blocks, index, block));
-            } else if (isFence(block.mState)) {
-                states.putByte("minecraft:connection_east", solid(block.x + 1, block.y, block.z) ? 1 : 0);
-                states.putByte("minecraft:connection_north", solid(block.x, block.y, block.z - 1) ? 1 : 0);
-                states.putByte("minecraft:connection_south", solid(block.x, block.y, block.z + 1) ? 1 : 0);
-                states.putByte("minecraft:connection_west", solid(block.x - 1, block.y, block.z) ? 1 : 0);
-            } else {
+            if (!isStair(block.mState))
                 continue;
-            }
+
+            Tag states = block.mState.mStates;
+            states.putString("minecraft:corner", stairCorner(blocks, index, block));
             block.mState = BlockState(block.mState.mName, states);
         }
 
-        blocks = std::move(shaped);
+        // posts look at the turned stairs, and past the wreck at the terrain
+        const auto connects = [&](const ShipwreckStructure::PlacedBlock &post, int32_t sideX, int32_t sideZ) {
+            const ShipwreckStructure::PlacedBlock *next = at(shaped, index, post.x + sideX, post.y, post.z + sideZ);
+            return StructureConnections::connects(
+                    next != nullptr ? next->mState : terrain.getBlock(post.x + sideX, post.y, post.z + sideZ), sideX,
+                    sideZ);
+        };
+
+        blocks = shaped;
+        for (size_t i = 0; i < shaped.size(); ++i) {
+            const ShipwreckStructure::PlacedBlock &post = shaped[i];
+            if (isFence(post.mState))
+                blocks[i].mState = StructureConnections::connected(post.mState, connects(post, 1, 0),
+                                                                   connects(post, 0, -1), connects(post, 0, 1),
+                                                                   connects(post, -1, 0));
+        }
     }
 
     const char *markerLootTable(const std::string &marker) {
@@ -228,8 +215,8 @@ std::vector<ShipwreckStructure::PlacedBlock> ShipwreckStructure::build(const Chu
     const int32_t sizeX = quarter ? shape->getSizeZ() : shape->getSizeX();
     const int32_t sizeZ = quarter ? shape->getSizeX() : shape->getSizeZ();
 
-    GeneratedColumns columns(generator);
-    const int32_t mean = meanHeight(columns, cornerX, cornerZ, turns, sizeX, sizeZ);
+    StructureTerrain terrain(generator);
+    const int32_t mean = meanHeight(terrain, cornerX, cornerZ, turns, sizeX, sizeZ);
     const int32_t originX = cornerX + ((turns == 1 || turns == 2) ? 15 : 0);
     const int32_t originZ = cornerZ + ((turns == 2 || turns == 3) ? 15 : 0);
     int32_t originY = mean + (piece < BEACHED_PIECE_COUNT ? -2 : -4);
@@ -302,7 +289,7 @@ std::vector<ShipwreckStructure::PlacedBlock> ShipwreckStructure::build(const Chu
         blocks[chest->second].mLootSeed = FeatureRandom::nextInt(random);
     }
 
-    connectShapes(blocks);
+    connectShapes(blocks, terrain);
     return blocks;
 }
 

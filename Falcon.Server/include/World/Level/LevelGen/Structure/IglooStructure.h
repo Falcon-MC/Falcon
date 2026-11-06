@@ -9,6 +9,7 @@
 class ChunkGenerator;
 class Level;
 class LevelChunk;
+class StructureTerrain;
 
 /**
  * Igloos: the temple starts of the snowy biomes. The pieces turn around the north west corner of the start chunk
@@ -27,7 +28,8 @@ public:
     };
 
     // the blocks relative to the corner of the start chunk and the floor height
-    static std::vector<PlacedBlock> build(int32_t quarterTurns, int32_t shaftPieces);
+    static std::vector<PlacedBlock> build(int32_t quarterTurns, int32_t shaftPieces, StructureTerrain &terrain,
+                                          int32_t originX, int32_t originY, int32_t originZ);
 
     static void place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk);
 };
