@@ -5,6 +5,8 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/End/TheEndGenerator.h"
+#include "World/Level/LevelGen/End/TheEndGeneratorConstants.h"
+#include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/ChunkGenerateContext.h"
 
@@ -228,9 +230,12 @@ void TheEndDecorationFeature::_placeChorus(std::mt19937 &random, int32_t x, int3
 
     for (const Vector3i &plant: plants) {
         const BlockState state = mRoot->getBlockAt(plant.x, plant.y, plant.z);
+        // measured against BDS: a generated plant does not connect down to the end stone it grows on
         mRoot->setBlockStateAt(plant.x, plant.y, plant.z, ChorusPlantBlock::connectedState(state, [&](int face) {
             const Vector3i other = PlacementOrientation::relativePosition(plant, face);
-            return &mRoot->getBlockAt(other.x, other.y, other.z);
+            const BlockState &neighbour = mRoot->getBlockAt(other.x, other.y, other.z);
+            const bool standsOn = face == PlacementOrientation::FACE_DOWN && neighbour.mName == endStoneState().mName;
+            return standsOn ? &airState() : &neighbour;
         }));
     }
 }
@@ -263,7 +268,11 @@ void TheEndDecorationFeature::apply(ChunkGenerateContext &context) {
     std::mt19937 seeding(mSeed);
     const uint32_t multiplierX = (seeding() >> 1) | 1u;
     const uint32_t multiplierZ = (seeding() >> 1) | 1u;
-    std::mt19937 random((multiplierZ * (uint32_t) chunkZ + multiplierX * (uint32_t) chunkX) ^ mSeed);
+    const uint32_t decorationSeed = (multiplierZ * (uint32_t) chunkZ + multiplierX * (uint32_t) chunkX) ^ mSeed;
+    std::mt19937 random(decorationSeed);
+
+    // sub_14CDABCD0 runs the biome's rules on this random before the end features, and they leave it reseeded
+    OverworldRulePlacer::drawBiomeRules(*mRoot, chunk, TheEndGeneratorConstants::BIOME_ID, decorationSeed, random);
 
     // a spike belongs to the chunk of its lowest corner
     for (const Spike &spike: mSpikes) {

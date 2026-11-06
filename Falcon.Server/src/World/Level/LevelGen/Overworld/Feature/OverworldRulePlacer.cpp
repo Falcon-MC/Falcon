@@ -78,6 +78,12 @@ namespace {
 
     using ExpressionPtr = std::shared_ptr<const FeatureExpression>;
 
+    // sub_14A22D800: boost-style combine of the decoration seed with the rule's hash
+    uint32_t ruleSeed(uint32_t decorationSeed, const std::string &identifier) {
+        const uint32_t hash = static_cast<uint32_t>(hashedString(identifier));
+        return decorationSeed ^ ((decorationSeed >> 2) + hash + (decorationSeed << 6) + 0x9E3779B9u);
+    }
+
     // one axis of a scatter: a single value or a distribution between two bounds
     struct Axis {
         int32_t mDistribution = 0;
@@ -1248,6 +1254,58 @@ void OverworldRulePlacer::_apply(BlockManager &blocks, const LevelChunk &chunk, 
     placementContext = PlacementContext();
 }
 
+void OverworldRulePlacer::drawBiomeRules(BlockManager &blocks, const LevelChunk &chunk, int32_t biome,
+                                         uint32_t decorationSeed, std::mt19937 &shared) {
+    const std::vector<BiomeFeatureEntry> *rules = BiomeChunkGenDataRegistry::getConsolidatedFeatures(biome);
+    if (rules == nullptr)
+        return;
+
+    placementContext.mDecoration = &shared;
+    const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
+    for (const char *pass: PASSES) {
+        for (const BiomeFeatureEntry &entry: *rules) {
+            if (entry.mPass != pass)
+                continue;
+
+            shared.seed(ruleSeed(decorationSeed, entry.mIdentifier));
+            ScatterVariables variables(blocks, origin);
+            const ExpressionPtr iterationsExpression = FeatureExpression::parse(entry.mIterations);
+            const ExpressionPtr percent = FeatureExpression::parse(entry.mChancePercent);
+            if (iterationsExpression == nullptr || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
+                continue;
+
+            if (entry.mChanceNumerator > 0 && entry.mChanceDenominator > 0) {
+                if (entry.mChanceNumerator != entry.mChanceDenominator
+                    && nextInt(shared, entry.mChanceDenominator) >= entry.mChanceNumerator)
+                    continue;
+            } else {
+                const float chance = percent == nullptr ? 0.0f : percent->evaluate(variables);
+                if (chance < 100.0f && (chance <= 0.0f || chance <= nextFloat(shared) * 100.0f))
+                    continue;
+            }
+
+            // measured on the end islands: the iteration count is truncated there, not rounded
+            const float count = iterationsExpression->evaluate(variables);
+            int32_t iterations = count > 0.0f ? static_cast<int32_t>(count) : 0;
+
+            Axis axes[3];
+            bool parsed = true;
+            for (size_t axis = 0; axis < 3; axis++) {
+                const BiomeFeatureEntry::Coordinate &coordinate = entry.mCoordinates[axis];
+                parsed = parseAxis(coordinate.mDistribution, coordinate.mMin, coordinate.mMax, axes[axis]) && parsed;
+            }
+            if (!parsed)
+                continue;
+
+            while (iterations-- > 0) {
+                int32_t position[3] = {0, 0, 0};
+                scatterPosition(axes, entry.mEvalOrder, origin, variables, shared, position);
+            }
+        }
+    }
+    placementContext = PlacementContext();
+}
+
 void OverworldRulePlacer::_drawUnported(BlockManager &blocks, const LevelChunk &chunk, const BiomeFeatureEntry &entry,
                                         uint32_t decorationSeed) {
     // a rule the placer does not port still draws its math.random from the decoration random the ported rules
@@ -1283,8 +1341,7 @@ void OverworldRulePlacer::_drawUnported(BlockManager &blocks, const LevelChunk &
             return;
     }
 
-    const uint32_t hash = static_cast<uint32_t>(hashedString(entry.mIdentifier));
-    const uint32_t seed = decorationSeed ^ ((decorationSeed >> 2) + hash + (decorationSeed << 6) + 0x9E3779B9u);
+    const uint32_t seed = ruleSeed(decorationSeed, entry.mIdentifier);
     std::mt19937 scatter(seed);
     const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
     ScatterVariables variables(blocks, origin);
@@ -1301,9 +1358,7 @@ void OverworldRulePlacer::_drawUnported(BlockManager &blocks, const LevelChunk &
 
 void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chunk, const BiomeFeatureEntry &entry,
                                      const Feature &feature, uint32_t decorationSeed, int32_t biomeFilter) {
-    // sub_14A22D800: boost-style combine of the decoration seed with the rule's hash
-    const uint32_t hash = static_cast<uint32_t>(hashedString(entry.mIdentifier));
-    const uint32_t seed = decorationSeed ^ ((decorationSeed >> 2) + hash + (decorationSeed << 6) + 0x9E3779B9u);
+    const uint32_t seed = ruleSeed(decorationSeed, entry.mIdentifier);
     std::mt19937 scatter(seed);
 
     const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
