@@ -8,6 +8,7 @@
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/ItemProperties.h"
+#include "World/Level/Block/VanillaBlocks.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -316,6 +317,24 @@ namespace {
         return context.mOpenContainer->canHold(item);
     }
 
+    // an armor slot only accepts the matching armor piece; the head slot also accepts a block worn on the head,
+    // as vanilla does. without this a client could drop four chestplates into the four slots for stacked protection.
+    bool acceptsInArmorSlot(const FullContainerName &name, int slot, const ItemStack &item) {
+        if (name.mContainer != ContainerSlotType::Armor || item.isAir())
+            return true;
+
+        const ItemData *data = ItemDataTable::find(item.mDefinition->getIdentifier());
+        if (data != nullptr && data->mArmorSlot != ArmorSlot::None)
+            return (int) data->mArmorSlot - (int) ArmorSlot::Head == slot;
+
+        if (slot == PlayerInventory::ARMOR_HEAD) {
+            const Block *block = VanillaBlocks::fromIdentifier(item.mDefinition->getIdentifier());
+            return block != nullptr && block->isWornOnHead();
+        }
+
+        return false;
+    }
+
     bool moveItems(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                    std::vector<TouchedSlot> &touched) {
         ItemStack *source = resolveSlot(inventory, context, action.mSource.mContainerName,
@@ -342,6 +361,10 @@ namespace {
         }
 
         if (!acceptsInOpenContainer(context, destination, *source)) {
+            return false;
+        }
+
+        if (!acceptsInArmorSlot(action.mDestination.mContainerName, action.mDestination.mSlot, *source)) {
             return false;
         }
 
@@ -404,6 +427,11 @@ namespace {
 
         if (!acceptsInOpenContainer(context, destination, *source)
             || !acceptsInOpenContainer(context, source, *destination)) {
+            return false;
+        }
+
+        if (!acceptsInArmorSlot(action.mDestination.mContainerName, action.mDestination.mSlot, *source)
+            || !acceptsInArmorSlot(action.mSource.mContainerName, action.mSource.mSlot, *destination)) {
             return false;
         }
 
