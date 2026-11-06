@@ -23,6 +23,9 @@ public:
     static void apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate &climate,
                       uint32_t levelSeed, const std::vector<int32_t> &biomes);
 
+    // every pass of one biome's rules, for the generators without a climate that decorate with a single biome
+    static void applyBiome(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed, int32_t biome);
+
     // one vein of OreFeature for the generators that place their ores themselves
     static bool placeOreVein(BlockManager &blocks, int32_t count, Block (*places)(),
                              const std::vector<std::string> &mayReplace, int32_t x, int32_t y, int32_t z,
@@ -70,13 +73,15 @@ private:
         bool mPointedDripstone = false;
         bool mLargeDripstone = false;
         const LegacyFlowerDefinition *mLegacyFlower = nullptr;
+        // a feature ported on its own, placed at the position with the rule's random
+        bool (*mFunction)(BlockManager &, int32_t, int32_t, int32_t, std::mt19937 &) = nullptr;
 
         bool isSet() const {
             return mSeagrass != nullptr || mScatter != nullptr || mSingleBlock != nullptr || mWeighted != nullptr
                    || mAggregate != nullptr || mTree != nullptr || mLeafLitter || mMushroom != nullptr
                    || mBeehiveSearch || mThreshold != nullptr || mSnap != nullptr || mBlob != nullptr
                    || mMultiface != nullptr || mDripstoneCluster || mPointedDripstone || mLargeDripstone
-                   || mLegacyFlower != nullptr;
+                   || mLegacyFlower != nullptr || mFunction != nullptr;
         }
     };
 
@@ -102,6 +107,9 @@ private:
     };
 
     static Feature _find(const BiomeFeatureEntry &entry);
+
+    static void _apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate *climate,
+                       uint32_t levelSeed, const std::vector<int32_t> &biomes);
 
     static void _drawUnported(BlockManager &blocks, const LevelChunk &chunk, const BiomeFeatureEntry &entry,
                               uint32_t decorationSeed);

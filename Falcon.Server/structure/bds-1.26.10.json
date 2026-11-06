@@ -5072,107 +5072,11 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/BasaltDelta/BasaltPillarFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/BasaltDelta/BasaltPillarFeature.h",
-      "sha256": "50c668b17e9587a6426bc11bd1a8884f26c5c0aedcca526211cf8b9a5d20b5f6",
-      "classes": [
-        "BasaltPillarFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/BasaltDelta/DeltaFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/BasaltDelta/DeltaFeature.h",
-      "sha256": "343e6cb01f947cacaa37927ef6d6bf584b681263e081d40d305a9006f5469f37",
-      "classes": [
-        "DeltaFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/BasaltDelta/DeltaMagmaFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/BasaltDelta/DeltaMagmaFeature.h",
-      "sha256": "4894dbfd3985e545a841bd2d5d8dcc602bf51298f96b88c4310e49c263a73b53",
-      "classes": [
-        "DeltaMagmaFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Crimson/CrimsonHugeFungusFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Crimson/CrimsonHugeFungusFeature.h",
-      "sha256": "6d68c063332592dee58a0cb3e1657976606d7a3d3b803d10f2527e7160a9296f",
-      "classes": [
-        "CrimsonHugeFungusFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Crimson/CrimsonVegetationFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Crimson/CrimsonVegetationFeature.h",
-      "sha256": "dceb8cf689f35ddd771517d037cb21a9aa46388339c7eaf7075919f94c1116b6",
-      "classes": [
-        "CrimsonVegetationFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Crimson/WeepingVinesClusterFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Crimson/WeepingVinesClusterFeature.h",
-      "sha256": "8199c6ac65cef90deb2be3283f5ebcea84d5da07b00d449039065dc1a8d8f59e",
-      "classes": [
-        "WeepingVinesClusterFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/HugeFungusFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/HugeFungusFeature.h",
-      "sha256": "d9cfa748674c9e8627d5ac7a7f6a720ee763006c0c7b92ab9f368d87c6c532cc",
-      "classes": [
-        "HugeFungusFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/NetherFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/NetherFeature.h",
-      "sha256": "4983bae92b48f0e127287c9fe1729b5892bb222dcdacd0c29345d29d4088c2b2",
-      "classes": [
-        "NetherFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Nether/Feature/NetherFeatureBuilder.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/NetherFeatureBuilder.h",
       "sha256": "c09c968df27cf316c3607f3ffa71c15d95e6f3ca5b284175f96e6147a9bcb2fa",
       "classes": [
         "NetherFeatureBuilder"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/NyliumVegetationFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/NyliumVegetationFeature.h",
-      "sha256": "c55e0c54f51a8d9268300415cdbe4c967015bb4a0c236be930edc3ababd858dc",
-      "classes": [
-        "NyliumVegetationFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Warped/TwistingVinesClusterFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Warped/TwistingVinesClusterFeature.h",
-      "sha256": "5f355fe5c1798efdd88c8b3da966c38954f61cdac4809cd235364e50447db257",
-      "classes": [
-        "TwistingVinesClusterFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Warped/WarpedHugeFungusFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Warped/WarpedHugeFungusFeature.h",
-      "sha256": "9ebaa7f1ab159719477d30159eb281c21081ebffba4bd41f73097f7eacae1d48",
-      "classes": [
-        "WarpedHugeFungusFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Warped/WarpedVegetationFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Warped/WarpedVegetationFeature.h",
-      "sha256": "2f413a248a5b0042cc1a2dda8b251aa27b2aa2ffe0839683974a8f901a28394d",
-      "classes": [
-        "WarpedVegetationFeature"
       ]
     },
     {
@@ -5203,38 +5107,6 @@
         "NetherTerrainNoises",
         "NetherDeltaNoises",
         "NetherNoiseHolder"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Object/NyliumVegetationGenerator.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Object/NyliumVegetationGenerator.h",
-      "sha256": "92d815da74d3a4c47333fc775184ca8de017cab9e096ce6a8d3f6652a0ce16fb",
-      "classes": [
-        "NyliumVegetationGenerator"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Tree/LegacyCrimsonTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Tree/LegacyCrimsonTree.h",
-      "sha256": "0314a63a6d244aa931e1fb75d18cf8a00dd2700eeb84339f7da2fdaf7209ef83",
-      "classes": [
-        "LegacyCrimsonTree"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Tree/LegacyNetherTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Tree/LegacyNetherTree.h",
-      "sha256": "5f41905685104d90097146ec9f852a028f7766ee7532da265dd40e953a4ab5b9",
-      "classes": [
-        "LegacyNetherTree"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Tree/LegacyWarpedTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Tree/LegacyWarpedTree.h",
-      "sha256": "a139563dffac8c13d5e69451ace463a9f8b5f309bf5496b2614ab6ac5bf8038c",
-      "classes": [
-        "LegacyWarpedTree"
       ]
     },
     {
@@ -9602,69 +9474,9 @@
       "sha256": "ced555bf09ed6babad5e8393095471dfc3f806704e68828767d6dc2f11c92bcd"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/BasaltDelta/BasaltPillarFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/BasaltDelta/BasaltPillarFeature.cpp",
-      "sha256": "10d80997084ddef892dc32213c1de5a3acfbaf0784a918979d188d356783b270"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/BasaltDelta/DeltaFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/BasaltDelta/DeltaFeature.cpp",
-      "sha256": "1df59d51554f297ce632d7c08dc1c92a5150d0c555657b6e9c35007b871e2670"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/BasaltDelta/DeltaMagmaFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/BasaltDelta/DeltaMagmaFeature.cpp",
-      "sha256": "68ce6af8656eb4c0820b88cfc836869f273f49fae76eb30bf9f77c61a645b22f"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Crimson/CrimsonHugeFungusFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Crimson/CrimsonHugeFungusFeature.cpp",
-      "sha256": "0db5ff7f8bc0066c1399c4743237aa23d5bee1dcc6676c0172939ab2f753c5c6"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Crimson/CrimsonVegetationFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Crimson/CrimsonVegetationFeature.cpp",
-      "sha256": "e8284b10cb419359ebb40559fc12923e93142536303e71d93588bd1c28009d4d"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Crimson/WeepingVinesClusterFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Crimson/WeepingVinesClusterFeature.cpp",
-      "sha256": "7ae94faa8b0488ccf246b194954c9dcb5ba1d091e9c545c7b44ff922f9604d20"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/HugeFungusFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/HugeFungusFeature.cpp",
-      "sha256": "5b949c16babf6788a63e721e0df018c150d0cae7603c65eb4a2f9b9fffcebb4a"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/NetherFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/NetherFeature.cpp",
-      "sha256": "3f72d4becc70c7e9bb4140badf38f06b6450fd162468195c2d615431048595d0"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Nether/Feature/NetherFeatureBuilder.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/NetherFeatureBuilder.cpp",
       "sha256": "cf33dcf19f8a0001049ab48fd454e7d6546ef95cdb350517631d6a2d00bb6ba3"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/NyliumVegetationFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/NyliumVegetationFeature.cpp",
-      "sha256": "78f5daddc2ec0534047b739279d627cdadd5933bb3303df36dab9d9efc229390"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Warped/TwistingVinesClusterFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Warped/TwistingVinesClusterFeature.cpp",
-      "sha256": "3b073a9535c5ee8371f428b31fabfd07bb6b9a470e8bc4fe5a1509a8911a77dd"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Warped/WarpedHugeFungusFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Warped/WarpedHugeFungusFeature.cpp",
-      "sha256": "164feed40879eb4a07f4c16da3365a32dc1308ceff56ad278539982d93ff7363"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Warped/WarpedVegetationFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Warped/WarpedVegetationFeature.cpp",
-      "sha256": "bdd3fb6213b3b4a60ce7a6bd62a3ec8b5cbd69a4e3b969152a699702f1bec23d"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Nether/NetherGenerator.cpp",
@@ -9675,26 +9487,6 @@
       "old": "Falcon.Server/src/Level/Generator/Nether/NetherNoiseHolder.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Nether/NetherNoiseHolder.cpp",
       "sha256": "238d49653ffcd7dd67ac2c4c31adf75b74e74629c716d5888cdc5e49e950b804"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Object/NyliumVegetationGenerator.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Object/NyliumVegetationGenerator.cpp",
-      "sha256": "afaaba0488020f7e2850bb05adeba60dbbea3966da02f9f923ba7c81622c1bc4"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Tree/LegacyCrimsonTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Tree/LegacyCrimsonTree.cpp",
-      "sha256": "511e0488ef4e8e8dcbe0e8d7138ce41fe2f8a1567c586e45d190bd0a9f326e70"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Tree/LegacyNetherTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Tree/LegacyNetherTree.cpp",
-      "sha256": "c986e8a1b99e09ead837aa5dab203cdc6c961de8ca57c73bc2d6c16553a14543"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Tree/LegacyWarpedTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Tree/LegacyWarpedTree.cpp",
-      "sha256": "49f047f01db0ef18edc6c9f6523424e10195c5671dd8fceb89302f5111045537"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Noise/Noise.cpp",
