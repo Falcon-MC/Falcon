@@ -17,7 +17,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Tree/RoofedForestTreeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/SavannaMutatedTreeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/SavannaTreeFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Tree/SwampTreeFeature.h"
 
 void registerTreeFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<BambooJungleTreeFeature>());
@@ -38,5 +37,4 @@ void registerTreeFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<RoofedForestTreeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SavannaMutatedTreeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SavannaTreeFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<SwampTreeFeature>());
 }

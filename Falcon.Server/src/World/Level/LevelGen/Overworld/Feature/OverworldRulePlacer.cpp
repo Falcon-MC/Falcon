@@ -653,13 +653,17 @@ struct OverworldRulePlacer::LegacyTreeDefinition {
         // nextInt(3) == 0 ? first : second
         OneInThree,
         // nextInt(3) != 0 ? (nextInt(3) != 0 ? fourth : third) : (nextInt(13) != 0 ? second : first), sub_14D230860
-        MegaTaiga
+        MegaTaiga,
+        // nextInt(20) != 0 ? second : first, sub_14D230100
+        Swamp
     };
 
     const char *mIdentifier;
     float mDensity;
     Pick mPick;
     std::vector<Placed> mFeatures;
+    // the swamp's ten seagrass_feature tries at columns of the chunk, 54 above the rule's y, before the trees
+    const SeagrassDefinition *mSeagrass = nullptr;
 };
 
 // a minecraft:geode_feature (GeodeFeature, place sub_14D20B390)
@@ -999,6 +1003,17 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
               Tree::Canopy::Pine, &VanillaBlocks::SPRUCE_LEAVES, {0, 0}, {3, 5}, {0, 0}, 1, 0.0f, false}, nullptr, {}}
     };
 
+    // BDS 1.26.61 behavior packs, features/swamp_tree_feature.json
+    static const TreeDefinition SWAMP_TREE = {
+            {"minecraft:swamp_tree_feature", Tree::Trunk::Simple, &VanillaBlocks::OAK_LOG, {5, 9}, {0, 0},
+             Tree::Canopy::Simple, &VanillaBlocks::OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false, 2, 2, 1, 4, 4,
+             true}, nullptr, {}};
+    static const Placed HUGE_MUSHROOM = [] {
+        Placed placed;
+        placed.mHugeMushroom = true;
+        return placed;
+    }();
+
     // BDS 1.26.61 behavior packs, features/mega_spruce_tree_feature.json and mega_pine_tree_feature.json
     static const Tree::Mega MEGA_SPRUCE = {2, 13, {3, 15}, {13, 18}, 0, 3.5f, 2, &VanillaBlocks::PODZOL, 5, 2};
     static const Tree::Mega MEGA_PINE = {2, 13, {3, 15}, {3, 8}, 0, 3.5f, 2, &VanillaBlocks::PODZOL, 5, 2};
@@ -1066,7 +1081,11 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:legacy:taiga_tree_feature", 10.0f, Pick::OneInThree,
              {tree(TREES[9]), aggregate(SELECT_SPRUCE)}},
             {"minecraft:legacy:mega_taiga_tree_feature", 10.0f, Pick::MegaTaiga,
-             {tree(MEGA_TREES[0]), tree(MEGA_TREES[1]), tree(TREES[9]), aggregate(SELECT_SPRUCE)}}
+             {tree(MEGA_TREES[0]), tree(MEGA_TREES[1]), tree(TREES[9]), aggregate(SELECT_SPRUCE)}},
+            // the swamp foliage feature (constructor sub_14D21E9F0, place sub_14D21F070) counts its trees like a
+            // legacy tree feature of density 2
+            {"minecraft:legacy:swamp_foliage_feature", 2.0f, Pick::Swamp, {HUGE_MUSHROOM, tree(SWAMP_TREE)},
+             &SEAGRASS[3]}
     };
 
     // the double plant patches: a lower half, then the upper one placed one block above it
@@ -1422,7 +1441,7 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
         else if (feature.mFossil != nullptr)
             _placeFossil(blocks, *feature.mFossil, position[0], position[1], position[2], placement, seed);
         else if (feature.mLegacyTree != nullptr)
-            _placeLegacyTrees(blocks, *feature.mLegacyTree, position[0], position[2], placement);
+            _placeLegacyTrees(blocks, *feature.mLegacyTree, position[0], position[1], position[2], placement);
         else if (feature.mPlaced.isSet())
             _place(blocks, feature.mPlaced, position[0], position[1], position[2], placement);
         else
@@ -1733,7 +1752,97 @@ bool OverworldRulePlacer::_place(BlockManager &blocks, const Placed &placed, int
         return _placeLargeDripstone(blocks, x, y, z, random);
     if (placed.mLegacyFlower != nullptr)
         return _placeLegacyFlower(blocks, *placed.mLegacyFlower, x, y, z, random);
+    if (placed.mHugeMushroom)
+        return _placeHugeMushroom(blocks, x, y, z, random);
     return _placeBeehiveSearch(blocks, x, y, z, random);
+}
+
+bool OverworldRulePlacer::_placeHugeMushroom(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
+                                             std::mt19937 &random) {
+    // HugeMushroomFeature (vtable 0x14F3D7A30, sub_14A2C8900) of the random type: brown or red, 4 to 6 tall and
+    // twice as tall one time in 12, all drawn before any test
+    const bool red = nextInt(random, 2) > 0;
+    int32_t height = nextInt(random, 3) + 4;
+    if (nextInt(random, 12) == 0)
+        height *= 2;
+    if (y <= LevelChunk::MIN_Y || y + height + 1 >= LevelChunk::MAX_Y + 1)
+        return false;
+
+    // air or leaves (material types 0 and 7) over the stem and, from 4 above the ground, the cap's 7 by 7; a small
+    // mushroom may stand at the position itself
+    static const BlockStateSet SMALL = {
+            VanillaBlocks::BROWN_MUSHROOM().getIdentifier(), VanillaBlocks::RED_MUSHROOM().getIdentifier()
+    };
+    for (int32_t at = y; at <= y + height + 1; at++) {
+        const int32_t radius = at > y + 3 ? 3 : 0;
+        for (int32_t offsetX = -radius; offsetX <= radius; offsetX++) {
+            for (int32_t offsetZ = -radius; offsetZ <= radius; offsetZ++) {
+                if (at < LevelChunk::MIN_Y || at > LevelChunk::MAX_Y)
+                    return false;
+                const BlockState &state = blocks.getBlockAt(x + offsetX, at, z + offsetZ);
+                if (DecorationSupport::isAir(state) || VanillaBlocks::getAs<LeavesBlock>(state.mName) != nullptr)
+                    continue;
+                if (offsetX == 0 && at == y && offsetZ == 0 && SMALL.contains(state))
+                    continue;
+                return false;
+            }
+        }
+    }
+
+    // the lists at xmmword_1529B3B88 and xmmword_1529B0A98 (sub_14A2C96E0), grass and dirt with roots; the game also
+    // grows it from water in some biomes, a case not ported
+    static const BlockStateSet GROUND = {
+            VanillaBlocks::DIRT().getIdentifier(), VanillaBlocks::COARSE_DIRT().getIdentifier(),
+            VanillaBlocks::MYCELIUM().getIdentifier(), VanillaBlocks::CRIMSON_NYLIUM().getIdentifier(),
+            VanillaBlocks::WARPED_NYLIUM().getIdentifier(), VanillaBlocks::PODZOL().getIdentifier(),
+            VanillaBlocks::GRASS_BLOCK().getIdentifier(), VanillaBlocks::DIRT_WITH_ROOTS().getIdentifier()
+    };
+    if (!GROUND.contains(blocks.getBlockAt(x, y - 1, z)))
+        return false;
+
+    // the cap: a red one hangs three layers of radius 2 below a top of radius 1, a brown one is a single layer of
+    // radius 3; huge_mushroom_bits 1 to 9 face the cell's side of the square, 5 the top, 0 the inside
+    const BlockState cap = (red ? VanillaBlocks::RED_MUSHROOM_BLOCK() : VanillaBlocks::BROWN_MUSHROOM_BLOCK())
+            .toBlockState();
+    const int32_t top = y + height;
+    for (int32_t layer = red ? top - 3 : top; layer <= top; layer++) {
+        const int32_t radius = red ? (layer < top ? 2 : 1) : 3;
+        const bool cutCorners = layer < top || !red;
+        for (int32_t capX = x - radius; capX <= x + radius; capX++) {
+            for (int32_t capZ = z - radius; capZ <= z + radius; capZ++) {
+                const bool west = capX == x - radius;
+                const bool east = capX == x + radius;
+                const bool north = capZ == z - radius;
+                const bool south = capZ == z + radius;
+                int32_t bits = 5 + (west ? -1 : (east ? 1 : 0)) + (north ? -3 : (south ? 3 : 0));
+                if (cutCorners) {
+                    if ((west || east) && (north || south))
+                        continue;
+                    if ((capX == x - radius + 1 && north) || (west && capZ == z - radius + 1))
+                        bits = 1;
+                    if ((capX == x + radius - 1 && north) || (east && capZ == z - radius + 1))
+                        bits = 3;
+                    if ((capX == x - radius + 1 && south) || (west && capZ == z + radius - 1))
+                        bits = 7;
+                    if ((capX == x + radius - 1 && south) || (east && capZ == z + radius - 1))
+                        bits = 9;
+                }
+                if (bits == 5 && layer < top)
+                    bits = 0;
+                if (bits == 0 || isSolidBlocking(blocks, capX, layer, capZ))
+                    continue;
+
+                blocks.setBlockStateAt(capX, layer, capZ, withState(cap, "huge_mushroom_bits", bits));
+            }
+        }
+    }
+
+    const BlockState stem = withState(VanillaBlocks::MUSHROOM_STEM().toBlockState(), "huge_mushroom_bits", 10);
+    for (int32_t at = y; at < top; at++) {
+        if (!isSolidBlocking(blocks, x, at, z))
+            blocks.setBlockStateAt(x, at, z, stem);
+    }
+    return true;
 }
 
 bool OverworldRulePlacer::_placeLegacyFlower(BlockManager &blocks, const LegacyFlowerDefinition &flower, int32_t x,
@@ -2738,9 +2847,10 @@ bool OverworldRulePlacer::_placeGeode(BlockManager &blocks, const GeodeDefinitio
 }
 
 void OverworldRulePlacer::_placeLegacyTrees(BlockManager &blocks, const LegacyTreeDefinition &trees, int32_t x,
-                                            int32_t z, std::mt19937 &random) {
+                                            int32_t y, int32_t z, std::mt19937 &random) {
     // LegacyTreeFeature::place (sub_14D224440): nine times in ten the density plus up to 2 more, or for a density
-    // below 1 one tree with that chance; otherwise the density scaled by a float; the rule's y is not read
+    // below 1 one tree with that chance; otherwise the density scaled by a float; only the swamp's seagrass reads the
+    // rule's y
     const float density = trees.mDensity;
     int32_t count = 0;
     if (nextInt(random, 10) != 0) {
@@ -2756,6 +2866,14 @@ void OverworldRulePlacer::_placeLegacyTrees(BlockManager &blocks, const LegacyTr
 
     // sub_14D21F430: the feature, then z and x inside the chunk's border and the tree on the generation heightmap;
     // the grass it scatters around each tree outside legacy worlds (sub_145E2AA10) has 0 iterations
+    if (trees.mSeagrass != nullptr) {
+        for (int32_t attempt = 0; attempt < 10; attempt++) {
+            const int32_t seagrassX = x + nextInt(random, 16);
+            const int32_t seagrassZ = z + nextInt(random, 16);
+            _placeSeagrass(blocks, *trees.mSeagrass, seagrassX, y + 54, seagrassZ, random);
+        }
+    }
+
     using Pick = LegacyTreeDefinition::Pick;
     for (int32_t tree = 0; tree < count; tree++) {
         size_t picked = 0;
@@ -2763,6 +2881,8 @@ void OverworldRulePlacer::_placeLegacyTrees(BlockManager &blocks, const LegacyTr
             picked = nextInt(random, 5) != 0 ? (nextInt(random, 10) != 0 ? 2 : 1) : 0;
         else if (trees.mPick == Pick::OneInThree)
             picked = nextInt(random, 3) == 0 ? 0 : 1;
+        else if (trees.mPick == Pick::Swamp)
+            picked = nextInt(random, 20) != 0 ? 1 : 0;
         else if (trees.mPick == Pick::MegaTaiga)
             picked = nextInt(random, 3) != 0 ? (nextInt(random, 3) != 0 ? 3 : 2) : (nextInt(random, 13) != 0 ? 1 : 0);
 

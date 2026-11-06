@@ -53,6 +53,15 @@ public:
         float mVineChance;
         // a fallen trunk places its log decoration feature on each log
         bool mLogDecoration;
+        // can_be_submerged max_depth: the trunk sinks through up to this many replaceable blocks
+        int32_t mMaxDepth = 0;
+        int32_t mCanopyMinWidth = 1;
+        // canopy_decoration: each side of every leaf hangs a vine, numerator in denominator, num_steps down
+        int32_t mCanopyVineNumerator = 0;
+        int32_t mCanopyVineDenominator = 0;
+        int32_t mCanopyVineSteps = 0;
+        // water among may_replace, and no may_grow_through
+        bool mInWater = false;
     };
 
     // fancy_trunk and fancy_canopy of fancy_oak_tree_feature
@@ -90,7 +99,8 @@ public:
                       int32_t y, int32_t z, std::mt19937 &random, const Decorate &decorate);
 
 private:
-    static bool _canPlace(BlockManager &blocks, int32_t x, int32_t y, int32_t z, int32_t height);
+    static bool _canPlace(BlockManager &blocks, const Definition &tree, int32_t x, int32_t y, int32_t z,
+                          int32_t height);
 
     static bool _simpleTrunk(BlockManager &blocks, const Definition &tree, int32_t x, int32_t y, int32_t z,
                              int32_t height, std::mt19937 &random);
@@ -120,6 +130,9 @@ private:
 
     static bool _pineCanopy(BlockManager &blocks, const Definition &tree, int32_t x, int32_t y, int32_t z,
                             std::mt19937 &random);
+
+    static void _hangCanopyVines(BlockManager &blocks, const Definition &tree, int32_t x, int32_t y, int32_t z,
+                                 int32_t minOffset, int32_t maxOffset, float slope, std::mt19937 &random);
 
     static void _fancyLayer(BlockManager &blocks, const Definition &tree, int32_t x, int32_t y, int32_t z,
                             int32_t radius);

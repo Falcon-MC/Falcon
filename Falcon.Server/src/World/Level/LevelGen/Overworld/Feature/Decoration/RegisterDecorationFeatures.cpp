@@ -48,7 +48,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/WaterlilyFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/WildflowersBedFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Multi/JunglePlantAggregateFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Multi/LegacySwampFoliageFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Multi/OverworldCaveCarverAggregateFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Multi/RoofedForestAggregateFeature.h"
 
@@ -101,7 +100,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<WaterlilyFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<WildflowersBedFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<JunglePlantAggregateFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<LegacySwampFoliageFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<OverworldCaveCarverAggregateFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<RoofedForestAggregateFeature>());
 }

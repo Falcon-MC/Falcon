@@ -5584,14 +5584,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Multi/LegacySwampFoliageFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Multi/LegacySwampFoliageFeature.h",
-      "sha256": "1317c4e3b728c37dbc1784c971872bf375fb9e2c73cf7374fe0705bfe6d6afcd",
-      "classes": [
-        "LegacySwampFoliageFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Multi/OverworldCaveCarverAggregateFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Multi/OverworldCaveCarverAggregateFeature.h",
       "sha256": "f14296c8d4633965e08ed4ca6098bebdffb85292fa619eb2441f07f0a991eb0d",
@@ -5970,22 +5962,6 @@
       "sha256": "d7719aa01dbbd65d8d62fd76e6ca9d76efb90a6a69aa760d29bcd70732ca0d53",
       "classes": [
         "SmallSpruceTree"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/SwampOakTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/SwampOakTree.h",
-      "sha256": "424b84ab2d8f15a925c8f77d06e769c04e49ee52405740c86600e44eb597b8b8",
-      "classes": [
-        "SwampOakTree"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/SwampTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/SwampTreeFeature.h",
-      "sha256": "59c445168ca6d1b02637b5b6a22126cf473758044f24c169530403f84d21325a",
-      "classes": [
-        "SwampTreeFeature"
       ]
     },
     {
@@ -9765,11 +9741,6 @@
       "sha256": "968d409e2b6c961c638779fa2cc62d155b3681d2cb61e3bcaaf5a8626b9a36ca"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Multi/LegacySwampFoliageFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Multi/LegacySwampFoliageFeature.cpp",
-      "sha256": "ac5a9d669a152ff4c4d230316ce041cea2a08ff7868d845451d83be9ac9cea4b"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Multi/OverworldCaveCarverAggregateFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Multi/OverworldCaveCarverAggregateFeature.cpp",
       "sha256": "077fedaec1965c099cbcbd7e1100defebcfe8b2b7ace862297350b62f11fac39"
@@ -10013,16 +9984,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/SmallSpruceTree.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/SmallSpruceTree.cpp",
       "sha256": "d463b494f3e2ff4956600a6f3f54fb3c1dde9bfe4551cb3fee6ae0207f1ce2dd"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/SwampOakTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/SwampOakTree.cpp",
-      "sha256": "6d5e80e8f2a04eddbc08ad858b8b60c6bbb4bd4721cd6dc75ad74a06988dc865"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/SwampTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/SwampTreeFeature.cpp",
-      "sha256": "bd1b865b804be1ca8f3260e3abb17cee4c24cff5c8c4883f68ebaefdc5e23f62"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/OverworldGenerator.cpp",
