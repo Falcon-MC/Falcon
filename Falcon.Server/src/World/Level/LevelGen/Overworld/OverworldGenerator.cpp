@@ -15,6 +15,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <random>
@@ -64,24 +65,46 @@ int32_t OverworldGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
     return mBiomeParameters->search(target, nullptr)->mBiome;
 }
 
-int32_t OverworldGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
+namespace {
     // the game fills the column with its noise terrain only, before surface rules and carvers (generator
     // vfunc +0x170 in sub_14A2298E0, which runs sub_14CDF0330), into a volume 320 blocks tall from the
     // bottom of the world (sub_14CDD12F0): higher terrain is cut at that top
     const int32_t PRELIMINARY_HEIGHT = 320;
 
+    int32_t topOfColumn(const LevelChunk &chunk, int32_t localX, int32_t localZ, int32_t airHash) {
+        int32_t y = OverworldGeneratorConstants::MIN_Y + PRELIMINARY_HEIGHT - 1;
+        while (y >= OverworldGeneratorConstants::MIN_Y && chunk.getBlock(localX, y, localZ).getHash() == airHash)
+            y--;
+
+        return y + 1;
+    }
+}
+
+int32_t OverworldGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
     int32_t heightMap[256] = {};
     LevelChunk chunk(x >> 4, z >> 4);
     OverworldAquifer aquifer = mTerrainFiller->createAquifer();
     mTerrainFiller->fill(chunk, heightMap, aquifer);
+    return topOfColumn(chunk, x & 15, z & 15, mAirHash);
+}
 
-    const int32_t localX = x & 15;
-    const int32_t localZ = z & 15;
-    int32_t y = OverworldGeneratorConstants::MIN_Y + PRELIMINARY_HEIGHT - 1;
-    while (y >= OverworldGeneratorConstants::MIN_Y && chunk.getBlock(localX, y, localZ).getHash() == mAirHash)
-        y--;
+int32_t OverworldGenerator::getPreliminaryLowestHeight(int32_t chunkX, int32_t chunkZ) const {
+    int32_t heightMap[256] = {};
+    LevelChunk chunk(chunkX, chunkZ);
+    OverworldAquifer aquifer = mTerrainFiller->createAquifer();
+    mTerrainFiller->fill(chunk, heightMap, aquifer);
 
-    return y + 1;
+    int32_t lowest = topOfColumn(chunk, 0, 0, mAirHash);
+    for (int32_t x = 0; x < 16; ++x) {
+        for (int32_t z = 0; z < 16; ++z)
+            lowest = std::min(lowest, topOfColumn(chunk, x, z, mAirHash));
+    }
+
+    return lowest;
+}
+
+int32_t OverworldGenerator::getPreliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const {
+    return mClimate->preliminarySurfaceLevel(quartX, quartZ);
 }
 
 void OverworldGenerator::decorate(Level &level, LevelChunk &chunk,

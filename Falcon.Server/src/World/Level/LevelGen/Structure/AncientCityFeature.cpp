@@ -17,5 +17,5 @@ AncientCityFeature::AncientCityFeature()
         : StructureFeature("ancient_city", SPACING, SEPARATION, SALT, Spread::Triangular) {}
 
 bool AncientCityFeature::_isValidStart(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const {
-    return generator.pickBiome(chunkX * 16 + 8, CITY_Y, chunkZ * 16 + 8) == BiomeIds::DEEP_DARK;
+    return generator.pickBiome(chunkX * 16, CITY_Y, chunkZ * 16) == BiomeIds::DEEP_DARK;
 }

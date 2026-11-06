@@ -31,4 +31,11 @@ public:
     // what the game reads for a column that is not loaded (sub_14A2298E0). generates a throwaway
     // chunk, so it is safe off the main thread but not cheap.
     virtual int32_t getPreliminaryHeight(int32_t x, int32_t z) const;
+
+    // the coarse height structures read their biomes at: the terrain density alone, with no water and cut to the
+    // eight block noise cells, so a sea column reports its floor
+    virtual int32_t getPreliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const;
+
+    // the lowest getPreliminaryHeight of the chunk's columns, from a single throwaway chunk
+    virtual int32_t getPreliminaryLowestHeight(int32_t chunkX, int32_t chunkZ) const;
 };

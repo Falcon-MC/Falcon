@@ -1,7 +1,9 @@
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 
+#include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/ChunkGenerator.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <random>
 #include <utility>
@@ -10,6 +12,7 @@ namespace {
     const int64_t REGION_X_MULTIPLIER = 341873128712LL;
     const int64_t REGION_Z_MULTIPLIER = 132897987541LL;
     const int32_t SEARCH_RINGS = 100;
+    const int32_t BIOME_CELL_SIZE = 4;
 
     class CongruentialRandom {
     public:
@@ -121,6 +124,23 @@ bool StructureFeature::findNearest(const ChunkGenerator &generator, int32_t bloc
     }
 
     return false;
+}
+
+bool StructureFeature::_hasOnlyBiomes(const ChunkGenerator &generator, int32_t blockX, int32_t blockY, int32_t blockZ,
+                                      int32_t radius, bool (*filter)(int32_t biomeId)) {
+    // the volume is walked one biome cell at a time from its low corner, so the far faces are not always reached
+    const int32_t minY = std::max(blockY - radius, LevelChunk::MIN_Y);
+    const int32_t maxY = std::min(blockY + radius, LevelChunk::MAX_Y);
+    for (int32_t x = blockX - radius; x <= blockX + radius; x += BIOME_CELL_SIZE) {
+        for (int32_t z = blockZ - radius; z <= blockZ + radius; z += BIOME_CELL_SIZE) {
+            for (int32_t y = minY; y <= maxY; y += BIOME_CELL_SIZE) {
+                if (!filter(generator.pickBiome(x, y, z)))
+                    return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 const std::vector<const StructureFeature *> &StructureFeature::getAll() {
