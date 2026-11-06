@@ -40,6 +40,8 @@ private:
     struct LegacyFlowerDefinition;
 
     // one of the game's features a rule or another feature places
+    struct FossilDefinition;
+
     struct Placed {
         const SeagrassDefinition *mSeagrass = nullptr;
         const ScatterDefinition *mScatter = nullptr;
@@ -85,10 +87,11 @@ private:
         bool mSprings = false;
         // legacy:ice_feature
         bool mLegacyIce = false;
+        const FossilDefinition *mFossil = nullptr;
 
         bool isPorted() const {
             return mOre != nullptr || mDisk != nullptr || mGeode != nullptr || mLegacyTree != nullptr
-                   || mPlaced.isSet() || mKelp || mForestFoliage || mSprings || mLegacyIce;
+                   || mPlaced.isSet() || mKelp || mForestFoliage || mSprings || mLegacyIce || mFossil != nullptr;
         }
     };
 
@@ -117,6 +120,9 @@ private:
     static void _placeSpring(BlockManager &blocks, int32_t x, int32_t y, int32_t z, const BlockState &liquid);
 
     static void _placeLegacyIce(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
+
+    static bool _placeFossil(BlockManager &blocks, const FossilDefinition &fossil, int32_t x, int32_t y, int32_t z,
+                             std::mt19937 &random, uint32_t integritySeed);
 
     static void _placeIceberg(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
 
