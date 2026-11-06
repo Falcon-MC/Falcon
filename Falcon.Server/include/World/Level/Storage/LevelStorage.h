@@ -113,6 +113,10 @@ private:
 
     std::string _makeDataVersionKey(int32_t chunkX, int32_t chunkZ) const;
 
+    int _firstBiomeSection() const;
+
+    int _biomeSectionCount() const;
+
     std::string _makeSubChunkKey(int32_t chunkX, int32_t chunkZ, int8_t subY) const;
 
     std::string _makePendingChangesKey(int32_t chunkX, int32_t chunkZ) const;

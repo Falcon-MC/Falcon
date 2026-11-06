@@ -4,6 +4,7 @@
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/BinaryStream.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
+#include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Storage/FalconDataVersion.h"
 
 #include <ctime>
@@ -139,6 +140,19 @@ std::string LevelStorage::_makeDataVersionKey(int32_t chunkX, int32_t chunkZ) co
     return key;
 }
 
+int LevelStorage::_firstBiomeSection() const {
+    return mDimensionId == static_cast<int>(DimensionType::Overworld) ? 0 : -LevelChunk::LOWEST_SUB_CHUNK_Y;
+}
+
+int LevelStorage::_biomeSectionCount() const {
+    // the game stores the sections of a dimension's own build range, from its bottom
+    if (mDimensionId == static_cast<int>(DimensionType::Nether))
+        return 8;
+    if (mDimensionId == static_cast<int>(DimensionType::TheEnd))
+        return 16;
+    return LevelChunk::SUB_CHUNK_COUNT;
+}
+
 std::string LevelStorage::_makeSubChunkKey(int32_t chunkX, int32_t chunkZ, int8_t subY) const {
     std::string key = _makeKey(chunkX, chunkZ, LevelDbTag::SubChunkPrefix);
     key.push_back((char) subY);
@@ -253,7 +267,7 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
         heightAndBiomes.putByte(0);
         heightAndBiomes.putByte(0);
     }
-    heightAndBiomes.put(chunk.encodeBiomesPersistent(LevelChunk::SUB_CHUNK_COUNT));
+    heightAndBiomes.put(chunk.encodeBiomesPersistent(_firstBiomeSection(), _biomeSectionCount()));
     batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::Data3D), heightAndBiomes.getBuffer());
 
     const leveldb::Status status = mDb->Write(leveldb::WriteOptions(), &batch);
@@ -314,7 +328,7 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
             for (int i = 0; i < 512; i++)
                 stream.getByte();
 
-            chunk.readBiomesPersistent(stream, LevelChunk::SUB_CHUNK_COUNT);
+            chunk.readBiomesPersistent(stream, _firstBiomeSection(), _biomeSectionCount());
         } catch (const BinaryDataException &exception) {
             LOG_WARN(LogAreaID::Server, "Malformed biome data for chunk %d %d: %s", chunk.getX(), chunk.getZ(),
                      exception.what());
