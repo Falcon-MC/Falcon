@@ -49,6 +49,9 @@ public:
     // the random a chunk post processes one structure type with, seeded anew for every type
     static std::mt19937 createPostProcessRandom(int64_t seed, int32_t chunkX, int32_t chunkZ);
 
+    // the region random as the candidate draws left it, which the start of the structure goes on drawing from
+    std::mt19937 createStartRandom(int64_t seed, int32_t chunkX, int32_t chunkZ) const;
+
     static const std::vector<const StructureFeature *> &getAll();
 
     static const StructureFeature *get(const std::string &name);
@@ -61,6 +64,9 @@ protected:
                                int32_t radius, const std::function<bool(int32_t biomeId)> &filter);
 
 private:
+    StructureChunkPos _drawMersenneCandidate(int64_t seed, int32_t regionX, int32_t regionZ,
+                                             std::mt19937 &random) const;
+
     static std::vector<const StructureFeature *> &_registry();
 
     std::string mName;
