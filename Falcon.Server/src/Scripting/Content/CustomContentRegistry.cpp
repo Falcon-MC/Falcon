@@ -407,7 +407,7 @@ void CustomContentRegistry::_loadPackActors(const std::string &packPath) {
         if (duplicate)
             continue;
 
-        LOG_TRACE(LogAreaID::Server, "Custom actor %s registered (%zu properties)", definition.mIdentifier.c_str(),
+        LOG_TRACE(LogAreaID::Script, "Custom actor %s registered (%zu properties)", definition.mIdentifier.c_str(),
                   definition.mProperties.size());
         mActors.push_back(definition);
     }
@@ -544,7 +544,7 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
 void CustomContentRegistry::_registerItem(const CustomItemDefinition &item, ItemDefinitionRegistry &items) {
     for (const CustomItemDefinition &existing: mItems) {
         if (existing.mIdentifier == item.mIdentifier) {
-            LOG_WARN(LogAreaID::Server, "Skipping duplicate custom item %s", item.mIdentifier.c_str());
+            LOG_WARN(LogAreaID::Script, "Skipping duplicate custom item %s", item.mIdentifier.c_str());
             return;
         }
     }
@@ -565,7 +565,7 @@ void CustomContentRegistry::_registerItem(const CustomItemDefinition &item, Item
     });
 
     mItems.push_back(stored);
-    LOG_TRACE(LogAreaID::Server, "Custom item %s registered (network id %d)", stored.mIdentifier.c_str(),
+    LOG_TRACE(LogAreaID::Script, "Custom item %s registered (network id %d)", stored.mIdentifier.c_str(),
               stored.mNetworkId);
 }
 
@@ -742,7 +742,7 @@ void CustomContentRegistry::_registerBlock(const CustomBlockDefinition &block, I
                                            BlockDefinitionRegistry &blocks) {
     for (const CustomBlockDefinition &existing: mBlocks) {
         if (existing.mIdentifier == block.mIdentifier) {
-            LOG_WARN(LogAreaID::Server, "Skipping duplicate custom block %s", block.mIdentifier.c_str());
+            LOG_WARN(LogAreaID::Script, "Skipping duplicate custom block %s", block.mIdentifier.c_str());
             return;
         }
     }
@@ -801,7 +801,7 @@ void CustomContentRegistry::_registerBlock(const CustomBlockDefinition &block, I
     });
 
     mBlocks.push_back(stored);
-    LOG_TRACE(LogAreaID::Server, "Custom block %s registered (network hash %d)", stored.mIdentifier.c_str(),
+    LOG_TRACE(LogAreaID::Script, "Custom block %s registered (network hash %d)", stored.mIdentifier.c_str(),
               stored.mNetworkHash);
 }
 

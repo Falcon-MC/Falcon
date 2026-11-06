@@ -459,6 +459,7 @@ void ServerNetworkHandler::setProtocolVersion(int protocolVersion, const std::st
 
 void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     mProperties = properties;
+    mPlayerIdleTimeoutTicks = (int64_t) mProperties.getPlayerIdleTimeout() * TICKS_PER_MINUTE;
 
     if (mNetherNetInstance != nullptr) {
         mNetherNetInstance->setServerDataProvider([this]() {
@@ -827,13 +828,19 @@ void ServerNetworkHandler::tick(bool paused) {
     mScriptEngine.tick(mCurrentTick);
 
     std::vector<std::pair<NetworkIdentifier, std::string>> timedOut;
+    std::vector<NetworkIdentifier> idle;
     for (auto &entry: mPlayers) {
         entry.second.getAcknowledgements().flush(*this, entry.first);
         if (entry.second.getAcknowledgements().hasTimedOut(mCurrentTick))
             timedOut.emplace_back(entry.first, entry.second.localize("falcon.disconnect.timedOut"));
+        else if (mPlayerIdleTimeoutTicks > 0 && entry.second.isSpawned()
+                 && mCurrentTick - entry.second.getLastActiveTick() >= mPlayerIdleTimeoutTicks)
+            idle.push_back(entry.first);
     }
     for (const auto &entry: timedOut)
         _disconnect(entry.first, DisconnectReason::Timeout, entry.second);
+    for (const NetworkIdentifier &entry: idle)
+        _disconnect(entry, DisconnectReason::KickedForIdle, IDLE_MESSAGE);
 
     uint32_t loadedChunks = 0;
     uint32_t pendingChunkTasks = 0;
@@ -1922,6 +1929,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const TextPacket 
     if (packet.mType != TextPacket::Type::Chat || !_allowPacket(id, RateLimitedPacket::Chat))
         return;
 
+    player->markActive(mCurrentTick);
+
     const std::string message = packet.mMessage.substr(0, packet.mMessage.find('\n'));
     if (message.find_first_not_of(" \t\r") == std::string::npos)
         return;
@@ -2032,6 +2041,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ItemStackRe
     if (player == nullptr || !player->isSpawned())
         return;
 
+    player->markActive(mCurrentTick);
+
     std::string badPacketReason;
     if (BadPacketHandler::inspect(*player, packet, badPacketReason)) {
         _rejectBadPacket(id, badPacketReason);
@@ -2054,6 +2065,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const InventoryTr
     if (player == nullptr || !player->isSpawned())
         return;
 
+    player->markActive(mCurrentTick);
+
     std::string badPacketReason;
     if (BadPacketHandler::inspect(*player, packet, badPacketReason)) {
         _rejectBadPacket(id, badPacketReason);
@@ -2067,6 +2080,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ContainerCl
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr || !player->isSpawned())
         return;
+
+    player->markActive(mCurrentTick);
 
     InventoryHandler::handleContainerClose(*player, packet);
 }
@@ -2084,6 +2099,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequ
     if (player == nullptr || !_allowPacket(id, RateLimitedPacket::Command))
         return;
 
+    player->markActive(mCurrentTick);
     LOG_INFO(LogAreaID::Server, "%s issued command: %s", player->getName().c_str(), packet.mCommand.c_str());
 
     std::string commandLine = packet.mCommand;

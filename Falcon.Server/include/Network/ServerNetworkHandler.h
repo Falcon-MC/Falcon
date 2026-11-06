@@ -456,6 +456,8 @@ public:
     OpList &getOpList() { return mOps; }
 
     static constexpr const char *NOT_ALLOW_LISTED_MESSAGE = "disconnectionScreen.notAllowed";
+    static constexpr const char *IDLE_MESSAGE = "disconnectionScreen.body.idleTooLong";
+    static constexpr int64_t TICKS_PER_MINUTE = 1200;
 
     AllowList &getAllowList() {
         return mAllowList;
@@ -901,6 +903,7 @@ private:
     std::vector<std::unique_ptr<ItemActor>> mItemEntities;
     uint64_t mNextRuntimeId;
     int64_t mCurrentTick = 0;
+    int64_t mPlayerIdleTimeoutTicks = 0;
     uint64_t mChunkStreamTick = 0;
     std::chrono::steady_clock::time_point mStartTime = std::chrono::steady_clock::now();
 

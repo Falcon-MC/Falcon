@@ -473,6 +473,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     player.getAttributes() = ActorAttributes::createPlayerDefaults();
     player.setGameType((int32_t) owner.getProperties().getGameType());
     owner._loadPlayerData(player);
+    if (owner.getProperties().getForceGameType())
+        player.setGameType((int32_t) owner.getProperties().getGameType());
     player.setHungerEnabled(player.getGameType() == (int32_t) GameType::Survival
                             || player.getGameType() == (int32_t) GameType::Adventure);
 
@@ -1225,6 +1227,7 @@ void LoginHandler::removeFromPlayerList(ServerNetworkHandler &owner, ServerPlaye
 
 void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner, ServerPlayer &player) {
     player.setLoginState(ServerPlayer::LoginState::Spawned);
+    player.markActive(owner.getCurrentTick());
     player.grantSpawnInvulnerability();
     BonusChest::placeIfPending(owner, owner.getWorldFor(player).getOverworld());
     LOG_INFO(LogAreaID::Server, "Player %s spawned", player.getName().c_str());

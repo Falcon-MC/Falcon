@@ -369,11 +369,28 @@ bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkId
     return true;
 }
 
+// reads what the player pressed, never the resulting position: water, pistons and mobs move an idle player, and
+// the client sends this packet every tick whether or not anything was pressed
+static bool isActiveInput(ServerPlayer &player, const PlayerAuthInputPacket &packet) {
+    const bool rotated = player.updateInputRotation(packet.mRotation);
+
+    return rotated || packet.mMotionX != 0.0f || packet.mMotionY != 0.0f
+           || packet.mRawMoveVectorX != 0.0f || packet.mRawMoveVectorY != 0.0f
+           || packet.mHasItemUseTransaction || packet.mHasItemStackRequest || !packet.mPlayerActions.empty()
+           || packet.hasInputFlag((int32_t) PlayerAuthInputData::JumpDown)
+           || packet.hasInputFlag((int32_t) PlayerAuthInputData::SneakDown)
+           || packet.hasInputFlag((int32_t) PlayerAuthInputData::MissedSwing)
+           || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartUsingItem);
+}
+
 void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                             ServerPlayer &player, const PlayerAuthInputPacket &packet) {
     // BDS LoadingScreenPlayerProtectionsSystem disables movement until loading completes.
     if (!player.isSpawned())
         return;
+
+    if (isActiveInput(player, packet))
+        player.markActive(owner.getCurrentTick());
 
     // Resolve sprinting before replay so physics and the advertised actor state use the same decision.
     // The client toggles sprint on StartSprinting and keeps it until StopSprinting. The Sprinting bit is not

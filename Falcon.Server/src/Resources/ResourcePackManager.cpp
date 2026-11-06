@@ -229,7 +229,7 @@ std::string ResourcePackManager::_sha256(const std::string &data) {
 bool ResourcePackManager::_loadPackBytes(std::string data, const std::string &label, const std::string &contentKey) {
     std::string manifest;
     if (!_extractZipEntry(data, "manifest.json", manifest)) {
-        LOG_WARN(LogAreaID::Server, "Resource pack %s has no readable manifest.json", label.c_str());
+        LOG_WARN(LogAreaID::Resource, "Resource pack %s has no readable manifest.json", label.c_str());
         return false;
     }
 
@@ -237,13 +237,13 @@ bool ResourcePackManager::_loadPackBytes(std::string data, const std::string &la
     std::string version;
     std::string name;
     if (!_readManifest(manifest, uuid, version, name)) {
-        LOG_WARN(LogAreaID::Server, "Resource pack %s manifest is missing a header uuid", label.c_str());
+        LOG_WARN(LogAreaID::Resource, "Resource pack %s manifest is missing a header uuid", label.c_str());
         return false;
     }
 
     for (const ResourcePack &existing: mPacks) {
         if (existing.mUuidString == uuid) {
-            LOG_WARN(LogAreaID::Server, "Skipping duplicate resource pack %s (uuid %s already loaded)",
+            LOG_WARN(LogAreaID::Resource, "Skipping duplicate resource pack %s (uuid %s already loaded)",
                      label.c_str(), uuid.c_str());
             return false;
         }
@@ -261,7 +261,7 @@ bool ResourcePackManager::_loadPackBytes(std::string data, const std::string &la
     pack.mContentKey = contentKey;
 
     if (!contentKey.empty())
-        LOG_INFO(LogAreaID::Server, "Resource pack %s is encrypted (loaded content key)", pack.mName.c_str());
+        LOG_INFO(LogAreaID::Resource, "Resource pack %s is encrypted (loaded content key)", pack.mName.c_str());
 
     mPacks.push_back(std::move(pack));
     return true;
@@ -270,7 +270,7 @@ bool ResourcePackManager::_loadPackBytes(std::string data, const std::string &la
 bool ResourcePackManager::_loadPackFile(const std::string &path, const std::string &fileName) {
     std::string data;
     if (!_readWholeFile(path, data)) {
-        LOG_WARN(LogAreaID::Server, "Could not read resource pack %s", fileName.c_str());
+        LOG_WARN(LogAreaID::Resource, "Could not read resource pack %s", fileName.c_str());
         return false;
     }
 
@@ -402,7 +402,7 @@ void ResourcePackManager::loadFromDirectory(const std::string &directory) {
         }
     }
 
-    LOG_TRACE(LogAreaID::Server, "Resource pack manager loaded %zu pack(s)", mPacks.size());
+    LOG_TRACE(LogAreaID::Resource, "Resource pack manager loaded %zu pack(s)", mPacks.size());
 }
 
 bool ResourcePackManager::loadCdnConfig(const std::string &path) {
@@ -413,7 +413,7 @@ bool ResourcePackManager::loadCdnConfig(const std::string &path) {
     const std::unique_ptr<json::Value> root = json::parse(source);
     const json::Value *entries = root == nullptr ? nullptr : root->get("resource_packs");
     if (entries == nullptr || !entries->isArray()) {
-        LOG_ERROR(LogAreaID::Server, "Failed to parse CDN config");
+        LOG_ERROR(LogAreaID::Resource, "Failed to parse CDN config");
         return false;
     }
 
@@ -435,13 +435,13 @@ bool ResourcePackManager::loadCdnConfig(const std::string &path) {
         });
 
         if (pack == mPacks.end()) {
-            LOG_WARN(LogAreaID::Server, "Mismatch detected between CDN config and required resource packs: %s",
+            LOG_WARN(LogAreaID::Resource, "Mismatch detected between CDN config and required resource packs: %s",
                      packId->mString.c_str());
             continue;
         }
 
         pack->mCdnUrl = url->mString;
-        LOG_INFO(LogAreaID::Server, "CDN URL for resource pack %s: %s", pack->mName.c_str(),
+        LOG_INFO(LogAreaID::Resource, "CDN URL for resource pack %s: %s", pack->mName.c_str(),
                  pack->mCdnUrl.c_str());
     }
 
