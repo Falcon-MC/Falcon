@@ -4,111 +4,76 @@
 
 namespace {
 
-    const double SQRT_3 = std::sqrt(3.0);
-    const double F2 = 0.5 * (SQRT_3 - 1.0);
-    const double G2 = (3.0 - SQRT_3) / 6.0;
+    const float F2 = (float) (0.5 * (std::sqrt(3.0) - 1.0));
+    const float G2 = (float) ((3.0 - std::sqrt(3.0)) / 6.0);
 
-    const int32_t GRAD3[12][3] = {
-            {1,  1,  0},
-            {-1, 1,  0},
-            {1,  -1, 0},
-            {-1, -1, 0},
-            {1,  0,  1},
-            {-1, 0,  1},
-            {1,  0,  -1},
-            {-1, 0,  -1},
-            {0,  1,  1},
-            {0,  -1, 1},
-            {0,  1,  -1},
-            {0,  -1, -1}
+    const float GRADIENTS[12][2] = {
+            {1.0f,  1.0f},
+            {-1.0f, 1.0f},
+            {1.0f,  -1.0f},
+            {-1.0f, -1.0f},
+            {1.0f,  0.0f},
+            {-1.0f, 0.0f},
+            {1.0f,  0.0f},
+            {-1.0f, 0.0f},
+            {0.0f,  1.0f},
+            {0.0f,  -1.0f},
+            {0.0f,  1.0f},
+            {0.0f,  -1.0f}
     };
+
+    int32_t fastFloor(float value) {
+        return value > 0.0f ? (int32_t) value : (int32_t) value - 1;
+    }
+
+    float contribution(int32_t gradient, float x, float z) {
+        const float falloff = (0.5f - x * x) - z * z;
+        if (falloff < 0.0f)
+            return 0.0f;
+
+        const float *vector = GRADIENTS[gradient % 12];
+        return (vector[1] * z + vector[0] * x) * (((falloff * falloff) * falloff) * falloff);
+    }
 
 }
 
-TheEndSimplexNoise::TheEndSimplexNoise(IRandom &random)
-        : mPermutations(), mOriginX(0.0), mOriginY(0.0), mOriginZ(0.0) {
-    mPermutations.fill(0);
-
-    mOriginX = random.nextDouble() * 256.0;
-    mOriginY = random.nextDouble() * 256.0;
-    mOriginZ = random.nextDouble() * 256.0;
+TheEndSimplexNoise::TheEndSimplexNoise(std::mt19937 &random)
+        : mPermutations() {
+    for (int32_t i = 0; i < 3; i++)
+        random();
 
     for (int32_t i = 0; i < 256; i++)
         mPermutations[(size_t) i] = i;
 
-    for (int32_t l = 0; l < 256; l++) {
-        const int32_t j = random.nextBoundedInt(256 - l) + l;
-        const int32_t k = mPermutations[(size_t) l];
-        mPermutations[(size_t) l] = mPermutations[(size_t) j];
-        mPermutations[(size_t) j] = k;
-        mPermutations[(size_t) (l + 256)] = mPermutations[(size_t) l];
+    for (int32_t i = 0; i < 256; i++) {
+        const int32_t swap = (int32_t) (random() % (uint32_t) (256 - i)) + i;
+        const int32_t value = mPermutations[(size_t) i];
+        mPermutations[(size_t) i] = mPermutations[(size_t) swap];
+        mPermutations[(size_t) swap] = value;
+        mPermutations[(size_t) (i + 256)] = mPermutations[(size_t) i];
     }
 }
 
-int32_t TheEndSimplexNoise::_fastFloor(double value) {
-    return value > 0.0 ? (int32_t) value : (int32_t) value - 1;
-}
+float TheEndSimplexNoise::getValue(float x, float z) const {
+    const float skew = (z + x) * F2;
+    const int32_t i = fastFloor(skew + x);
+    const int32_t j = fastFloor(skew + z);
+    const float unskew = (float) (i + j) * G2;
+    const float x0 = x - ((float) i - unskew);
+    const float z0 = z - ((float) j - unskew);
 
-double TheEndSimplexNoise::_dot(const int32_t *gradient, double x, double z) {
-    return (double) gradient[0] * x + (double) gradient[1] * z;
-}
+    const int32_t stepX = x0 > z0 ? 1 : 0;
+    const int32_t stepZ = 1 - stepX;
+    const float x1 = G2 + (x0 - (float) stepX);
+    const float z1 = G2 + (z0 - (float) stepZ);
+    const float x2 = (G2 + G2) + (x0 + -1.0f);
+    const float z2 = (G2 + G2) + (z0 + -1.0f);
 
-double TheEndSimplexNoise::getValue(double x, double z) const {
-    const double d4 = (x + z) * F2;
-    const int32_t i = _fastFloor(x + d4);
-    const int32_t j = _fastFloor(z + d4);
-    const double d6 = (double) (i + j) * G2;
-    const double d7 = (double) i - d6;
-    const double d8 = (double) j - d6;
-    const double d9 = x - d7;
-    const double d10 = z - d8;
-
-    int32_t k = 0;
-    int32_t l = 0;
-    if (d9 > d10) {
-        k = 1;
-        l = 0;
-    } else {
-        k = 0;
-        l = 1;
-    }
-
-    const double d11 = d9 - (double) k + G2;
-    const double d12 = d10 - (double) l + G2;
-    const double d13 = d9 - 1.0 + 2.0 * G2;
-    const double d14 = d10 - 1.0 + 2.0 * G2;
-    const int32_t i1 = i & 255;
-    const int32_t j1 = j & 255;
-    const int32_t k1 = mPermutations[(size_t) (i1 + mPermutations[(size_t) j1])] % 12;
-    const int32_t l1 = mPermutations[(size_t) (i1 + k + mPermutations[(size_t) (j1 + l)])] % 12;
-    const int32_t i2 = mPermutations[(size_t) (i1 + 1 + mPermutations[(size_t) (j1 + 1)])] % 12;
-
-    double d15 = 0.5 - d9 * d9 - d10 * d10;
-    double d0 = 0.0;
-    if (d15 < 0.0) {
-        d0 = 0.0;
-    } else {
-        d15 = d15 * d15;
-        d0 = d15 * d15 * _dot(GRAD3[k1], d9, d10);
-    }
-
-    double d16 = 0.5 - d11 * d11 - d12 * d12;
-    double d1 = 0.0;
-    if (d16 < 0.0) {
-        d1 = 0.0;
-    } else {
-        d16 = d16 * d16;
-        d1 = d16 * d16 * _dot(GRAD3[l1], d11, d12);
-    }
-
-    double d17 = 0.5 - d13 * d13 - d14 * d14;
-    double d2 = 0.0;
-    if (d17 < 0.0) {
-        d2 = 0.0;
-    } else {
-        d17 = d17 * d17;
-        d2 = d17 * d17 * _dot(GRAD3[i2], d13, d14);
-    }
-
-    return 70.0 * (d0 + d1 + d2);
+    const int32_t latticeX = i & 255;
+    const int32_t latticeZ = j & 255;
+    const std::array<int32_t, 512> &p = mPermutations;
+    const float first = contribution(p[(size_t) (latticeX + p[(size_t) latticeZ])], x0, z0);
+    const float second = contribution(p[(size_t) (stepX + latticeX + p[(size_t) (stepZ + latticeZ)])], x1, z1);
+    const float third = contribution(p[(size_t) (p[(size_t) latticeZ + 1] + latticeX + 1)], x2, z2);
+    return ((first + second) + third) * 70.0f;
 }

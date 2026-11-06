@@ -1,164 +1,132 @@
 #include "World/Level/LevelGen/End/Noise/TheEndImprovedNoise.h"
 
+#include <cmath>
+
 namespace {
 
-    const double GRAD_X[16] = {1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0};
-    const double GRAD_Y[16] = {1.0, 1.0, -1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0};
-    const double GRAD_Z[16] = {0.0, 0.0, 0.0, 0.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 0.0, 1.0, 0.0, -1.0};
-    const double GRAD_2X[16] = {1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0};
-    const double GRAD_2Z[16] = {0.0, 0.0, 0.0, 0.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 0.0, 1.0, 0.0, -1.0};
+    const float GRADIENTS[16][3] = {
+            {1.0f,  1.0f,  0.0f},
+            {-1.0f, 1.0f,  0.0f},
+            {1.0f,  -1.0f, 0.0f},
+            {-1.0f, -1.0f, 0.0f},
+            {1.0f,  0.0f,  1.0f},
+            {-1.0f, 0.0f,  1.0f},
+            {1.0f,  0.0f,  -1.0f},
+            {-1.0f, 0.0f,  -1.0f},
+            {0.0f,  1.0f,  1.0f},
+            {0.0f,  -1.0f, 1.0f},
+            {0.0f,  1.0f,  -1.0f},
+            {0.0f,  -1.0f, -1.0f},
+            {1.0f,  1.0f,  0.0f},
+            {0.0f,  -1.0f, 1.0f},
+            {-1.0f, 1.0f,  0.0f},
+            {0.0f,  -1.0f, -1.0f}
+    };
+
+    float nextUnit(std::mt19937 &random) {
+        return static_cast<float>(static_cast<double>(random()) * 2.3283064365386963e-10);
+    }
+
+    float grad(int32_t hash, float x, float y, float z) {
+        const float *gradient = GRADIENTS[hash & 15];
+        return gradient[2] * z + (gradient[1] * y + gradient[0] * x);
+    }
+
+    float fade(float value) {
+        return ((value * 6.0f + -15.0f) * value + 10.0f) * ((value * value) * value);
+    }
 
 }
 
-TheEndImprovedNoise::TheEndImprovedNoise(IRandom &random)
-        : mPermutations(), mXCoord(0.0), mYCoord(0.0), mZCoord(0.0) {
-    mPermutations.fill(0);
-
-    mXCoord = random.nextDouble() * 256.0;
-    mYCoord = random.nextDouble() * 256.0;
-    mZCoord = random.nextDouble() * 256.0;
+TheEndImprovedNoise::TheEndImprovedNoise(std::mt19937 &random)
+        : mPermutations(), mXCoord(0.0f), mYCoord(0.0f), mZCoord(0.0f) {
+    mXCoord = nextUnit(random) * 256.0f;
+    mYCoord = nextUnit(random) * 256.0f;
+    mZCoord = nextUnit(random) * 256.0f;
 
     for (int32_t i = 0; i < 256; i++)
         mPermutations[(size_t) i] = i;
 
-    for (int32_t l = 0; l < 256; l++) {
-        const int32_t j = random.nextBoundedInt(256 - l) + l;
-        const int32_t k = mPermutations[(size_t) l];
-        mPermutations[(size_t) l] = mPermutations[(size_t) j];
-        mPermutations[(size_t) j] = k;
-        mPermutations[(size_t) (l + 256)] = mPermutations[(size_t) l];
+    for (int32_t i = 0; i < 256; i++) {
+        const int32_t swap = (int32_t) (random() % (uint32_t) (256 - i)) + i;
+        const int32_t value = mPermutations[(size_t) i];
+        mPermutations[(size_t) i] = mPermutations[(size_t) swap];
+        mPermutations[(size_t) swap] = value;
+        mPermutations[(size_t) (i + 256)] = mPermutations[(size_t) i];
     }
 }
 
-double TheEndImprovedNoise::_lerp(double delta, double start, double end) {
-    return start + delta * (end - start);
-}
+void TheEndImprovedNoise::addOctave(float *noiseArray, const float *position, int32_t xSize, int32_t ySize,
+                                    int32_t zSize, const float *scale, float weight) const {
+    const std::array<int32_t, 512> &p = mPermutations;
+    const float inverseWeight = 1.0f / weight;
 
-double TheEndImprovedNoise::_grad2(int32_t hash, double x, double z) const {
-    const int32_t i = hash & 15;
-    return GRAD_2X[i] * x + GRAD_2Z[i] * z;
-}
+    // the layer at the noise origin keeps its own fraction, the others snap down to a multiple of the y scale
+    const int32_t originY = (int32_t) mYCoord;
+    const float originFraction = mYCoord - (float) originY;
 
-double TheEndImprovedNoise::_grad(int32_t hash, double x, double y, double z) const {
-    const int32_t i = hash & 15;
-    return GRAD_X[i] * x + GRAD_Y[i] * y + GRAD_Z[i] * z;
-}
+    float lanes[4] = {};
+    int32_t cachedLattice = -1;
+    int32_t index = 0;
 
-void TheEndImprovedNoise::populateNoiseArray(std::vector<double> &noiseArray, double xOffset, double yOffset,
-                                             double zOffset, int32_t xSize, int32_t ySize, int32_t zSize,
-                                             double xScale, double yScale, double zScale, double noiseScale) const {
-    if (ySize == 1) {
-        int32_t l5 = 0;
-        const double d16 = 1.0 / noiseScale;
+    for (int32_t ix = 0; ix < xSize; ix++) {
+        const float x = ((float) ix + position[0]) * scale[0] + mXCoord;
+        const float floorX = std::floor(x);
+        const int32_t latticeX = (int32_t) (uint8_t) (int32_t) floorX;
+        const float fractionX = x - floorX;
+        const float fadeX = fade(fractionX);
 
-        for (int32_t j2 = 0; j2 < xSize; ++j2) {
-            double d17 = xOffset + (double) j2 * xScale + mXCoord;
-            int32_t i6 = (int32_t) d17;
+        for (int32_t iz = 0; iz < zSize; iz++) {
+            const float z = ((float) iz + position[2]) * scale[2] + mZCoord;
+            const float floorZ = std::floor(z);
+            const int32_t latticeZ = (int32_t) (uint8_t) (int32_t) floorZ;
+            const float fractionZ = z - floorZ;
+            const float fadeZ = fade(fractionZ);
 
-            if (d17 < (double) i6)
-                --i6;
+            for (int32_t iy = 0; iy < ySize; iy++) {
+                const float y = ((float) iy + position[1]) * scale[1] + mYCoord;
+                const float floorY = std::floor(y);
+                const int32_t latticeY = (int32_t) (uint8_t) (int32_t) floorY;
+                const float fractionY = y - floorY;
 
-            const int32_t k2 = i6 & 255;
-            d17 = d17 - (double) i6;
-            const double d18 = d17 * d17 * d17 * (d17 * (d17 * 6.0 - 15.0) + 10.0);
-
-            for (int32_t j6 = 0; j6 < zSize; ++j6) {
-                double d19 = zOffset + (double) j6 * zScale + mZCoord;
-                int32_t k6 = (int32_t) d19;
-
-                if (d19 < (double) k6)
-                    --k6;
-
-                const int32_t l6 = k6 & 255;
-                d19 = d19 - (double) k6;
-                const double d20 = d19 * d19 * d19 * (d19 * (d19 * 6.0 - 15.0) + 10.0);
-                const int32_t i5 = mPermutations[(size_t) k2];
-                const int32_t j5 = mPermutations[(size_t) i5] + l6;
-                const int32_t j = mPermutations[(size_t) (k2 + 1)];
-                const int32_t k5 = mPermutations[(size_t) j] + l6;
-                const double d14 = _lerp(d18, _grad2(mPermutations[(size_t) j5], d17, d19),
-                                         _grad(mPermutations[(size_t) k5], d17 - 1.0, 0.0, d19));
-                const double d15 = _lerp(d18, _grad(mPermutations[(size_t) (j5 + 1)], d17, 0.0, d19 - 1.0),
-                                         _grad(mPermutations[(size_t) (k5 + 1)], d17 - 1.0, 0.0, d19 - 1.0));
-                const double d21 = _lerp(d20, d14, d15);
-                const int32_t i7 = l5++;
-                noiseArray[(size_t) i7] += d21 * d16;
-            }
-        }
-
-        return;
-    }
-
-    int32_t i = 0;
-    const double d0 = 1.0 / noiseScale;
-    int32_t k = -1;
-    int32_t l = 0;
-    int32_t i1 = 0;
-    int32_t j1 = 0;
-    int32_t k1 = 0;
-    int32_t l1 = 0;
-    int32_t i2 = 0;
-    double d1 = 0.0;
-    double d2 = 0.0;
-    double d3 = 0.0;
-    double d4 = 0.0;
-
-    for (int32_t l2 = 0; l2 < xSize; ++l2) {
-        double d5 = xOffset + (double) l2 * xScale + mXCoord;
-        int32_t i3 = (int32_t) d5;
-
-        if (d5 < (double) i3)
-            --i3;
-
-        const int32_t j3 = i3 & 255;
-        d5 = d5 - (double) i3;
-        const double d6 = d5 * d5 * d5 * (d5 * (d5 * 6.0 - 15.0) + 10.0);
-
-        for (int32_t k3 = 0; k3 < zSize; ++k3) {
-            double d7 = zOffset + (double) k3 * zScale + mZCoord;
-            int32_t l3 = (int32_t) d7;
-
-            if (d7 < (double) l3)
-                --l3;
-
-            const int32_t i4 = l3 & 255;
-            d7 = d7 - (double) l3;
-            const double d8 = d7 * d7 * d7 * (d7 * (d7 * 6.0 - 15.0) + 10.0);
-
-            for (int32_t j4 = 0; j4 < ySize; ++j4) {
-                double d9 = yOffset + (double) j4 * yScale + mYCoord;
-                int32_t k4 = (int32_t) d9;
-
-                if (d9 < (double) k4)
-                    --k4;
-
-                const int32_t l4 = k4 & 255;
-                d9 = d9 - (double) k4;
-                const double d10 = d9 * d9 * d9 * (d9 * (d9 * 6.0 - 15.0) + 10.0);
-
-                if (j4 == 0 || l4 != k) {
-                    k = l4;
-                    l = mPermutations[(size_t) j3] + l4;
-                    i1 = mPermutations[(size_t) l] + i4;
-                    j1 = mPermutations[(size_t) (l + 1)] + i4;
-                    k1 = mPermutations[(size_t) (j3 + 1)] + l4;
-                    l1 = mPermutations[(size_t) k1] + i4;
-                    i2 = mPermutations[(size_t) (k1 + 1)] + i4;
-                    d1 = _lerp(d6, _grad(mPermutations[(size_t) i1], d5, d9, d7),
-                               _grad(mPermutations[(size_t) l1], d5 - 1.0, d9, d7));
-                    d2 = _lerp(d6, _grad(mPermutations[(size_t) j1], d5, d9 - 1.0, d7),
-                               _grad(mPermutations[(size_t) i2], d5 - 1.0, d9 - 1.0, d7));
-                    d3 = _lerp(d6, _grad(mPermutations[(size_t) (i1 + 1)], d5, d9, d7 - 1.0),
-                               _grad(mPermutations[(size_t) (l1 + 1)], d5 - 1.0, d9, d7 - 1.0));
-                    d4 = _lerp(d6, _grad(mPermutations[(size_t) (j1 + 1)], d5, d9 - 1.0, d7 - 1.0),
-                               _grad(mPermutations[(size_t) (i2 + 1)], d5 - 1.0, d9 - 1.0, d7 - 1.0));
+                bool refresh = true;
+                float gradientY = originFraction;
+                if (originY != (int32_t) y) {
+                    refresh = latticeY != cachedLattice;
+                    gradientY = fractionY - std::floor(fractionY / scale[1]) * scale[1];
                 }
 
-                const double d11 = _lerp(d10, d1, d2);
-                const double d12 = _lerp(d10, d3, d4);
-                const double d13 = _lerp(d8, d11, d12);
-                const int32_t j7 = i++;
-                noiseArray[(size_t) j7] += d13 * d0;
+                if (refresh) {
+                    cachedLattice = latticeY;
+
+                    const int32_t a = latticeY + p[(size_t) latticeX];
+                    const int32_t b = latticeY + p[(size_t) latticeX + 1];
+                    const int32_t aa = latticeZ + p[(size_t) a];
+                    const int32_t ab = latticeZ + p[(size_t) a + 1];
+                    const int32_t ba = latticeZ + p[(size_t) b];
+                    const int32_t bb = latticeZ + p[(size_t) b + 1];
+                    const float x1 = fractionX + -1.0f;
+                    const float y1 = gradientY + -1.0f;
+                    const float z1 = fractionZ + -1.0f;
+
+                    const float low[4] = {grad(p[(size_t) ab], fractionX, y1, fractionZ),
+                                          grad(p[(size_t) aa + 1], fractionX, gradientY, z1),
+                                          grad(p[(size_t) aa], fractionX, gradientY, fractionZ),
+                                          grad(p[(size_t) ab + 1], fractionX, y1, z1)};
+                    const float high[4] = {grad(p[(size_t) bb], x1, y1, fractionZ),
+                                           grad(p[(size_t) ba + 1], x1, gradientY, z1),
+                                           grad(p[(size_t) ba], x1, gradientY, fractionZ),
+                                           grad(p[(size_t) bb + 1], x1, y1, z1)};
+                    for (int32_t lane = 0; lane < 4; lane++)
+                        lanes[lane] = (high[lane] - low[lane]) * fadeX + low[lane];
+                }
+
+                const float fadeY = ((fractionY * fractionY) * fractionY)
+                                    * ((fractionY * 6.0f + -15.0f) * fractionY + 10.0f);
+                const float far = fadeY * (lanes[3] - lanes[1]) + lanes[1];
+                const float near = fadeY * (lanes[0] - lanes[2]) + lanes[2];
+                noiseArray[index] = ((far - near) * fadeZ + near) * inverseWeight + noiseArray[index];
+                index++;
             }
         }
     }
