@@ -20,3 +20,7 @@ ItemLockMode ItemProperties::getLockMode(const ItemStack &item) {
         return ItemLockMode::None;
     return mode == 1 ? ItemLockMode::LockInSlot : ItemLockMode::LockInInventory;
 }
+
+bool ItemProperties::keepsOnDeath(const ItemStack &item) {
+    return item.mTag.isCompound() && item.mTag.getByte("minecraft:keep_on_death") != 0;
+}

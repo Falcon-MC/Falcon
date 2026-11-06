@@ -16,4 +16,5 @@ public:
     static bool canDestroy(const ItemStack &item, const std::string &blockName);
     static bool isUnbreakable(const ItemStack &item);
     static ItemLockMode getLockMode(const ItemStack &item);
+    static bool keepsOnDeath(const ItemStack &item);
 };

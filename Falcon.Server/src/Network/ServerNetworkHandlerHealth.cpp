@@ -12,6 +12,7 @@
 #include "Core/Math/MathConstants.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/ItemProperties.h"
 #include "World/Item/TotemItem.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -341,13 +342,28 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
                  ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
     };
 
-    for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; slot++)
-        dropOnDeath(inventory.getItem(slot));
+    std::vector<std::pair<int, ItemStack>> keptItems;
+    std::vector<std::pair<int, ItemStack>> keptArmor;
+    for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; slot++) {
+        const ItemStack &item = inventory.getItem(slot);
+        if (ItemProperties::keepsOnDeath(item))
+            keptItems.emplace_back(slot, item);
+        else
+            dropOnDeath(item);
+    }
 
-    for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; slot++)
-        dropOnDeath(inventory.getArmor(slot));
+    for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; slot++) {
+        const ItemStack &item = inventory.getArmor(slot);
+        if (ItemProperties::keepsOnDeath(item))
+            keptArmor.emplace_back(slot, item);
+        else
+            dropOnDeath(item);
+    }
 
-    dropOnDeath(inventory.getOffhand());
+    const ItemStack offhand = inventory.getOffhand();
+    const bool keepOffhand = ItemProperties::keepsOnDeath(offhand);
+    if (!keepOffhand)
+        dropOnDeath(offhand);
     dropOnDeath(inventory.getCursor());
 
     for (int slot = 0; slot < PlayerInventory::CRAFTING_SIZE; ++slot)
@@ -358,6 +374,13 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
 
     inventory.clear();
     inventory.setSelectedSlot(0);
+
+    for (auto &[slot, item]: keptItems)
+        inventory.setItem(slot, std::move(item));
+    for (auto &[slot, item]: keptArmor)
+        inventory.setArmor(slot, std::move(item));
+    if (keepOffhand)
+        inventory.setOffhand(offhand);
 
     _sendInventory(player);
 }
