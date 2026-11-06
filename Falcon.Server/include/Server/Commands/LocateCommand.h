@@ -17,5 +17,7 @@ public:
 private:
     bool _locateBiome(CommandOrigin &sender, const std::vector<std::string> &arguments);
 
+    bool _locateStructure(CommandOrigin &sender, const std::vector<std::string> &arguments);
+
     ServerNetworkHandler &mHandler;
 };
