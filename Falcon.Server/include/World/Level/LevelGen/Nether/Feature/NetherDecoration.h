@@ -15,6 +15,10 @@ public:
 
     void placeAfterBiomes();
 
+    std::mt19937 &getRandom() {
+        return mRandom;
+    }
+
 private:
     int32_t _at(int32_t origin, int32_t bound);
 
