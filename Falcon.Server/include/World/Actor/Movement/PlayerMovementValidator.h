@@ -34,6 +34,11 @@ public:
 
     void onMovementEffect(uint64_t tick);
 
+    // the client predicts its own exit point, which the next input reports once
+    void allowDismountPosition() {
+        mDismountPending = true;
+    }
+
     /**
      * Proves that a correction reached the client: a network stack latency request goes out right after it, and
      * once the client acknowledges that request it has received the correction too. Inputs that still diverge
@@ -85,6 +90,7 @@ private:
     int64_t mAcknowledgedInputTick = 0;
     int64_t mLastInputTick = 0;
     uint8_t mAdjustmentCount = 0;
+    bool mDismountPending = false;
     bool mHasMovementEffect = false;
     uint64_t mLastMovementEffectTick = 0;
 };

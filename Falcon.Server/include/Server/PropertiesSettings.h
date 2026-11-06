@@ -197,6 +197,10 @@ public:
         return mServerAuthoritativeMovementStrict;
     }
 
+    bool getServerAuthoritativeDismountStrict() const {
+        return getBool("server-authoritative-dismount-strict");
+    }
+
     float getPlayerMovementActionDirectionThreshold() const {
         return getFloat("player-movement-action-direction-threshold");
     }

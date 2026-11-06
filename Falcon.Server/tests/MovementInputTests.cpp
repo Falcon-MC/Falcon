@@ -165,6 +165,20 @@ namespace {
         const auto close = [](float actual, float expected, const char *message) {
             require(std::fabs(actual - expected) < 0.000001f, message);
         };
+        {
+            PlayerMovementValidator validator;
+            Vector3f position(0, 0, 0);
+            validator.allowDismountPosition();
+            require(!validator.reconcile(position, Vector3f(14, 0, 0), 100, 0.5f, false),
+                    "A non strict exit inside 15 blocks was corrected");
+            close(position.x, 14.0f, "A non strict exit was not adopted");
+            require(validator.reconcile(position, Vector3f(28, 0, 0), 200, 0.5f, false),
+                    "The exit tolerance outlived its input");
+            position = Vector3f(0, 0, 0);
+            validator.allowDismountPosition();
+            require(validator.reconcile(position, Vector3f(16, 0, 0), 300, 0.5f, false),
+                    "An exit beyond 15 blocks was accepted");
+        }
         for (bool strict: {false, true}) {
             PlayerMovementValidator validator;
             Vector3f position(0, 0, 0);

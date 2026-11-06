@@ -10,6 +10,18 @@ bool PlayerMovementValidator::reconcile(Vector3f &simulated, const Vector3f &rep
         *details = {};
     const uint8_t adjustments = mAdjustmentCount;
     mAdjustmentCount = 0;
+    const bool dismounting = mDismountPending;
+    mDismountPending = false;
+    if (dismounting) {
+        const float exitX = reported.x - simulated.x;
+        const float exitY = reported.y - simulated.y;
+        const float exitZ = reported.z - simulated.z;
+        // client 0x14A2183E0 grants 225, 15 blocks squared, to a non strict exit
+        if (exitX * exitX + exitY * exitY + exitZ * exitZ <= 225.0f) {
+            simulated = reported;
+            return false;
+        }
+    }
     if (tick <= mLastCorrectionTick || tick - mLastCorrectionTick <= 5)
         return false;
 
@@ -67,6 +79,7 @@ void PlayerMovementValidator::reset() {
     mAdjustmentCount = 0;
     mCorrectionCheck = CorrectionCheck::None;
     mIgnoredCorrections = 0;
+    mDismountPending = false;
     mHasMovementEffect = false;
     mLastMovementEffectTick = 0;
 }
