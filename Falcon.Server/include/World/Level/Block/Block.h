@@ -121,6 +121,16 @@ public:
         return false;
     }
 
+    // a replaceable block that stays in place when an actor item such as an armor stand is placed into it
+    virtual bool staysUnderPlacedActor() const {
+        return false;
+    }
+
+    // the item of this block goes in the head slot when an armor stand is given it
+    virtual bool isWornOnHead() const {
+        return false;
+    }
+
     virtual bool isClimbable() const {
         return false;
     }

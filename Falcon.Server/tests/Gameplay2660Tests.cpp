@@ -1,5 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/ActorClassRegistry.h"
+#include "World/Actor/Misc/ArmorStandActor.h"
+#include "World/Item/ArmorStandItem.h"
 #include "World/Actor/VanillaActorTable.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -40,6 +42,53 @@ namespace {
         const Block *value = VanillaBlocks::fromIdentifier(name);
         require(value != nullptr, "missing block registration");
         return value->toBlockState();
+    }
+
+    ItemStack armorStandTestStack(const char *identifier, int count) {
+        ItemStack item;
+        item.mDefinition = std::make_shared<ItemDefinition>(identifier, 1, false, Tag());
+        item.mCount = count;
+        return item;
+    }
+
+    void armorStandExchange() {
+        require(ArmorStandActor::slotForClick(0.05f, false) == -1, "below the stand is no slot");
+        require(ArmorStandActor::slotForClick(0.3f, false) == MobEquipment::FEET, "feet band");
+        require(ArmorStandActor::slotForClick(0.7f, false) == MobEquipment::LEGS, "legs band");
+        require(ArmorStandActor::slotForClick(1.3f, false) == MobEquipment::CHEST, "chest band");
+        require(ArmorStandActor::slotForClick(1.3f, true) == MobEquipment::MAINHAND, "held item shadows the chest");
+        require(ArmorStandActor::slotForClick(1.8f, false) == MobEquipment::HEAD, "head band");
+        require(ArmorStandActor::slotForClick(std::nanf(""), false) == -1, "NaN reaches no slot");
+
+        ItemStack slot = ItemStack::air();
+        ItemStack held = armorStandTestStack("minecraft:stick", 5);
+        require(ArmorStandActor::exchange(slot, held, false), "stack onto empty slot");
+        require(slot.mCount == 1 && held.mCount == 4, "exactly one item leaves a stack");
+        require(!ArmorStandActor::exchange(slot, held, false), "a stack never swaps with a worn item");
+        require(slot.mCount == 1 && held.mCount == 4, "a refused exchange changes nothing");
+
+        ItemStack single = armorStandTestStack("minecraft:apple", 1);
+        require(ArmorStandActor::exchange(slot, single, false), "single item swaps");
+        require(slot.mCount == 1 && single.mCount == 1 && single.mDefinition->getIdentifier() == "minecraft:stick",
+                "a swap keeps one item on each side");
+
+        ItemStack empty = ItemStack::air();
+        require(ArmorStandActor::exchange(slot, empty, false), "empty hand takes the item");
+        require(slot.isAir() && empty.mCount == 1, "taking moves the item");
+
+        ItemStack nothing = ItemStack::air();
+        require(!ArmorStandActor::exchange(slot, nothing, false), "two empty sides do nothing");
+
+        ItemStack creativeHeld = armorStandTestStack("minecraft:stick", 1);
+        ItemStack creativeSlot = ItemStack::air();
+        require(ArmorStandActor::exchange(creativeSlot, creativeHeld, true), "creative fills a slot");
+        require(creativeSlot.mCount == 1 && creativeHeld.mCount == 1, "creative keeps its stack");
+
+        require(ArmorStandItem::placedYaw(0.0f) == -180.0f, "a stand placed facing south looks north");
+        require(ArmorStandItem::placedYaw(90.0f) == -90.0f, "a stand placed facing west looks east");
+        require(ArmorStandItem::placedYaw(-90.0f) == 90.0f, "a negative yaw wraps around");
+        require(ArmorStandItem::placedYaw(22.0f) == -180.0f, "below half a step keeps the same eighth");
+        require(ArmorStandItem::placedYaw(23.0f) == -135.0f, "past half a step snaps to the next eighth");
     }
 
     void sleepThreshold() {
@@ -277,6 +326,7 @@ int main() {
         migration();
         gameplay();
         freezing();
+        armorStandExchange();
         sleepThreshold();
         std::cout << "26.60 migration and gameplay regressions passed\n";
         return 0;

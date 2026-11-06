@@ -8,6 +8,7 @@
 #include "World/Actor/Movement/PhysicsComponent.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/NBT/Tag.h"
+#include "Protocol/PacketCodecContext.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Types/EntityDataMap.h"
 #include "Protocol/Types/ItemStack.h"
@@ -108,6 +109,12 @@ public:
         return false;
     }
 
+    /** A click on the actor. clickPosition comes from the client and may hold any float. */
+    virtual bool onInteractAt(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &clickPosition) {
+        (void) clickPosition;
+        return onInteract(owner, player);
+    }
+
     virtual void onStruckByLightning(ServerNetworkHandler &owner) {
         (void) owner;
     }
@@ -117,6 +124,16 @@ public:
     }
 
     virtual void fillSpawnMetadata(EntityDataMap &metadata) const { (void) metadata; }
+
+    virtual void sendEquipmentTo(ServerNetworkHandler &owner, const ServerPlayer &player) const {
+        (void) owner;
+        (void) player;
+    }
+
+    virtual void loadEquipment(const Tag &data, const PacketCodecContext &context) {
+        (void) data;
+        (void) context;
+    }
 
     virtual int32_t getDeathDuration() const {
         return 25;
@@ -166,6 +183,11 @@ public:
 
     virtual bool hasGravity() const {
         return true;
+    }
+
+    // an arrow that hits this actor is used up, whatever its piercing level
+    virtual bool stopsProjectiles() const {
+        return false;
     }
 
     virtual bool isPushable() const {

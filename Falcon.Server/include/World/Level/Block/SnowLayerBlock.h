@@ -14,6 +14,10 @@ public:
 
     bool canBeReplaced(const BlockState &state) const override;
 
+    bool staysUnderPlacedActor() const override {
+        return true;
+    }
+
     PlacementMergeResult mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
                                         const Vector3f &clickPosition, Vector3i &position,
                                         BlockState &state) const override;

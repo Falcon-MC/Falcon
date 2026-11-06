@@ -118,6 +118,8 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
         actor->initializeProperties();
         if (mob != nullptr)
             mob->getEquipment().loadNbt(tag, mCodecContext);
+        else
+            actor->loadEquipment(tag, mCodecContext);
         actor->moveToLevel(level);
 
         ServerActor *result = _registerActor(std::move(actor));
