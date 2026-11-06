@@ -8,6 +8,7 @@
 #include "World/Item/Item.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemNetworkIdTable.h"
+#include "World/Item/ItemProperties.h"
 #include "World/Item/VanillaItems.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/InventoryHandler.h"
@@ -196,6 +197,10 @@ bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &ite
 
     ItemStack worn = inventory.getArmor(armorSlot);
     ItemStack held = inventory.getItemInHand();
+
+    if (ItemProperties::getLockMode(held) == ItemLockMode::LockInSlot
+        || ItemProperties::getLockMode(worn) == ItemLockMode::LockInSlot)
+        return false;
 
     inventory.setArmor(armorSlot, held);
     inventory.setItemInHand(std::move(worn));
