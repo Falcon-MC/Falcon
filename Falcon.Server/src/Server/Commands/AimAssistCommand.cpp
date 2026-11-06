@@ -99,6 +99,6 @@ bool AimAssistCommand::execute(CommandOrigin &sender, const std::vector<std::str
     for (ServerPlayer *target: targets)
         mHandler.sendPacketTo(target->getNetworkIdentifier(), packet);
 
-    sender.sendTranslation("commands.aimassist.success", {});
+    sender.sendTranslation("commands.aimassist.success", {joinPlayerNames(targets)});
     return true;
 }

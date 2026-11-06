@@ -9,6 +9,7 @@
 #include <vector>
 
 class Server;
+class ServerPlayer;
 
 class Command {
 public:
@@ -33,6 +34,8 @@ public:
                                               const std::vector<std::string> &values, bool optional = false);
 
     static std::string joinArguments(const std::vector<std::string> &arguments, size_t first);
+
+    static std::string joinPlayerNames(const std::vector<ServerPlayer *> &players);
 
     static bool parseCoordinate(const std::string &value, float origin, float &out);
 

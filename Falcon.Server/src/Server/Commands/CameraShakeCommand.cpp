@@ -21,17 +21,6 @@ namespace {
         out = parsed;
         return true;
     }
-
-    std::string joinNames(const std::vector<ServerPlayer *> &players) {
-        std::string names;
-        for (const ServerPlayer *player: players) {
-            if (!names.empty())
-                names += ", ";
-            names += player->getName();
-        }
-
-        return names;
-    }
 }
 
 CameraShakeCommand::CameraShakeCommand(ServerNetworkHandler &handler)
@@ -94,6 +83,6 @@ bool CameraShakeCommand::execute(CommandOrigin &sender, const std::vector<std::s
         mHandler.sendPacketTo(target->getNetworkIdentifier(), packet);
 
     sender.sendTranslation(adding ? "commands.screenshake.success" : "commands.screenshake.successStop",
-                           {joinNames(targets)});
+                           {joinPlayerNames(targets)});
     return true;
 }
