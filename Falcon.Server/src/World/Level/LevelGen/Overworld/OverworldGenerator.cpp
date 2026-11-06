@@ -87,6 +87,20 @@ int32_t OverworldGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
     return topOfColumn(chunk, x & 15, z & 15, mAirHash);
 }
 
+std::array<int32_t, 256> OverworldGenerator::getPreliminaryHeights(int32_t chunkX, int32_t chunkZ) const {
+    int32_t heightMap[256] = {};
+    LevelChunk chunk(chunkX, chunkZ);
+    OverworldAquifer aquifer = mTerrainFiller->createAquifer();
+    mTerrainFiller->fill(chunk, heightMap, aquifer);
+
+    std::array<int32_t, 256> heights{};
+    for (int32_t z = 0; z < 16; ++z) {
+        for (int32_t x = 0; x < 16; ++x)
+            heights[(size_t) ((z << 4) | x)] = topOfColumn(chunk, x, z, mAirHash);
+    }
+    return heights;
+}
+
 int32_t OverworldGenerator::getPreliminaryLowestHeight(int32_t chunkX, int32_t chunkZ) const {
     int32_t heightMap[256] = {};
     LevelChunk chunk(chunkX, chunkZ);
