@@ -7,6 +7,7 @@
 #include "World/Item/Components/ItemComponentTypes.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/ItemProperties.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -612,6 +613,34 @@ namespace {
         return item != nullptr && ItemEnchantments::getLevel(*item, EnchantmentIds::BINDING) > 0;
     }
 
+    bool isPlayerContainer(ContainerSlotType container) {
+        return container == ContainerSlotType::Hotbar || container == ContainerSlotType::Inventory
+               || container == ContainerSlotType::HotbarAndInventory || container == ContainerSlotType::Armor
+               || container == ContainerSlotType::Offhand || container == ContainerSlotType::Cursor;
+    }
+
+    bool isLocked(PlayerInventory &inventory, RequestContext &context, const FullContainerName &name, int slot) {
+        const ItemStack *item = resolveSlot(inventory, context, name, slot);
+        return item != nullptr && ItemProperties::getLockMode(*item) != ItemLockMode::None;
+    }
+
+    bool rejectedByLock(PlayerInventory &inventory, RequestContext &context, const FullContainerName &source,
+                        int sourceSlot, const FullContainerName &destination) {
+        const ItemStack *item = resolveSlot(inventory, context, source, sourceSlot);
+        if (item == nullptr)
+            return false;
+
+        switch (ItemProperties::getLockMode(*item)) {
+            case ItemLockMode::None:
+                return false;
+            case ItemLockMode::LockInSlot:
+                return true;
+            case ItemLockMode::LockInInventory:
+                return !isPlayerContainer(destination.mContainer);
+        }
+        return true;
+    }
+
     bool rejectedByOffhand(PlayerInventory &inventory, RequestContext &context, const FullContainerName &destination,
                            const FullContainerName &source, int sourceSlot) {
         if (destination.mContainer != ContainerSlotType::Offhand)
@@ -662,6 +691,33 @@ namespace {
             case ItemStackRequestActionType::Swap:
                 if (isBoundArmor(inventory, context, action.mSource.mContainerName, action.mSource.mSlot)
                     || isBoundArmor(inventory, context, action.mDestination.mContainerName, action.mDestination.mSlot))
+                    return false;
+                break;
+
+            default:
+                break;
+        }
+
+        switch (action.mType) {
+            case ItemStackRequestActionType::Take:
+            case ItemStackRequestActionType::Place:
+                if (rejectedByLock(inventory, context, action.mSource.mContainerName, action.mSource.mSlot,
+                                   action.mDestination.mContainerName))
+                    return false;
+                break;
+
+            case ItemStackRequestActionType::Swap:
+                if (rejectedByLock(inventory, context, action.mSource.mContainerName, action.mSource.mSlot,
+                                   action.mDestination.mContainerName)
+                    || rejectedByLock(inventory, context, action.mDestination.mContainerName,
+                                      action.mDestination.mSlot, action.mSource.mContainerName))
+                    return false;
+                break;
+
+            case ItemStackRequestActionType::Drop:
+            case ItemStackRequestActionType::Destroy:
+            case ItemStackRequestActionType::Consume:
+                if (isLocked(inventory, context, action.mSource.mContainerName, action.mSource.mSlot))
                     return false;
                 break;
 

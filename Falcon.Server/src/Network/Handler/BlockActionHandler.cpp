@@ -1,6 +1,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 
+#include "World/Item/ItemProperties.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/Components/BlockPlacementComponent.h"
@@ -469,8 +470,14 @@ bool BlockActionHandler::_canInteractWithBlock(ServerPlayer &player, const Vecto
     return (dot1 - dot) >= -REACH_MAX_DIFF;
 }
 
-bool BlockActionHandler::canBreakBlock(const ServerNetworkHandler &owner, ServerPlayer &player,
+bool BlockActionHandler::canBreakBlock(ServerNetworkHandler &owner, ServerPlayer &player,
                                        const Vector3i &position) {
+    if (player.getGameType() == (int32_t) GameType::Adventure) {
+        const BlockState *block = owner.getLevelFor(player).peekBlockPtr(position.x, position.y, position.z);
+        if (block == nullptr || !ItemProperties::canDestroy(player.getInventory().getItemInHand(), block->mName))
+            return false;
+    }
+
     const PropertiesSettings &properties = owner.getProperties();
     const float scalar = properties.getServerAuthoritativeBlockBreaking()
                              ? properties.getServerAuthoritativeBlockBreakingRangeScalar() : 1.0f;
