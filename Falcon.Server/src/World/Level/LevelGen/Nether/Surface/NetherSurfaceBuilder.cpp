@@ -233,16 +233,20 @@ void LayeredNetherSurface::build(const NetherSurfaceColumn &column) const {
     const BlockState *layerMid = baseMid;
     for (int32_t y = HEIGHT - 1; y > 0; y--) {
         const BlockState &state = chunk.getBlock(column.mX, y, column.mZ);
-        if (sameBlock(state, bedrockState()))
-            continue;
-
         if (sameBlock(state, airState())) {
             remaining = -1;
             continue;
         }
 
-        if (!sameBlock(state, netherrackState()))
+        // bedrock takes the layers like stone: measured against BDS, the roof keeps netherrack in most columns
+        const bool bedrock = sameBlock(state, bedrockState());
+        if (!bedrock && !sameBlock(state, netherrackState()))
             continue;
+
+        const auto setLayer = [&](const BlockState &layer) {
+            if (!bedrock)
+                chunk.setBlock(column.mX, y, column.mZ, layer);
+        };
 
         const BlockState *top = baseTop;
         const BlockState *mid = baseMid;
@@ -263,14 +267,14 @@ void LayeredNetherSurface::build(const NetherSurfaceColumn &column) const {
 
             remaining = runDepth;
             if (y >= SEA_LEVEL - 1) {
-                chunk.setBlock(column.mX, y, column.mZ, *nextTop);
+                setLayer(*nextTop);
             } else if (y < SEA_LEVEL - seaFloorDepth || y == 1) {
-                chunk.setBlock(column.mX, y, column.mZ, *seaFloor);
+                setLayer(*seaFloor);
                 layerMid = foundation;
                 layerTop = &airState();
                 continue;
             } else {
-                chunk.setBlock(column.mX, y, column.mZ, *nextMid);
+                setLayer(*nextMid);
             }
 
             layerMid = nextMid;
@@ -279,11 +283,11 @@ void LayeredNetherSurface::build(const NetherSurfaceColumn &column) const {
         }
 
         if (remaining <= 0) {
-            chunk.setBlock(column.mX, y, column.mZ, *foundation);
+            setLayer(*foundation);
             continue;
         }
 
-        chunk.setBlock(column.mX, y, column.mZ, *layerMid);
+        setLayer(*layerMid);
         remaining--;
     }
 }

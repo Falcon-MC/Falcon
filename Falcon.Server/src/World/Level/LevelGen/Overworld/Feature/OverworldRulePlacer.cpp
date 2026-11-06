@@ -1,4 +1,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
+
+#include "World/Level/LevelGen/Nether/Feature/NetherFeatures.h"
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 
 #include "World/Level/Block/BlockSupport.h"
@@ -609,6 +611,8 @@ struct OverworldRulePlacer::SingleBlockDefinition {
     int32_t mUpperBlockBit = -1;
     // may_replace short grass besides air
     bool mReplacesShortGrass = false;
+    // survives on nylium and soul soil besides the blocks of PlantSupport::Dirt
+    bool mNetherPlant = false;
 };
 
 // a minecraft:weighted_random_feature
@@ -782,7 +786,9 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:redstone_ore_feature", 8, 0.0f, {{&VanillaBlocks::REDSTONE_ORE, {"minecraft:stone"}},
                                                          {&VanillaBlocks::DEEPSLATE_REDSTONE_ORE,
                                                           {"minecraft:deepslate"}}}},
-            {"minecraft:tuff_feature", 64, 0.0f, {{&VanillaBlocks::TUFF, {"minecraft:stone", "minecraft:deepslate"}}}}
+            {"minecraft:tuff_feature", 64, 0.0f, {{&VanillaBlocks::TUFF, {"minecraft:stone", "minecraft:deepslate"}}}},
+            {"minecraft:nether_soul_sand_underground_feature", 12, 0.0f,
+             {{&VanillaBlocks::SOUL_SAND, {"minecraft:netherrack"}}}}
     };
 
     // vtables 0x14F4A0DC0 (clay, place sub_14D1FBFA0) and 0x14F4A1710 (sand and gravel, place sub_14D22F1B0)
@@ -811,7 +817,12 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:fern_double_plant_upper_feature", &VanillaBlocks::LARGE_FERN, false, false, 1},
             {"minecraft:grass_double_plant_lower_feature", &VanillaBlocks::TALL_GRASS, false, true, 0, true},
             {"minecraft:grass_double_plant_upper_feature", &VanillaBlocks::TALL_GRASS, false, false, 1},
-            {"minecraft:bush_feature", &VanillaBlocks::BUSH}
+            {"minecraft:bush_feature", &VanillaBlocks::BUSH},
+            {"minecraft:crimson_fungus_feature", &VanillaBlocks::CRIMSON_FUNGUS, true, false, -1, false, true},
+            {"minecraft:warped_fungus_feature", &VanillaBlocks::WARPED_FUNGUS, true, false, -1, false, true},
+            {"minecraft:crimson_roots_feature", &VanillaBlocks::CRIMSON_ROOTS, true, false, -1, false, true},
+            {"minecraft:warped_roots_feature", &VanillaBlocks::WARPED_ROOTS, true, false, -1, false, true},
+            {"minecraft:nether_sprouts_feature", &VanillaBlocks::NETHER_SPROUTS, true, false, -1, false, true}
     };
 
     static const auto single = [](size_t index) {
@@ -844,6 +855,11 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
 
     // BDS 1.26.61 behavior packs, features/scatter_*.json; eval order 4 is zxy, 5 zyx
     static const ScatterDefinition SCATTERS[] = {
+            {"minecraft:crimson_fungus_scatter_feature", "24", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(7)},
+            {"minecraft:warped_fungus_scatter_feature", "24", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(8)},
+            {"minecraft:crimson_roots_scatter_feature", "64", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(9)},
+            {"minecraft:warped_roots_scatter_feature", "64", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(10)},
+            {"minecraft:nether_sprouts_scatter_feature", "64", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(11)},
             {"minecraft:scatter_cold_ocean_seagrass_feature", "32", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
              seagrass(0)},
             {"minecraft:scatter_deep_cold_ocean_seagrass_feature", "40", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
@@ -1087,6 +1103,20 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              4, 7, 3, 5, 1, 3, 16, 2, 0.025f, 0.35f, 0.083f, true, 1}
     };
 
+    struct NetherPlaced {
+        const char *mIdentifier;
+        bool (*mFunction)(BlockManager &, int32_t, int32_t, int32_t, std::mt19937 &);
+    };
+    static const NetherPlaced NETHER_FEATURES[] = {
+            {"minecraft:_huge_crimson_fungus_feature", &NetherFeatures::placeHugeCrimsonFungus},
+            {"minecraft:_huge_warped_fungus_feature", &NetherFeatures::placeHugeWarpedFungus},
+            {"minecraft:_weeping_vines_cluster_feature", &NetherFeatures::placeWeepingVines},
+            {"minecraft:_twisting_vines_cluster_feature", &NetherFeatures::placeTwistingVines},
+            {"minecraft:_basalt_pillar_feature", &NetherFeatures::placeBasaltPillar},
+            {"minecraft:delta_feature", &NetherFeatures::placeDelta},
+            {"minecraft:basalt_columns_feature", &NetherFeatures::placeBasaltColumns}
+    };
+
     // BDS 1.26.61 behavior packs, features/*fossil_feature.json
     static const std::vector<FossilDefinition> FOSSILS = {
             {"minecraft:fossil_feature", "minecraft:coal_ore", 4},
@@ -1122,6 +1152,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
                 feature.mDisk = &disk;
         }
         feature.mPlaced.mLargeDripstone = entry.mFeature == "minecraft:large_dripstone_feature";
+        for (const NetherPlaced &nether: NETHER_FEATURES) {
+            if (entry.mFeature == nether.mIdentifier)
+                feature.mPlaced.mFunction = nether.mFunction;
+        }
         feature.mSprings = entry.mFeature == "minecraft:legacy:springs_feature";
         for (const LegacyTreeDefinition &trees: LEGACY_TREES) {
             if (entry.mFeature == trees.mIdentifier)
@@ -1172,6 +1206,16 @@ bool OverworldRulePlacer::handles(const BiomeFeatureEntry &entry) {
 
 void OverworldRulePlacer::apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate &climate,
                                uint32_t levelSeed, const std::vector<int32_t> &biomes) {
+    _apply(blocks, chunk, &climate, levelSeed, biomes);
+}
+
+void OverworldRulePlacer::applyBiome(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed,
+                                     int32_t biome) {
+    _apply(blocks, chunk, nullptr, levelSeed, {biome});
+}
+
+void OverworldRulePlacer::_apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate *climate,
+                                 uint32_t levelSeed, const std::vector<int32_t> &biomes) {
     // the decoration seed of sub_14CDD4880, from the level seed and the chunk position
     std::mt19937 random(levelSeed);
     const uint32_t multiplierX = (random() >> 1) | 1u;
@@ -1181,7 +1225,7 @@ void OverworldRulePlacer::apply(BlockManager &blocks, const LevelChunk &chunk, c
 
     std::mt19937 decoration(decorationSeed);
     placementContext.mDecoration = &decoration;
-    placementContext.mClimate = &climate;
+    placementContext.mClimate = climate;
 
     // sub_14CDDF960, sub_14A22E1E0, sub_14A22E470: each pass, every biome of the chunk, then its rules in order
     for (const char *pass: PASSES) {
@@ -1579,6 +1623,8 @@ bool OverworldRulePlacer::_placeDisk(BlockManager &blocks, const DiskDefinition 
 
 bool OverworldRulePlacer::_place(BlockManager &blocks, const Placed &placed, int32_t x, int32_t y, int32_t z,
                                  std::mt19937 &random) {
+    if (placed.mFunction != nullptr)
+        return placed.mFunction(blocks, x, y, z, random);
     if (placed.mSeagrass != nullptr)
         return _placeSeagrass(blocks, *placed.mSeagrass, x, y, z, random);
     if (placed.mScatter != nullptr)
@@ -2084,6 +2130,9 @@ bool OverworldRulePlacer::_growMultiface(BlockManager &blocks, const MultifaceDe
 
 bool OverworldRulePlacer::_placeThreshold(BlockManager &blocks, const ThresholdDefinition &threshold, int32_t x,
                                           int32_t y, int32_t z, std::mt19937 &random) {
+    if (placementContext.mClimate == nullptr)
+        return false;
+
     // the generator's preliminary surface of the quart column, not the blocks
     const auto surface = static_cast<int16_t>(placementContext.mClimate->preliminarySurfaceLevel(x >> 2, z >> 2));
     if (surface - threshold.mMinimumDistanceBelowSurface <= y)
@@ -2253,7 +2302,11 @@ bool OverworldRulePlacer::_placeSingleBlock(BlockManager &blocks, const SingleBl
     // SingleBlockFeature::place (sub_14A267E10): the block is drawn by weight even when it is the only one, then its
     // survival is enforced and only air is replaced; a short grass or fern survives on the blocks of PlantSupport::Dirt
     nextInt(random, 1);
-    const bool supported = IFeature::isSupportDirt(blocks.getBlockAt(x, y - 1, z));
+    const BlockState &support = blocks.getBlockAt(x, y - 1, z);
+    const bool supported = IFeature::isSupportDirt(support)
+                           || (single.mNetherPlant && (support.mName == "minecraft:crimson_nylium"
+                                                       || support.mName == "minecraft:warped_nylium"
+                                                       || support.mName == "minecraft:soul_soil"));
     if (single.mSurvival && !supported)
         return false;
     if (single.mDoublePlant && (!supported || !DecorationSupport::isAir(blocks.getBlockAt(x, y + 1, z))))
