@@ -131,7 +131,7 @@ jobs:
             artifact: FalconServer.exe
             binary: FalconServer.exe
           - name: macos-arm64
-            os: macos-14
+            os: macos-15
             platform: macos
             artifact: FalconServer-macos-arm64
             binary: FalconServer
@@ -148,7 +148,7 @@ jobs:
           sudo apt-get install -y ninja-build ccache zlib1g-dev libssl-dev
 
       - name: Install macOS dependencies
-        if: matrix.os == 'macos-14'
+        if: matrix.os == 'macos-15'
         run: brew install ninja ccache openssl@3
 
       - name: Install MSYS2 toolchain
@@ -190,7 +190,7 @@ jobs:
           ccache --show-stats
 
       - name: Configure and build (macOS)
-        if: matrix.os == 'macos-14'
+        if: matrix.os == 'macos-15'
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
