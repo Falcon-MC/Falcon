@@ -1,7 +1,6 @@
 #pragma once
 
 #include "World/Level/LevelGen/ChunkGenerator.h"
-#include "World/Level/LevelGen/Nether/Biome/NetherBiomeResult.h"
 #include "World/Level/LevelGen/Nether/NetherGeneratorConstants.h"
 #include "World/Level/LevelGen/Nether/NetherNoiseHolder.h"
 
@@ -34,8 +33,6 @@ public:
     int32_t getAirHash() const override { return mAirHash; }
 
     int32_t pickBiome(int32_t x, int32_t y, int32_t z) const override;
-
-    NetherBiomeResult pickBiomeResult(int32_t x, int32_t y, int32_t z) const;
 
     static int64_t chunkHash(int32_t chunkX, int32_t chunkZ);
 

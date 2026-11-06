@@ -5064,14 +5064,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Biome/NetherBiomeResult.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Biome/NetherBiomeResult.h",
-      "sha256": "514c121cfe134fff221a5bf8ae94e4bd452c8a08fed4575ddcbbfcc565377a61",
-      "classes": [
-        "NetherBiomeResult"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Nether/Biome/VanillaNetherBiomeSource.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Biome/VanillaNetherBiomeSource.h",
       "sha256": "e33fc61d1ff341611654b0ed7dbe38d1837f5459005162cdf89b036d25668a90",
