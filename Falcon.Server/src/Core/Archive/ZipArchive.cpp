@@ -66,7 +66,9 @@ bool ZipArchive::listEntries(const std::string &zip, std::vector<ZipEntry> &out)
         return false;
 
     const uint16_t entryCount = readU16(zip, eocd + 10);
-    uint32_t offset = readU32(zip, eocd + 16);
+    // the offsets come from the archive, so the arithmetic is done in 64 bits: a 32-bit sum could wrap past
+    // the size check and lead readU32 to read out of bounds.
+    size_t offset = readU32(zip, eocd + 16);
 
     for (uint16_t entry = 0; entry < entryCount; entry++) {
         if (offset + 46 > zip.size() || readU32(zip, offset) != 0x02014b50)
@@ -78,10 +80,10 @@ bool ZipArchive::listEntries(const std::string &zip, std::vector<ZipEntry> &out)
         const uint16_t nameLength = readU16(zip, offset + 28);
         const uint16_t extraLength = readU16(zip, offset + 30);
         const uint16_t commentLength = readU16(zip, offset + 32);
-        const uint32_t localOffset = readU32(zip, offset + 42);
+        const size_t localOffset = readU32(zip, offset + 42);
 
         const std::string name = zip.substr(offset + 46, nameLength);
-        offset += 46 + nameLength + extraLength + commentLength;
+        offset += (size_t) 46 + nameLength + extraLength + commentLength;
 
         if (!name.empty() && name.back() == '/')
             continue;
@@ -91,7 +93,7 @@ bool ZipArchive::listEntries(const std::string &zip, std::vector<ZipEntry> &out)
 
         const uint16_t localNameLength = readU16(zip, localOffset + 26);
         const uint16_t localExtraLength = readU16(zip, localOffset + 28);
-        const size_t dataStart = localOffset + 30 + localNameLength + localExtraLength;
+        const size_t dataStart = localOffset + 30 + (size_t) localNameLength + localExtraLength;
 
         if (dataStart + compressedSize > zip.size())
             return false;
@@ -124,9 +126,43 @@ bool ZipArchive::extractToDirectory(const std::string &zip, const std::string &d
     std::error_code error;
     const std::filesystem::path root(destinationDirectory);
     std::filesystem::create_directories(root, error);
+    const std::filesystem::path canonicalRoot = std::filesystem::weakly_canonical(root, error);
+    const std::filesystem::path safeRoot = canonicalRoot.empty() ? root : canonicalRoot;
 
     for (const ZipEntry &entry: entries) {
-        const std::filesystem::path target = root / entry.mName;
+        // the archive is attacker-controlled, so an entry name must not escape the destination directory.
+        // reject separators the host may not treat as such, absolute names and any traversal, then confirm
+        // the resolved path stays under the root (zip slip).
+        if (entry.mName.empty() || entry.mName.find('\\') != std::string::npos
+            || entry.mName.find('\0') != std::string::npos) {
+            return false;
+        }
+
+        const std::filesystem::path relative(entry.mName);
+        if (relative.is_absolute() || relative.has_root_name()) {
+            return false;
+        }
+
+        bool traverses = false;
+        for (const std::filesystem::path &part: relative) {
+            if (part == "..") {
+                traverses = true;
+                break;
+            }
+        }
+        if (traverses) {
+            return false;
+        }
+
+        const std::filesystem::path target = root / relative;
+        const std::filesystem::path canonicalTarget = std::filesystem::weakly_canonical(target, error);
+        const std::string targetString = canonicalTarget.empty() ? target.string() : canonicalTarget.string();
+        const std::string rootString = safeRoot.string();
+        if (targetString.compare(0, rootString.size(), rootString) != 0
+            || (targetString.size() > rootString.size()
+                && targetString[rootString.size()] != std::filesystem::path::preferred_separator)) {
+            return false;
+        }
 
         if (target.has_parent_path())
             std::filesystem::create_directories(target.parent_path(), error);
