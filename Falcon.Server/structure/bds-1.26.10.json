@@ -10457,6 +10457,1690 @@
       "classes": [
         "SoulSpeedBlockBehavior"
       ]
+    },
+    {
+      "old": "Falcon.Server/include/Falcon/Plugin/WasmHost.h",
+      "path": "Falcon.Server/include/Falcon/Plugin/WasmHost.h",
+      "sha256": "2bc39f18bf955720d6e86bd037133fb180f062e43620adbf8ebc429737497788",
+      "classes": [
+        "WasmHost"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/Falcon/Plugin/WasmPlugin.h",
+      "path": "Falcon.Server/include/Falcon/Plugin/WasmPlugin.h",
+      "sha256": "f68f41b2ba0d547ad79d06433ac117b16546856e2d345d5d62d72ff6004e5fce",
+      "classes": [
+        "WasmPlugin",
+        "Binding",
+        "ItemSlot",
+        "FuelScope",
+        "WasmCall",
+        "Definition"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/AI/Goal/CelebrateGoal.h",
+      "path": "Falcon.Server/include/World/Actor/AI/Goal/CelebrateGoal.h",
+      "sha256": "7f382ae176121e81eabc1963b35e3cb853c0a90a48a40051fc0e9dd7dcdcc244",
+      "classes": [
+        "CelebrateGoal",
+        "Settings"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/AI/Goal/MoveToVillageGoal.h",
+      "path": "Falcon.Server/include/World/Actor/AI/Goal/MoveToVillageGoal.h",
+      "sha256": "2e2fa2a6edad76f5a088ca4eec9786441786dd8180c1db470c81ccbe704da82d",
+      "classes": [
+        "MoveToVillageGoal",
+        "Settings"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/FreezingSystem.h",
+      "path": "Falcon.Server/include/World/Actor/FreezingSystem.h",
+      "sha256": "7691f16212c88b394abdb67cb3321cb4d145225721e3acbf595bf6f6eb7964da",
+      "classes": [
+        "FreezingSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Misc/ArmorStandActor.h",
+      "path": "Falcon.Server/include/World/Actor/Misc/ArmorStandActor.h",
+      "sha256": "ad422c36d8f4b1815b8ea2333d5a9445917c6aa7bf11355b52aeb72ef168232d",
+      "classes": [
+        "ArmorStandActor"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Mob/Component/MobAddRider.h",
+      "path": "Falcon.Server/include/World/Actor/Mob/Component/MobAddRider.h",
+      "sha256": "1a4ada9366c3fb4abdf1cda8c9f7eabb921356b78f5a82f9727843954ac72d1b",
+      "classes": [
+        "MobAddRider"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Mob/Component/MobDweller.h",
+      "path": "Falcon.Server/include/World/Actor/Mob/Component/MobDweller.h",
+      "sha256": "d1a04901114b0ce2a64c09baf47c9a2bb7a8acd1ef237b1210d7f4cf44625766",
+      "classes": [
+        "MobDweller"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Mob/Component/MobLeash.h",
+      "path": "Falcon.Server/include/World/Actor/Mob/Component/MobLeash.h",
+      "sha256": "fa21e39e4ca1df1b76c9b304bc2fd24ac7554bfe74557561532d39000c0116e6",
+      "classes": [
+        "MobLeash",
+        "Preset"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/AutoClimbTravelFlagComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/AutoClimbTravelFlagComponent.h",
+      "sha256": "4696c9248a647a6e664f9e5eae5a5b39519dee7132115c9ff90a0f5a2c22cb98",
+      "classes": [
+        "AutoClimbTravelFlagComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/ClientAcceptanceThresholdsComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/ClientAcceptanceThresholdsComponent.h",
+      "sha256": "1ec454616262341dfffec411904f99b8de2bac6b596d1311d8f0a40e3cec7120",
+      "classes": [
+        "ClientAcceptanceThresholdsComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/LiquidTravelFlagComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/LiquidTravelFlagComponent.h",
+      "sha256": "721f5f2a075422c616ae18fa5bed479a4adf7b9ceefea290eb3ff995061efb14",
+      "classes": [
+        "LiquidTravelFlagComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/MoveInputComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/MoveInputComponent.h",
+      "sha256": "3e09a8d0522e09ac94a2ecd494b6b5d8c0776e59e31222da441f537e4476600a",
+      "classes": [
+        "MoveInputComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/MovementAbilitiesComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/MovementAbilitiesComponent.h",
+      "sha256": "4d7b0494b7f7be7208d7f3b036316977073a65ae048059d840dae61838f264e7",
+      "classes": [
+        "MovementAbilitiesComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/MovementTraceComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/MovementTraceComponent.h",
+      "sha256": "0237dcf01db1fc9b019227510c8a81b6f866fb8ba615b93661b3e223fca0894a",
+      "classes": [
+        "MovementTraceFrame",
+        "MovementTraceComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/PlayerLiquidContactComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/PlayerLiquidContactComponent.h",
+      "sha256": "580956ac04cac438964b558ea65989b5d80be89108168a3a2f1b05abb73a932f",
+      "classes": [
+        "PlayerLiquidContactComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/PlayerPoseComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/PlayerPoseComponent.h",
+      "sha256": "d48acab4984ff1ee63915696b960eb90f3aa2e93e71881595a8d241de91bb2de",
+      "classes": [
+        "PlayerPoseComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/PlayerPredictionComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/PlayerPredictionComponent.h",
+      "sha256": "7a0e69aa935cb3a0103dbaca0ce88e41e64f55a960925201519fe36260f79511",
+      "classes": [
+        "PlayerPredictionComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/PlayerTravelComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/PlayerTravelComponent.h",
+      "sha256": "fb74c4549ae2bf94d2fc62e52ca868f5e7737dc92fbf564a0362c360307819b2",
+      "classes": [
+        "PlayerTravelComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/StateVectorComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/StateVectorComponent.h",
+      "sha256": "ed409a72dabfcd7e248f74211c1483e4545d95ddbddc068cddf78749ba813953",
+      "classes": [
+        "StateVectorComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/SwimAmountComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/SwimAmountComponent.h",
+      "sha256": "44455cf40b4d748341de893edd2b23ffa89de889d19b96c0c5ae6b1c019a63f3",
+      "classes": [
+        "SwimAmountComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Components/WaterTravelFlagComponent.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Components/WaterTravelFlagComponent.h",
+      "sha256": "b364b51d35056502e4fdbae5d903602c2c4cce7687ce7986e5d64ca4e9d2892d",
+      "classes": [
+        "WaterTravelFlagComponent"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/MovementConstants.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/MovementConstants.h",
+      "sha256": "a76514c33063a99887a7945225a3298f8d1db46c9beb45fb6017800eb075ab7d",
+      "classes": []
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/MovementPhysics.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/MovementPhysics.h",
+      "sha256": "8e64e1d7e65a3d9556000985a25a9c36624a36409559bb1a33de22c118421b5a",
+      "classes": []
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/PlayerMovementContext.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/PlayerMovementContext.h",
+      "sha256": "59f5ff5bbc523375abd52f2d06bfcbc5164723695021410eccfbe258f36bb426",
+      "classes": [
+        "PlayerMovementContext"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/PlayerMovementPipeline.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/PlayerMovementPipeline.h",
+      "sha256": "bf5b98840e9b18c5b0a0584b30646d07930c5b390d993a4bb351082731b2cd7e",
+      "classes": [
+        "PlayerMovementSystemRegistry",
+        "Entry",
+        "PlayerMovementPipeline"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/PlayerMovementRegistry.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/PlayerMovementRegistry.h",
+      "sha256": "87250bb26afea64a7912fa9e9c7d2a12875ca44650464eb9c23a2b6d24da95b9",
+      "classes": [
+        "PlayerMovementRegistry",
+        "Pool"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/PlayerMovementValidator.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/PlayerMovementValidator.h",
+      "sha256": "4a6b0aac35d79ef0a53440f709106ce6f75267298e3d20e1fc8b87ec319cdf1b",
+      "classes": [
+        "MovementCorrectionDetails",
+        "PlayerMovementValidator"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/BubbleColumnMovementSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/BubbleColumnMovementSystem.h",
+      "sha256": "a82d25a1c9232f38aa5821e30d10d1c92f8f68e808cbe7755df27ca02d8c2117",
+      "classes": [
+        "BubbleColumnMovementSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/ClientAcceptanceSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/ClientAcceptanceSystem.h",
+      "sha256": "f5260dcc3acfceb44d8f2c84c9ad479bdd31fe6153e7a27993950c75b492300f",
+      "classes": [
+        "ClientAcceptanceSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/ClimbOutOfLiquidSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/ClimbOutOfLiquidSystem.h",
+      "sha256": "289e0617ad4b27a8f7b897c46eee2323c9dda3a09de6e4506e63b074d5852e74",
+      "classes": [
+        "ClimbOutOfLiquidSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/CurrentSwimAmountSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/CurrentSwimAmountSystem.h",
+      "sha256": "9d929cc8d31fb4651090dc201672b09ec147036bb7c521a951927f0382c3a8cf",
+      "classes": [
+        "CurrentSwimAmountSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/FlyingPlayerStuckOnGroundWorkaroundSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/FlyingPlayerStuckOnGroundWorkaroundSystem.h",
+      "sha256": "2327f28a5572136db690058c67d8b3f9fa8593bd78e4b3b2762e15508115cfdd",
+      "classes": [
+        "FlyingPlayerStuckOnGroundWorkaroundSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/GlideMoveSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/GlideMoveSystem.h",
+      "sha256": "bb215bf72a842074fdedf7fca85872a2cdd87e7d057e6f503288c37da4e594e7",
+      "classes": [
+        "GlideMoveSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/GroundTravelSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/GroundTravelSystem.h",
+      "sha256": "2e5284a2f132b52856e55ec490db93590cac70328efc34e61e2912ba1a8877b2",
+      "classes": [
+        "GroundTravelSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/LavaDragSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/LavaDragSystem.h",
+      "sha256": "9193fe79a0f3f724844f5bb6dd8cec7384856da12acfddcef8ffe440d7aea8c3",
+      "classes": [
+        "LavaDragSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/LavaTravelSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/LavaTravelSystem.h",
+      "sha256": "fe2bef3f16d2c41023cf5fc9421456b026c8d2c8549f2ea641a1652d8d2d9c18",
+      "classes": [
+        "LavaTravelSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/MovementAbilitiesSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/MovementAbilitiesSystem.h",
+      "sha256": "f4e0ba1e3aeee6f98628e2661979f1eb303a6583aacf7270197554854d8ec101",
+      "classes": [
+        "MovementAbilitiesSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/MovementInputSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/MovementInputSystem.h",
+      "sha256": "4e6fc33052d01b0a6ede679ca87fee8ff6af7cdc6581efa95044654297d8e431",
+      "classes": [
+        "MovementInputSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerCollisionSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerCollisionSystem.h",
+      "sha256": "165b015ac0bd0cdcf1c28579c667016cb5c90cf35a0cd4d4fe6753ffeab2a4c4",
+      "classes": [
+        "PlayerCollisionSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerFlightDragSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerFlightDragSystem.h",
+      "sha256": "b0a0a88c818ea61a5a816974f365b19570da246b68b6925402579b880d7328f3",
+      "classes": [
+        "PlayerFlightDragSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerFlightSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerFlightSystem.h",
+      "sha256": "77bbee426b28a74e889bcfb8ae714c7521c7778b2c8991fbed591371c9009e2b",
+      "classes": [
+        "PlayerFlightSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerFrictionSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerFrictionSystem.h",
+      "sha256": "4a62f4fb48e70beeccbbfa37c7c86b6428bee445df16005fcfd3045ab5d589f5",
+      "classes": [
+        "PlayerFrictionSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerGravitySystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerGravitySystem.h",
+      "sha256": "86f320d12fb6ddd7081f2d1d87ad1d970033642e8fa39718b44d052f2fae108e",
+      "classes": [
+        "PlayerGravitySystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerGroundJumpSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerGroundJumpSystem.h",
+      "sha256": "d8e986b04c4a508a1df76189d22bda3251999f00c22dcd13b43b1b3a234ccad0",
+      "classes": [
+        "PlayerGroundJumpSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerLiquidContactSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerLiquidContactSystem.h",
+      "sha256": "f9140d36f61b1f68938e5ed7d9640a34142561e631fc5d5cf18261a251f90fe2",
+      "classes": [
+        "PlayerLiquidContactSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerLiquidCurrentSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerLiquidCurrentSystem.h",
+      "sha256": "04bb82c31a5cc53580d70334d1bc1e3e57f3e1ea5377edfeaa630432d7f6ef6e",
+      "classes": [
+        "PlayerLiquidCurrentSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerLiquidJumpSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerLiquidJumpSystem.h",
+      "sha256": "c52d29c363f1c01bdedb17d7c7f12823dee9e0389630eb1284ddc176304a4052",
+      "classes": [
+        "PlayerLiquidJumpSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerMoveRelativeSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerMoveRelativeSystem.h",
+      "sha256": "9daaa258e3809f379161aa9437ead61c13dcdfd48f4ad6e4178e5285fcedfe15",
+      "classes": [
+        "PlayerMoveRelativeSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerMovementAdmissionSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerMovementAdmissionSystem.h",
+      "sha256": "fe9fad4a7c7f64aecbc7f453c4455096be457fb57c6d5d584a32edc4d130afbc",
+      "classes": [
+        "PlayerMovementAdmissionSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerMovementInitializationSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerMovementInitializationSystem.h",
+      "sha256": "93de9ce14efe2a6f04188f28af9e86572e8131e75aceff4e6fde25a1a2bfbe83",
+      "classes": [
+        "PlayerMovementInitializationSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerPostTravelSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerPostTravelSystem.h",
+      "sha256": "e559fb1fb4d2c23f12151dd605963616b251f4c1a8b5e2c050feba6189df5432",
+      "classes": [
+        "PlayerPostTravelSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerPredictionSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerPredictionSystem.h",
+      "sha256": "1bcf7f5e5106aae2927c81df24d0a48662f0f8b60eb7f53aab9e7f5ae8d85f9d",
+      "classes": [
+        "PlayerPredictionSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerTravelPreparationSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerTravelPreparationSystem.h",
+      "sha256": "2b0c833b9abb3d7d928bdd37b7b3e7d640a91a7de4191d0a5c28c78c92203aa6",
+      "classes": [
+        "PlayerTravelPreparationSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerTraversalSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/PlayerTraversalSystem.h",
+      "sha256": "7ae20ad7977f9d419e3094d6082eadd0f9f3e724f00edc4e188500c648855d83",
+      "classes": [
+        "PlayerTraversalSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/SwimControlSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/SwimControlSystem.h",
+      "sha256": "d3b6b44b491042e877200a8b1dc4c1221b6acdf4c85b49859864b2e191aff238",
+      "classes": [
+        "SwimControlSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/UpdateHorizontalPoseSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/UpdateHorizontalPoseSystem.h",
+      "sha256": "21c086f84d6bcd46510b4bc268c5059075706b6705c2b37447906aba7c7430d0",
+      "classes": [
+        "UpdateHorizontalPoseSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/WaterDragSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/WaterDragSystem.h",
+      "sha256": "599f14915b312fafab058e0c6b6fd7dba9e968f0cf0aa5d43779444be9732109",
+      "classes": [
+        "WaterDragSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/WaterSinkInputSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/WaterSinkInputSystem.h",
+      "sha256": "78e7d53e581ecc542832ccc87843de766825809f2140cebdf30624e4402283ec",
+      "classes": [
+        "WaterSinkInputSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Movement/Systems/WaterTravelSystem.h",
+      "path": "Falcon.Server/include/World/Actor/Movement/Systems/WaterTravelSystem.h",
+      "sha256": "8d8659d3ff0c8b18619dffd87bcdd9c735119e8802fd7a8b06796df376c6fda5",
+      "classes": [
+        "WaterTravelSystem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Player/PlayerRaidState.h",
+      "path": "Falcon.Server/include/World/Actor/Player/PlayerRaidState.h",
+      "sha256": "5a2ca392af22f2335bc8457db7afb48b8fe4e6c12000c902aac17ce7ad241d4b",
+      "classes": [
+        "PlayerRaidState"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Actor/Projectile/FishingHookActor.h",
+      "path": "Falcon.Server/include/World/Actor/Projectile/FishingHookActor.h",
+      "sha256": "401b856ff212c53a88e7fbe13a10d0312a0c4e8fced0f58ed10e5a5a5934cbd9",
+      "classes": [
+        "FishingHookActor"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Item/ArmorStandItem.h",
+      "path": "Falcon.Server/include/World/Item/ArmorStandItem.h",
+      "sha256": "be97daa4ce14c1ae5dd8f53e41e72f7a91101306c3bf6920553902f01e752810",
+      "classes": [
+        "ArmorStandItem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Item/ArmorTrims.h",
+      "path": "Falcon.Server/include/World/Item/ArmorTrims.h",
+      "sha256": "0a2988d16ab146bf22032dfd18150038dabd49158eccad66e07025603ad8bec3",
+      "classes": [
+        "ArmorTrims"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Item/FishingRodItem.h",
+      "path": "Falcon.Server/include/World/Item/FishingRodItem.h",
+      "sha256": "de93dd97892881262fdd10efb346230010094901ffdc27949994b56567d91bc5",
+      "classes": [
+        "FishingRodItem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Item/GlassBottleItem.h",
+      "path": "Falcon.Server/include/World/Item/GlassBottleItem.h",
+      "sha256": "0fc1f089ea55ae797e6de37d0360dc55fc8699b9629a8a36f62ab7dae16f248e",
+      "classes": [
+        "GlassBottleItem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Item/GoatHornItem.h",
+      "path": "Falcon.Server/include/World/Item/GoatHornItem.h",
+      "sha256": "7dd12f8c64324c4df39eafa3f7b35e2f15d24670637db0624859995b3aa8ea8d",
+      "classes": [
+        "GoatHornItem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Item/ItemProperties.h",
+      "path": "Falcon.Server/include/World/Item/ItemProperties.h",
+      "sha256": "f185d4f4536e2cd01e00a666d021fe9dc74c2a4ddb988c9ad6aa642ecd389115",
+      "classes": [
+        "ItemProperties"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Item/OminousBottleItem.h",
+      "path": "Falcon.Server/include/World/Item/OminousBottleItem.h",
+      "sha256": "b7d65fa25e8090d322e07903d81973bbba69d2bfaabec5bc86dc1e727a18212d",
+      "classes": [
+        "OminousBottleItem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Item/ShearsItem.h",
+      "path": "Falcon.Server/include/World/Item/ShearsItem.h",
+      "sha256": "3a5718c2ab5fb03a41a21f4b177ae81db50881fb158b50dfe7a7c11d6d366e88",
+      "classes": [
+        "ShearsItem"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Block/BlockPrecipitation.h",
+      "path": "Falcon.Server/include/World/Level/Block/BlockPrecipitation.h",
+      "sha256": "83f344bc2d605f796f5c542c40ac65bae836796e0305c075c4470de9447d7c33",
+      "classes": []
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Block/CarvedPumpkinBlock.h",
+      "path": "Falcon.Server/include/World/Level/Block/CarvedPumpkinBlock.h",
+      "sha256": "ebeedf6b01c916d4653e7888053556bcec5c9cba36ef44a99f940b85e81bc788",
+      "classes": [
+        "CarvedPumpkinBlock"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Block/ChorusPlantBlock.h",
+      "path": "Falcon.Server/include/World/Level/Block/ChorusPlantBlock.h",
+      "sha256": "dd5167c755498f12aba64332e6e9c44a92ed80e346c974dda27d3d45a14ca9c5",
+      "classes": [
+        "ChorusPlantBlock"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Block/DiscPressBlock.h",
+      "path": "Falcon.Server/include/World/Level/Block/DiscPressBlock.h",
+      "sha256": "71fe03f7a2ea1af598fb95659959a6e0f902d69ec0c36621bcfe1daf48f06cf1",
+      "classes": [
+        "DiscPressBlock"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Block/DispenserBlock.h",
+      "path": "Falcon.Server/include/World/Level/Block/DispenserBlock.h",
+      "sha256": "da070059732fba3a5e43216d1c1f23f3e57c22fab34c865dd31489f74228c47b",
+      "classes": [
+        "DispenserBlock"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Block/IceCrystalBlock.h",
+      "path": "Falcon.Server/include/World/Level/Block/IceCrystalBlock.h",
+      "sha256": "5723bdd7ab21d347191da053e2190d0c6e467b22ae3f5f60b30b677e6d7fc20b",
+      "classes": [
+        "IceCrystalBlock"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Block/IcicleBlock.h",
+      "path": "Falcon.Server/include/World/Level/Block/IcicleBlock.h",
+      "sha256": "cebd219a62c2fbcd2f6a4901e2cfe09a9c5e40651197215b33736f95c65fe8bd",
+      "classes": [
+        "IcicleBlock"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Block/ShearableVegetationBlock.h",
+      "path": "Falcon.Server/include/World/Level/Block/ShearableVegetationBlock.h",
+      "sha256": "e28015ef751b74c36b7dc9936fb90507b89c1df59e027713b646ddd006df3901",
+      "classes": [
+        "ShearableVegetationBlock"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Block/SpeleothemBlock.h",
+      "path": "Falcon.Server/include/World/Level/Block/SpeleothemBlock.h",
+      "sha256": "cf307d96b8380902b703ef6f282bc8ed133132a9c6aed6f163dc35d24f8b3b5b",
+      "classes": [
+        "SpeleothemBlock"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Chunk/LightStorage.h",
+      "path": "Falcon.Server/include/World/Level/Chunk/LightStorage.h",
+      "sha256": "0867c0de7faf60890561cb7786bb27d274ea79bf42532e4e5f92521cd12e56fe",
+      "classes": [
+        "LightStorage"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Chunk/PaletteIndices.h",
+      "path": "Falcon.Server/include/World/Level/Chunk/PaletteIndices.h",
+      "sha256": "b751c11418e541b69b46783dc5b6c9d035878e48e8717305cbf656e4cf655ef1",
+      "classes": [
+        "PaletteIndices"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Biome/BiomeSearch.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Biome/BiomeSearch.h",
+      "sha256": "43a91f2636866d4061d4ef4f0217f544f891b95cce6f72823e0364431bbae8e5",
+      "classes": [
+        "BiomeSearch",
+        "Result"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/BlockStateSet.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/BlockStateSet.h",
+      "sha256": "20bdfab60e7ce4703665f85f64557dffaaededf49b1c111d160c6e46f53a6289",
+      "classes": [
+        "BlockStateSet"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/End/Feature/TheEndDecorationFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/End/Feature/TheEndDecorationFeature.h",
+      "sha256": "5c7746b2c0b358be356ba161903aa527e641c817400338a816ca82586fa74209",
+      "classes": [
+        "TheEndDecorationFeature",
+        "Spike"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Feature/FeatureExpression.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Feature/FeatureExpression.h",
+      "sha256": "017396b97c2b4c2200ed1cb7593f95caa41226872eafab209b6173751eddef55",
+      "classes": [
+        "FeatureExpression",
+        "Context",
+        "Node"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Flat/FlatWorldGenerator.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Flat/FlatWorldGenerator.h",
+      "sha256": "b5c2cbdf19e54b98740fb42d4cd448186d95dcdfcddbc48157ce6c0304a56080",
+      "classes": [
+        "FlatWorldGenerator",
+        "Layer"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/NetherDecoration.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/NetherDecoration.h",
+      "sha256": "37ac3de1913608cb38a34d80532eba0f32d5e1e26e9068fa6c0dc0b0ac55f61c",
+      "classes": [
+        "NetherDecoration"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/NetherFeatures.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/NetherFeatures.h",
+      "sha256": "b6f4645e9442df02ffb186ec6da9c12707d56d89591dfce765c4d3df08276e5c",
+      "classes": []
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Nether/NetherCarvers.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/NetherCarvers.h",
+      "sha256": "33d27656935695558a56c3283270e7cabc64681d3a7cc8be34aee709da61a503",
+      "classes": [
+        "NetherCarvers",
+        "Position"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Nether/Surface/NetherSurfaceBuilder.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Surface/NetherSurfaceBuilder.h",
+      "sha256": "d9794a1a329d9a5b0a75c27ab1d027bb76cc8ccc153f20986c6a0ab021dc3fb2",
+      "classes": [
+        "NetherSurfaceColumn",
+        "NetherBiomeSurface",
+        "CappedNetherSurface",
+        "Material",
+        "LayeredNetherSurface",
+        "Adjustment",
+        "NetherSurfaceBuilder"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h",
+      "sha256": "627858a0827d40c79f481558ac6b563d23aa7b185dc9f4d2bd11bad1fcfe834b",
+      "classes": [
+        "BiomeTemperature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Biome/BiomeZoom.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Biome/BiomeZoom.h",
+      "sha256": "2d69d17f8b07dcd4fe1c066d3f8305241a1def9b36611baff5274e5d149b0282",
+      "classes": [
+        "BiomeZoom",
+        "Jitter"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h",
+      "sha256": "902ee599499d2e77dbb45d34f54ba6423d5327d077bd17f9dbab7a6ace1a5496",
+      "classes": [
+        "OverworldBiomeParameters",
+        "Parameter",
+        "Node"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSnowLayerFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSnowLayerFeature.h",
+      "sha256": "d5803083a576f358516c3ec876c0668b0ba34e83ae6b71ba3c9c32b05ca311fd",
+      "classes": [
+        "IceCavesSnowLayerFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSupport.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSupport.h",
+      "sha256": "3aac3cc30507eaf98adb241b1d8ffe9a823d4dd50dcc5885a3bf11b5efc6258d",
+      "classes": []
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSurfaceFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSurfaceFeature.h",
+      "sha256": "fef8efdfdbfdd9dc7b1bcbc353f549f3a1b7fce5cdc43ecc89bcf854899fa441",
+      "classes": [
+        "IceCavesSurfaceFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/IceCrystalScatterFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/IceCrystalScatterFeature.h",
+      "sha256": "668c61e92e729fb3594a212259f0a7f325d6226212a5636d987db2cd61eeb1c8",
+      "classes": [
+        "IceCrystalScatterFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/IcicleClusterFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/IcicleClusterFeature.h",
+      "sha256": "2b81619545dcf170bf3b50fc4635c6d476eb22d8d2f5079952ab2e55e521d4a3",
+      "classes": [
+        "IcicleClusterFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/LargeIcicleFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/LargeIcicleFeature.h",
+      "sha256": "781f298123e4dc0e9a7c9230617017c56570d03cf89ed334d9c63b0d9a19edbd",
+      "classes": [
+        "LargeIcicleFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/FeatureRandom.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/FeatureRandom.h",
+      "sha256": "4b379e1b60f8ecc143b6c935a588775c8cceed5b14b0d2008cd25914512ef387",
+      "classes": []
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/OverworldFreezer.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/OverworldFreezer.h",
+      "sha256": "07b6c2dee2be4583d3ca03414fe7b8442481dbc18edb30f6800ab75cce6e2969",
+      "classes": [
+        "OverworldFreezer"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h",
+      "sha256": "307c6b5c8085bb483e4429bafa48197fe2b59a156afe7f382ff601b58c890310",
+      "classes": [
+        "OverworldRulePlacer",
+        "Placed",
+        "Feature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/OverworldTreePlacer.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/OverworldTreePlacer.h",
+      "sha256": "ee8920ca4f1a4ed0d886994571847e2ca6ac7224c75f2457b83e227b7375e472",
+      "classes": [
+        "OverworldTreePlacer",
+        "Range",
+        "Definition",
+        "Fancy",
+        "Mega"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/OverworldBlockLists.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/OverworldBlockLists.h",
+      "sha256": "1f2d80576aba26aa06a752555f3c3ade3fb36bb3341cd9a63051548138985563",
+      "classes": []
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h",
+      "sha256": "3e679e61cef195956c7c9c35fde1c9bd409a5add0564b86bd5004ede4e04b408",
+      "classes": [
+        "SurfaceSimplexNoise"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/LatticeNoise.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/LatticeNoise.h",
+      "sha256": "5693c19b1b0e9ae0fa403112bcdec0e47607bb1a155cac6a13754e2c0404ffd5",
+      "classes": [
+        "LatticeNoise"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/OverworldAquifer.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/OverworldAquifer.h",
+      "sha256": "d528d83ce03406c3850ff3589972651a1469ae3a5c695fd93917d4745d684fb2",
+      "classes": [
+        "OverworldAquiferNoises",
+        "OverworldAquifer",
+        "Substance",
+        "Location",
+        "FluidStatus"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/OverworldCarvers.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/OverworldCarvers.h",
+      "sha256": "d37684c6c88302c9e33a29fb9e4d95454e6c69128d8c291760e5b74bf115fef8",
+      "classes": [
+        "OverworldCarvers",
+        "CaveSettings",
+        "CaveSegment"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h",
+      "sha256": "571b9321e25e5e69ce4989b5fc05200cce1a765f1c6ff7e2383348b71c48a8fc",
+      "classes": [
+        "OverworldClimate",
+        "Column",
+        "Shift"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/OverworldTerrainFiller.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/OverworldTerrainFiller.h",
+      "sha256": "4da5a89aa9e2ef2698b20deddf89cbe04c36b13b0fb957d6b35c8c65fe7d1d72",
+      "classes": [
+        "OverworldTerrainFiller",
+        "Corners"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/TerrainSpline.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Terrain/TerrainSpline.h",
+      "sha256": "57c56f9f91083d246227d64ee2519fccc637fb58dab558582db2ea6acc7bc13c",
+      "classes": [
+        "TerrainSpline",
+        "Climate",
+        "Point"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Random/GameRandom.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Random/GameRandom.h",
+      "sha256": "c54a1ddfe08bcfcfaf9afe93ce32c57d87a056e4900759e0a797826516921f27",
+      "classes": []
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Random/XoroshiroPositionalFactory.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Random/XoroshiroPositionalFactory.h",
+      "sha256": "8327f51dcd7e16839ee8a852a32a2d3c6cf9d1a6fc67c3ac49cc303441f4a45f",
+      "classes": [
+        "XoroshiroPositionalFactory"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/AncientCityFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/AncientCityFeature.h",
+      "sha256": "3711fb879555bbeaaf4498c83a5aec02e3ee54db7a27f3f605c8ca274f567490",
+      "classes": [
+        "AncientCityFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/IglooStructure.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/IglooStructure.h",
+      "sha256": "497b5d5bb92bcfbe020340bd079966988b2042d202b37cde3e5a0baf1b581416",
+      "classes": [
+        "IglooStructure",
+        "PlacedBlock"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/MonumentFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/MonumentFeature.h",
+      "sha256": "dde7f662e5414346b3a8598c09066371de9229afc977c5140fb24a431a8a1921",
+      "classes": [
+        "MonumentFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/ShipwreckFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/ShipwreckFeature.h",
+      "sha256": "0c0e3c9f4af3ed7d648d802a162fbeda31f3210e6e52d35e08ed359102bd698f",
+      "classes": [
+        "ShipwreckFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/ShipwreckStructure.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/ShipwreckStructure.h",
+      "sha256": "a6d246215e433ff54ca5de52b83431fa27ec881655618d5115b81c3644f800ff",
+      "classes": [
+        "ShipwreckStructure",
+        "PlacedBlock"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureBlockTable.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureBlockTable.h",
+      "sha256": "3f5bba452f67072bf11b265ce117c22fc5f1fe12a66b439586914fcb59929c03",
+      "classes": [
+        "StructureBlockTable",
+        "WoodSpecies"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureConnections.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureConnections.h",
+      "sha256": "ad85424da8fd00c93a97e007c9a525ec97979f669932d26efe060dfc61843a9d",
+      "classes": [
+        "StructureConnections"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureFeature.h",
+      "sha256": "f25e77afee9e222efb2dffa420054cb75eba703a9c623fc61a791ed6a7cfb38d",
+      "classes": [
+        "StructureChunkPos",
+        "StructureFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureMarkers.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureMarkers.h",
+      "sha256": "a413126d76e318448be51f8a5fd96f3e550b99abe87f4f13053902dc22891b0e",
+      "classes": [
+        "StructureMarkers",
+        "Marker"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureTemplate.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureTemplate.h",
+      "sha256": "43a47036e2538fb776d526dd004aff179f631b372a5e4fd9e39657bb6faec4b4",
+      "classes": [
+        "StructureTemplate",
+        "PaletteEntry",
+        "BlockEntry"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureTerrain.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/StructureTerrain.h",
+      "sha256": "b265900b629edb82be8c829f3b5696d867ef10f587e812e3fafbfd5d08fa155e",
+      "classes": [
+        "StructureTerrain"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/TempleFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/TempleFeature.h",
+      "sha256": "6f47557a816055fdb4f53ee4fb903f71eac3f094aaca3b3c5ce78b163be6c1e8",
+      "classes": [
+        "TempleFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/TrialChambersFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/TrialChambersFeature.h",
+      "sha256": "348d3c67259f0d9be35d5db0ca0a282b5ec96093201cc62e9184c4feef8af0be",
+      "classes": [
+        "TrialChambersFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/VillageFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/VillageFeature.h",
+      "sha256": "bf8cd1d0802c99b4e51592ea3a8d7c1ecbe636340f762a5d8c2f41f6bf1c8df5",
+      "classes": [
+        "VillageFeature"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Village/PoiBlueprint.h",
+      "path": "Falcon.Server/include/World/Village/PoiBlueprint.h",
+      "sha256": "36138576f209fa945d8d91eb5aaa0c83bd0ebb5714bcfd32b48ee09200cda18b",
+      "classes": [
+        "PoiBlueprint",
+        "PoiBlueprints"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Village/PoiInstance.h",
+      "path": "Falcon.Server/include/World/Village/PoiInstance.h",
+      "sha256": "c3fa08fbe777d757a6d65144645da74687f080d25e9e0e5745d92daef8e6d4da",
+      "classes": [
+        "PoiInstance"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Village/PoiScanner.h",
+      "path": "Falcon.Server/include/World/Village/PoiScanner.h",
+      "sha256": "75f47d236dfac48d563fcebe516bc1d77e870d468dcbc9ac9c8fb5c71aa1f845",
+      "classes": [
+        "PoiScanner"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Village/Raid.h",
+      "path": "Falcon.Server/include/World/Village/Raid.h",
+      "sha256": "63270fec8d2743d58a0bf91829633120352fc0de9d2e3a932ae6cf7964893f9d",
+      "classes": [
+        "Raid"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Village/Village.h",
+      "path": "Falcon.Server/include/World/Village/Village.h",
+      "sha256": "c0bb79995e80fad30b5b9bdd6ee26883ccbbe872d4aa247605433d5fa2525c12",
+      "classes": [
+        "Village",
+        "Inhabitant",
+        "DwellerEntry"
+      ]
+    },
+    {
+      "old": "Falcon.Server/include/World/Village/VillageManager.h",
+      "path": "Falcon.Server/include/World/Village/VillageManager.h",
+      "sha256": "bf9ca6c682b1a1250c128b80c2d2cce814c1771123c8d43905739b4408becb63",
+      "classes": [
+        "VillageManager",
+        "PositionHash"
+      ]
+    },
+    {
+      "old": "Falcon.Server/src/Falcon/Plugin/WasmHost.cpp",
+      "path": "Falcon.Server/src/Falcon/Plugin/WasmHost.cpp",
+      "sha256": "4b0a0a9874b1b8ec5c73ac272c1cf746b1a3e1a88197dda9a6be385d4d3f2804"
+    },
+    {
+      "old": "Falcon.Server/src/Falcon/Plugin/WasmImports.cpp",
+      "path": "Falcon.Server/src/Falcon/Plugin/WasmImports.cpp",
+      "sha256": "c21bd31591a19a408cb20f683941a374ee14641c0ab45def30878648f541880a"
+    },
+    {
+      "old": "Falcon.Server/src/Falcon/Plugin/WasmPlugin.cpp",
+      "path": "Falcon.Server/src/Falcon/Plugin/WasmPlugin.cpp",
+      "sha256": "4e82833eb79f78d53a5c3b3029f4b14b1975e08582e0f3e2b38c5e259d556ff6"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/AI/Goal/CelebrateGoal.cpp",
+      "path": "Falcon.Server/src/World/Actor/AI/Goal/CelebrateGoal.cpp",
+      "sha256": "9316b0122f9c9d93fa4416d58b03f5d493a97824cf1015cb5e3a94532f6fbc10"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/AI/Goal/MoveToVillageGoal.cpp",
+      "path": "Falcon.Server/src/World/Actor/AI/Goal/MoveToVillageGoal.cpp",
+      "sha256": "193d0b66c3158cc2e7bb2c590a76be8cfcb1ce5feea7ab083d91eb37673164b2"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/FreezingSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/FreezingSystem.cpp",
+      "sha256": "e59712c5d9ce953a6c602ad705b6932038869b8a8ef4645dbf9aa1bfa3ab7ad2"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Misc/ArmorStandActor.cpp",
+      "path": "Falcon.Server/src/World/Actor/Misc/ArmorStandActor.cpp",
+      "sha256": "14fc6f283c555e8c957d6cdb31b87913c62bdf1f9697e70549edca083a23791b"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Mob/Component/MobAddRider.cpp",
+      "path": "Falcon.Server/src/World/Actor/Mob/Component/MobAddRider.cpp",
+      "sha256": "2ec48a01529bb1e8d201f969d7979429911b11a2fb28aa54df5913d3e658e3e2"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Mob/Component/MobDweller.cpp",
+      "path": "Falcon.Server/src/World/Actor/Mob/Component/MobDweller.cpp",
+      "sha256": "fceda7f4f769fd2524eff286ce35a39fae3421c48353e10786f206723d6b8dd8"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Mob/Component/MobLeash.cpp",
+      "path": "Falcon.Server/src/World/Actor/Mob/Component/MobLeash.cpp",
+      "sha256": "711ea74c6d253d2d865311f2172e1a2f0727fd60ecc0cf64a5f9519a7dca9654"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/MovementPhysics.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/MovementPhysics.cpp",
+      "sha256": "f2b956509c685d28955ed994bf413249348a018aae1e689b8af5ee4e7b4654bc"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/PlayerMovementPipeline.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/PlayerMovementPipeline.cpp",
+      "sha256": "5545fe76998f50a0dc919d9cc21520c50d404ea6b30e600e8e272c5a6f885b47"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/PlayerMovementRegistry.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/PlayerMovementRegistry.cpp",
+      "sha256": "b15a908c66bd93223e6ca089d87ca7763f9f782bdfcf553959c0a5838e42d2db"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/PlayerMovementValidator.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/PlayerMovementValidator.cpp",
+      "sha256": "d99d1721a4cdea7590b6989c02617048c085bdb3cd33c493d068776c530ce8fc"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/BubbleColumnMovementSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/BubbleColumnMovementSystem.cpp",
+      "sha256": "14afee90f97d42355879a52555f2fdae21cffc3f3ca93d9ae611d88b99d9807c"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/ClientAcceptanceSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/ClientAcceptanceSystem.cpp",
+      "sha256": "8455b7804b2940d0dc25471a077dad29ed26f7c4d5da7eb3e1a0becc0141f689"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/ClimbOutOfLiquidSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/ClimbOutOfLiquidSystem.cpp",
+      "sha256": "60ccdf65201520f3a22b643d54f58d6faafbf717360646cf5c751621769e11a3"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/CurrentSwimAmountSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/CurrentSwimAmountSystem.cpp",
+      "sha256": "9fa713bac1a46c58bd3b514c4e9778cfeda183d5d05e10a20a60e2e6448135f4"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/FlyingPlayerStuckOnGroundWorkaroundSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/FlyingPlayerStuckOnGroundWorkaroundSystem.cpp",
+      "sha256": "bb1fa58decf012f2678acaeb182b6d979101d2b22639ebdecfbf66ca137321c0"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/GlideMoveSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/GlideMoveSystem.cpp",
+      "sha256": "64f7a2b435c94a1a2044d5e98753993e32848bfc00f681e3d790edde1bf4cd58"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/GroundTravelSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/GroundTravelSystem.cpp",
+      "sha256": "ca76c5c044819f4e9f1d379c9da16665fc71178f20bb5dc009340cdcc0d00c48"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/LavaDragSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/LavaDragSystem.cpp",
+      "sha256": "4b5e2714f1415e6aff60fc465c696d4051dd3f994483fb27db7e21310f2f1379"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/LavaTravelSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/LavaTravelSystem.cpp",
+      "sha256": "139e8170564d9cbe3126b1506bc3d417a71203bd6bbf4e3769d3be3e37f7944d"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/MovementAbilitiesSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/MovementAbilitiesSystem.cpp",
+      "sha256": "b443b170420bfcae07c450bb2568c9715a536aabf01bbccd2eb1194dcc574408"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/MovementInputSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/MovementInputSystem.cpp",
+      "sha256": "02314206dd1b4cdd35ce905676433c13fa7d060168e6dda4120a9f034fb8c77e"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerCollisionSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerCollisionSystem.cpp",
+      "sha256": "14bd3516f02b126aaf4f508f71808d67264b40525e57313616b0d5f2542698d5"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerFlightDragSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerFlightDragSystem.cpp",
+      "sha256": "cfd5b65fc7fe2c05e1af5bf1872ab5e96d7ed71ac538d270be29e2109019f28b"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerFlightSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerFlightSystem.cpp",
+      "sha256": "1ab2fa3f15bb1987363e6ea9d031940937b17d44015455b3a0847255910b059a"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerFrictionSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerFrictionSystem.cpp",
+      "sha256": "43a283677f67118515743a116d53ae30635343857322b26fb7705b643180b72e"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerGravitySystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerGravitySystem.cpp",
+      "sha256": "e16621070f6c8e8a3b13cc8ae1d5c77644f2fb51bb84bcfc1dc56f775586d1d0"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerGroundJumpSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerGroundJumpSystem.cpp",
+      "sha256": "b631f73868c38f56364228f3cb62d09b0c190a55a3e8bdbeb32f76b01c31ba76"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerLiquidContactSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerLiquidContactSystem.cpp",
+      "sha256": "6f40dda8fda5eae83294215ca1d69e962929f6c0e9bfed05c93da519811734c7"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerLiquidCurrentSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerLiquidCurrentSystem.cpp",
+      "sha256": "7e56191c28517140dcd5be9353decef6052ca1e63190d5d5279bfe6c4b509e66"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerLiquidJumpSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerLiquidJumpSystem.cpp",
+      "sha256": "34d604cce8ad821a33cd1e62e092e848f9fd7635d9cffad110f6c48425d8aa41"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerMoveRelativeSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerMoveRelativeSystem.cpp",
+      "sha256": "b404268c2e9be4891fb4d7c0c7efb65410af2ac1420252deb86322a6d9fc52b4"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerMovementAdmissionSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerMovementAdmissionSystem.cpp",
+      "sha256": "50d59714f7118a6c9140e30cb4be8c06c5a129fdc4f41a57af0bdcc2de15b69d"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerMovementInitializationSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerMovementInitializationSystem.cpp",
+      "sha256": "97e20deda2168311ff6674e4a1e5783be6ebe2ba19d3fce52e3970c9bb5004a6"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerPostTravelSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerPostTravelSystem.cpp",
+      "sha256": "f4b23b8ace68a0ef28704346496d0645d850e689fedc208d79965153a615ba25"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerPredictionSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerPredictionSystem.cpp",
+      "sha256": "f025136bb1b5da7a23a722c88c929ce29ecdd09060962db36ef3c625443bf28a"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerTravelPreparationSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerTravelPreparationSystem.cpp",
+      "sha256": "00fc04694ec0f2a2388799154de633f39b2070b52b0d64a7360c1dc1d85e0223"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerTraversalSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/PlayerTraversalSystem.cpp",
+      "sha256": "920819b1920c48ad52a80ffe7ab7e3252c3b1678cb4452103c6598a7a615614d"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/SwimControlSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/SwimControlSystem.cpp",
+      "sha256": "2f1ed3f0a6be2418522f911fb5b5963961b08c4f5d57ce3f9f693ca03a1fa5b0"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/UpdateHorizontalPoseSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/UpdateHorizontalPoseSystem.cpp",
+      "sha256": "0f2a73a40624879c6190e6cbceceb96a2102f3dbd1b436aa81f760da758fb31a"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/WaterDragSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/WaterDragSystem.cpp",
+      "sha256": "3cd1dca212c53f0f849517261acbe6e380b38695e960bff1fe22ba6db099d41d"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/WaterSinkInputSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/WaterSinkInputSystem.cpp",
+      "sha256": "674394d5b128ae86419b8bcdcfcdb37c0cdc3dfd383f37657dd79b80627f82ca"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Movement/Systems/WaterTravelSystem.cpp",
+      "path": "Falcon.Server/src/World/Actor/Movement/Systems/WaterTravelSystem.cpp",
+      "sha256": "d670646f185468552f406f90f9d6c05367ac9c47f61af48027bfb622488b03cb"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Player/PlayerRaidState.cpp",
+      "path": "Falcon.Server/src/World/Actor/Player/PlayerRaidState.cpp",
+      "sha256": "02e6d4e3a6d3dc9fee2a43a02c56ae19448c829624c189f79d822ac6f7b315ef"
+    },
+    {
+      "old": "Falcon.Server/src/World/Actor/Projectile/FishingHookActor.cpp",
+      "path": "Falcon.Server/src/World/Actor/Projectile/FishingHookActor.cpp",
+      "sha256": "e86c0b539345b9f1498121d8522d1c7d3500371b146c3285e78187e3f37f58a7"
+    },
+    {
+      "old": "Falcon.Server/src/World/Item/ArmorStandItem.cpp",
+      "path": "Falcon.Server/src/World/Item/ArmorStandItem.cpp",
+      "sha256": "0a438cb47519a1a934648fb382f27577d6e6cb4a13b312149ac21fc7deaaf9b4"
+    },
+    {
+      "old": "Falcon.Server/src/World/Item/ArmorTrims.cpp",
+      "path": "Falcon.Server/src/World/Item/ArmorTrims.cpp",
+      "sha256": "5aebfde24166cc4b7fbe30800b68480db0ef929dd5893add7aef862f34534b4f"
+    },
+    {
+      "old": "Falcon.Server/src/World/Item/FishingRodItem.cpp",
+      "path": "Falcon.Server/src/World/Item/FishingRodItem.cpp",
+      "sha256": "3074fb4b42d4e8708d1516c1b211f43b07199d98af18d8f3990a221302332867"
+    },
+    {
+      "old": "Falcon.Server/src/World/Item/GlassBottleItem.cpp",
+      "path": "Falcon.Server/src/World/Item/GlassBottleItem.cpp",
+      "sha256": "cef246ed89b262cede8fe9e5d5cba0502f2ddf21b8f016ddc8d421c9cdf398fe"
+    },
+    {
+      "old": "Falcon.Server/src/World/Item/GoatHornItem.cpp",
+      "path": "Falcon.Server/src/World/Item/GoatHornItem.cpp",
+      "sha256": "4bafd655b4ac44239a3255a36630754f5c4a2e82e1c81360322a176fd3cd5fe0"
+    },
+    {
+      "old": "Falcon.Server/src/World/Item/ItemProperties.cpp",
+      "path": "Falcon.Server/src/World/Item/ItemProperties.cpp",
+      "sha256": "993f4b1e4da0d258913561dd1e5ca757e8c19dca820e4ef2fcfb289b08093d21"
+    },
+    {
+      "old": "Falcon.Server/src/World/Item/OminousBottleItem.cpp",
+      "path": "Falcon.Server/src/World/Item/OminousBottleItem.cpp",
+      "sha256": "a09dd0f63cd5ee1d8f90b6af28ee222c021a909920b5e3fd432bfca2ff96f155"
+    },
+    {
+      "old": "Falcon.Server/src/World/Item/ShearsItem.cpp",
+      "path": "Falcon.Server/src/World/Item/ShearsItem.cpp",
+      "sha256": "7d86069fcecc1e85525fc471b272b2c7b1e23824c8c91e231b5291bc824de14e"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/Block/BlockPrecipitation.cpp",
+      "path": "Falcon.Server/src/World/Level/Block/BlockPrecipitation.cpp",
+      "sha256": "37f55992d61c7da3cb6edba57f21e40cf25d87014a30e591a7b4fbfda3482693"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/Block/CarvedPumpkinBlock.cpp",
+      "path": "Falcon.Server/src/World/Level/Block/CarvedPumpkinBlock.cpp",
+      "sha256": "31aa45057db69ead046426019c38df77693c5ccc5b9039a38a34768c78e6f8bb"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/Block/ChorusPlantBlock.cpp",
+      "path": "Falcon.Server/src/World/Level/Block/ChorusPlantBlock.cpp",
+      "sha256": "8cf5398a9e252b78d872b5d49eb07991782074296310eac49bb1023364869031"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/Block/DiscPressBlock.cpp",
+      "path": "Falcon.Server/src/World/Level/Block/DiscPressBlock.cpp",
+      "sha256": "64ec82defd724f2de2c8c44289c350e40af74738780882ca95cf3a7ea8e5e32b"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/Block/DispenserBlock.cpp",
+      "path": "Falcon.Server/src/World/Level/Block/DispenserBlock.cpp",
+      "sha256": "652c8ab550bf2a316badd25769c409d5e795ad0ed1c272b1993960e351993f89"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/Block/IceCrystalBlock.cpp",
+      "path": "Falcon.Server/src/World/Level/Block/IceCrystalBlock.cpp",
+      "sha256": "20672a347f19fd835854c5fcd944cf6efbb8bee3ad04d2549a8674481139c16f"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/Block/IcicleBlock.cpp",
+      "path": "Falcon.Server/src/World/Level/Block/IcicleBlock.cpp",
+      "sha256": "a923079ac56dd298881375982eba652e02af4392e68585bb51d0228348bbe241"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/Block/ShearableVegetationBlock.cpp",
+      "path": "Falcon.Server/src/World/Level/Block/ShearableVegetationBlock.cpp",
+      "sha256": "24d694146fcd03fb537ec43991ab02d3698e477f48857af22a94df3070be9ef4"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/Block/SpeleothemBlock.cpp",
+      "path": "Falcon.Server/src/World/Level/Block/SpeleothemBlock.cpp",
+      "sha256": "c6af2bea04d42386e0292828b8d4e95bad2e40eca27fd1319e366c7bdfeee03c"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Biome/BiomeSearch.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Biome/BiomeSearch.cpp",
+      "sha256": "8f1e1bd78b7cad2e60841ef6029ee120436c0f4d05f56b4062eb7c73f1639b10"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/BlockStateSet.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/BlockStateSet.cpp",
+      "sha256": "4631b84065d98a0d9a448f981cac1552e83a474575f7b60b5653d91b77f74418"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/ChunkGenerator.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/ChunkGenerator.cpp",
+      "sha256": "abf05d2bdfa2d9caf423abebd6f523b5ce7cb93c4df62734c8db7d6496b996ed"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/End/Feature/TheEndDecorationFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/End/Feature/TheEndDecorationFeature.cpp",
+      "sha256": "2c405b333ef229621a3dd6b9797648b588f0fe209c1d79290a52486165f0448f"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Feature/FeatureExpression.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Feature/FeatureExpression.cpp",
+      "sha256": "46fbdf1cfada12625e5f3136332e204a54698943871b1ffea4bdf8f718a68108"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Flat/FlatWorldGenerator.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Flat/FlatWorldGenerator.cpp",
+      "sha256": "f6dcd0cadc3f082cb322a92da324659692a6e2e3cab112205798ef8ef1b643e6"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/NetherDecoration.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/NetherDecoration.cpp",
+      "sha256": "8761c5d0a196804d4c5847dc5cca676c7dc0d005327e27025cf56b45221f78de"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/NetherFeatures.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/NetherFeatures.cpp",
+      "sha256": "3d72f0cca789a5df01c5880bed08595dd80ceedb1f3fe8a5fd7fd87f54469e55"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Nether/NetherCarvers.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/NetherCarvers.cpp",
+      "sha256": "4e4b73a2e73c7b2dee3a2e3ba24f4d50b0564c804cc43c59beeceb14ba5b0eca"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Nether/Surface/NetherSurfaceBuilder.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Surface/NetherSurfaceBuilder.cpp",
+      "sha256": "8962c5fbab5513d3b224eed89eaf827d4a47558743830175f112162e5278dc9a"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Biome/BiomeTemperature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Biome/BiomeTemperature.cpp",
+      "sha256": "9bfaa0206be9f090cc306597c6d55cc4ddcd13c01a4bb7134b9d46f57c70df43"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Biome/BiomeZoom.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Biome/BiomeZoom.cpp",
+      "sha256": "a441904e428135ebb69c2ee408ab431a9800184afeea1261ab9f9e35c92e2625"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.cpp",
+      "sha256": "4b5e05b2d03d144d2e994732616287aba90f8121809e598832bb6b739c0e65f8"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSnowLayerFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSnowLayerFeature.cpp",
+      "sha256": "576295b80de3dda2209741f828e31b32fe9286b0d3dd320ee9e66b111e53410a"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSupport.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSupport.cpp",
+      "sha256": "05e2571de9c8595dedf3b69f896ace827000f72d45a66c3d06a78b730702e002"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSurfaceFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSurfaceFeature.cpp",
+      "sha256": "2c549888525570bc105b02f3ea22091df1c906b6766488cae85f0ee9d323e6e2"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IceCrystalScatterFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IceCrystalScatterFeature.cpp",
+      "sha256": "db22c1e25e694655305f9c06e8a2ade7e42299a5747565bb7fce6b8123e7c45a"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IcicleClusterFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/IcicleClusterFeature.cpp",
+      "sha256": "1865a85c9d209091a120768394a324168b81910c2e0f7df7d404ef99ee602c8c"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/LargeIcicleFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/LargeIcicleFeature.cpp",
+      "sha256": "56f73d8b9694d68089a466c663506c13ecb425a60ea09b4a7b887496d60149fc"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/OverworldFreezer.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/OverworldFreezer.cpp",
+      "sha256": "b6d0445f4bf50baf65e6fb63f69b65e82b5f8c86a3e348d17773ebd77a13cf1f"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.cpp",
+      "sha256": "74f0dc112f8f3b4e4418102d7ab5c247e7cf855cb7d64204bdc5ebc68b701113"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/OverworldTreePlacer.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/OverworldTreePlacer.cpp",
+      "sha256": "45afa1fe50cb27eb139d26ffbd2ba75092673c47ee3da9bca37a904063893eba"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/OverworldBlockLists.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/OverworldBlockLists.cpp",
+      "sha256": "f7c5e31ce277e39ba5822fe3cb160e1cf9939d1a18821ec72a56b0cab28735c4"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.cpp",
+      "sha256": "ddccc8a5bcd6fef60effc8e0c8968f737fe759e74b90fb6a748470c8c2b04145"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/LatticeNoise.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/LatticeNoise.cpp",
+      "sha256": "2c046143d9156604df992478fa04e5298813b04a4c5c5119cb704da8981bb60c"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/OverworldAquifer.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/OverworldAquifer.cpp",
+      "sha256": "f0ec68f8e558a54b7f6bb53b93a5b68d85ccecf4ebc05932cb04e5eb9e01421d"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/OverworldCarvers.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/OverworldCarvers.cpp",
+      "sha256": "1afe2aa215d65a2e41495bcf85c59cbd45c6bac3b1ad3cf20d4b8a7e49fc3fa1"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/OverworldClimate.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/OverworldClimate.cpp",
+      "sha256": "87a1313607cbbb5a63166939f800bc3e3379ce964ab09646b40fd2087eabccbb"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/OverworldTerrainFiller.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/OverworldTerrainFiller.cpp",
+      "sha256": "da2a9c178d08c2417990ea3d1a69126720153e277eb16284cbf31c37aac83788"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/TerrainSpline.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Terrain/TerrainSpline.cpp",
+      "sha256": "9b6baa5ba53d24d4028d05cfde3d52b5b8c27870ec0077d057019a52cc10bc4f"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Random/XoroshiroPositionalFactory.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Random/XoroshiroPositionalFactory.cpp",
+      "sha256": "b98d6a8338b9fc347033335a337550c9080a24887536d7524d77ab1777943cfc"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/AncientCityFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/AncientCityFeature.cpp",
+      "sha256": "4e7eb253fad5a595e77b8fafcfe5931e329e775cc85b54e32d69aa36a89df4c5"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/IglooStructure.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/IglooStructure.cpp",
+      "sha256": "f969c487d97bab5556d54066b29afd8102a4c196c434905dbf5a070825d994d0"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/MonumentFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/MonumentFeature.cpp",
+      "sha256": "c1f8577c79e54fce2de058085926733dfa28594080e4a1ea322b5a105c89bb8e"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/ShipwreckFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/ShipwreckFeature.cpp",
+      "sha256": "a5fffd54e220f7d4317f438855e3b017320c57b8e2940dbc4eca079ad95a6040"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/ShipwreckStructure.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/ShipwreckStructure.cpp",
+      "sha256": "940c03d9656a513429f80248e75f0deeab3a6895574c899c00df911f5182060a"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureBlockTable.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureBlockTable.cpp",
+      "sha256": "2b91c553a2fc7323fe60f7ca61bc98229b0906b4296768215222ea50997bd6cc"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureConnections.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureConnections.cpp",
+      "sha256": "2458df64e0f935f514837092e264cb7460600cc8b3847be10e499d37a7090915"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureFeature.cpp",
+      "sha256": "08012f0f830affc7fb6ed896532c04b379a1b19fb52e2d7cf6aebe27b094c195"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureMarkers.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureMarkers.cpp",
+      "sha256": "966f4feb4df0a0684c841f64b62da7d9bf6f90fc70c9a89445c2b9f3eabef3fb"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureTemplate.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureTemplate.cpp",
+      "sha256": "c2f6d36a4bbbe140ab005b1e29d29033a3677629de0bc443217ae03166a20ff7"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureTerrain.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/StructureTerrain.cpp",
+      "sha256": "49bf1c7495f012d43057b353958f8afcbc9210c91d428dc6c78f8aab27e8d41d"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/TempleFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/TempleFeature.cpp",
+      "sha256": "326b1ee060c93d1f1d08514e05e939c8a8d9854a3bd08d6e848838428d01b669"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/TrialChambersFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/TrialChambersFeature.cpp",
+      "sha256": "7a3a3365321c31f78f033cdd9741c5fbc69d75658090396f6d0295217e15f516"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/VillageFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/VillageFeature.cpp",
+      "sha256": "544daaa788bd36bc5694eca2970671c2a66edaec67319e65cee431d6d666b2aa"
+    },
+    {
+      "old": "Falcon.Server/src/World/Village/PoiBlueprint.cpp",
+      "path": "Falcon.Server/src/World/Village/PoiBlueprint.cpp",
+      "sha256": "691bd407cc97d90b2c296647611dc0e73fd252725efd7ce6f4a2796423c7ba28"
+    },
+    {
+      "old": "Falcon.Server/src/World/Village/PoiInstance.cpp",
+      "path": "Falcon.Server/src/World/Village/PoiInstance.cpp",
+      "sha256": "28909cf6cf1ad9fdc77f0e1d425480688c5ba983ad73c7418dd4f3d6ef113b7c"
+    },
+    {
+      "old": "Falcon.Server/src/World/Village/PoiScanner.cpp",
+      "path": "Falcon.Server/src/World/Village/PoiScanner.cpp",
+      "sha256": "efdb522a302a8ec0ebc5abb466f1751f30fbde5b0aae1c2d90c4738e06b94390"
+    },
+    {
+      "old": "Falcon.Server/src/World/Village/Raid.cpp",
+      "path": "Falcon.Server/src/World/Village/Raid.cpp",
+      "sha256": "9308cb7ede096de50f674ba7ece7b556541920b4741dafd85e4ab77a882beb1f"
+    },
+    {
+      "old": "Falcon.Server/src/World/Village/Village.cpp",
+      "path": "Falcon.Server/src/World/Village/Village.cpp",
+      "sha256": "cc8083b781ecf84d03d524c5f7534f1eebb2c452664c3c8dae713fc6f659da3f"
+    },
+    {
+      "old": "Falcon.Server/src/World/Village/VillageManager.cpp",
+      "path": "Falcon.Server/src/World/Village/VillageManager.cpp",
+      "sha256": "fc25bfd7208444aa9f7252c81b057d43120d97e477c161129fa9c245d464c3ed"
     }
   ]
 }
