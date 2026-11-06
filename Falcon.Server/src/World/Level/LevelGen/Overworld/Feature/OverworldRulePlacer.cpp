@@ -30,6 +30,8 @@
 #include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
+#include "World/Level/LevelGen/Structure/StructureBlockTable.h"
+#include "World/Level/LevelGen/Structure/StructureTemplate.h"
 
 #include <algorithm>
 #include <array>
@@ -718,6 +720,13 @@ struct OverworldRulePlacer::LegacyFlowerDefinition {
     int32_t mType;
 };
 
+// a minecraft:fossil_feature
+struct OverworldRulePlacer::FossilDefinition {
+    const char *mIdentifier;
+    const char *mOre;
+    int32_t mMaxEmptyCorners;
+};
+
 OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry &entry) {
     // BDS 1.26.61 behavior packs, features/*.json
     static const std::vector<OreDefinition> ORES = {
@@ -1078,6 +1087,12 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              4, 7, 3, 5, 1, 3, 16, 2, 0.025f, 0.35f, 0.083f, true, 1}
     };
 
+    // BDS 1.26.61 behavior packs, features/*fossil_feature.json
+    static const std::vector<FossilDefinition> FOSSILS = {
+            {"minecraft:fossil_feature", "minecraft:coal_ore", 4},
+            {"minecraft:deepslate_diamond_fossil_feature", "minecraft:deepslate_diamond_ore", 4}
+    };
+
     Feature feature;
     if (entry.mPass == AFTER_SURFACE_PASS) {
         // vtable 0x14F4A0F60, place sub_14D217680
@@ -1088,6 +1103,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             feature.mPlaced.mScatter = &SMALL_DRIPSTONE;
         feature.mPlaced.mDripstoneCluster = entry.mFeature == "minecraft:dripstone_cluster_feature";
         feature.mLegacyIce = entry.mFeature == "minecraft:legacy:ice_feature";
+        for (const FossilDefinition &fossil: FOSSILS) {
+            if (entry.mFeature == fossil.mIdentifier)
+                feature.mFossil = &fossil;
+        }
         for (const GeodeDefinition &geode: GEODES) {
             if (entry.mFeature == geode.mIdentifier)
                 feature.mGeode = &geode;
@@ -1280,6 +1299,8 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
             _placeSprings(blocks, position[0], position[2], placement);
         else if (feature.mLegacyIce)
             _placeLegacyIce(blocks, position[0], position[2], placement);
+        else if (feature.mFossil != nullptr)
+            _placeFossil(blocks, *feature.mFossil, position[0], position[1], position[2], placement, seed);
         else if (feature.mLegacyTree != nullptr)
             _placeLegacyTrees(blocks, *feature.mLegacyTree, position[0], position[2], placement);
         else if (feature.mPlaced.isSet())
@@ -1287,6 +1308,80 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
         else
             _placeKelp(blocks, position[0], position[1], position[2], placement);
     }
+}
+
+bool OverworldRulePlacer::_placeFossil(BlockManager &blocks, const FossilDefinition &fossil, int32_t x, int32_t y,
+                                       int32_t z, std::mt19937 &random, uint32_t integritySeed) {
+    // FossilFeature::place (sub_14D209B60); the game first gives up inside the bounds of a structure, which the
+    // generator does not track yet
+    static const char *const TEMPLATES[] = {
+            "fossils/fossil_spine_01.nbt", "fossils/fossil_spine_02.nbt", "fossils/fossil_spine_03.nbt",
+            "fossils/fossil_spine_04.nbt", "fossils/fossil_skull_01.nbt", "fossils/fossil_skull_02.nbt",
+            "fossils/fossil_skull_03.nbt", "fossils/fossil_skull_04.nbt"};
+    constexpr float BONE_INTEGRITY = 0.9f;
+    constexpr float ORE_INTEGRITY = 0.1f;
+
+    const int32_t rotation = nextInt(random, 4);
+    const std::shared_ptr<const StructureTemplate> piece = StructureTemplate::load(TEMPLATES[nextInt(random, 8)]);
+    if (piece == nullptr)
+        return false;
+
+    const bool turned = (rotation & 1) != 0;
+    const int32_t spanX = turned ? piece->getSizeZ() : piece->getSizeX();
+    const int32_t spanZ = turned ? piece->getSizeX() : piece->getSizeZ();
+    const int32_t offsetX = nextInt(random, 16 - spanX);
+    const int32_t offsetZ = nextInt(random, 16 - spanZ);
+
+    int32_t lowest = y;
+    for (int32_t i = 0; i < spanX; i++) {
+        for (int32_t j = 0; j < spanZ; j++)
+            lowest = std::min(lowest, aboveTopSolid(blocks, x + offsetX + i, z + offsetZ + j));
+    }
+
+    const int32_t startX = x + offsetX;
+    const int32_t startY = std::max(lowest - nextInt(random, 10) - 15, LevelChunk::MIN_Y + 10);
+    const int32_t startZ = z + offsetZ;
+
+    // the pieces turn around their first block, so the far corner depends on the rotation
+    const int32_t lastX = piece->getSizeX() - 1;
+    const int32_t lastZ = piece->getSizeZ() - 1;
+    const int32_t farX[] = {startX + lastX, startX - lastZ, startX - lastX, startX + lastZ};
+    const int32_t farZ[] = {startZ + lastZ, startZ + lastX, startZ - lastZ, startZ - lastX};
+    const int32_t topY = startY + piece->getSizeY() - 1;
+
+    int32_t emptyCorners = 0;
+    for (int32_t cornerX: {startX, farX[rotation]}) {
+        for (int32_t cornerY: {topY, startY}) {
+            for (int32_t cornerZ: {startZ, farZ[rotation]}) {
+                const BlockState &corner = blocks.getBlockAt(cornerX, cornerY, cornerZ);
+                if (DecorationSupport::isAir(corner) || isWater(corner) || LavaBlock::matches(corner.mName))
+                    emptyCorners++;
+            }
+        }
+    }
+    if (emptyCorners > fossil.mMaxEmptyCorners)
+        return false;
+
+    // the game places the piece twice with one integrity seed: the second pass draws the same numbers, so it only
+    // turns a tenth of the blocks of the first into ore, and its match at chance 1 draws nothing
+    std::mt19937 integrity(integritySeed);
+    const BlockState ore(fossil.mOre);
+    for (const StructureTemplate::BlockEntry &entry: piece->getBlocks()) {
+        BlockState bone;
+        if (!StructureBlockTable::translate(piece->getPalette()[static_cast<size_t>(entry.mPaletteIndex)], rotation,
+                                            bone) || DecorationSupport::isAir(bone))
+            continue;
+
+        const float draw = nextFloat(integrity);
+        if (draw > BONE_INTEGRITY)
+            continue;
+
+        const int32_t turnedX[] = {entry.x, -entry.z, -entry.x, entry.z};
+        const int32_t turnedZ[] = {entry.z, entry.x, -entry.z, -entry.x};
+        blocks.setBlockStateAt(startX + turnedX[rotation], startY + entry.y, startZ + turnedZ[rotation],
+                               draw <= ORE_INTEGRITY ? ore : bone);
+    }
+    return true;
 }
 
 bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &ore, int32_t x, int32_t y, int32_t z,

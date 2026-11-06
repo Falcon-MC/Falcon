@@ -84,6 +84,15 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
     }
 
     Tag states = Tag::ofCompound();
+    if (name == "minecraft:bone_block") {
+        const std::string axis = property(entry, "axis");
+        const bool swapped = (quarterTurns & 1) != 0 && axis != "y";
+        states.putInt("deprecated", 0);
+        states.putString("pillar_axis", swapped ? (axis == "x" ? "z" : "x") : axis);
+        out = BlockState(name, states);
+        return true;
+    }
+
     if (name == "minecraft:furnace" || name == "minecraft:chest") {
         states.putString("minecraft:cardinal_direction", rotatedFacing(entry, quarterTurns));
         out = BlockState(name, states);
