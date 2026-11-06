@@ -189,9 +189,13 @@ public:
     }
 
     // Both are read for every player input, so load resolves them once.
-    bool getMovementSimulation() const { return mMovementSimulation; }
+    bool getMovementSimulation() const {
+        return mMovementSimulation;
+    }
 
-    bool getServerAuthoritativeMovementStrict() const { return mServerAuthoritativeMovementStrict; }
+    bool getServerAuthoritativeMovementStrict() const {
+        return mServerAuthoritativeMovementStrict;
+    }
 
     float getPlayerMovementActionDirectionThreshold() const {
         return getFloat("player-movement-action-direction-threshold");
