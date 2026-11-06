@@ -3,9 +3,11 @@
 #include "World/Level/Block/BlockState.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 class ChunkGenerator;
+class Level;
 class LevelChunk;
 
 /**
@@ -19,10 +21,13 @@ public:
         int32_t y = 0;
         int32_t z = 0;
         BlockState mState;
+        // the data of the template: the marker text of a data block, or the block actor of the block
+        std::string mMarker;
+        std::string mBlockActor;
     };
 
     // the blocks relative to the corner of the start chunk and the floor height
     static std::vector<PlacedBlock> build(int32_t quarterTurns, int32_t shaftPieces);
 
-    static void place(const ChunkGenerator &generator, LevelChunk &chunk);
+    static void place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk);
 };

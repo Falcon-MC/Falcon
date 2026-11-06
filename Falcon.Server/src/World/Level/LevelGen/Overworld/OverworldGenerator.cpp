@@ -110,7 +110,7 @@ int32_t OverworldGenerator::getPreliminarySurfaceLevel(int32_t quartX, int32_t q
 void OverworldGenerator::decorate(Level &level, LevelChunk &chunk,
                                  std::vector<GeneratedBlockChange> *overflow) const {
     // structures go first: the game post processes them before any feature runs
-    IglooStructure::place(*this, chunk);
+    IglooStructure::place(*this, level, chunk);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }
 

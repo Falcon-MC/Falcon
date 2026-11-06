@@ -230,6 +230,9 @@ bool ContainerBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
         return false;
 
     BlockActorStore &blockActors = owner.getLevelFor(player).getBlockActors();
+    if (BlockActor *existing = blockActors.find(position))
+        existing->unpackLoot(owner);
+
     if (blockActors.find(position) == nullptr) {
         std::unique_ptr<BlockActor> created = createBlockActor(definition->mKind);
         if (created == nullptr)
@@ -285,6 +288,7 @@ void ContainerBlock::onBroken(ServerNetworkHandler &owner, Level &level, const V
     if (definition->mDropsContentsOnBreak) {
         ContainerBlockActor *actor = level.getBlockActors().find<ContainerBlockActor>(position);
         if (actor != nullptr) {
+            actor->unpackLoot(owner);
             const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
                                         (float) position.z + 0.5f);
             SimpleContainerInventory &inventory = actor->getInventory();

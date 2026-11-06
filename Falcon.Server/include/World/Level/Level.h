@@ -25,6 +25,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 class Packet;
@@ -115,6 +116,11 @@ public:
     void addParticle(const Particle &particle);
 
     BlockActorStore &getBlockActors() { return mBlockActors; }
+
+    /** Mobs a structure spawns while it generates; the chunk worker stores them with the chunk. */
+    void addGeneratedEntity(Tag entity) { mGeneratedEntities.push_back(std::move(entity)); }
+
+    std::vector<Tag> takeGeneratedEntities() { return std::exchange(mGeneratedEntities, std::vector<Tag>()); }
 
     const BlockActorStore &getBlockActors() const { return mBlockActors; }
 
@@ -476,6 +482,7 @@ private:
     GameRules mGameRules;
     Level *mRulesOwner = nullptr;
     BlockActorStore mBlockActors{*this};
+    std::vector<Tag> mGeneratedEntities;
     PacketBroadcaster mPacketBroadcaster;
     std::unordered_set<int64_t> mBlockLightQueue;
 };

@@ -281,6 +281,7 @@ bool HopperBlockActor::_pullItems(ServerNetworkHandler &owner) {
     if (sourceActor == nullptr)
         return _pickupItemActors(owner);
 
+    sourceActor->unpackLoot(owner);
     Container *sourceContainer = sourceActor->getContainer();
     if (sourceContainer == nullptr)
         return _pickupItemActors(owner);

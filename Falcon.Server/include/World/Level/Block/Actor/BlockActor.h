@@ -48,10 +48,19 @@ public:
 
     Tag saveWithPosition() const;
 
+    /** Container loot the game rolls on first access. A seed of 0 means an unseeded roll. */
+    void setLootTable(const std::string &table, int32_t seed);
+
+    void loadLootTable(const Tag &data);
+
+    void unpackLoot(ServerNetworkHandler &owner);
+
 protected:
     Vector3i mPosition;
     Level *mLevel = nullptr;
 
 private:
     BlockState mState;
+    std::string mLootTable;
+    int32_t mLootSeed = 0;
 };

@@ -56,7 +56,7 @@ void GeneratorChunkSource::_trim() {
  * soon after and would otherwise regenerate the same terrain.
  */
 void GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow,
-                                    std::vector<Tag> &blockActors) {
+                                    std::vector<Tag> &blockActors, std::vector<Tag> &entities) {
     const int32_t chunkX = chunk.getX();
     const int32_t chunkZ = chunk.getZ();
 
@@ -76,6 +76,7 @@ void GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBloc
 
     BlockActorStore &generatedActors = mScratch.getBlockActors();
     blockActors = generatedActors.saveChunk(chunkX, chunkZ);
+    entities = mScratch.takeGeneratedEntities();
 
     for (int32_t offsetX = -1; offsetX <= 1; offsetX++) {
         for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++) {

@@ -1,5 +1,6 @@
 #include "World/Level/Storage/Loot/LootTable.h"
 
+#include "World/Level/LevelGen/Random/GameRandom.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
 
@@ -110,9 +111,9 @@ void LootPool::_rollTier(const LootContext &context, std::vector<LootDrop> &drop
     if (mEntries.empty())
         return;
 
-    int32_t tier = std::uniform_int_distribution<int32_t>(0, mTierInitialRange - 1)(context.mRandom);
+    int32_t tier = GameRandom::nextInt(context.mRandom, mTierInitialRange);
     for (int32_t bonus = 0; bonus < mTierBonusRolls; ++bonus) {
-        if (std::uniform_real_distribution<float>(0.0f, 1.0f)(context.mRandom) < mTierBonusChance)
+        if (GameRandom::nextFloat(context.mRandom) < mTierBonusChance)
             tier++;
     }
 
@@ -125,7 +126,12 @@ void LootPool::roll(const LootContext &context, std::vector<LootDrop> &drops, in
     if (!LootCondition::testAll(mConditions, context))
         return;
 
-    const int32_t rolls = mRolls.rollInt(context.mRandom);
+    // the game always draws the count, even for a fixed one, then a float for the bonus rolls
+    const int32_t minimum = (int32_t) std::floor(mRolls.mMin);
+    const int32_t maximum = std::max(minimum, (int32_t) std::floor(mRolls.mMax));
+    const int32_t rolls = minimum + GameRandom::nextInt(context.mRandom, maximum - minimum + 1);
+    GameRandom::nextFloat(context.mRandom);
+
     for (int32_t roll = 0; roll < rolls; ++roll) {
         if (mHasTiers) {
             _rollTier(context, drops, depth);
@@ -142,9 +148,9 @@ void LootPool::roll(const LootContext &context, std::vector<LootDrop> &drops, in
         }
 
         if (totalWeight <= 0)
-            return;
+            continue;
 
-        int32_t pick = std::uniform_int_distribution<int32_t>(0, totalWeight - 1)(context.mRandom);
+        int32_t pick = GameRandom::nextInt(context.mRandom, totalWeight);
         for (const LootEntry *entry: available) {
             if (pick < entry->getWeight(context)) {
                 entry->roll(context, drops, depth);
