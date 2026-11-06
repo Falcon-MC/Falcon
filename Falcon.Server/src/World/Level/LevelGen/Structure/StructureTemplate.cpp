@@ -7,6 +7,7 @@
 #include "StructuresPack.h"
 
 #include <exception>
+#include <mutex>
 #include <unordered_map>
 #include <utility>
 
@@ -67,6 +68,14 @@ namespace {
 }
 
 std::shared_ptr<const StructureTemplate> StructureTemplate::load(const std::string &path) {
+    // chunk workers ask for the same few pieces around every start
+    static std::mutex cacheMutex;
+    static std::unordered_map<std::string, std::shared_ptr<const StructureTemplate>> cache;
+    const std::lock_guard<std::mutex> lock(cacheMutex);
+    const auto cached = cache.find(path);
+    if (cached != cache.end())
+        return cached->second;
+
     const auto entry = archive().find(path);
     if (entry == archive().end())
         return nullptr;
@@ -94,6 +103,7 @@ std::shared_ptr<const StructureTemplate> StructureTemplate::load(const std::stri
         return nullptr;
     }
 
+    cache.emplace(path, result);
     return result;
 }
 

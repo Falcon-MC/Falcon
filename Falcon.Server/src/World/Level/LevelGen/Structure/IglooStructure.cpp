@@ -1,6 +1,7 @@
 #include "World/Level/LevelGen/Structure/IglooStructure.h"
 
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "World/Level/LevelGen/ChunkGenerator.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
@@ -43,6 +44,16 @@ namespace {
         return choice;
     }
 
+    const BlockStateSet &airStates() {
+        static const BlockStateSet states{"minecraft:air"};
+        return states;
+    }
+
+    const BlockStateSet &barStates() {
+        static const BlockStateSet states{"minecraft:iron_bars"};
+        return states;
+    }
+
     void rotate(int32_t quarterTurns, int32_t &x, int32_t &z) {
         for (int32_t i = 0; i < quarterTurns; ++i) {
             const int32_t oldX = x;
@@ -75,7 +86,7 @@ namespace {
     void connectBars(std::vector<IglooStructure::PlacedBlock> &blocks) {
         std::map<std::tuple<int32_t, int32_t, int32_t>, bool> solid;
         for (const IglooStructure::PlacedBlock &block : blocks)
-            solid[{block.x, block.y, block.z}] = block.mState.mName != "minecraft:air";
+            solid[{block.x, block.y, block.z}] = !airStates().contains(block.mState);
 
         const auto isSolid = [&solid](int32_t x, int32_t y, int32_t z) {
             const auto found = solid.find({x, y, z});
@@ -83,7 +94,7 @@ namespace {
         };
 
         for (IglooStructure::PlacedBlock &block : blocks) {
-            if (block.mState.mName != "minecraft:iron_bars")
+            if (!barStates().contains(block.mState))
                 continue;
 
             Tag states = Tag::ofCompound();

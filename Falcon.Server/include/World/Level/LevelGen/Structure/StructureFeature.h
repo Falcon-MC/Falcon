@@ -41,7 +41,7 @@ public:
 
     bool isStartChunk(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const;
 
-    // the start nearest to the block position within the search radius, as /locate structure reports it
+    // the first valid start of the region rings around the block position, which is what /locate structure reports
     bool findNearest(const ChunkGenerator &generator, int32_t blockX, int32_t blockZ, StructureChunkPos &out) const;
 
     static const std::vector<const StructureFeature *> &getAll();
