@@ -8,6 +8,7 @@
 #include <memory>
 
 class LevelChunk;
+class NetherSurfaceBuilder;
 class VanillaNetherBiomeSource;
 
 class NetherGenerator : public ChunkGenerator {
@@ -41,10 +42,9 @@ private:
 
     void _generateTerrain(LevelChunk &chunk) const;
 
-    void _applySurface(LevelChunk &chunk) const;
-
     int64_t mSeed;
     int32_t mAirHash;
     std::unique_ptr<NetherNoiseHolder> mNoiseHolder;
     std::unique_ptr<VanillaNetherBiomeSource> mBiomeSource;
+    std::unique_ptr<NetherSurfaceBuilder> mSurfaceBuilder;
 };

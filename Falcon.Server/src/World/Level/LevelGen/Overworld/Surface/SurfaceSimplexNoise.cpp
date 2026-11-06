@@ -90,3 +90,67 @@ float SurfaceSimplexNoise::getValue(float x, float y) const {
 
     return ((corner(g0, x0, y0) + corner(g1, x1, y1)) + corner(g2, x2, y2)) * 70.0f;
 }
+
+float SurfaceSimplexNoise::getValue3D(float x, float y, float z) const {
+    static const float GRADIENTS_3D[12][3] = {
+            {1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f},
+            {1.0f, 0.0f, 1.0f}, {-1.0f, 0.0f, 1.0f}, {1.0f, 0.0f, -1.0f}, {-1.0f, 0.0f, -1.0f},
+            {0.0f, 1.0f, 1.0f}, {0.0f, -1.0f, 1.0f}, {0.0f, 1.0f, -1.0f}, {0.0f, -1.0f, -1.0f}
+    };
+
+    const float skew = (z + (x + y)) * 0.33333334f;
+    const int32_t i = gameFloor(x + skew);
+    const int32_t j = gameFloor(y + skew);
+    const int32_t k = gameFloor(z + skew);
+    const float unskew = static_cast<float>(k + i + j) * 0.16666667f;
+    const float x0 = x - (static_cast<float>(i) - unskew);
+    const float y0 = y - (static_cast<float>(j) - unskew);
+    const float z0 = z - (static_cast<float>(k) - unskew);
+
+    int32_t i1 = 0, j1 = 0, k1 = 0, i2 = 0, j2 = 0, k2 = 0;
+    if (x0 < y0) {
+        j2 = 1;
+        if (z0 > y0) {
+            k1 = 1;
+            k2 = 1;
+        } else if (z0 > x0) {
+            j1 = 1;
+            k2 = 1;
+        } else {
+            j1 = 1;
+            i2 = 1;
+        }
+    } else {
+        i2 = 1;
+        if (y0 >= z0) {
+            i1 = 1;
+            j2 = 1;
+        } else if (x0 >= z0) {
+            i1 = 1;
+            k2 = 1;
+        } else {
+            k1 = 1;
+            k2 = 1;
+        }
+    }
+
+    const auto corner3D = [&](int32_t di, int32_t dj, int32_t dk, float cx, float cy, float cz) {
+        const float falloff = ((0.6f - cx * cx) - cy * cy) - cz * cz;
+        if (falloff < 0.0f)
+            return 0.0f;
+
+        const int32_t inner = mPermutation[(size_t) ((k + dk) & 255)] + ((j + dj) & 255);
+        const int32_t outer = mPermutation[(size_t) inner] + ((i + di) & 255);
+        const float *g = GRADIENTS_3D[mPermutation[(size_t) outer] % 12];
+        return (g[2] * cz + (g[1] * cy + g[0] * cx)) * (((falloff * falloff) * falloff) * falloff);
+    };
+
+    const float first = corner3D(0, 0, 0, x0, y0, z0);
+    const float second = corner3D(i1, j1, k1, (x0 - (float) i1) + 0.16666667f, (y0 - (float) j1) + 0.16666667f,
+                                  (z0 - (float) k1) + 0.16666667f);
+    const float third = corner3D(i2, j2, k2, (x0 - (float) i2) + 0.33333334f, (y0 - (float) j2) + 0.33333334f,
+                                 (z0 - (float) k2) + 0.33333334f);
+    const float fourth = corner3D(1, 1, 1, (x0 + -1.0f) + 0.5f, (y0 + -1.0f) + 0.5f, (z0 + -1.0f) + 0.5f);
+
+    return (((first + second) + third) + fourth) * 32.0f;
+}
