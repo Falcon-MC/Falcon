@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <random>
+#include <string>
 #include <vector>
 
 class BiomeFeatureEntry;
@@ -21,6 +22,11 @@ public:
     // biome
     static void apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate &climate,
                       uint32_t levelSeed, const std::vector<int32_t> &biomes);
+
+    // one vein of OreFeature for the generators that place their ores themselves
+    static bool placeOreVein(BlockManager &blocks, int32_t count, Block (*places)(),
+                             const std::vector<std::string> &mayReplace, int32_t x, int32_t y, int32_t z,
+                             std::mt19937 &random);
 
 private:
     struct OreDefinition;

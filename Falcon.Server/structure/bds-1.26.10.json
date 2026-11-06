@@ -5120,14 +5120,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/GlowStoneFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/GlowStoneFeature.h",
-      "sha256": "77e58993da66812da198c2f723a0a685853f53ac3b99f9109f75df6bd236af9b",
-      "classes": [
-        "GlowStoneFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Nether/Feature/HugeFungusFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/HugeFungusFeature.h",
       "sha256": "d9cfa748674c9e8627d5ac7a7f6a720ee763006c0c7b92ab9f368d87c6c532cc",
@@ -5152,99 +5144,11 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/NetherFireFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/NetherFireFeature.h",
-      "sha256": "b0420e25b2f4afa5c7f30c549255d284b03cb4258165d2cabc6cce5a95bae7cd",
-      "classes": [
-        "NetherFireFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/NetherSpringFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/NetherSpringFeature.h",
-      "sha256": "8c46aa397d7572e0d117995129dfc89f04fa126eb5d9ceee3e779ed3f4d3cf74",
-      "classes": [
-        "NetherSpringFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Nether/Feature/NyliumVegetationFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/NyliumVegetationFeature.h",
       "sha256": "c55e0c54f51a8d9268300415cdbe4c967015bb4a0c236be930edc3ababd858dc",
       "classes": [
         "NyliumVegetationFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Ore/AncientDebrisLargeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Ore/AncientDebrisLargeFeature.h",
-      "sha256": "01a820b8ad1d0a6bfe8fe43b0004998b9d122e49cdf0300f754eb4fa25bbdd32",
-      "classes": [
-        "AncientDebrisLargeFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Ore/AncientDebrisSmallFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Ore/AncientDebrisSmallFeature.h",
-      "sha256": "2a38386dcae5d60a7d3534efe88008b3524304edd75e7bdfb0f91e9e6ddd4505",
-      "classes": [
-        "AncientDebrisSmallFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Ore/MagmaOreFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Ore/MagmaOreFeature.h",
-      "sha256": "897f754c111bd270cbdeb48238bf98aef574005aad793c17021a43aea0213f2d",
-      "classes": [
-        "MagmaOreFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Ore/NetherBlackstoneFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Ore/NetherBlackstoneFeature.h",
-      "sha256": "61e455c500421c92c1dc9664e0083a70b9ff14dec987f8f4325762196b7d897c",
-      "classes": [
-        "NetherBlackstoneFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Ore/NetherGoldOreFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Ore/NetherGoldOreFeature.h",
-      "sha256": "9ccd5d8c6f9c0d0611155b83a41523d54cbec65c8898f04a8f58548d184e7dc5",
-      "classes": [
-        "NetherGoldOreFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Ore/NetherGravelFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Ore/NetherGravelFeature.h",
-      "sha256": "daa1895d4cbdc0c4693d743204f637662994d124c20154f20f454bff85237c64",
-      "classes": [
-        "NetherGravelFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Ore/NetherLavaOreFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Ore/NetherLavaOreFeature.h",
-      "sha256": "ed02a85e253fabd9b45223b2392ee53d056506c9739d1e5d64fae11f628c4639",
-      "classes": [
-        "NetherLavaOreFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Ore/NetherQuartzOreFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Ore/NetherQuartzOreFeature.h",
-      "sha256": "f0db0b1009ac4f5eb8a019a51ea114cc1f168e915093a991508e06b24f3a29e7",
-      "classes": [
-        "NetherQuartzOreFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Nether/Feature/Ore/SoulSandOreFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Nether/Feature/Ore/SoulSandOreFeature.h",
-      "sha256": "7d275682652c2b900f83d6ee55be28e4b4485ced58018291379c10e701299636",
-      "classes": [
-        "SoulSandOreFeature"
       ]
     },
     {
@@ -9728,11 +9632,6 @@
       "sha256": "7ae94faa8b0488ccf246b194954c9dcb5ba1d091e9c545c7b44ff922f9604d20"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/GlowStoneFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/GlowStoneFeature.cpp",
-      "sha256": "f2d8cd51ccff5f65f1b323bf149a1fd6a49a91e2bb1969fefad1db49174ea922"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Nether/Feature/HugeFungusFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/HugeFungusFeature.cpp",
       "sha256": "5b949c16babf6788a63e721e0df018c150d0cae7603c65eb4a2f9b9fffcebb4a"
@@ -9748,64 +9647,9 @@
       "sha256": "cf33dcf19f8a0001049ab48fd454e7d6546ef95cdb350517631d6a2d00bb6ba3"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/NetherFireFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/NetherFireFeature.cpp",
-      "sha256": "c1b40468d1fd91ce6c65fff4b5b460a7592a3f6b7edf11c19ffc37ff9f9fbf10"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/NetherSpringFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/NetherSpringFeature.cpp",
-      "sha256": "42a91d3827001458c53eee4b39a6b8f1bdb4cb9cf86a4fe79a569fbef09e7a73"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Nether/Feature/NyliumVegetationFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/NyliumVegetationFeature.cpp",
       "sha256": "78f5daddc2ec0534047b739279d627cdadd5933bb3303df36dab9d9efc229390"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Ore/AncientDebrisLargeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Ore/AncientDebrisLargeFeature.cpp",
-      "sha256": "0568226daf3c46d034a2c4a9e70a76d527c3641bd458ce6efe9bcc29dc26150e"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Ore/AncientDebrisSmallFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Ore/AncientDebrisSmallFeature.cpp",
-      "sha256": "ede54e8a2e38a4381bc24112f05746d756f39d9f1b9347bf13fa12e1bbd4a11f"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Ore/MagmaOreFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Ore/MagmaOreFeature.cpp",
-      "sha256": "c9b393e58016a3ac761e4258c6083a6ace94d7ad67cc8fd6c8906d8e9c029455"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Ore/NetherBlackstoneFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Ore/NetherBlackstoneFeature.cpp",
-      "sha256": "0936ccb3bc86954d10bad39939d4504e268566759e0eab93eebdad9464201146"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Ore/NetherGoldOreFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Ore/NetherGoldOreFeature.cpp",
-      "sha256": "076e82769653ea41fe6e413f3aa7a1bf2afcaba84e713d803da06fdc620169e5"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Ore/NetherGravelFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Ore/NetherGravelFeature.cpp",
-      "sha256": "0d8c0ddc8dd78aa2b6a5b9c8c1436962f412ee828111eda4f3b2e9768e1fdcd9"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Ore/NetherLavaOreFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Ore/NetherLavaOreFeature.cpp",
-      "sha256": "3427968f383fa003f616874ea6a97a58f9478944d4504e41eca0a0dd62b42ae8"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Ore/NetherQuartzOreFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Ore/NetherQuartzOreFeature.cpp",
-      "sha256": "ed285b1ee2c3647837d1557f162e2a8303187515c8b6e221568c56fd5754707c"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Ore/SoulSandOreFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Nether/Feature/Ore/SoulSandOreFeature.cpp",
-      "sha256": "5e8a49ab26962de0d667dae41698cf995be796ddb8f3849355c99918bd517308"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Nether/Feature/Warped/TwistingVinesClusterFeature.cpp",
