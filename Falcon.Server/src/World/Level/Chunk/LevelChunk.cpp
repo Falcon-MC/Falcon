@@ -229,9 +229,10 @@ std::string LevelChunk::encodeBiomes(int sectionCount) const {
     return stream.getBuffer();
 }
 
-bool LevelChunk::readBiomesPersistent(ReadOnlyBinaryStream &stream, int sectionCount) {
-    for (int i = 0; i < sectionCount && i < SUB_CHUNK_COUNT; i++) {
-        if (!mSubChunks[i].readBiomes(stream, i > 0 ? &mSubChunks[i - 1] : nullptr))
+bool LevelChunk::readBiomesPersistent(ReadOnlyBinaryStream &stream, int firstSection, int sectionCount) {
+    const int end = std::min(firstSection + sectionCount, SUB_CHUNK_COUNT);
+    for (int i = firstSection; i < end; i++) {
+        if (!mSubChunks[i].readBiomes(stream, i > firstSection ? &mSubChunks[i - 1] : nullptr))
             return false;
     }
 
@@ -240,17 +241,17 @@ bool LevelChunk::readBiomesPersistent(ReadOnlyBinaryStream &stream, int sectionC
     return true;
 }
 
-std::string LevelChunk::encodeBiomesPersistent(int sectionCount) const {
+std::string LevelChunk::encodeBiomesPersistent(int firstSection, int sectionCount) const {
     BinaryStream stream;
 
     // like the game, sections above the highest non-empty one repeat it instead of keeping their own biomes
     int storedCount = sectionCount;
-    while (storedCount > 1 && mSubChunks[storedCount - 1].isEmpty())
+    while (storedCount > 1 && mSubChunks[firstSection + storedCount - 1].isEmpty())
         storedCount--;
 
     for (int i = 0; i < sectionCount; i++) {
         if (i < storedCount)
-            mSubChunks[i].writeBiomes(stream, true);
+            mSubChunks[firstSection + i].writeBiomes(stream, true);
         else
             stream.putByte(SubChunk::BIOME_COPY_PREVIOUS);
     }

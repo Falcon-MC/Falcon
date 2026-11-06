@@ -84,9 +84,9 @@ public:
 
     std::string encodeBiomes(int sectionCount) const;
 
-    std::string encodeBiomesPersistent(int sectionCount) const;
+    std::string encodeBiomesPersistent(int firstSection, int sectionCount) const;
 
-    bool readBiomesPersistent(ReadOnlyBinaryStream &stream, int sectionCount);
+    bool readBiomesPersistent(ReadOnlyBinaryStream &stream, int firstSection, int sectionCount);
 
     int getNetworkSubChunkCount() const;
 

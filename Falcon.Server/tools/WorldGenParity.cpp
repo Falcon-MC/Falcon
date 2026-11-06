@@ -502,14 +502,6 @@ namespace {
     }
 
     /**
-     * The game stores the biome sections of the nether and the end from the bottom of their own build range, which
-     * LevelStorage reads as if they started at the overworld's lowest section.
-     */
-    uint32_t expectedBiomeAt(const LevelChunk &expected, int x, int32_t y, int z) {
-        return expected.getBiomeAt(x, y - gMinY + LevelChunk::MIN_Y, z);
-    }
-
-    /**
      * The game saves no biomes above the highest non-empty section and repeats that section instead, so a generated
      * biome there is read from the section the saved world repeats, whatever blocks the generated chunk has.
      */
@@ -675,7 +667,7 @@ namespace {
             for (int x = 0; x < 16; x += BIOME_CELL_SIZE) {
                 for (int z = 0; z < 16; z += BIOME_CELL_SIZE) {
                     for (int32_t y = gMinY; y <= gMaxY; y += BIOME_CELL_SIZE) {
-                        const uint32_t expectedBiome = expectedBiomeAt(expected, x, y, z);
+                        const uint32_t expectedBiome = expected.getBiomeAt(x, y, z);
                         const uint32_t generatedBiome = savedBiomeAt(generated, expected, x, y, z);
                         score.mBiomes.add(expectedBiome == generatedBiome);
                         mBiomesByExpected[expectedBiome].add(expectedBiome == generatedBiome);
@@ -998,7 +990,7 @@ namespace {
             for (int32_t y = gMaxY; y >= gMinY; y--) {
                 const BlockState &expectedBlock = expected.getBlock(x, y, z);
                 const BlockState &generatedBlock = generated.getBlock(x, y, z);
-                const uint32_t expectedBiome = expectedBiomeAt(expected, x, y, z);
+                const uint32_t expectedBiome = expected.getBiomeAt(x, y, z);
                 const uint32_t generatedBiome = savedBiomeAt(generated, expected, x, y, z);
                 LOG_INFO(LogAreaID::Level, "%c%c %4d  %-40s %-40s %-22s %s",
                                            expectedBlock == generatedBlock ? ' ' : '*',
