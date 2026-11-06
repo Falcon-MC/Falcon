@@ -135,6 +135,15 @@ public:
 
     bool hurt(ServerNetworkHandler &owner, float amount, const ActorDamageSource &damageSource, int32_t lootingLevel = -1);
 
+    /**
+     * Called when the actor lands after falling the given distance. Only mobs take fall damage, so other actors
+     * ignore it.
+     */
+    virtual void causeFallDamage(ServerNetworkHandler &owner, float distance) {
+        (void) owner;
+        (void) distance;
+    }
+
     virtual bool senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
         (void) owner;
         (void) amount;
