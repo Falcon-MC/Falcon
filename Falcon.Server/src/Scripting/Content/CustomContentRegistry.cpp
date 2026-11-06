@@ -701,6 +701,18 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
                 }
             }
 
+            const json::Value *tick = components->get("minecraft:tick");
+            if (tick != nullptr && tick->isObject()) {
+                definition.mHasTick = true;
+                const json::Value *range = tick->get("interval_range");
+                if (range != nullptr && range->isArray() && range->mArray.size() == 2) {
+                    definition.mTickMin = std::max(1, (int32_t) range->mArray[0]->integer(10));
+                    definition.mTickMax = std::max(definition.mTickMin, (int32_t) range->mArray[1]->integer(10));
+                }
+                if (tick->get("looping") != nullptr)
+                    definition.mTickLooping = tick->get("looping")->boolean(true);
+            }
+
             const json::Value *destructible = components->get("minecraft:destructible_by_mining");
             if (destructible != nullptr && destructible->isObject() &&
                 destructible->get("seconds_to_destroy") != nullptr) {

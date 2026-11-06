@@ -1610,11 +1610,69 @@ void ScriptApi::emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, i
     fireHeldItemComponents(player, "onUseOn", event);
 }
 
-void ScriptApi::emitBlockInteract(ServerPlayer &player, const std::string &blockId, const Vector3i &position) {
+JSValue ScriptApi::_makeBlockEvent(const Level &level, const Vector3i &position) {
     JSValue event = JS_NewObject(mContext);
+    JS_SetPropertyStr(mContext, event, "block", makeBlock(level, position.x, position.y, position.z));
+    JS_SetPropertyStr(mContext, event, "dimension", makeDimension(level));
+    return event;
+}
+
+void ScriptApi::emitBlockInteract(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
+                                  const char *face) {
+    JSValue event = _makeBlockEvent(mHost.getLevelFor(player), position);
     JS_SetPropertyStr(mContext, event, "player", makePlayer(player));
-    JS_SetPropertyStr(mContext, event, "block", makeBlock(mHost.getLevelFor(player), position.x, position.y, position.z));
+    JS_SetPropertyStr(mContext, event, "face", jsString(mContext, face));
     fireBlockComponents(blockId, "onPlayerInteract", event);
+}
+
+void ScriptApi::_scheduleBlockTick(Level &level, const std::string &blockId, const Vector3i &position) {
+    for (const CustomBlockDefinition &definition: CustomContentRegistry::getInstance().getBlocks()) {
+        if (definition.mIdentifier != blockId)
+            continue;
+        if (definition.mHasTick) {
+            std::uniform_int_distribution<int32_t> delay(definition.mTickMin, definition.mTickMax);
+            level.scheduleBlockUpdate(position, delay(mTickRandom));
+        }
+        return;
+    }
+}
+
+void ScriptApi::emitBlockTick(Level &level, const std::string &blockId, const Vector3i &position) {
+    fireBlockComponents(blockId, "onTick", _makeBlockEvent(level, position));
+    for (const CustomBlockDefinition &definition: CustomContentRegistry::getInstance().getBlocks()) {
+        if (definition.mIdentifier == blockId) {
+            if (definition.mTickLooping)
+                _scheduleBlockTick(level, blockId, position);
+            return;
+        }
+    }
+}
+
+void ScriptApi::emitBlockStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position) {
+    const auto previous = mStepping.find(actor.getUniqueId());
+    if (previous != mStepping.end() && previous->second.mPosition.x == position.x
+        && previous->second.mPosition.y == position.y && previous->second.mPosition.z == position.z)
+        return;
+
+    emitBlockStepOff(actor, level);
+    mStepping[actor.getUniqueId()] = {blockId, position};
+
+    JSValue event = _makeBlockEvent(level, position);
+    JS_SetPropertyStr(mContext, event, "entity", makeEntity(actor));
+    fireBlockComponents(blockId, "onStepOn", event);
+}
+
+void ScriptApi::emitBlockStepOff(Actor &actor, const Level &level) {
+    const auto previous = mStepping.find(actor.getUniqueId());
+    if (previous == mStepping.end())
+        return;
+
+    const SteppedBlock left = previous->second;
+    mStepping.erase(previous);
+
+    JSValue event = _makeBlockEvent(level, left.mPosition);
+    JS_SetPropertyStr(mContext, event, "entity", makeEntity(actor));
+    fireBlockComponents(left.mIdentifier, "onStepOff", event);
 }
 
 void ScriptApi::emitWorldInitialize() {
@@ -1759,11 +1817,8 @@ void ScriptApi::_subscribeGameEvents() {
 
         // scripts written for older modules name the same hook onPlayerDestroy
         for (const char *hook: {"onPlayerBreak", "onPlayerDestroy"}) {
-            JSValue breakEvent = JS_NewObject(mContext);
+            JSValue breakEvent = _makeBlockEvent(mHost.getLevelFor(event.mPlayer), event.mBlockPosition);
             JS_SetPropertyStr(mContext, breakEvent, "player", makePlayer(event.mPlayer));
-            JS_SetPropertyStr(mContext, breakEvent, "block",
-                              makeBlock(mHost.getLevelFor(event.mPlayer), event.mBlockPosition.x,
-                                        event.mBlockPosition.y, event.mBlockPosition.z));
             JS_SetPropertyStr(mContext, breakEvent, "brokenBlockPermutation",
                               makeBlockType(mContext, event.mBrokenBlockIdentifier));
             fireBlockComponents(event.mBrokenBlockIdentifier, hook, breakEvent);
@@ -1779,11 +1834,9 @@ void ScriptApi::_subscribeGameEvents() {
         JS_SetPropertyStr(mContext, object, "permutation", makeBlockType(mContext, event.mBlockIdentifier));
         _dispatch(ScriptEvent::AfterPlayerPlaceBlock, object);
 
-        JSValue placeEvent = JS_NewObject(mContext);
-        JS_SetPropertyStr(mContext, placeEvent, "block",
-                          makeBlock(mHost.getLevelFor(event.mPlayer), event.mBlockPosition.x, event.mBlockPosition.y,
-                                    event.mBlockPosition.z));
-        fireBlockComponents(event.mBlockIdentifier, "onPlace", placeEvent);
+        Level &level = mHost.getLevelFor(event.mPlayer);
+        fireBlockComponents(event.mBlockIdentifier, "onPlace", _makeBlockEvent(level, event.mBlockPosition));
+        _scheduleBlockTick(level, event.mBlockIdentifier, event.mBlockPosition);
     });
 
     bus.after().mPlayerSpawn.subscribe([this](PlayerSpawnAfterEvent &event) {

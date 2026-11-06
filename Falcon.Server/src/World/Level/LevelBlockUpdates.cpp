@@ -1,5 +1,7 @@
 #include "World/Level/Level.h"
 
+#include "Scripting/Content/CustomContentRegistry.h"
+#include "Scripting/ScriptEngine.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Systems/CommandBlockSystem.h"
 #include "World/Level/Block/Systems/FallingBlockSystem.h"
@@ -92,6 +94,8 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type) {
             block->onNeighbourChanged(owner, *this, position, current);
         else if (block != nullptr)
             block->onScheduledUpdate(owner, *this, position, current);
+        else if (type == BlockUpdateType::Scheduled && CustomContentRegistry::getInstance().isCustomBlock(current.mName))
+            owner.getScriptEngine().onCustomBlockTick(*this, current.mName, position);
     }
 
     --mUpdateDepth;

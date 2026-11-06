@@ -7,6 +7,7 @@
 #include "Scripting/ScriptScheduler.h"
 
 #include <cstdint>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -117,7 +118,18 @@ public:
 
     void emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, int32_t z);
 
-    void emitBlockInteract(ServerPlayer &player, const std::string &blockId, const Vector3i &position);
+    void emitBlockInteract(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
+                           const char *face);
+
+    void emitBlockTick(Level &level, const std::string &blockId, const Vector3i &position);
+
+    void emitBlockStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position);
+
+    void emitBlockStepOff(Actor &actor, const Level &level);
+
+    bool hasSteppingActors() const {
+        return !mStepping.empty();
+    }
 
     void emitWorldInitialize();
 
@@ -126,6 +138,10 @@ public:
     void fireHeldItemComponents(ServerPlayer &player, const char *hook, JSValue event);
 
     void fireBlockComponents(const std::string &blockId, const char *hook, JSValue event);
+
+    JSValue _makeBlockEvent(const Level &level, const Vector3i &position);
+
+    void _scheduleBlockTick(Level &level, const std::string &blockId, const Vector3i &position);
 
     void _fireComponents(const char *dispatcher, const std::vector<std::string> *components, const char *hook,
                          JSValue event);
@@ -174,6 +190,15 @@ private:
     JSContext *mContext;
     JSRuntime *mRuntime;
     ServerNetworkHandler &mHost;
+
+    struct SteppedBlock {
+        std::string mIdentifier;
+        Vector3i mPosition;
+    };
+
+    // the custom block each actor stands on, so a block fires once per step and not once per tick
+    std::unordered_map<int64_t, SteppedBlock> mStepping;
+    std::mt19937 mTickRandom{std::random_device{}()};
     ScriptScheduler mScheduler;
     PlayerHandleRegistry mPlayers;
 

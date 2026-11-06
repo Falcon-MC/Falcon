@@ -12,6 +12,7 @@ struct JSContext;
 struct MobEffectInstance;
 class Actor;
 class ItemStack;
+class Level;
 class ScriptApi;
 class ServerNetworkHandler;
 class ServerActor;
@@ -55,6 +56,12 @@ public:
 
     void onPlayerInteractWithBlock(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
                                    int32_t face);
+
+    void onCustomBlockTick(Level &level, const std::string &blockId, const Vector3i &position);
+
+    void onCustomBlockStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position);
+
+    void onCustomBlockStepOff(Actor &actor, const Level &level);
 
     void onEntitySpawn(ServerActor &entity);
 
