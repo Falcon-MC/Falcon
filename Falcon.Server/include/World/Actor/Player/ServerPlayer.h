@@ -117,9 +117,13 @@ public:
 
     void setGameType(int32_t gameType) { mGameType = gameType; }
 
-    int64_t getLastActiveTick() const { return mLastActiveTick; }
+    int64_t getLastActiveTick() const {
+        return mLastActiveTick;
+    }
 
-    void markActive(int64_t tick) { mLastActiveTick = tick; }
+    void markActive(int64_t tick) {
+        mLastActiveTick = tick;
+    }
 
     /**
      * Records the look direction of an input and tells whether it moved since the previous one.
