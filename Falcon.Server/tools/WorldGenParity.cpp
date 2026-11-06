@@ -569,8 +569,9 @@ namespace {
 
                 std::vector<GeneratedBlockChange> overflow;
                 std::vector<Tag> blockActors;
+                std::vector<Tag> entities;
                 if (!terrainOnly)
-                    source.populate(chunk, overflow, blockActors);
+                    source.populate(chunk, overflow, blockActors, entities);
                 chunk.setPopulated(true);
 
                 for (GeneratedBlockChange &change: overflow) {
