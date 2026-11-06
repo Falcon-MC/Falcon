@@ -51,6 +51,10 @@ public:
 protected:
     virtual bool _isValidStart(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const = 0;
 
+    // true when the biomes sampled every four blocks in the cube of the given radius around the block pass the filter
+    static bool _hasOnlyBiomes(const ChunkGenerator &generator, int32_t blockX, int32_t blockY, int32_t blockZ,
+                               int32_t radius, bool (*filter)(int32_t biomeId));
+
 private:
     static std::vector<const StructureFeature *> &_registry();
 

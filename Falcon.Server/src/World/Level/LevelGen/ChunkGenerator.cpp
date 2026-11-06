@@ -25,3 +25,11 @@ int32_t ChunkGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
 
     return y + 1;
 }
+
+int32_t ChunkGenerator::getPreliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const {
+    return getPreliminaryHeight(quartX * 4, quartZ * 4);
+}
+
+int32_t ChunkGenerator::getPreliminaryLowestHeight(int32_t chunkX, int32_t chunkZ) const {
+    return getPreliminaryHeight(chunkX * 16, chunkZ * 16);
+}
