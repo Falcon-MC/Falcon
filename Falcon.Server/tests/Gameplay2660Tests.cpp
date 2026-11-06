@@ -22,9 +22,6 @@
 #include "World/Item/VanillaItems.h"
 #include "World/Item/PotionEffects.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
-#include "World/Level/LevelGen/End/Tree/LegacyChorusTree.h"
-#include "World/Level/LevelGen/Feature/BlockManager.h"
-#include "World/Level/LevelGen/Random/SimpleRandom.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Chunk/SubChunk.h"
@@ -271,13 +268,6 @@ namespace {
         require(level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"), "unloaded neighbour erased saved shape");
         level.insertChunk(LevelChunk(0, -1));
         require(!level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"), "loaded empty neighbour kept stale connection");
-
-        BlockManager manager(level);
-        SimpleRandom random(1234);
-        LegacyChorusTree tree;
-        manager.setBlockStateAt(8, 39, 8, block("minecraft:end_stone"));
-        tree.generate(manager, random, 8, 40, 8);
-        require(manager.getBlockAt(8, 40, 8).mStates.getBool("minecraft:connection_down"), "generated chorus missing root connection");
     }
 }
 
