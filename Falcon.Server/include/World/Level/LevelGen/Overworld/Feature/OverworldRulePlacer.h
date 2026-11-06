@@ -26,6 +26,14 @@ public:
     // every pass of one biome's rules, for the generators without a climate that decorate with a single biome
     static void applyBiome(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed, int32_t biome);
 
+    /**
+     * Draws the rules of one biome from the random a generator's own decoration goes on with afterwards, without
+     * placing them: each rule seeds that random again, then draws its chance, its iterations and its coordinates
+     * from it, so the decoration continues from the state the last rule leaves.
+     */
+    static void drawBiomeRules(BlockManager &blocks, const LevelChunk &chunk, int32_t biome, uint32_t decorationSeed,
+                               std::mt19937 &shared);
+
     // one vein of OreFeature for the generators that place their ores themselves
     static bool placeOreVein(BlockManager &blocks, int32_t count, Block (*places)(),
                              const std::vector<std::string> &mayReplace, int32_t x, int32_t y, int32_t z,
