@@ -1,5 +1,5 @@
 /**
- * Measures how closely Falcon's overworld generator reproduces a world generated and saved by BDS.
+ * Measures how closely Falcon's world generators reproduces a world generated and saved by BDS.
  *
  * The BDS database is never opened in place: LevelDB writes to any database it opens, so the "db" folder (and
  * the level.dat next to it) is copied to a temporary directory that is removed on exit. The copy is read with
@@ -9,9 +9,10 @@
  *
  * Usage:
  *   FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1 [--csv file] [--json file]
- *                        [--min-block-match pct] [--terrain-only]
+ *                        [--min-block-match pct] [--terrain-only] [--dimension 0|1|2]
  *   FalconWorldGenParity --db <path> --seed <int64> --column x,z [--terrain-only]
  *
+ * --dimension picks the dimension, 0 overworld (default), 1 nether, 2 end; only its build range is compared.
  * --terrain-only compares the chunks as the noise fills them, before any population.
  *
  * Area corners are chunk coordinates, both inclusive; the column is a block position. Exit codes: 0 success,
@@ -103,7 +104,23 @@ namespace {
     const int64_t HEIGHT_BUCKET_LIMITS[] = {0, 1, 2, 3, 7, 15, 31};
     const char *const HEIGHT_BUCKET_NAMES[] = {"0", "1", "2", "3", "4-7", "8-15", "16-31", "32+"};
     const size_t HEIGHT_BUCKETS = sizeof(HEIGHT_BUCKET_NAMES) / sizeof(HEIGHT_BUCKET_NAMES[0]);
-    const int32_t Y_BANDS = (LevelChunk::MAX_Y - LevelChunk::MIN_Y + 1) / Y_BAND_HEIGHT;
+
+    // the nether and the end store the same chunk layout as the overworld, but only their own build range is
+    // compared, so that the empty sections above and below do not inflate the match
+    DimensionType gDimension = DimensionType::Overworld;
+    int32_t gMinY = LevelChunk::MIN_Y;
+    int32_t gMaxY = LevelChunk::MAX_Y;
+
+    void selectDimension(DimensionType dimension) {
+        gDimension = dimension;
+        gMinY = dimension == DimensionType::Overworld ? LevelChunk::MIN_Y : 0;
+        gMaxY = dimension == DimensionType::Overworld ? LevelChunk::MAX_Y
+                                                      : dimension == DimensionType::Nether ? 127 : 255;
+    }
+
+    int32_t yBandCount() {
+        return (gMaxY - gMinY + 1) / Y_BAND_HEIGHT;
+    }
 
     struct ChunkArea {
         int32_t mX0 = 0;
@@ -203,7 +220,7 @@ namespace {
     void printUsage() {
         LOG_ERROR(LogAreaID::Level, "Usage: FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1");
         LOG_ERROR(LogAreaID::Level, "                            [--csv file] [--json file] [--min-block-match pct]");
-        LOG_ERROR(LogAreaID::Level, "                            [--terrain-only]");
+        LOG_ERROR(LogAreaID::Level, "                            [--terrain-only] [--dimension 0|1|2]");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --column x,z");
     }
 
@@ -250,6 +267,12 @@ namespace {
                 options.mColumnX = numbers[0];
                 options.mColumnZ = numbers[1];
                 options.mHasColumn = true;
+            } else if (flag == "--dimension") {
+                if (value != "0" && value != "1" && value != "2") {
+                    LOG_ERROR(LogAreaID::Level, "--dimension must be 0, 1 or 2, got '%s'", value.c_str());
+                    return false;
+                }
+                selectDimension(Dimension::fromId(value[0] - '0'));
             } else if (flag == "--csv") {
                 options.mCsv = value;
             } else if (flag == "--json") {
@@ -360,6 +383,12 @@ namespace {
             for (const Block &block: base)
                 mBaseTerrain.insert(block.getIdentifier());
 
+            // the rock the noise fills these dimensions with: left out, their whole terrain would count as features
+            if (gDimension == DimensionType::Nether)
+                mBaseTerrain.insert(VanillaBlocks::NETHERRACK().getIdentifier());
+            if (gDimension == DimensionType::TheEnd)
+                mBaseTerrain.insert(VanillaBlocks::END_STONE().getIdentifier());
+
             const Block surface[] = {
                     VanillaBlocks::GRASS_BLOCK(), VanillaBlocks::DIRT(), VanillaBlocks::COARSE_DIRT(),
                     VanillaBlocks::PODZOL(), VanillaBlocks::MYCELIUM(), VanillaBlocks::MUD(),
@@ -402,7 +431,8 @@ namespace {
             static const char *const SOLID[] = {"minecraft:stone", "minecraft:deepslate", "minecraft:granite",
                                                  "minecraft:diorite", "minecraft:andesite", "minecraft:tuff",
                                                  "minecraft:dirt", "minecraft:gravel", "minecraft:bedrock",
-                                                 "minecraft:raw_iron_block", "minecraft:raw_copper_block"};
+                                                 "minecraft:raw_iron_block", "minecraft:raw_copper_block",
+                                                 "minecraft:netherrack", "minecraft:end_stone"};
             for (const char *solid: SOLID) {
                 if (name == solid)
                     return 2;
@@ -456,25 +486,33 @@ namespace {
     }
 
     /**
+     * The game stores the biome sections of the nether and the end from the bottom of their own build range, which
+     * LevelStorage reads as if they started at the overworld's lowest section.
+     */
+    uint32_t expectedBiomeAt(const LevelChunk &expected, int x, int32_t y, int z) {
+        return expected.getBiomeAt(x, y - gMinY + LevelChunk::MIN_Y, z);
+    }
+
+    /**
      * The game saves no biomes above the highest non-empty section and repeats that section instead, so a generated
      * biome there is read from the section the saved world repeats, whatever blocks the generated chunk has.
      */
     uint32_t savedBiomeAt(const LevelChunk &generated, const LevelChunk &expected, int x, int32_t y, int z) {
         const int32_t savedSections = std::max(1, expected.getNetworkSubChunkCount());
-        const int32_t section = (y - LevelChunk::MIN_Y) >> 4;
+        const int32_t section = (y - gMinY) >> 4;
         if (section < savedSections)
             return generated.getBiomeAt(x, y, z);
 
-        return generated.getBiomeAt(x, LevelChunk::MIN_Y + ((savedSections - 1) << 4) + ((y - LevelChunk::MIN_Y) & 15), z);
+        return generated.getBiomeAt(x, gMinY + ((savedSections - 1) << 4) + ((y - gMinY) & 15), z);
     }
 
     int32_t surfaceHeight(const LevelChunk &chunk, int x, int z, const BlockClassifier &classifier) {
-        for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
+        for (int32_t y = gMaxY; y >= gMinY; y--) {
             if (!classifier.isAir(chunk.getBlock(x, y, z)))
                 return y;
         }
 
-        return LevelChunk::MIN_Y - 1;
+        return gMinY - 1;
     }
 
     class BiomeNames {
@@ -507,16 +545,16 @@ namespace {
      */
     void generateArea(int64_t seed, const ChunkArea &area, bool terrainOnly,
                       const std::function<void(LevelChunk &)> &visit) {
-        const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(DimensionType::Overworld,
+        const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(gDimension,
                                                                                          seed);
-        GeneratorChunkSource source(seed, DimensionType::Overworld);
+        GeneratorChunkSource source(seed, gDimension);
         std::unordered_map<int64_t, LevelChunk> waiting;
         std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> spilled;
 
         for (int32_t chunkZ = area.mZ0 - 1; chunkZ <= area.mZ1 + 1; chunkZ++) {
             for (int32_t chunkX = area.mX0 - 1; chunkX <= area.mX1 + 1; chunkX++) {
                 LevelChunk chunk(chunkX, chunkZ);
-                chunk.setDimension(DimensionType::Overworld);
+                chunk.setDimension(gDimension);
                 generator->generate(chunk);
                 if (!chunk.hasHeightmap())
                     LightSystem::computeHeightmap(chunk);
@@ -528,7 +566,7 @@ namespace {
                 chunk.setPopulated(true);
 
                 for (GeneratedBlockChange &change: overflow) {
-                    if (change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y
+                    if (change.mY < gMinY || change.mY > gMaxY
                         || !area.contains(change.mX >> 4, change.mZ >> 4))
                         continue;
 
@@ -566,7 +604,7 @@ namespace {
     };
 
     LoadResult loadExpected(LevelStorage &storage, LevelChunk &chunk) {
-        chunk.setDimension(DimensionType::Overworld);
+        chunk.setDimension(gDimension);
 
         try {
             if (!storage.loadChunk(chunk))
@@ -592,7 +630,7 @@ namespace {
     class ParityReport {
     public:
         ParityReport(const BlockClassifier &classifier, const BiomeNames &biomes)
-                : mClassifier(classifier), mBiomeNames(biomes), mBands((size_t) Y_BANDS),
+                : mClassifier(classifier), mBiomeNames(biomes), mBands((size_t) yBandCount()),
                   mHeightHistogram(HEIGHT_BUCKETS, 0) {}
 
         ChunkScore compare(const LevelChunk &expected, const LevelChunk &generated) {
@@ -602,7 +640,7 @@ namespace {
 
             for (int x = 0; x < 16; x++) {
                 for (int z = 0; z < 16; z++) {
-                    for (int32_t y = LevelChunk::MIN_Y; y <= LevelChunk::MAX_Y; y++)
+                    for (int32_t y = gMinY; y <= gMaxY; y++)
                         _compareBlock(expected.getBlock(x, y, z), generated.getBlock(x, y, z),
                                       expected.getX() * 16 + x, y, expected.getZ() * 16 + z, score);
 
@@ -620,8 +658,8 @@ namespace {
 
             for (int x = 0; x < 16; x += BIOME_CELL_SIZE) {
                 for (int z = 0; z < 16; z += BIOME_CELL_SIZE) {
-                    for (int32_t y = LevelChunk::MIN_Y; y <= LevelChunk::MAX_Y; y += BIOME_CELL_SIZE) {
-                        const uint32_t expectedBiome = expected.getBiomeAt(x, y, z);
+                    for (int32_t y = gMinY; y <= gMaxY; y += BIOME_CELL_SIZE) {
+                        const uint32_t expectedBiome = expectedBiomeAt(expected, x, y, z);
                         const uint32_t generatedBiome = savedBiomeAt(generated, expected, x, y, z);
                         score.mBiomes.add(expectedBiome == generatedBiome);
                         mBiomesByExpected[expectedBiome].add(expectedBiome == generatedBiome);
@@ -679,7 +717,7 @@ namespace {
             });
             for (size_t i = 0; i < shapes.size() && i < 16; i++) {
                 const int pair = shapes[i].first.first;
-                const int32_t minY = LevelChunk::MIN_Y + shapes[i].first.second * Y_BAND_HEIGHT;
+                const int32_t minY = gMinY + shapes[i].first.second * Y_BAND_HEIGHT;
                 std::string line = formatted("  %10llu  %-5s -> %-5s y %4d..%-4d",
                                              (unsigned long long) shapes[i].second.mCount, SHAPES[pair / 3],
                                              SHAPES[pair % 3], minY, minY + Y_BAND_HEIGHT - 1);
@@ -696,7 +734,7 @@ namespace {
 
             LOG_INFO(LogAreaID::Level, "By Y band          blocks       match");
             for (size_t band = 0; band < mBands.size(); band++) {
-                const int32_t minY = LevelChunk::MIN_Y + (int32_t) band * Y_BAND_HEIGHT;
+                const int32_t minY = gMinY + (int32_t) band * Y_BAND_HEIGHT;
                 LOG_INFO(LogAreaID::Level, "  %4d..%-4d    %12llu  %8.3f%%", minY, minY + Y_BAND_HEIGHT - 1,
                                            (unsigned long long) mBands[band].mTotal, mBands[band].percent());
             }
@@ -788,7 +826,7 @@ namespace {
             }
             out << "},\n  \"y_bands\": [";
             for (size_t band = 0; band < mBands.size(); band++) {
-                const int32_t minY = LevelChunk::MIN_Y + (int32_t) band * Y_BAND_HEIGHT;
+                const int32_t minY = gMinY + (int32_t) band * Y_BAND_HEIGHT;
                 std::snprintf(buffer, sizeof(buffer),
                               "%s{\"min_y\": %d, \"max_y\": %d, \"total\": %llu, \"match_pct\": %.4f}",
                               band == 0 ? "" : ", ", minY, minY + Y_BAND_HEIGHT - 1,
@@ -819,7 +857,7 @@ namespace {
                 mShape.add(expectedShape == generatedShape);
             if (expectedShape >= 0 && generatedShape >= 0 && expectedShape != generatedShape) {
                 ShapeMismatch &mismatch = mShapeMismatches[{expectedShape * 3 + generatedShape,
-                                                            (y - LevelChunk::MIN_Y) / Y_BAND_HEIGHT}];
+                                                            (y - gMinY) / Y_BAND_HEIGHT}];
                 if (mismatch.mCount++ < 3)
                     mismatch.mSamples.push_back({x, y, z});
             }
@@ -828,7 +866,7 @@ namespace {
                 mOreSpills++;
             mCoarse.add(mClassifier.coarse(expected) == mClassifier.coarse(generated));
             mCategories[std::max(mClassifier.category(expected), mClassifier.category(generated))].add(matched);
-            mBands[(size_t) ((y - LevelChunk::MIN_Y) / Y_BAND_HEIGHT)].add(matched);
+            mBands[(size_t) ((y - gMinY) / Y_BAND_HEIGHT)].add(matched);
 
             if (matched)
                 return;
@@ -941,10 +979,10 @@ namespace {
         generateArea(options.mSeed, area, options.mTerrainOnly, [&](LevelChunk &generated) {
             LOG_INFO(LogAreaID::Level, "Column %d,%d (chunk %d %d), seed %lld; '*' marks a difference",
                                        options.mColumnX, options.mColumnZ, chunkX, chunkZ, (long long) options.mSeed);
-            for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
+            for (int32_t y = gMaxY; y >= gMinY; y--) {
                 const BlockState &expectedBlock = expected.getBlock(x, y, z);
                 const BlockState &generatedBlock = generated.getBlock(x, y, z);
-                const uint32_t expectedBiome = expected.getBiomeAt(x, y, z);
+                const uint32_t expectedBiome = expectedBiomeAt(expected, x, y, z);
                 const uint32_t generatedBiome = savedBiomeAt(generated, expected, x, y, z);
                 LOG_INFO(LogAreaID::Level, "%c%c %4d  %-40s %-40s %-22s %s",
                                            expectedBlock == generatedBlock ? ' ' : '*',
@@ -966,7 +1004,7 @@ namespace {
         }
 
         LevelStorage storage;
-        if (!storage.open(copy.getWorldsDirectory(), WorldCopy::LEVEL_NAME, Dimension::toId(DimensionType::Overworld))) {
+        if (!storage.open(copy.getWorldsDirectory(), WorldCopy::LEVEL_NAME, Dimension::toId(gDimension))) {
             LOG_ERROR(LogAreaID::Level, "could not open '%s' as a LevelDB database", options.mDb.c_str());
             return EXIT_INVALID;
         }
