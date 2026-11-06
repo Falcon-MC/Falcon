@@ -3,6 +3,18 @@
 #include <algorithm>
 #include <cmath>
 
+bool PlayerMovementValidator::takeDismountPosition(const Vector3f &simulated, const Vector3f &reported) {
+    if (!mDismountPending)
+        return false;
+
+    // client 0x14A2183E0 grants 225, 15 blocks squared, and 0x14A211A50 spends it on the next input either way
+    mDismountPending = false;
+    const float dx = reported.x - simulated.x;
+    const float dy = reported.y - simulated.y;
+    const float dz = reported.z - simulated.z;
+    return dx * dx + dy * dy + dz * dz <= 225.0f;
+}
+
 bool PlayerMovementValidator::reconcile(Vector3f &simulated, const Vector3f &reported, uint64_t tick,
                                         float threshold, bool strict, MovementCorrectionDetails *details) {
     // BDS 1.26.10: comparator 0x140B4A560, defaults 0x1437F5420, property scaling 0x140158FA0.
@@ -67,6 +79,7 @@ void PlayerMovementValidator::reset() {
     mAdjustmentCount = 0;
     mCorrectionCheck = CorrectionCheck::None;
     mIgnoredCorrections = 0;
+    mDismountPending = false;
     mHasMovementEffect = false;
     mLastMovementEffectTick = 0;
 }

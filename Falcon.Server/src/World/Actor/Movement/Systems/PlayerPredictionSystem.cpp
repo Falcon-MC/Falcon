@@ -53,6 +53,9 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     prediction.validator->trace().record(frame);
 
     const Vector3f reported = *prediction.feetPosition;
+    // the exit moves the player itself; reconciling it would turn up to 15 blocks into velocity
+    if (prediction.validator->takeDismountPosition(state.simulated, reported))
+        state.simulated = reported;
     // Measured on every input: right after a correction the validator skips its comparison, and the server spaces
     // its corrections, so most inputs of a dropped correction would otherwise look fine.
     const float errorX = reported.x - state.simulated.x;

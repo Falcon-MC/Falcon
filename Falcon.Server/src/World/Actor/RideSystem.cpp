@@ -153,10 +153,14 @@ void RideSystem::dismount(ServerNetworkHandler &owner, Actor &rider, bool riderI
     refreshSeats(owner, *vehicle);
 
     ServerPlayer *playerRider = dynamic_cast<ServerPlayer *>(&rider);
-    if (playerRider != nullptr)
-        playerRider->teleport(owner, standing);
-    else
+    if (playerRider == nullptr) {
         rider.teleport(standing);
+    } else if (riderInitiated && !owner.getProperties().getServerAuthoritativeDismountStrict()
+               && !vehicle->getFlags().get(ActorFlag::DoesServerAuthOnlyDismount)) {
+        playerRider->getMovementValidator().allowDismountPosition();
+    } else {
+        playerRider->teleport(owner, standing);
+    }
 
     if (serverVehicle != nullptr)
         serverVehicle->onPassengerRemoved(owner, rider);
