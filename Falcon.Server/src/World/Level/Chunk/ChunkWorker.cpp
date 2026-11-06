@@ -265,7 +265,8 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
             LightSystem::computeHeightmap(*chunk);
 
         std::vector<Tag> blockActors;
-        mSources[sourceIndex]->populate(*chunk, result.mOverflowChanges, blockActors);
+        std::vector<Tag> entities;
+        mSources[sourceIndex]->populate(*chunk, result.mOverflowChanges, blockActors, entities);
         chunk->setPopulated(true);
         chunk->markDirty();
         mPopulatedCount.fetch_add(1);
@@ -274,6 +275,12 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
             std::vector<Tag> stored = mStorage.loadBlockEntities(result.mX, result.mZ);
             stored.insert(stored.end(), blockActors.begin(), blockActors.end());
             mStorage.saveBlockEntities(result.mX, result.mZ, stored);
+        }
+
+        if (!entities.empty() && mStorage.isOpen()) {
+            std::vector<Tag> stored = mStorage.loadEntities(result.mX, result.mZ);
+            stored.insert(stored.end(), entities.begin(), entities.end());
+            mStorage.saveEntities(result.mX, result.mZ, stored);
         }
     }
 

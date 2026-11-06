@@ -82,7 +82,8 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
 
         // Unique ids are only unique within one world database, so an actor from another world can
         // carry the id of one already loaded here; it gets a fresh id instead of being dropped.
-        const bool idTaken = loaded != mActors.end();
+        // Generated mobs have no id yet: chunk workers cannot allocate one.
+        const bool idTaken = loaded != mActors.end() || !tag.contains("UniqueID");
 
         const uint64_t runtimeId = allocateRuntimeId();
 

@@ -98,6 +98,7 @@ void ChestBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vecto
     if (chest == nullptr)
         return;
 
+    chest->unpackLoot(owner);
     chest->unpair();
 
     const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
@@ -120,6 +121,11 @@ bool ChestBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, c
     Level &level = owner.getLevelFor(player);
     if (level.getBlockActors().find<ChestBlockActor>(position) == nullptr)
         pair(level, position);
+
+    ChestBlockActor &chest = getOrCreate(level, position);
+    chest.unpackLoot(owner);
+    if (ChestBlockActor *other = chest.getPair())
+        other->unpackLoot(owner);
 
     ChestContainerManagerModel model;
     model.open(owner, player, position);

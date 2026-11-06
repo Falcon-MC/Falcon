@@ -1,6 +1,13 @@
 #include "World/Level/LevelGen/Structure/IglooStructure.h"
 
+#include "World/Actor/Mob/Hostile/ZombieVillagerV2Actor.h"
+#include "World/Actor/Mob/Passive/VillagerV2Actor.h"
+#include "World/Level/Block/Actor/BedBlockActor.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/ChestBlockActor.h"
+#include "World/Level/Block/Actor/FurnaceBlockActor.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Level.h"
 #include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "World/Level/LevelGen/ChunkGenerator.h"
@@ -22,10 +29,13 @@ namespace {
     const int32_t BOTTOM_Y = -6;
     const int32_t SHAFT_MIN_PIECES = 4;
     const int32_t SHAFT_PIECE_RANGE = 8;
+    const int8_t RED_BED_COLOR = 14;
+    const char *IGLOO_LOOT_TABLE = "loot_tables/chests/igloo_chest.json";
 
     struct IglooChoice {
         int32_t mQuarterTurns = 0;
         int32_t mShaftPieces = 0;
+        int32_t mLootSeed = 0;
     };
 
     // the draws of the piece, in order, from the random the start chunk post processes with
@@ -34,9 +44,13 @@ namespace {
 
         IglooChoice choice;
         choice.mQuarterTurns = FeatureRandom::nextInt(random, 4);
-        if (FeatureRandom::nextDouble(random) >= 0.5)
-            choice.mShaftPieces = FeatureRandom::nextInt(random, SHAFT_PIECE_RANGE) + SHAFT_MIN_PIECES;
+        if (FeatureRandom::nextDouble(random) < 0.5)
+            return choice;
 
+        choice.mShaftPieces = FeatureRandom::nextInt(random, SHAFT_PIECE_RANGE) + SHAFT_MIN_PIECES;
+        // measured, not located in the code: one draw goes by while the bottom piece is placed
+        random();
+        choice.mLootSeed = FeatureRandom::nextInt(random);
         return choice;
     }
 
@@ -73,6 +87,8 @@ namespace {
             block.x = entry.x + offsetX;
             block.y = entry.y + offsetY;
             block.z = entry.z + offsetZ;
+            block.mMarker = entry.mData.getString("metadata", std::string());
+            block.mBlockActor = entry.mData.getString("id", std::string());
             rotate(quarterTurns, block.x, block.z);
             blocks.push_back(block);
         }
@@ -102,6 +118,35 @@ namespace {
         }
     }
 
+    Tag generatedMob(const char *identifier, const Vector3i &position) {
+        Tag location = Tag::ofList(Tag::Type::Float);
+        location.addToList(Tag::ofFloat((float) position.x + 0.5f));
+        location.addToList(Tag::ofFloat((float) position.y));
+        location.addToList(Tag::ofFloat((float) position.z + 0.5f));
+
+        Tag mob = Tag::ofCompound();
+        mob.putString("identifier", identifier);
+        mob.put("Pos", location);
+        return mob;
+    }
+
+    void placeData(Level &level, const IglooStructure::PlacedBlock &block, const Vector3i &position,
+                   int32_t lootSeed) {
+        BlockActorStore &actors = level.getBlockActors();
+        if (block.mBlockActor == "minecraft:chest") {
+            actors.getOrCreate<ChestBlockActor>(position).setLootTable(IGLOO_LOOT_TABLE, lootSeed);
+        } else if (block.mBlockActor == "minecraft:furnace") {
+            actors.getOrCreate<FurnaceBlockActor>(position);
+        } else if (block.mBlockActor == "minecraft:bed") {
+            actors.getOrCreate<BedBlockActor>(position).setColor(RED_BED_COLOR);
+        } else if (block.mMarker == "Villager") {
+            // the game spawns the old villager, which turns into this one on its first tick
+            level.addGeneratedEntity(generatedMob(VillagerV2Actor::IDENTIFIER, position));
+        } else if (block.mMarker == "Zombie Villager") {
+            level.addGeneratedEntity(generatedMob(ZombieVillagerV2Actor::IDENTIFIER, position));
+        }
+    }
+
     bool isIglooBiome(int32_t biomeId) {
         return biomeId == BiomeIds::ICE_PLAINS || biomeId == BiomeIds::COLD_TAIGA
                || biomeId == BiomeIds::SNOWY_SLOPES;
@@ -123,7 +168,7 @@ std::vector<IglooStructure::PlacedBlock> IglooStructure::build(int32_t quarterTu
     return blocks;
 }
 
-void IglooStructure::place(const ChunkGenerator &generator, LevelChunk &chunk) {
+void IglooStructure::place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk) {
     const StructureFeature *temple = StructureFeature::get("temple");
     if (temple == nullptr)
         return;
@@ -149,6 +194,7 @@ void IglooStructure::place(const ChunkGenerator &generator, LevelChunk &chunk) {
                     continue;
 
                 chunk.setBlock(x & 15, y, z & 15, block.mState);
+                placeData(level, block, Vector3i(x, y, z), choice.mLootSeed);
             }
         }
     }

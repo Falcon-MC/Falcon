@@ -130,6 +130,8 @@ std::string BlockActorStore::encodeNetwork(const std::vector<Tag> &blockActors) 
 
         Tag spawnData = blockActor;
         spawnData.remove("Items");
+        spawnData.remove("LootTable");
+        spawnData.remove("LootTableSeed");
         NbtIo::writeTag(stream, spawnData, NbtVariant::Network);
     }
 
@@ -147,6 +149,8 @@ std::string BlockActorStore::encodeNetworkForSection(const std::vector<Tag> &blo
 
         Tag spawnData = blockActor;
         spawnData.remove("Items");
+        spawnData.remove("LootTable");
+        spawnData.remove("LootTableSeed");
         NbtIo::writeTag(stream, spawnData, NbtVariant::Network);
     }
 
@@ -184,6 +188,7 @@ void BlockActorStore::loadChunk(int32_t chunkX, int32_t chunkZ, const std::vecto
 
         blockActor->setPosition(Vector3i(data.getInt("x"), data.getInt("y"), data.getInt("z")));
         blockActor->loadNbt(data, context);
+        blockActor->loadLootTable(data);
         insert(std::move(blockActor));
     }
 }

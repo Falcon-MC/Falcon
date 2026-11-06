@@ -24,7 +24,8 @@ public:
 
     GeneratorChunkSource &operator=(const GeneratorChunkSource &) = delete;
 
-    void populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow, std::vector<Tag> &blockActors);
+    void populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow, std::vector<Tag> &blockActors,
+                  std::vector<Tag> &entities);
 
     uint64_t getCacheHitCount() const { return mCacheHits; }
 
