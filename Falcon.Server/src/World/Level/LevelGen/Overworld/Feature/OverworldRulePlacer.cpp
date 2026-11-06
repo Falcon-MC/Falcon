@@ -1310,6 +1310,13 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
     }
 }
 
+bool OverworldRulePlacer::placeOreVein(BlockManager &blocks, int32_t count, Block (*places)(),
+                                       const std::vector<std::string> &mayReplace, int32_t x, int32_t y, int32_t z,
+                                       std::mt19937 &random) {
+    const OreDefinition ore{"", count, 0.0f, {{places, mayReplace}}};
+    return _placeOre(blocks, ore, x, y, z, random);
+}
+
 bool OverworldRulePlacer::_placeFossil(BlockManager &blocks, const FossilDefinition &fossil, int32_t x, int32_t y,
                                        int32_t z, std::mt19937 &random, uint32_t integritySeed) {
     // FossilFeature::place (sub_14D209B60); the game first gives up inside the bounds of a structure, which the
