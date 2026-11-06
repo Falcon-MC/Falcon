@@ -92,6 +92,10 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"disable-client-vibrant-visuals", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"skin-change-cooldown", "30", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"spawn-protection", "16", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            // Replays player movement server-side and corrects clients that diverge. Packet validity checks do not
+            // depend on it. server-authoritative-movement-strict only tightens this simulation.
+            {"movement-simulation", "false", PropertyKind::Bool, 0, 0, nullptr},
+            // Former name of movement-simulation, still read from existing files but no longer generated.
             {"simulation", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"server-authoritative-movement-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"server-authoritative-dismount-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
@@ -138,8 +142,9 @@ std::string PropertiesSettings::getDefaultContents() {
     std::string contents;
 
     for (const PropertyDefinition &definition: getDefinitions()) {
-        // Accept the BDS spelling on input without generating two competing settings.
-        if (std::string(definition.mKey) == "server-authoritative-block-breaking-pick-range-scalar")
+        // Accept the BDS spelling and former names on input without generating two competing settings.
+        if (std::string(definition.mKey) == "server-authoritative-block-breaking-pick-range-scalar"
+            || std::string(definition.mKey) == "simulation")
             continue;
         contents += definition.mKey;
         contents += "=";
@@ -182,7 +187,8 @@ bool PropertiesSettings::_isValidValue(const PropertyDefinition &definition, con
         case PropertyKind::String:
             return true;
         case PropertyKind::Bool:
-            if (std::string(definition.mKey) == "simulation"
+            if (std::string(definition.mKey) == "movement-simulation"
+                || std::string(definition.mKey) == "simulation"
                 || std::string(definition.mKey) == "server-authoritative-block-breaking"
                 || std::string(definition.mKey) == "disable-client-vibrant-visuals")
                 return value == "true" || value == "false";
@@ -229,6 +235,18 @@ void PropertiesSettings::_validate() {
         mInvalid.push_back(std::string(definition.mKey) + "=" + it->second);
         it->second = definition.mDefault;
     }
+}
+
+void PropertiesSettings::_resolveMovementSettings() {
+    mServerAuthoritativeMovementStrict = getBool("server-authoritative-movement-strict");
+    // A file that predates movement-simulation keeps the behaviour it was written for: the former name when it has
+    // one, and otherwise strict mode, which asks for the simulation and used to get it by default.
+    if (hasProperty("movement-simulation"))
+        mMovementSimulation = getBool("movement-simulation");
+    else if (hasProperty("simulation"))
+        mMovementSimulation = getBool("simulation");
+    else
+        mMovementSimulation = mServerAuthoritativeMovementStrict;
 }
 
 std::vector<std::string> PropertiesSettings::getAutoloadWorlds() const {
@@ -285,6 +303,7 @@ bool PropertiesSettings::load(const std::string &path) {
     }
 
     _validate();
+    _resolveMovementSettings();
 
     mLoaded = true;
     return true;
@@ -292,6 +311,7 @@ bool PropertiesSettings::load(const std::string &path) {
 
 bool PropertiesSettings::setProperty(const std::string &key, const std::string &value) {
     mProperties[key] = value;
+    _resolveMovementSettings();
 
     std::vector<std::string> lines;
     bool replaced = false;

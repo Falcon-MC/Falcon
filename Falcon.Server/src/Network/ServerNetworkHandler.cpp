@@ -1896,7 +1896,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerAuthI
 
     if (!std::isfinite(packet.mPosition.x) || !std::isfinite(packet.mPosition.y) ||
         !std::isfinite(packet.mPosition.z) || !std::isfinite(packet.mRotation.x) ||
-        !std::isfinite(packet.mRotation.y) || !std::isfinite(packet.mRotation.z)) {
+        !std::isfinite(packet.mRotation.y) || !std::isfinite(packet.mRotation.z) ||
+        !std::isfinite(packet.mDelta.x) || !std::isfinite(packet.mDelta.y) || !std::isfinite(packet.mDelta.z)) {
         return;
     }
 

@@ -34,6 +34,17 @@ Download the latest Windows, Linux or macOS build from the [releases](https://gi
 check it against its `.sha256` file and run it. On the first start, a setup wizard in the console writes
 `server.properties`.
 
+## Movement simulation
+
+By default the server accepts the position a client reports once the packet passes its validity checks: finite
+values, coordinates within the world limits, advancing input ticks and the packet rate limit. These checks are
+always on.
+
+Set `movement-simulation=true` to also replay player movement on the server and correct clients that diverge from
+it. `server-authoritative-movement-strict=true` then corrects every mismatch instead of absorbing small ones, and
+has no effect while `movement-simulation=false`. A `server.properties` without `movement-simulation` keeps its
+former `simulation` value, or enables the simulation when strict mode is on.
+
 ## Supported versions
 
 | Minecraft | Protocol |

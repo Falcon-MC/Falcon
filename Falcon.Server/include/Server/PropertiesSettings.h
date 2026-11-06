@@ -188,12 +188,13 @@ public:
         return getFloat("player-position-acceptance-threshold");
     }
 
-    bool getSimulation() const {
-        return getBool("simulation");
+    // Both are read for every player input, so load resolves them once.
+    bool getMovementSimulation() const {
+        return mMovementSimulation;
     }
 
     bool getServerAuthoritativeMovementStrict() const {
-        return getBool("server-authoritative-movement-strict");
+        return mServerAuthoritativeMovementStrict;
     }
 
     float getPlayerMovementActionDirectionThreshold() const {
@@ -232,8 +233,12 @@ private:
 
     void _validate();
 
+    void _resolveMovementSettings();
+
     std::string mPath;
     bool mLoaded;
+    bool mMovementSimulation = false;
+    bool mServerAuthoritativeMovementStrict = false;
     std::unordered_map<std::string, std::string> mProperties;
     std::vector<std::string> mInvalid;
 };
