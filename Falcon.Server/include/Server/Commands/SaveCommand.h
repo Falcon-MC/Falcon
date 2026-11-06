@@ -18,7 +18,7 @@ public:
 
     std::vector<CommandOverloadData> getOverloads() const override;
 
-    CommandPermission getRequiredPermission() const override { return CommandPermission::Owner; }
+    CommandPermission getRequiredPermission() const override { return CommandPermission::GameDirectors; }
 
 private:
     void setAutoSave(CommandOrigin &sender, bool enabled);

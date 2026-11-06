@@ -24,7 +24,7 @@ WorldCommand::WorldCommand(ServerNetworkHandler &handler)
           mHandler(handler) {}
 
 CommandPermission WorldCommand::getRequiredPermission() const {
-    return CommandPermission::Admin;
+    return CommandPermission::GameDirectors;
 }
 
 std::vector<CommandOverloadData> WorldCommand::getOverloads() const {
