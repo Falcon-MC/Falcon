@@ -72,6 +72,8 @@ private:
         Block (*mMushroom)() = nullptr;
         // beehive_search_feature
         bool mBeehiveSearch = false;
+        // the game's own huge_mushroom_feature, of a random type
+        bool mHugeMushroom = false;
         const ThresholdDefinition *mThreshold = nullptr;
         const SnapDefinition *mSnap = nullptr;
         const BlobDefinition *mBlob = nullptr;
@@ -87,7 +89,7 @@ private:
         bool isSet() const {
             return mSeagrass != nullptr || mScatter != nullptr || mSingleBlock != nullptr || mWeighted != nullptr
                    || mAggregate != nullptr || mTree != nullptr || mLeafLitter || mMushroom != nullptr
-                   || mBeehiveSearch || mThreshold != nullptr || mSnap != nullptr || mBlob != nullptr
+                   || mBeehiveSearch || mHugeMushroom || mThreshold != nullptr || mSnap != nullptr || mBlob != nullptr
                    || mMultiface != nullptr || mDripstoneCluster || mPointedDripstone || mLargeDripstone
                    || mLegacyFlower != nullptr || mFunction != nullptr;
         }
@@ -102,6 +104,8 @@ private:
         bool mKelp = false;
         // legacy:forest_foliage_feature
         bool mForestFoliage = false;
+        // legacy:forest_rock_feature
+        bool mForestRock = false;
         // legacy:springs_feature
         bool mSprings = false;
         // legacy:ice_feature
@@ -110,7 +114,8 @@ private:
 
         bool isPorted() const {
             return mOre != nullptr || mDisk != nullptr || mGeode != nullptr || mLegacyTree != nullptr
-                   || mPlaced.isSet() || mKelp || mForestFoliage || mSprings || mLegacyIce || mFossil != nullptr;
+                   || mPlaced.isSet() || mKelp || mForestFoliage || mForestRock || mSprings || mLegacyIce
+                   || mFossil != nullptr;
         }
     };
 
@@ -134,8 +139,8 @@ private:
     static bool _placeGeode(BlockManager &blocks, const GeodeDefinition &geode, int32_t x, int32_t y, int32_t z,
                             std::mt19937 &random);
 
-    static void _placeLegacyTrees(BlockManager &blocks, const LegacyTreeDefinition &trees, int32_t x, int32_t z,
-                                  std::mt19937 &random);
+    static void _placeLegacyTrees(BlockManager &blocks, const LegacyTreeDefinition &trees, int32_t x, int32_t y,
+                                  int32_t z, std::mt19937 &random);
 
     static void _placeSprings(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
 
@@ -152,6 +157,10 @@ private:
 
     static void _placeForestFoliage(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
 
+    static void _placeForestRocks(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
+
+    static void _placeForestRock(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
+
     static void _placeLegacyDoublePlant(BlockManager &blocks, Block (*plant)(), int32_t x, int32_t y, int32_t z,
                                         std::mt19937 &random);
 
@@ -166,6 +175,8 @@ private:
     static bool _placeMushroom(BlockManager &blocks, Block (*mushroom)(), int32_t x, int32_t y, int32_t z);
 
     static bool _placeBeehiveSearch(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
+
+    static bool _placeHugeMushroom(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 
     static bool _place(BlockManager &blocks, const Placed &placed, int32_t x, int32_t y, int32_t z,
                        std::mt19937 &random);
