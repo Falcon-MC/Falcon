@@ -1,7 +1,5 @@
 #include "World/Level/LevelGen/Feature/GenerateFeatureRegistry.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/BambooJungleTreeFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Tree/BirchForestMutatedTreeFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Tree/BirchForestTreeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/CherryTreeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/FlowerForestTreeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/GroveTreeFeature.h"
@@ -20,8 +18,6 @@
 
 void registerTreeFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<BambooJungleTreeFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<BirchForestMutatedTreeFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<BirchForestTreeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<CherryTreeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<FlowerForestTreeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<GroveTreeFeature>());

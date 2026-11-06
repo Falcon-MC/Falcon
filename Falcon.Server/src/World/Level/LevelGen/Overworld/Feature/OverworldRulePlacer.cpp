@@ -655,7 +655,9 @@ struct OverworldRulePlacer::LegacyTreeDefinition {
         // nextInt(3) != 0 ? (nextInt(3) != 0 ? fourth : third) : (nextInt(13) != 0 ? second : first), sub_14D230860
         MegaTaiga,
         // nextInt(20) != 0 ? second : first, sub_14D230100
-        Swamp
+        Swamp,
+        // nextInt(5) != 0 && nextBoolean() ? second : first, sub_14D2302A0
+        BirchMutated
     };
 
     const char *mIdentifier;
@@ -1076,6 +1078,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:legacy:forest_tree_feature", 10.0f, Pick::Forest,
              {aggregate(WITH_LEAF_LITTER[0]), aggregate(WITH_LEAF_LITTER[1]), aggregate(WITH_LEAF_LITTER[2])}},
             {"minecraft:legacy:ice_tree_feature", 0.1f, Pick::First, {aggregate(SELECT_SPRUCE)}},
+            // types 1 and 2 of the constructor; the mutated forest's second feature, select_super_birch_tree_feature,
+            // is in none of the game's packs and places nothing
+            {"minecraft:legacy:birch_forest_tree_feature", 10.0f, Pick::First, {aggregate(SELECT_BIRCH)}},
+            {"minecraft:legacy:birch_forest_mutated_tree_feature", 10.0f, Pick::BirchMutated, {aggregate(SELECT_BIRCH)}},
             {"minecraft:legacy:plains_tree_feature", 0.05f, Pick::OneInThree,
              {aggregate(FANCY_WITH_BEEHIVE), aggregate(SELECT_OAK)}},
             {"minecraft:legacy:taiga_tree_feature", 10.0f, Pick::OneInThree,
@@ -2883,11 +2889,15 @@ void OverworldRulePlacer::_placeLegacyTrees(BlockManager &blocks, const LegacyTr
             picked = nextInt(random, 3) == 0 ? 0 : 1;
         else if (trees.mPick == Pick::Swamp)
             picked = nextInt(random, 20) != 0 ? 1 : 0;
+        else if (trees.mPick == Pick::BirchMutated)
+            picked = nextInt(random, 5) != 0 && nextBoolean(random) ? 1 : 0;
         else if (trees.mPick == Pick::MegaTaiga)
             picked = nextInt(random, 3) != 0 ? (nextInt(random, 3) != 0 ? 3 : 2) : (nextInt(random, 13) != 0 ? 1 : 0);
 
         const int32_t treeZ = z + nextInt(random, 14) + 1;
         const int32_t treeX = x + nextInt(random, 14) + 1;
+        if (picked >= trees.mFeatures.size())
+            continue;
         const int32_t treeY = heightmapAt(blocks.getLevel(), treeX, treeZ);
         _place(blocks, trees.mFeatures[picked], treeX, treeY, treeZ, random);
     }

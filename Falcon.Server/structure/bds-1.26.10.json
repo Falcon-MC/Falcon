@@ -5640,22 +5640,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/BirchForestMutatedTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/BirchForestMutatedTreeFeature.h",
-      "sha256": "7cf894fa138cf0b04b955e27ac8b1b7cec75cc24890eef1182ca835c9979eb95",
-      "classes": [
-        "BirchForestMutatedTreeFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/BirchForestTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/BirchForestTreeFeature.h",
-      "sha256": "5d88142147e15063e6b93a6ad2fb7336a2e33eca87bf44f826edfe94d58baa38",
-      "classes": [
-        "BirchForestTreeFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/CherryTree.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/CherryTree.h",
       "sha256": "79d7b94d54396f58c9bbd43f16621a808c0a08af6d45050fbe1ec8836e31f3f4",
@@ -9779,16 +9763,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/BambooJungleTreeFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/BambooJungleTreeFeature.cpp",
       "sha256": "836c2fea50f33d6d0e8976e8f38eb8daf64d362bad962b4a624f55e007d6b9d3"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/BirchForestMutatedTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/BirchForestMutatedTreeFeature.cpp",
-      "sha256": "c64b08c8e1eec36c04ac7927484ab6a3f4283042e6621beb5648418ed8e152b9"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/BirchForestTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/BirchForestTreeFeature.cpp",
-      "sha256": "864582f2ee819e00a0d4dd1aaff5fe801773e8e46e2f6cde3212cdcdd860ed2c"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/CherryTree.cpp",
