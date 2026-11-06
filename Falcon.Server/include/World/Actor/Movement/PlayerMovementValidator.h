@@ -39,6 +39,9 @@ public:
         mDismountPending = true;
     }
 
+    // true when the input must move the player straight to the reported position
+    bool takeDismountPosition(const Vector3f &simulated, const Vector3f &reported);
+
     /**
      * Proves that a correction reached the client: a network stack latency request goes out right after it, and
      * once the client acknowledges that request it has received the correction too. Inputs that still diverge
