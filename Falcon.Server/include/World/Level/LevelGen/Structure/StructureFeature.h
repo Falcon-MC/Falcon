@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,9 @@ public:
 
     // the first valid start of the region rings around the block position, which is what /locate structure reports
     bool findNearest(const ChunkGenerator &generator, int32_t blockX, int32_t blockZ, StructureChunkPos &out) const;
+
+    // the random a chunk post processes one structure type with, seeded anew for every type
+    static std::mt19937 createPostProcessRandom(int64_t seed, int32_t chunkX, int32_t chunkZ);
 
     static const std::vector<const StructureFeature *> &getAll();
 

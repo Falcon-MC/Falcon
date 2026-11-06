@@ -32,6 +32,10 @@ public:
     // chunk, so it is safe off the main thread but not cheap.
     virtual int32_t getPreliminaryHeight(int32_t x, int32_t z) const;
 
+    // y above the top solid block of the generated column, carvers included and liquids skipped: where the game
+    // lays a structure on the ground. generates a throwaway chunk.
+    int32_t getGeneratedSolidHeight(int32_t x, int32_t z) const;
+
     // the coarse height structures read their biomes at: the terrain density alone, with no water and cut to the
     // eight block noise cells, so a sea column reports its floor
     virtual int32_t getPreliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const;
