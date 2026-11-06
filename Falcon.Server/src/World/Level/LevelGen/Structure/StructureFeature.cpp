@@ -11,6 +11,36 @@ namespace {
     const int64_t REGION_Z_MULTIPLIER = 132897987541LL;
     const int32_t SEARCH_RINGS = 100;
 
+    class CongruentialRandom {
+    public:
+        explicit CongruentialRandom(uint64_t seed) : mState((seed ^ MULTIPLIER) & MASK) {}
+
+        int32_t nextInt(int32_t bound) {
+            if ((bound & -bound) == bound)
+                return (int32_t) (((int64_t) bound * (int64_t) _next()) >> 31);
+
+            int32_t bits = 0;
+            int32_t value = 0;
+            do {
+                bits = _next();
+                value = bits % bound;
+            } while ((int64_t) bits - value + (bound - 1) > INT32_MAX);
+
+            return value;
+        }
+
+    private:
+        static constexpr uint64_t MULTIPLIER = 0x5DEECE66DULL;
+        static constexpr uint64_t MASK = (1ULL << 48) - 1ULL;
+
+        int32_t _next() {
+            mState = (mState * MULTIPLIER + 0xBULL) & MASK;
+            return (int32_t) (mState >> 17);
+        }
+
+        uint64_t mState;
+    };
+
     int32_t floorDiv(int32_t value, int32_t divisor) {
         int32_t quotient = value / divisor;
         if ((value % divisor != 0) && ((value < 0) != (divisor < 0)))
@@ -20,8 +50,10 @@ namespace {
     }
 }
 
-StructureFeature::StructureFeature(std::string name, int32_t spacing, int32_t separation, int32_t salt, Spread spread)
-        : mName(std::move(name)), mSpacing(spacing), mSeparation(separation), mSalt(salt), mSpread(spread) {
+StructureFeature::StructureFeature(std::string name, int32_t spacing, int32_t separation, int32_t salt, Spread spread,
+                                   Generator generator)
+        : mName(std::move(name)), mSpacing(spacing), mSeparation(separation), mSalt(salt), mSpread(spread),
+          mGenerator(generator) {
     _registry().push_back(this);
 }
 
@@ -30,6 +62,17 @@ const std::string &StructureFeature::getName() const {
 }
 
 StructureChunkPos StructureFeature::getCandidate(int64_t seed, int32_t regionX, int32_t regionZ) const {
+    if (mGenerator == Generator::Congruential) {
+        const uint64_t regionSeed = (uint64_t) regionX * (uint64_t) REGION_X_MULTIPLIER
+                                    + (uint64_t) regionZ * (uint64_t) REGION_Z_MULTIPLIER + (uint64_t) seed
+                                    + (uint64_t) mSalt;
+        CongruentialRandom random(regionSeed);
+        const int32_t bound = mSpacing - mSeparation;
+        const int32_t offsetX = random.nextInt(bound);
+        const int32_t offsetZ = random.nextInt(bound);
+        return {regionX * mSpacing + offsetX, regionZ * mSpacing + offsetZ};
+    }
+
     // the game seeds a plain 32-bit mersenne twister with the low half of the mixed region seed
     const uint64_t mixed = (uint64_t) regionX * (uint64_t) REGION_X_MULTIPLIER
                            + (uint64_t) regionZ * (uint64_t) REGION_Z_MULTIPLIER + (uint64_t) seed + (uint64_t) mSalt;
