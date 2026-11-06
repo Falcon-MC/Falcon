@@ -1,6 +1,7 @@
 #include "World/Level/LevelGen/ChunkGenerator.h"
 
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/LevelGen/BlockStateSet.h"
 
 int32_t ChunkGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
     const DimensionType dimension = getDimensionType();
@@ -32,4 +33,19 @@ int32_t ChunkGenerator::getPreliminarySurfaceLevel(int32_t quartX, int32_t quart
 
 int32_t ChunkGenerator::getPreliminaryLowestHeight(int32_t chunkX, int32_t chunkZ) const {
     return getPreliminaryHeight(chunkX * 16, chunkZ * 16);
+}
+
+int32_t ChunkGenerator::getGeneratedSolidHeight(int32_t x, int32_t z) const {
+    static const BlockStateSet SKIPPED{"minecraft:air", "minecraft:water", "minecraft:flowing_water",
+                                       "minecraft:lava", "minecraft:flowing_lava", "minecraft:snow_layer"};
+
+    LevelChunk chunk(x >> 4, z >> 4);
+    chunk.setDimension(getDimensionType());
+    generate(chunk);
+
+    int32_t y = LevelChunk::MAX_Y;
+    while (y >= LevelChunk::MIN_Y && SKIPPED.contains(chunk.getBlock(x & 15, y, z & 15)))
+        y--;
+
+    return y + 1;
 }
