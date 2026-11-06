@@ -1,5 +1,7 @@
 #include "World/Level/Block/Systems/BlockContactSystem.h"
 
+#include "Scripting/Content/CustomContentRegistry.h"
+#include "Scripting/ScriptEngine.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -107,14 +109,22 @@ bool BlockContactSystem::touchInsideBlocks(ServerNetworkHandler &owner, Actor &a
         }
     }
 
-    if (!actor.isOnGround())
+    ScriptEngine &scripts = owner.getScriptEngine();
+    if (!actor.isOnGround()) {
+        scripts.onCustomBlockStepOff(actor, level);
         return true;
+    }
 
     Vector3i below;
     const BlockState *state = nullptr;
     const Block *block = blockBelow(level, position, below, state);
     if (block != nullptr)
         block->onStepOn(owner, actor, below, *state);
+
+    if (block == nullptr && state != nullptr && CustomContentRegistry::getInstance().isCustomBlock(state->mName))
+        scripts.onCustomBlockStep(actor, level, state->mName, below);
+    else
+        scripts.onCustomBlockStepOff(actor, level);
 
     return true;
 }

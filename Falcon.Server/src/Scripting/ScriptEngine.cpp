@@ -399,7 +399,35 @@ void ScriptEngine::onPlayerInteractWithBlock(ServerPlayer &player, const std::st
         return;
 
     mExecutionDeadlineMs = nowMs() + mWatchdogMs;
-    mApi->emitBlockInteract(player, blockId, position);
+    mApi->emitBlockInteract(player, blockId, position, directionName(face));
+    _pumpJobs();
+}
+
+void ScriptEngine::onCustomBlockTick(Level &level, const std::string &blockId, const Vector3i &position) {
+    if (mApi == nullptr)
+        return;
+
+    mExecutionDeadlineMs = nowMs() + mWatchdogMs;
+    mApi->emitBlockTick(level, blockId, position);
+    _pumpJobs();
+}
+
+void ScriptEngine::onCustomBlockStep(Actor &actor, const Level &level, const std::string &blockId,
+                                     const Vector3i &position) {
+    if (mApi == nullptr)
+        return;
+
+    mExecutionDeadlineMs = nowMs() + mWatchdogMs;
+    mApi->emitBlockStep(actor, level, blockId, position);
+    _pumpJobs();
+}
+
+void ScriptEngine::onCustomBlockStepOff(Actor &actor, const Level &level) {
+    if (mApi == nullptr || !mApi->hasSteppingActors())
+        return;
+
+    mExecutionDeadlineMs = nowMs() + mWatchdogMs;
+    mApi->emitBlockStepOff(actor, level);
     _pumpJobs();
 }
 

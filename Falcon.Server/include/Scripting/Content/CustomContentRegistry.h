@@ -61,6 +61,10 @@ struct CustomBlockDefinition {
     CustomBlockBox mCollision;
     CustomBlockBox mSelection;
     std::vector<std::string> mCustomComponents;
+    bool mHasTick = false;
+    bool mTickLooping = true;
+    int32_t mTickMin = 10;
+    int32_t mTickMax = 10;
 };
 
 struct CustomActorDefinition {
