@@ -11,9 +11,13 @@
  *   FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1 [--csv file] [--json file]
  *                        [--min-block-match pct] [--terrain-only] [--dimension 0|1|2]
  *   FalconWorldGenParity --db <path> --seed <int64> --column x,z [--terrain-only]
+ *   FalconWorldGenParity --db <path> --seed <int64> --far [--min-block-match pct] [--terrain-only]
  *
  * --dimension picks the dimension, 0 overworld (default), 1 nether, 2 end; only its build range is compared.
  * --terrain-only compares the chunks as the noise fills them, before any population.
+ *
+ * --far compares 6x6 chunks at +-1000 and +-10000 blocks on both axes, one report each: terrain that only
+ * goes wrong in some climates can match around the origin and be wrong elsewhere.
  *
  * Area corners are chunk coordinates, both inclusive; the column is a block position. Exit codes: 0 success,
  * 1 invalid input or unreadable world, 2 block match below --min-block-match.
@@ -146,6 +150,7 @@ namespace {
         std::string mCsv;
         std::string mJson;
         bool mHasColumn = false;
+        bool mFar = false;
         int32_t mColumnX = 0;
         int32_t mColumnZ = 0;
         bool mHasMinimum = false;
@@ -222,11 +227,17 @@ namespace {
         LOG_ERROR(LogAreaID::Level, "                            [--csv file] [--json file] [--min-block-match pct]");
         LOG_ERROR(LogAreaID::Level, "                            [--terrain-only] [--dimension 0|1|2]");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --column x,z");
+        LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --far");
     }
 
     bool parseOptions(int argc, char **argv, Options &options) {
         for (int i = 1; i < argc; i++) {
             const std::string flag = argv[i];
+            if (flag == "--far") {
+                options.mFar = true;
+                continue;
+            }
+
             if (flag == "--terrain-only") {
                 options.mTerrainOnly = true;
                 continue;
@@ -297,8 +308,13 @@ namespace {
             return false;
         }
 
-        if (options.mHasArea == options.mHasColumn) {
-            LOG_ERROR(LogAreaID::Level, "give exactly one of --area and --column");
+        if ((int) options.mHasArea + (int) options.mHasColumn + (int) options.mFar != 1) {
+            LOG_ERROR(LogAreaID::Level, "give exactly one of --area, --column and --far");
+            return false;
+        }
+
+        if (options.mFar && (!options.mCsv.empty() || !options.mJson.empty())) {
+            LOG_ERROR(LogAreaID::Level, "--far prints one report per region and cannot write a file");
             return false;
         }
 
@@ -995,6 +1011,48 @@ namespace {
         return 0;
     }
 
+    int compareArea(LevelStorage &storage, const Options &options, const ChunkArea &area,
+                    const BlockClassifier &classifier, const BiomeNames &biomes) {
+        ParityReport report(classifier, biomes);
+        uint64_t skipped[3] = {0, 0, 0};
+
+        generateArea(options.mSeed, area, options.mTerrainOnly, [&](LevelChunk &generated) {
+            LevelChunk expected(generated.getX(), generated.getZ());
+            const LoadResult loaded = loadExpected(storage, expected);
+            if (loaded != LoadResult::Loaded) {
+                skipped[(int) loaded - 1]++;
+                return;
+            }
+
+            report.compare(expected, generated);
+        });
+
+        if (report.getBlocks().mTotal == 0) {
+            LOG_ERROR(LogAreaID::Level, "BDS saved no finalized chunk in this area");
+            return EXIT_INVALID;
+        }
+
+        report.printText(options.mSeed, area, skipped);
+
+        if (!options.mCsv.empty() && !report.writeCsv(options.mCsv)) {
+            LOG_ERROR(LogAreaID::Level, "could not write %s", options.mCsv.c_str());
+            return EXIT_INVALID;
+        }
+
+        if (!options.mJson.empty() && !report.writeJson(options.mJson, options.mSeed, area, skipped)) {
+            LOG_ERROR(LogAreaID::Level, "could not write %s", options.mJson.c_str());
+            return EXIT_INVALID;
+        }
+
+        if (options.mHasMinimum && report.getBlocks().percent() < options.mMinBlockMatch) {
+            LOG_ERROR(LogAreaID::Level, "block match %.3f%% is below the required %.3f%%", report.getBlocks().percent(),
+                                        options.mMinBlockMatch);
+            return EXIT_BELOW_THRESHOLD;
+        }
+
+        return 0;
+    }
+
     int run(const Options &options) {
         WorldCopy copy;
         std::string message;
@@ -1023,44 +1081,24 @@ namespace {
             return dumpColumn(storage, options, biomes);
 
         const BlockClassifier classifier;
-        ParityReport report(classifier, biomes);
-        uint64_t skipped[3] = {0, 0, 0};
+        if (!options.mFar)
+            return compareArea(storage, options, options.mArea, classifier, biomes);
 
-        generateArea(options.mSeed, options.mArea, options.mTerrainOnly, [&](LevelChunk &generated) {
-            LevelChunk expected(generated.getX(), generated.getZ());
-            const LoadResult loaded = loadExpected(storage, expected);
-            if (loaded != LoadResult::Loaded) {
-                skipped[(int) loaded - 1]++;
-                return;
+        int result = 0;
+        for (const int32_t distance: {1000, 10000}) {
+            for (const int32_t signX: {1, -1}) {
+                for (const int32_t signZ: {1, -1}) {
+                    const int32_t chunkX = (distance * signX) >> 4;
+                    const int32_t chunkZ = (distance * signZ) >> 4;
+                    const ChunkArea area{chunkX - 3, chunkZ - 3, chunkX + 2, chunkZ + 2};
+                    const int regionResult = compareArea(storage, options, area, classifier, biomes);
+                    if (regionResult != 0)
+                        result = regionResult;
+                }
             }
-
-            report.compare(expected, generated);
-        });
-
-        if (report.getBlocks().mTotal == 0) {
-            LOG_ERROR(LogAreaID::Level, "BDS saved no finalized chunk in this area");
-            return EXIT_INVALID;
         }
 
-        report.printText(options.mSeed, options.mArea, skipped);
-
-        if (!options.mCsv.empty() && !report.writeCsv(options.mCsv)) {
-            LOG_ERROR(LogAreaID::Level, "could not write %s", options.mCsv.c_str());
-            return EXIT_INVALID;
-        }
-
-        if (!options.mJson.empty() && !report.writeJson(options.mJson, options.mSeed, options.mArea, skipped)) {
-            LOG_ERROR(LogAreaID::Level, "could not write %s", options.mJson.c_str());
-            return EXIT_INVALID;
-        }
-
-        if (options.mHasMinimum && report.getBlocks().percent() < options.mMinBlockMatch) {
-            LOG_ERROR(LogAreaID::Level, "block match %.3f%% is below the required %.3f%%", report.getBlocks().percent(),
-                                        options.mMinBlockMatch);
-            return EXIT_BELOW_THRESHOLD;
-        }
-
-        return 0;
+        return result;
     }
 }
 
