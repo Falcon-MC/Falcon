@@ -1,6 +1,6 @@
 #pragma once
 
-#include "World/Level/LevelGen/Density/DensityFunction.h"
+#include "World/Level/LevelGen/End/Noise/TheEndOctaveNoise.h"
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
 #include "World/Level/LevelGen/Random/IRandom.h"
 
@@ -9,7 +9,7 @@
 
 class NetherTerrainNoises {
 public:
-    explicit NetherTerrainNoises(IRandom &random);
+    NetherTerrainNoises(IRandom &random, uint32_t seed);
 
     const NormalNoisePtr &getSurfaceNoise() const { return mSurfaceNoise; }
 
@@ -21,9 +21,11 @@ public:
 
     const NormalNoisePtr &getNetherwartNoise() const { return mNetherwartNoise; }
 
-    const DensityFunctionPtr &getBase3dNoise() const { return mBase3dNoise; }
+    const TheEndOctaveNoise &getMinLimitNoise() const { return *mMinLimitNoise; }
 
-    const DensityFunctionPtr &getDensityFunction() const { return mDensityFunction; }
+    const TheEndOctaveNoise &getMaxLimitNoise() const { return *mMaxLimitNoise; }
+
+    const TheEndOctaveNoise &getMainNoise() const { return *mMainNoise; }
 
 private:
     NormalNoisePtr mSurfaceNoise;
@@ -31,8 +33,9 @@ private:
     NormalNoisePtr mSoulsandNoise;
     NormalNoisePtr mNetherStateNoise;
     NormalNoisePtr mNetherwartNoise;
-    DensityFunctionPtr mBase3dNoise;
-    DensityFunctionPtr mDensityFunction;
+    std::unique_ptr<TheEndOctaveNoise> mMinLimitNoise;
+    std::unique_ptr<TheEndOctaveNoise> mMaxLimitNoise;
+    std::unique_ptr<TheEndOctaveNoise> mMainNoise;
 };
 
 class NetherDeltaNoises {

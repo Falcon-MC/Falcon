@@ -4,15 +4,22 @@
 #include "World/Level/LevelGen/Nether/Biome/VanillaNetherBiomeSource.h"
 #include "World/Level/LevelGen/Nether/Feature/NetherFeatureBuilder.h"
 #include "World/Level/LevelGen/Nether/NetherBiomeIds.h"
-#include "World/Level/LevelGen/Noise/NoiseMath.h"
 #include "World/Level/LevelGen/Random/SimpleRandom.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
 
 #include <algorithm>
+#include <cmath>
+#include <vector>
 
 namespace {
     const int32_t BIOME_PICK_Y = 64;
+
+    // bit patterns read from the game, one unit off the nearest float of the decimal values
+    const float LIMIT_XZ_SCALE = 0x1.5634bcp+9f;
+    const float LIMIT_Y_SCALE = 0x1.00a78cp+11f;
+    const float MAIN_XZ_SCALE = 0x1.11c3cap+3f;
+    const float MAIN_Y_SCALE = 0x1.11c3c8p+5f;
 
     const BlockState &bedrockState() {
         static const BlockState state = VanillaBlocks::BEDROCK().toBlockState();
@@ -167,38 +174,79 @@ void NetherGenerator::_generateBiomeMap(LevelChunk &chunk) const {
     }
 }
 
-void NetherGenerator::_generateTerrain(LevelChunk &chunk, DensityChunkCache &chunkCache) const {
-    const NetherTerrainNoises &terrain = mNoiseHolder->getTerrainNoises();
-    const DensityFunctionPtr &densityFunction = terrain.getDensityFunction();
+void NetherGenerator::_generateTerrain(LevelChunk &chunk) const {
+    const NetherTerrainNoises &noises = mNoiseHolder->getTerrainNoises();
+    const int32_t xzCount = NetherGeneratorConstants::DENSITY_XZ_COUNT;
+    const int32_t yCount = NetherGeneratorConstants::DENSITY_Y_COUNT;
+    const size_t total = (size_t) (xzCount * xzCount * yCount);
 
-    const int32_t chunkBaseX = chunk.getX() << 4;
-    const int32_t chunkBaseZ = chunk.getZ() << 4;
-    const int32_t minDensityY = NetherGeneratorConstants::MIN_DENSITY_Y;
-    const int32_t maxDensityY = NetherGeneratorConstants::MAX_DENSITY_Y;
-    const int32_t cellMinY = NoiseMath::floorDiv(minDensityY, NetherGeneratorConstants::CELL_HEIGHT)
-                             * NetherGeneratorConstants::CELL_HEIGHT;
-    const int32_t cellMaxY = NoiseMath::floorDiv(maxDensityY, NetherGeneratorConstants::CELL_HEIGHT)
-                             * NetherGeneratorConstants::CELL_HEIGHT;
+    const float position[3] = {(float) (chunk.getX() * 4), 0.0f, (float) (chunk.getZ() * 4)};
+    std::vector<float> minLimit(total, 0.0f);
+    std::vector<float> maxLimit(total, 0.0f);
+    std::vector<float> main(total, 0.0f);
+    noises.getMainNoise().generate(main.data(), position, xzCount, yCount, xzCount, MAIN_XZ_SCALE, MAIN_Y_SCALE);
+    noises.getMinLimitNoise().generate(minLimit.data(), position, xzCount, yCount, xzCount, LIMIT_XZ_SCALE,
+                                       LIMIT_Y_SCALE);
+    noises.getMaxLimitNoise().generate(maxLimit.data(), position, xzCount, yCount, xzCount, LIMIT_XZ_SCALE,
+                                       LIMIT_Y_SCALE);
 
-    CellFunctionContext functionContext(&chunkCache);
+    float offsets[NetherGeneratorConstants::DENSITY_Y_COUNT];
+    for (int32_t k = 0; k < yCount; k++) {
+        const float distance = k >= 9 ? 16.0f - (float) k : (float) k;
+        const float index = (float) k * 3.1415927f * 6.0f / 17.0f * 10430.378f + 16384.0f;
+        const float cosine = (float) std::sin((double) (uint16_t) (int32_t) index * 6.283185307179586 / 65536.0);
+        offsets[k] = cosine + cosine;
+        if (distance < 4.0f)
+            offsets[k] += (4.0f - distance) * (4.0f - distance) * (4.0f - distance) * -10.0f;
+    }
 
-    for (int32_t cellX = 0; cellX < 16; cellX += NetherGeneratorConstants::CELL_XZ_SIZE) {
-        for (int32_t cellZ = 0; cellZ < 16; cellZ += NetherGeneratorConstants::CELL_XZ_SIZE) {
-            for (int32_t cellY = cellMaxY; cellY >= cellMinY; cellY -= NetherGeneratorConstants::CELL_HEIGHT) {
-                for (int32_t localX = 0; localX < NetherGeneratorConstants::CELL_XZ_SIZE; localX++) {
-                    const int32_t x = cellX + localX;
-                    const int32_t worldX = chunkBaseX + x;
+    std::vector<float> density(total, 0.0f);
+    for (size_t index = 0; index < total; index++) {
+        const int32_t k = (int32_t) (index % (size_t) yCount);
+        const float low = minLimit[index] * 0.001953125f;
+        const float high = maxLimit[index] * 0.001953125f;
+        const float blend = (main[index] / 10.0f + 1.0f) * 0.5f;
+        float value = low;
+        if (blend > 1.0f)
+            value = high;
+        else if (blend >= 0.0f)
+            value = (high - low) * blend + low;
 
-                    for (int32_t localZ = 0; localZ < NetherGeneratorConstants::CELL_XZ_SIZE; localZ++) {
-                        const int32_t z = cellZ + localZ;
-                        const int32_t worldZ = chunkBaseZ + z;
+        value -= offsets[k];
+        if (k == 14)
+            value = value * 0.6666666f + -3.3333335f;
+        else if (k == 15)
+            value = value * 0.3333333f + -6.666667f;
+        else if (k == 16)
+            value = value * 0.0f + -10.0f;
 
-                        for (int32_t localY = NetherGeneratorConstants::CELL_HEIGHT - 1; localY >= 0; localY--) {
-                            const int32_t y = cellY + localY;
-                            if (y < minDensityY || y > maxDensityY)
-                                continue;
+        density[index] = value;
+    }
 
-                            if (densityFunction->compute(functionContext.set(worldX, y, worldZ)) > 0.0)
+    for (int32_t cellX = 0; cellX < 4; cellX++) {
+        for (int32_t cellZ = 0; cellZ < 4; cellZ++) {
+            for (int32_t k = 0; k < yCount - 1; k++) {
+                const auto at = [&](int32_t x, int32_t z, int32_t y) {
+                    return density[(size_t) (((cellX + x) * xzCount + cellZ + z) * yCount + k + y)];
+                };
+
+                for (int32_t localZ = 0; localZ < 4; localZ++) {
+                    const float stepZ = (float) localZ * 0.25f;
+                    const float low0 = (at(0, 1, 0) - at(0, 0, 0)) * stepZ + at(0, 0, 0);
+                    const float high0 = (at(0, 1, 1) - at(0, 0, 1)) * stepZ + at(0, 0, 1);
+                    const float lowDelta = ((at(1, 1, 0) - at(1, 0, 0)) * stepZ + at(1, 0, 0)) - low0;
+                    const float highDelta = ((at(1, 1, 1) - at(1, 0, 1)) * stepZ + at(1, 0, 1)) - high0;
+
+                    for (int32_t localX = 0; localX < 4; localX++) {
+                        const float stepX = (float) localX * 0.25f;
+                        const float low = lowDelta * stepX + low0;
+                        const float slope = (stepX * highDelta + high0) - low;
+
+                        for (int32_t localY = 0; localY < NetherGeneratorConstants::CELL_HEIGHT; localY++) {
+                            const int32_t x = cellX * 4 + localX;
+                            const int32_t y = k * NetherGeneratorConstants::CELL_HEIGHT + localY;
+                            const int32_t z = cellZ * 4 + localZ;
+                            if (slope * ((float) localY * 0.125f) + low > 0.0f)
                                 chunk.setBlock(x, y, z, netherrackState());
                             else if (y <= NetherGeneratorConstants::LAVA_LEVEL)
                                 chunk.setBlock(x, y, z, lavaState());
@@ -324,12 +372,9 @@ void NetherGenerator::_applySurface(LevelChunk &chunk) const {
 }
 
 void NetherGenerator::generate(LevelChunk &chunk) const {
-    DensityChunkCache chunkCache;
-    chunkCache.clear();
-
     _generateBiomeMap(chunk);
 
-    _generateTerrain(chunk, chunkCache);
+    _generateTerrain(chunk);
 
     _applySurface(chunk);
 
