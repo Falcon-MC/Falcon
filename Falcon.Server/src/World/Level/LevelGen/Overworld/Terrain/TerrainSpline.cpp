@@ -142,10 +142,10 @@ TerrainSplinePtr TerrainSpline::overworldOffset() {
         point(1.0f, 0.1f, 0.049f)
     });
     const TerrainSplinePtr ridgesFolded11 = spline(Coordinate::RidgesFolded, {
-        point(-1.0f, -0.02f, 0.015f),
-        point(-0.4f, 0.01f, 0.0f),
-        point(0.0f, 0.01f, 0.0f),
-        point(0.4f, 0.03f, 0.04f),
+        point(-1.0f, -0.02f, 0.0f),
+        point(-0.4f, -0.03f, 0.0f),
+        point(0.0f, -0.03f, 0.0f),
+        point(0.4f, 0.03f, 0.12f),
         point(1.0f, 0.1f, 0.049f)
     });
     const TerrainSplinePtr ridgesFolded12 = spline(Coordinate::RidgesFolded, {
@@ -179,13 +179,6 @@ TerrainSplinePtr TerrainSpline::overworldOffset() {
     });
     const TerrainSplinePtr ridgesFolded17 = spline(Coordinate::RidgesFolded, {
         point(-1.0f, -0.1f, 0.5f),
-        point(-0.4f, 0.01f, 0.0f),
-        point(0.0f, 0.01f, 0.0f),
-        point(0.4f, 0.03f, 0.04f),
-        point(1.0f, 0.1f, 0.049f)
-    });
-    const TerrainSplinePtr ridgesFolded18 = spline(Coordinate::RidgesFolded, {
-        point(-1.0f, -0.05f, 0.5f),
         point(-0.4f, 0.01f, 0.0f),
         point(0.0f, 0.01f, 0.0f),
         point(0.4f, 0.03f, 0.04f),
@@ -231,12 +224,12 @@ TerrainSplinePtr TerrainSpline::overworldOffset() {
     });
     const TerrainSplinePtr ridgesFolded25 = spline(Coordinate::RidgesFolded, {
         point(-1.0f, -0.1f, 0.0f),
-        point(-0.4f, 0.1f, 0.0f),
+        point(-0.4f, ridgesFolded17, 0.0f),
         point(0.0f, 0.17f, 0.0f)
     });
     const TerrainSplinePtr ridgesFolded26 = spline(Coordinate::RidgesFolded, {
         point(-1.0f, -0.05f, 0.0f),
-        point(-0.4f, 0.1f, 0.0f),
+        point(-0.4f, ridgesFolded22, 0.0f),
         point(0.0f, 0.17f, 0.0f)
     });
     const TerrainSplinePtr erosion1 = spline(Coordinate::Erosion, {
@@ -267,7 +260,7 @@ TerrainSplinePtr TerrainSpline::overworldOffset() {
         point(0.4f, ridgesFolded17, 0.0f),
         point(0.45f, ridgesFolded25, 0.0f),
         point(0.55f, ridgesFolded25, 0.0f),
-        point(0.58f, ridgesFolded18, 0.0f),
+        point(0.58f, ridgesFolded17, 0.0f),
         point(0.7f, ridgesFolded11, 0.0f)
     });
     const TerrainSplinePtr erosion4 = spline(Coordinate::Erosion, {
