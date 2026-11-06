@@ -17,6 +17,7 @@ class ServerPlayer;
  */
 class PlayerBossBars {
 public:
+    // wire values of the client's BossBarColor (0x147E1D5A0)
     enum class Color : int32_t {
         Pink,
         Blue,
@@ -24,6 +25,7 @@ public:
         Green,
         Yellow,
         Purple,
+        RebeccaPurple,
         White
     };
 
