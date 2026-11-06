@@ -8,4 +8,5 @@
 class ItemProperties {
 public:
     static bool canDestroy(const ItemStack &item, const std::string &blockName);
+    static bool isUnbreakable(const ItemStack &item);
 };

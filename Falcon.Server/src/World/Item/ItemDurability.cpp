@@ -3,6 +3,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/ItemProperties.h"
 #include "Falcon/Plugin/PluginManager.h"
 
 #include <random>
@@ -16,6 +17,9 @@ namespace {
 
 bool ItemDurability::apply(ServerPlayer *player, ItemStack &item, int32_t amount, bool rollUnbreaking) {
     if (item.isAir() || item.mDefinition == nullptr || amount <= 0)
+        return false;
+
+    if (ItemProperties::isUnbreakable(item))
         return false;
 
     const ItemData *data = ItemDataTable::find(item.mDefinition->getIdentifier());
