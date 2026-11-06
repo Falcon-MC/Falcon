@@ -102,6 +102,8 @@ private:
         bool mKelp = false;
         // legacy:forest_foliage_feature
         bool mForestFoliage = false;
+        // legacy:forest_rock_feature
+        bool mForestRock = false;
         // legacy:springs_feature
         bool mSprings = false;
         // legacy:ice_feature
@@ -110,7 +112,8 @@ private:
 
         bool isPorted() const {
             return mOre != nullptr || mDisk != nullptr || mGeode != nullptr || mLegacyTree != nullptr
-                   || mPlaced.isSet() || mKelp || mForestFoliage || mSprings || mLegacyIce || mFossil != nullptr;
+                   || mPlaced.isSet() || mKelp || mForestFoliage || mForestRock || mSprings || mLegacyIce
+                   || mFossil != nullptr;
         }
     };
 
@@ -151,6 +154,10 @@ private:
     static bool _placeBlueIce(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 
     static void _placeForestFoliage(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
+
+    static void _placeForestRocks(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random);
+
+    static void _placeForestRock(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 
     static void _placeLegacyDoublePlant(BlockManager &blocks, Block (*plant)(), int32_t x, int32_t y, int32_t z,
                                         std::mt19937 &random);

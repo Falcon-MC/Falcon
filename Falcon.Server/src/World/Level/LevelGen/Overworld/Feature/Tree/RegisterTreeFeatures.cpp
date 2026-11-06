@@ -10,7 +10,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Tree/JungleTreeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/MangroveTreeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/MeadowTreeFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Tree/MegaTaigaTreeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/MesaPlateauStoneTreeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/MesaTreeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/MushroomIslandHugeMushroomFeature.h"
@@ -32,7 +31,6 @@ void registerTreeFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<JungleTreeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<MangroveTreeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<MeadowTreeFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<MegaTaigaTreeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<MesaPlateauStoneTreeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<MesaTreeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<MushroomIslandHugeMushroomFeature>());

@@ -20,7 +20,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/IcePatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/IceSpikeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/JungleGrassFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/LegacyForestRockFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/LegacySmallBrownMushroomsFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/LegacySmallMushroomsFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/MelonFeature.h"
@@ -74,7 +73,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<IcePatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<IceSpikeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<JungleGrassFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<LegacyForestRockFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<LegacySmallBrownMushroomsFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<LegacySmallMushroomsFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<MelonFeature>());

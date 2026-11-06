@@ -5384,14 +5384,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/LegacyForestRockFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/LegacyForestRockFeature.h",
-      "sha256": "07ab580f25b7d310970bded3539f3ed2681aa3426ea70461b1c9b90bc429e224",
-      "classes": [
-        "LegacyForestRockFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/LegacySmallBrownMushroomsFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/LegacySmallBrownMushroomsFeature.h",
       "sha256": "1f4fec011f7fbf4cce88f1f55683393bab234fb9fe0fb05b4fca05fcfb1cdbcd",
@@ -5656,14 +5648,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/BigSpruceTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/BigSpruceTree.h",
-      "sha256": "8fd2c76c46726cc2d0f1dcdf64da6d6a8b4fb1eddf127ce7b711d032eed7886d",
-      "classes": [
-        "BigSpruceTree"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/BirchForestMutatedTreeFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/BirchForestMutatedTreeFeature.h",
       "sha256": "7cf894fa138cf0b04b955e27ac8b1b7cec75cc24890eef1182ca835c9979eb95",
@@ -5890,14 +5874,6 @@
       "sha256": "76230c159dfefb65652228d622c08c9e449875c52aa50a921354f5b2c28c9866",
       "classes": [
         "MeadowTreeFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/MegaTaigaTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/MegaTaigaTreeFeature.h",
-      "sha256": "3d83ebd9b550169437b1a0038fedc5f2ddcbbe0c027f1931aed43b9cc95552c7",
-      "classes": [
-        "MegaTaigaTreeFeature"
       ]
     },
     {
@@ -9659,11 +9635,6 @@
       "sha256": "af92c700b7921dd0261e5902c791667b38cc840d5159ad7372abe1267eddf52e"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/LegacyForestRockFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/LegacyForestRockFeature.cpp",
-      "sha256": "46f736563bab943cfecf34d91ce920db4019d0bf07018f607033925054478d95"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/LegacySmallBrownMushroomsFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/LegacySmallBrownMushroomsFeature.cpp",
       "sha256": "e3183c11a385f5f1e73d3691b9597a85521f0c8791b18e62b727cb983cf3a88b"
@@ -9839,11 +9810,6 @@
       "sha256": "836c2fea50f33d6d0e8976e8f38eb8daf64d362bad962b4a624f55e007d6b9d3"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/BigSpruceTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/BigSpruceTree.cpp",
-      "sha256": "c48cecb1ff7d46deb50b2ee70498e9ea9787b0a14786adde259c276f0539bea3"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/BirchForestMutatedTreeFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/BirchForestMutatedTreeFeature.cpp",
       "sha256": "c64b08c8e1eec36c04ac7927484ab6a3f4283042e6621beb5648418ed8e152b9"
@@ -9982,11 +9948,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/MeadowTreeFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/MeadowTreeFeature.cpp",
       "sha256": "6d5c7878eb5df54620ef5fa4fab1fe7b3545c57cada663ec24f8412dd634ca25"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/MegaTaigaTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/MegaTaigaTreeFeature.cpp",
-      "sha256": "fa034c6aa5690d8ece19571dd073d755c90f64ef3efaa7856cf074027b4a9518"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/MesaPlateauStoneTreeFeature.cpp",

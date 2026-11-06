@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <random>
+#include <vector>
 
 class BlockManager;
 
@@ -15,7 +16,8 @@ public:
     enum class Trunk {
         Simple,
         Fancy,
-        Fallen
+        Fallen,
+        Mega
     };
 
     enum class Canopy {
@@ -23,7 +25,8 @@ public:
         Simple,
         Fancy,
         Spruce,
-        Pine
+        Pine,
+        MegaPine
     };
 
     // a range of the feature's JSON, its maximum excluded
@@ -67,10 +70,24 @@ public:
         int32_t mCanopyRadius;
     };
 
+    // mega_trunk without branches, mega_pine_canopy and the base_cluster of the mega spruce and pine features
+    struct Mega {
+        int32_t mTrunkWidth;
+        int32_t mBaseHeight;
+        std::vector<int32_t> mHeightIntervals;
+        Range mCanopyHeight;
+        int32_t mBaseRadius;
+        float mRadiusStepModifier;
+        int32_t mCoreWidth;
+        Block (*mBaseBlock)();
+        int32_t mClusters;
+        int32_t mClusterRadius;
+    };
+
     using Decorate = std::function<void(int32_t, int32_t, int32_t)>;
 
-    static bool place(BlockManager &blocks, const Definition &tree, const Fancy *fancy, int32_t x, int32_t y,
-                      int32_t z, std::mt19937 &random, const Decorate &decorate);
+    static bool place(BlockManager &blocks, const Definition &tree, const Fancy *fancy, const Mega *mega, int32_t x,
+                      int32_t y, int32_t z, std::mt19937 &random, const Decorate &decorate);
 
 private:
     static bool _canPlace(BlockManager &blocks, int32_t x, int32_t y, int32_t z, int32_t height);
@@ -83,6 +100,14 @@ private:
 
     static bool _fallenTrunk(BlockManager &blocks, const Definition &tree, int32_t x, int32_t y, int32_t z,
                              int32_t length, std::mt19937 &random, const Decorate &decorate);
+
+    static bool _megaTrunk(BlockManager &blocks, const Definition &tree, const Mega &mega, int32_t x, int32_t y,
+                           int32_t z, int32_t height, std::mt19937 &random);
+
+    static void _baseCluster(BlockManager &blocks, const Mega &mega, int32_t x, int32_t y, int32_t z);
+
+    static bool _megaPineCanopy(BlockManager &blocks, const Definition &tree, const Mega &mega, int32_t x, int32_t y,
+                                int32_t z, std::mt19937 &random);
 
     static bool _canopy(BlockManager &blocks, const Definition &tree, int32_t x, int32_t y, int32_t z,
                         std::mt19937 &random);
