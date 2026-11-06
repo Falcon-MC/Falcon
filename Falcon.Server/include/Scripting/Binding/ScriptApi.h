@@ -127,7 +127,9 @@ public:
 
     void emitBlockStepOff(Actor &actor, const Level &level);
 
-    bool hasSteppingActors() const { return !mStepping.empty(); }
+    bool hasSteppingActors() const {
+        return !mStepping.empty();
+    }
 
     void emitWorldInitialize();
 
