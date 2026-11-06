@@ -92,6 +92,12 @@ StructureChunkPos StructureFeature::getCandidate(int64_t seed, int32_t regionX, 
     return {regionX * mSpacing + offsetX, regionZ * mSpacing + offsetZ};
 }
 
+bool StructureFeature::isStartChunk(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const {
+    const StructureChunkPos candidate = getCandidate(generator.getSeed(), floorDiv(chunkX, mSpacing),
+                                                     floorDiv(chunkZ, mSpacing));
+    return candidate.x == chunkX && candidate.z == chunkZ && _isValidStart(generator, chunkX, chunkZ);
+}
+
 bool StructureFeature::findNearest(const ChunkGenerator &generator, int32_t blockX, int32_t blockZ,
                                    StructureChunkPos &out) const {
     const int32_t originRegionX = floorDiv(blockX >> 4, mSpacing);

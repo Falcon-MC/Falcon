@@ -1,0 +1,28 @@
+#pragma once
+
+#include "World/Level/Block/BlockState.h"
+
+#include <cstdint>
+#include <vector>
+
+class ChunkGenerator;
+class LevelChunk;
+
+/**
+ * Igloos: the temple starts of the snowy biomes. The pieces turn around the north west corner of the start chunk
+ * and may reach into the neighbouring chunks, so every chunk writes its own share of the starts around it.
+ */
+class IglooStructure {
+public:
+    struct PlacedBlock {
+        int32_t x = 0;
+        int32_t y = 0;
+        int32_t z = 0;
+        BlockState mState;
+    };
+
+    // the blocks relative to the corner of the start chunk and the floor height
+    static std::vector<PlacedBlock> build(int32_t quarterTurns, bool hasBasement);
+
+    static void place(const ChunkGenerator &generator, LevelChunk &chunk);
+};

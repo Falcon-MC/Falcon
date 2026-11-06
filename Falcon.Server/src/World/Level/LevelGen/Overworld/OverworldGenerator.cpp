@@ -4,6 +4,7 @@
 #include "World/Level/LevelGen/Overworld/Biome/BiomeZoom.h"
 #include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldFeatureBuilder.h"
+#include "World/Level/LevelGen/Structure/IglooStructure.h"
 #include "World/Level/LevelGen/Feature/FeatureNoiseHolder.h"
 #include "World/Level/LevelGen/Overworld/Surface/OverworldSurfaceBuilder.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldAquifer.h"
@@ -86,6 +87,7 @@ int32_t OverworldGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
 void OverworldGenerator::decorate(Level &level, LevelChunk &chunk,
                                  std::vector<GeneratedBlockChange> *overflow) const {
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
+    IglooStructure::place(*this, chunk);
 }
 
 int64_t OverworldGenerator::parseSeed(const std::string &value) {

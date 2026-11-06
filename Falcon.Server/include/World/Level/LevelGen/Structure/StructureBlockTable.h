@@ -1,0 +1,16 @@
+#pragma once
+
+#include "World/Level/Block/BlockState.h"
+#include "World/Level/LevelGen/Structure/StructureTemplate.h"
+
+#include <cstdint>
+
+/**
+ * Turns the palette entries of a structure template into the block states of the server. Every state is checked
+ * against instances saved by the game, so the table only holds the blocks of the structures already generated.
+ */
+class StructureBlockTable {
+public:
+    // quarter turns are clockwise seen from above; false for a block with no entry, which is then left out
+    static bool translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, BlockState &out);
+};
