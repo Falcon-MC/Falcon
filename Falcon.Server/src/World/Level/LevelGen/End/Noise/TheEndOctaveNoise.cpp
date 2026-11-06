@@ -17,3 +17,18 @@ void TheEndOctaveNoise::generate(float *noiseArray, const float *position, int32
         weight *= 0.5f;
     }
 }
+
+float TheEndOctaveNoise::sample(float x, float y, float z) const {
+    float frequency = 1.0f;
+    float total = 0.0f;
+    float amplitudeSum = 0.0f;
+
+    for (const TheEndImprovedNoise &octave: mOctaves) {
+        total += octave.sample(x * frequency + octave.getXCoord(), y * frequency + octave.getYCoord(),
+                               z * frequency + octave.getZCoord()) / frequency;
+        amplitudeSum += 1.0f / frequency;
+        frequency *= 0.5f;
+    }
+
+    return total * (1.0f / amplitudeSum);
+}

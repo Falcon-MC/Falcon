@@ -13,8 +13,6 @@
 #include <vector>
 
 namespace {
-    const int32_t BIOME_PICK_Y = 64;
-
     // bit patterns read from the game, one unit off the nearest float of the decimal values
     const float LIMIT_XZ_SCALE = 0x1.5634bcp+9f;
     const float LIMIT_Y_SCALE = 0x1.00a78cp+11f;
@@ -129,7 +127,7 @@ namespace {
 NetherGenerator::NetherGenerator(int64_t seed)
         : mSeed(seed), mAirHash(BlockStateHasher::hash("minecraft:air")) {
     mNoiseHolder = std::make_unique<NetherNoiseHolder>(seed);
-    mBiomeSource = std::make_unique<VanillaNetherBiomeSource>(mNoiseHolder->getRandomSource());
+    mBiomeSource = std::make_unique<VanillaNetherBiomeSource>(seed);
 
     NetherNoiseHolder::setInstance(mNoiseHolder.get());
 }
@@ -147,24 +145,14 @@ int32_t NetherGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
     return mBiomeSource->pickBiomeId(x, y, z);
 }
 
-NetherBiomeResult NetherGenerator::pickBiomeResult(int32_t x, int32_t y, int32_t z) const {
-    return mBiomeSource->pick(x, y, z);
-}
-
 void NetherGenerator::decorate(Level &level, LevelChunk &chunk,
                                std::vector<GeneratedBlockChange> *overflow) const {
     NetherFeatureBuilder::apply(level, chunk, overflow);
 }
 
 void NetherGenerator::_generateBiomeMap(LevelChunk &chunk) const {
-    const int32_t chunkBaseX = chunk.getX() << 4;
-    const int32_t chunkBaseZ = chunk.getZ() << 4;
-
     int32_t biomes[256];
-    for (int32_t x = 0; x < 16; x++) {
-        for (int32_t z = 0; z < 16; z++)
-            biomes[(x << 4) | z] = mBiomeSource->pickBiomeId(chunkBaseX + x, BIOME_PICK_Y, chunkBaseZ + z);
-    }
+    mBiomeSource->pickChunk(chunk.getX(), chunk.getZ(), biomes);
 
     for (int32_t y = NetherGeneratorConstants::MAX_Y; y >= NetherGeneratorConstants::MIN_Y; y--) {
         for (int32_t x = 0; x < 16; x++) {

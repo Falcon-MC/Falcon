@@ -131,3 +131,38 @@ void TheEndImprovedNoise::addOctave(float *noiseArray, const float *position, in
         }
     }
 }
+
+float TheEndImprovedNoise::sample(float x, float y, float z) const {
+    const std::array<int32_t, 512> &p = mPermutations;
+    const float floorX = std::floor(x);
+    const float floorY = std::floor(y);
+    const float floorZ = std::floor(z);
+    const int32_t latticeX = (int32_t) (uint8_t) (int32_t) floorX;
+    const int32_t latticeY = (int32_t) (uint8_t) (int32_t) floorY;
+    const int32_t latticeZ = (int32_t) (uint8_t) (int32_t) floorZ;
+    const float fx = x - floorX;
+    const float fy = y - floorY;
+    const float fz = z - floorZ;
+    const float x1 = fx + -1.0f;
+    const float y1 = fy + -1.0f;
+    const float z1 = fz + -1.0f;
+
+    const int32_t a = latticeY + p[(size_t) latticeX];
+    const int32_t b = latticeY + p[(size_t) latticeX + 1];
+    const int32_t aa = latticeZ + p[(size_t) a];
+    const int32_t ab = latticeZ + p[(size_t) a + 1];
+    const int32_t ba = latticeZ + p[(size_t) b];
+    const int32_t bb = latticeZ + p[(size_t) b + 1];
+
+    const float fadeX = fade(fx);
+    const float fadeY = fade(fy);
+    const float fadeZ = fade(fz);
+    const auto lerp = [](float t, float from, float to) { return (to - from) * t + from; };
+
+    const float nearLow = lerp(fadeX, grad(p[(size_t) aa], fx, fy, fz), grad(p[(size_t) ba], x1, fy, fz));
+    const float nearHigh = lerp(fadeX, grad(p[(size_t) ab], fx, y1, fz), grad(p[(size_t) bb], x1, y1, fz));
+    const float farLow = lerp(fadeX, grad(p[(size_t) aa + 1], fx, fy, z1), grad(p[(size_t) ba + 1], x1, fy, z1));
+    const float farHigh = lerp(fadeX, grad(p[(size_t) ab + 1], fx, y1, z1), grad(p[(size_t) bb + 1], x1, y1, z1));
+
+    return lerp(fadeZ, lerp(fadeY, nearLow, nearHigh), lerp(fadeY, farLow, farHigh));
+}
