@@ -2,10 +2,12 @@
 
 #include "World/Level/LevelGen/Structure/JigsawPools.h"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <random>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class ChunkGenerator;
@@ -58,7 +60,8 @@ private:
 
     JigsawBox _box(const JigsawElementData &element, int32_t x, int32_t y, int32_t z, int32_t quarterTurns) const;
 
-    // the estimate of the surface, not the terrain, held at sea level: pieces can end up sunk into a hill
+    // the noise terrain before surface rules and carvers, water included, held at sea level; the game keeps these
+    // per chunk for the whole assembly
     int32_t _groundHeight(int32_t x, int32_t z);
 
     void _expand(size_t pieceIndex);
@@ -74,4 +77,5 @@ private:
     int32_t mMaxDepth;
     int32_t mSeaLevel;
     std::vector<JigsawPiece> mPieces;
+    std::unordered_map<uint64_t, std::array<int32_t, 256>> mHeights;
 };

@@ -67,7 +67,14 @@ void JigsawAssembler::_shuffle(std::vector<T> &values) {
 }
 
 int32_t JigsawAssembler::_groundHeight(int32_t x, int32_t z) {
-    return std::max(mGenerator.getPreliminarySurfaceLevel(x >> 2, z >> 2), mSeaLevel);
+    const int32_t chunkX = x >> 4;
+    const int32_t chunkZ = z >> 4;
+    const uint64_t key = ((uint64_t) (uint32_t) chunkX << 32) | (uint32_t) chunkZ;
+    auto found = mHeights.find(key);
+    if (found == mHeights.end())
+        found = mHeights.emplace(key, mGenerator.getPreliminaryHeights(chunkX, chunkZ)).first;
+
+    return std::max(found->second[(size_t) (((z & 15) << 4) | (x & 15))], mSeaLevel);
 }
 
 std::vector<JigsawAssembler::Marker> JigsawAssembler::_markers(const JigsawElementData &element, int32_t x, int32_t y,

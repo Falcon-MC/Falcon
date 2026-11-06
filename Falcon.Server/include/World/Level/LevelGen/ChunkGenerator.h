@@ -3,6 +3,7 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Chunk/GeneratedBlockChange.h"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -45,6 +46,9 @@ public:
     // the coarse height structures read their biomes at: the terrain density alone, with no water and cut to the
     // eight block noise cells, so a sea column reports its floor
     virtual int32_t getPreliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const;
+
+    // getPreliminaryHeight of every column of a chunk, z major, from a single throwaway chunk
+    virtual std::array<int32_t, 256> getPreliminaryHeights(int32_t chunkX, int32_t chunkZ) const;
 
     // the lowest getPreliminaryHeight of the chunk's columns, from a single throwaway chunk
     virtual int32_t getPreliminaryLowestHeight(int32_t chunkX, int32_t chunkZ) const;
