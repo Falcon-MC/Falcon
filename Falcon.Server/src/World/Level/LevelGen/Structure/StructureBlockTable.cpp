@@ -65,11 +65,97 @@ namespace {
                 {"minecraft:monster_egg:chiseled_brick", "minecraft:infested_chiseled_stone_bricks"}};
         return blocks;
     }
+
+    std::string prefixed(const std::string &species, const char *suffix) {
+        return "minecraft:" + species + suffix;
+    }
+
+    // the oak of these two blocks has kept the name it had before the species got their own blocks
+    std::string trapdoorName(const std::string &species) {
+        return species == "oak" ? "minecraft:trapdoor" : prefixed(species, "_trapdoor");
+    }
+
+    std::string doorName(const std::string &species) {
+        return species == "oak" ? "minecraft:wooden_door" : prefixed(species, "_door");
+    }
+
+    bool translateWood(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns,
+                       const StructureBlockTable::WoodSpecies &wood, BlockState &out) {
+        const std::string &name = entry.mName;
+        const std::string variant = property(entry, "variant");
+        const std::string &species = (name.rfind("minecraft:dark_oak", 0) == 0 || variant == "dark_oak") ? wood.mDarkOak
+                                                                                                         : wood.mOak;
+        Tag states = Tag::ofCompound();
+        if (name == "minecraft:planks" && (variant == "oak" || variant == "dark_oak")) {
+            out = BlockState(prefixed(species, "_planks"));
+            return true;
+        }
+
+        if (name == "minecraft:fence" || name == "minecraft:dark_oak_fence") {
+            out = BlockState(prefixed(species, "_fence"), states);
+            return true;
+        }
+
+        if ((name == "minecraft:wooden_slab" || name == "minecraft:double_wooden_slab")
+            && (variant == "oak" || variant == "dark_oak")) {
+            states.putString("minecraft:vertical_half", property(entry, "half").empty() ? "bottom" : property(entry, "half"));
+            out = BlockState(prefixed(species, name == "minecraft:wooden_slab" ? "_slab" : "_double_slab"), states);
+            return true;
+        }
+
+        if (name == "minecraft:oak_stairs" || name == "minecraft:dark_oak_stairs") {
+            states.putString("minecraft:corner", "none");
+            states.putByte("upside_down_bit", property(entry, "half") == "top" ? 1 : 0);
+            states.putInt("weirdo_direction", weirdoDirection(rotatedFacing(entry, quarterTurns)));
+            out = BlockState(prefixed(species, "_stairs"), states);
+            return true;
+        }
+
+        if (name == "minecraft:stripped_oak_log") {
+            std::string axis = property(entry, "axis");
+            if ((quarterTurns & 1) != 0 && axis != "y")
+                axis = axis == "x" ? "z" : "x";
+            states.putString("pillar_axis", axis);
+            out = BlockState("minecraft:stripped_" + species + "_log", states);
+            return true;
+        }
+
+        if (name == "minecraft:trapdoor") {
+            states.putInt("direction", weirdoDirection(rotatedFacing(entry, quarterTurns)));
+            states.putByte("open_bit", property(entry, "open") == "true" ? 1 : 0);
+            states.putByte("upside_down_bit", property(entry, "half") == "top" ? 1 : 0);
+            out = BlockState(trapdoorName(species), states);
+            return true;
+        }
+
+        if (name == "minecraft:wooden_door") {
+            // measured: only the lower half keeps a direction, a quarter turn from the side of the file, and the two
+            // halves read the hinge of the file opposite ways
+            const bool upper = property(entry, "half") == "upper";
+            const bool rightHinge = property(entry, "hinge") == "right";
+            states.putByte("door_hinge_bit", rightHinge == upper ? 1 : 0);
+            states.putString("minecraft:cardinal_direction", upper ? "south" : rotatedFacing(entry, quarterTurns + 1));
+            states.putByte("open_bit", property(entry, "open") == "true" ? 1 : 0);
+            states.putByte("upper_block_bit", upper ? 1 : 0);
+            out = BlockState(doorName(species), states);
+            return true;
+        }
+
+        return false;
+    }
 }
 
 bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns,
                                     BlockState &out) {
+    return translate(entry, quarterTurns, out, WoodSpecies());
+}
+
+bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, BlockState &out,
+                                    const WoodSpecies &wood) {
     const std::string &name = entry.mName;
+
+    if (translateWood(entry, quarterTurns, wood, out))
+        return true;
 
     const auto plain = plainBlocks().find(name);
     if (plain != plainBlocks().end()) {

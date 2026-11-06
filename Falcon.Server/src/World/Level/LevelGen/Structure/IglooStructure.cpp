@@ -13,8 +13,10 @@
 #include "World/Level/LevelGen/ChunkGenerator.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
+#include "World/Level/LevelGen/Structure/StructureConnections.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 #include "World/Level/LevelGen/Structure/StructureTemplate.h"
+#include "World/Level/LevelGen/Structure/StructureTerrain.h"
 
 #include <map>
 #include <memory>
@@ -48,7 +50,7 @@ namespace {
             return choice;
 
         choice.mShaftPieces = FeatureRandom::nextInt(random, SHAFT_PIECE_RANGE) + SHAFT_MIN_PIECES;
-        // measured, not located in the code: one draw goes by while the bottom piece is placed
+        // placing a chest draws a loot seed of its own (sub_14775E430), which the marker of the piece then replaces
         random();
         choice.mLootSeed = FeatureRandom::nextInt(random);
         return choice;
@@ -94,27 +96,27 @@ namespace {
         }
     }
 
-    // the files save bars unconnected and the game connects them once placed
-    void connectBars(std::vector<IglooStructure::PlacedBlock> &blocks) {
-        std::map<std::tuple<int32_t, int32_t, int32_t>, bool> solid;
+    // the files save bars unconnected and the game connects them once placed, to the terrain as well
+    void connectBars(std::vector<IglooStructure::PlacedBlock> &blocks, StructureTerrain &terrain, int32_t originX,
+                     int32_t originY, int32_t originZ) {
+        std::map<std::tuple<int32_t, int32_t, int32_t>, BlockState> placed;
         for (const IglooStructure::PlacedBlock &block : blocks)
-            solid[{block.x, block.y, block.z}] = !airStates().contains(block.mState);
+            placed[{block.x, block.y, block.z}] = block.mState;
 
-        const auto isSolid = [&solid](int32_t x, int32_t y, int32_t z) {
-            const auto found = solid.find({x, y, z});
-            return found != solid.end() && found->second;
+        const auto connects = [&](const IglooStructure::PlacedBlock &bar, int32_t sideX, int32_t sideZ) {
+            const auto found = placed.find({bar.x + sideX, bar.y, bar.z + sideZ});
+            return StructureConnections::connects(
+                    found != placed.end() ? found->second
+                                          : terrain.getBlock(originX + bar.x + sideX, originY + bar.y,
+                                                             originZ + bar.z + sideZ),
+                    sideX, sideZ);
         };
 
         for (IglooStructure::PlacedBlock &block : blocks) {
-            if (!barStates().contains(block.mState))
-                continue;
-
-            Tag states = Tag::ofCompound();
-            states.putByte("minecraft:connection_east", isSolid(block.x + 1, block.y, block.z) ? 1 : 0);
-            states.putByte("minecraft:connection_north", isSolid(block.x, block.y, block.z - 1) ? 1 : 0);
-            states.putByte("minecraft:connection_south", isSolid(block.x, block.y, block.z + 1) ? 1 : 0);
-            states.putByte("minecraft:connection_west", isSolid(block.x - 1, block.y, block.z) ? 1 : 0);
-            block.mState = BlockState(block.mState.mName, states);
+            if (barStates().contains(block.mState))
+                block.mState = StructureConnections::connected(block.mState, connects(block, 1, 0),
+                                                               connects(block, 0, -1), connects(block, 0, 1),
+                                                               connects(block, -1, 0));
         }
     }
 
@@ -153,7 +155,9 @@ namespace {
     }
 }
 
-std::vector<IglooStructure::PlacedBlock> IglooStructure::build(int32_t quarterTurns, int32_t shaftPieces) {
+std::vector<IglooStructure::PlacedBlock> IglooStructure::build(int32_t quarterTurns, int32_t shaftPieces,
+                                                                 StructureTerrain &terrain, int32_t originX,
+                                                                 int32_t originY, int32_t originZ) {
     std::vector<PlacedBlock> blocks;
     addPiece(blocks, shaftPieces > 0 ? "igloo/igloo_top_trapdoor.nbt" : "igloo/igloo_top_no_trapdoor.nbt", 0, 0, 0,
              quarterTurns);
@@ -164,7 +168,7 @@ std::vector<IglooStructure::PlacedBlock> IglooStructure::build(int32_t quarterTu
         addPiece(blocks, "igloo/igloo_middle.nbt", SHAFT_X, -SHAFT_PIECE_HEIGHT * i, SHAFT_Z, quarterTurns);
 
     addPiece(blocks, "igloo/igloo_bottom.nbt", 0, BOTTOM_Y - SHAFT_PIECE_HEIGHT * shaftPieces, BOTTOM_Z, quarterTurns);
-    connectBars(blocks);
+    connectBars(blocks, terrain, originX, originY, originZ);
     return blocks;
 }
 
@@ -186,7 +190,9 @@ void IglooStructure::place(const ChunkGenerator &generator, Level &level, LevelC
 
             const int32_t floorY = generator.getGeneratedSolidHeight(cornerX, cornerZ) - 1;
             const IglooChoice choice = drawChoice(generator.getSeed(), startX, startZ);
-            for (const PlacedBlock &block : build(choice.mQuarterTurns, choice.mShaftPieces)) {
+            StructureTerrain terrain(generator);
+            for (const PlacedBlock &block :
+                 build(choice.mQuarterTurns, choice.mShaftPieces, terrain, cornerX, floorY, cornerZ)) {
                 const int32_t x = cornerX + block.x;
                 const int32_t z = cornerZ + block.z;
                 const int32_t y = floorY + block.y;
