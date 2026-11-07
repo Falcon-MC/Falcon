@@ -26,6 +26,14 @@ namespace {
         return ticks;
     }
 
+    bool stateTicksRandomly(const BlockState &state) {
+        if (state.mName == "minecraft:air")
+            return false;
+
+        const Block *block = VanillaBlocks::fromState(state);
+        return block != nullptr && ticksRandomly(*block);
+    }
+
     struct Candidate {
         Vector3i mPosition;
         const Block *mBlock;
@@ -107,6 +115,14 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
             const SubChunk &subChunk = chunk->getSubChunk(index);
             if (subChunk.isEmpty())
                 continue;
+
+            // A section holding no randomly ticking state, most of the underground, still draws its picks so
+            // the other sections land on the same blocks.
+            if (!subChunk.paletteMatches(SubChunk::PaletteQuery::RandomTick, stateTicksRandomly)) {
+                for (int32_t attempt = 0; attempt < speed; attempt++)
+                    nextUpdateLcg();
+                continue;
+            }
 
             for (int32_t attempt = 0; attempt < speed; attempt++) {
                 const uint32_t lcg = nextUpdateLcg();

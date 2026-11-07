@@ -3,6 +3,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Chunk/SubChunk.h"
 
 namespace {
     const BlockState &airState() {
@@ -31,9 +32,9 @@ const BlockState &BlockManager::getExtraBlockAt(int32_t x, int32_t y, int32_t z)
 const BlockState &BlockManager::_getBlockAt(int32_t x, int32_t y, int32_t z, int32_t layer) {
     const int64_t key = hashXYZ(x, y, z) | layer;
 
-    const std::unordered_map<int64_t, BlockState>::const_iterator cached = mCaches.find(key);
+    const std::unordered_map<int64_t, const BlockState *>::const_iterator cached = mCaches.find(key);
     if (cached != mCaches.end())
-        return cached->second;
+        return *cached->second;
 
     if (mPending != nullptr) {
         const BlockState *pending = mPending->getCachedBlock(x, y, z, layer);
@@ -52,11 +53,11 @@ const BlockState &BlockManager::_getBlockAt(int32_t x, int32_t y, int32_t z, int
 }
 
 const BlockState *BlockManager::getCachedBlock(int32_t x, int32_t y, int32_t z, int32_t layer) const {
-    const std::unordered_map<int64_t, BlockState>::const_iterator cached = mCaches.find(hashXYZ(x, y, z) | layer);
+    const std::unordered_map<int64_t, const BlockState *>::const_iterator cached = mCaches.find(hashXYZ(x, y, z) | layer);
     if (cached == mCaches.end())
         return nullptr;
 
-    return &cached->second;
+    return cached->second;
 }
 
 void BlockManager::setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockState &state) {
@@ -64,8 +65,9 @@ void BlockManager::setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockS
         return;
 
     const int64_t key = hashXYZ(x, y, z);
-    mPlaces[key] = state;
-    mCaches[key] = state;
+    const BlockState *interned = SubChunk::intern(state);
+    mPlaces[key] = interned;
+    mCaches[key] = interned;
 }
 
 void BlockManager::setExtraBlockAt(int32_t x, int32_t y, int32_t z, const BlockState &state) {
@@ -73,8 +75,9 @@ void BlockManager::setExtraBlockAt(int32_t x, int32_t y, int32_t z, const BlockS
         return;
 
     const int64_t key = hashXYZ(x, y, z) | 1;
-    mPlaces[key] = state;
-    mCaches[key] = state;
+    const BlockState *interned = SubChunk::intern(state);
+    mPlaces[key] = interned;
+    mCaches[key] = interned;
 }
 
 bool BlockManager::isCached(int32_t x, int32_t y, int32_t z) const {
@@ -82,7 +85,7 @@ bool BlockManager::isCached(int32_t x, int32_t y, int32_t z) const {
 }
 
 void BlockManager::merge(const BlockManager &other) {
-    for (const std::pair<const int64_t, BlockState> &entry: other.mPlaces) {
+    for (const std::pair<const int64_t, const BlockState *> &entry: other.mPlaces) {
         mPlaces[entry.first] = entry.second;
         mCaches[entry.first] = entry.second;
     }
@@ -96,7 +99,7 @@ void BlockManager::setOverflowSink(int32_t centerChunkX, int32_t centerChunkZ,
 }
 
 void BlockManager::applySubChunkUpdate() {
-    for (const std::pair<const int64_t, BlockState> &entry: mPlaces) {
+    for (const std::pair<const int64_t, const BlockState *> &entry: mPlaces) {
         const int64_t key = entry.first;
         const int32_t x = (int32_t) ((key >> 37) & 0x3FFFFFFLL) - 30000000;
         const int32_t z = (int32_t) ((key >> 11) & 0x3FFFFFFLL) - 30000000;
@@ -118,7 +121,7 @@ void BlockManager::applySubChunkUpdate() {
         if (chunk == nullptr)
             continue;
 
-        chunk->setBlock(x & 15, y, z & 15, layer, entry.second);
+        chunk->setBlock(x & 15, y, z & 15, layer, *entry.second);
     }
 
     mPlaces.clear();

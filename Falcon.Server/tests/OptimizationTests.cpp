@@ -7,6 +7,9 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Protocol/Packets/CommandRequestPacket.h"
+#include "World/Level/Chunk/SubChunk.h"
+#include "World/Level/LevelGen/DimensionFactory.h"
+#include "World/Level/LevelGen/GeneratorChunkSource.h"
 
 #include <algorithm>
 #include <chrono>
@@ -40,7 +43,7 @@ public:
             change.mX = i % 16;
             change.mZ = (i / 16) % 16;
             change.mY = invalidY ? LevelChunk::MIN_Y - 1 : 140 + i / 256;
-            change.mState = BlockState("minecraft:diamond_block");
+            change.mState = SubChunk::intern(BlockState("minecraft:diamond_block"));
             level.mIncomingChanges.push_back(std::move(change));
         }
     }
@@ -53,7 +56,7 @@ public:
             change.mX = x * 16 + i % 16;
             change.mZ = z * 16 + (i / 16) % 16;
             change.mY = 140 + (i / 256) % 64;
-            change.mState = BlockState(block);
+            change.mState = SubChunk::intern(BlockState(block));
             changes.push_back(std::move(change));
         }
         level.mPendingBlockChangeCount += count;
@@ -110,6 +113,32 @@ namespace {
         if (!condition)
             throw std::runtime_error(message);
     }
+
+    // Fails its first chunk, the way a generator bug would surface on a worker.
+    class ThrowOnceGenerator : public ChunkGenerator {
+    public:
+        DimensionType getDimensionType() const override { return DimensionType::Overworld; }
+
+        void generate(LevelChunk &) const override {
+            if (!mThrown) {
+                mThrown = true;
+                throw std::runtime_error("generation failed");
+            }
+        }
+
+        void decorate(Level &, LevelChunk &, std::vector<GeneratedBlockChange> *) const override {}
+
+        int64_t getSeed() const override { return 1; }
+
+        int getSpawnY() const override { return 64; }
+
+        int32_t getAirHash() const override { return 0; }
+
+        int32_t pickBiome(int32_t, int32_t, int32_t) const override { return 0; }
+
+    private:
+        mutable bool mThrown = false;
+    };
 }
 
 int main() {
@@ -289,11 +318,13 @@ int main() {
             require(pending.openStorage(WorldManager::getWorldsDirectory()), "Could not open pending fixture");
             pending.startWorkers(1);
             LevelPersistenceProbe::stagePending(pending, 32, 32, 16384);
-            const auto start = std::chrono::steady_clock::now();
             require(pending.processGeneratedChanges() == 0, "Persistence changed the generation budget");
+            require(!LevelPersistenceProbe::writing(pending), "A few parked changes were written on a tick");
+            const auto start = std::chrono::steady_clock::now();
+            pending.saveAll(false);
             const double queuedMicros = std::chrono::duration<double, std::micro>(
                     std::chrono::steady_clock::now() - start).count();
-            require(LevelPersistenceProbe::writing(pending), "Tick did not hand persistence to a worker");
+            require(LevelPersistenceProbe::writing(pending), "Save did not hand persistence to a worker");
             require(pending.getBlockState(32 * 16, 140, 32 * 16).mName == "minecraft:diamond_block",
                     "Synchronous load missed the pending write");
             LevelPersistenceProbe::stagePending(pending, 35, 35, 1, "minecraft:glowstone");
@@ -332,14 +363,14 @@ int main() {
             LevelPersistenceProbe::failPendingWrite(pending, 33, 33);
             require(pending.getPendingChangeChunkCount() == 1, "Failed persistence discarded its payload");
             LevelPersistenceProbe::stagePending(pending, 33, 33, 1, "minecraft:gold_block");
-            pending.processGeneratedChanges();
+            pending.saveAll(false);
             LevelPersistenceProbe::finishWrites(pending);
             const auto saved = LevelPersistenceProbe::storedPending(pending, 33, 33);
             require(saved.size() == 1024, "Retry lost or duplicated positions");
             const auto newest = std::find_if(saved.begin(), saved.end(), [](const GeneratedBlockChange &change) {
                 return change.mX == 33 * 16 && change.mY == 140 && change.mZ == 33 * 16;
             });
-            require(newest != saved.end() && newest->mState.mName == "minecraft:gold_block", "Retry overwrote a newer state");
+            require(newest != saved.end() && newest->mState->mName == "minecraft:gold_block", "Retry overwrote a newer state");
             LevelPersistenceProbe::stagePending(pending, 34, 34, 1024);
             pending.processGeneratedChanges();
             pending.closeStorage();
@@ -392,6 +423,62 @@ int main() {
             for (int x = 70; x < 86; ++x)
                 require(level.isChunkPopulated(x, 70), "Ticking area never retried deferred terrain");
             world.getTickingAreas().remove(world, [&areaId](const TickingArea &entry) { return entry.mId == areaId; });
+        });
+        check("parked changes of a load discarded at close survive", [&]() {
+            Level parked("ParkedClose", 4, 1);
+            require(parked.openStorage(WorldManager::getWorldsDirectory()), "Could not open parked close fixture");
+            parked.startWorkers(1);
+            // Fresh terrain keeps the only worker busy, so the last load is still queued when close discards it.
+            for (int x = 90; x < 94; ++x)
+                parked.requestChunkAsync(x, 90);
+            LevelPersistenceProbe::stagePending(parked, 95, 90, 256, "minecraft:gold_block");
+            parked.requestChunkAsync(95, 90);
+            require(parked.getPendingChangeChunkCount() == 0, "Load did not take its parked changes");
+            parked.closeStorage();
+            Level reopened("ParkedClose", 4, 1);
+            require(reopened.openStorage(WorldManager::getWorldsDirectory()), "Could not reopen parked close fixture");
+            require(reopened.getBlockState(95 * 16, 140, 90 * 16).mName == "minecraft:gold_block",
+                    "Close lost the parked changes of a discarded load");
+            reopened.closeStorage();
+        });
+        check("a synchronous load overtaking an async one keeps its parked changes", [&]() {
+            Level overtaken("ParkedOvertake", 4, 1);
+            require(overtaken.openStorage(WorldManager::getWorldsDirectory()), "Could not open overtake fixture");
+            overtaken.startWorkers(1);
+            LevelPersistenceProbe::stagePending(overtaken, 96, 90, 256, "minecraft:gold_block");
+            overtaken.requestChunkAsync(96, 90);
+            require(overtaken.getPendingChangeChunkCount() == 0, "Load did not take its parked changes");
+            overtaken.getChunk(96, 90);
+            LevelPersistenceProbe::finishWrites(overtaken);
+            overtaken.drainCompletedChunks();
+            require(overtaken.getBlockState(96 * 16, 140, 90 * 16).mName == "minecraft:gold_block",
+                    "Rejected load result dropped its parked changes");
+            overtaken.closeStorage();
+        });
+        check("loaded terrain ignores blocks decorations left in the cache", [&]() {
+            const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(
+                    DimensionType::Overworld, 1, DimensionFactory::GeneratorType::Flat);
+            TerrainCache cache(*generator);
+            LevelChunk decorated = cache.neighbour(3, 3);
+            decorated.setBlock(0, 140, 0, BlockState("minecraft:gold_block"));
+            cache.put(std::move(decorated));
+            require(cache.terrain(3, 3).getBlock(0, 140, 0).mName != "minecraft:gold_block",
+                    "Loaded terrain picked up a decorated neighbour");
+            require(cache.neighbour(3, 3).getBlock(0, 140, 0).mName == "minecraft:gold_block",
+                    "Decorated neighbour was not kept for the next decoration");
+        });
+        check("failed terrain generation releases its claim", [&]() {
+            const ThrowOnceGenerator generator;
+            TerrainCache cache(generator);
+            bool thrown = false;
+            try {
+                cache.terrain(5, 5);
+            } catch (const std::runtime_error &) {
+                thrown = true;
+            }
+            require(thrown, "Generation failure was swallowed");
+            // A claim left behind would make this wait forever.
+            cache.terrain(5, 5);
         });
         check("generation backlog survives close", [&]() {
             Level backlog("Backlog", 4, 1, DimensionType::Overworld);

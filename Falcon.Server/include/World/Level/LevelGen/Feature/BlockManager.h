@@ -48,9 +48,10 @@ protected:
     const BlockState &_getBlockAt(int32_t x, int32_t y, int32_t z, int32_t layer);
 
     Level *mLevel;
-    // keyed by hashXYZ with the layer in the lowest bit
-    std::unordered_map<int64_t, BlockState> mCaches;
-    std::unordered_map<int64_t, BlockState> mPlaces;
+    // keyed by hashXYZ with the layer in the lowest bit; the states are interned (SubChunk::intern), so
+    // recording a block copies no state and placing it later finds the palette entry by address
+    std::unordered_map<int64_t, const BlockState *> mCaches;
+    std::unordered_map<int64_t, const BlockState *> mPlaces;
     std::vector<GeneratedBlockChange> *mOverflowSink = nullptr;
     const BlockManager *mPending = nullptr;
     int32_t mCenterChunkX = 0;

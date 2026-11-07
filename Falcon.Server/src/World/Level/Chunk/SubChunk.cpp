@@ -9,7 +9,9 @@
 #include "Core/NBT/NbtIo.h"
 
 #include <mutex>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace {
     struct InternedStateHash {
@@ -34,10 +36,36 @@ namespace {
         return &*found;
     }
 
+    // A worker interns the same few feature states over and over; remembering them per thread spares the shared
+    // table's lock.
+    const BlockState *internStateCached(const BlockState &state) {
+        thread_local std::unordered_map<int32_t, std::vector<const BlockState *>> known;
+
+        std::vector<const BlockState *> &candidates = known[state.getHash()];
+        for (const BlockState *candidate: candidates) {
+            if (candidate == &state || *candidate == state)
+                return candidate;
+        }
+
+        const BlockState *interned = internState(state);
+        candidates.push_back(interned);
+        return interned;
+    }
+
+    // Sections are asked whether they are empty for every section of every ticked chunk each tick; the interned
+    // air is recognised by address, and the length check sends almost every other name away at once.
+    bool isAir(const BlockState *state, const BlockState *air) {
+        return state == air || (state->mName.size() == 13 && state->mName == "minecraft:air");
+    }
+
     const BlockState *airState() {
         static const BlockState *air = internState(BlockState("minecraft:air"));
         return air;
     }
+}
+
+const BlockState *SubChunk::intern(const BlockState &state) {
+    return internStateCached(state);
 }
 
 SubChunk::SubChunk(int8_t y) : mY(y) {
@@ -73,6 +101,11 @@ void SubChunk::setBiome(int x, int y, int z, uint32_t biomeId) {
     }
 
     mBiomes.set(_index(x, y, z), index);
+}
+
+void SubChunk::fillBiome(uint32_t biomeId) {
+    mBiomePalette.assign(1, biomeId);
+    mBiomes.clear();
 }
 
 /**
@@ -221,15 +254,14 @@ const BlockState &SubChunk::getBlock(int x, int y, int z) const {
 }
 
 const BlockState &SubChunk::getBlock(int x, int y, int z, int layer) const {
-    static const BlockState air;
-
     if (layer <= 0)
         return getBlock(x, y, z);
 
     // Layer 1 storage is only allocated once something is placed in it, so sub-chunks
-    // without waterlogged blocks pay for a single layer.
+    // without waterlogged blocks pay for a single layer. The air returned is the interned one,
+    // like every state a section hands out.
     if (mBlocks2.empty())
-        return air;
+        return *airState();
 
     return *mPalette2[mBlocks2[_index(x, y, z)]];
 }
@@ -241,6 +273,7 @@ uint16_t SubChunk::_paletteIndexFor(const BlockState &state) {
     }
 
     mPalette.push_back(internState(state));
+    _forgetPaletteQueries();
     return (uint16_t) (mPalette.size() - 1);
 }
 
@@ -251,6 +284,7 @@ uint16_t SubChunk::_paletteIndexForLayer1(const BlockState &state) {
     }
 
     mPalette2.push_back(internState(state));
+    _forgetPaletteQueries();
     return (uint16_t) (mPalette2.size() - 1);
 }
 
@@ -272,6 +306,7 @@ void SubChunk::_ensureLayer1() {
         return;
 
     mPalette2.push_back(airState());
+    _forgetPaletteQueries();
     mBlocks2.assign(BLOCK_COUNT, 0);
 }
 
@@ -283,13 +318,14 @@ void SubChunk::setBlock(int x, int y, int z, int layer, const BlockState &state)
 
     _ensureLayer1();
     mBlocks2.set(_index(x, y, z), _paletteIndexForLayer1(state));
+    mEmptyCache = -1;
 }
 
 bool SubChunk::isEmpty() const {
-    if (mPalette.size() != 1 || mPalette[0]->mName != "minecraft:air")
-        return false;
+    if (mEmptyCache < 0)
+        mEmptyCache = mPalette.size() == 1 && isAir(mPalette[0], airState()) && isLayerEmpty(1) ? 1 : 0;
 
-    return isLayerEmpty(1);
+    return mEmptyCache == 1;
 }
 
 bool SubChunk::hasDynamicShapes() const {
@@ -299,6 +335,23 @@ bool SubChunk::hasDynamicShapes() const {
             return true;
     }
     return false;
+}
+
+bool SubChunk::paletteMatches(PaletteQuery query, bool (*matches)(const BlockState &)) const {
+    int8_t &cached = mPaletteQueries[(size_t) query];
+    if (cached < 0) {
+        cached = 0;
+        for (const std::vector<const BlockState *> *palette: {&mPalette, &mPalette2}) {
+            for (const BlockState *state: *palette) {
+                if (matches(*state)) {
+                    cached = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    return cached == 1;
 }
 
 bool SubChunk::hasLightEmitter() const {
@@ -315,14 +368,15 @@ bool SubChunk::isLayerEmpty(int layer) const {
         if (mPalette.size() != 1)
             return false;
 
-        return mPalette[0]->mName == "minecraft:air";
+        return isAir(mPalette[0], airState());
     }
 
     if (mBlocks2.empty())
         return true;
 
+    const BlockState *air = airState();
     for (int i = 0; i < BLOCK_COUNT; i++) {
-        if (mPalette2[mBlocks2[i]]->mName != "minecraft:air")
+        if (!isAir(mPalette2[mBlocks2[i]], air))
             return false;
     }
 
@@ -485,6 +539,7 @@ bool SubChunk::readPersistent(ReadOnlyBinaryStream &stream, bool *replacedUnknow
     if (layers == 0)
         return false;
 
+    _forgetPaletteQueries();
     if (!_readStorage(stream, mPalette, mBlocks, replacedUnknown))
         return false;
 

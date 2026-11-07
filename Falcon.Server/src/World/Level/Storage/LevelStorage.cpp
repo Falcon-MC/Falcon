@@ -4,6 +4,7 @@
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/BinaryStream.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
+#include "World/Level/Chunk/SubChunk.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Storage/FalconDataVersion.h"
 
@@ -12,6 +13,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 
@@ -30,6 +32,9 @@ namespace {
     const int32_t FINALIZED_STATE_NEEDS_POPULATION = 1;
     const int32_t FINALIZED_STATE_DONE = 2;
     const char *PENDING_BLOCK_CHANGES_PREFIX = "falcon_pending_block_changes";
+    // An NBT root starts with its tag type, never this byte, so the compact format is told apart from the old one.
+    const unsigned char PENDING_CHANGES_COMPACT_MARKER = 0xff;
+    const unsigned char PENDING_CHANGES_COMPACT_VERSION = 1;
     const std::string ACTOR_PREFIX = "actorprefix";
     const std::string ACTOR_DIGEST_PREFIX = "digp";
     const char *ACTOR_UNIQUE_ID_TAG = "UniqueID";
@@ -178,7 +183,10 @@ bool LevelStorage::open(const std::string &worldsDirectory, const std::string &l
     // worlds interchangeable with it.
     options.compression = leveldb::kZlibRawCompression;
     options.block_size = 163840;
-    options.write_buffer_size = 4 * 1024 * 1024;
+    // Chunk keys are spread over the whole key space, so every table flushed from the memtable overlaps all of
+    // level 1 and makes it be rewritten. With a 4 MB memtable, about 0.5 MB once compressed, saving freshly
+    // generated terrain kept compaction so far behind that writes stalled, an auto-save for seconds.
+    options.write_buffer_size = 32 * 1024 * 1024;
     mFilterPolicy.reset(leveldb::NewBloomFilterPolicy(10));
     mBlockCache.reset(leveldb::NewLRUCache(8 * 1024 * 1024));
     options.filter_policy = mFilterPolicy.get();
@@ -384,24 +392,31 @@ bool LevelStorage::mergePendingBlockChanges(int32_t chunkX, int32_t chunkZ,
         merged.push_back(change);
     }
 
-    Tag root = Tag::ofCompound();
-    Tag list = Tag::ofList(Tag::Type::Compound);
+    // Each state is written once, and every change refers to it by index: a chunk often holds thousands of
+    // spilled blocks of a few states, which as one NBT compound each would make every save rewrite megabytes.
+    BinaryStream stream;
+    stream.putByte(PENDING_CHANGES_COMPACT_MARKER);
+    stream.putByte(PENDING_CHANGES_COMPACT_VERSION);
 
+    std::unordered_map<const BlockState *, uint32_t> paletteIndex;
+    std::vector<const BlockState *> palette;
     for (const GeneratedBlockChange &change: merged) {
-        Tag entry = Tag::ofCompound();
-        entry.putInt("x", change.mX);
-        entry.putInt("y", change.mY);
-        entry.putInt("z", change.mZ);
-        if (change.mLayer != 0)
-            entry.putInt("layer", change.mLayer);
-        entry.put("block", change.mState.toNbt());
-        list.addToList(entry);
+        if (paletteIndex.emplace(change.mState, (uint32_t) palette.size()).second)
+            palette.push_back(change.mState);
     }
 
-    root.put("changes", list);
+    stream.putUnsignedVarInt((uint32_t) palette.size());
+    for (const BlockState *state: palette)
+        NbtIo::writeTag(stream, state->toNbt(), NbtVariant::LittleEndian);
 
-    BinaryStream stream;
-    NbtIo::writeTag(stream, root, NbtVariant::LittleEndian);
+    stream.putUnsignedVarInt((uint32_t) merged.size());
+    for (const GeneratedBlockChange &change: merged) {
+        stream.putVarInt(change.mX - chunkX * 16);
+        stream.putVarInt(change.mY);
+        stream.putVarInt(change.mZ - chunkZ * 16);
+        stream.putByte((unsigned char) (change.mLayer == 1 ? 1 : 0));
+        stream.putUnsignedVarInt(paletteIndex[change.mState]);
+    }
 
     const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), _makePendingChangesKey(chunkX, chunkZ),
                                             stream.getBuffer());
@@ -429,6 +444,44 @@ std::vector<GeneratedBlockChange> LevelStorage::loadPendingBlockChanges(int32_t 
     stream.setEncodingSettings(_storageEncodingSettings());
 
     try {
+        if (!data.empty() && (unsigned char) data[0] == PENDING_CHANGES_COMPACT_MARKER) {
+            stream.getByte();
+            if (stream.getByte() != PENDING_CHANGES_COMPACT_VERSION)
+                throw std::runtime_error("unknown pending change version");
+
+            const uint32_t paletteSize = stream.getUnsignedVarInt();
+            if (paletteSize > stream.getRemainingLength())
+                throw std::runtime_error("pending change palette overruns the record");
+
+            std::vector<const BlockState *> palette(paletteSize);
+            for (const BlockState *&state: palette) {
+                const Tag block = NbtIo::readTag(stream, NbtVariant::LittleEndian);
+                const Tag *states = block.get("states");
+                state = SubChunk::intern(BlockState(block.getString("name", "minecraft:air"),
+                                                    states == nullptr ? Tag::ofCompound() : *states));
+            }
+
+            const uint32_t count = stream.getUnsignedVarInt();
+            if (count > stream.getRemainingLength())
+                throw std::runtime_error("pending changes overrun the record");
+
+            changes.reserve(count);
+            for (uint32_t i = 0; i < count; i++) {
+                GeneratedBlockChange change;
+                change.mX = chunkX * 16 + stream.getVarInt();
+                change.mY = stream.getVarInt();
+                change.mZ = chunkZ * 16 + stream.getVarInt();
+                change.mLayer = stream.getByte() == 1 ? 1 : 0;
+                const uint32_t index = stream.getUnsignedVarInt();
+                if (index >= palette.size())
+                    throw std::runtime_error("pending change state out of range");
+                change.mState = palette[index];
+                changes.push_back(change);
+            }
+            return changes;
+        }
+
+        // worlds saved before the compact format hold one NBT compound per change
         const Tag root = NbtIo::readTag(stream, NbtVariant::LittleEndian);
         const Tag *list = root.get("changes");
         if (list == nullptr || !list->isList())
@@ -449,8 +502,8 @@ std::vector<GeneratedBlockChange> LevelStorage::loadPendingBlockChanges(int32_t 
             change.mY = entry.getInt("y");
             change.mZ = entry.getInt("z");
             change.mLayer = entry.getInt("layer", 0) == 1 ? 1 : 0;
-            change.mState = BlockState(block->getString("name", "minecraft:air"),
-                                       states == nullptr ? Tag::ofCompound() : *states);
+            change.mState = SubChunk::intern(BlockState(block->getString("name", "minecraft:air"),
+                                                        states == nullptr ? Tag::ofCompound() : *states));
             changes.push_back(change);
         }
     } catch (const std::exception &exception) {

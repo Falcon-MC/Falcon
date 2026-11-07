@@ -24,6 +24,12 @@ public:
 
     static void onBlockChanged(Level &level, int32_t x, int32_t y, int32_t z);
 
+    /**
+     * Recomputes the height and sky light of one column from its current blocks, which is what
+     * onBlockChanged does for a single block; a batch of changes relights each column once.
+     */
+    static void relightColumn(LevelChunk &chunk, int x, int z);
+
     static void updateBlockLight(Level &level, std::unordered_set<int64_t> &pending);
 
     static int64_t packPosition(int32_t x, int32_t y, int32_t z);

@@ -22,6 +22,12 @@ public:
 
     explicit SubChunk(int8_t y);
 
+    /**
+     * The shared copy of a block state, which lives as long as the process. Sections hold these, so a
+     * state passed back by address is found in a palette without comparing it.
+     */
+    static const BlockState *intern(const BlockState &state);
+
     int8_t getY() const { return mY; }
 
     const BlockState &getBlock(int x, int y, int z) const;
@@ -40,9 +46,24 @@ public:
 
     bool hasDynamicShapes() const;
 
+    // Questions asked of a section's palettes often enough to be remembered; each always comes with the same test.
+    enum class PaletteQuery : uint8_t {
+        RandomTick = 0,
+        Water = 1
+    };
+
+    /**
+     * Whether a state of either layer's palette passes `matches`, remembered until a palette changes. A palette may
+     * keep a state no block uses any more, so a true answer only means the section is worth scanning.
+     */
+    bool paletteMatches(PaletteQuery query, bool (*matches)(const BlockState &)) const;
+
     uint32_t getBiome(int x, int y, int z) const;
 
     void setBiome(int x, int y, int z, uint32_t biomeId);
+
+    // Gives every block of the section the same biome.
+    void fillBiome(uint32_t biomeId);
 
     // Drops the index array of a section that ended up holding a single biome, which is most of them.
     void compactBiomes();
@@ -91,4 +112,14 @@ private:
     PaletteIndices mBlocks2;
     std::vector<uint32_t> mBiomePalette;
     PaletteIndices mBiomes;
+    void _forgetPaletteQueries() const {
+        mPaletteQueries[0] = -1;
+        mPaletteQueries[1] = -1;
+        mEmptyCache = -1;
+    }
+
+    // per PaletteQuery: -1 until asked, then whether a palette state matched
+    mutable int8_t mPaletteQueries[2] = {-1, -1};
+    // -1 until isEmpty() runs, then its answer; it only changes with a palette or the second layer's blocks
+    mutable int8_t mEmptyCache = -1;
 };

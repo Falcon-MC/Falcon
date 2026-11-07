@@ -175,11 +175,33 @@ void OverworldGenerator::_generateBiomeMap(LevelChunk &chunk) const {
     // the zoom takes the level's 32-bit seed (vfunc +0x430 in sub_147186040)
     const BiomeZoom zoom((uint32_t) mSeed, originX, originY, originZ, BIOME_SAMPLE_COUNT_XZ, BIOME_SAMPLE_COUNT_Y,
                          BIOME_SAMPLE_COUNT_XZ);
-    for (int32_t x = 0; x < 16; x++) {
-        for (int32_t z = 0; z < 16; z++) {
-            for (int32_t y = OverworldGeneratorConstants::MIN_Y; y <= OverworldGeneratorConstants::MAX_Y; y++) {
-                const int32_t sample = zoom.nearestSample((chunk.getX() << 4) + x, y, (chunk.getZ() << 4) + z);
-                chunk.setBiomeAt(x, y, z, (uint32_t) samples[(size_t) sample]);
+    // A section only reads the 3x3x3 samples around it: when they all hold one biome, so does every block of it.
+    for (int32_t section = 0; section < LevelChunk::SUB_CHUNK_COUNT; section++) {
+        const int32_t sectionY = LevelChunk::MIN_Y + section * 16;
+        const int32_t first = samples[(size_t) zoom.sampleIndex(1, 2 * section + 1, 1)];
+        bool uniform = true;
+        for (int32_t indexX = 1; indexX <= 3 && uniform; indexX++) {
+            for (int32_t indexZ = 1; indexZ <= 3 && uniform; indexZ++) {
+                for (int32_t indexY = 2 * section + 1; indexY <= 2 * section + 3; indexY++) {
+                    if (samples[(size_t) zoom.sampleIndex(indexX, indexY, indexZ)] != first) {
+                        uniform = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (uniform) {
+            chunk.fillSubChunkBiome(section, (uint32_t) first);
+            continue;
+        }
+
+        for (int32_t x = 0; x < 16; x++) {
+            for (int32_t z = 0; z < 16; z++) {
+                for (int32_t y = sectionY; y < sectionY + 16; y++) {
+                    const int32_t sample = zoom.nearestSample((chunk.getX() << 4) + x, y, (chunk.getZ() << 4) + z);
+                    chunk.setBiomeAt(x, y, z, (uint32_t) samples[(size_t) sample]);
+                }
             }
         }
     }
