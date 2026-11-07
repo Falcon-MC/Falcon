@@ -447,6 +447,9 @@ namespace {
             int jumps = 0;
             player.setPosition(expected);
             player.setOnGround(true);
+            // the trajectory sprints from its first input: the sprint started on an earlier one, since the server
+            // keeps sprint from StartSprinting and the Sprinting bit alone does not start it
+            player.getFlags().set(ActorFlag::Sprinting, true);
             for (int tick = 1; tick <= 60; ++tick) {
                 const bool wasGrounded = grounded;
                 if (jumpDelay > 0)
@@ -863,29 +866,44 @@ namespace {
         level.getChunk(9, 0);
         level.getBlockActors().loadChunk(9, 0, {}, owner.getCodecContext());
         PlayerAuthInputPacket packet;
-        packet.mTick = 100;
+        packet.mTick = 99;
         packet.mInputData = {(int32_t) PlayerAuthInputData::StartFlying,
                              (int32_t) PlayerAuthInputData::WantUp,
                              (int32_t) PlayerAuthInputData::Jumping};
-        packet.mPosition = Vector3f(150.5f, 251.77f, 2.5f);
+        packet.mPosition = Vector3f(150.5f, 251.62f, 2.5f);
         player.getMovementInputs().enqueue(packet);
         MovementInputProbe::step(owner, player, 1);
+        // The client's FlyTriggerActionSystem (client 26.60 sub_145E0FB40) only queues the flying ability change,
+        // so the input that carries the toggle still travels with the old abilities.
+        require(player.isFlying() && std::fabs(player.getSimulatedVelocity().y - 0.09f) > 0.000002f,
+                "AuthInput StartFlying was not applied after the input that carries it");
+        player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
+        player.setSimulatedPosition(Vector3f(150.5f, 250.0f, 2.5f));
+        player.setSimulatedVelocity(Vector3f());
+        packet.mTick = 100;
+        packet.mInputData = {(int32_t) PlayerAuthInputData::WantUp, (int32_t) PlayerAuthInputData::Jumping};
+        packet.mPosition = Vector3f(150.5f, 251.77f, 2.5f);
+        player.getMovementInputs().enqueue(packet);
+        MovementInputProbe::step(owner, player, 2);
         require(player.isFlying() && std::fabs(player.getPosition().y - 250.15f) < 0.00003f
                 && std::fabs(player.getSimulatedVelocity().y - 0.09f) < 0.000002f,
-                "AuthInput StartFlying was not applied before simulation, or Jumping was confused with WantUpSlow");
+                "Flight controls did not apply on the input after StartFlying, or Jumping was confused with WantUpSlow");
         packet.mTick = 101;
         packet.mInputData = {(int32_t) PlayerAuthInputData::WantUp};
         packet.mPosition.y = 252.01f;
         player.getMovementInputs().enqueue(packet);
-        MovementInputProbe::step(owner, player, 2);
+        MovementInputProbe::step(owner, player, 3);
         require(player.isFlying() && std::fabs(player.getPosition().y - 250.39f) < 0.00003f,
                 "Flying state did not persist across subsequent input ticks");
         packet.mTick = 102;
         packet.mInputData = {(int32_t) PlayerAuthInputData::StopFlying};
         player.getMovementInputs().enqueue(packet);
-        MovementInputProbe::step(owner, player, 3);
-        require(!player.isFlying() && std::fabs(player.getSimulatedVelocity().y - 0.06272f) < 0.000002f,
-                "AuthInput StopFlying did not restore gravity on its own tick");
+        MovementInputProbe::step(owner, player, 4);
+        // The StopFlying input still travels as flying, idle, with the rules of checkCreativeFlightTrajectory: the
+        // previous input left (0.09 + 0.15 WantUp) * 0.6 drag, then idle mouse damping 0.375 and drag 0.6 again.
+        const float idleFlyingVelocity = (0.09f + 0.15f) * 0.6f * 0.375f * 0.6f;
+        require(!player.isFlying() && std::fabs(player.getSimulatedVelocity().y - idleFlyingVelocity) < 0.000002f,
+                "AuthInput StopFlying did not keep flying travel on its own tick");
         packet.mTick = 103;
         packet.mInputData = {(int32_t) PlayerAuthInputData::StartFlying,
                              (int32_t) PlayerAuthInputData::WantUp};
@@ -1377,7 +1395,8 @@ namespace {
         waterEffect.mDuration = 200;
         waterLevitation->addEffect(waterEffect);
         step(*waterLevitation);
-        close(waterLevitation->getSimulatedVelocity().y, 0.015f, "Water drag, levitation and gravity order differs");
+        // levitation II lifts by 0.02 and replaces the -0.005 water gravity
+        close(waterLevitation->getSimulatedVelocity().y, 0.02f, "Water drag, levitation and gravity order differs");
         auto swimming = makePlayer(false);
         step(*swimming, {(int32_t) PlayerAuthInputData::StartSwimming});
         close(swimming->getSimulatedVelocity().y, 0.0f, "Swimming incorrectly applied sinking gravity");
