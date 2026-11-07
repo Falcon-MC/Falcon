@@ -1311,8 +1311,8 @@ size_t Level::drainCompletedChunks() {
 }
 
 std::string Level::getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds) {
-    // The encoded sections are built off the main thread for the first send; keeping them for every
-    // loaded chunk costs more memory than re-encoding for the rare later viewer.
+    // Encoding is cheap next to what the sections would cost if kept for every loaded chunk, and most chunks
+    // have a single viewer, so nothing is kept once the chunk is sent.
     LevelChunk &chunk = getChunk(chunkX, chunkZ);
     std::string data = chunk.encodeNetwork(blockIds);
     chunk.invalidateNetworkCaches();

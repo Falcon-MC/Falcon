@@ -80,8 +80,6 @@ public:
 
     const std::vector<int32_t> &getTopBlockHeights() const;
 
-    void buildNetworkCaches() const;
-
     void invalidateNetworkCaches();
 
     std::string encodeBiomes(int sectionCount) const;

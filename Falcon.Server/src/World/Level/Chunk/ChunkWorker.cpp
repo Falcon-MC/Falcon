@@ -329,10 +329,6 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
     LightSystem::computeSkyLight(*chunk);
     LightSystem::computeBlockLight(*chunk);
 
-    // Lighting and network encoding are done here, off the main thread, so the main thread
-    // only has to swap the finished chunk in.
-    chunk->buildNetworkCaches();
-
     result.mChunk = std::move(chunk);
 
     mCompleted.push(std::move(result));

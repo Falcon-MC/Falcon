@@ -28,18 +28,6 @@ void LevelChunk::invalidateNetworkCaches() {
     mNetworkAnchorValid = false;
 }
 
-void LevelChunk::buildNetworkCaches() const {
-    for (int i = 0; i < SUB_CHUNK_COUNT; i++) {
-        if (mSubChunks[(size_t) i].isEmpty())
-            continue;
-
-        encodeSubChunkNetwork(i);
-    }
-
-    getTopBlockHeights();
-    encodeNetworkAnchor();
-}
-
 int32_t LevelChunk::getHeight(int x, int z) const {
     if (mHeightmap.empty())
         return MIN_Y;
