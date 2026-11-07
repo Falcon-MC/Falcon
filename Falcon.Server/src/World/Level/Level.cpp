@@ -8,6 +8,7 @@
 #include "World/Level/LightSystem.h"
 
 #include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/BlockLightProperties.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -16,6 +17,7 @@
 #include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
+#include <bitset>
 #include <cmath>
 #include <cstdlib>
 #include <iterator>
@@ -66,6 +68,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mActiveColumns = std::move(other.mActiveColumns);
     mCompletedChunks = std::move(other.mCompletedChunks);
     mDeferredSaves = std::move(other.mDeferredSaves);
+    mIdleSaves = std::move(other.mIdleSaves);
     mQueuedEntityErasures = std::move(other.mQueuedEntityErasures);
     mErasingEntityBatch = std::move(other.mErasingEntityBatch);
     mErasingEntities = std::move(other.mErasingEntities);
@@ -173,14 +176,19 @@ void Level::saveAll(bool wait) {
     if (wait || !async) {
         _finishPendingChangeWrite(true);
         _flushPendingBlockChanges(true);
+        mParkedChangesToFlush = 0;
     } else {
-        _flushPendingBlockChanges(false);
+        // Every change parked now is written over the next ticks, one batch at a time, so this save
+        // covers the blocks that the chunks it saves spilled into their neighbours.
+        mParkedChangesToFlush = mPendingBlockChangeCount;
+        _flushParkedChanges();
     }
 
     size_t saved = 0;
     // A full save covers everything a background save still has queued.
     if (wait || !async) {
         mDeferredSaves.clear();
+        mIdleSaves.clear();
         _flushEntityErasures(true);
     }
 
@@ -487,7 +495,7 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
         const auto stored = mStorage.loadPendingBlockChanges(chunkX, chunkZ);
         for (const auto &change: stored) {
             if (change.mY >= LevelChunk::MIN_Y && change.mY <= LevelChunk::MAX_Y)
-                chunk.setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mState);
+                chunk.setBlock(change.mX & 15, change.mY, change.mZ & 15, *change.mState);
         }
         if (!stored.empty()) {
             LightSystem::computeSkyLight(chunk);
@@ -597,6 +605,14 @@ void Level::_replayPendingChanges(int64_t key) {
 }
 
 void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &changes) {
+    // A feature spills many blocks into the same few columns; each touched column is relit once
+    // after the whole batch instead of once per block, which gives the same light.
+    std::unordered_map<int64_t, std::pair<LevelChunk *, std::bitset<256>>> touchedColumns;
+    int64_t lastKey = 0;
+    LevelChunk *lastChunk = nullptr;
+    bool lastParked = false;
+    bool haveLast = false;
+
     for (const GeneratedBlockChange &change: changes) {
         if (change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y)
             continue;
@@ -605,10 +621,17 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
         const int32_t chunkZ = change.mZ >> 4;
         const int64_t key = _packChunk(chunkX, chunkZ);
 
-        LevelChunk *chunk = peekChunkPtr(chunkX, chunkZ);
+        if (!haveLast || key != lastKey) {
+            lastKey = key;
+            lastChunk = peekChunkPtr(chunkX, chunkZ);
+            lastParked = lastChunk == nullptr || mPendingChunks.find(key) != mPendingChunks.end();
+            haveLast = true;
+        }
+
+        LevelChunk *chunk = lastChunk;
         // Feature blocks that spill into a chunk which is absent or still being loaded are
         // kept aside, replayed once it arrives, or merged into storage on save.
-        if (chunk == nullptr || mPendingChunks.find(key) != mPendingChunks.end()) {
+        if (lastParked) {
             mPendingBlockChanges[key].push_back(change);
             ++mPendingBlockChangeCount;
             continue;
@@ -617,17 +640,43 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
         const int32_t localX = change.mX & 15;
         const int32_t localZ = change.mZ & 15;
 
-        if (chunk->getBlock(localX, change.mY, localZ, change.mLayer) == change.mState)
+        // Both states are interned, so they are equal exactly when they are the same object.
+        const BlockState &previous = chunk->getBlock(localX, change.mY, localZ, change.mLayer);
+        if (&previous == change.mState)
             continue;
 
-        chunk->setBlock(localX, change.mY, localZ, change.mLayer, change.mState);
-        LightSystem::onBlockChanged(*this, change.mX, change.mY, change.mZ);
-        mRepopulatedChunks.insert(key);
+        const int32_t previousLight = BlockLightProperties::packed(previous);
+        const int32_t nextLight = BlockLightProperties::packed(*change.mState);
+        chunk->setBlock(localX, change.mY, localZ, change.mLayer, *change.mState);
+        std::pair<LevelChunk *, std::bitset<256>> &touched = touchedColumns[key];
+        touched.first = chunk;
+
+        // Most spilled blocks are stone variants swapped for one another: a block with the same light
+        // properties leaves the column's height and sky light as they were, and an opaque block that
+        // emits nothing holds no block light either way.
+        if (previousLight == nextLight) {
+            if (!BlockLightProperties::isTransparent(nextLight) && BlockLightProperties::lightLevel(nextLight) == 0)
+                continue;
+        } else {
+            touched.second.set((size_t) (localX * 16 + localZ));
+        }
+        addBlockLightUpdate(change.mX, change.mY, change.mZ);
+    }
+
+    for (const auto &entry: touchedColumns) {
+        mRepopulatedChunks.insert(entry.first);
+        if (entry.second.second.none())
+            continue;
+
+        for (size_t column = 0; column < 256; ++column) {
+            if (entry.second.second.test(column))
+                LightSystem::relightColumn(*entry.second.first, (int) (column / 16), (int) (column % 16));
+        }
     }
 }
 
 size_t Level::processGeneratedChanges() {
-    _flushPendingBlockChanges(false);
+    _flushParkedChanges();
     if (mIncomingChanges.empty())
         return 0;
 
@@ -677,6 +726,19 @@ void Level::_finishPendingChangeWrite(bool wait) {
                             std::make_move_iterator(newer.end()));
         newer = std::move(entry.second);
     }
+}
+
+void Level::_flushParkedChanges() {
+    if (mParkedChangesToFlush == 0 && mPendingBlockChangeCount <= PARKED_CHANGES_IN_MEMORY) {
+        _finishPendingChangeWrite(false);
+        return;
+    }
+
+    const size_t before = mPendingBlockChangeCount;
+    _flushPendingBlockChanges(false);
+    const size_t handed = before > mPendingBlockChangeCount ? before - mPendingBlockChangeCount : 0;
+    mParkedChangesToFlush = handed >= mParkedChangesToFlush || mPendingBlockChangeCount == 0
+                            ? 0 : mParkedChangesToFlush - handed;
 }
 
 void Level::_flushPendingBlockChanges(bool includeInFlight) {
@@ -806,14 +868,44 @@ void Level::setOccupiedColumns(std::unordered_set<int64_t> columns) {
     mOccupiedColumns = std::move(columns);
 }
 
+/**
+ * A chunk whose eight neighbours are populated receives no more spilled feature blocks, so its generated
+ * content is final: it is queued for a background save that runs once generation goes quiet. Freshly
+ * streamed terrain is then on disk well before the next auto-save, which no longer has to write it all at
+ * once, and the saves never compete with players waiting for terrain.
+ */
+void Level::_queueCompletedSaves(int32_t chunkX, int32_t chunkZ) {
+    if (!mStorage.isOpen() || mChunkWorker == nullptr || !mChunkWorker->isRunning())
+        return;
+
+    for (int32_t dx = -1; dx <= 1; ++dx) {
+        for (int32_t dz = -1; dz <= 1; ++dz) {
+            const int32_t x = chunkX + dx;
+            const int32_t z = chunkZ + dz;
+            bool complete = isChunkPopulated(x, z);
+            for (int32_t nx = -1; nx <= 1 && complete; ++nx) {
+                for (int32_t nz = -1; nz <= 1 && complete; ++nz)
+                    complete = isChunkPopulated(x + nx, z + nz);
+            }
+
+            if (complete)
+                mIdleSaves.push_back(_packChunk(x, z));
+        }
+    }
+}
+
 void Level::processDeferredSaves() {
     _flushEntityErasures(false);
 
+    const bool generationIdle = mChunkWorker != nullptr && mChunkWorker->getOutstandingGenerationCount() == 0
+                                && mPendingChunks.empty() && mCompletedChunks.empty();
     const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + DEFERRED_SAVE_BUDGET;
-    while (!mDeferredSaves.empty() && std::chrono::steady_clock::now() < deadline
+    while ((!mDeferredSaves.empty() || (generationIdle && !mIdleSaves.empty()))
+           && std::chrono::steady_clock::now() < deadline
            && mChunkWorker != nullptr && mChunkWorker->getPendingSaveCount() < MAX_QUEUED_BACKGROUND_SAVES) {
-        const int64_t key = mDeferredSaves.front();
-        mDeferredSaves.pop_front();
+        std::deque<int64_t> &queue = mDeferredSaves.empty() ? mIdleSaves : mDeferredSaves;
+        const int64_t key = queue.front();
+        queue.pop_front();
 
         auto chunk = mChunks.find(key);
         if (chunk == mChunks.end() || mChunkWorker == nullptr || !mChunkWorker->isRunning())
@@ -838,8 +930,10 @@ size_t Level::processChunkUnloads() {
         return 0;
 
     size_t unloaded = 0;
+    size_t queuedSaves = 0;
 
-    for (auto it = mUnloadQueue.begin(); it != mUnloadQueue.end() && unloaded < MAX_CHUNK_UNLOADS_PER_TICK;) {
+    for (auto it = mUnloadQueue.begin();
+         it != mUnloadQueue.end() && unloaded + queuedSaves < MAX_CHUNK_UNLOADS_PER_TICK;) {
         const int64_t key = *it;
 
         if (mChunkLoaders.find(key) != mChunkLoaders.end() || mOccupiedColumns.find(key) != mOccupiedColumns.end()) {
@@ -860,12 +954,23 @@ size_t Level::processChunkUnloads() {
             continue;
         }
 
-        // The save is synchronous: an async save still queued on a worker could be overtaken by a
-        // synchronous getChunk() reading the old version back from storage. For the same reason a
-        // chunk waits while an earlier save of it is queued, which would otherwise land last. A
-        // chunk that cannot be saved stays resident instead of losing its changes.
+        // A chunk is only freed once no save of it is queued: a synchronous getChunk() would otherwise read
+        // the old version back from storage. A chunk whose save failed stays resident instead of losing
+        // its changes.
         if (mChunkWorker != nullptr && mChunkWorker->hasPendingSave(chunk->second.getX(), chunk->second.getZ())) {
             ++it;
+            continue;
+        }
+
+        // A dirty chunk is saved by a worker from a copy, so the tick never waits on storage; it stays
+        // resident and queued until that save has landed.
+        if (chunk->second.isDirty() && mStorage.isOpen() && mChunkWorker != nullptr && mChunkWorker->isRunning()) {
+            std::unique_ptr<LevelChunk> copy(new LevelChunk(chunk->second));
+            copy->invalidateNetworkCaches();
+            mChunkWorker->requestSave(std::move(copy));
+            chunk->second.clearDirty();
+            ++it;
+            queuedSaves++;
             continue;
         }
 
@@ -1041,8 +1146,25 @@ bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
         return false;
     }
 
-    if (!mChunkWorker->requestLoad(chunkX, chunkZ))
+    // The blocks spilled into the chunk while it was absent travel with the load and are applied on the
+    // worker, so the main thread does not replay them once it arrives.
+    std::vector<GeneratedBlockChange> parked;
+    const auto pending = mPendingBlockChanges.find(key);
+    if (pending != mPendingBlockChanges.end())
+        parked.swap(pending->second);
+    const size_t parkedCount = parked.size();
+
+    if (!mChunkWorker->requestLoad(chunkX, chunkZ, parked)) {
         mPendingChunks.erase(key);
+        if (parkedCount != 0)
+            pending->second.swap(parked);
+        return false;
+    }
+
+    if (parkedCount != 0) {
+        mPendingBlockChangeCount -= parkedCount;
+        mPendingBlockChanges.erase(pending);
+    }
     return false;
 }
 
@@ -1097,6 +1219,7 @@ size_t Level::drainCompletedChunks() {
 
             _queueGeneratedChanges(std::move(result.mOverflowChanges));
             _refreshChunkShapes(result.mX, result.mZ);
+            _queueCompletedSaves(result.mX, result.mZ);
         }
 
         _replayPendingChanges(key);

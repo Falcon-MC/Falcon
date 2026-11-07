@@ -7,6 +7,7 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Protocol/Packets/CommandRequestPacket.h"
+#include "World/Level/Chunk/SubChunk.h"
 
 #include <algorithm>
 #include <chrono>
@@ -40,7 +41,7 @@ public:
             change.mX = i % 16;
             change.mZ = (i / 16) % 16;
             change.mY = invalidY ? LevelChunk::MIN_Y - 1 : 140 + i / 256;
-            change.mState = BlockState("minecraft:diamond_block");
+            change.mState = SubChunk::intern(BlockState("minecraft:diamond_block"));
             level.mIncomingChanges.push_back(std::move(change));
         }
     }
@@ -53,7 +54,7 @@ public:
             change.mX = x * 16 + i % 16;
             change.mZ = z * 16 + (i / 16) % 16;
             change.mY = 140 + (i / 256) % 64;
-            change.mState = BlockState(block);
+            change.mState = SubChunk::intern(BlockState(block));
             changes.push_back(std::move(change));
         }
         level.mPendingBlockChangeCount += count;
@@ -289,11 +290,13 @@ int main() {
             require(pending.openStorage(WorldManager::getWorldsDirectory()), "Could not open pending fixture");
             pending.startWorkers(1);
             LevelPersistenceProbe::stagePending(pending, 32, 32, 16384);
-            const auto start = std::chrono::steady_clock::now();
             require(pending.processGeneratedChanges() == 0, "Persistence changed the generation budget");
+            require(!LevelPersistenceProbe::writing(pending), "A few parked changes were written on a tick");
+            const auto start = std::chrono::steady_clock::now();
+            pending.saveAll(false);
             const double queuedMicros = std::chrono::duration<double, std::micro>(
                     std::chrono::steady_clock::now() - start).count();
-            require(LevelPersistenceProbe::writing(pending), "Tick did not hand persistence to a worker");
+            require(LevelPersistenceProbe::writing(pending), "Save did not hand persistence to a worker");
             require(pending.getBlockState(32 * 16, 140, 32 * 16).mName == "minecraft:diamond_block",
                     "Synchronous load missed the pending write");
             LevelPersistenceProbe::stagePending(pending, 35, 35, 1, "minecraft:glowstone");
@@ -332,14 +335,14 @@ int main() {
             LevelPersistenceProbe::failPendingWrite(pending, 33, 33);
             require(pending.getPendingChangeChunkCount() == 1, "Failed persistence discarded its payload");
             LevelPersistenceProbe::stagePending(pending, 33, 33, 1, "minecraft:gold_block");
-            pending.processGeneratedChanges();
+            pending.saveAll(false);
             LevelPersistenceProbe::finishWrites(pending);
             const auto saved = LevelPersistenceProbe::storedPending(pending, 33, 33);
             require(saved.size() == 1024, "Retry lost or duplicated positions");
             const auto newest = std::find_if(saved.begin(), saved.end(), [](const GeneratedBlockChange &change) {
                 return change.mX == 33 * 16 && change.mY == 140 && change.mZ == 33 * 16;
             });
-            require(newest != saved.end() && newest->mState.mName == "minecraft:gold_block", "Retry overwrote a newer state");
+            require(newest != saved.end() && newest->mState->mName == "minecraft:gold_block", "Retry overwrote a newer state");
             LevelPersistenceProbe::stagePending(pending, 34, 34, 1024);
             pending.processGeneratedChanges();
             pending.closeStorage();

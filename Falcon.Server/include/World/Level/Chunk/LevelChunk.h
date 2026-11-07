@@ -55,6 +55,8 @@ public:
 
     void setBiomeAt(int x, int32_t y, int z, uint32_t biomeId);
 
+    void fillSubChunkBiome(int index, uint32_t biomeId);
+
     uint32_t getBiomeAt(int x, int32_t y, int z) const;
 
     void setColumnBiome(int x, int z, uint32_t biomeId);

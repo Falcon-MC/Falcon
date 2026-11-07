@@ -44,6 +44,8 @@ private:
 
     Shift _shift(int32_t quartX, int32_t quartZ) const;
 
+    int32_t _computePreliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const;
+
     TerrainSpline::Climate _climate(const Shift &shift) const;
 
     NormalNoisePtr mTemperature;
@@ -56,4 +58,6 @@ private:
     TerrainSplinePtr mOffsetSpline;
     TerrainSplinePtr mFactorSpline;
     TerrainSplinePtr mJaggednessSpline;
+    // tells the climates apart in the per-thread preliminary surface cache, unlike an address that may be reused
+    uint64_t mId;
 };

@@ -555,7 +555,8 @@ namespace {
                       const std::function<void(LevelChunk &)> &visit) {
         const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(gDimension,
                                                                                          seed);
-        GeneratorChunkSource source(seed, gDimension);
+        TerrainCache terrainCache;
+        GeneratorChunkSource source(seed, gDimension, terrainCache);
         std::unordered_map<int64_t, LevelChunk> waiting;
         std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> spilled;
 
@@ -595,7 +596,7 @@ namespace {
                         spilled.find(key);
                 if (changes != spilled.end()) {
                     for (const GeneratedBlockChange &change: changes->second)
-                        finished.setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, change.mState);
+                        finished.setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
                     spilled.erase(changes);
                 }
 

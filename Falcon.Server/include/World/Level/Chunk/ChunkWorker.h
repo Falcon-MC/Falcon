@@ -18,6 +18,7 @@
 class ChunkGenerator;
 class LevelStorage;
 class GeneratorChunkSource;
+class TerrainCache;
 
 struct ChunkTask {
     enum class Kind : int {
@@ -77,7 +78,8 @@ public:
 
     size_t getThreadCount() const { return mQueues.size(); }
 
-    bool requestLoad(int32_t chunkX, int32_t chunkZ);
+    // `parked` are feature blocks spilled into the chunk while it was absent; they are applied before it is lit.
+    bool requestLoad(int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> &parked);
 
     void requestSave(std::unique_ptr<LevelChunk> chunk);
 
@@ -131,7 +133,7 @@ private:
     bool _reserveGeneration();
 
     void _finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident,
-                      bool generated);
+                      bool generated, const std::vector<GeneratedBlockChange> &parked);
 
     size_t _queueIndexFor(int32_t chunkX, int32_t chunkZ) const;
 
@@ -140,6 +142,7 @@ private:
     const ChunkGenerator &mGenerator;
     LevelStorage &mStorage;
 
+    std::unique_ptr<TerrainCache> mTerrainCache;
     std::vector<std::unique_ptr<GeneratorChunkSource>> mSources;
     std::vector<std::unique_ptr<TaskQueue<ChunkTask>>> mQueues;
     TaskQueue<ChunkLoadResult> mCompleted;
