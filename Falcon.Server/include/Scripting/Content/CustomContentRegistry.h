@@ -12,6 +12,12 @@ class BehaviorPackManager;
 class ItemDefinitionRegistry;
 class BlockDefinitionRegistry;
 
+// one minecraft:repairable repair_items entry: the items that repair, and the repair_amount Molang or number
+struct CustomRepairEntry {
+    std::vector<std::string> mItems;
+    std::string mAmount;
+};
+
 struct CustomItemDefinition {
     std::string mIdentifier;
     std::string mDisplayName;
@@ -32,6 +38,7 @@ struct CustomItemDefinition {
     bool mDiggerUseEfficiency = false;
     int32_t mDiggerToolSpeed = 0;
     std::unordered_map<std::string, int32_t> mDiggerBlockSpeeds;
+    std::vector<CustomRepairEntry> mRepairItems;
     int32_t mNetworkId = 0;
 };
 
@@ -115,6 +122,8 @@ public:
     const CustomActorDefinition *getActorDefinition(const std::string &identifier) const;
 
     int32_t getItemMaxStackSize(const std::string &identifier) const;
+
+    const CustomItemDefinition *findItem(const std::string &identifier) const;
 
     int32_t getDiggerSpeed(const std::string &itemId, const std::string &blockName, bool blockNeedsStandardTool,
                            bool &useEfficiency) const;

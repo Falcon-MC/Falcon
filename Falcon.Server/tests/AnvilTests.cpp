@@ -1,3 +1,5 @@
+#include "Protocol/Types/ItemDefinitionRegistry.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Inventory/AnvilRepair.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemData.h"
@@ -173,6 +175,30 @@ namespace {
         require(!creative.mResult.isAir() && creative.mCost == 40, "creative ignores too expensive");
     }
 
+    // a behavior pack item repaired through its minecraft:repairable entries
+    void customRepair() {
+        CustomItemDefinition blade;
+        blade.mIdentifier = "test:ruby_blade";
+        blade.mMaxStackSize = 1;
+        blade.mMaxDurability = 400;
+        blade.mRepairItems.push_back({{"test:ruby"}, "q.max_durability * 0.25"});
+        blade.mRepairItems.push_back({{"test:ruby_blade"},
+                                      "context.other->query.remaining_durability + 0.05 * context.other->query.max_durability"});
+        ItemDefinitionRegistry items;
+        require(CustomContentRegistry::getInstance().registerItem(blade, items) != nullptr, "custom item registers");
+
+        const AnvilResult rubies = combine(stack("test:ruby_blade", 1, 300), stack("test:ruby", 3));
+        require(!rubies.mResult.isAir(), "rubies repair the custom blade");
+        require(rubies.mMaterialCost == 3 && rubies.mCost == 3, "each ruby restores a quarter");
+        require(rubies.mResult.mDamage == 0, "three rubies restore 300 damage");
+
+        const AnvilResult two = combine(stack("test:ruby_blade", 1, 300), stack("test:ruby_blade", 1, 300));
+        require(!two.mResult.isAir() && two.mResult.mDamage < 300, "a second blade repairs the first");
+
+        require(combine(stack("test:ruby_blade", 1, 300), stack("minecraft:diamond")).mResult.isAir(),
+                "an unlisted material does nothing");
+    }
+
     void enchantValues() {
         const std::vector<EnchantmentInstance> list = {{EnchantmentIds::SHARPNESS, 5}, {EnchantmentIds::UNBREAKING, 3},
                                                        {EnchantmentIds::FORTUNE, 2}, {EnchantmentIds::THORNS, 1}};
@@ -189,6 +215,7 @@ int main() {
         renaming();
         penalties();
         enchantValues();
+        customRepair();
         std::cout << "anvil repair, merge and rename checks passed\n";
         return 0;
     } catch (const std::exception &error) {

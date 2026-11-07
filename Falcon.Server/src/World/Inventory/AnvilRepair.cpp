@@ -3,9 +3,14 @@
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemProperties.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
 #include <utility>
+#include <vector>
 
 const char *AnvilRepair::TAG_REPAIR_COST = "RepairCost";
 
@@ -53,9 +58,215 @@ namespace {
         return item.isAir() ? nullptr : ItemDataTable::find(identifierOf(item));
     }
 
+    const CustomItemDefinition *customOf(const ItemStack &item) {
+        return item.isAir() ? nullptr : CustomContentRegistry::getInstance().findItem(identifierOf(item));
+    }
+
+    // behavior pack items take their maximum durability from minecraft:durability
     int32_t maxDamageOf(const ItemStack &item) {
         const ItemData *data = dataOf(item);
-        return data == nullptr ? 0 : data->mMaxDurability;
+        if (data != nullptr)
+            return data->mMaxDurability;
+
+        const CustomItemDefinition *custom = customOf(item);
+        return custom == nullptr ? 0 : custom->mMaxDurability;
+    }
+
+    // The repair_amount Molang a pack writes: numbers, + - * /, parentheses, math.floor, math.ceil, math.round,
+    // math.abs, math.min and math.max, and the durability queries of the repaired item (query.*) and of the
+    // material (context.other->query.*).
+    class RepairAmountParser {
+    public:
+        RepairAmountParser(const std::string &text, const ItemStack &item, const ItemStack &other)
+                : mText(text), mItem(item), mOther(other) {
+        }
+
+        bool parse(double &out) {
+            out = _sum();
+            _skip();
+            return mValid && mPosition == mText.size();
+        }
+
+    private:
+        const std::string &mText;
+        const ItemStack &mItem;
+        const ItemStack &mOther;
+        size_t mPosition = 0;
+        bool mValid = true;
+
+        void _skip() {
+            while (mPosition < mText.size() && std::isspace((unsigned char) mText[mPosition]))
+                ++mPosition;
+        }
+
+        bool _accept(char c) {
+            _skip();
+            if (mPosition < mText.size() && mText[mPosition] == c) {
+                ++mPosition;
+                return true;
+            }
+            return false;
+        }
+
+        double _sum() {
+            double value = _product();
+            while (mValid) {
+                if (_accept('+'))
+                    value += _product();
+                else if (_accept('-'))
+                    value -= _product();
+                else
+                    break;
+            }
+            return value;
+        }
+
+        double _product() {
+            double value = _unary();
+            while (mValid) {
+                if (_accept('*')) {
+                    value *= _unary();
+                } else if (_accept('/')) {
+                    const double divisor = _unary();
+                    value = divisor == 0.0 ? 0.0 : value / divisor;
+                } else {
+                    break;
+                }
+            }
+            return value;
+        }
+
+        double _unary() {
+            if (_accept('-'))
+                return -_unary();
+            if (_accept('+'))
+                return _unary();
+            return _primary();
+        }
+
+        std::string _name() {
+            _skip();
+            std::string name;
+            while (mPosition < mText.size()) {
+                const char c = mText[mPosition];
+                if (std::isalnum((unsigned char) c) || c == '_' || c == '.') {
+                    name += (char) std::tolower((unsigned char) c);
+                    ++mPosition;
+                } else if (c == '-' && mPosition + 1 < mText.size() && mText[mPosition + 1] == '>') {
+                    name += "->";
+                    mPosition += 2;
+                } else {
+                    break;
+                }
+            }
+            return name;
+        }
+
+        static std::string _expand(const std::string &name) {
+            std::string expanded = name;
+            if (expanded.rfind("c.", 0) == 0)
+                expanded = "context." + expanded.substr(2);
+
+            const size_t arrow = expanded.find("->");
+            const size_t queryAt = arrow == std::string::npos ? 0 : arrow + 2;
+            if (expanded.compare(queryAt, 2, "q.") == 0)
+                expanded = expanded.substr(0, queryAt) + "query." + expanded.substr(queryAt + 2);
+            return expanded;
+        }
+
+        static double _durability(const ItemStack &item, const std::string &query) {
+            const int32_t maxDamage = maxDamageOf(item);
+            if (query == "query.max_durability")
+                return maxDamage;
+            if (query == "query.remaining_durability")
+                return std::max(0, maxDamage - item.mDamage);
+            return 0.0;
+        }
+
+        double _primary() {
+            if (_accept('(')) {
+                const double value = _sum();
+                if (!_accept(')'))
+                    mValid = false;
+                return value;
+            }
+
+            _skip();
+            if (mPosition < mText.size()
+                && (std::isdigit((unsigned char) mText[mPosition]) || mText[mPosition] == '.')) {
+                char *end = nullptr;
+                const double value = std::strtod(mText.c_str() + mPosition, &end);
+                mPosition = (size_t) (end - mText.c_str());
+                if (mPosition < mText.size() && (mText[mPosition] == 'f' || mText[mPosition] == 'F'))
+                    ++mPosition;
+                return value;
+            }
+
+            const std::string name = _expand(_name());
+            if (name.empty()) {
+                mValid = false;
+                return 0.0;
+            }
+
+            if (name.rfind("math.", 0) == 0)
+                return _math(name);
+
+            const std::string otherPrefix = "context.other->";
+            if (name.rfind(otherPrefix, 0) == 0)
+                return _durability(mOther, name.substr(otherPrefix.size()));
+            return _durability(mItem, name);
+        }
+
+        double _math(const std::string &name) {
+            std::vector<double> arguments;
+            if (_accept('(')) {
+                if (!_accept(')')) {
+                    do {
+                        arguments.push_back(_sum());
+                    } while (mValid && _accept(','));
+                    if (!_accept(')'))
+                        mValid = false;
+                }
+            }
+
+            const double first = arguments.empty() ? 0.0 : arguments[0];
+            const double second = arguments.size() < 2 ? 0.0 : arguments[1];
+            if (name == "math.floor")
+                return std::floor(first);
+            if (name == "math.ceil")
+                return std::ceil(first);
+            if (name == "math.round")
+                return std::round(first);
+            if (name == "math.abs")
+                return std::fabs(first);
+            if (name == "math.min")
+                return std::min(first, second);
+            if (name == "math.max")
+                return std::max(first, second);
+            mValid = false;
+            return 0.0;
+        }
+    };
+
+    // RepairableItemComponent (sub_148F1BBF0): the first repair_items entry that lists the material gives the
+    // amount, evaluated with the material as context.other; -1 when the item has no entry for it.
+    int32_t customRepairAmount(const ItemStack &item, const ItemStack &material) {
+        const CustomItemDefinition *custom = customOf(item);
+        if (custom == nullptr || material.isAir())
+            return -1;
+
+        const std::string &materialId = identifierOf(material);
+        for (const CustomRepairEntry &entry: custom->mRepairItems) {
+            if (std::find(entry.mItems.begin(), entry.mItems.end(), materialId) == entry.mItems.end())
+                continue;
+
+            double amount = 0.0;
+            RepairAmountParser parser(entry.mAmount, item, material);
+            if (!parser.parse(amount))
+                return -1;
+            return std::max(0, (int32_t) amount);
+        }
+        return -1;
     }
 
     // ItemStackBase::isDamageableItem (sub_141ACF450): the item can take damage and is not Unbreakable.
@@ -330,42 +541,45 @@ AnvilResult AnvilRepair::createResult(const ItemStack &input, const ItemStack &m
             return outcome;
 
         bool repaired = false;
+        const bool sameItem = identifierOf(material) == identifierOf(input);
+        int32_t amount = -1;
         if (isSpear(input)) {
             // Spears are repaired through their minecraft:repairable component: a second spear restores its
             // remaining durability, a tier material a quarter of the maximum durability per item
             // (sub_148F1BBF0).
-            const bool sameItem = identifierOf(material) == identifierOf(input);
-            int32_t amount = -1;
             if (sameItem)
                 amount = maxDamageOf(material) - material.mDamage;
             else if (dataOf(input) != nullptr && matchesToolTier(dataOf(input)->mToolTier, identifierOf(material)))
                 amount = (int32_t) ((float) maxDamageOf(input) * 0.25f);
+        } else {
+            // behavior pack items repair through the same component, with the amount their pack gives
+            amount = customRepairAmount(input, material);
+        }
 
-            if (amount >= 0) {
-                repaired = true;
-                const int32_t used = repairWith(result, material.mCount, amount);
-                outcome.mMaterialCost = used;
-                cost = sameItem ? used * 2 : used;
-                if (sameItem) {
-                    const int32_t bonus = std::min(7 * maxDamageOf(result) / 100, result.mDamage);
-                    if (result.mDamage > bonus)
-                        result.mDamage -= bonus;
-                    outcome.mMaterialCost = input.mCount;
-                }
-
-                const int32_t enchantCost = mergeEnchantments(input, material, result, book, enchantedBook);
-                if (enchantCost > 0)
-                    cost += enchantCost;
+        if (amount >= 0) {
+            repaired = true;
+            const int32_t used = repairWith(result, material.mCount, amount);
+            outcome.mMaterialCost = used;
+            cost = sameItem ? used * 2 : used;
+            if (sameItem) {
+                const int32_t bonus = std::min(7 * maxDamageOf(result) / 100, result.mDamage);
+                if (result.mDamage > bonus)
+                    result.mDamage -= bonus;
+                outcome.mMaterialCost = input.mCount;
             }
+
+            const int32_t enchantCost = mergeEnchantments(input, material, result, book, enchantedBook);
+            if (enchantCost > 0)
+                cost += enchantCost;
         }
 
         if (!repaired) {
             if (isDamageable(result) && isValidRepairItem(input, material)) {
-                const int32_t amount = maxDamageOf(result) / 4;
-                if (std::min(amount, result.mDamage) <= 0)
+                const int32_t quarter = maxDamageOf(result) / 4;
+                if (std::min(quarter, result.mDamage) <= 0)
                     return outcome;
 
-                cost = repairWith(result, material.mCount, amount);
+                cost = repairWith(result, material.mCount, quarter);
                 outcome.mMaterialCost = cost;
             } else {
                 if (!book && (identifierOf(input) != identifierOf(material) || isUnmergeable(material)
