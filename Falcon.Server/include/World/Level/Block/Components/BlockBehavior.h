@@ -23,4 +23,9 @@ public:
     virtual bool onEntityLand(Actor &actor, float downwardVelocity) const;
 
     virtual std::optional<float> getFallDamage(const Actor &actor, float vanillaFallDamage) const;
+
+    // scales the fall distance before the fall damage is worked out, like the game's onFallOn handlers
+    virtual float getFallDistanceMultiplier() const {
+        return 1.0f;
+    }
 };
