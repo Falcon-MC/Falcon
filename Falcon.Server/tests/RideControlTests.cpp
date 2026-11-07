@@ -1,6 +1,8 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Movement/RideControlSystem.h"
+#include "World/Actor/RideSystem.h"
+#include "World/Actor/Misc/CushionActor.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/ServerPaths.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
@@ -71,6 +73,18 @@ namespace {
         rider._setVehicleId(mount.getUniqueId());
         owner.getActors().emplace(mount.getUniqueId(), std::move(mountOwner));
         const auto air = json::parse(R"({"minecraft:free_camera_controlled":{"strafe_speed_modifier":1.0},"minecraft:flying_speed":{"value":0.016}})");
+        RideControlProbe::components(mount, *air);
+        const auto seats = json::parse(R"({"minecraft:rideable":{"seats":{"position":[0.0,1.1,-0.2]}}})");
+        RideControlProbe::components(mount, *seats);
+        const Vector3f riderSeat = RideSystem::syncedSeatOf(mount, rider, 0, 1);
+        near(riderSeat.y, 1.1f + 1.62f, "Player seat omitted the player height offset");
+        near(riderSeat.z, -0.2f, "Player seat moved horizontally");
+        TestMount mobPassenger(1003);
+        near(RideSystem::syncedSeatOf(mount, mobPassenger, 0, 1).y, 1.1f, "Mob seat gained a height offset");
+        // minecraft:cushion seats its rider at [0, 0.0625, 0] and lets it off on top of its 0.249 tall box
+        CushionActor cushion(1004, CushionActor::IDENTIFIER);
+        near(RideSystem::syncedSeatOf(cushion, rider, 0, 1).y, 0.0625f + 1.62f, "Cushion seat left the vanilla height");
+        near(cushion.getDismountPosition(0, 1).y - cushion.getPosition().y, 0.249f, "Cushion dismount left its top");
         RideControlProbe::components(mount, *air);
         PlayerAuthInputPacket packet;
         packet.mMotionY = 1.0f;

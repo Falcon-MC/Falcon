@@ -3,6 +3,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Protocol/Types/EntityLinkData.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -21,6 +22,9 @@ public:
     static void appendLinks(const Actor &actor, std::vector<EntityLinkData> &links);
 
     static Actor *resolve(ServerNetworkHandler &owner, int64_t uniqueId);
+
+    // The RIDER_SEAT_POSITION value: the vehicle seat raised by the passenger's height offset.
+    static Vector3f syncedSeatOf(const Actor &vehicle, const Actor &passenger, size_t index, size_t passengerCount);
 
     static void syncPassengerPositions(ServerNetworkHandler &owner, Actor &vehicle);
 };
