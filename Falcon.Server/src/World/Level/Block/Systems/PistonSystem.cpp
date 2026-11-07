@@ -126,23 +126,16 @@ namespace {
         return 0;
     }
 
-    bool sticksTogether(const BlockState &first, const BlockState &second) {
-        const bool firstSticky = PistonSystem::canSticksBlock(first);
-        const bool secondSticky = PistonSystem::canSticksBlock(second);
-        // slime and honey never hold onto each other
-        if (firstSticky && secondSticky)
-            return first.mName == second.mName;
-        return firstSticky || secondSticky;
-    }
-
     /**
-     * Collects the blocks a piston moves, following slime and honey: a sticky block drags the
-     * blocks behind it and beside it along, up to MOVE_BLOCK_LIMIT blocks in total.
+     * Collects the blocks a piston moves, like PistonBlockActor::_attachedBlockWalker (client 26.60 sub_144C4AFD0):
+     * a walk from the block in front of the arm that follows slime and honey to every neighbour but the one it came
+     * from, and pushes whatever stands ahead of each moved block. A block reached along the move direction is pushed;
+     * one reached from the side of a sticky block is only dragged if it can be pulled.
      */
     struct MoveResolver {
         Level &mLevel;
         Vector3i mPiston;
-        // the arm being retracted: it leaves before the pulled blocks arrive, so it counts as air
+        // the arm being retracted: the game removes it before it walks the pulled blocks, so it counts as air
         Vector3i mFreed;
         bool mHasFreed;
         int mDirection;
@@ -153,92 +146,68 @@ namespace {
             return std::find(list.begin(), list.end(), position) != list.end();
         }
 
-        bool isEmpty(const Vector3i &position, const BlockState &state) const {
-            return isAir(state) || (mHasFreed && position == mFreed);
+        bool isInWorld(const Vector3i &position) const {
+            return position.y >= mLevel.getMinY() && position.y <= mLevel.getMaxY();
         }
 
-        // blocks dragged along by a sticky neighbour, rather than pushed head on
-        bool canBeDragged(const BlockState &state) const {
-            return PistonSystem::canBePulled(state) && !PistonSystem::breaksWhenMoved(state);
+        // _checkAttachedBlocks (sub_144C49B90) starts the walk with the piston's facing as the branch
+        bool resolve(const Vector3i &origin, int facing) {
+            return walk(origin, facing) && mToMove.size() <= (size_t) PistonSystem::MOVE_BLOCK_LIMIT;
         }
 
-        bool resolve(const Vector3i &origin) {
-            if (!addLine(origin, true))
-                return false;
-
-            for (size_t index = 0; index < mToMove.size(); ++index) {
-                if (!addBranches(mToMove[index]))
-                    return false;
-            }
-            return true;
-        }
-
-        bool addLine(const Vector3i &origin, bool head) {
-            const BlockState originState = stateAt(mLevel, origin);
-            if (isEmpty(origin, originState) || origin == mPiston || contains(mToMove, origin))
-                return true;
-            if (!head && !canBeDragged(originState))
+        bool walk(const Vector3i &position, int branch) {
+            if (contains(mToMove, position))
                 return true;
 
-            const int back = RedstoneFace::opposite(mDirection);
-            std::vector<Vector3i> line{origin};
-            BlockState current = originState;
-            Vector3i behind = origin;
-            while (PistonSystem::canSticksBlock(current)) {
-                behind = relative(behind, back);
-                const BlockState behindState = stateAt(mLevel, behind);
-                if (isEmpty(behind, behindState) || behind == mPiston || contains(mToMove, behind)
-                    || !sticksTogether(current, behindState) || !canBeDragged(behindState))
-                    break;
-
-                line.push_back(behind);
-                current = behindState;
-            }
-
-            if (mToMove.size() + line.size() > (size_t) PistonSystem::MOVE_BLOCK_LIMIT)
-                return false;
-            for (size_t index = line.size(); index > 0; --index)
-                mToMove.push_back(line[index - 1]);
-
-            Vector3i next = origin;
-            while (true) {
-                next = relative(next, mDirection);
-                if (contains(mToMove, next))
-                    return true;
-
-                const BlockState nextState = stateAt(mLevel, next);
-                if (isEmpty(next, nextState))
-                    return true;
-                if (next == mPiston || !PistonSystem::canBePushed(nextState))
-                    return false;
-                if (PistonSystem::breaksWhenMoved(nextState)) {
-                    if (!contains(mToDestroy, next))
-                        mToDestroy.push_back(next);
-                    return true;
-                }
-                if (mToMove.size() >= (size_t) PistonSystem::MOVE_BLOCK_LIMIT)
-                    return false;
-
-                mToMove.push_back(next);
-            }
-        }
-
-        bool addBranches(const Vector3i &position) {
             const BlockState state = stateAt(mLevel, position);
-            if (!PistonSystem::canSticksBlock(state))
+            if (isAir(state) || (mHasFreed && position == mFreed))
                 return true;
 
-            for (int side = 0; side < RedstoneFace::COUNT; ++side) {
-                if (faceAxis(side) == faceAxis(mDirection))
-                    continue;
+            const bool ahead = branch == mDirection;
+            // the game keeps a block with a piston block actor (type 18) in place unless that actor allows the move,
+            // which covers the moving piston itself
+            if (position == mPiston || !PistonSystem::canBePushed(state))
+                return !ahead;
 
-                const Vector3i neighbour = relative(position, side);
-                if (!sticksTogether(state, stateAt(mLevel, neighbour)))
-                    continue;
-                if (!addLine(neighbour, false))
+            if (PistonSystem::canSticksBlock(state)) {
+                if (!isInWorld(relative(position, mDirection)))
                     return false;
+                mToMove.push_back(position);
+                // the structure fails anyway past the limit, so stop walking it
+                if (mToMove.size() > (size_t) PistonSystem::MOVE_BLOCK_LIMIT)
+                    return false;
+
+                const int from = RedstoneFace::opposite(branch);
+                for (int side = 0; side < RedstoneFace::COUNT; ++side) {
+                    if (side == from)
+                        continue;
+
+                    const Vector3i neighbour = relative(position, side);
+                    const BlockState neighbourState = stateAt(mLevel, neighbour);
+                    // slime and honey do not hold onto each other, but one still pushes the other ahead of it
+                    if (side != mDirection && PistonSystem::canSticksBlock(neighbourState)
+                        && neighbourState.mName != state.mName)
+                        continue;
+                    if (!walk(neighbour, side))
+                        return false;
+                }
+                return true;
             }
-            return true;
+
+            if (PistonSystem::breaksWhenMoved(state)) {
+                if (ahead && !contains(mToDestroy, position))
+                    mToDestroy.push_back(position);
+                return true;
+            }
+            if (!ahead && !PistonSystem::canBePulled(state))
+                return true;
+
+            mToMove.push_back(position);
+            if (mToMove.size() > (size_t) PistonSystem::MOVE_BLOCK_LIMIT)
+                return false;
+
+            const Vector3i next = relative(position, mDirection);
+            return isInWorld(next) && walk(next, mDirection);
         }
     };
 }
@@ -399,10 +368,11 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
                     toDestroy.push_back(origin);
             } else {
                 MoveResolver resolver{level, position, armPosition, !extending, moveDirection, toMove, toDestroy};
-                if (!resolver.resolve(origin)) {
+                if (!resolver.resolve(origin, face)) {
                     if (extending)
                         return false;
-                    // a retraction that cannot pull its structure still retracts, empty-handed
+                    // PistonBlockActor::tick (sub_144C481C0) still retracts a sticky piston whose blocks cannot be
+                    // pulled: it drops the collected blocks and pulls nothing
                     toMove.clear();
                     toDestroy.clear();
                 }
@@ -467,6 +437,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
     owner.playLevelSound(level, extending ? LevelSoundEvent::PISTON_OUT : LevelSoundEvent::PISTON_IN, center);
 
+    (void) faceAxis;
     return true;
 }
 

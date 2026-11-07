@@ -375,6 +375,8 @@ public:
 
     std::optional<float> getFallDamage(const Actor &actor, float vanillaFallDamage) const;
 
+    float getFallDistanceMultiplier() const;
+
     BlockState toBlockState() const { return BlockState(mIdentifier, mStates); }
 
     int32_t getNetworkHash() const { return BlockStateHasher::hash(mIdentifier, mStates); }

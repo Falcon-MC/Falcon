@@ -200,3 +200,7 @@ bool Block::onEntityLand(Actor &actor, float downwardVelocity) const {
 std::optional<float> Block::getFallDamage(const Actor &actor, float vanillaFallDamage) const {
     return getBehavior().getFallDamage(actor, vanillaFallDamage);
 }
+
+float Block::getFallDistanceMultiplier() const {
+    return getBehavior().getFallDistanceMultiplier();
+}

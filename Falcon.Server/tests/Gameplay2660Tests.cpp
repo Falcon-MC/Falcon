@@ -1,5 +1,4 @@
 #include "Network/ServerNetworkHandler.h"
-#include "World/Actor/ActorFlags.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Misc/ArmorStandActor.h"
 #include "World/Item/ArmorStandItem.h"
@@ -414,20 +413,45 @@ namespace {
             fixture.power(true);
             require(fixture.at(8, 101, 8) == "minecraft:slime", "slime pushed a block into obsidian");
         }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:slime");
+            fixture.set(8, 102, 8, "minecraft:honey_block");
+            fixture.power(true);
+            require(fixture.at(8, 102, 8) == "minecraft:slime" && fixture.at(8, 103, 8) == "minecraft:honey_block",
+                    "slime did not push the honey block ahead of it");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(true);
+            fixture.set(8, 101, 8, "minecraft:slime");
+            fixture.power(true);
+            fixture.set(9, 102, 8, "minecraft:stone");
+            fixture.set(9, 101, 8, "minecraft:obsidian");
+            fixture.power(false);
+            require(fixture.at(8, 101, 8) == "minecraft:air" && fixture.at(8, 102, 8) == "minecraft:slime"
+                    && fixture.at(9, 102, 8) == "minecraft:stone",
+                    "a sticky piston that cannot pull its structure did not retract empty-handed");
+        }
     }
 
     void fallDamageReduction() {
         NetworkIdentifier id;
         ServerPlayer player(id, 9100);
-        const float vanilla = 10.0f;
-        require(*VanillaBlocks::fromIdentifier("minecraft:hay_block")->getFallDamage(player, vanilla) == 2.0f,
-                "hay bale did not keep a fifth of the fall damage");
-        require(*VanillaBlocks::fromIdentifier("minecraft:bed")->getFallDamage(player, vanilla) == 5.0f,
-                "bed did not halve the fall damage");
-        require(*VanillaBlocks::fromIdentifier("minecraft:slime")->getFallDamage(player, vanilla) == 0.0f,
+        const Block *hay = VanillaBlocks::fromIdentifier("minecraft:hay_block");
+        const Block *bed = VanillaBlocks::fromIdentifier("minecraft:bed");
+        const Block *stone = VanillaBlocks::fromIdentifier("minecraft:stone");
+        // the game scales the fall distance, not the damage: 13 blocks deal ceil(13 * 0.2 - 3) = 0 on hay
+        // and ceil(13 * 0.5 - 3) = 4 on a bed
+        require(player.computeFallDamage(13.0f * hay->getFallDistanceMultiplier()) == 0.0f,
+                "hay bale did not scale the fall distance by 0.2");
+        require(player.computeFallDamage(13.0f * bed->getFallDistanceMultiplier()) == 4.0f,
+                "bed did not scale the fall distance by 0.5");
+        require(stone->getFallDistanceMultiplier() == 1.0f, "stone changed the fall distance");
+        require(*VanillaBlocks::fromIdentifier("minecraft:slime")->getFallDamage(player, 10.0f) == 0.0f,
                 "slime did not cancel the fall damage");
-        require(!VanillaBlocks::fromIdentifier("minecraft:stone")->getFallDamage(player, vanilla).has_value(),
-                "stone changed the fall damage");
+        require(!stone->getFallDamage(player, 10.0f).has_value(), "stone changed the fall damage");
     }
 }
 

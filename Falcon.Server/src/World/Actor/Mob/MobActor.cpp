@@ -626,9 +626,8 @@ void MobActor::causeFallDamage(ServerNetworkHandler &owner, float distance) {
     const BlockState *landedOn = level.peekBlockPtr((int32_t) std::floor(below.x), (int32_t) std::floor(below.y),
                                                     (int32_t) std::floor(below.z));
 
-    float damage = computeFallDamage(distance);
-
     const Block *block = landedOn == nullptr ? nullptr : VanillaBlocks::fromIdentifier(landedOn->mName);
+    float damage = computeFallDamage(block == nullptr ? distance : distance * block->getFallDistanceMultiplier());
     if (block != nullptr) {
         const std::optional<float> blockDamage = block->getFallDamage(*this, damage);
         if (blockDamage.has_value())
