@@ -723,9 +723,13 @@ int main() {
                 network.send(client, payload);
             peer->deliver("ping", true);
 
+            require(network.getPendingOutboundBytes(client) > 0, "Queued bytes were not counted");
+
             pumpUntil(network, [&]() { return listener.mEvents.back() == "data:ping"; }, "Inbound packet never read");
             require(peer->mSentBytes.load() < packets * payload.size() / 2,
                     "Inbound packet waited for the outbound backlog");
+            pumpUntil(network, [&]() { return network.getPendingOutboundBytes(client) == 0; },
+                      "Queued bytes were never released");
             network.stopIoThread();
         });
         check("a server close is reported once and stops the connection's data", [&]() {

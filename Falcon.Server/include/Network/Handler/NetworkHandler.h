@@ -114,6 +114,8 @@ public:
         DisconnectFailReason mReason = DisconnectFailReason::Unknown;
         uint16_t mMtuSize = 0;
         std::unique_ptr<Connection> mConnection;
+        // The connection's count of queued bytes, released once its shard has taken the data.
+        std::shared_ptr<std::atomic<size_t>> mPendingBytes;
     };
 
     using OutboundFilter = std::function<bool(const NetworkIdentifier &, std::string &)>;
@@ -140,6 +142,12 @@ public:
     void runEvents();
 
     size_t getPendingOutboundCount() const;
+
+    /**
+     * Bytes sent to a connection that its IO shard has not batched yet, so a sender can hold back bulk data
+     * instead of queueing it faster than it is compressed. Main thread only, like every send.
+     */
+    size_t getPendingOutboundBytes(const NetworkIdentifier &id) const;
 
     size_t getPendingInboundCount() const { return mInbound.size(); }
 
@@ -220,6 +228,8 @@ private:
 
     void _pushOutbound(OutboundCommand command);
 
+    void _trackPending(OutboundCommand &command);
+
     void _ioLoop(size_t shardIndex);
 
     void _pumpIo();
@@ -242,6 +252,8 @@ private:
     ContextResolver mContextResolver;
 
     TaskQueue<InboundEvent> mInbound;
+    // Open connections as the main thread knows them, from their Opened event to their Closed one.
+    std::unordered_map<NetworkIdentifier, std::shared_ptr<std::atomic<size_t>>, NetworkIdentifier::Hasher> mPendingBytes;
 
     std::atomic<bool> mIoRunning;
     std::atomic<size_t> mConnectionCount;

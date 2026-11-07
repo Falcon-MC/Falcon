@@ -151,6 +151,20 @@ void NetworkHandler::_pushOutbound(OutboundCommand command) {
     _shardFor(command.mId).mOutbound.push(std::move(command));
 }
 
+size_t NetworkHandler::getPendingOutboundBytes(const NetworkIdentifier &id) const {
+    auto it = mPendingBytes.find(id);
+    return it == mPendingBytes.end() ? 0 : it->second->load(std::memory_order_relaxed);
+}
+
+void NetworkHandler::_trackPending(OutboundCommand &command) {
+    auto it = mPendingBytes.find(command.mId);
+    if (it == mPendingBytes.end())
+        return;
+
+    command.mPendingBytes = it->second;
+    it->second->fetch_add(command.mData.size(), std::memory_order_relaxed);
+}
+
 void NetworkHandler::addListener(Listener *listener) {
     if (listener != nullptr && std::find(mListeners.begin(), mListeners.end(), listener) == mListeners.end())
         mListeners.push_back(listener);
@@ -268,6 +282,7 @@ void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const
 
         command.mReliability = _toPeerReliability(packet);
         command.mCompressibility = _toPeerCompressibility(packet);
+        _trackPending(command);
         commands[NetworkIdentifier::Hasher()(id) % mShards.size()].push_back(std::move(command));
     }
 
@@ -291,6 +306,7 @@ void NetworkHandler::send(const NetworkIdentifier &id, const std::string &data, 
     command.mData = data;
     command.mReliability = reliability;
     command.mCompressibility = compressibility;
+    _trackPending(command);
     _pushOutbound(std::move(command));
 }
 
@@ -430,6 +446,9 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
         if (command.mCompressibility == Compressibility::Compressible)
             bytes += command.mBroadcast ? command.mData.size() * shard.mConnections.size() : command.mData.size();
 
+        if (command.mPendingBytes != nullptr)
+            command.mPendingBytes->fetch_sub(command.mData.size(), std::memory_order_relaxed);
+
         try {
             _applyOutbound(shard, command);
         } catch (const std::exception &) {
@@ -479,6 +498,7 @@ void NetworkHandler::runEvents() {
         switch (event.mKind) {
             case InboundEvent::Kind::Opened: {
                 ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
+                mPendingBytes[event.mId] = std::make_shared<std::atomic<size_t>>(0);
                 for (Listener *listener: mListeners)
                     listener->onNewIncomingConnection(event.mId, event.mMtuSize);
                 break;
@@ -488,6 +508,7 @@ void NetworkHandler::runEvents() {
                 ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
                 for (Listener *listener: mListeners)
                     listener->onConnectionClosed(event.mId, event.mReason, event.mData);
+                mPendingBytes.erase(event.mId);
                 break;
             }
 
