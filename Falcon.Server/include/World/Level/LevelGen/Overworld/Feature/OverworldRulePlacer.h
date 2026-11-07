@@ -234,4 +234,6 @@ private:
 
     static bool _placeGrowingPlant(BlockManager &blocks, const GrowingPlantDefinition &plant, int32_t x, int32_t y,
                                    int32_t z, std::mt19937 &random);
+
+    static bool _placeDripleaf(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 };

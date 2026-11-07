@@ -8,13 +8,6 @@ namespace {
 }
 
 FeatureNoiseHolder::FeatureNoiseHolder(IRandom &random) {
-    const IRandomPtr clayRandom = random.identical();
-    mRandomClayWithDripleavesSnapToFloor =
-            std::make_shared<SimplexF>(*clayRandom, 1.0f, 2.0f / 4.0f, 1.0f / 15.0f);
-
-    const IRandomPtr mossFloorRandom = random.identical();
-    mMossPatchSnapToFloor = std::make_shared<SimplexF>(*mossFloorRandom, 2.0f, 2.0f / 4.0f, 1.0f / 10.0f);
-
     const IRandomPtr mossCeilingRandom = random.identical();
     mMossSnapToCeiling = std::make_shared<SimplexF>(*mossCeilingRandom, 2.0f, 2.0f / 4.0f, 1.0f / 30.0f);
 
