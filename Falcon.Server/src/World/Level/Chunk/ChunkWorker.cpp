@@ -6,6 +6,7 @@
 #include "World/Level/LightSystem.h"
 
 #include <algorithm>
+#include <iterator>
 #include <utility>
 
 #include <pthread.h>
@@ -54,7 +55,7 @@ void ChunkWorker::start(size_t threadCount) {
 
     mSources.clear();
     mSources.reserve(count);
-    mTerrainCache.reset(new TerrainCache());
+    mTerrainCache.reset(new TerrainCache(mGenerator));
     for (size_t i = 0; i < count; ++i)
         mSources.push_back(std::unique_ptr<GeneratorChunkSource>(
                 new GeneratorChunkSource(mGenerator.getSeed(), mGenerator.getDimensionType(), *mTerrainCache)));
@@ -255,20 +256,18 @@ void ChunkWorker::_processLoad(ChunkTask &task, size_t sourceIndex) {
         mLoadedCount.fetch_add(1);
     } else {
         // The terrain is often cached already, generated as the neighbour of a chunk populated
-        // earlier; a fresh one is cached for the neighbours populated next.
-        if (!mTerrainCache->acquire(task.mX, task.mZ, *chunk)) {
-            mGenerator.generate(*chunk);
-            mTerrainCache->publish(*chunk);
-        }
+        // earlier; a fresh one is cached for the neighbours populated next. Only the raw terrain is
+        // taken, never a neighbour another decoration already spilled into.
+        *chunk = mTerrainCache->terrain(task.mX, task.mZ);
         mGeneratedCount.fetch_add(1);
         generated = true;
     }
 
-    _finishChunk(std::move(chunk), sourceIndex, false, generated, task.mChanges);
+    _finishChunk(std::move(chunk), sourceIndex, false, generated, std::move(task.mChanges));
 }
 
 void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident,
-                               bool generated, const std::vector<GeneratedBlockChange> &parked) {
+                               bool generated, std::vector<GeneratedBlockChange> parked) {
     ChunkLoadResult result;
     result.mX = chunk->getX();
     result.mZ = chunk->getZ();
@@ -302,10 +301,10 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
     // Features populated in a neighbouring chunk may have spilled blocks into this one while
     // it was not loaded; those were stored and are applied now.
     if (mStorage.isOpen()) {
-        const std::vector<GeneratedBlockChange> stored = mStorage.loadPendingBlockChanges(result.mX, result.mZ);
+        result.mSpilledChanges = mStorage.loadPendingBlockChanges(result.mX, result.mZ);
 
-        if (!stored.empty()) {
-            for (const GeneratedBlockChange &change: stored) {
+        if (!result.mSpilledChanges.empty()) {
+            for (const GeneratedBlockChange &change: result.mSpilledChanges) {
                 if (change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y)
                     continue;
 
@@ -323,6 +322,8 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
 
         chunk->setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
     }
+    result.mSpilledChanges.insert(result.mSpilledChanges.end(), std::make_move_iterator(parked.begin()),
+                                  std::make_move_iterator(parked.end()));
 
     chunk->compactBiomes();
     LightSystem::computeSkyLight(*chunk);
@@ -412,15 +413,26 @@ void ChunkWorker::_run(size_t queueIndex) {
         // Saves are never dropped, even when pending generation is discarded, or player
         // changes would be lost.
         if (task.mKind != ChunkTask::Kind::Save && mDiscardGeneration.load()) {
-            mOutstandingGeneration.fetch_sub(1);
+            // The parked blocks a dropped load carried exist nowhere else; they go back to the main
+            // thread, which keeps them for the final save. The result returns the generation credit.
+            if (task.mKind == ChunkTask::Kind::Load && !task.mChanges.empty()) {
+                ChunkLoadResult result;
+                result.mX = task.mX;
+                result.mZ = task.mZ;
+                result.mSpilledChanges = std::move(task.mChanges);
+                mCompleted.push(std::move(result));
+            } else {
+                mOutstandingGeneration.fetch_sub(1);
+            }
             task.mChunk.reset();
+            task.mChanges.clear();
             continue;
         }
 
         if (task.mKind == ChunkTask::Kind::Load)
             _processLoad(task, queueIndex);
         else if (task.mKind == ChunkTask::Kind::Populate)
-            _finishChunk(std::move(task.mChunk), queueIndex, true, false, task.mChanges);
+            _finishChunk(std::move(task.mChunk), queueIndex, true, false, std::move(task.mChanges));
         else
             _processSave(task);
 

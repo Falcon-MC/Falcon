@@ -555,7 +555,7 @@ namespace {
                       const std::function<void(LevelChunk &)> &visit) {
         const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(gDimension,
                                                                                          seed);
-        TerrainCache terrainCache;
+        TerrainCache terrainCache(*generator);
         GeneratorChunkSource source(seed, gDimension, terrainCache);
         std::unordered_map<int64_t, LevelChunk> waiting;
         std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> spilled;

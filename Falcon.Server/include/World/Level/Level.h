@@ -395,11 +395,15 @@ private:
 
     void _replayPendingChanges(int64_t key);
 
+    void _restoreSpilledChanges(int64_t key, std::vector<GeneratedBlockChange> changes);
+
     void _dispatchChunkEvent(uint32_t type, int32_t chunkX, int32_t chunkZ, bool generated);
 
     void _flushPendingBlockChanges(bool includeInFlight);
 
     void _flushParkedChanges();
+
+    bool _persistSpillAround(int32_t chunkX, int32_t chunkZ);
 
     void _queueCompletedSaves(int32_t chunkX, int32_t chunkZ);
 

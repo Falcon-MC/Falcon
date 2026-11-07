@@ -1,44 +1,74 @@
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
 
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/LevelGen/ChunkGenerator.h"
 
+#include <iterator>
 #include <utility>
+
+TerrainCache::TerrainCache(const ChunkGenerator &generator) : mGenerator(generator) {
+}
+
+TerrainCache::GenerationClaim::~GenerationClaim() {
+    {
+        std::lock_guard<std::mutex> lock(mCache.mMutex);
+        mCache.mGenerating.erase(mKey);
+    }
+    mCache.mPublished.notify_all();
+}
 
 int64_t TerrainCache::_packChunk(int32_t chunkX, int32_t chunkZ) {
     return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 }
 
-bool TerrainCache::acquire(int32_t chunkX, int32_t chunkZ, LevelChunk &out) {
+LevelChunk TerrainCache::terrain(int32_t chunkX, int32_t chunkZ) {
+    return _get(chunkX, chunkZ, false);
+}
+
+LevelChunk TerrainCache::neighbour(int32_t chunkX, int32_t chunkZ) {
+    return _get(chunkX, chunkZ, true);
+}
+
+LevelChunk TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated) {
     const int64_t key = _packChunk(chunkX, chunkZ);
 
     std::shared_ptr<const LevelChunk> cached;
     {
         std::unique_lock<std::mutex> lock(mMutex);
-        mPublished.wait(lock, [this, key] { return mGenerating.count(key) == 0; });
+        while (true) {
+            const auto found = mChunks.find(key);
+            if (found != mChunks.end()) {
+                const Entry &entry = found->second;
+                cached = decorated && entry.mDecorated != nullptr ? entry.mDecorated : entry.mTerrain;
+                if (cached != nullptr) {
+                    mOrder.splice(mOrder.end(), mOrder, entry.mOrder);
+                    break;
+                }
+            }
+            if (mGenerating.count(key) == 0)
+                break;
 
-        const auto found = mChunks.find(key);
-        if (found == mChunks.end()) {
-            mGenerating.insert(key);
-            return false;
+            mPublished.wait(lock);
         }
 
-        mOrder.splice(mOrder.end(), mOrder, found->second.second);
-        cached = found->second.first;
+        if (cached == nullptr)
+            mGenerating.insert(key);
     }
 
-    out = *cached;
-    return true;
-}
+    if (cached != nullptr)
+        return *cached;
 
-void TerrainCache::publish(LevelChunk chunk) {
-    const int64_t key = _packChunk(chunk.getX(), chunk.getZ());
-    std::shared_ptr<const LevelChunk> shared = std::make_shared<const LevelChunk>(std::move(chunk));
+    const GenerationClaim claim{*this, key};
+    LevelChunk chunk(chunkX, chunkZ);
+    chunk.setDimension(mGenerator.getDimensionType());
+    mGenerator.generate(chunk);
+
+    std::shared_ptr<const LevelChunk> shared = std::make_shared<const LevelChunk>(chunk);
     {
         std::lock_guard<std::mutex> lock(mMutex);
-        _store(key, std::move(shared));
-        mGenerating.erase(key);
+        _entry(key).mTerrain = std::move(shared);
     }
-    mPublished.notify_all();
+    return chunk;
 }
 
 void TerrainCache::put(LevelChunk chunk) {
@@ -46,24 +76,25 @@ void TerrainCache::put(LevelChunk chunk) {
     std::shared_ptr<const LevelChunk> shared = std::make_shared<const LevelChunk>(std::move(chunk));
 
     std::lock_guard<std::mutex> lock(mMutex);
-    _store(key, std::move(shared));
+    _entry(key).mDecorated = std::move(shared);
 }
 
-void TerrainCache::_store(int64_t key, std::shared_ptr<const LevelChunk> chunk) {
+TerrainCache::Entry &TerrainCache::_entry(int64_t key) {
     const auto found = mChunks.find(key);
     if (found != mChunks.end()) {
-        found->second.first = std::move(chunk);
-        mOrder.splice(mOrder.end(), mOrder, found->second.second);
-        return;
+        mOrder.splice(mOrder.end(), mOrder, found->second.mOrder);
+        return found->second;
     }
 
     mOrder.push_back(key);
-    mChunks.emplace(key, std::make_pair(std::move(chunk), std::prev(mOrder.end())));
+    Entry &entry = mChunks[key];
+    entry.mOrder = std::prev(mOrder.end());
 
     while (mOrder.size() > MAX_CACHED_CHUNKS) {
         mChunks.erase(mOrder.front());
         mOrder.pop_front();
     }
+    return entry;
 }
 
 GeneratorChunkSource::GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache)
@@ -71,13 +102,7 @@ GeneratorChunkSource::GeneratorChunkSource(int64_t seed, DimensionType dimension
 }
 
 void GeneratorChunkSource::_stageNeighbour(int32_t chunkX, int32_t chunkZ) {
-    LevelChunk terrain(chunkX, chunkZ);
-    if (mCache.acquire(chunkX, chunkZ, terrain)) {
-        mScratch.insertChunk(std::move(terrain));
-        return;
-    }
-
-    mCache.publish(mScratch.generateTerrainChunk(chunkX, chunkZ));
+    mScratch.insertChunk(mCache.neighbour(chunkX, chunkZ));
 }
 
 /**

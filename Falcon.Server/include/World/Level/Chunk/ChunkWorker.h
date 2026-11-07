@@ -45,6 +45,12 @@ struct ChunkLoadResult {
     int32_t mZ = 0;
     std::unique_ptr<LevelChunk> mChunk;
     std::vector<GeneratedBlockChange> mOverflowChanges;
+    /**
+     * The blocks neighbours spilled into this chunk that the worker applied to it, stored ones first. They
+     * no longer exist anywhere else, so the main thread restores them when it drops the result. A load
+     * discarded at shutdown comes back with no chunk and only the parked blocks its task carried.
+     */
+    std::vector<GeneratedBlockChange> mSpilledChanges;
     bool mReplacesResident = false;
     bool mGenerated = false;
 };
@@ -133,7 +139,7 @@ private:
     bool _reserveGeneration();
 
     void _finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident,
-                      bool generated, const std::vector<GeneratedBlockChange> &parked);
+                      bool generated, std::vector<GeneratedBlockChange> parked);
 
     size_t _queueIndexFor(int32_t chunkX, int32_t chunkZ) const;
 

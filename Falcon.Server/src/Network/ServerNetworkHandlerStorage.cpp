@@ -19,6 +19,22 @@
 #include <unordered_set>
 #include <vector>
 
+namespace {
+    /**
+     * The chunk column an actor is stored under, packed as (x << 32) | z, or false when the actor is not
+     * saved with `level`. Both the per-chunk save and the level-wide save sort actors with it.
+     */
+    bool savedActorColumn(const ServerActor &actor, const Level &level, int64_t &column) {
+        if (!actor.shouldSave() || !actor.isIn(level))
+            return false;
+
+        const Vector3f position = actor.getPosition();
+        column = ((int64_t) ((int32_t) std::floor(position.x) >> 4) << 32)
+                 | (uint32_t) ((int32_t) std::floor(position.z) >> 4);
+        return true;
+    }
+}
+
 void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player, bool checked) {
     if (mPlayerData.saveData(player.getName(), player.saveNbt(getWorldFor(player).getName())))
         LOG_INFO(LogAreaID::Server, "Saved player data for %s", player.getName().c_str());
@@ -147,15 +163,11 @@ void ServerNetworkHandler::saveActorsForChunk(Level &level, int32_t chunkX, int3
     std::vector<Tag> entities;
     std::vector<int64_t> culled;
 
+    const int64_t target = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
     for (auto &entry: mActors) {
         ServerActor &actor = *entry.second;
-        if (!actor.shouldSave() || !actor.isIn(level))
-            continue;
-
-        const Vector3f position = actor.getPosition();
-        const int32_t actorChunkX = (int32_t) std::floor(position.x) >> 4;
-        const int32_t actorChunkZ = (int32_t) std::floor(position.z) >> 4;
-        if (actorChunkX != chunkX || actorChunkZ != chunkZ)
+        int64_t column = 0;
+        if (!savedActorColumn(actor, level, column) || column != target)
             continue;
 
         entities.push_back(actor.saveNbt());
@@ -190,13 +202,8 @@ void ServerNetworkHandler::saveAllActors() {
         std::unordered_map<int64_t, std::vector<Tag>> byChunk;
         for (auto &entry: mActors) {
             ServerActor &actor = *entry.second;
-            if (!actor.shouldSave() || !actor.isIn(*level))
-                continue;
-
-            const Vector3f position = actor.getPosition();
-            const int64_t column = ((int64_t) ((int32_t) std::floor(position.x) >> 4) << 32)
-                                   | (uint32_t) ((int32_t) std::floor(position.z) >> 4);
-            if (columns.count(column) != 0)
+            int64_t column = 0;
+            if (savedActorColumn(actor, *level, column) && columns.count(column) != 0)
                 byChunk[column].push_back(actor.saveNbt());
         }
 
