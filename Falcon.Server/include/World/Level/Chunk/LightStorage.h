@@ -8,7 +8,8 @@
 /**
  * Light levels of a chunk column, kept per sub-chunk section. Most sections hold a single level (open
  * sky above the terrain, darkness below it, no block light), so a section only allocates its nibble
- * array once it stops being uniform, and compact() folds uniform arrays back into one value.
+ * array once it stops being uniform, and compact() folds uniform arrays back into one value. The table of
+ * section arrays itself only exists while one of them is allocated.
  */
 class LightStorage {
 public:
@@ -24,6 +25,9 @@ public:
             return 0;
 
         const int section = (y - MIN_Y) >> 4;
+        if (mSections.empty())
+            return mUniform[(size_t) section];
+
         const std::vector<uint8_t> &data = mSections[(size_t) section];
         if (data.empty())
             return mUniform[(size_t) section];
@@ -40,6 +44,13 @@ public:
         }
 
         const int section = (y - MIN_Y) >> 4;
+        if (mSections.empty()) {
+            if (value == mUniform[(size_t) section])
+                return;
+
+            mSections.resize(SECTION_COUNT);
+        }
+
         std::vector<uint8_t> &data = mSections[(size_t) section];
         if (data.empty()) {
             const uint8_t uniform = mUniform[(size_t) section];
@@ -59,14 +70,17 @@ public:
 
     // Releases section arrays that hold a single level again, typically right after a full recompute.
     void compact() {
+        bool kept = false;
         for (size_t section = 0; section < mSections.size(); ++section) {
             std::vector<uint8_t> &data = mSections[section];
             if (data.empty())
                 continue;
 
             const uint8_t first = data[0];
-            if ((first & 0x0F) != (first >> 4))
+            if ((first & 0x0F) != (first >> 4)) {
+                kept = true;
                 continue;
+            }
 
             bool uniform = true;
             for (const uint8_t packed: data) {
@@ -75,17 +89,21 @@ public:
                     break;
                 }
             }
-            if (!uniform)
+            if (!uniform) {
+                kept = true;
                 continue;
+            }
 
             mUniform[section] = (uint8_t) (first & 0x0F);
             std::vector<uint8_t>().swap(data);
         }
+
+        if (!kept)
+            std::vector<std::vector<uint8_t>>().swap(mSections);
     }
 
     void clear() {
-        for (std::vector<uint8_t> &data: mSections)
-            std::vector<uint8_t>().swap(data);
+        std::vector<std::vector<uint8_t>>().swap(mSections);
         mAllocated = false;
     }
 
@@ -96,7 +114,7 @@ private:
         return (((y - MIN_Y) & 15) << 8) | (z << 4) | x;
     }
 
-    std::array<std::vector<uint8_t>, SECTION_COUNT> mSections;
+    std::vector<std::vector<uint8_t>> mSections;
     std::array<uint8_t, SECTION_COUNT> mUniform{};
     bool mAllocated = false;
 };

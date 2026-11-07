@@ -8,6 +8,7 @@
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Protocol/Packets/CommandRequestPacket.h"
 #include "World/Level/Chunk/SubChunk.h"
+#include "World/Level/Chunk/LightStorage.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
@@ -700,6 +701,22 @@ int main() {
                             == section.getBlock(index >> 8, index & 15, (index >> 4) & 15).getHash(),
                             "Network section indices point at other blocks");
             }
+        });
+        check("light sections fold back to one level and release their table", [&]() {
+            LightStorage light;
+            light.set(0, 0, 0, 0);
+            require(light.isAllocated() && light.get(3, 0, 3) == 0, "Uniform light allocated a section");
+            light.set(1, 70, 2, 9);
+            light.set(1, -60, 2, 4);
+            require(light.get(1, 70, 2) == 9 && light.get(1, -60, 2) == 4 && light.get(2, 70, 2) == 0,
+                    "Light levels were not kept");
+            light.set(1, 70, 2, 0);
+            light.compact();
+            require(light.get(1, 70, 2) == 0 && light.get(1, -60, 2) == 4, "Compaction changed a light level");
+            light.set(1, -60, 2, 0);
+            light.compact();
+            light.set(5, 5, 5, 0);
+            require(light.get(1, -60, 2) == 0 && light.get(5, 5, 5) == 0, "Released sections kept a level");
         });
         check("inbound packets are read while a large outbound backlog compresses", [&]() {
             FakeConnector *connector = new FakeConnector();
