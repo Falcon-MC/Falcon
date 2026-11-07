@@ -1,4 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/ActorFlags.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Misc/ArmorStandActor.h"
 #include "World/Item/ArmorStandItem.h"
@@ -9,6 +10,8 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/Systems/PistonSystem.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/IceCrystalBlock.h"
@@ -318,6 +321,114 @@ namespace {
         level.insertChunk(LevelChunk(0, -1));
         require(!level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"), "loaded empty neighbour kept stale connection");
     }
+
+    // A piston at (8, 100, 8) facing up, powered by a redstone block beside it.
+    struct PistonFixture {
+        ServerNetworkHandler mOwner{"Piston regression", "", 1};
+        Level &mLevel = mOwner.getLevel();
+        Vector3i mPiston{8, 100, 8};
+
+        PistonFixture() {
+            mLevel.getChunk(0, 0);
+            mLevel.getBlockActors().loadChunk(0, 0, {}, mOwner.getCodecContext());
+            for (int x = 0; x < 16; ++x)
+                for (int z = 0; z < 16; ++z)
+                    for (int y = 95; y <= 120; ++y)
+                        mLevel.setBlockState(x, y, z, BlockState("minecraft:air"));
+        }
+
+        void set(int x, int y, int z, const char *name) {
+            mLevel.setBlockState(x, y, z, block(name));
+        }
+
+        std::string at(int x, int y, int z) {
+            return mLevel.getBlockState(x, y, z).mName;
+        }
+
+        void place(bool sticky) {
+            BlockState piston = block(sticky ? "minecraft:sticky_piston" : "minecraft:piston");
+            piston.mStates.putInt("facing_direction", 1);
+            mLevel.setBlockState(mPiston.x, mPiston.y, mPiston.z, piston);
+        }
+
+        void power(bool powered) {
+            mLevel.setBlockState(mPiston.x + 1, mPiston.y, mPiston.z,
+                                 powered ? block("minecraft:redstone_block") : BlockState("minecraft:air"));
+            const BlockState piston = mLevel.getBlockState(mPiston.x, mPiston.y, mPiston.z);
+            PistonSystem::onRedstoneUpdate(mOwner, mLevel, mPiston, piston);
+            for (int tick = 0; tick < 10; ++tick)
+                PistonSystem::tick(mOwner, mLevel);
+        }
+    };
+
+    void pistons() {
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            for (int y = 101; y <= 112; ++y)
+                fixture.set(8, y, 8, "minecraft:stone");
+            fixture.power(true);
+            require(fixture.at(8, 101, 8) == "minecraft:piston_arm_collision"
+                    && fixture.at(8, 113, 8) == "minecraft:stone" && fixture.at(8, 102, 8) == "minecraft:stone",
+                    "a piston did not push a line of twelve blocks");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            for (int y = 101; y <= 113; ++y)
+                fixture.set(8, y, 8, "minecraft:stone");
+            fixture.power(true);
+            require(fixture.at(8, 101, 8) == "minecraft:stone" && fixture.at(8, 114, 8) == "minecraft:air",
+                    "a piston pushed more than twelve blocks");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:stone");
+            fixture.set(8, 102, 8, "minecraft:obsidian");
+            fixture.power(true);
+            require(fixture.at(8, 101, 8) == "minecraft:stone", "a piston pushed obsidian");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(true);
+            fixture.set(8, 101, 8, "minecraft:slime");
+            fixture.set(9, 101, 8, "minecraft:stone");
+            fixture.set(7, 101, 8, "minecraft:honey_block");
+            fixture.power(true);
+            require(fixture.at(8, 102, 8) == "minecraft:slime" && fixture.at(9, 102, 8) == "minecraft:stone"
+                    && fixture.at(9, 101, 8) == "minecraft:air",
+                    "slime did not carry the block stuck to its side");
+            require(fixture.at(7, 101, 8) == "minecraft:honey_block", "slime carried a honey block along");
+            fixture.power(false);
+            require(fixture.at(8, 101, 8) == "minecraft:slime" && fixture.at(9, 101, 8) == "minecraft:stone"
+                    && fixture.at(8, 102, 8) == "minecraft:air" && fixture.at(9, 102, 8) == "minecraft:air",
+                    "a sticky piston did not pull back its slime structure");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:slime");
+            fixture.set(9, 101, 8, "minecraft:stone");
+            fixture.set(9, 102, 8, "minecraft:obsidian");
+            fixture.power(true);
+            require(fixture.at(8, 101, 8) == "minecraft:slime", "slime pushed a block into obsidian");
+        }
+    }
+
+    void fallDamageReduction() {
+        NetworkIdentifier id;
+        ServerPlayer player(id, 9100);
+        const float vanilla = 10.0f;
+        require(*VanillaBlocks::fromIdentifier("minecraft:hay_block")->getFallDamage(player, vanilla) == 2.0f,
+                "hay bale did not keep a fifth of the fall damage");
+        require(*VanillaBlocks::fromIdentifier("minecraft:bed")->getFallDamage(player, vanilla) == 5.0f,
+                "bed did not halve the fall damage");
+        require(*VanillaBlocks::fromIdentifier("minecraft:slime")->getFallDamage(player, vanilla) == 0.0f,
+                "slime did not cancel the fall damage");
+        require(!VanillaBlocks::fromIdentifier("minecraft:stone")->getFallDamage(player, vanilla).has_value(),
+                "stone changed the fall damage");
+    }
 }
 
 int main() {
@@ -328,6 +439,8 @@ int main() {
         freezing();
         armorStandExchange();
         sleepThreshold();
+        pistons();
+        fallDamageReduction();
         std::cout << "26.60 migration and gameplay regressions passed\n";
         return 0;
     } catch (const std::exception &error) {
