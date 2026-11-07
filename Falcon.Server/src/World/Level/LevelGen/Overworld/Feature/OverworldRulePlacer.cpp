@@ -764,7 +764,32 @@ struct OverworldRulePlacer::VegetationPatchDefinition {
     // the vegetation feature placed on a share of the ground: a weighted set of blocks, drawn even when empty so
     // the shared placement random stays in step across the rule's iterations
     std::vector<std::pair<Block (*)(), int32_t>> mVegetation;
+    // the moss ceiling hangs a growing plant instead of a flat block
+    const GrowingPlantDefinition *mVegetationPlant;
     float mVegetationChance;
+};
+
+// a minecraft:growing_plant_feature (place sub_14A2BEF40): a hanging or standing column of weighted body blocks
+// capped with a weighted head, its length drawn from a weighted set of ranges
+struct OverworldRulePlacer::GrowingPlantDefinition {
+    struct HeightWeight {
+        int32_t mMin;
+        int32_t mMax;
+        int32_t mWeight;
+    };
+    struct BlockWeight {
+        Block (*mBlock)();
+        int32_t mWeight;
+    };
+
+    const char *mIdentifier;
+    std::vector<HeightWeight> mHeight;
+    // down grows toward lower y
+    bool mDown;
+    int32_t mAgeMin;
+    int32_t mAgeMax;
+    std::vector<BlockWeight> mBody;
+    std::vector<BlockWeight> mHead;
 };
 
 OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry &entry) {
@@ -1179,6 +1204,11 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         placed.mVegetationPatch = &definition;
         return placed;
     };
+    static const auto growingPlant = [](const GrowingPlantDefinition &definition) {
+        Placed placed;
+        placed.mGrowingPlant = &definition;
+        return placed;
+    };
     static const std::vector<std::string> MOSS_REPLACEABLE = {
             "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:podzol", "minecraft:dirt_with_roots",
             "minecraft:grass_block", "minecraft:mycelium", "minecraft:stone", "minecraft:granite",
@@ -1191,7 +1221,7 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {&VanillaBlocks::SHORT_GRASS, 50}, {&VanillaBlocks::TALL_GRASS, 10}};
     static const VegetationPatchDefinition MOSS_PATCH = {
             "minecraft:moss_patch_feature", &VanillaBlocks::MOSS_BLOCK, MOSS_REPLACEABLE, 1, 2, 5, 0.0f, 0.3f, 4, 8,
-            true, MOSS_VEGETATION, 0.8f};
+            true, MOSS_VEGETATION, nullptr, 0.8f};
     static const SnapDefinition MOSS_PATCH_SNAP = {
             "minecraft:moss_patch_snap_to_floor_feature", vegetationPatch(MOSS_PATCH), 12, 1, true, false, false,
             false, {}};
@@ -1203,10 +1233,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             "minecraft:cave_vines_head_with_berries"};
     static const VegetationPatchDefinition CLAY_PATCH = {
             "minecraft:clay_with_dripleaves_feature", &VanillaBlocks::CLAY, CLAY_REPLACEABLE, 3, 3, 2, 0.8f, 0.7f, 4,
-            8, true, {}, 0.05f};
+            8, true, {}, nullptr, 0.05f};
     static const VegetationPatchDefinition CLAY_POOL = {
             "minecraft:clay_pool_with_dripleaves_feature", &VanillaBlocks::CLAY, CLAY_REPLACEABLE, 3, 3, 5, 0.8f, 0.7f,
-            4, 8, true, {}, 0.1f};
+            4, 8, true, {}, nullptr, 0.1f};
     static const WeightedDefinition RANDOM_CLAY = {
             "minecraft:random_clay_with_dripleaves_feature",
             {{vegetationPatch(CLAY_PATCH), 1}, {vegetationPatch(CLAY_POOL), 1}}};
@@ -1219,6 +1249,33 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     static const SnapDefinition CLAY_SNAP = {
             "minecraft:random_clay_with_dripleaves_snap_to_floor_feature", weightedOf(RANDOM_CLAY), 12, 1, false,
             false, true, false, {}};
+
+    // cave_vine_feature and cave_vine_in_moss_feature (growing_plant), the weighted body and head built from
+    // cave_vine_feature.json; both grow down and age 17..25
+    static const GrowingPlantDefinition CAVE_VINE = {
+            "minecraft:cave_vine_feature", {{1, 13, 2}, {1, 2, 3}, {1, 7, 10}}, true, 17, 26,
+            {{&VanillaBlocks::CAVE_VINES, 4}, {&VanillaBlocks::CAVE_VINES_BODY_WITH_BERRIES, 1}},
+            {{&VanillaBlocks::CAVE_VINES, 4}, {&VanillaBlocks::CAVE_VINES_HEAD_WITH_BERRIES, 1}}};
+    static const GrowingPlantDefinition CAVE_VINE_IN_MOSS = {
+            "minecraft:cave_vine_in_moss_feature", {{1, 4, 5}, {2, 7, 1}}, true, 17, 26,
+            {{&VanillaBlocks::CAVE_VINES, 4}, {&VanillaBlocks::CAVE_VINES_BODY_WITH_BERRIES, 1}},
+            {{&VanillaBlocks::CAVE_VINES, 4}, {&VanillaBlocks::CAVE_VINES_HEAD_WITH_BERRIES, 1}}};
+    static const SnapDefinition CAVE_VINE_SNAP = {
+            "minecraft:cave_vine_snap_to_ceiling_feature", growingPlant(CAVE_VINE), 12, 0, true, false, false, false,
+            {}};
+    static const std::vector<std::string> MOSS_CEILING_REPLACEABLE = {
+            "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:podzol", "minecraft:dirt_with_roots",
+            "minecraft:grass_block", "minecraft:mycelium", "minecraft:stone", "minecraft:granite",
+            "minecraft:polished_granite", "minecraft:diorite", "minecraft:polished_diorite", "minecraft:andesite",
+            "minecraft:polished_andesite", "minecraft:deepslate", "minecraft:tuff", "minecraft:moss_block",
+            "minecraft:cave_vines", "minecraft:cave_vines_body_with_berries",
+            "minecraft:cave_vines_head_with_berries"};
+    static const VegetationPatchDefinition MOSS_CEILING = {
+            "minecraft:moss_ceiling_feature", &VanillaBlocks::MOSS_BLOCK, MOSS_CEILING_REPLACEABLE, 1, 3, 5, 0.0f, 0.3f,
+            4, 8, false, {}, &CAVE_VINE_IN_MOSS, 0.08f};
+    static const SnapDefinition MOSS_CEILING_SNAP = {
+            "minecraft:moss_ceiling_snap_to_ceiling_feature", vegetationPatch(MOSS_CEILING), 12, 0, true, false, false,
+            false, {}};
 
     struct NetherPlaced {
         const char *mIdentifier;
@@ -1252,6 +1309,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             feature.mPlaced.mSnap = &MOSS_PATCH_SNAP;
         if (entry.mFeature == CLAY_SNAP.mIdentifier)
             feature.mPlaced.mSnap = &CLAY_SNAP;
+        if (entry.mFeature == MOSS_CEILING_SNAP.mIdentifier)
+            feature.mPlaced.mSnap = &MOSS_CEILING_SNAP;
+        if (entry.mFeature == CAVE_VINE_SNAP.mIdentifier)
+            feature.mPlaced.mSnap = &CAVE_VINE_SNAP;
         feature.mPlaced.mDripstoneCluster = entry.mFeature == "minecraft:dripstone_cluster_feature";
         feature.mLegacyIce = entry.mFeature == "minecraft:legacy:ice_feature";
         for (const FossilDefinition &fossil: FOSSILS) {
@@ -1820,6 +1881,8 @@ bool OverworldRulePlacer::_place(BlockManager &blocks, const Placed &placed, int
         return _placeThreshold(blocks, *placed.mThreshold, x, y, z, random);
     if (placed.mVegetationPatch != nullptr)
         return _placeVegetationPatch(blocks, *placed.mVegetationPatch, x, y, z, random);
+    if (placed.mGrowingPlant != nullptr)
+        return _placeGrowingPlant(blocks, *placed.mGrowingPlant, x, y, z, random);
     if (placed.mSnap != nullptr)
         return _placeSnap(blocks, *placed.mSnap, x, y, z, random);
     if (placed.mBlob != nullptr)
@@ -2578,6 +2641,14 @@ bool OverworldRulePlacer::_placeVegetationPatch(BlockManager &blocks, const Vege
         for (size_t i = 0; i + 2 < columns.size(); i += 3) {
             if (patch.mVegetationChance <= nextFloat(random))
                 continue;
+
+            const int32_t vx = columns[i];
+            const int32_t vy = columns[i + 1] - step;
+            const int32_t vz = columns[i + 2];
+            if (patch.mVegetationPlant != nullptr) {
+                _placeGrowingPlant(blocks, *patch.mVegetationPlant, vx, vy, vz, random);
+                continue;
+            }
             if (patch.mVegetation.empty())
                 continue;
 
@@ -2586,15 +2657,65 @@ bool OverworldRulePlacer::_placeVegetationPatch(BlockManager &blocks, const Vege
             while (roll >= 0 && index + 1 < patch.mVegetation.size())
                 roll -= patch.mVegetation[++index].second;
 
-            const int32_t vx = columns[i];
-            const int32_t vy = columns[i + 1] - step;
-            const int32_t vz = columns[i + 2];
             if (DecorationSupport::isAir(blocks.getBlockAt(vx, vy, vz)))
                 blocks.setBlockStateAt(vx, vy, vz, patch.mVegetation[index].first().toBlockState());
         }
     }
 
     return !columns.empty();
+}
+
+bool OverworldRulePlacer::_placeGrowingPlant(BlockManager &blocks, const GrowingPlantDefinition &plant, int32_t x,
+                                             int32_t y, int32_t z, std::mt19937 &random) {
+    // sub_14A2BEF40: a length drawn from the weighted ranges, an age, then weighted body blocks capped by a
+    // weighted head at the first blocked step
+    int32_t heightTotal = 0;
+    for (const GrowingPlantDefinition::HeightWeight &height: plant.mHeight)
+        heightTotal += height.mWeight;
+
+    const GrowingPlantDefinition::HeightWeight *picked = &plant.mHeight.front();
+    int32_t heightRoll = (heightTotal > 0 ? nextInt(random, heightTotal) : 0) - plant.mHeight.front().mWeight;
+    for (size_t i = 0; heightRoll >= 0 && i + 1 < plant.mHeight.size(); i++) {
+        picked = &plant.mHeight[i + 1];
+        heightRoll -= picked->mWeight;
+    }
+
+    const int32_t length = picked->mMin < picked->mMax - 1 ? picked->mMin + nextInt(random, picked->mMax - picked->mMin)
+                                                           : picked->mMin;
+    const int32_t age = plant.mAgeMin < plant.mAgeMax - 1 ? plant.mAgeMin + nextInt(random, plant.mAgeMax - plant.mAgeMin)
+                                                          : plant.mAgeMin;
+    if (length <= 0)
+        return false;
+
+    const int32_t step = plant.mDown ? -1 : 1;
+    const auto pick = [&](const std::vector<GrowingPlantDefinition::BlockWeight> &blocksWeighted) {
+        int32_t total = 0;
+        for (const GrowingPlantDefinition::BlockWeight &weighted: blocksWeighted)
+            total += weighted.mWeight;
+        int32_t roll = (total > 0 ? nextInt(random, total) : 0) - blocksWeighted.front().mWeight;
+        size_t index = 0;
+        while (roll >= 0 && index + 1 < blocksWeighted.size())
+            roll -= blocksWeighted[++index].mWeight;
+        return blocksWeighted[index].mBlock;
+    };
+
+    bool placed = false;
+    for (int32_t i = 0; i < length; i++) {
+        const int32_t columnY = y + step * i;
+        if (!DecorationSupport::isAir(blocks.getBlockAt(x, columnY, z)))
+            continue;
+
+        if (i == length - 1 || !DecorationSupport::isAir(blocks.getBlockAt(x, columnY + step, z))) {
+            const BlockState head = pick(plant.mHead)().toBlockState();
+            blocks.setBlockStateAt(x, columnY, z, DecorationSupport::withState(head, "growing_plant_age", age));
+            return true;
+        }
+
+        blocks.setBlockStateAt(x, columnY, z, pick(plant.mBody)().toBlockState());
+        placed = true;
+    }
+
+    return placed;
 }
 
 bool OverworldRulePlacer::_placeBlob(BlockManager &blocks, const BlobDefinition &blob, int32_t x, int32_t y, int32_t z,
