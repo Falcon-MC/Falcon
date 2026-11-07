@@ -12,7 +12,8 @@
 
 bool CommandBlockContainerScreenValidator::isValid(ServerNetworkHandler &owner, ServerPlayer &player,
                                                    const Vector3i &position) const {
-    if (!player.isOp() && player.getGameType() != (int32_t) GameType::Creative)
+    // command blocks are operator-only, and the screen only opens in creative: both are required
+    if (!player.isOp() || player.getGameType() != (int32_t) GameType::Creative)
         return false;
 
     return ContainerScreenValidatorBase::isValid(owner, player, position);

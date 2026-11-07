@@ -8,6 +8,10 @@ class MaceItem : public Item {
 public:
     static const int32_t BASE_ATTACK_DAMAGE = 6;
 
+    // upper bound on the fall height used for the smash bonus; past any legitimate world-height fall it only
+    // caps a client-controlled value, it does not change damage for real falls
+    static const int32_t MAX_SMASH_FALL = 1024;
+
     explicit MaceItem(const Item &base);
 
     float getAttackDamageBonus(const ItemStack &item, ServerPlayer &attacker) const override;

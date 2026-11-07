@@ -626,6 +626,13 @@ public:
      */
     LoginGate _checkLoginState(const NetworkIdentifier &id, MinecraftPacketIds packetId);
 
+    // the packet ids the server decodes from a client; clientbound and ignored packets are dropped before decode
+    static const std::unordered_set<MinecraftPacketIds> &_serverboundPackets();
+
+    static bool _isServerboundPacket(MinecraftPacketIds packetId);
+
+    void _validateServerboundPackets() const;
+
     void _rejectBadPacket(const NetworkIdentifier &id, const std::string &reason);
 
     ResourcePackManager &getResourcePacks() { return mResourcePacks; }

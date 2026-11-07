@@ -29,6 +29,20 @@ PlayerDataProvider::PlayerDataProvider(const std::string &directory) : mDirector
     MAKE_DIRECTORY(mDirectory.c_str());
 }
 
+bool PlayerDataProvider::_isSafeName(const std::string &name) {
+    // the name comes from the client, so it must not be able to escape the directory or inject a path.
+    // a NUL would also truncate the path, so control bytes are rejected outright.
+    if (name.empty() || name.size() > 64 || name == "." || name == "..")
+        return false;
+
+    for (const unsigned char character: name) {
+        if (character == '/' || character == '\\' || character < 0x20)
+            return false;
+    }
+
+    return name.find("..") == std::string::npos;
+}
+
 std::string PlayerDataProvider::_getPlayerDataPath(const std::string &name) const {
     return mDirectory + "/" + StringUtil::toLowerCase(name) + ".dat";
 }

@@ -382,6 +382,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mResourcePacks.loadBundledAddonsFrom(ServerPaths::file("behavior_packs"));
     mResourcePacks.loadCdnConfig(ServerPaths::file("cdn_config.json"));
     _registerVanillaDefinitions();
+    _validateServerboundPackets();
 
     AuthKeyProvider::getInstance().start();
     mPluginManager = std::make_unique<PluginManager>(*this);
@@ -1057,6 +1058,14 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
             }
         }
 
+        // the shared codec can build clientbound packets too; decoding those on the server exposes large,
+        // never-hardened client-side decoders to remote input, so only the packets the server handles are read
+        if (!_isServerboundPacket(packetId)) {
+            LOG_TRACE(LogAreaID::Network, "Dropping non-serverbound packet id %d from %s", (int) packetId,
+                      id.getAddress().c_str());
+            return;
+        }
+
         const PacketCodecContext &context = getCodecContext(id);
         const ProtocolCodec &codec = context.getCodec();
         std::shared_ptr<Packet> packet = codec.createPacket(packetId);
@@ -1115,6 +1124,67 @@ bool ServerNetworkHandler::_allowPacket(const NetworkIdentifier &id, RateLimited
     }
 
     return false;
+}
+
+const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverboundPackets() {
+    // single source of truth for what the server decodes from a client: the login/cache packets the client
+    // sends before it has a player, plus one entry per handle() override below. the shared codec can also build
+    // clientbound packets (it is used to send them), and decoding those exposes large client-side decoders to
+    // remote input, so anything not in this set is dropped before createPacket. keep this list in step with the
+    // handle() overrides in ServerNetworkHandler.h; _validateServerboundPackets() checks it at startup.
+    static const std::unordered_set<MinecraftPacketIds> allowed = {
+        MinecraftPacketIds::RequestNetworkSettings,
+        MinecraftPacketIds::Login,
+        MinecraftPacketIds::ClientToServerHandshake,
+        MinecraftPacketIds::ClientCacheStatus,
+        MinecraftPacketIds::ResourcePackClientResponse,
+        MinecraftPacketIds::ResourcePackChunkRequest,
+        MinecraftPacketIds::SetLocalPlayerAsInitialized,
+        MinecraftPacketIds::NetworkStackLatency,
+        MinecraftPacketIds::PlayerAuthInput,
+        MinecraftPacketIds::CompletedUsingItem,
+        MinecraftPacketIds::CommandRequest,
+        MinecraftPacketIds::Text,
+        MinecraftPacketIds::PacketViolationWarning,
+        MinecraftPacketIds::RequestChunkRadius,
+        MinecraftPacketIds::SubChunkRequest,
+        MinecraftPacketIds::RequestAbility,
+        MinecraftPacketIds::MobEquipment,
+        MinecraftPacketIds::PlayerHotbar,
+        MinecraftPacketIds::ItemStackRequest,
+        MinecraftPacketIds::CraftingEvent,
+        MinecraftPacketIds::InventoryTransaction,
+        MinecraftPacketIds::ContainerClose,
+        MinecraftPacketIds::Interact,
+        MinecraftPacketIds::PlayerAction,
+        MinecraftPacketIds::Respawn,
+        MinecraftPacketIds::SetPlayerGameType,
+        MinecraftPacketIds::BlockActorData,
+        MinecraftPacketIds::CommandBlockUpdate,
+        MinecraftPacketIds::BlockPickRequest,
+        MinecraftPacketIds::ActorPickRequest,
+        MinecraftPacketIds::Emote,
+        MinecraftPacketIds::ModalFormResponse,
+        MinecraftPacketIds::PlayerSkin,
+    };
+
+    return allowed;
+}
+
+bool ServerNetworkHandler::_isServerboundPacket(MinecraftPacketIds packetId) {
+    const std::unordered_set<MinecraftPacketIds> &allowed = _serverboundPackets();
+    return allowed.find(packetId) != allowed.end();
+}
+
+void ServerNetworkHandler::_validateServerboundPackets() const {
+    // a packet the server means to handle but that the active codec cannot build would be dropped before decode:
+    // surface that drift at startup rather than losing the packet silently in production.
+    const ProtocolCodec &codec = mCodecContext.getCodec();
+    for (const MinecraftPacketIds id: _serverboundPackets()) {
+        if (!codec.supports(id))
+            LOG_ERROR(LogAreaID::Network, "Serverbound packet %d is in the allowlist but not in the codec",
+                      (int) id);
+    }
 }
 
 ServerNetworkHandler::LoginGate ServerNetworkHandler::_checkLoginState(const NetworkIdentifier &id,
@@ -1207,6 +1277,9 @@ void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, DisconnectRe
 
     mNetworkHandler->send(id, disconnect, mCodecContext);
     mNetworkHandler->flush(id);
+    // the Disconnect packet is advisory: a hostile client can ignore it, so the connection is also dropped.
+    // the commands are queued in order, so the kick message is delivered before the socket is closed.
+    mNetworkHandler->closeConnection(id);
 }
 
 void ServerNetworkHandler::_rejectBadPacket(const NetworkIdentifier &id, const std::string &reason) {
@@ -1669,18 +1742,37 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     if (dx * dx + dy * dy + dz * dz > 10000.0f)
         return;
 
-    const BlockState state = getLevelFor(*player).getBlockState(packet.mBlockPosition.x, packet.mBlockPosition.y,
-                                                                packet.mBlockPosition.z);
+    // peek only, and require an actual sign at the position: without this any block in range would relay an
+    // arbitrary client NBT compound to everyone, and a far position could force a chunk to load.
+    const BlockState *statePtr = getLevelFor(*player).peekBlockPtr(packet.mBlockPosition.x, packet.mBlockPosition.y,
+                                                                   packet.mBlockPosition.z);
+    if (statePtr == nullptr || !isSignBlock(statePtr->mName))
+        return;
     if (!packet.mData.isCompound())
         return;
 
-    const bool hasSignText = packet.mData.contains("FrontText") || packet.mData.contains("BackText") ||
-                             packet.mData.contains("Text1") || packet.mData.contains("Text2") ||
-                             packet.mData.contains("Text3") || packet.mData.contains("Text4");
-    if (!isSignBlock(state.mName) && !hasSignText)
-        return;
-
+    // cap each relayed line so a client cannot push an oversized string to every player
+    static const size_t MAX_SIGN_TEXT = 512;
     BlockActorDataPacket relayed = packet;
+    const char *const textKeys[] = {"Text1", "Text2", "Text3", "Text4"};
+    for (const char *key: textKeys) {
+        if (relayed.mData.contains(key)) {
+            const std::string line = relayed.mData.getString(key);
+            if (line.size() > MAX_SIGN_TEXT)
+                relayed.mData.putString(key, line.substr(0, MAX_SIGN_TEXT));
+        }
+    }
+    const char *const sideKeys[] = {"FrontText", "BackText"};
+    for (const char *side: sideKeys) {
+        Tag *sideData = relayed.mData.get(side);
+        if (sideData == nullptr || !sideData->isCompound())
+            continue;
+        if (sideData->contains("Text")) {
+            const std::string line = sideData->getString("Text");
+            if (line.size() > MAX_SIGN_TEXT)
+                sideData->putString("Text", line.substr(0, MAX_SIGN_TEXT));
+        }
+    }
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_SIGN_CHANGE)) {
         const char *const sides[] = {"FrontText", "BackText"};
         for (const char *side: sides) {
@@ -1705,7 +1797,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     }
 
     for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
+        // only players in the same world and dimension should receive the sign update
+        if (entry.second.isSpawned() && entry.second.sharesLevelWith(*player))
             mNetworkHandler->send(entry.second.getNetworkIdentifier(), relayed, mCodecContext);
     }
 }

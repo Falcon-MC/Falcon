@@ -22,6 +22,10 @@ class ScriptEngine {
 public:
     static const int64_t DEFAULT_WATCHDOG_MS = 2000;
 
+    // caps for an untrusted behavior pack script's heap and native stack
+    static const size_t SCRIPT_MEMORY_LIMIT_BYTES = 64 * 1024 * 1024;
+    static const size_t SCRIPT_MAX_STACK_BYTES = 1024 * 1024;
+
     ScriptEngine();
 
     ~ScriptEngine();

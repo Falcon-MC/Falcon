@@ -250,7 +250,9 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
 
     ServerPlayer *victim = nullptr;
     for (auto &entry: owner.getPlayers()) {
-        if (entry.second.getRuntimeId() == targetRuntimeId) {
+        // the target must be in the same world and dimension, or a client could attack players across
+        // dimensions and worlds, including worlds where pvp is disabled.
+        if (entry.second.getRuntimeId() == targetRuntimeId && entry.second.sharesLevelWith(*this)) {
             victim = &entry.second;
             break;
         }
@@ -327,7 +329,8 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
         victim->getGameType() == (int32_t) GameType::Creative)
         return false;
 
-    if (!owner.getWorldFor(*this).getOverworld().getGameRules().getBool("pvp"))
+    // pvp is read from the victim's world: a victim in a pvp-disabled world must be protected
+    if (!owner.getWorldFor(*victim).getOverworld().getGameRules().getBool("pvp"))
         return false;
 
     const Vector3f delta(victim->getPosition().x - getPosition().x,

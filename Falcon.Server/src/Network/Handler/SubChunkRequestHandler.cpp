@@ -4,12 +4,14 @@
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/SubChunkPacket.h"
 #include "Protocol/Packets/SubChunkRequestPacket.h"
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <string>
 #include <vector>
@@ -70,6 +72,7 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
                                            const SubChunkRequestPacket &packet) {
     Level &level = owner.getLevelFor(player);
     const NetworkIdentifier &id = player.getNetworkIdentifier();
+    const ChunkStreamState &state = player.getChunkStreamState();
     const bool wrongDimension = packet.mDimension != level.getDimensionId();
 
     std::vector<SubChunkData> entries;
@@ -87,13 +90,31 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
             continue;
         }
 
-        const int32_t chunkX = packet.mSubChunkPosition.x + offset.x;
-        const int32_t subChunkY = packet.mSubChunkPosition.y + offset.y;
-        const int32_t chunkZ = packet.mSubChunkPosition.z + offset.z;
-        const int index = (int) (subChunkY - LevelChunk::LOWEST_SUB_CHUNK_Y);
+        // the centre and the offsets are client-chosen, so the sum is done in 64 bits to avoid signed overflow,
+        // then range-checked before it is narrowed back to the chunk coordinate type.
+        const int64_t chunkX64 = (int64_t) packet.mSubChunkPosition.x + offset.x;
+        const int64_t subChunkY64 = (int64_t) packet.mSubChunkPosition.y + offset.y;
+        const int64_t chunkZ64 = (int64_t) packet.mSubChunkPosition.z + offset.z;
+        const int64_t index64 = subChunkY64 - LevelChunk::LOWEST_SUB_CHUNK_Y;
 
-        if (index < 0 || index >= LevelChunk::SUB_CHUNK_COUNT) {
+        if (chunkX64 < INT32_MIN || chunkX64 > INT32_MAX || chunkZ64 < INT32_MIN || chunkZ64 > INT32_MAX
+            || index64 < 0 || index64 >= LevelChunk::SUB_CHUNK_COUNT) {
             entry.mResult = SubChunkRequestResult::IndexOutOfBounds;
+            entry.mHeightMapType = HeightMapDataType::NoData;
+            entry.mRenderHeightMapType = entry.mHeightMapType;
+            entries.push_back(entry);
+            continue;
+        }
+
+        const int32_t chunkX = (int32_t) chunkX64;
+        const int32_t subChunkY = (int32_t) subChunkY64;
+        const int32_t chunkZ = (int32_t) chunkZ64;
+        const int index = (int) index64;
+
+        // only chunks already within the player's view may be read: this bounds the work per packet and stops a
+        // client from pulling distant chunks it was never streamed (locating bases, x-ray).
+        if (state.mInRadius.find(ChunkStreamHandler::packChunk(chunkX, chunkZ)) == state.mInRadius.end()) {
+            entry.mResult = SubChunkRequestResult::ChunkNotFound;
             entry.mHeightMapType = HeightMapDataType::NoData;
             entry.mRenderHeightMapType = entry.mHeightMapType;
             entries.push_back(entry);

@@ -274,7 +274,9 @@ void CommandBlockSystem::onCommandBlockUpdate(ServerNetworkHandler &owner, Serve
     if (!packet.mBlock)
         return;
 
-    if (!player.isOp() && player.getGameType() != (int32_t) GameType::Creative) {
+    // command blocks are operator-only in vanilla, and the screen only opens in creative: both are required,
+    // or a non-op creative player would run commands at the internal permission level.
+    if (!player.isOp() || player.getGameType() != (int32_t) GameType::Creative) {
         LOG_INFO(LogAreaID::Server, "Rejected command block update from %s: missing permission",
                  player.getName().c_str());
         return;
@@ -282,7 +284,15 @@ void CommandBlockSystem::onCommandBlockUpdate(ServerNetworkHandler &owner, Serve
 
     Level &level = owner.getLevelFor(player);
     const Vector3i position = packet.mBlockPosition;
-    const BlockState state = level.getBlockState(position.x, position.y, position.z);
+
+    if (!BlockActionHandler::canInteractWithBlock(player, position))
+        return;
+
+    // peek instead of get: an out-of-reach or unloaded position must not force a synchronous chunk load here
+    const BlockState *statePtr = level.peekBlockPtr(position.x, position.y, position.z);
+    if (statePtr == nullptr)
+        return;
+    const BlockState state = *statePtr;
     if (!CommandBlock::matches(state.mName))
         return;
 

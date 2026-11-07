@@ -285,7 +285,12 @@ namespace {
         if (position.y < level.getMinY() || position.y > level.getMaxY())
             return;
 
-        const BlockState state = level.getBlockState(position.x, position.y, position.z);
+        // peek only: a rejected action on a far or unloaded position must not force a synchronous chunk
+        // load or generation on the tick thread. an unloaded chunk means there is nothing to correct.
+        const BlockState *statePtr = level.peekBlockPtr(position.x, position.y, position.z);
+        if (statePtr == nullptr)
+            return;
+        const BlockState state = *statePtr;
 
         UpdateBlockPacket update;
         update.mBlockPosition = position;
@@ -336,7 +341,11 @@ namespace {
                 continue;
 
             for (int32_t layer = 0; layer < 2; ++layer) {
-                const BlockState state = level.getBlockStateAtLayer(position.x, position.y, position.z, layer);
+                // peek only: syncing around a click must not generate chunks from client coordinates
+                const BlockState *statePtr = level.peekBlockPtr(position.x, position.y, position.z, layer);
+                if (statePtr == nullptr)
+                    continue;
+                const BlockState &state = *statePtr;
 
                 UpdateBlockPacket update;
                 update.mBlockPosition = position;
@@ -477,6 +486,11 @@ bool BlockActionHandler::canBreakBlock(ServerNetworkHandler &owner, ServerPlayer
         if (block == nullptr || !ItemProperties::canDestroy(player.getInventory().getItemInHand(), block->mName))
             return false;
     }
+
+    // a deny block below forbids changing the block, breaking as much as placing: otherwise it is bypassed
+    // simply by breaking instead of placing.
+    if (!isBlockChangeAllowed(owner.getLevelFor(player), position, player))
+        return false;
 
     const PropertiesSettings &properties = owner.getProperties();
     const float scalar = properties.getServerAuthoritativeBlockBreaking()

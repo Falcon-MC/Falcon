@@ -16,6 +16,9 @@ public:
     bool saveData(const std::string &name, const Tag &data) const;
 
 private:
+    // whether a name maps to a file name that stays inside the data directory (no path separators, no traversal)
+    static bool _isSafeName(const std::string &name);
+
     std::string _getPlayerDataPath(const std::string &name) const;
 
     static bool _gzipCompress(const std::string &input, std::string &output);
