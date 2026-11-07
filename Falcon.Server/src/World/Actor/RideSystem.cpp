@@ -2,6 +2,7 @@
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/SetActorDataPacket.h"
 #include "Protocol/Packets/SetActorLinkPacket.h"
@@ -79,6 +80,17 @@ namespace {
         return actor->getSeatOffset(index, passengerCount);
     }
 
+    // Vanilla writes the passenger's height offset into the seat it syncs: the client places the passenger's
+    // network position (eyes for a player) on that seat. Falcon positions are feet based, so the server side
+    // position keeps the bare seat.
+    float heightOffsetOf(const Actor &passenger) {
+        if (dynamic_cast<const ServerPlayer *>(&passenger) != nullptr)
+            return PlayerMovementSimulator::PLAYER_BASE_OFFSET;
+
+        const ServerActor *actor = dynamic_cast<const ServerActor *>(&passenger);
+        return actor == nullptr ? 0.0f : actor->getBaseOffset();
+    }
+
     Vector3f seatPositionOf(const Actor &vehicle, const Vector3f &seat) {
         const float yaw = vehicle.getRotation().y * DEGREES_TO_RADIANS;
         const float cosine = std::cos(yaw);
@@ -92,10 +104,20 @@ namespace {
         const std::vector<int64_t> passengers = vehicle.getPassengers();
         for (size_t index = 0; index < passengers.size(); ++index) {
             Actor *passenger = RideSystem::resolve(owner, passengers[index]);
-            if (passenger != nullptr)
-                sendSeatPosition(owner, vehicle, *passenger, seatOffsetOf(vehicle, index, passengers.size()));
+            if (passenger == nullptr)
+                continue;
+
+            sendSeatPosition(owner, vehicle, *passenger,
+                             RideSystem::syncedSeatOf(vehicle, *passenger, index, passengers.size()));
         }
     }
+}
+
+Vector3f RideSystem::syncedSeatOf(const Actor &vehicle, const Actor &passenger, size_t index,
+                                  size_t passengerCount) {
+    Vector3f seat = seatOffsetOf(vehicle, index, passengerCount);
+    seat.y += heightOffsetOf(passenger);
+    return seat;
 }
 
 bool RideSystem::mount(ServerNetworkHandler &owner, Actor &rider, ServerActor &vehicle, bool riderInitiated) {
