@@ -15,6 +15,7 @@
 #include <memory>
 #include <string>
 #include <stdexcept>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -182,10 +183,34 @@ void ServerNetworkHandler::saveActorsForChunk(Level &level, int32_t chunkX, int3
 
 void ServerNetworkHandler::saveAllActors() {
     for (Level *level: getLevels()) {
-        for (const int64_t column: getWorldOf(*level).getActorLoadedChunks(level->getDimensionType())) {
+        const std::unordered_set<int64_t> &columns = getWorldOf(*level).getActorLoadedChunks(level->getDimensionType());
+
+        // One pass sorts the actors into their chunks, in the order saveActorsForChunk() would find them;
+        // asking every loaded chunk for its actors walked all of them once per chunk.
+        std::unordered_map<int64_t, std::vector<Tag>> byChunk;
+        for (auto &entry: mActors) {
+            ServerActor &actor = *entry.second;
+            if (!actor.shouldSave() || !actor.isIn(*level))
+                continue;
+
+            const Vector3f position = actor.getPosition();
+            const int64_t column = ((int64_t) ((int32_t) std::floor(position.x) >> 4) << 32)
+                                   | (uint32_t) ((int32_t) std::floor(position.z) >> 4);
+            if (columns.count(column) != 0)
+                byChunk[column].push_back(actor.saveNbt());
+        }
+
+        for (const int64_t column: columns) {
             const int32_t chunkX = (int32_t) (column >> 32);
             const int32_t chunkZ = (int32_t) (column & 0xffffffff);
-            saveActorsForChunk(*level, chunkX, chunkZ, false);
+
+            std::vector<Tag> entities;
+            const auto found = byChunk.find(column);
+            if (found != byChunk.end())
+                entities = std::move(found->second);
+
+            ItemActorHandler::saveItemsInChunk(*this, *level, chunkX, chunkZ, entities, false);
+            level->saveEntities(chunkX, chunkZ, entities);
             saveBlockActorsForChunk(*level, chunkX, chunkZ, false);
         }
     }
