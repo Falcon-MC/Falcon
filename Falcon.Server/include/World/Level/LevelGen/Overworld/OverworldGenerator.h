@@ -44,6 +44,8 @@ public:
 
     int32_t getPreliminaryHeight(int32_t x, int32_t z) const override;
 
+    std::array<int32_t, 256> getPreliminaryHeights(int32_t chunkX, int32_t chunkZ) const override;
+
     int32_t getPreliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const override;
 
     int32_t getPreliminaryLowestHeight(int32_t chunkX, int32_t chunkZ) const override;
