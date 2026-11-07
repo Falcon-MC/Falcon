@@ -14,6 +14,41 @@
 #include <vector>
 
 namespace {
+    /**
+     * Appends the index words of one paletted storage in a single write. Chunk encoding runs on the main
+     * thread for every chunk streamed to a player, so packing byte by byte into the stream cost most of a
+     * tick while many players load terrain.
+     */
+    void putIndexWords(BinaryStream &stream, const PaletteIndices &indices, int bitsPerBlock) {
+        const int blocksPerWord = 32 / bitsPerBlock;
+        const int wordCount = (SubChunk::BLOCK_COUNT + blocksPerWord - 1) / blocksPerWord;
+        std::string bytes((size_t) wordCount * 4, '\0');
+        if (indices.words().empty()) {
+            stream.put(bytes);
+            return;
+        }
+
+        const bool sameLayout = indices.bitsPerIndex() == (uint32_t) bitsPerBlock
+                                && indices.words().size() == (size_t) wordCount;
+        int blockIndex = 0;
+        for (int word = 0; word < wordCount; word++) {
+            uint32_t packed = 0;
+            if (sameLayout) {
+                packed = indices.words()[(size_t) word];
+            } else {
+                for (int slot = 0; slot < blocksPerWord && blockIndex < SubChunk::BLOCK_COUNT; slot++) {
+                    packed |= ((uint32_t) indices[(size_t) blockIndex]) << (slot * bitsPerBlock);
+                    blockIndex++;
+                }
+            }
+            bytes[(size_t) word * 4] = (char) (packed & 0xff);
+            bytes[(size_t) word * 4 + 1] = (char) ((packed >> 8) & 0xff);
+            bytes[(size_t) word * 4 + 2] = (char) ((packed >> 16) & 0xff);
+            bytes[(size_t) word * 4 + 3] = (char) (packed >> 24);
+        }
+        stream.put(bytes);
+    }
+
     struct InternedStateHash {
         size_t operator()(const BlockState &state) const {
             return (size_t) (uint32_t) state.getHash();
@@ -126,20 +161,9 @@ void SubChunk::writeBiomes(BinaryStream &stream, bool persistent) const {
     }
 
     const int bitsPerBlock = _bitsPerBlock(mBiomePalette.size());
-    const int blocksPerWord = 32 / bitsPerBlock;
-    const int wordCount = (BLOCK_COUNT + blocksPerWord - 1) / blocksPerWord;
 
     stream.putByte((unsigned char) ((bitsPerBlock << 1) | (persistent ? 0 : 1)));
-
-    int blockIndex = 0;
-    for (int word = 0; word < wordCount; word++) {
-        uint32_t packed = 0;
-        for (int slot = 0; slot < blocksPerWord && blockIndex < BLOCK_COUNT; slot++) {
-            packed |= ((uint32_t) mBiomes[blockIndex]) << (slot * bitsPerBlock);
-            blockIndex++;
-        }
-        stream.putLInt(packed);
-    }
+    putIndexWords(stream, mBiomes, bitsPerBlock);
 
     if (persistent) {
         stream.putLInt((uint32_t) mBiomePalette.size());
@@ -387,20 +411,9 @@ void SubChunk::_writeStorage(BinaryStream &stream, bool persistent,
                             const std::vector<const BlockState *> &palette,
                             const PaletteIndices &blocks, const BlockNetworkIdMap *blockIds) const {
     const int bitsPerBlock = _bitsPerBlock(palette.size());
-    const int blocksPerWord = 32 / bitsPerBlock;
-    const int wordCount = (BLOCK_COUNT + blocksPerWord - 1) / blocksPerWord;
 
     stream.putByte((unsigned char) ((bitsPerBlock << 1) | (persistent ? 0 : 1)));
-
-    int blockIndex = 0;
-    for (int word = 0; word < wordCount; word++) {
-        uint32_t packed = 0;
-        for (int slot = 0; slot < blocksPerWord && blockIndex < BLOCK_COUNT && !blocks.empty(); slot++) {
-            packed |= ((uint32_t) blocks[blockIndex]) << (slot * bitsPerBlock);
-            blockIndex++;
-        }
-        stream.putLInt(packed);
-    }
+    putIndexWords(stream, blocks, bitsPerBlock);
 
     if (persistent) {
         stream.putLInt((uint32_t) palette.size());
@@ -429,9 +442,7 @@ void SubChunk::writeNetwork(BinaryStream &stream, const BlockNetworkIdMap *block
 
 void SubChunk::_writeEmptyStorage(BinaryStream &stream, bool persistent, const BlockNetworkIdMap *blockIds) const {
     stream.putByte((unsigned char) ((1 << 1) | (persistent ? 0 : 1)));
-
-    for (int word = 0; word < 128; word++)
-        stream.putLInt(0);
+    putIndexWords(stream, PaletteIndices(), 1);
 
     const BlockState air;
 

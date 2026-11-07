@@ -54,6 +54,16 @@ public:
         mWords.assign(_wordCount(count, mWidthLog2), word);
     }
 
+    // Bits each index takes in words(), which then hold the indices in the Bedrock storage layout.
+    uint32_t bitsPerIndex() const {
+        return 1u << mWidthLog2;
+    }
+
+    // Empty while every index is zero.
+    const std::vector<uint32_t> &words() const {
+        return mWords;
+    }
+
     // Releases the storage, unlike std::vector::clear().
     void clear() {
         std::vector<uint32_t>().swap(mWords);

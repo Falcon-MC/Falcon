@@ -8,6 +8,7 @@
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Protocol/Packets/CommandRequestPacket.h"
 #include "World/Level/Chunk/SubChunk.h"
+#include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
 
@@ -645,6 +646,60 @@ int main() {
             require(LevelPersistenceProbe::savedBlock(retry, 1, 140, 1, "minecraft:diamond_block"),
                     "Retry lost the failed snapshot");
             retry.closeStorage();
+        });
+        check("packed sub-chunk storage reads back for every palette width", [&]() {
+            const char *names[] = {"minecraft:stone", "minecraft:dirt", "minecraft:cobblestone", "minecraft:sand",
+                                   "minecraft:gravel", "minecraft:gold_ore", "minecraft:iron_ore", "minecraft:coal_ore",
+                                   "minecraft:glass", "minecraft:diamond_block", "minecraft:gold_block",
+                                   "minecraft:iron_block", "minecraft:bedrock", "minecraft:bookshelf",
+                                   "minecraft:obsidian", "minecraft:ice", "minecraft:clay", "minecraft:netherrack",
+                                   "minecraft:soul_sand", "minecraft:glowstone"};
+            std::mt19937 random(11);
+            for (size_t kinds = 1; kinds <= sizeof(names) / sizeof(names[0]); ++kinds) {
+                SubChunk section(3);
+                for (int index = 0; index < SubChunk::BLOCK_COUNT; ++index) {
+                    if (random() % 4 != 0)
+                        section.setBlock(index >> 8, index & 15, (index >> 4) & 15,
+                                         BlockState(names[random() % kinds]));
+                    section.setBiome(index >> 8, index & 15, (index >> 4) & 15, (uint32_t) (random() % kinds));
+                }
+                section.setBlock(1, 2, 3, 1, BlockState(names[kinds - 1]));
+
+                BinaryStream persistent;
+                section.writePersistent(persistent);
+                section.writeBiomes(persistent, true);
+                ReadOnlyBinaryStream input(persistent.getBuffer());
+                SubChunk read(3);
+                require(read.readPersistent(input) && read.readBiomes(input, nullptr), "Packed section did not parse");
+                for (int index = 0; index < SubChunk::BLOCK_COUNT; ++index) {
+                    const int x = index >> 8, y = index & 15, z = (index >> 4) & 15;
+                    require(read.getBlock(x, y, z).getHash() == section.getBlock(x, y, z).getHash()
+                            && read.getBlock(x, y, z, 1).getHash() == section.getBlock(x, y, z, 1).getHash(),
+                            "Packed section read back other blocks");
+                    require(read.getBiome(x, y, z) == section.getBiome(x, y, z), "Packed section read back other biomes");
+                }
+
+                BinaryStream network;
+                section.writeNetwork(network);
+                ReadOnlyBinaryStream packet(network.getBuffer());
+                require(packet.getByte() == SubChunk::STORAGE_VERSION && packet.getByte() == SubChunk::LAYER_COUNT
+                        && packet.getByte() == 3, "Network section header changed");
+                const int bits = packet.getByte() >> 1;
+                const int perWord = 32 / bits;
+                std::vector<uint32_t> indices;
+                for (int word = 0; word < (SubChunk::BLOCK_COUNT + perWord - 1) / perWord; ++word) {
+                    const uint32_t packed = packet.getLInt();
+                    for (int slot = 0; slot < perWord && (int) indices.size() < SubChunk::BLOCK_COUNT; ++slot)
+                        indices.push_back((packed >> (slot * bits)) & ((1u << bits) - 1u));
+                }
+                std::vector<int32_t> palette((size_t) packet.getVarInt());
+                for (int32_t &entry: palette)
+                    entry = packet.getVarInt();
+                for (int index = 0; index < SubChunk::BLOCK_COUNT; ++index)
+                    require(palette.at(indices[(size_t) index])
+                            == section.getBlock(index >> 8, index & 15, (index >> 4) & 15).getHash(),
+                            "Network section indices point at other blocks");
+            }
         });
         check("inbound packets are read while a large outbound backlog compresses", [&]() {
             FakeConnector *connector = new FakeConnector();
