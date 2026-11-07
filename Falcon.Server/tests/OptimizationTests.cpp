@@ -8,6 +8,7 @@
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Protocol/Packets/CommandRequestPacket.h"
 #include "World/Level/Chunk/SubChunk.h"
+#include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Chunk/LightStorage.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
@@ -720,6 +721,52 @@ int main() {
                             == section.getBlock(index >> 8, index & 15, (index >> 4) & 15).getHash(),
                             "Network section indices point at other blocks");
             }
+        });
+        check("a packed chunk unpacks to exactly the same storage", [&]() {
+            const char *names[] = {"minecraft:stone", "minecraft:dirt", "minecraft:water", "minecraft:glowstone",
+                                   "minecraft:oak_log"};
+            std::mt19937 random(3);
+            LevelChunk chunk(2, -3);
+            for (int i = 0; i < 20000; ++i) {
+                const int x = (int) (random() % 16), z = (int) (random() % 16);
+                const int32_t y = LevelChunk::MIN_Y + (int32_t) (random() % 200);
+                chunk.setBlock(x, y, z, BlockState(names[random() % 5]));
+                chunk.setBiomeAt(x, y, z, (uint32_t) (random() % 4));
+                chunk.setSkyLight(x, y, z, (int) (random() % 16));
+                chunk.setBlockLight(x, y, z, (int) (random() % 16));
+            }
+            chunk.setBlock(4, 10, 4, 1, BlockState("minecraft:water"));
+            const auto persistent = [&chunk]() {
+                BinaryStream stream;
+                for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; ++index)
+                    chunk.getSubChunk(index).writePersistent(stream);
+                return stream.getBuffer() + chunk.encodeBiomesPersistent(0, LevelChunk::SUB_CHUNK_COUNT);
+            };
+            const auto light = [&chunk]() {
+                std::string levels;
+                for (int32_t y = LevelChunk::MIN_Y; y <= LevelChunk::MAX_Y; ++y) {
+                    for (int x = 0; x < 16; ++x) {
+                        levels += (char) chunk.getSkyLight(x, y, 15 - x);
+                        levels += (char) chunk.getBlockLight(x, y, x);
+                    }
+                }
+                return levels;
+            };
+            const std::string network = chunk.encodeNetwork();
+            const std::string stored = persistent();
+            const std::string levels = light();
+
+            chunk.pack();
+            require(chunk.isPacked(), "Chunk did not pack");
+            require(chunk.encodeNetwork() == network && !chunk.isPacked(), "Unpacked chunk encodes differently");
+            require(persistent() == stored && light() == levels, "Unpacked chunk lost storage");
+            require(chunk.consumeUnpacked() && !chunk.consumeUnpacked(), "Unpacking was not reported once");
+
+            chunk.pack();
+            LevelChunk copy(chunk);
+            copy.setBlock(1, 1, 1, BlockState("minecraft:dirt"));
+            require(chunk.isPacked() && copy.getBlock(1, 1, 1).mName == "minecraft:dirt",
+                    "A copy of a packed chunk did not unpack on its own");
         });
         check("light sections fold back to one level and release their table", [&]() {
             LightStorage light;

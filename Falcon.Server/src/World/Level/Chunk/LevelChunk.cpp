@@ -3,7 +3,10 @@
 static_assert(LightStorage::SECTION_COUNT == LevelChunk::SUB_CHUNK_COUNT && LightStorage::MIN_Y == LevelChunk::MIN_Y,
               "LightStorage sections must match the chunk sub-chunks");
 
+#include <zlib.h>
+
 #include <algorithm>
+#include <stdexcept>
 
 LevelChunk::LevelChunk(int32_t x, int32_t z) : mX(x), mZ(z), mBiomeId(1), mDirty(false) {
     mSubChunks.reserve(SUB_CHUNK_COUNT);
@@ -21,6 +24,67 @@ void LevelChunk::invalidateNetworkCaches() {
     std::string().swap(mNetworkAnchorCache);
     mTopHeightsValid = false;
     mNetworkAnchorValid = false;
+}
+
+void LevelChunk::pack() {
+    if (mPacked)
+        return;
+
+    std::string raw;
+    for (const SubChunk &subChunk: mSubChunks)
+        subChunk.packRaw(raw);
+    mSkyLight.packRaw(raw);
+    mBlockLight.packRaw(raw);
+
+    // Index words are long runs of the same few values, so even the fastest zlib level shrinks them several fold.
+    uLongf size = compressBound((uLong) raw.size());
+    std::string packed(sizeof(uint32_t) + size, '\0');
+    const uint32_t rawSize = (uint32_t) raw.size();
+    std::memcpy(&packed[0], &rawSize, sizeof(rawSize));
+    if (compress2((Bytef *) &packed[sizeof(uint32_t)], &size, (const Bytef *) raw.data(), (uLong) raw.size(),
+                  Z_BEST_SPEED) != Z_OK)
+        return;
+
+    packed.resize(sizeof(uint32_t) + size);
+    packed.shrink_to_fit();
+    mPackedData = std::move(packed);
+    std::vector<SubChunk>().swap(mSubChunks);
+    mSkyLight.clear();
+    mBlockLight.clear();
+    invalidateNetworkCaches();
+    mPacked = true;
+}
+
+void LevelChunk::_unpack() const {
+    uint32_t rawSize = 0;
+    std::memcpy(&rawSize, mPackedData.data(), sizeof(rawSize));
+    std::string raw(rawSize, '\0');
+    uLongf size = rawSize;
+    if (uncompress((Bytef *) &raw[0], &size, (const Bytef *) mPackedData.data() + sizeof(uint32_t),
+                   (uLong) (mPackedData.size() - sizeof(uint32_t))) != Z_OK || size != rawSize)
+        throw std::logic_error("Packed chunk could not be unpacked");
+
+    RawPack::Reader reader(raw.data(), raw.size());
+    std::vector<SubChunk> subChunks;
+    subChunks.reserve(SUB_CHUNK_COUNT);
+    for (int i = 0; i < SUB_CHUNK_COUNT; i++) {
+        subChunks.push_back(SubChunk((int8_t) (LOWEST_SUB_CHUNK_Y + i)));
+        if (!subChunks.back().unpackRaw(reader))
+            throw std::logic_error("Packed chunk holds a malformed section");
+    }
+    if (!mSkyLight.unpackRaw(reader) || !mBlockLight.unpackRaw(reader) || !reader.atEnd())
+        throw std::logic_error("Packed chunk holds malformed light");
+
+    mSubChunks = std::move(subChunks);
+    std::string().swap(mPackedData);
+    mPacked = false;
+    mUnpacked = true;
+}
+
+bool LevelChunk::consumeUnpacked() {
+    const bool unpacked = mUnpacked;
+    mUnpacked = false;
+    return unpacked;
 }
 
 int32_t LevelChunk::getHeight(int x, int z) const {
@@ -46,6 +110,7 @@ void LevelChunk::setHeight(int x, int z, int32_t height) {
 }
 
 int LevelChunk::getSkyLight(int x, int32_t y, int z) const {
+    _ensureUnpacked();
     if (y < MIN_Y || y > MAX_Y)
         return 0;
 
@@ -53,6 +118,7 @@ int LevelChunk::getSkyLight(int x, int32_t y, int z) const {
 }
 
 void LevelChunk::setSkyLight(int x, int32_t y, int z, int value) {
+    _ensureUnpacked();
     if (y < MIN_Y || y > MAX_Y)
         return;
 
@@ -60,6 +126,7 @@ void LevelChunk::setSkyLight(int x, int32_t y, int z, int value) {
 }
 
 int LevelChunk::getBlockLight(int x, int32_t y, int z) const {
+    _ensureUnpacked();
     if (y < MIN_Y || y > MAX_Y)
         return 0;
 
@@ -67,6 +134,7 @@ int LevelChunk::getBlockLight(int x, int32_t y, int z) const {
 }
 
 void LevelChunk::setBlockLight(int x, int32_t y, int z, int value) {
+    _ensureUnpacked();
     if (y < MIN_Y || y > MAX_Y)
         return;
 
@@ -74,21 +142,25 @@ void LevelChunk::setBlockLight(int x, int32_t y, int z, int value) {
 }
 
 void LevelChunk::clearSkyLight() {
+    _ensureUnpacked();
     mSkyLight.clear();
     mHeightmap.clear();
 }
 
 void LevelChunk::compactLight() {
+    _ensureUnpacked();
     mSkyLight.compact();
     mBlockLight.compact();
 }
 
 void LevelChunk::compactBiomes() {
+    _ensureUnpacked();
     for (SubChunk &subChunk: mSubChunks)
         subChunk.compactBiomes();
 }
 
 const BlockState &LevelChunk::getBlock(int x, int32_t y, int z) const {
+    _ensureUnpacked();
     static const BlockState air;
 
     if (y < MIN_Y || y > MAX_Y)
@@ -98,6 +170,7 @@ const BlockState &LevelChunk::getBlock(int x, int32_t y, int z) const {
 }
 
 const BlockState &LevelChunk::getBlock(int x, int32_t y, int z, int layer) const {
+    _ensureUnpacked();
     static const BlockState air;
 
     if (y < MIN_Y || y > MAX_Y)
@@ -107,6 +180,7 @@ const BlockState &LevelChunk::getBlock(int x, int32_t y, int z, int layer) const
 }
 
 void LevelChunk::setBlock(int x, int32_t y, int z, const BlockState &state) {
+    _ensureUnpacked();
     if (y < MIN_Y || y > MAX_Y)
         return;
 
@@ -122,6 +196,7 @@ void LevelChunk::setBlock(int x, int32_t y, int z, const BlockState &state) {
 }
 
 void LevelChunk::setBlock(int x, int32_t y, int z, int layer, const BlockState &state) {
+    _ensureUnpacked();
     if (y < MIN_Y || y > MAX_Y)
         return;
 
@@ -156,6 +231,7 @@ void LevelChunk::setDimension(DimensionType dimension) {
 }
 
 int LevelChunk::getNetworkSubChunkCount() const {
+    _ensureUnpacked();
     const int last = mFirstNetworkSubChunk + mNetworkSubChunkLimit - 1;
 
     for (int i = last; i >= mFirstNetworkSubChunk; i--) {
@@ -167,6 +243,7 @@ int LevelChunk::getNetworkSubChunkCount() const {
 }
 
 void LevelChunk::setBiome(uint32_t biomeId) {
+    _ensureUnpacked();
     mBiomeId = biomeId;
     mNetworkAnchorValid = false;
 
@@ -182,6 +259,7 @@ void LevelChunk::setBiome(uint32_t biomeId) {
 }
 
 void LevelChunk::setBiomeAt(int x, int32_t y, int z, uint32_t biomeId) {
+    _ensureUnpacked();
     if (y < MIN_Y || y > MAX_Y)
         return;
 
@@ -190,11 +268,13 @@ void LevelChunk::setBiomeAt(int x, int32_t y, int z, uint32_t biomeId) {
 }
 
 void LevelChunk::fillSubChunkBiome(int index, uint32_t biomeId) {
+    _ensureUnpacked();
     mSubChunks[index].fillBiome(biomeId);
     mNetworkAnchorValid = false;
 }
 
 uint32_t LevelChunk::getBiomeAt(int x, int32_t y, int z) const {
+    _ensureUnpacked();
     if (y < MIN_Y || y > MAX_Y)
         return mBiomeId;
 
@@ -211,6 +291,7 @@ uint32_t LevelChunk::getColumnBiome(int x, int z) const {
 }
 
 std::string LevelChunk::encodeBiomes(int sectionCount) const {
+    _ensureUnpacked();
     BinaryStream stream;
 
     for (int i = 0; i < sectionCount; i++)
@@ -220,6 +301,7 @@ std::string LevelChunk::encodeBiomes(int sectionCount) const {
 }
 
 bool LevelChunk::readBiomesPersistent(ReadOnlyBinaryStream &stream, int firstSection, int sectionCount) {
+    _ensureUnpacked();
     const int end = std::min(firstSection + sectionCount, SUB_CHUNK_COUNT);
     for (int i = firstSection; i < end; i++) {
         if (!mSubChunks[i].readBiomes(stream, i > firstSection ? &mSubChunks[i - 1] : nullptr))
@@ -232,6 +314,7 @@ bool LevelChunk::readBiomesPersistent(ReadOnlyBinaryStream &stream, int firstSec
 }
 
 std::string LevelChunk::encodeBiomesPersistent(int firstSection, int sectionCount) const {
+    _ensureUnpacked();
     BinaryStream stream;
 
     // like the game, sections above the highest non-empty one repeat it instead of keeping their own biomes
@@ -271,6 +354,7 @@ std::string LevelChunk::encodeNetwork(const BlockNetworkIdMap *blockIds) const {
 }
 
 const std::string &LevelChunk::encodeNetworkAnchor() const {
+    _ensureUnpacked();
     if (mNetworkAnchorValid)
         return mNetworkAnchorCache;
 
@@ -299,6 +383,7 @@ const std::string &LevelChunk::encodeNetworkAnchor() const {
  * section changes, since the same data is sent to every player who loads the chunk.
  */
 const std::string &LevelChunk::encodeSubChunkNetwork(int index) const {
+    _ensureUnpacked();
     static const std::string empty;
 
     if (index < 0 || index >= SUB_CHUNK_COUNT)
@@ -324,6 +409,7 @@ const std::string &LevelChunk::encodeSubChunkNetwork(int index) const {
 }
 
 const std::string &LevelChunk::encodeSubChunkNetwork(int index, const BlockNetworkIdMap &blockIds) const {
+    _ensureUnpacked();
     static const std::string empty;
 
     if (index < 0 || index >= SUB_CHUNK_COUNT)
@@ -344,6 +430,7 @@ const std::string &LevelChunk::encodeSubChunkNetwork(int index, const BlockNetwo
 }
 
 const std::vector<int32_t> &LevelChunk::getTopBlockHeights() const {
+    _ensureUnpacked();
     if (mTopHeightsValid)
         return mTopHeightsCache;
 

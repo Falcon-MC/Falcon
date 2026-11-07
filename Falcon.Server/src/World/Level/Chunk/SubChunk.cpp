@@ -456,6 +456,23 @@ void SubChunk::_writeEmptyStorage(BinaryStream &stream, bool persistent, const B
     stream.putVarInt(blockIds == nullptr ? air.getHash() : blockIds->toClient(air.getHash()));
 }
 
+void SubChunk::packRaw(std::string &out) const {
+    RawPack::put(out, mY);
+    RawPack::putVector(out, mPalette);
+    mBlocks.packRaw(out);
+    RawPack::putVector(out, mPalette2);
+    mBlocks2.packRaw(out);
+    RawPack::putVector(out, mBiomePalette);
+    mBiomes.packRaw(out);
+}
+
+bool SubChunk::unpackRaw(RawPack::Reader &in) {
+    _forgetPaletteQueries();
+    return in.get(mY) && in.getVector(mPalette) && !mPalette.empty() && mBlocks.unpackRaw(in)
+           && in.getVector(mPalette2) && mBlocks2.unpackRaw(in) && in.getVector(mBiomePalette)
+           && !mBiomePalette.empty() && mBiomes.unpackRaw(in);
+}
+
 void SubChunk::writePersistent(BinaryStream &stream) const {
     stream.putByte(STORAGE_VERSION);
     stream.putByte(LAYER_COUNT);

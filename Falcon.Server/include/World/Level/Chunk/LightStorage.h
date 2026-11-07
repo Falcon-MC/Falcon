@@ -1,5 +1,7 @@
 #pragma once
 
+#include "World/Level/Chunk/RawPack.h"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -105,6 +107,31 @@ public:
     void clear() {
         std::vector<std::vector<uint8_t>>().swap(mSections);
         mAllocated = false;
+    }
+
+    void packRaw(std::string &out) const {
+        RawPack::put(out, mAllocated);
+        RawPack::put(out, mUniform);
+        RawPack::put(out, (uint8_t) (mSections.empty() ? 0 : 1));
+        for (const std::vector<uint8_t> &data: mSections)
+            RawPack::putVector(out, data);
+    }
+
+    bool unpackRaw(RawPack::Reader &in) {
+        uint8_t hasSections = 0;
+        if (!in.get(mAllocated) || !in.get(mUniform) || !in.get(hasSections))
+            return false;
+
+        mSections.clear();
+        if (hasSections == 0)
+            return true;
+
+        mSections.resize(SECTION_COUNT);
+        for (std::vector<uint8_t> &data: mSections) {
+            if (!in.getVector(data) || (!data.empty() && data.size() != SECTION_BYTES))
+                return false;
+        }
+        return true;
     }
 
 private:

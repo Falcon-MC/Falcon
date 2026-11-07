@@ -80,6 +80,11 @@ public:
 
     void writePersistent(BinaryStream &stream) const;
 
+    // The section's storage as LevelChunk::pack() keeps it; unpackRaw() restores it exactly.
+    void packRaw(std::string &out) const;
+
+    bool unpackRaw(RawPack::Reader &in);
+
     bool readPersistent(ReadOnlyBinaryStream &stream, bool *replacedUnknown = nullptr);
 
 private:

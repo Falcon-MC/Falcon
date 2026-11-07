@@ -997,6 +997,34 @@ void Level::processDeferredSaves() {
     }
 }
 
+void Level::packIdleChunks() {
+    if (mPackCursor >= mPackKeys.size()) {
+        mPackKeys.clear();
+        mPackKeys.reserve(mChunks.size());
+        for (const auto &entry: mChunks)
+            mPackKeys.push_back(entry.first);
+        mPackCursor = 0;
+    }
+
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + PACK_BUDGET;
+    for (size_t visited = 0; visited < MAX_PACK_VISITS_PER_TICK && mPackCursor < mPackKeys.size(); ++visited) {
+        const int64_t key = mPackKeys[mPackCursor++];
+        auto it = mChunks.find(key);
+        if (it == mChunks.end() || it->second.isPacked())
+            continue;
+
+        // A chunk read since the last pass gets another pass before it is packed.
+        LevelChunk &chunk = it->second;
+        if (chunk.consumeUnpacked() || !chunk.isPopulated() || mActiveColumns.count(key) != 0
+            || mOccupiedColumns.count(key) != 0 || mPendingChunks.count(key) != 0)
+            continue;
+
+        chunk.pack();
+        if (std::chrono::steady_clock::now() >= deadline)
+            break;
+    }
+}
+
 size_t Level::processChunkUnloads() {
     if (++mUnloadSweepTicks >= UNLOAD_SWEEP_INTERVAL_TICKS) {
         mUnloadSweepTicks = 0;
