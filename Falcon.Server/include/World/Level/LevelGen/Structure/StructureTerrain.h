@@ -18,6 +18,9 @@ public:
 
     int32_t getSolidHeight(int32_t x, int32_t z);
 
+    // one above the highest block that is not air, water included
+    int32_t getTopHeight(int32_t x, int32_t z);
+
     const BlockState &getBlock(int32_t x, int32_t y, int32_t z);
 
 private:

@@ -11,6 +11,15 @@ int32_t StructureTerrain::getSolidHeight(int32_t x, int32_t z) {
     return ChunkGenerator::solidHeight(*_chunkAt(x, z), x & 15, z & 15);
 }
 
+int32_t StructureTerrain::getTopHeight(int32_t x, int32_t z) {
+    const LevelChunk &chunk = *_chunkAt(x, z);
+    int32_t y = LevelChunk::MAX_Y;
+    while (y >= LevelChunk::MIN_Y && chunk.getBlock(x & 15, y, z & 15).mName == "minecraft:air")
+        y--;
+
+    return y + 1;
+}
+
 const BlockState &StructureTerrain::getBlock(int32_t x, int32_t y, int32_t z) {
     return _chunkAt(x, z)->getBlock(x & 15, y, z & 15);
 }

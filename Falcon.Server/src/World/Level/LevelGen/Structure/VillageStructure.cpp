@@ -92,7 +92,7 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
             std::map<Position, bool> chests;
             StructureTerrain terrain(generator);
             // rigid pieces sit at a fixed height; the ground-hugging streets project each column onto the
-            // bare terrain, laying their single ground layer over whatever block tops that column
+            // bare terrain, laying their single ground layer over the top block of that column, water included
             for (const JigsawPiece &piece : plan(generator, startX, startZ)) {
                 if (piece.mElement->mTemplate == nullptr)
                     continue;
@@ -113,7 +113,7 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
                     x += piece.x;
                     z += piece.z;
                     const int32_t y = piece.mElement->mTerrainMatching
-                                              ? terrain.getSolidHeight(x, z) - 1 + entry.y
+                                              ? terrain.getTopHeight(x, z) - 1 + entry.y
                                               : piece.y + entry.y;
 
                     BlockState state;
