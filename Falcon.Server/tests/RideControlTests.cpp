@@ -1,6 +1,7 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Movement/RideControlSystem.h"
+#include "World/Actor/RideSystem.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/ServerPaths.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
@@ -71,6 +72,14 @@ namespace {
         rider._setVehicleId(mount.getUniqueId());
         owner.getActors().emplace(mount.getUniqueId(), std::move(mountOwner));
         const auto air = json::parse(R"({"minecraft:free_camera_controlled":{"strafe_speed_modifier":1.0},"minecraft:flying_speed":{"value":0.016}})");
+        RideControlProbe::components(mount, *air);
+        const auto seats = json::parse(R"({"minecraft:rideable":{"seats":{"position":[0.0,1.1,-0.2]}}})");
+        RideControlProbe::components(mount, *seats);
+        const Vector3f riderSeat = RideSystem::syncedSeatOf(mount, rider, 0, 1);
+        near(riderSeat.y, 1.1f + 1.62f, "Player seat omitted the player height offset");
+        near(riderSeat.z, -0.2f, "Player seat moved horizontally");
+        TestMount mobPassenger(1003);
+        near(RideSystem::syncedSeatOf(mount, mobPassenger, 0, 1).y, 1.1f, "Mob seat gained a height offset");
         RideControlProbe::components(mount, *air);
         PlayerAuthInputPacket packet;
         packet.mMotionY = 1.0f;
