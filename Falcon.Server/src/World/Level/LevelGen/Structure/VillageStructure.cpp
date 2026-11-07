@@ -90,9 +90,11 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
 
             std::map<Position, BlockState> placed;
             std::map<Position, bool> chests;
-            // the rigid pieces are laid at a fixed height; the ground-hugging streets need their own pass
+            StructureTerrain terrain(generator);
+            // rigid pieces sit at a fixed height; the ground-hugging streets project each column onto the
+            // bare terrain, laying their single ground layer over whatever block tops that column
             for (const JigsawPiece &piece : plan(generator, startX, startZ)) {
-                if (piece.mElement->mTerrainMatching || piece.mElement->mTemplate == nullptr)
+                if (piece.mElement->mTemplate == nullptr)
                     continue;
 
                 const std::shared_ptr<const StructureTemplate> shape = StructureTemplate::load(piece.mElement->mTemplate);
@@ -110,7 +112,9 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
                     rotate(piece.mQuarterTurns, x, z);
                     x += piece.x;
                     z += piece.z;
-                    const int32_t y = piece.y + entry.y;
+                    const int32_t y = piece.mElement->mTerrainMatching
+                                              ? terrain.getSolidHeight(x, z) - 1 + entry.y
+                                              : piece.y + entry.y;
 
                     BlockState state;
                     if (!StructureBlockTable::translate(palette, piece.mQuarterTurns, state))
@@ -126,7 +130,6 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
             if (placed.empty())
                 continue;
 
-            StructureTerrain terrain(generator);
             const auto neighbour = [&](int32_t x, int32_t y, int32_t z) -> BlockState {
                 const auto found = placed.find({x, y, z});
                 return found != placed.end() ? found->second : terrain.getBlock(x, y, z);
