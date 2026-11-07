@@ -12,9 +12,14 @@
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <deque>
 #include <filesystem>
+#include <mutex>
+#include <random>
 #include <stdexcept>
+#include <thread>
 
 class LevelPersistenceProbe {
 public:
@@ -139,6 +144,118 @@ namespace {
     private:
         mutable bool mThrown = false;
     };
+}
+
+namespace {
+    class FakePeer : public NetworkPeer {
+    public:
+        void sendPacket(const std::string &data, Reliability, Compressibility) override {
+            mSentBytes += data.size();
+        }
+
+        DataStatus receivePacket(std::string &outData) override {
+            std::lock_guard<std::mutex> lock(mMutex);
+            if (mIncoming.empty())
+                return DataStatus::NoData;
+            outData = std::move(mIncoming.front());
+            mIncoming.pop_front();
+            return DataStatus::HasData;
+        }
+
+        NetworkStatus getNetworkStatus() const override { return NetworkStatus(); }
+
+        bool usesGamePacketId() const override { return false; }
+
+        bool encryptsGamePackets() const override { return false; }
+
+        // Queues one game packet the way a client batches it, behind the compression header once it is on.
+        void deliver(const std::string &packet, bool compressed = false) {
+            std::string batch;
+            if (compressed)
+                batch.push_back((char) CompressedNetworkPeer::CompressionAlgorithm::None);
+            batch.push_back((char) packet.size());
+            batch += packet;
+            std::lock_guard<std::mutex> lock(mMutex);
+            mIncoming.push_back(batch);
+        }
+
+        std::atomic<size_t> mSentBytes{0};
+
+    private:
+        std::mutex mMutex;
+        std::deque<std::string> mIncoming;
+    };
+
+    class FakeConnector : public Connector {
+    public:
+        bool host(const ConnectionDefinition &) override { return true; }
+
+        void disconnect() override {}
+
+        void runEvents() override {
+            std::vector<std::pair<NetworkIdentifier, std::shared_ptr<NetworkPeer>>> joining;
+            {
+                std::lock_guard<std::mutex> lock(mMutex);
+                joining.swap(mJoining);
+            }
+            for (const auto &entry: joining)
+                mCallbacks->onNewIncomingConnection(entry.first, entry.second);
+        }
+
+        std::shared_ptr<NetworkPeer> getPeerForUser(const NetworkIdentifier &) override { return nullptr; }
+
+        bool closeConnection(const NetworkIdentifier &id) override {
+            std::lock_guard<std::mutex> lock(mMutex);
+            mClosed.push_back(id);
+            return true;
+        }
+
+        TransportLayer getNetworkType() const override { return TransportLayer::NetherNet; }
+
+        bool isIPv4Supported() const override { return true; }
+
+        bool isIPv6Supported() const override { return false; }
+
+        void join(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer) {
+            std::lock_guard<std::mutex> lock(mMutex);
+            mJoining.emplace_back(id, std::move(peer));
+        }
+
+        size_t closedCount() {
+            std::lock_guard<std::mutex> lock(mMutex);
+            return mClosed.size();
+        }
+
+    private:
+        std::mutex mMutex;
+        std::vector<std::pair<NetworkIdentifier, std::shared_ptr<NetworkPeer>>> mJoining;
+        std::vector<NetworkIdentifier> mClosed;
+    };
+
+    class RecordingListener : public NetworkHandler::Listener {
+    public:
+        void onNewIncomingConnection(const NetworkIdentifier &) override { mEvents.push_back("open"); }
+
+        void onConnectionClosed(const NetworkIdentifier &, DisconnectFailReason reason, const std::string &) override {
+            mEvents.push_back(reason == DisconnectFailReason::ConnectionRefused ? "refused" : "closed");
+        }
+
+        void onDataReceived(const NetworkIdentifier &, const std::string &data) override {
+            mEvents.push_back("data:" + data);
+        }
+
+        std::vector<std::string> mEvents;
+    };
+
+    template<typename Predicate>
+    void pumpUntil(NetworkHandler &network, Predicate done, const char *message) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+        while (!done()) {
+            require(std::chrono::steady_clock::now() < deadline, message);
+            network.runEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
 }
 
 int main() {
@@ -528,6 +645,54 @@ int main() {
             require(LevelPersistenceProbe::savedBlock(retry, 1, 140, 1, "minecraft:diamond_block"),
                     "Retry lost the failed snapshot");
             retry.closeStorage();
+        });
+        check("inbound packets are read while a large outbound backlog compresses", [&]() {
+            FakeConnector *connector = new FakeConnector();
+            NetworkHandler network{std::unique_ptr<Connector>(connector)};
+            RecordingListener listener;
+            network.addListener(&listener);
+            network.startIoThread();
+            const NetworkIdentifier client("backlog", 1);
+            std::shared_ptr<FakePeer> peer = std::make_shared<FakePeer>();
+            connector->join(client, peer);
+            pumpUntil(network, [&]() { return !listener.mEvents.empty(); }, "Connection never opened");
+            network.enableCompression(client, CompressedNetworkPeer::CompressionAlgorithm::ZLib, 0);
+
+            // Random bytes keep deflate slow, so the backlog takes far longer than one read pass.
+            std::mt19937 random(7);
+            std::string payload(64 * 1024, '\0');
+            for (char &byte: payload)
+                byte = (char) random();
+            const size_t packets = 1024;
+            for (size_t index = 0; index < packets; ++index)
+                network.send(client, payload);
+            peer->deliver("ping", true);
+
+            pumpUntil(network, [&]() { return listener.mEvents.back() == "data:ping"; }, "Inbound packet never read");
+            require(peer->mSentBytes.load() < packets * payload.size() / 2,
+                    "Inbound packet waited for the outbound backlog");
+            network.stopIoThread();
+        });
+        check("a server close is reported once and stops the connection's data", [&]() {
+            FakeConnector *connector = new FakeConnector();
+            NetworkHandler network{std::unique_ptr<Connector>(connector)};
+            RecordingListener listener;
+            network.addListener(&listener);
+            network.startIoThread();
+            const NetworkIdentifier client("close", 1);
+            std::shared_ptr<FakePeer> peer = std::make_shared<FakePeer>();
+            connector->join(client, peer);
+            peer->deliver("first");
+            pumpUntil(network, [&]() { return listener.mEvents.size() >= 2; }, "First packet never read");
+            network.closeConnection(client);
+            pumpUntil(network, [&]() { return connector->closedCount() == 1; }, "Transport never closed");
+            peer->deliver("late");
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            network.runEvents();
+            network.stopIoThread();
+            const std::vector<std::string> expected = {"open", "data:first", "refused"};
+            require(listener.mEvents == expected, "Close was not reported once after the connection's data");
+            require(network.getConnectionCount() == 0, "Closed connection still counted");
         });
         handler.getPlayers().clear();
         host.stop();
