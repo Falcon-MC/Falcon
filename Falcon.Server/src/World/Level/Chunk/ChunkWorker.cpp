@@ -326,7 +326,10 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
                                   std::make_move_iterator(parked.end()));
 
     chunk->compactBiomes();
-    LightSystem::computeSkyLight(*chunk);
+    // Sky light is only read around players, where Level computes it on first use; most streamed chunks
+    // never need it and would otherwise each keep its arrays.
+    if (Dimension::hasSkyLight(chunk->getDimension()))
+        LightSystem::computeHeightmap(*chunk);
     LightSystem::computeBlockLight(*chunk);
 
     result.mChunk = std::move(chunk);
