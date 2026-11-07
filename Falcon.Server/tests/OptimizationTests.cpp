@@ -164,11 +164,17 @@ namespace {
             return DataStatus::HasData;
         }
 
-        NetworkStatus getNetworkStatus() const override { return NetworkStatus(); }
+        NetworkStatus getNetworkStatus() const override {
+            return NetworkStatus();
+        }
 
-        bool usesGamePacketId() const override { return false; }
+        bool usesGamePacketId() const override {
+            return false;
+        }
 
-        bool encryptsGamePackets() const override { return false; }
+        bool encryptsGamePackets() const override {
+            return false;
+        }
 
         // Queues one game packet the way a client batches it, behind the compression header once it is on.
         void deliver(const std::string &packet, bool compressed = false) {
@@ -190,9 +196,12 @@ namespace {
 
     class FakeConnector : public Connector {
     public:
-        bool host(const ConnectionDefinition &) override { return true; }
+        bool host(const ConnectionDefinition &) override {
+            return true;
+        }
 
-        void disconnect() override {}
+        void disconnect() override {
+        }
 
         void runEvents() override {
             std::vector<std::pair<NetworkIdentifier, std::shared_ptr<NetworkPeer>>> joining;
@@ -204,7 +213,9 @@ namespace {
                 mCallbacks->onNewIncomingConnection(entry.first, entry.second);
         }
 
-        std::shared_ptr<NetworkPeer> getPeerForUser(const NetworkIdentifier &) override { return nullptr; }
+        std::shared_ptr<NetworkPeer> getPeerForUser(const NetworkIdentifier &) override {
+            return nullptr;
+        }
 
         bool closeConnection(const NetworkIdentifier &id) override {
             std::lock_guard<std::mutex> lock(mMutex);
@@ -212,11 +223,17 @@ namespace {
             return true;
         }
 
-        TransportLayer getNetworkType() const override { return TransportLayer::NetherNet; }
+        TransportLayer getNetworkType() const override {
+            return TransportLayer::NetherNet;
+        }
 
-        bool isIPv4Supported() const override { return true; }
+        bool isIPv4Supported() const override {
+            return true;
+        }
 
-        bool isIPv6Supported() const override { return false; }
+        bool isIPv6Supported() const override {
+            return false;
+        }
 
         void join(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer) {
             std::lock_guard<std::mutex> lock(mMutex);
@@ -236,7 +253,9 @@ namespace {
 
     class RecordingListener : public NetworkHandler::Listener {
     public:
-        void onNewIncomingConnection(const NetworkIdentifier &) override { mEvents.push_back("open"); }
+        void onNewIncomingConnection(const NetworkIdentifier &) override {
+            mEvents.push_back("open");
+        }
 
         void onConnectionClosed(const NetworkIdentifier &, DisconnectFailReason reason, const std::string &) override {
             mEvents.push_back(reason == DisconnectFailReason::ConnectionRefused ? "refused" : "closed");
