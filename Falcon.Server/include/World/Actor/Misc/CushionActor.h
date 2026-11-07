@@ -10,9 +10,23 @@ public:
 
     CushionActor(uint64_t runtimeId, const std::string &identifier);
 
-    ActorSize getSize() const override { return ActorSize{0.249f, 0.999f}; }
+    // minecraft:cushion collision_box: 0.999 wide, 0.249 tall
+    ActorSize getSize() const override {
+        return ActorSize{0.999f, 0.249f};
+    }
 
-    Vector3f getSeatOffset() const override { return Vector3f(0.0f, 1.25f, 0.0f); }
+    // minecraft:rideable seat position [0, 0.0625, 0]; the synced seat adds the rider's height offset on top
+    Vector3f getSeatOffset() const override {
+        return Vector3f(0.0f, 0.0625f, 0.0f);
+    }
+
+    // minecraft:rideable dismount_mode on_top_center: riders step off onto the top of the cushion
+    Vector3f getDismountPosition(size_t index, size_t passengerCount) const override {
+        (void) index;
+        (void) passengerCount;
+        const Vector3f position = getPosition();
+        return Vector3f(position.x, position.y + getSize().mHeight, position.z);
+    }
 
     void setColor(uint8_t color) { mColor = color; }
 

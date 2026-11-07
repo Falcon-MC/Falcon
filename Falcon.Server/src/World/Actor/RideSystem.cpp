@@ -2,6 +2,7 @@
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/SetActorDataPacket.h"
 #include "Protocol/Packets/SetActorLinkPacket.h"
@@ -11,7 +12,6 @@
 namespace {
     constexpr int32_t RIDER_SEAT_POSITION = 56;
     constexpr float DEGREES_TO_RADIANS = 0.017453292519943295f;
-    constexpr float PLAYER_BASE_OFFSET = 1.62f;
 
     EntityLinkType linkTypeFor(const Actor &vehicle, int64_t passengerId) {
         const std::vector<int64_t> &passengers = vehicle.getPassengers();
@@ -85,7 +85,7 @@ namespace {
     // position keeps the bare seat.
     float heightOffsetOf(const Actor &passenger) {
         if (dynamic_cast<const ServerPlayer *>(&passenger) != nullptr)
-            return PLAYER_BASE_OFFSET;
+            return PlayerMovementSimulator::PLAYER_BASE_OFFSET;
 
         const ServerActor *actor = dynamic_cast<const ServerActor *>(&passenger);
         return actor == nullptr ? 0.0f : actor->getBaseOffset();
