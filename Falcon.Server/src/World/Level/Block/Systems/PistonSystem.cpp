@@ -125,6 +125,122 @@ namespace {
             return 2;
         return 0;
     }
+
+    bool sticksTogether(const BlockState &first, const BlockState &second) {
+        const bool firstSticky = PistonSystem::canSticksBlock(first);
+        const bool secondSticky = PistonSystem::canSticksBlock(second);
+        // slime and honey never hold onto each other
+        if (firstSticky && secondSticky)
+            return first.mName == second.mName;
+        return firstSticky || secondSticky;
+    }
+
+    /**
+     * Collects the blocks a piston moves, following slime and honey: a sticky block drags the
+     * blocks behind it and beside it along, up to MOVE_BLOCK_LIMIT blocks in total.
+     */
+    struct MoveResolver {
+        Level &mLevel;
+        Vector3i mPiston;
+        // the arm being retracted: it leaves before the pulled blocks arrive, so it counts as air
+        Vector3i mFreed;
+        bool mHasFreed;
+        int mDirection;
+        std::vector<Vector3i> &mToMove;
+        std::vector<Vector3i> &mToDestroy;
+
+        bool contains(const std::vector<Vector3i> &list, const Vector3i &position) const {
+            return std::find(list.begin(), list.end(), position) != list.end();
+        }
+
+        bool isEmpty(const Vector3i &position, const BlockState &state) const {
+            return isAir(state) || (mHasFreed && position == mFreed);
+        }
+
+        // blocks dragged along by a sticky neighbour, rather than pushed head on
+        bool canBeDragged(const BlockState &state) const {
+            return PistonSystem::canBePulled(state) && !PistonSystem::breaksWhenMoved(state);
+        }
+
+        bool resolve(const Vector3i &origin) {
+            if (!addLine(origin, true))
+                return false;
+
+            for (size_t index = 0; index < mToMove.size(); ++index) {
+                if (!addBranches(mToMove[index]))
+                    return false;
+            }
+            return true;
+        }
+
+        bool addLine(const Vector3i &origin, bool head) {
+            const BlockState originState = stateAt(mLevel, origin);
+            if (isEmpty(origin, originState) || origin == mPiston || contains(mToMove, origin))
+                return true;
+            if (!head && !canBeDragged(originState))
+                return true;
+
+            const int back = RedstoneFace::opposite(mDirection);
+            std::vector<Vector3i> line{origin};
+            BlockState current = originState;
+            Vector3i behind = origin;
+            while (PistonSystem::canSticksBlock(current)) {
+                behind = relative(behind, back);
+                const BlockState behindState = stateAt(mLevel, behind);
+                if (isEmpty(behind, behindState) || behind == mPiston || contains(mToMove, behind)
+                    || !sticksTogether(current, behindState) || !canBeDragged(behindState))
+                    break;
+
+                line.push_back(behind);
+                current = behindState;
+            }
+
+            if (mToMove.size() + line.size() > (size_t) PistonSystem::MOVE_BLOCK_LIMIT)
+                return false;
+            for (size_t index = line.size(); index > 0; --index)
+                mToMove.push_back(line[index - 1]);
+
+            Vector3i next = origin;
+            while (true) {
+                next = relative(next, mDirection);
+                if (contains(mToMove, next))
+                    return true;
+
+                const BlockState nextState = stateAt(mLevel, next);
+                if (isEmpty(next, nextState))
+                    return true;
+                if (next == mPiston || !PistonSystem::canBePushed(nextState))
+                    return false;
+                if (PistonSystem::breaksWhenMoved(nextState)) {
+                    if (!contains(mToDestroy, next))
+                        mToDestroy.push_back(next);
+                    return true;
+                }
+                if (mToMove.size() >= (size_t) PistonSystem::MOVE_BLOCK_LIMIT)
+                    return false;
+
+                mToMove.push_back(next);
+            }
+        }
+
+        bool addBranches(const Vector3i &position) {
+            const BlockState state = stateAt(mLevel, position);
+            if (!PistonSystem::canSticksBlock(state))
+                return true;
+
+            for (int side = 0; side < RedstoneFace::COUNT; ++side) {
+                if (faceAxis(side) == faceAxis(mDirection))
+                    continue;
+
+                const Vector3i neighbour = relative(position, side);
+                if (!sticksTogether(state, stateAt(mLevel, neighbour)))
+                    continue;
+                if (!addLine(neighbour, false))
+                    return false;
+            }
+            return true;
+        }
+    };
 }
 
 bool PistonSystem::isPiston(const std::string &identifier) {
@@ -282,34 +398,13 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
                 if (extending || sticksToPiston(originState))
                     toDestroy.push_back(origin);
             } else {
-                Vector3i current = origin;
-                while (true) {
-                    if ((int) toMove.size() >= MOVE_BLOCK_LIMIT) {
-                        if (extending)
-                            return false;
-                        break;
-                    }
-
-                    toMove.push_back(current);
-
-                    const Vector3i next = relative(current, moveDirection);
-                    const BlockState nextState = stateAt(level, next);
-
-                    if (isAir(nextState) || (!extending && next == armPosition))
-                        break;
-
-                    if (!canBePushed(nextState) || next == position) {
-                        if (extending)
-                            return false;
-                        break;
-                    }
-
-                    if (breaksWhenMoved(nextState)) {
-                        toDestroy.push_back(next);
-                        break;
-                    }
-
-                    current = next;
+                MoveResolver resolver{level, position, armPosition, !extending, moveDirection, toMove, toDestroy};
+                if (!resolver.resolve(origin)) {
+                    if (extending)
+                        return false;
+                    // a retraction that cannot pull its structure still retracts, empty-handed
+                    toMove.clear();
+                    toDestroy.clear();
                 }
             }
         }
@@ -372,7 +467,6 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
     owner.playLevelSound(level, extending ? LevelSoundEvent::PISTON_OUT : LevelSoundEvent::PISTON_IN, center);
 
-    (void) faceAxis;
     return true;
 }
 
