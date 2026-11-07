@@ -1195,6 +1195,30 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     static const SnapDefinition MOSS_PATCH_SNAP = {
             "minecraft:moss_patch_snap_to_floor_feature", vegetationPatch(MOSS_PATCH), 12, 1, true, false, false,
             false, {}};
+    static const std::vector<std::string> CLAY_REPLACEABLE = {
+            "minecraft:clay", "minecraft:sand", "minecraft:gravel", "minecraft:dirt", "minecraft:coarse_dirt",
+            "minecraft:podzol", "minecraft:dirt_with_roots", "minecraft:grass_block", "minecraft:mycelium",
+            "minecraft:stone", "minecraft:deepslate", "minecraft:tuff", "minecraft:moss_block",
+            "minecraft:cave_vines", "minecraft:cave_vines_body_with_berries",
+            "minecraft:cave_vines_head_with_berries"};
+    static const VegetationPatchDefinition CLAY_PATCH = {
+            "minecraft:clay_with_dripleaves_feature", &VanillaBlocks::CLAY, CLAY_REPLACEABLE, 3, 3, 2, 0.8f, 0.7f, 4,
+            8, true, {}, 0.05f};
+    static const VegetationPatchDefinition CLAY_POOL = {
+            "minecraft:clay_pool_with_dripleaves_feature", &VanillaBlocks::CLAY, CLAY_REPLACEABLE, 3, 3, 5, 0.8f, 0.7f,
+            4, 8, true, {}, 0.1f};
+    static const WeightedDefinition RANDOM_CLAY = {
+            "minecraft:random_clay_with_dripleaves_feature",
+            {{vegetationPatch(CLAY_PATCH), 1}, {vegetationPatch(CLAY_POOL), 1}}};
+    static const auto weightedOf = [](const WeightedDefinition &definition) {
+        Placed placed;
+        placed.mWeighted = &definition;
+        return placed;
+    };
+    // clay forms only at the bottom of a pool: the snap must start in water, never on a dry cave floor
+    static const SnapDefinition CLAY_SNAP = {
+            "minecraft:random_clay_with_dripleaves_snap_to_floor_feature", weightedOf(RANDOM_CLAY), 12, 1, false,
+            false, true, false, {}};
 
     struct NetherPlaced {
         const char *mIdentifier;
@@ -1226,6 +1250,8 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             feature.mPlaced.mScatter = &SMALL_DRIPSTONE;
         if (entry.mFeature == MOSS_PATCH_SNAP.mIdentifier)
             feature.mPlaced.mSnap = &MOSS_PATCH_SNAP;
+        if (entry.mFeature == CLAY_SNAP.mIdentifier)
+            feature.mPlaced.mSnap = &CLAY_SNAP;
         feature.mPlaced.mDripstoneCluster = entry.mFeature == "minecraft:dripstone_cluster_feature";
         feature.mLegacyIce = entry.mFeature == "minecraft:legacy:ice_feature";
         for (const FossilDefinition &fossil: FOSSILS) {
@@ -2486,6 +2512,12 @@ bool OverworldRulePlacer::_placeVegetationPatch(BlockManager &blocks, const Vege
     const int32_t step = patch.mFloor ? -1 : 1;
     const BlockState ground = patch.mGround().toBlockState();
 
+    // the game's column snap walks past air and water alike (the air marker or material 5), so a patch can lie on a
+    // floor under a pool as well as a dry cave floor
+    const auto isOpen = [](const BlockState &state) {
+        return DecorationSupport::isAir(state) || isWater(state);
+    };
+
     std::vector<int32_t> columns;
     for (int32_t cx = -radiusX - 1; cx <= radiusX + 1; cx++) {
         const bool edgeX = cx == -radiusX - 1 || cx == radiusX + 1;
@@ -2503,15 +2535,13 @@ bool OverworldRulePlacer::_placeVegetationPatch(BlockManager &blocks, const Vege
             const int32_t columnX = x + cx;
             const int32_t columnZ = z + cz;
             int32_t columnY = y;
-            for (int32_t i = 0; i < patch.mVerticalRange
-                                && DecorationSupport::isAir(blocks.getBlockAt(columnX, columnY, columnZ)); i++)
+            for (int32_t i = 0; i < patch.mVerticalRange && isOpen(blocks.getBlockAt(columnX, columnY, columnZ)); i++)
                 columnY += step;
-            for (int32_t j = 0; j < patch.mVerticalRange
-                                && !DecorationSupport::isAir(blocks.getBlockAt(columnX, columnY, columnZ)); j++)
+            for (int32_t j = 0; j < patch.mVerticalRange && !isOpen(blocks.getBlockAt(columnX, columnY, columnZ)); j++)
                 columnY -= step;
 
             // the floor must be exposed: the snap stops on an open block, never buried inside solid rock
-            if (!DecorationSupport::isAir(blocks.getBlockAt(columnX, columnY, columnZ)))
+            if (!isOpen(blocks.getBlockAt(columnX, columnY, columnZ)))
                 continue;
 
             const int32_t top = columnY + step;
