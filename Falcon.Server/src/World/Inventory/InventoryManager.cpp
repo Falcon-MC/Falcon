@@ -112,6 +112,8 @@ void InventoryManager::attach(ServerPlayer *player, ServerNetworkHandler *owner)
     mMainInventoryWindowId = CONTAINER_ID_NONE;
     mCraftingTableWindowId = CONTAINER_ID_NONE;
     mCraftingTablePosition = Vector3i(0, 0, 0);
+    mAnvilWindowId = CONTAINER_ID_NONE;
+    mAnvilPosition = Vector3i(0, 0, 0);
     mFurnaceWindowId = CONTAINER_ID_NONE;
     mFurnacePosition = Vector3i(0, 0, 0);
     mFurnaceKind = FurnaceKind::Furnace;
@@ -841,9 +843,11 @@ void InventoryManager::onCurrentWindowRemove() {
                                 ? mFurnaceWindowId
                                 : (mCraftingTableWindowId != CONTAINER_ID_NONE
                                    ? mCraftingTableWindowId
-                                   : (mContainerWindowId != CONTAINER_ID_NONE
-                                      ? mContainerWindowId
-                                      : mMainInventoryWindowId));
+                                   : (mAnvilWindowId != CONTAINER_ID_NONE
+                                      ? mAnvilWindowId
+                                      : (mContainerWindowId != CONTAINER_ID_NONE
+                                         ? mContainerWindowId
+                                         : mMainInventoryWindowId)));
     if (currentWindowId == CONTAINER_ID_NONE) {
         return;
     }
@@ -858,6 +862,9 @@ void InventoryManager::onCurrentWindowRemove() {
     mHasPendingCloseWindow = true;
     if (mCraftingTableWindowId == currentWindowId) {
         mCraftingTableWindowId = CONTAINER_ID_NONE;
+    } else if (mAnvilWindowId == currentWindowId) {
+        _closeAnvil();
+        mAnvilWindowId = CONTAINER_ID_NONE;
     } else if (mFurnaceWindowId == currentWindowId) {
         _storeFurnaceState(true);
         mFurnaceWindowId = CONTAINER_ID_NONE;
@@ -924,7 +931,8 @@ bool InventoryManager::onClientOpenCraftingTable(const Vector3i &position) {
         return mCraftingTablePosition == position;
     }
 
-    if (mMainInventoryWindowId != CONTAINER_ID_NONE || mFurnaceWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow) {
+    if (mMainInventoryWindowId != CONTAINER_ID_NONE || mFurnaceWindowId != CONTAINER_ID_NONE
+        || mAnvilWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow) {
         return false;
     }
 
@@ -943,6 +951,65 @@ bool InventoryManager::onClientOpenCraftingTable(const Vector3i &position) {
     open.mUniqueActorId = -1;
     mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
     return true;
+}
+
+bool InventoryManager::onClientOpenAnvil(const Vector3i &position) {
+    if (mPlayer == nullptr || mSender == nullptr)
+        return false;
+
+    if (mAnvilWindowId != CONTAINER_ID_NONE)
+        return mAnvilPosition == position;
+
+    if (mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
+        || mFurnaceWindowId != CONTAINER_ID_NONE || mContainerWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
+        return false;
+
+    if (!_allowPluginOpen(position))
+        return false;
+
+    const int windowId = _getNewWindowId();
+    mAnvilWindowId = windowId;
+    mAnvilPosition = position;
+    mCurrentWindowType = ContainerType::Anvil;
+
+    ContainerOpenPacket open;
+    open.mWindowId = (int8_t) windowId;
+    open.mType = ContainerType::Anvil;
+    open.mBlockPosition = position;
+    open.mUniqueActorId = -1;
+    mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
+    return true;
+}
+
+bool InventoryManager::isAnvilOpen() const {
+    return mAnvilWindowId != CONTAINER_ID_NONE;
+}
+
+const Vector3i &InventoryManager::getAnvilPosition() const {
+    return mAnvilPosition;
+}
+
+// The anvil keeps nothing: closing it hands the input and material back, and whatever the inventory cannot hold
+// is dropped at the player.
+void InventoryManager::_closeAnvil() {
+    if (mPlayer == nullptr || mOwner == nullptr)
+        return;
+
+    PlayerInventory &inventory = mPlayer->getInventory();
+    for (int slot = 0; slot < PlayerInventory::ANVIL_SIZE; ++slot) {
+        ItemStack item = inventory.getAnvilItem(slot);
+        if (item.isAir())
+            continue;
+
+        inventory.setAnvilItem(slot, ItemStack::air());
+        std::vector<int> touched;
+        item.mCount = inventory.addItemPartial(item, touched);
+        for (int touchedSlot: touched)
+            syncSlot(InventoryId::Inventory, touchedSlot);
+
+        if (item.mCount > 0)
+            mOwner->_throwItem(*mPlayer, item);
+    }
 }
 
 bool InventoryManager::openContainer(ContainerType type, const Vector3i &position) {
@@ -1011,7 +1078,7 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
         return mContainerPosition == position;
 
     if (mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
-        || mFurnaceWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
+        || mFurnaceWindowId != CONTAINER_ID_NONE || mAnvilWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
         return false;
 
     BlockActorStore *blockActors = _blockActors();
@@ -1067,7 +1134,7 @@ bool InventoryManager::onClientOpenChest(const Vector3i &position) {
         return mContainerPosition == position;
 
     if (mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
-        || mFurnaceWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
+        || mFurnaceWindowId != CONTAINER_ID_NONE || mAnvilWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
         return false;
 
     BlockActorStore *blockActors = _blockActors();
@@ -1225,7 +1292,7 @@ bool InventoryManager::onClientOpenFurnace(const Vector3i &position, FurnaceKind
         return mFurnacePosition == position;
     }
     if (mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
-        || mHasPendingCloseWindow) {
+        || mAnvilWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow) {
         return false;
     }
 
@@ -1278,7 +1345,7 @@ void InventoryManager::onClientOpenMainInventory() {
     }
 
     if (mCraftingTableWindowId != CONTAINER_ID_NONE || mContainerWindowId != CONTAINER_ID_NONE
-        || mFurnaceWindowId != CONTAINER_ID_NONE) {
+        || mFurnaceWindowId != CONTAINER_ID_NONE || mAnvilWindowId != CONTAINER_ID_NONE) {
         mHasPendingOpenMainInventory = true;
         onCurrentWindowRemove();
         return;
@@ -1316,6 +1383,11 @@ void InventoryManager::onClientRemoveWindow(int windowId) {
 
     if (windowId == mCraftingTableWindowId) {
         mCraftingTableWindowId = CONTAINER_ID_NONE;
+    }
+
+    if (windowId == mAnvilWindowId) {
+        _closeAnvil();
+        mAnvilWindowId = CONTAINER_ID_NONE;
     }
 
     if (windowId == mContainerWindowId) {

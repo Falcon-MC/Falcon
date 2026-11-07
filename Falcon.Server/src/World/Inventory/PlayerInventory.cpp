@@ -13,7 +13,7 @@ namespace {
 PlayerInventory::PlayerInventory()
         : mItems((size_t) CONTAINER_SIZE), mArmor((size_t) ARMOR_SIZE), mCrafting((size_t) CRAFTING_SIZE),
           mCraftingTable((size_t) CRAFTING_TABLE_SIZE), mFurnace((size_t) FURNACE_SIZE),
-          mSelectedSlot(0), mNextNetId(1) {
+          mAnvil((size_t) ANVIL_SIZE), mSelectedSlot(0), mNextNetId(1) {
     mOffhand = ItemStack::air();
     mCursor = ItemStack::air();
 
@@ -34,6 +34,10 @@ PlayerInventory::PlayerInventory()
     }
 
     for (ItemStack &item: mFurnace) {
+        item = ItemStack::air();
+    }
+
+    for (ItemStack &item: mAnvil) {
         item = ItemStack::air();
     }
 }
@@ -123,6 +127,22 @@ void PlayerInventory::setFurnaceItem(int slot, ItemStack item) {
     mFurnace[(size_t) slot] = std::move(item);
 }
 
+const ItemStack &PlayerInventory::getAnvilItem(int slot) const {
+    if (slot < 0 || slot >= ANVIL_SIZE) {
+        return getEmptyItem();
+    }
+    return mAnvil[(size_t) slot];
+}
+
+void PlayerInventory::setAnvilItem(int slot, ItemStack item) {
+    if (slot < 0 || slot >= ANVIL_SIZE) {
+        return;
+    }
+
+    assignNetId(item);
+    mAnvil[(size_t) slot] = std::move(item);
+}
+
 void PlayerInventory::setOffhand(ItemStack item) {
     assignNetId(item);
     mOffhand = std::move(item);
@@ -185,6 +205,12 @@ const ItemStack *PlayerInventory::resolveSlot(ContainerSlotType container, int s
 
         case ContainerSlotType::EnchantingMaterial:
             return &mEnchantingMaterial;
+
+        case ContainerSlotType::AnvilInput:
+            return &mAnvil[(size_t) ANVIL_INPUT];
+
+        case ContainerSlotType::AnvilMaterial:
+            return &mAnvil[(size_t) ANVIL_MATERIAL];
 
         case ContainerSlotType::CraftingInput:
             if (slot >= CRAFTING_NETWORK_SLOT_FIRST
@@ -347,6 +373,10 @@ void PlayerInventory::clear() {
     }
 
     for (ItemStack &item: mFurnace) {
+        item = ItemStack::air();
+    }
+
+    for (ItemStack &item: mAnvil) {
         item = ItemStack::air();
     }
 }

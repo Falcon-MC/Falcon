@@ -69,6 +69,12 @@ public:
 
     bool onClientOpenFurnace(const Vector3i &position, FurnaceKind kind, ContainerType type);
 
+    bool onClientOpenAnvil(const Vector3i &position);
+
+    bool isAnvilOpen() const;
+
+    const Vector3i &getAnvilPosition() const;
+
     bool openContainer(ContainerType type, const Vector3i &position);
 
     bool isCraftingTableOpen() const { return mCraftingTableWindowId != CONTAINER_ID_NONE; }
@@ -132,11 +138,13 @@ public:
                ? mFurnaceWindowId
                : (mCraftingTableWindowId != CONTAINER_ID_NONE
                       ? mCraftingTableWindowId
-                      : (mContainerWindowId != CONTAINER_ID_NONE
-                             ? mContainerWindowId
-                             : (mMainInventoryWindowId != CONTAINER_ID_NONE
-                                    ? mMainInventoryWindowId
-                                    : mLastInventoryNetworkId)));
+                      : (mAnvilWindowId != CONTAINER_ID_NONE
+                             ? mAnvilWindowId
+                             : (mContainerWindowId != CONTAINER_ID_NONE
+                                    ? mContainerWindowId
+                                    : (mMainInventoryWindowId != CONTAINER_ID_NONE
+                                           ? mMainInventoryWindowId
+                                           : mLastInventoryNetworkId))));
     }
 
 private:
@@ -156,6 +164,8 @@ private:
     void _animateBarrel(const Vector3i &position, bool open);
 
     void _closeBlockContainer();
+
+    void _closeAnvil();
 
     void _sendContentPackets(int containerId, const Container &container);
 
@@ -180,6 +190,8 @@ private:
     int mMainInventoryWindowId;
     int mCraftingTableWindowId;
     Vector3i mCraftingTablePosition;
+    int mAnvilWindowId = CONTAINER_ID_NONE;
+    Vector3i mAnvilPosition;
     int mContainerWindowId = CONTAINER_ID_NONE;
     Vector3i mContainerPosition;
     std::string mEnchantInputId;

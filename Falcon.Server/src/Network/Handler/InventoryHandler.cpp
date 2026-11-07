@@ -11,6 +11,8 @@
 #include "World/Inventory/BundleInventory.h"
 #include "World/Inventory/ItemStackRequestHandler.h"
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Level/Block/AnvilBlock.h"
+#include "World/Level/Level.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "Protocol/Packets/PlayerEnchantOptionsPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -425,11 +427,20 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
     player.getInventoryManager().loadFurnaceView();
 
+    InventoryManager &manager = player.getInventoryManager();
+    Level &level = owner.getLevelFor(player);
+    const Vector3i &anvilPosition = manager.getAnvilPosition();
+
     for (const ItemStackRequest &request: packet.mRequests) {
+        const bool anvilOpen = manager.isAnvilOpen()
+                               && AnvilBlock::matches(level.getBlockState(anvilPosition.x, anvilPosition.y,
+                                                                          anvilPosition.z));
         const int32_t gameType = player.getGameType();
         const bool creativeMode = gameType == (int32_t) GameType::Creative
                                   || gameType == (int32_t) GameType::Spectator;
         int32_t enchantLevelsConsumed = 0;
+        int32_t anvilLevelsConsumed = 0;
+        bool anvilUsed = false;
 
         if (!allowRequest(owner, player, request)) {
             ItemStackResponseEntry rejected;
@@ -451,12 +462,24 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                                                                        &bundles,
                                                                        player.getExperience().getXpLevel(),
                                                                        creativeMode,
-                                                                       &enchantLevelsConsumed);
+                                                                       &enchantLevelsConsumed,
+                                                                       anvilOpen,
+                                                                       &anvilLevelsConsumed,
+                                                                       &anvilUsed);
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && enchantLevelsConsumed > 0) {
             player.getExperience().subtractXpLevels(enchantLevelsConsumed);
             player.syncExperience();
             owner._sendAttributes(player);
+        }
+
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK && anvilUsed) {
+            if (anvilLevelsConsumed > 0) {
+                player.getExperience().subtractXpLevels(anvilLevelsConsumed);
+                player.syncExperience();
+                owner._sendAttributes(player);
+            }
+            AnvilBlock::onUsed(owner, level, anvilPosition, gameType == (int32_t) GameType::Creative);
         }
 
         if (entry.mResult != ItemStackRequestHandler::RESULT_OK) {

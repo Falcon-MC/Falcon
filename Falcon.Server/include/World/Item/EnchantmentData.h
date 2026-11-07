@@ -94,7 +94,7 @@ namespace EnchantmentGroups {
     const uint32_t TRIDENT_PROPULSION = 1u << 4;
     const uint32_t CROSSBOW_SHOT = 1u << 5;
     const uint32_t BOOTS_MOVEMENT = 1u << 6;
-    const uint32_t HEAVY_WEAPON_DAMAGE = 1u << 7;
+    const uint32_t TRIDENT_CHANNELING = 1u << 7;
 }
 
 enum class EnchantmentRarity : int32_t {
