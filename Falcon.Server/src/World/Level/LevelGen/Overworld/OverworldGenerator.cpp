@@ -13,6 +13,7 @@
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldCarvers.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldTerrainFiller.h"
+#include "World/Level/LevelGen/Overworld/Terrain/TerrainBeard.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceOverwriteBuilder.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
@@ -150,7 +151,10 @@ int64_t OverworldGenerator::parseSeed(const std::string &value) {
 void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random,
                                           OverworldAquifer &aquifer) const {
     const int32_t minY = OverworldGeneratorConstants::MIN_Y;
-    mTerrainFiller->fill(chunk, heightMap, aquifer);
+    TerrainBeard beard;
+    if (mBeardSource)
+        mBeardSource(chunk.getX(), chunk.getZ(), beard);
+    mTerrainFiller->fill(chunk, heightMap, aquifer, &beard);
 
     // the first draws of the chunk's random lay 2 to 5 bedrock layers over whatever the noise placed
     // (sub_14A22D380)

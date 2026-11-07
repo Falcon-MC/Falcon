@@ -5,6 +5,8 @@
 #include "World/Level/LevelGen/Overworld/OverworldNoiseHolder.h"
 
 #include <cstdint>
+#include <functional>
+#include <utility>
 #include <memory>
 #include <random>
 #include <string>
@@ -17,6 +19,7 @@ class OverworldClimate;
 class OverworldSurfaceBuilder;
 class OverworldTerrainFiller;
 class SurfaceOverwriteBuilder;
+class TerrainBeard;
 
 class OverworldGenerator : public ChunkGenerator {
 public:
@@ -52,6 +55,10 @@ public:
 
     static int64_t parseSeed(const std::string &value);
 
+    // fills the pieces and junctions of the jigsaw structures near a chunk, whose beard the terrain
+    // noise takes in (sub_145C33980). The preliminary heights never use it.
+    using BeardSource = std::function<void(int32_t chunkX, int32_t chunkZ, TerrainBeard &beard)>;
+
 private:
     void _generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random,
                           OverworldAquifer &aquifer) const;
@@ -67,4 +74,5 @@ private:
     std::unique_ptr<OverworldTerrainFiller> mTerrainFiller;
     const OverworldBiomeParameters *mBiomeParameters;
     std::unique_ptr<OverworldCarvers> mCarvers;
+    BeardSource mBeardSource;
 };
