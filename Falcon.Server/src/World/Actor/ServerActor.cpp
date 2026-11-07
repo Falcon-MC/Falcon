@@ -152,8 +152,12 @@ void ServerActor::tick(ServerNetworkHandler &owner) {
     owner.getProfiler().endSection(ProfilerSection::ActorEnvironment);
 
     owner.getProfiler().beginSection(ProfilerSection::ActorPhysics);
-    ActorMovementSystem::tick(owner, *this);
+    tickMovement(owner);
     owner.getProfiler().endSection(ProfilerSection::ActorPhysics);
+}
+
+void ServerActor::tickMovement(ServerNetworkHandler &owner) {
+    ActorMovementSystem::tick(owner, *this);
 }
 
 PhysicsComponent ServerActor::getPhysics() const {

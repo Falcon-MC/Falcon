@@ -463,42 +463,53 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
 }
 
 void ServerNetworkHandler::spawnLingeringCloud(Level &level, const Vector3f &position, int32_t potionId) {
+    AreaEffectCloudSettings settings;
+    settings.mPotionId = potionId;
+    settings.mRadius = 3.0f;
+    settings.mRadiusPerTick = LINGERING_CLOUD_RADIUS_PER_TICK;
+    settings.mRadiusOnUse = LINGERING_CLOUD_RADIUS_ON_USE;
+    settings.mWaitTime = LINGERING_CLOUD_WAIT_TIME;
+    settings.mDuration = LINGERING_CLOUD_DURATION;
+    settings.mParticle = AREA_EFFECT_CLOUD_POTION_PARTICLE;
+    spawnAreaEffectCloud(level, position, settings);
+}
+
+ServerActor *ServerNetworkHandler::spawnAreaEffectCloud(Level &level, const Vector3f &position,
+                                                        const AreaEffectCloudSettings &settings) {
     ServerActor *cloud = spawnActor(level, "minecraft:area_effect_cloud", position);
     if (cloud == nullptr)
-        return;
-
-    const float cloudRadius = 3.0f;
+        return nullptr;
 
     EntityDataMap metadata;
 
     EntityDataEntry radius;
     radius.mId = ACTOR_DATA_AREA_EFFECT_CLOUD_RADIUS;
     radius.mFormat = EntityDataFormat::Float;
-    radius.mFloatValue = cloudRadius;
+    radius.mFloatValue = settings.mRadius;
     metadata.mEntries.push_back(radius);
 
     EntityDataEntry particle;
     particle.mId = ACTOR_DATA_AREA_EFFECT_CLOUD_PARTICLE_ID;
     particle.mFormat = EntityDataFormat::Int;
-    particle.mIntValue = AREA_EFFECT_CLOUD_POTION_PARTICLE;
+    particle.mIntValue = settings.mParticle;
     metadata.mEntries.push_back(particle);
 
     EntityDataEntry auxValue;
     auxValue.mId = ACTOR_DATA_POTION_AUX_VALUE;
     auxValue.mFormat = EntityDataFormat::Short;
-    auxValue.mShortValue = (int16_t) potionId;
+    auxValue.mShortValue = (int16_t) settings.mPotionId;
     metadata.mEntries.push_back(auxValue);
 
     EntityDataEntry color;
     color.mId = ACTOR_DATA_POTION_COLOR;
     color.mFormat = EntityDataFormat::Int;
-    color.mIntValue = getPotionColor(potionId);
+    color.mIntValue = settings.mColor.has_value() ? *settings.mColor : getPotionColor(settings.mPotionId);
     metadata.mEntries.push_back(color);
 
     EntityDataEntry width;
     width.mId = ACTOR_DATA_WIDTH;
     width.mFormat = EntityDataFormat::Float;
-    width.mFloatValue = cloudRadius;
+    width.mFloatValue = settings.mRadius;
     metadata.mEntries.push_back(width);
 
     EntityDataEntry height;
@@ -510,19 +521,21 @@ void ServerNetworkHandler::spawnLingeringCloud(Level &level, const Vector3f &pos
     sendActorMetadata(*cloud, metadata);
 
     LingeringCloud state;
-    state.mPotionId = potionId;
+    state.mPotionId = settings.mPotionId;
     state.mAge = 0;
-    state.mWaitTime = LINGERING_CLOUD_WAIT_TIME;
-    state.mDuration = LINGERING_CLOUD_DURATION;
+    state.mWaitTime = settings.mWaitTime;
+    state.mDuration = settings.mDuration;
     state.mNextApply = 0;
-    state.mReapplicationDelay = 0;
-    state.mRadius = cloudRadius;
-    state.mRadiusPerTick = LINGERING_CLOUD_RADIUS_PER_TICK;
-    state.mRadiusOnUse = LINGERING_CLOUD_RADIUS_ON_USE;
+    state.mReapplicationDelay = settings.mReapplicationDelay;
+    state.mRadius = settings.mRadius;
+    state.mRadiusPerTick = settings.mRadiusPerTick;
+    state.mRadiusOnUse = settings.mRadiusOnUse;
     state.mPosition = position;
     state.mDimension = cloud->getDimension();
     state.mWorldId = cloud->getWorldId();
+    state.mOwnerRuntimeId = settings.mOwnerRuntimeId;
     mLingeringClouds[cloud->getUniqueId()] = state;
+    return cloud;
 }
 
 void ServerNetworkHandler::broadcastLevelEvent(Level &level, int32_t eventId, const Vector3f &position,
@@ -1435,6 +1448,7 @@ void ServerNetworkHandler::tickActors() {
 
         if (actor.isDead()) {
             actor.addDeathTick();
+            actor.tickDeath(*this);
             if (actor.getDeathTicks() >= actor.getDeathDuration())
                 expired.push_back(actorId);
             continue;
@@ -1655,6 +1669,9 @@ void ServerNetworkHandler::tickActors() {
                         if (candidateIsProjectile && candidate.getOwnerUniqueId() == actor.getOwnerUniqueId() &&
                             candidate.getLifetimeTicks() < 8)
                             continue;
+                        if (projectile != nullptr && projectile->passesThroughOwner()
+                            && (int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId())
+                            continue;
 
                         const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
                         if (intersectsActorBox(candidate.getPosition(), size.mWidth, size.mHeight,
@@ -1737,7 +1754,8 @@ void ServerNetworkHandler::tickActors() {
             for (auto &playerEntry: mPlayers) {
                 ServerPlayer &nearby = playerEntry.second;
                 if (!nearby.isSpawned() || nearby.getDimension() != cloud.mDimension
-                    || nearby.getWorldId() != cloud.mWorldId)
+                    || nearby.getWorldId() != cloud.mWorldId
+                    || (int64_t) nearby.getRuntimeId() == cloud.mOwnerRuntimeId)
                     continue;
 
                 const Vector3f position = nearby.getPosition();
@@ -1754,7 +1772,8 @@ void ServerNetworkHandler::tickActors() {
             for (auto &actorEntry: mActors) {
                 ServerActor &nearby = *actorEntry.second;
                 if (!nearby.isAlive() || nearby.isProjectile() || nearby.isDead() ||
-                    nearby.getDimension() != cloud.mDimension || nearby.getWorldId() != cloud.mWorldId)
+                    nearby.getDimension() != cloud.mDimension || nearby.getWorldId() != cloud.mWorldId
+                    || (int64_t) nearby.getRuntimeId() == cloud.mOwnerRuntimeId)
                     continue;
 
                 const Vector3f position = nearby.getPosition();

@@ -1,9 +1,11 @@
 #include "World/Level/LevelGen/End/Feature/TheEndDecorationFeature.h"
 
+#include "World/Actor/Misc/EndCrystalActor.h"
 #include "World/Level/Block/ChorusPlantBlock.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Level.h"
 #include "World/Level/LevelGen/End/TheEndGenerator.h"
 #include "World/Level/LevelGen/End/TheEndGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
@@ -17,7 +19,6 @@
 namespace {
 
     const int32_t CHORUS_MAX_SPREAD = 8;
-    const double TWO_PI = 6.283185307179586;
 
     const BlockState &airState() {
         static const BlockState state = VanillaBlocks::AIR().toBlockState();
@@ -26,16 +27,6 @@ namespace {
 
     const BlockState &endStoneState() {
         static const BlockState state = VanillaBlocks::END_STONE().toBlockState();
-        return state;
-    }
-
-    const BlockState &obsidianState() {
-        static const BlockState state = VanillaBlocks::OBSIDIAN().toBlockState();
-        return state;
-    }
-
-    const BlockState &ironBarsState() {
-        static const BlockState state = VanillaBlocks::IRON_BARS().toBlockState();
         return state;
     }
 
@@ -71,11 +62,6 @@ namespace {
         return state.mName == "minecraft:air";
     }
 
-    // the game reads its 65536 entry sine table
-    float tableSine(float index) {
-        return (float) std::sin((double) (uint16_t) (int32_t) index * TWO_PI / 65536.0);
-    }
-
     int32_t nextInt(std::mt19937 &random, uint32_t bound) {
         return (int32_t) (random() % bound);
     }
@@ -83,35 +69,12 @@ namespace {
 }
 
 TheEndDecorationFeature::TheEndDecorationFeature(int64_t seed, const TheEndSimplexNoise &islandNoise)
-        : mSeed((uint32_t) seed), mIslandNoise(&islandNoise), mSpikes(_createSpikes((uint32_t) seed)) {
+        : mSeed((uint32_t) seed), mIslandNoise(&islandNoise), mSpikes(EndSpikes::create((uint32_t) seed)),
+          mSpikeRandom((uint32_t) seed) {
 }
 
 const char *TheEndDecorationFeature::name() const {
     return "the_end_decoration";
-}
-
-std::vector<TheEndDecorationFeature::Spike> TheEndDecorationFeature::_createSpikes(uint32_t seed) {
-    std::mt19937 random(seed);
-
-    int32_t sizes[10];
-    for (int32_t i = 0; i < 10; i++)
-        sizes[i] = i;
-
-    for (int32_t i = 1; i < 10; i++)
-        std::swap(sizes[i], sizes[nextInt(random, (uint32_t) i + 1)]);
-
-    std::vector<Spike> spikes;
-    spikes.reserve(10);
-
-    for (int32_t i = 0; i < 10; i++) {
-        const float angle = (float) i * 0.31415927f + -3.1415927f;
-        const float index = (angle + angle) * 10430.378f;
-        const int32_t size = sizes[i];
-        spikes.push_back(Spike{(int32_t) (tableSine(index + 16384.0f) * 42.0f), (int32_t) (tableSine(index) * 42.0f),
-                               size / 3 + 2, size * 3 + 76, size == 1 || size == 2});
-    }
-
-    return spikes;
 }
 
 int32_t TheEndDecorationFeature::_surfaceAt(int32_t x, int32_t z) const {
@@ -119,33 +82,31 @@ int32_t TheEndDecorationFeature::_surfaceAt(int32_t x, int32_t z) const {
     return top > 0 ? top + 1 : 0;
 }
 
-void TheEndDecorationFeature::_placeSpike(const Spike &spike) {
-    const int32_t radius = spike.mRadius;
+void TheEndDecorationFeature::_placeSpike(ChunkGenerateContext &context, const EndSpike &spike) {
+    EndSpikes::place(spike, true, [this](int32_t x, int32_t y, int32_t z, const BlockState &state) {
+        mRoot->setBlockStateAt(x, y, z, state);
+    });
 
-    for (int32_t x = -radius; x <= radius; x++) {
-        for (int32_t y = 0; y <= spike.mHeight + 10; y++) {
-            for (int32_t z = -radius; z <= radius; z++) {
-                if (x * x + z * z <= radius * radius + 1 && y < spike.mHeight)
-                    mRoot->setBlockStateAt(spike.mX + x, y, spike.mZ + z, obsidianState());
-                else if (y >= 66)
-                    mRoot->setBlockStateAt(spike.mX + x, y, spike.mZ + z, airState());
-            }
-        }
-    }
+    // sub_14D1EE710 sets each spike's crystal on bedrock once the spike stands
+    const Vector3i top = spike.getTop();
+    mRoot->setBlockStateAt(top.x, top.y, top.z, EndSpikes::getCrystalBaseState());
 
-    if (!spike.mGuarded)
-        return;
+    const Vector3f position = spike.getCrystalPosition();
+    Tag location = Tag::ofList(Tag::Type::Float);
+    location.addToList(Tag::ofFloat(position.x));
+    location.addToList(Tag::ofFloat(position.y));
+    location.addToList(Tag::ofFloat(position.z));
 
-    for (int32_t x = -2; x <= 2; x++) {
-        for (int32_t z = -2; z <= 2; z++) {
-            if (std::abs(x) == 2 || std::abs(z) == 2) {
-                for (int32_t y = 0; y < 3; y++)
-                    mRoot->setBlockStateAt(spike.mX + x, spike.mHeight + y, spike.mZ + z, ironBarsState());
-            }
+    Tag rotation = Tag::ofList(Tag::Type::Float);
+    rotation.addToList(Tag::ofFloat((float) (mSpikeRandom() % 360u)));
+    rotation.addToList(Tag::ofFloat(0.0f));
 
-            mRoot->setBlockStateAt(spike.mX + x, spike.mHeight + 3, spike.mZ + z, ironBarsState());
-        }
-    }
+    Tag crystal = Tag::ofCompound();
+    crystal.putString("identifier", EndCrystalActor::IDENTIFIER);
+    crystal.put("Pos", location);
+    crystal.put("Rotation", rotation);
+    crystal.putBool(EndCrystalActor::SHOW_BOTTOM_TAG, true);
+    context.getLevel().addGeneratedEntity(std::move(crystal));
 }
 
 void TheEndDecorationFeature::_placeIsland(std::mt19937 &random, int32_t x, int32_t y, int32_t z) {
@@ -240,7 +201,7 @@ void TheEndDecorationFeature::_placeChorus(std::mt19937 &random, int32_t x, int3
     }
 }
 
-void TheEndDecorationFeature::_placeGateway(int32_t x, int32_t y, int32_t z) {
+void TheEndDecorationFeature::placeGateway(int32_t x, int32_t y, int32_t z, const EndSpikes::BlockSink &sink) {
     for (int32_t offsetX = -1; offsetX <= 1; offsetX++) {
         for (int32_t offsetY = -2; offsetY <= 2; offsetY++) {
             for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++) {
@@ -249,7 +210,7 @@ void TheEndDecorationFeature::_placeGateway(int32_t x, int32_t y, int32_t z) {
                                                           : offsetY != 0 && (offsetX == 0 || offsetZ == 0);
                 const BlockState &state = offsetY == 0 && center ? endGatewayState()
                                                                  : frame ? infiniburnBedrockState() : airState();
-                mRoot->setBlockStateAt(x + offsetX, y + offsetY, z + offsetZ, state);
+                sink(x + offsetX, y + offsetY, z + offsetZ, state);
             }
         }
     }
@@ -275,9 +236,9 @@ void TheEndDecorationFeature::apply(ChunkGenerateContext &context) {
     OverworldRulePlacer::drawBiomeRules(*mRoot, chunk, TheEndGeneratorConstants::BIOME_ID, decorationSeed, random);
 
     // a spike belongs to the chunk of its lowest corner
-    for (const Spike &spike: mSpikes) {
+    for (const EndSpike &spike: mSpikes) {
         if (((spike.mX - spike.mRadius) & ~15) == baseX && ((spike.mZ - spike.mRadius) & ~15) == baseZ)
-            _placeSpike(spike);
+            _placeSpike(context, spike);
     }
 
     if ((int64_t) chunkX * chunkX + (int64_t) chunkZ * chunkZ <= 4096LL)
@@ -318,5 +279,8 @@ void TheEndDecorationFeature::apply(ChunkGenerateContext &context) {
     const int32_t z = (baseZ | 8) + (int32_t) (random() & 15u);
     const int32_t surface = _surfaceAt(x, z);
     if (surface > 0)
-        _placeGateway(x, (int32_t) (random() % 7u) + surface + 3, z);
+        placeGateway(x, (int32_t) (random() % 7u) + surface + 3, z,
+                     [this](int32_t blockX, int32_t blockY, int32_t blockZ, const BlockState &state) {
+                         mRoot->setBlockStateAt(blockX, blockY, blockZ, state);
+                     });
 }

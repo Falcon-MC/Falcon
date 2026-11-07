@@ -44,6 +44,7 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <mutex>
 #include <cstdint>
 #include <cstddef>
@@ -264,6 +265,23 @@ public:
     void applyPotionEffects(ServerActor &actor, int32_t potionId, float durationScale);
 
     void spawnLingeringCloud(Level &level, const Vector3f &position, int32_t potionId);
+
+    /** An area effect cloud applying a potion to the players standing in it. */
+    struct AreaEffectCloudSettings {
+        int32_t mPotionId = -1;
+        float mRadius = 3.0f;
+        float mRadiusPerTick = 0.0f;
+        float mRadiusOnUse = 0.0f;
+        int32_t mWaitTime = 0;
+        int32_t mDuration = 600;
+        int32_t mReapplicationDelay = 0;
+        int32_t mParticle = 0;
+        std::optional<int32_t> mColor;
+        // the runtime id of the actor that made the cloud, which it leaves alone
+        int64_t mOwnerRuntimeId = -1;
+    };
+
+    ServerActor *spawnAreaEffectCloud(Level &level, const Vector3f &position, const AreaEffectCloudSettings &settings);
 
     void broadcastLevelEvent(Level &level, int32_t eventId, const Vector3f &position, int32_t data);
 
@@ -902,6 +920,7 @@ private:
         Vector3f mPosition;
         DimensionType mDimension = DimensionType::Overworld;
         uint32_t mWorldId = 0;
+        int64_t mOwnerRuntimeId = -1;
     };
 
     std::unordered_map<int64_t, LingeringCloud> mLingeringClouds;

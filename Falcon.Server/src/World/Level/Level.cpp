@@ -252,6 +252,10 @@ std::vector<Tag> Level::loadEntities(int32_t chunkX, int32_t chunkZ) {
     return entities;
 }
 
+bool Level::hasStoredEntity(int64_t uniqueId) const {
+    return mStorage.isOpen() && mStorage.hasEntity(uniqueId);
+}
+
 void Level::eraseEntity(int64_t uniqueId) {
     if (!mStorage.isOpen())
         return;
@@ -313,6 +317,14 @@ std::vector<std::pair<std::string, Tag>> Level::loadTickingAreas() {
         return std::vector<std::pair<std::string, Tag>>();
 
     return mStorage.loadTickingAreas();
+}
+
+bool Level::saveSavedData(const std::string &key, const Tag &data) {
+    return mStorage.saveSavedData(key, data);
+}
+
+bool Level::loadSavedData(const std::string &key, Tag &data) {
+    return mStorage.loadSavedData(key, data);
 }
 
 void Level::saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities) {

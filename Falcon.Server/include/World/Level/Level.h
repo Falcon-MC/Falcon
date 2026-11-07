@@ -161,11 +161,18 @@ public:
 
     void eraseEntity(int64_t uniqueId);
 
+    /** Whether the actor is saved with a chunk that is not loaded. */
+    bool hasStoredEntity(int64_t uniqueId) const;
+
     void saveTickingArea(const std::string &id, const Tag &area);
 
     void eraseTickingArea(const std::string &id);
 
     std::vector<std::pair<std::string, Tag>> loadTickingAreas();
+
+    bool saveSavedData(const std::string &key, const Tag &data);
+
+    bool loadSavedData(const std::string &key, Tag &data);
 
     void saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities);
 

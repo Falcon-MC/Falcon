@@ -188,6 +188,8 @@ void ServerNetworkHandler::_tickDimension(World &world, Level &level) {
     level.setActiveColumns(activeColumns);
     syncActorPersistence(level, activeColumns);
     level.tick();
+    if (level.getDimensionType() == DimensionType::TheEnd)
+        world.getDragonFight().tick(*this, level);
     _tickVillages(level);
     _broadcastFluidChanges(level);
     _processChunkUnloads(level);

@@ -15,7 +15,7 @@ FALCON_REGISTER_PROJECTILE(ProjectileActor, WitherSkull, "minecraft:wither_skull
 FALCON_REGISTER_PROJECTILE(ProjectileActor, WitherSkullDangerous, "minecraft:wither_skull_dangerous", 0.25f, 0.25f);
 FALCON_REGISTER_PROJECTILE(ProjectileActor, Fireball, "minecraft:fireball", 0.31f, 0.31f);
 FALCON_REGISTER_PROJECTILE(ProjectileActor, SmallFireball, "minecraft:small_fireball", 0.3125f, 0.3125f);
-FALCON_REGISTER_PROJECTILE(ProjectileActor, DragonFireball, "minecraft:dragon_fireball", 0.3125f, 0.3125f);
+FALCON_REGISTER_PROJECTILE(DragonFireballActor, DragonFireball, "minecraft:dragon_fireball", 0.31f, 0.31f);
 FALCON_REGISTER_PROJECTILE(ShulkerBulletActor, ShulkerBullet, "minecraft:shulker_bullet", 0.3125f, 0.3125f);
 FALCON_REGISTER_PROJECTILE(WindChargeActor, WindCharge, "minecraft:wind_charge_projectile", 0.3125f, 0.3125f);
 FALCON_REGISTER_PROJECTILE(ProjectileActor, BreezeWindCharge, "minecraft:breeze_wind_charge_projectile",

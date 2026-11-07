@@ -9,6 +9,7 @@
 #include "World/Inventory/InventoryManager.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Level/Level.h"
+#include "World/Level/World.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/StartGameTypes.h"
 
@@ -99,6 +100,10 @@ bool EndCrystalItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
 
     const float yaw = (float) std::rand() / (float) RAND_MAX * FULL_TURN_DEGREES;
     crystal->setRotation(Vector3f(0.0f, yaw, 0.0f));
+
+    // a crystal placed in the End may complete the four that respawn the dragon (0x1471853D0)
+    if (level.getDimensionType() == DimensionType::TheEnd)
+        owner.getWorldFor(player).getDragonFight().tryRespawn(owner, level);
 
     if (player.getGameType() != (int32_t) GameType::Creative) {
         ItemStack remaining = item;

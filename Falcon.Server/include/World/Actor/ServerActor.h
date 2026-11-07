@@ -57,6 +57,14 @@ public:
 
     virtual void tick(ServerNetworkHandler &owner);
 
+    /** Moves the actor by its motion; an actor that steers its own flight replaces it. */
+    virtual void tickMovement(ServerNetworkHandler &owner);
+
+    /** Runs each tick between the actor's death and its removal. */
+    virtual void tickDeath(ServerNetworkHandler &owner) {
+        (void) owner;
+    }
+
     virtual ActorSize getSize() const { return ActorSize{DEFAULT_WIDTH, DEFAULT_HEIGHT}; }
 
     virtual bool isExpired() const { return false; }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Item/Item.h"
+#include "World/Level/LevelGen/End/Feature/EndSpikes.h"
 #include "World/Level/LevelGen/End/Noise/TheEndSimplexNoise.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
 
@@ -19,21 +20,14 @@ public:
 
     void apply(ChunkGenerateContext &context) override;
 
+    /** An end gateway with its bedrock frame, as the islands and the dragon fight both place it. */
+    static void placeGateway(int32_t x, int32_t y, int32_t z, const EndSpikes::BlockSink &sink);
+
 private:
-    struct Spike {
-        int32_t mX;
-        int32_t mZ;
-        int32_t mRadius;
-        int32_t mHeight;
-        bool mGuarded;
-    };
-
-    static std::vector<Spike> _createSpikes(uint32_t seed);
-
     // the surface y of a column, 0 when it holds nothing
     int32_t _surfaceAt(int32_t x, int32_t z) const;
 
-    void _placeSpike(const Spike &spike);
+    void _placeSpike(ChunkGenerateContext &context, const EndSpike &spike);
 
     void _placeIsland(std::mt19937 &random, int32_t x, int32_t y, int32_t z);
 
@@ -44,9 +38,8 @@ private:
 
     bool _isClearOfChorus(int32_t x, int32_t y, int32_t z, int32_t exceptX, int32_t exceptZ) const;
 
-    void _placeGateway(int32_t x, int32_t y, int32_t z);
-
     uint32_t mSeed;
     const TheEndSimplexNoise *mIslandNoise;
-    std::vector<Spike> mSpikes;
+    std::vector<EndSpike> mSpikes;
+    std::mt19937 mSpikeRandom;
 };
