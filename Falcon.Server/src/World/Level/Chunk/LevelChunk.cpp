@@ -9,18 +9,13 @@ LevelChunk::LevelChunk(int32_t x, int32_t z) : mX(x), mZ(z), mBiomeId(1), mDirty
     mSubChunks.reserve(SUB_CHUNK_COUNT);
     for (int i = 0; i < SUB_CHUNK_COUNT; i++)
         mSubChunks.push_back(SubChunk((int8_t) (LOWEST_SUB_CHUNK_Y + i)));
-
-    mSubChunkNetworkCache.resize(SUB_CHUNK_COUNT);
-    mSubChunkNetworkValid.assign(SUB_CHUNK_COUNT, 0);
 }
 
 void LevelChunk::invalidateNetworkCaches() {
     // Swapping with empty objects releases the memory, which clear() would keep; this runs
     // on copies sent off for saving, where the encoded buffers are dead weight.
-    for (std::string &cached: mSubChunkNetworkCache)
-        std::string().swap(cached);
-
-    mSubChunkNetworkValid.assign(SUB_CHUNK_COUNT, 0);
+    std::vector<std::string>().swap(mSubChunkNetworkCache);
+    std::vector<uint8_t>().swap(mSubChunkNetworkValid);
     std::unordered_map<const BlockNetworkIdMap *, std::vector<std::string>>().swap(mTranslatedSubChunkCache);
     std::vector<int32_t>().swap(mTopHeightsCache);
     std::string().swap(mNetworkAnchorCache);
@@ -117,7 +112,8 @@ void LevelChunk::setBlock(int x, int32_t y, int z, const BlockState &state) {
 
     const int index = subChunkIndexFor(y);
     mSubChunks[index].setBlock(x, y & 15, z, state);
-    mSubChunkNetworkValid[(size_t) index] = 0;
+    if (!mSubChunkNetworkValid.empty())
+        mSubChunkNetworkValid[(size_t) index] = 0;
     for (auto &translated: mTranslatedSubChunkCache)
         translated.second[(size_t) index].clear();
     mTopHeightsValid = false;
@@ -136,7 +132,8 @@ void LevelChunk::setBlock(int x, int32_t y, int z, int layer, const BlockState &
 
     const int index = subChunkIndexFor(y);
     mSubChunks[index].setBlock(x, y & 15, z, layer, state);
-    mSubChunkNetworkValid[(size_t) index] = 0;
+    if (!mSubChunkNetworkValid.empty())
+        mSubChunkNetworkValid[(size_t) index] = 0;
     for (auto &translated: mTranslatedSubChunkCache)
         translated.second[(size_t) index].clear();
     mDirty = true;
@@ -306,6 +303,12 @@ const std::string &LevelChunk::encodeSubChunkNetwork(int index) const {
 
     if (index < 0 || index >= SUB_CHUNK_COUNT)
         return empty;
+
+    // Most chunks are encoded once, when they are sent, so the per-section cache only exists once it is used.
+    if (mSubChunkNetworkCache.empty()) {
+        mSubChunkNetworkCache.resize(SUB_CHUNK_COUNT);
+        mSubChunkNetworkValid.assign(SUB_CHUNK_COUNT, 0);
+    }
 
     std::string &cached = mSubChunkNetworkCache[(size_t) index];
     if (mSubChunkNetworkValid[(size_t) index] != 0)
