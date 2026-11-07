@@ -611,6 +611,11 @@ void CustomContentRegistry::_registerItem(const CustomItemDefinition &item, Item
               stored.mNetworkId);
 }
 
+namespace {
+    // MolangVersion::Latest (sub_1446C5450): LeafSupportingInFirstSolidBlockBelow, one below NumValidVersions
+    const int16_t MOLANG_VERSION_LATEST = 12;
+}
+
 Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &item, ItemDefinitionRegistry &items) {
     (void) items;
 
@@ -681,7 +686,9 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
         components.put("minecraft:durability", durability);
     }
 
-    // the client previews anvil repairs from this component, so it goes out as the game writes it
+    // the client previews anvil repairs from this component, so it goes out as the game writes it: each
+    // repair_amount is an ExpressionNode in its object form (sub_141D3B840), the expression and its short
+    // MolangVersion, Latest (12) for pack content
     if (!item.mRepairItems.empty()) {
         Tag repairItems = Tag::ofList(Tag::Type::Compound);
         for (const CustomRepairEntry &entry: item.mRepairItems) {
@@ -694,7 +701,7 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
 
             Tag amount = Tag::ofCompound();
             amount.putString("expression", entry.mAmount);
-            amount.putInt("version", 1);
+            amount.putShort("version", MOLANG_VERSION_LATEST);
 
             Tag repair = Tag::ofCompound();
             repair.put("items", items);
