@@ -4,6 +4,7 @@
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 
 #include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/DoublePlantBlock.h"
 #include "World/Level/Block/FenceBlock.h"
 #include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
 #include "World/Level/Block/IceBlock.h"
@@ -746,6 +747,58 @@ struct OverworldRulePlacer::FossilDefinition {
     int32_t mMaxEmptyCorners;
 };
 
+// a minecraft:vegetation_patch_feature (place sub_14A282710): a disk snapped to the floor or ceiling, the ground
+// laid first, then a vegetation feature on a share of its columns
+struct OverworldRulePlacer::VegetationPatchDefinition {
+    const char *mIdentifier;
+    Block (*mGround)();
+    std::vector<std::string> mReplaceable;
+    int32_t mDepthMin;
+    int32_t mDepthMax;
+    int32_t mVerticalRange;
+    float mExtraDeepChance;
+    float mExtraEdgeChance;
+    int32_t mRadiusMin;
+    int32_t mRadiusMax;
+    // floor grows the disk downward, ceiling upward
+    bool mFloor;
+    // the vegetation feature placed on a share of the ground: a weighted set of blocks, drawn even when empty so
+    // the shared placement random stays in step across the rule's iterations
+    std::vector<std::pair<Block (*)(), int32_t>> mVegetation;
+    // a feature placed instead of the weighted blocks: the moss ceiling's cave vines, the clay's dripleaves
+    Placed mVegetationFeature;
+    float mVegetationChance;
+    // the ground's surface turns to water where it is closed on its four sides and below, the vegetation then
+    // placed in that water rather than above it
+    bool mWaterlogged;
+};
+
+// a minecraft:growing_plant_feature (place sub_14A2BEF40): a hanging or standing column of weighted body blocks
+// capped with a weighted head, its length drawn from a weighted set of ranges
+struct OverworldRulePlacer::GrowingPlantDefinition {
+    struct HeightWeight {
+        int32_t mMin;
+        int32_t mMax;
+        int32_t mWeight;
+    };
+    struct BlockWeight {
+        BlockState mState;
+        int32_t mWeight;
+    };
+
+    const char *mIdentifier;
+    std::vector<HeightWeight> mHeight;
+    // down grows toward lower y
+    bool mDown;
+    // an age range ending at 0 is no age: the head keeps its own state and nothing is drawn
+    int32_t mAgeMin;
+    int32_t mAgeMax;
+    std::vector<BlockWeight> mBody;
+    std::vector<BlockWeight> mHead;
+    // allow_water: the plant also grows through water, the next step still only through air
+    bool mAllowWater;
+};
+
 OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry &entry) {
     // BDS 1.26.61 behavior packs, features/*.json
     static const std::vector<OreDefinition> ORES = {
@@ -1151,6 +1204,95 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              4, 7, 3, 5, 1, 3, 16, 2, 0.025f, 0.35f, 0.083f, true, 1}
     };
 
+    // BDS 1.26.61 behavior packs, features/moss_patch_feature.json, clay_*_with_dripleaves_feature.json and
+    // cave_vine_feature.json; the floor rules run in after_surface_pass
+    static const auto vegetationPatch = [](const VegetationPatchDefinition &definition) {
+        Placed placed;
+        placed.mVegetationPatch = &definition;
+        return placed;
+    };
+    static const auto growingPlant = [](const GrowingPlantDefinition &definition) {
+        Placed placed;
+        placed.mGrowingPlant = &definition;
+        return placed;
+    };
+    static const std::vector<std::string> MOSS_REPLACEABLE = {
+            "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:podzol", "minecraft:dirt_with_roots",
+            "minecraft:grass_block", "minecraft:mycelium", "minecraft:stone", "minecraft:granite",
+            "minecraft:diorite", "minecraft:andesite", "minecraft:deepslate", "minecraft:tuff",
+            "minecraft:moss_block", "minecraft:cave_vines", "minecraft:cave_vines_body_with_berries",
+            "minecraft:cave_vines_head_with_berries"};
+    // moss_vegetation_feature, the weighted blocks built in the registrar sub_14738C180 (total 96)
+    static const std::vector<std::pair<Block (*)(), int32_t>> MOSS_VEGETATION = {
+            {&VanillaBlocks::FLOWERING_AZALEA, 4}, {&VanillaBlocks::AZALEA, 7}, {&VanillaBlocks::MOSS_CARPET, 25},
+            {&VanillaBlocks::SHORT_GRASS, 50}, {&VanillaBlocks::TALL_GRASS, 10}};
+    static const VegetationPatchDefinition MOSS_PATCH = {
+            "minecraft:moss_patch_feature", &VanillaBlocks::MOSS_BLOCK, MOSS_REPLACEABLE, 1, 2, 5, 0.0f, 0.3f, 4, 8,
+            true, MOSS_VEGETATION, {}, 0.8f, false};
+    static const SnapDefinition MOSS_PATCH_SNAP = {
+            "minecraft:moss_patch_snap_to_floor_feature", vegetationPatch(MOSS_PATCH), 12, 1, true, false, false,
+            false, {}};
+    static const std::vector<std::string> CLAY_REPLACEABLE = {
+            "minecraft:clay", "minecraft:sand", "minecraft:gravel", "minecraft:dirt", "minecraft:coarse_dirt",
+            "minecraft:podzol", "minecraft:dirt_with_roots", "minecraft:grass_block", "minecraft:mycelium",
+            "minecraft:stone", "minecraft:deepslate", "minecraft:tuff", "minecraft:moss_block",
+            "minecraft:cave_vines", "minecraft:cave_vines_body_with_berries",
+            "minecraft:cave_vines_head_with_berries"};
+    // dripleaf_feature is the game's own DripleafFeature (sub_14D208A20), not a data feature
+    static const auto dripleaf = [] {
+        Placed placed;
+        placed.mFunction = &OverworldRulePlacer::_placeDripleaf;
+        return placed;
+    };
+    static const VegetationPatchDefinition CLAY_PATCH = {
+            "minecraft:clay_with_dripleaves_feature", &VanillaBlocks::CLAY, CLAY_REPLACEABLE, 3, 3, 2, 0.8f, 0.7f, 4,
+            8, true, {}, dripleaf(), 0.05f, false};
+    static const VegetationPatchDefinition CLAY_POOL = {
+            "minecraft:clay_pool_with_dripleaves_feature", &VanillaBlocks::CLAY, CLAY_REPLACEABLE, 3, 3, 5, 0.8f, 0.7f,
+            4, 8, true, {}, dripleaf(), 0.1f, true};
+    static const WeightedDefinition RANDOM_CLAY = {
+            "minecraft:random_clay_with_dripleaves_feature",
+            {{vegetationPatch(CLAY_PATCH), 1}, {vegetationPatch(CLAY_POOL), 1}}};
+    static const auto weightedOf = [](const WeightedDefinition &definition) {
+        Placed placed;
+        placed.mWeighted = &definition;
+        return placed;
+    };
+    static const SnapDefinition CLAY_SNAP = {
+            "minecraft:random_clay_with_dripleaves_snap_to_floor_feature", weightedOf(RANDOM_CLAY), 12, 1, true,
+            false, false, false, {}};
+
+    // cave_vine_feature and cave_vine_in_moss_feature (growing_plant), the weighted body and head built from
+    // cave_vine_feature.json; both grow down and age 17..25
+    static const std::vector<GrowingPlantDefinition::BlockWeight> CAVE_VINE_BODY = {
+            {VanillaBlocks::CAVE_VINES().toBlockState(), 4},
+            {VanillaBlocks::CAVE_VINES_BODY_WITH_BERRIES().toBlockState(), 1}};
+    static const std::vector<GrowingPlantDefinition::BlockWeight> CAVE_VINE_HEAD = {
+            {VanillaBlocks::CAVE_VINES().toBlockState(), 4},
+            {VanillaBlocks::CAVE_VINES_HEAD_WITH_BERRIES().toBlockState(), 1}};
+    static const GrowingPlantDefinition CAVE_VINE = {
+            "minecraft:cave_vine_feature", {{1, 13, 2}, {1, 2, 3}, {1, 7, 10}}, true, 17, 26, CAVE_VINE_BODY,
+            CAVE_VINE_HEAD, false};
+    static const GrowingPlantDefinition CAVE_VINE_IN_MOSS = {
+            "minecraft:cave_vine_in_moss_feature", {{1, 4, 5}, {2, 7, 1}}, true, 17, 26, CAVE_VINE_BODY,
+            CAVE_VINE_HEAD, false};
+    static const SnapDefinition CAVE_VINE_SNAP = {
+            "minecraft:cave_vine_snap_to_ceiling_feature", growingPlant(CAVE_VINE), 12, 0, true, false, false, false,
+            {}};
+    static const std::vector<std::string> MOSS_CEILING_REPLACEABLE = {
+            "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:podzol", "minecraft:dirt_with_roots",
+            "minecraft:grass_block", "minecraft:mycelium", "minecraft:stone", "minecraft:granite",
+            "minecraft:polished_granite", "minecraft:diorite", "minecraft:polished_diorite", "minecraft:andesite",
+            "minecraft:polished_andesite", "minecraft:deepslate", "minecraft:tuff", "minecraft:moss_block",
+            "minecraft:cave_vines", "minecraft:cave_vines_body_with_berries",
+            "minecraft:cave_vines_head_with_berries"};
+    static const VegetationPatchDefinition MOSS_CEILING = {
+            "minecraft:moss_ceiling_feature", &VanillaBlocks::MOSS_BLOCK, MOSS_CEILING_REPLACEABLE, 1, 3, 5, 0.0f, 0.3f,
+            4, 8, false, {}, growingPlant(CAVE_VINE_IN_MOSS), 0.08f, false};
+    static const SnapDefinition MOSS_CEILING_SNAP = {
+            "minecraft:moss_ceiling_snap_to_ceiling_feature", vegetationPatch(MOSS_CEILING), 12, 0, true, false, false,
+            false, {}};
+
     struct NetherPlaced {
         const char *mIdentifier;
         bool (*mFunction)(BlockManager &, int32_t, int32_t, int32_t, std::mt19937 &);
@@ -1179,6 +1321,14 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             feature.mPlaced.mThreshold = &UNDERWATER_MAGMA_UNDERGROUND;
         if (entry.mFeature == SMALL_DRIPSTONE.mIdentifier)
             feature.mPlaced.mScatter = &SMALL_DRIPSTONE;
+        if (entry.mFeature == MOSS_PATCH_SNAP.mIdentifier)
+            feature.mPlaced.mSnap = &MOSS_PATCH_SNAP;
+        if (entry.mFeature == CLAY_SNAP.mIdentifier)
+            feature.mPlaced.mSnap = &CLAY_SNAP;
+        if (entry.mFeature == MOSS_CEILING_SNAP.mIdentifier)
+            feature.mPlaced.mSnap = &MOSS_CEILING_SNAP;
+        if (entry.mFeature == CAVE_VINE_SNAP.mIdentifier)
+            feature.mPlaced.mSnap = &CAVE_VINE_SNAP;
         feature.mPlaced.mDripstoneCluster = entry.mFeature == "minecraft:dripstone_cluster_feature";
         feature.mLegacyIce = entry.mFeature == "minecraft:legacy:ice_feature";
         for (const FossilDefinition &fossil: FOSSILS) {
@@ -1745,6 +1895,10 @@ bool OverworldRulePlacer::_place(BlockManager &blocks, const Placed &placed, int
         return _placeMushroom(blocks, placed.mMushroom, x, y, z);
     if (placed.mThreshold != nullptr)
         return _placeThreshold(blocks, *placed.mThreshold, x, y, z, random);
+    if (placed.mVegetationPatch != nullptr)
+        return _placeVegetationPatch(blocks, *placed.mVegetationPatch, x, y, z, random);
+    if (placed.mGrowingPlant != nullptr)
+        return _placeGrowingPlant(blocks, *placed.mGrowingPlant, x, y, z, random);
     if (placed.mSnap != nullptr)
         return _placeSnap(blocks, *placed.mSnap, x, y, z, random);
     if (placed.mBlob != nullptr)
@@ -2420,6 +2574,273 @@ bool OverworldRulePlacer::_snapAlong(BlockManager &blocks, const SnapDefinition 
     snapped[1] = y + step[1] * distance;
     snapped[2] = z + step[2] * distance;
     return true;
+}
+
+bool OverworldRulePlacer::_placeVegetationPatch(BlockManager &blocks, const VegetationPatchDefinition &patch,
+                                                int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
+    // sub_14A282710: two radii, then a disk of columns, corners dropped and edges kept by chance; each column
+    // snaps to its own floor and the ground is laid there before any vegetation draws
+    const int32_t radiusRange = patch.mRadiusMax - patch.mRadiusMin;
+    const auto radius = [&] {
+        return patch.mRadiusMin < patch.mRadiusMax - 1 ? patch.mRadiusMin + nextInt(random, radiusRange)
+                                                       : patch.mRadiusMin;
+    };
+    const int32_t radiusX = radius();
+    const int32_t radiusZ = radius();
+
+    const int32_t step = patch.mFloor ? -1 : 1;
+    const BlockState ground = patch.mGround().toBlockState();
+
+    std::vector<int32_t> columns;
+    for (int32_t cx = -radiusX - 1; cx <= radiusX + 1; cx++) {
+        const bool edgeX = cx == -radiusX - 1 || cx == radiusX + 1;
+        for (int32_t cz = -radiusZ - 1; cz <= radiusZ + 1; cz++) {
+            const bool edgeZ = cz == -radiusZ - 1 || cz == radiusZ + 1;
+            if (edgeX && edgeZ)
+                continue;
+            if (edgeX || edgeZ) {
+                if (patch.mExtraEdgeChance == 0.0f)
+                    continue;
+                if (nextFloat(random) > patch.mExtraEdgeChance)
+                    continue;
+            }
+
+            const int32_t columnX = x + cx;
+            const int32_t columnZ = z + cz;
+            int32_t columnY = y;
+            // the column snap only walks through air: water is ground like any other block
+            for (int32_t i = 0;
+                 i < patch.mVerticalRange && DecorationSupport::isAir(blocks.getBlockAt(columnX, columnY, columnZ));
+                 i++)
+                columnY += step;
+            for (int32_t j = 0;
+                 j < patch.mVerticalRange && !DecorationSupport::isAir(blocks.getBlockAt(columnX, columnY, columnZ));
+                 j++)
+                columnY -= step;
+
+            if (!DecorationSupport::isAir(blocks.getBlockAt(columnX, columnY, columnZ)))
+                continue;
+
+            // the surface must hold the vegetation: a full block stands in for the game's sturdy face test
+            // (sub_147A83F50) on the face toward the air; whether it may be replaced is only known after the depth
+            // is drawn
+            const int32_t top = columnY + step;
+            if (!DecorationSupport::isFullBlock(blocks.getBlockAt(columnX, top, columnZ)))
+                continue;
+
+            int32_t extra = 0;
+            if (patch.mExtraDeepChance > 0.0f && patch.mExtraDeepChance > nextFloat(random))
+                extra = 1;
+            const int32_t depth = (patch.mDepthMin < patch.mDepthMax - 1
+                                           ? patch.mDepthMin + nextInt(random, patch.mDepthMax - patch.mDepthMin)
+                                           : patch.mDepthMin)
+                                  + extra;
+
+            // the ground goes down layer by layer, over the ground block itself without laying it again, and stops at
+            // the first block it may not replace; a surface it may not replace keeps no column
+            bool kept = true;
+            for (int32_t d = 0; d < depth; d++) {
+                const int32_t groundY = top + step * d;
+                const BlockState &replaced = blocks.getBlockAt(columnX, groundY, columnZ);
+                if (replaced == ground)
+                    continue;
+                if (!contains(patch.mReplaceable, replaced)) {
+                    kept = d != 0;
+                    break;
+                }
+                blocks.setBlockStateAt(columnX, groundY, columnZ, ground);
+            }
+            if (!kept)
+                continue;
+            columns.push_back(columnX);
+            columns.push_back(top);
+            columns.push_back(columnZ);
+        }
+    }
+
+    if (patch.mWaterlogged) {
+        // a full block stands in for the game's sturdy face test (sub_147A83F50) on the south face of the block
+        // north of the surface, the west face east of it, the north face south of it, the east face west of it and
+        // the top of the block below
+        std::vector<int32_t> closed;
+        for (size_t i = 0; i + 2 < columns.size(); i += 3) {
+            const int32_t cx = columns[i];
+            const int32_t cy = columns[i + 1];
+            const int32_t cz = columns[i + 2];
+            if (!DecorationSupport::isFullBlock(blocks.getBlockAt(cx, cy, cz - 1))
+                || !DecorationSupport::isFullBlock(blocks.getBlockAt(cx + 1, cy, cz))
+                || !DecorationSupport::isFullBlock(blocks.getBlockAt(cx, cy, cz + 1))
+                || !DecorationSupport::isFullBlock(blocks.getBlockAt(cx - 1, cy, cz))
+                || !DecorationSupport::isFullBlock(blocks.getBlockAt(cx, cy - 1, cz)))
+                continue;
+            closed.push_back(cx);
+            closed.push_back(cy);
+            closed.push_back(cz);
+        }
+        for (size_t i = 0; i + 2 < closed.size(); i += 3)
+            blocks.setBlockStateAt(closed[i], closed[i + 1], closed[i + 2], DecorationSupport::waterState());
+        columns.swap(closed);
+    }
+
+    if (patch.mVegetationChance > 0.0f) {
+        int32_t total = 0;
+        for (const std::pair<Block (*)(), int32_t> &weighted: patch.mVegetation)
+            total += weighted.second;
+
+        for (size_t i = 0; i + 2 < columns.size(); i += 3) {
+            if (patch.mVegetationChance <= nextFloat(random))
+                continue;
+
+            const int32_t vx = columns[i];
+            const int32_t vy = columns[i + 1] - (patch.mWaterlogged ? 1 : 0) - step;
+            const int32_t vz = columns[i + 2];
+            if (patch.mVegetationFeature.isSet()) {
+                _place(blocks, patch.mVegetationFeature, vx, vy, vz, random);
+                continue;
+            }
+            if (patch.mVegetation.empty())
+                continue;
+
+            // the moss vegetation (vtable 0x14F2F2630, place sub_14721B570) draws its block before any test
+            int32_t roll = (total > 0 ? nextInt(random, total) : 0) - patch.mVegetation.front().second;
+            size_t index = 0;
+            while (roll >= 0 && index + 1 < patch.mVegetation.size())
+                roll -= patch.mVegetation[++index].second;
+
+            if (!DecorationSupport::isAir(blocks.getBlockAt(vx, vy, vz)))
+                continue;
+
+            const BlockState plant = patch.mVegetation[index].first().toBlockState();
+            if (VanillaBlocks::getAs<DoublePlantBlock>(plant.mName) == nullptr) {
+                blocks.setBlockStateAt(vx, vy, vz, plant);
+                continue;
+            }
+
+            // a double plant (the list at xmmword_1529AB080) gets its upper half too, once DoublePlantBlock::mayPlace
+            // has found air above
+            if (!DecorationSupport::isAir(blocks.getBlockAt(vx, vy + 1, vz)))
+                continue;
+            blocks.setBlockStateAt(vx, vy + 1, vz, DecorationSupport::withByteState(plant, "upper_block_bit", true));
+            blocks.setBlockStateAt(vx, vy, vz, DecorationSupport::withByteState(plant, "upper_block_bit", false));
+        }
+    }
+
+    return !columns.empty();
+}
+
+bool OverworldRulePlacer::_placeGrowingPlant(BlockManager &blocks, const GrowingPlantDefinition &plant, int32_t x,
+                                             int32_t y, int32_t z, std::mt19937 &random) {
+    // sub_14A2BEF40: a length drawn from the weighted ranges, an age, then weighted body blocks capped by a
+    // weighted head where the next step is not air; a blocked step is skipped, not an end, so the column goes on
+    // past it, and a column that never gets its head is a failure even with body blocks laid
+    int32_t heightTotal = 0;
+    for (const GrowingPlantDefinition::HeightWeight &height: plant.mHeight)
+        heightTotal += height.mWeight;
+
+    const GrowingPlantDefinition::HeightWeight *picked = &plant.mHeight.front();
+    int32_t heightRoll = (heightTotal > 0 ? nextInt(random, heightTotal) : 0) - plant.mHeight.front().mWeight;
+    for (size_t i = 0; heightRoll >= 0 && i + 1 < plant.mHeight.size(); i++) {
+        picked = &plant.mHeight[i + 1];
+        heightRoll -= picked->mWeight;
+    }
+
+    const int32_t length = picked->mMin < picked->mMax - 1 ? picked->mMin + nextInt(random, picked->mMax - picked->mMin)
+                                                           : picked->mMin;
+    const int32_t age = plant.mAgeMin < plant.mAgeMax - 1 ? plant.mAgeMin + nextInt(random, plant.mAgeMax - plant.mAgeMin)
+                                                          : plant.mAgeMin;
+    if (length <= 0)
+        return false;
+
+    const int32_t step = plant.mDown ? -1 : 1;
+    const auto pick = [&](const std::vector<GrowingPlantDefinition::BlockWeight> &blocksWeighted) {
+        int32_t total = 0;
+        for (const GrowingPlantDefinition::BlockWeight &weighted: blocksWeighted)
+            total += weighted.mWeight;
+        int32_t roll = (total > 0 ? nextInt(random, total) : 0) - blocksWeighted.front().mWeight;
+        size_t index = 0;
+        while (roll >= 0 && index + 1 < blocksWeighted.size())
+            roll -= blocksWeighted[++index].mWeight;
+        return blocksWeighted[index].mState;
+    };
+
+    for (int32_t i = 0; i < length; i++) {
+        const int32_t columnY = y + step * i;
+        const bool open = DecorationSupport::isAir(blocks.getBlockAt(x, columnY, z))
+                          || (plant.mAllowWater && (isWater(blocks.getBlockAt(x, columnY, z))
+                                                    || isWater(blocks.getExtraBlockAt(x, columnY, z))));
+        if (!open)
+            continue;
+
+        if (i == length - 1 || !DecorationSupport::isAir(blocks.getBlockAt(x, columnY + step, z))) {
+            const BlockState &head = pick(plant.mHead);
+            setInWater(blocks, x, columnY, z,
+                       plant.mAgeMax != 0 ? DecorationSupport::withState(head, "growing_plant_age", age) : head);
+            return true;
+        }
+
+        setInWater(blocks, x, columnY, z, pick(plant.mBody));
+    }
+
+    return false;
+}
+
+bool OverworldRulePlacer::_placeDripleaf(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
+                                         std::mt19937 &random) {
+    // DripleafFeature::place (sub_14D208A20): a small dripleaf when nextFloat < 0.2, else the big dripleaf feature
+    // of a direction; both draw the direction with nextInt(4), 0 south, 1 west, 2 north, 3 east
+    static const char *const DIRECTIONS[4] = {"south", "west", "north", "east"};
+    if (nextFloat(random) < 0.2f) {
+        // SmallDripleafBlock placement (sub_148F8FC60): mayPlace (sub_148F8EC40) then the lower half and the upper
+        // half above it (sub_148F8F620)
+        const BlockState lower = DecorationSupport::withByteState(
+                DecorationSupport::withState(VanillaBlocks::SMALL_DRIPLEAF_BLOCK().toBlockState(),
+                                             "minecraft:cardinal_direction", DIRECTIONS[nextInt(random, 4)]),
+                "upper_block_bit", false);
+        if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
+            return false;
+
+        const BlockState &at = blocks.getBlockAt(x, y, z);
+        const BlockState &above = blocks.getBlockAt(x, y + 1, z);
+        if (!BlockSupport::isReplaceable(at) || !BlockSupport::isReplaceable(above))
+            return false;
+
+        // mayPlaceOn (sub_148F8EE70): clay or moss anywhere, the dirt-like blocks of xmmword_1529B3258 only under
+        // water
+        static const BlockStateSet ANYWHERE = {"minecraft:clay", "minecraft:moss_block"};
+        static const BlockStateSet UNDER_WATER = {
+                "minecraft:dirt", "minecraft:grass_block", "minecraft:podzol", "minecraft:coarse_dirt",
+                "minecraft:mycelium", "minecraft:dirt_with_roots", "minecraft:moss_block",
+                "minecraft:pale_moss_block", "minecraft:mud", "minecraft:muddy_mangrove_roots", "minecraft:farmland"};
+        const BlockState &below = blocks.getBlockAt(x, y - 1, z);
+        const bool inWater = isWater(at) || isWater(blocks.getExtraBlockAt(x, y, z));
+        if (!ANYWHERE.contains(below) && !(inWater && UNDER_WATER.contains(below)))
+            return false;
+
+        setInWater(blocks, x, y, z, lower);
+        setInWater(blocks, x, y + 1, z, DecorationSupport::withByteState(lower, "upper_block_bit", true));
+        return true;
+    }
+
+    // big_dripleaf_<direction>_feature: growing_plant_feature growing up through water as well, 1 + nextInt(5)
+    // blocks at weight 2 or 1 block at weight 1, without an age
+    static const std::array<GrowingPlantDefinition, 4> BIG_DRIPLEAF = [] {
+        const auto part = [](const char *direction, bool head) {
+            BlockState state = DecorationSupport::withState(VanillaBlocks::BIG_DRIPLEAF().toBlockState(),
+                                                            "minecraft:cardinal_direction", direction);
+            state = DecorationSupport::withByteState(state, "big_dripleaf_head", head);
+            return DecorationSupport::withState(state, "big_dripleaf_tilt", "none");
+        };
+        const auto feature = [&](const char *identifier, const char *direction) {
+            return GrowingPlantDefinition{identifier, {{1, 6, 2}, {1, 2, 1}}, false, 0, 0,
+                                          {{part(direction, false), 1}}, {{part(direction, true), 1}}, true};
+        };
+        return std::array<GrowingPlantDefinition, 4>{
+                feature("minecraft:big_dripleaf_south_feature", DIRECTIONS[0]),
+                feature("minecraft:big_dripleaf_west_feature", DIRECTIONS[1]),
+                feature("minecraft:big_dripleaf_north_feature", DIRECTIONS[2]),
+                feature("minecraft:big_dripleaf_east_feature", DIRECTIONS[3])};
+    }();
+    return _placeGrowingPlant(blocks, BIG_DRIPLEAF[nextInt(random, 4)], x, y, z, random);
 }
 
 bool OverworldRulePlacer::_placeBlob(BlockManager &blocks, const BlobDefinition &blob, int32_t x, int32_t y, int32_t z,

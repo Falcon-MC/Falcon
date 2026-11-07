@@ -57,6 +57,8 @@ private:
     struct BlobDefinition;
     struct MultifaceDefinition;
     struct LegacyFlowerDefinition;
+    struct VegetationPatchDefinition;
+    struct GrowingPlantDefinition;
 
     // one of the game's features a rule or another feature places
     struct FossilDefinition;
@@ -85,6 +87,8 @@ private:
         bool mPointedDripstone = false;
         bool mLargeDripstone = false;
         const LegacyFlowerDefinition *mLegacyFlower = nullptr;
+        const VegetationPatchDefinition *mVegetationPatch = nullptr;
+        const GrowingPlantDefinition *mGrowingPlant = nullptr;
         // a feature ported on its own, placed at the position with the rule's random
         bool (*mFunction)(BlockManager &, int32_t, int32_t, int32_t, std::mt19937 &) = nullptr;
 
@@ -93,7 +97,8 @@ private:
                    || mAggregate != nullptr || mTree != nullptr || mLeafLitter || mMushroom != nullptr
                    || mBeehiveSearch || mHugeMushroom || mThreshold != nullptr || mSnap != nullptr || mBlob != nullptr
                    || mMultiface != nullptr || mDripstoneCluster || mPointedDripstone || mLargeDripstone
-                   || mLegacyFlower != nullptr || mFunction != nullptr;
+                   || mLegacyFlower != nullptr || mVegetationPatch != nullptr || mGrowingPlant != nullptr
+                   || mFunction != nullptr;
         }
     };
 
@@ -223,4 +228,12 @@ private:
                                    int32_t z, std::mt19937 &random);
 
     static bool _placeKelp(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
+
+    static bool _placeVegetationPatch(BlockManager &blocks, const VegetationPatchDefinition &patch, int32_t x,
+                                      int32_t y, int32_t z, std::mt19937 &random);
+
+    static bool _placeGrowingPlant(BlockManager &blocks, const GrowingPlantDefinition &plant, int32_t x, int32_t y,
+                                   int32_t z, std::mt19937 &random);
+
+    static bool _placeDripleaf(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 };

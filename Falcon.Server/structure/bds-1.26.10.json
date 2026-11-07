@@ -5216,14 +5216,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/ClayWithDripleavesPatchFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/ClayWithDripleavesPatchFeature.h",
-      "sha256": "536690538416939567f45b889386070b1284c39ee8cabae86156c0564b1e2eda",
-      "classes": [
-        "ClayWithDripleavesPatchFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/CoralCrustFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/CoralCrustFeature.h",
       "sha256": "d497b2b8fd518daae71918bcca1723836cdf47f53be8b3b8914bfeb454e6e35c",
@@ -5424,14 +5416,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/MossCeilingPatchFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/MossCeilingPatchFeature.h",
-      "sha256": "1fcb8c92e91b0a2174134a667fd0dce1fad81d7ac1cd35872d259082e7191eeb",
-      "classes": [
-        "MossCeilingPatchFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/PaleMossPatchFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/PaleMossPatchFeature.h",
       "sha256": "68cb1bcc422540a2d87759fd1e3f62eab6b36a47381666e24f4acb1857e79528",
@@ -5541,14 +5525,6 @@
       "sha256": "26e983141a49ec30d91663e4eadfe211c6e298f591d0721e7d0f5881fd6cccfb",
       "classes": [
         "TaigaGrassFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/VegetationPatchFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/VegetationPatchFeature.h",
-      "sha256": "b48f60204b24a170878376c0dad22125ea63e554aa9b1033c827b6a102a57b04",
-      "classes": [
-        "VegetationPatchFeature"
       ]
     },
     {
@@ -9490,11 +9466,6 @@
       "sha256": "b7039cf1bfa7a5637cbd9d445c1dbf731df42bc77f64673ff5d9f19ee4d309f8"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/ClayWithDripleavesPatchFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/ClayWithDripleavesPatchFeature.cpp",
-      "sha256": "4f69163e44573fe2ef9c558a45335c1bb2eb7bfd77643dd64fbf9b0b804f7a15"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/CoralCrustFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/CoralCrustFeature.cpp",
       "sha256": "78824aec54d3d85434a7f4e4cda52522dfb602da2c97b647f45d5a5d01f29068"
@@ -9620,11 +9591,6 @@
       "sha256": "27fdbda7fc1a88b94fd692c41632825bf2f75ad2403f0ec62b7b02a6ab7d7b7e"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/MossCeilingPatchFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/MossCeilingPatchFeature.cpp",
-      "sha256": "b0343788c789ea7515dbfbd397d2b3b2e9e8c109e8b5543088412f52c58525f0"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/PaleMossPatchFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/PaleMossPatchFeature.cpp",
       "sha256": "64beba21e3acdeb271eca01dd9acc30b4b52e67cb7b6aac66a76c071b745b5da"
@@ -9698,11 +9664,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/TaigaGrassFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/TaigaGrassFeature.cpp",
       "sha256": "9a73694696e2643b5ee476e2b12a01de9d2a9f60fdc6d3f13b1e88d7e3aa6ecc"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/VegetationPatchFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/VegetationPatchFeature.cpp",
-      "sha256": "5e0f404e929e596f68647c26f8f31e79362b71e50acafc87bff2f28c8e2948ea"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/WaterVegetationFeature.cpp",

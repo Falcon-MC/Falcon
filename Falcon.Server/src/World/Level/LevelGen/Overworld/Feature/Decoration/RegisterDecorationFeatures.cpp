@@ -3,7 +3,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/AzaleaRootSystemFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/BambooFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/CactusFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/ClayWithDripleavesPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/CoralCrustFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/CoralHangFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/CoralTreeFeature.h"
@@ -25,7 +24,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/MelonFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/MesaFoliageFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/MonsterRoomFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/MossCeilingPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/PaleMossPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/PumpkinFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/ReedsFeature.h"
@@ -44,7 +42,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SwampFlowerDiscFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SweetBerryBushFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/TaigaGrassFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/VegetationPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/WaterlilyFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/WildflowersBedFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Multi/JunglePlantAggregateFeature.h"
@@ -55,7 +52,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<AzaleaRootSystemFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<BambooFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<CactusFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<ClayWithDripleavesPatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<CoralCrustFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<CoralHangFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<CoralTreeFeature>());
@@ -77,7 +73,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<MelonFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<MesaFoliageFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<MonsterRoomFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<MossCeilingPatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<PaleMossPatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<PumpkinFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<ReedsFeature>());
@@ -96,7 +91,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<SwampFlowerDiscFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SweetBerryBushFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<TaigaGrassFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<VegetationPatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<WaterlilyFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<WildflowersBedFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<JunglePlantAggregateFeature>());
