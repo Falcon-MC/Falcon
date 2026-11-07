@@ -2,7 +2,11 @@
 
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/LiquidView.h"
+#include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Chunk/SubChunk.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
+#include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 
@@ -15,10 +19,47 @@ namespace {
         return data != nullptr && data->mSolid;
     }
 
+    bool holdsWater(const BlockState &state) {
+        const LiquidView liquid(state);
+        return liquid.isWater() || liquid.isBubbleColumn();
+    }
+
+    // Whether the section holding the block has any water or bubble column in its palettes; one without
+    // can be passed over without asking each of its blocks.
+    bool sectionMayHoldWater(Level &level, int32_t x, int32_t y, int32_t z) {
+        if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
+            return false;
+
+        const LevelChunk *chunk = level.peekChunkPtr(x >> 4, z >> 4);
+        return chunk != nullptr && chunk->getSubChunk(LevelChunk::subChunkIndexFor(y))
+                .paletteMatches(SubChunk::PaletteQuery::Water, holdsWater);
+    }
+
+    /**
+     * Whether the block holds water or a bubble column, as LiquidPhysicsSystem reads it: its first layer, or the
+     * water of its second layer when the first can be waterlogged. Asking the cheap layers first spares the block
+     * data lookup for almost every block.
+     */
+    bool holdsWaterAt(Level &level, int32_t x, int32_t y, int32_t z) {
+        const BlockState *layer0 = level.peekBlockPtr(x, y, z, 0);
+        if (layer0 == nullptr)
+            return false;
+
+        const LiquidView liquid(*layer0);
+        if (liquid.isWater() || liquid.isBubbleColumn())
+            return true;
+        if (liquid.isLava())
+            return false;
+
+        const BlockState *layer1 = level.peekBlockPtr(x, y, z, 1);
+        return layer1 != nullptr && LiquidView(*layer1).isWater()
+               && LiquidPhysicsSystem::getWaterloggingLevel(*layer0) != 0;
+    }
+
     bool isOpen(Level &level, int32_t x, int32_t y, int32_t z) {
         const BlockState *state = level.peekBlockPtr(x, y, z);
         return state != nullptr && !isSolid(level, x, y, z)
-               && !LiquidBlocksFetch::at(level, Vector3f((float) x + 0.5f, (float) y, (float) z + 0.5f)).water;
+               && !holdsWaterAt(level, x, y, z) && !holdsWaterAt(level, x, y + 1, z);
     }
 }
 
@@ -44,9 +85,15 @@ bool MoveToWaterGoal::_findTarget(ServerNetworkHandler &owner, const MobActor &m
     for (int32_t x = originX - mSearchRange; x <= originX + mSearchRange; ++x) {
         for (int32_t y = originY - mSearchHeight; y <= originY + mSearchHeight; ++y) {
             for (int32_t z = originZ - mSearchRange; z <= originZ + mSearchRange; ++z) {
+                // the water test reads the block and the one above, as a body 1.8 blocks tall standing there
+                if (mTowardsWater && !sectionMayHoldWater(level, x, y, z) && !sectionMayHoldWater(level, x, y + 1, z))
+                    continue;
+
+                // LiquidBlocksFetch::at(candidate).water, for a body 1.8 blocks tall centred on the block:
+                // water in the block or the one above
                 const Vector3f candidate((float) x + 0.5f, (float) y, (float) z + 0.5f);
                 const bool matches = mTowardsWater
-                                     ? LiquidBlocksFetch::at(level, candidate).water
+                                     ? holdsWaterAt(level, x, y, z) || holdsWaterAt(level, x, y + 1, z)
                                      : isSolid(level, x, y - 1, z) && isOpen(level, x, y, z) && isOpen(level, x, y + 1, z);
                 if (!matches)
                     continue;
