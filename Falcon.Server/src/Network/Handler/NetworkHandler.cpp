@@ -420,14 +420,8 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
             failed = true;
         }
 
-        if ((failed || entry.second->getEncryptedPeer()->hasFailed()) && !entry.second->isFailureReported()) {
-            entry.second->markFailureReported();
-
-            InboundEvent event;
-            event.mKind = InboundEvent::Kind::Failed;
-            event.mId = entry.first;
-            mInbound.push(std::move(event));
-        }
+        if (failed || entry.second->getEncryptedPeer()->hasFailed())
+            _reportFailure(*entry.second);
     }
 
     std::vector<OutboundCommand> commands = shard.mOutbound.drain();
@@ -453,14 +447,8 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
             _applyOutbound(shard, command);
         } catch (const std::exception &) {
             auto it = shard.mConnections.find(command.mId);
-            if (it != shard.mConnections.end() && !it->second->isFailureReported()) {
-                it->second->markFailureReported();
-
-                InboundEvent event;
-                event.mKind = InboundEvent::Kind::Failed;
-                event.mId = command.mId;
-                mInbound.push(std::move(event));
-            }
+            if (it != shard.mConnections.end())
+                _reportFailure(*it->second);
         }
     }
 
@@ -468,16 +456,21 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
         try {
             entry.second->getBatchedPeer()->flush();
         } catch (const std::exception &) {
-            if (!entry.second->isFailureReported()) {
-                entry.second->markFailureReported();
-
-                InboundEvent event;
-                event.mKind = InboundEvent::Kind::Failed;
-                event.mId = entry.first;
-                mInbound.push(std::move(event));
-            }
+            _reportFailure(*entry.second);
         }
     }
+}
+
+void NetworkHandler::_reportFailure(Connection &connection) {
+    if (connection.isFailureReported())
+        return;
+
+    connection.markFailureReported();
+
+    InboundEvent event;
+    event.mKind = InboundEvent::Kind::Failed;
+    event.mId = connection.getId();
+    mInbound.push(std::move(event));
 }
 
 void NetworkHandler::runEvents() {

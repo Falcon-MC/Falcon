@@ -240,6 +240,9 @@ private:
 
     void _applyOutbound(Shard &shard, OutboundCommand &command);
 
+    // Reports a connection whose transport failed, once, so the game drops it.
+    void _reportFailure(Connection &connection);
+
     Profiler *mProfiler = nullptr;
     std::vector<std::unique_ptr<Connector>> mConnectors;
     std::vector<std::unique_ptr<Shard>> mShards;
