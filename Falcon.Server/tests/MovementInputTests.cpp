@@ -472,6 +472,9 @@ namespace {
                 packet.mPosition = Vector3f(expected.x, expected.y + 1.62f, expected.z);
                 packet.mMotionY = 1.0f;
                 packet.mInputData = {(int32_t) PlayerAuthInputData::Sprinting};
+                // the client starts sprint once with StartSprinting; the Sprinting bit alone is not its state
+                if (tick == 1)
+                    packet.mInputData.push_back((int32_t) PlayerAuthInputData::StartSprinting);
                 if (jumpHeld)
                     packet.mInputData.push_back((int32_t) PlayerAuthInputData::Jumping);
                 if (tick == 6)
@@ -863,29 +866,42 @@ namespace {
         level.getChunk(9, 0);
         level.getBlockActors().loadChunk(9, 0, {}, owner.getCodecContext());
         PlayerAuthInputPacket packet;
-        packet.mTick = 100;
+        packet.mTick = 99;
         packet.mInputData = {(int32_t) PlayerAuthInputData::StartFlying,
                              (int32_t) PlayerAuthInputData::WantUp,
                              (int32_t) PlayerAuthInputData::Jumping};
-        packet.mPosition = Vector3f(150.5f, 251.77f, 2.5f);
+        packet.mPosition = Vector3f(150.5f, 251.62f, 2.5f);
         player.getMovementInputs().enqueue(packet);
         MovementInputProbe::step(owner, player, 1);
+        // The client keeps its old travel for the input that carries the toggle, so fly controls start next input.
+        require(player.isFlying() && std::fabs(player.getSimulatedVelocity().y - 0.09f) > 0.000002f,
+                "AuthInput StartFlying was not applied after the input that carries it");
+        player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
+        player.setSimulatedPosition(Vector3f(150.5f, 250.0f, 2.5f));
+        player.setSimulatedVelocity(Vector3f());
+        packet.mTick = 100;
+        packet.mInputData = {(int32_t) PlayerAuthInputData::WantUp, (int32_t) PlayerAuthInputData::Jumping};
+        packet.mPosition = Vector3f(150.5f, 251.77f, 2.5f);
+        player.getMovementInputs().enqueue(packet);
+        MovementInputProbe::step(owner, player, 2);
         require(player.isFlying() && std::fabs(player.getPosition().y - 250.15f) < 0.00003f
                 && std::fabs(player.getSimulatedVelocity().y - 0.09f) < 0.000002f,
-                "AuthInput StartFlying was not applied before simulation, or Jumping was confused with WantUpSlow");
+                "Flight controls did not apply on the input after StartFlying, or Jumping was confused with WantUpSlow");
         packet.mTick = 101;
         packet.mInputData = {(int32_t) PlayerAuthInputData::WantUp};
         packet.mPosition.y = 252.01f;
         player.getMovementInputs().enqueue(packet);
-        MovementInputProbe::step(owner, player, 2);
+        MovementInputProbe::step(owner, player, 3);
         require(player.isFlying() && std::fabs(player.getPosition().y - 250.39f) < 0.00003f,
                 "Flying state did not persist across subsequent input ticks");
         packet.mTick = 102;
         packet.mInputData = {(int32_t) PlayerAuthInputData::StopFlying};
         player.getMovementInputs().enqueue(packet);
-        MovementInputProbe::step(owner, player, 3);
-        require(!player.isFlying() && std::fabs(player.getSimulatedVelocity().y - 0.06272f) < 0.000002f,
-                "AuthInput StopFlying did not restore gravity on its own tick");
+        MovementInputProbe::step(owner, player, 4);
+        // The StopFlying input still travels as flying with the fly controls off: idle mouse friction
+        // (0.375) and the flight vertical drag (0.6), with no gravity until the next input.
+        require(!player.isFlying() && std::fabs(player.getSimulatedVelocity().y - 0.144f * 0.375f * 0.6f) < 0.000002f,
+                "AuthInput StopFlying did not keep flying travel on its own tick");
         packet.mTick = 103;
         packet.mInputData = {(int32_t) PlayerAuthInputData::StartFlying,
                              (int32_t) PlayerAuthInputData::WantUp};
