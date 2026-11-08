@@ -789,7 +789,9 @@ int main() {
             require(chunk.isPacked(), "Chunk did not pack");
             require(chunk.encodeNetwork() == network && !chunk.isPacked(), "Unpacked chunk encodes differently");
             require(persistent() == stored && light() == levels, "Unpacked chunk lost storage");
-            require(chunk.consumeUnpacked() && !chunk.consumeUnpacked(), "Unpacking was not reported once");
+            require(chunk.consumeAccessed() && !chunk.consumeAccessed(), "An access was not reported once");
+            chunk.getBlock(1, 1, 1);
+            require(chunk.consumeAccessed(), "A read of an unpacked chunk was not reported");
 
             chunk.pack();
             LevelChunk copy(chunk);

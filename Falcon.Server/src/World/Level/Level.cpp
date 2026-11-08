@@ -1015,7 +1015,7 @@ void Level::packIdleChunks() {
 
         // A chunk read since the last pass gets another pass before it is packed.
         LevelChunk &chunk = it->second;
-        if (chunk.consumeUnpacked() || !chunk.isPopulated() || mActiveColumns.count(key) != 0
+        if (chunk.consumeAccessed() || !chunk.isPopulated() || mActiveColumns.count(key) != 0
             || mOccupiedColumns.count(key) != 0 || mPendingChunks.count(key) != 0)
             continue;
 

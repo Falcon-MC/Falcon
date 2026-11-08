@@ -78,13 +78,12 @@ void LevelChunk::_unpack() const {
     mSubChunks = std::move(subChunks);
     std::string().swap(mPackedData);
     mPacked = false;
-    mUnpacked = true;
 }
 
-bool LevelChunk::consumeUnpacked() {
-    const bool unpacked = mUnpacked;
-    mUnpacked = false;
-    return unpacked;
+bool LevelChunk::consumeAccessed() {
+    const bool accessed = mAccessed;
+    mAccessed = false;
+    return accessed;
 }
 
 int32_t LevelChunk::getHeight(int x, int z) const {

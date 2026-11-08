@@ -152,11 +152,12 @@ public:
         return mPacked;
     }
 
-    // Whether the chunk was unpacked since the last call, which a packer uses to leave busy chunks alone.
-    bool consumeUnpacked();
+    // Whether the chunk was read or written since the last call, which a packer uses to leave busy chunks alone.
+    bool consumeAccessed();
 
 private:
     void _ensureUnpacked() const {
+        mAccessed = true;
         if (mPacked)
             _unpack();
     }
@@ -178,7 +179,7 @@ private:
     mutable LightStorage mBlockLight;
     mutable std::string mPackedData;
     mutable bool mPacked = false;
-    mutable bool mUnpacked = false;
+    mutable bool mAccessed = false;
     mutable std::vector<std::string> mSubChunkNetworkCache;
     mutable std::vector<uint8_t> mSubChunkNetworkValid;
     mutable std::unordered_map<const BlockNetworkIdMap *, std::vector<std::string>> mTranslatedSubChunkCache;
