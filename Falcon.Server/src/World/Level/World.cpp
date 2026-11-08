@@ -6,7 +6,8 @@ World::World(uint32_t id, const std::string &name, int viewDistance, int64_t see
         : mId(id),
           mOverworld(new Level(name, viewDistance, seed, DimensionType::Overworld)),
           mNether(new Level(name, viewDistance, seed, DimensionType::Nether)),
-          mTheEnd(new Level(name, viewDistance, seed, DimensionType::TheEnd)) {
+          mTheEnd(new Level(name, viewDistance, seed, DimensionType::TheEnd)),
+          mDragonFight(new EndDragonFight(seed)) {
     for (Level *level: getLevels())
         level->setWorldId(id);
 }
@@ -41,6 +42,13 @@ bool World::open(const std::string &worldsDirectory, size_t workerThreads,
         level->setOwner(owner);
     }
 
+    mDragonFight.reset(new EndDragonFight(mOverworld->getSeed()));
+    Tag endData;
+    if (mTheEnd->loadSavedData(EndDragonFight::SAVED_DATA_KEY, endData)) {
+        mTheEndData = endData;
+        mDragonFight->load(mTheEndData);
+    }
+
     mTickingAreas.load(*this);
     return opened;
 }
@@ -48,9 +56,21 @@ bool World::open(const std::string &worldsDirectory, size_t workerThreads,
 void World::saveAll(bool wait) {
     for (Level *level: getLevels())
         level->saveAll(wait);
+
+    _saveDragonFight();
+}
+
+void World::_saveDragonFight() {
+    if (!mTheEnd->isStorageOpen())
+        return;
+
+    mDragonFight->save(mTheEndData);
+    mTheEnd->saveSavedData(EndDragonFight::SAVED_DATA_KEY, mTheEndData);
 }
 
 void World::close() {
+    _saveDragonFight();
+
     std::exception_ptr error;
     for (Level *level: {mNether.get(), mTheEnd.get(), mOverworld.get()}) {
         try {

@@ -79,6 +79,8 @@ public:
 
     bool eraseEntity(int64_t uniqueId);
 
+    bool hasEntity(int64_t uniqueId) const;
+
     bool saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities);
 
     std::vector<Tag> loadBlockEntities(int32_t chunkX, int32_t chunkZ);
@@ -94,6 +96,11 @@ public:
     std::vector<std::pair<std::string, Tag>> loadTickingAreas();
 
     bool saveGameRules(const Tag &rules);
+
+    /** Data the game saves under a plain key, such as "TheEnd", as {"data": compound}. */
+    bool saveSavedData(const std::string &key, const Tag &data);
+
+    bool loadSavedData(const std::string &key, Tag &data);
 
     bool loadGameRules(Tag &rules);
 

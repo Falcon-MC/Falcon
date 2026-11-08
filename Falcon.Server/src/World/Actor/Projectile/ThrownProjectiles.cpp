@@ -224,3 +224,39 @@ bool LingeringPotionActor::onHit(ServerNetworkHandler &owner, const Vector3f &hi
     owner.spawnLingeringCloud(owner.getLevelFor(*this), hitPosition, getPotionId());
     return true;
 }
+
+namespace {
+    const int32_t DRAGON_BREATH_POTION = 23;
+    const int32_t DRAGON_BREATH_PARTICLE = 49;
+    const float DRAGON_BREATH_RADIUS = 6.0f;
+    const int32_t DRAGON_BREATH_DURATION = 120;
+    const int32_t DRAGON_BREATH_REAPPLICATION_DELAY = 20;
+}
+
+void DragonFireballActor::_burst(ServerNetworkHandler &owner, const Vector3f &hitPosition) {
+    Level &level = owner.getLevelFor(*this);
+    owner.playLevelSound(level, LevelSoundEvent::EXPLODE, hitPosition);
+
+    ServerNetworkHandler::AreaEffectCloudSettings settings;
+    settings.mPotionId = DRAGON_BREATH_POTION;
+    settings.mRadius = DRAGON_BREATH_RADIUS;
+    settings.mDuration = DRAGON_BREATH_DURATION;
+    settings.mReapplicationDelay = DRAGON_BREATH_REAPPLICATION_DELAY;
+    settings.mParticle = DRAGON_BREATH_PARTICLE;
+    settings.mOwnerRuntimeId = getOwnerUniqueId();
+    owner.spawnAreaEffectCloud(level, hitPosition, settings);
+}
+
+bool DragonFireballActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
+    (void) hitPlayer;
+
+    _burst(owner, hitPosition);
+    return true;
+}
+
+bool DragonFireballActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
+    (void) hitActor;
+
+    _burst(owner, hitPosition);
+    return true;
+}

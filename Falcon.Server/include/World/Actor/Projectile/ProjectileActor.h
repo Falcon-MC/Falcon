@@ -18,6 +18,11 @@ public:
     virtual float getInertia() const {
         return 1.0f;
     }
+
+    // a projectile that never hits the actor that shot it, however long it flies through its box
+    virtual bool passesThroughOwner() const {
+        return false;
+    }
 };
 
 class ThrownProjectileActor : public ProjectileActor {
@@ -126,6 +131,34 @@ public:
     using PotionActor::PotionActor;
 
     bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+};
+
+/**
+ * The dragon's fireball: it flies straight and leaves a cloud of dragon's breath where it lands
+ * (dragon_fireball.json, minecraft:projectile and its spawn_aoe_cloud).
+ */
+class DragonFireballActor final : public ThrownProjectileActor {
+public:
+    using ThrownProjectileActor::ThrownProjectileActor;
+
+    float getGravity() const override {
+        return 0.0f;
+    }
+
+    float getInertia() const override {
+        return 1.0f;
+    }
+
+    bool passesThroughOwner() const override {
+        return true;
+    }
+
+    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+
+    bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
+
+private:
+    void _burst(ServerNetworkHandler &owner, const Vector3f &hitPosition);
 };
 
 class ArrowActor : public ProjectileActor {

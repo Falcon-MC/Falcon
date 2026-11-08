@@ -589,6 +589,14 @@ bool LevelStorage::eraseEntity(int64_t uniqueId) {
     return _recordWrite(status.ok() || status.IsNotFound());
 }
 
+bool LevelStorage::hasEntity(int64_t uniqueId) const {
+    if (mDb == nullptr)
+        return false;
+
+    std::string data;
+    return mDb->Get(_readOptions(), ACTOR_PREFIX + _makeActorStorageId(uniqueId), &data).ok();
+}
+
 std::vector<Tag> LevelStorage::loadEntities(int32_t chunkX, int32_t chunkZ) {
     std::vector<Tag> entities;
 
@@ -789,6 +797,51 @@ bool LevelStorage::saveGameRules(const Tag &rules) {
     if (!status.ok()) {
         _recordWrite(false);
         LOG_WARN(LogAreaID::Server, "Could not save game rules: %s", status.ToString().c_str());
+        return false;
+    }
+
+    return true;
+}
+
+bool LevelStorage::saveSavedData(const std::string &key, const Tag &data) {
+    if (mDb == nullptr)
+        return false;
+
+    Tag root = Tag::ofCompound();
+    root.put("data", data);
+
+    BinaryStream stream;
+    NbtIo::writeTag(stream, root, NbtVariant::LittleEndian);
+
+    const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), key, stream.getBuffer());
+    if (!status.ok()) {
+        _recordWrite(false);
+        LOG_WARN(LogAreaID::Server, "Could not save %s: %s", key.c_str(), status.ToString().c_str());
+        return false;
+    }
+
+    return true;
+}
+
+bool LevelStorage::loadSavedData(const std::string &key, Tag &data) {
+    if (mDb == nullptr)
+        return false;
+
+    std::string raw;
+    if (!mDb->Get(_readOptions(), key, &raw).ok())
+        return false;
+
+    ReadOnlyBinaryStream stream(raw);
+
+    try {
+        const Tag root = NbtIo::readTag(stream, NbtVariant::LittleEndian);
+        const Tag *stored = root.get("data");
+        if (stored == nullptr || !stored->isCompound())
+            return false;
+
+        data = *stored;
+    } catch (const std::exception &exception) {
+        LOG_WARN(LogAreaID::Server, "Malformed %s data: %s", key.c_str(), exception.what());
         return false;
     }
 

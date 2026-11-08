@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Level/Dimension/Dimension.h"
+#include "World/Level/Dimension/EndDragonFight.h"
 #include "World/Level/Level.h"
 #include "World/Level/TickingAreaManager.h"
 
@@ -58,6 +59,10 @@ public:
         return mTickingAreas;
     }
 
+    EndDragonFight &getDragonFight() {
+        return *mDragonFight;
+    }
+
     std::unordered_set<int64_t> &getActorLoadedChunks(DimensionType dimension) {
         return mActorLoadedChunks[Dimension::toId(dimension)];
     }
@@ -68,10 +73,15 @@ public:
     bool mEnoughPlayersSleeping = false;
 
 private:
+    void _saveDragonFight();
+
     uint32_t mId;
     std::unique_ptr<Level> mOverworld;
     std::unique_ptr<Level> mNether;
     std::unique_ptr<Level> mTheEnd;
+    std::unique_ptr<EndDragonFight> mDragonFight;
+    // the End's saved data, kept so the fields Falcon does not use are written back unchanged
+    Tag mTheEndData = Tag::ofCompound();
     TickingAreaManager mTickingAreas;
     std::array<std::unordered_set<int64_t>, Dimension::DIMENSION_COUNT> mActorLoadedChunks;
 };

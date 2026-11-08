@@ -8,6 +8,7 @@
 #include "World/Actor/AI/Goal/BehaviorItems.h"
 #include "World/Actor/AI/Goal/BreakDoorGoal.h"
 #include "World/Actor/AI/Goal/BreedGoal.h"
+#include "World/Actor/AI/Goal/DragonGoals.h"
 #include "World/Actor/AI/Goal/CelebrateGoal.h"
 #include "World/Actor/AI/Goal/ChargeHeldItemGoal.h"
 #include "World/Actor/AI/Goal/CircleAroundAnchorGoal.h"
@@ -503,6 +504,9 @@ void BehaviorGoals::build(MobActor &mob, GoalSelector &selector) {
 std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::string &behavior,
                                              const json::Value &component) {
     const float speed = mob.getMovementSpeed() * numberOf(component, "speed_multiplier", 1.0f);
+
+    if (behavior.rfind("dragon", 0) == 0)
+        return DragonGoals::create(mob, behavior, component);
 
     if (behavior == "float")
         return std::make_unique<FloatGoal>();
