@@ -52,6 +52,29 @@ public:
     // a tick for the liquid now at the position
     void schedule(const Vector3i &position, int64_t delay);
 
+    // FillCommand writes every block with flag 2, then updates the neighbours of each in turn (sub_14BE6B770);
+    // only the writes asked for go quiet, not what their place events write
+    class QuietWrites {
+    public:
+        explicit QuietWrites(LiquidPhysicsSystem &system) : mSystem(system), mPrevious(system.mQuiet) {
+            mSystem.mQuiet = true;
+        }
+
+        ~QuietWrites() {
+            mSystem.mQuiet = mPrevious;
+        }
+
+        QuietWrites(const QuietWrites &) = delete;
+        QuietWrites &operator=(const QuietWrites &) = delete;
+
+    private:
+        LiquidPhysicsSystem &mSystem;
+        bool mPrevious;
+    };
+
+    // BlockSource::updateNeighborsAt for the liquid side of a block written quietly
+    void updateNeighbours(const Vector3i &position);
+
     // columns sorted by z, then x
     void tick(int64_t levelTick, const std::vector<int64_t> &columns);
 
@@ -240,6 +263,7 @@ private:
     BlockTickingQueue mRandomTicks;
     std::vector<LiquidChange> mChanges;
     bool mNotify = true;
+    bool mQuiet = false;
     // sub_149C41E60 defers solidify checks raised while one runs
     bool mSolidifying = false;
     std::deque<SolidifyCheck> mDeferredSolidify;

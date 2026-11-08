@@ -17,7 +17,7 @@ public:
     static bool resolveBlock(const std::string &name, BlockState &out);
 
     static bool placeBlock(ServerNetworkHandler &handler, Level &level, const Vector3i &position,
-                           const BlockState &state, const std::string &mode);
+                           const BlockState &state, const std::string &mode, bool updateNeighbours = true);
 
 private:
     ServerNetworkHandler &mHandler;

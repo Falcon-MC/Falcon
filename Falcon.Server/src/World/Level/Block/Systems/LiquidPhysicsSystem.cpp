@@ -202,7 +202,8 @@ bool LiquidPhysicsSystem::allows(const Vector3i &position, const BlockState &sta
 
 void LiquidPhysicsSystem::onBlockChanged(const Vector3i &position, int layer, const BlockState &previous) {
     const Scope scope(*this);
-    const bool notify = mNotify;
+    const bool notify = mNotify && !(mQuiet && mDepth == 1);
+    const bool requested = mNotify;
     mNotify = true;
     normalizeWaterlogged(position);
 
@@ -220,7 +221,12 @@ void LiquidPhysicsSystem::onBlockChanged(const Vector3i &position, int layer, co
     // BlockSource::_blockChanged: neighbours hear of writes made with flag 1 (sub_1432CEDE0)
     if (notify)
         _updateNeighbors(position);
-    mNotify = notify;
+    mNotify = requested;
+}
+
+void LiquidPhysicsSystem::updateNeighbours(const Vector3i &position) {
+    const Scope scope(*this);
+    _updateNeighbors(position);
 }
 
 // BlockSource::updateNeighborsAt (sub_1432D2940)

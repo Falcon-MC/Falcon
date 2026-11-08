@@ -1,4 +1,6 @@
 #include "Network/ServerNetworkHandler.h"
+#include "Server/Commands/CommandOrigin.h"
+#include "Server/Commands/FillCommand.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Block/LiquidProperties.h"
@@ -117,7 +119,46 @@ namespace {
         return states;
     }
 
-    // fill here only builds the floor and walls before any liquid: block by block in its x, y, z order
+    // a console in the level of the scenario; a refused command fails the scenario
+    class TraceOrigin : public CommandOrigin {
+    public:
+        explicit TraceOrigin(Level &level) : mLevel(level) {
+        }
+
+        std::string getSenderName() const override {
+            return "fluid-parity";
+        }
+
+        bool isPlayer() const override {
+            return false;
+        }
+
+        ServerPlayer *asPlayer() override {
+            return nullptr;
+        }
+
+        void sendMessage(const std::string &message) override {
+            (void) message;
+        }
+
+        void sendTranslation(const std::string &key, const std::vector<std::string> &parameters) override {
+            (void) parameters;
+            if (key != "commands.fill.success")
+                throw std::runtime_error("fill answered " + key);
+        }
+
+        CommandPermission getCommandPermission() const override {
+            return CommandPermission::Internal;
+        }
+
+        Level *getLevel() override {
+            return &mLevel;
+        }
+
+    private:
+        Level &mLevel;
+    };
+
     void runCommand(ServerNetworkHandler &owner, Level &level, const std::string &text) {
         std::istringstream words(text);
         std::string verb;
@@ -135,21 +176,14 @@ namespace {
             return;
         }
         if (verb == "fill") {
-            int from[3];
-            int to[3];
-            std::string name;
-            words >> from[0] >> from[1] >> from[2] >> to[0] >> to[1] >> to[2] >> name;
-            const BlockState state = defaultState(name);
-            if (LiquidProperties::of(state).isLiquid())
-                throw std::runtime_error("a liquid fill needs FillCommand: " + text);
-            for (int x = from[0]; x <= to[0]; ++x) {
-                for (int y = from[1]; y <= to[1]; ++y) {
-                    for (int z = from[2]; z <= to[2]; ++z) {
-                        if (!(*level.peekBlockPtr(x, y, z) == state))
-                            place(owner, level, Vector3i(x, y, z), state);
-                    }
-                }
-            }
+            std::vector<std::string> arguments;
+            std::string word;
+            while (words >> word)
+                arguments.push_back(word);
+            if (arguments.size() >= 7)
+                arguments[6] = withPrefix(arguments[6]);
+            TraceOrigin origin(level);
+            FillCommand(owner).execute(origin, arguments);
             return;
         }
         if (verb == "waterlog") {
