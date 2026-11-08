@@ -438,22 +438,23 @@ std::vector<JigsawPiece> VillageStructure::plan(const ChunkGenerator &generator,
 
 std::shared_ptr<const std::vector<JigsawPiece>> VillageStructure::cachedPlan(const ChunkGenerator &generator,
                                                                              int32_t startX, int32_t startZ) {
-    using Key = std::tuple<const ChunkGenerator *, int64_t, int32_t, int32_t>;
+    // the plan reads only the seed and the dimension: every worker's generator shares it
+    using Key = std::tuple<int64_t, int32_t, int32_t, int32_t>;
     static std::mutex mutex;
     static std::map<Key, std::shared_ptr<const std::vector<JigsawPiece>>> plans;
     static std::deque<Key> order;
 
-    const StructureFeature *village = StructureFeature::get("village");
-    if (village == nullptr || !village->isStartChunk(generator, startX, startZ))
-        return nullptr;
-
-    const Key key = {&generator, generator.getSeed(), startX, startZ};
+    const Key key = {generator.getSeed(), (int32_t) generator.getDimensionType(), startX, startZ};
     {
         std::lock_guard<std::mutex> lock(mutex);
         const auto found = plans.find(key);
         if (found != plans.end())
             return found->second;
     }
+
+    const StructureFeature *village = StructureFeature::get("village");
+    if (village == nullptr || !village->isStartChunk(generator, startX, startZ))
+        return nullptr;
 
     // planned unlocked: other workers keep planning
     auto pieces = std::make_shared<const std::vector<JigsawPiece>>(plan(generator, startX, startZ));
