@@ -1,5 +1,7 @@
 #include "World/Actor/FreezingSystem.h"
 
+#include "Protocol/Types/StartGameTypes.h"
+
 #include "World/Actor/ActorDamageSource.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -10,6 +12,10 @@
 #include <cmath>
 
 bool FreezingSystem::isSuppressed(Level &level, const Actor &actor) {
+    // sub_145E14260: spectators always thaw
+    const auto *player = dynamic_cast<const ServerPlayer *>(&actor);
+    if (player != nullptr && player->getGameType() == (int32_t) GameType::Spectator)
+        return true;
     bool suppressed = FreezingMobEffect::isProtected(actor) || FreezingMobEffect::isImmune(actor);
     const auto *serverActor = dynamic_cast<const ServerActor *>(&actor);
     const ActorSize size = serverActor != nullptr ? serverActor->getSize() : ActorSize{0.6f, 1.8f};
@@ -49,7 +55,7 @@ bool FreezingSystem::isInFreezingBlock(Level &level, const Actor &actor) {
         for (int z = minZ; z <= maxZ; ++z) {
             for (int y = minY; y <= maxY; ++y) {
                 const BlockState *state = level.peekBlockPtr(x, y, z);
-                const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+                const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromState(*state);
                 if (block != nullptr && block->freezesActorsInside())
                     return true;
             }
@@ -59,13 +65,15 @@ bool FreezingSystem::isInFreezingBlock(Level &level, const Actor &actor) {
 }
 
 void FreezingSystem::tick(ServerNetworkHandler &owner, Actor &actor) {
-    if (!actor.isAlive())
+    if (!actor.isAlive() || !actor.canFreeze())
+        return;
+    const bool effect = actor.hasEffect(MobEffectId::Freezing);
+    // the contact pass flags actors touching powder snow: only those need the trimmed scan
+    const bool touched = actor.touchedFreezingBlock(owner.getCurrentTick());
+    if (!effect && !touched && actor.getEffects().getFreezingTicks() == 0)
         return;
     Level &level = owner.getLevelFor(actor);
-    const bool effect = actor.hasEffect(MobEffectId::Freezing);
-    const bool freezingBlock = !effect && isInFreezingBlock(level, actor);
-    if (!effect && !freezingBlock && actor.getEffects().getFreezingTicks() == 0)
-        return;
+    const bool freezingBlock = !effect && touched && isInFreezingBlock(level, actor);
 
     // the effect or a freezing block climbs; immunity, warm armor and heat thaw
     const bool rising = (effect || freezingBlock) && !isSuppressed(level, actor);

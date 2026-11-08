@@ -301,6 +301,14 @@ void MobEffectManager::clear() {
         remove((MobEffectId) mEffects.begin()->first);
 }
 
+void MobEffectManager::resetFreezing() {
+    if (mFreezingTicks == 0)
+        return;
+    mFreezingTicks = 0;
+    mFreezingDamageTicks = 0;
+    refreshDerivedAttributes();
+}
+
 bool MobEffectManager::tick(int32_t tickDiff) {
     if (tickDiff <= 0 || mEffects.empty() || !mActor.isAlive())
         return false;

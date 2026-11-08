@@ -187,6 +187,19 @@ public:
 
     bool isAlive() const;
 
+    // sub_145E14260 freezes mobs only, players included
+    virtual bool canFreeze() const {
+        return false;
+    }
+
+    void markInFreezingBlock(int64_t tick) {
+        mFreezingBlockTick = tick;
+    }
+
+    bool touchedFreezingBlock(int64_t tick) const {
+        return mFreezingBlockTick == tick;
+    }
+
     int getNoDamageTicks() const { return mNoDamageTicks; }
 
     void setNoDamageTicks(int ticks) { mNoDamageTicks = std::max(0, ticks); }
@@ -351,6 +364,7 @@ protected:
     int mDifficulty = 2;
     bool mPendingStarveDamage = false;
     bool mIsDead = false;
+    int64_t mFreezingBlockTick = -1;
     int mNoDamageTicks = 0;
     int mSpawnInvulnerabilityTicks = 0;
     int mAttackTime = 0;

@@ -480,6 +480,8 @@ bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
 void Actor::kill() {
     mIsDead = true;
     mEffects.clear();
+    // a respawn starts thawed
+    mEffects.resetFreezing();
     extinguish();
     mAttributes.set(ATTRIBUTE_HEALTH, 0.0f);
     setMotion(Vector3f(0.0f, 0.0f, 0.0f));

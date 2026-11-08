@@ -205,6 +205,7 @@ public:
     float movementSpeedMultiplier() const;
     void setMovementSpeedBonus(float bonus);
     float advanceFreezing(bool rising);
+    void resetFreezing();
     int32_t getFreezingTicks() const {
         return mFreezingTicks;
     }

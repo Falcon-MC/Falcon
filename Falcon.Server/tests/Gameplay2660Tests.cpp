@@ -172,6 +172,16 @@ namespace {
         player.setPosition(Vector3f(8.71f, 20.0f, 8.5f));
         require(FreezingSystem::isInFreezingBlock(heat, player), "a box reaching into powder snow did not freeze");
         player.setPosition(Vector3f(8.5f, 20.0f, 8.5f));
+        require(player.canFreeze(), "players stopped freezing");
+        for (const char *name: {"minecraft:ender_crystal", "minecraft:item", "minecraft:tnt", "minecraft:arrow"}) {
+            auto actor = ActorClassRegistry::create(100, name);
+            require(actor != nullptr && !actor->canFreeze(), "a non-mob actor can freeze");
+        }
+        for (int tick = 0; tick < 140; ++tick)
+            player.getEffects().advanceFreezing(RISE);
+        player.kill();
+        require(player.getEffects().getFreezingTicks() == 0 && player.getMovementSpeedMultiplier() == 1.0f,
+                "a dead player kept its freeze");
         require(VanillaBlocks::fromIdentifier("minecraft:fire")->suppressesFreezing()
                 && VanillaBlocks::fromIdentifier("minecraft:lava")->suppressesFreezing()
                 && !VanillaBlocks::fromIdentifier("minecraft:stone")->suppressesFreezing(), "heat block protection incorrect");

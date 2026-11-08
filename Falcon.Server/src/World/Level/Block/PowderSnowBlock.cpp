@@ -2,6 +2,7 @@
 
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/BlockStateHasher.h"
+#include "Protocol/Types/StartGameTypes.h"
 #include "World/Actor/Actor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
@@ -40,7 +41,7 @@ namespace {
             for (int32_t y = minY; y <= maxY; ++y) {
                 for (int32_t z = minZ; z <= maxZ; ++z) {
                     const BlockState *state = level.peekBlockPtr(x, y, z);
-                    const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+                    const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromState(*state);
                     if (block != nullptr && block->freezesActorsInside())
                         melt(owner, level, Vector3i(x, y, z), BlockState(*state));
                 }
@@ -58,22 +59,29 @@ void PowderSnowBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, c
     (void) position;
     (void) state;
     actor.makeStuckInBlock(STUCK_MULTIPLIER);
+    actor.markInFreezingBlock(owner.getCurrentTick());
     if (!actor.isOnFire())
+        return;
+    const auto *player = dynamic_cast<const ServerPlayer *>(&actor);
+    if (player != nullptr && player->getGameType() == (int32_t) GameType::Spectator)
         return;
 
     // sub_143611E40, sub_143531350: put out with a fizz sized to the box
-    const auto *serverActor = dynamic_cast<const ServerActor *>(&actor);
+    auto *serverActor = dynamic_cast<ServerActor *>(&actor);
     const ActorSize size = serverActor != nullptr ? serverActor->getSize() : ActorSize{0.6f, 1.8f};
     const Vector3f feet = actor.getPosition();
     Level &level = owner.getLevelFor(actor);
     actor.extinguish();
+    // players resync their flags on their own tick, mobs do not
+    if (serverActor != nullptr)
+        owner.syncActorFlags(*serverActor);
     owner.playLevelSound(level, FIZZ_SOUND, feet);
     const int32_t fizzData = (int32_t) std::ceil(size.mWidth) + ((int32_t) std::ceil(size.mHeight) << 8);
     owner.broadcastLevelEvent(level, LEVEL_EVENT_FIZZ,
                               Vector3f(feet.x - size.mWidth * 0.5f, feet.y, feet.z - size.mWidth * 0.5f), fizzData);
 
     // mob griefing gamerule, sub_140B9C800 319: players always melt it
-    if (level.getGameRules().getBool("mobgriefing") || dynamic_cast<const ServerPlayer *>(&actor) != nullptr)
+    if (level.getGameRules().getBool("mobgriefing") || player != nullptr)
         meltAround(owner, level, feet, size);
 }
 
