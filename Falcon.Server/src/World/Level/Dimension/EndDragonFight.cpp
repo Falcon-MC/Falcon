@@ -343,8 +343,9 @@ void EndDragonFight::_tickDragon(ServerNetworkHandler &owner, Level &level) {
 
 EnderDragon *EndDragonFight::_findDragon(ServerNetworkHandler &owner, Level &level) {
     if (mDragonUniqueId != -1) {
+        // the tracked dragon still counts while it dies, or a second one would spawn (sub_14716C8B0)
         EnderDragon *known = dynamic_cast<EnderDragon *>(owner.getActor(mDragonUniqueId));
-        if (known != nullptr && known->isIn(level) && !known->isDead())
+        if (known != nullptr && known->isIn(level))
             return known;
     }
 
@@ -593,6 +594,8 @@ void EndDragonFight::_rebuildSpike(ServerNetworkHandler &owner, Level &level, co
 }
 
 void EndDragonFight::_finishRespawn(ServerNetworkHandler &owner, Level &level) {
+    // the ritual ends before the crystals explode, so one caught in the blast is not a broken ritual (sub_14716C8B0)
+    mRespawnStage = RespawnStage::None;
     mDragonKilled = false;
     _initializeDragon(owner, level);
     _resetSpikeCrystals(owner, level);

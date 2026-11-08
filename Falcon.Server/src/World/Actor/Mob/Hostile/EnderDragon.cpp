@@ -825,6 +825,10 @@ void EnderDragon::tickDeath(ServerNetworkHandler &owner) {
     Level &level = owner.getLevelFor(*this);
     const int32_t ticks = getDeathTicks();
 
+    // a dying dragon is no longer saved: drop its old record, or a restart now leaves the fight waiting for it
+    if (ticks == 1)
+        level.eraseEntity(getUniqueId());
+
     if (mBossPercent != 0.0f) {
         mBossPercent = 0.0f;
         for (auto &entry: owner.getPlayers()) {

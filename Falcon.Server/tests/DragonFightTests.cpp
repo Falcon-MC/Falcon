@@ -1,8 +1,17 @@
+#include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Misc/EndCrystalActor.h"
 #include "World/Actor/Mob/Hostile/EnderDragon.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Dimension/EndDragonFight.h"
+#include "World/Level/Level.h"
 #include "World/Level/LevelGen/End/Feature/EndSpikes.h"
+#include "World/Level/World.h"
 
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <set>
 #include <stdexcept>
@@ -239,16 +248,117 @@ namespace {
             require(index >= 12, "Without crystals no path goes back to the outer ring");
         }
     }
+
+    // an empty End around the island, wide enough for the spikes, with its fight
+    struct ArenaFixture {
+        ServerNetworkHandler mOwner{"Dragon fight", "", 1};
+        World &mWorld = mOwner.getWorlds().getDefault();
+        Level &mEnd = mWorld.getLevel(DimensionType::TheEnd);
+        EndDragonFight &mFight = mWorld.getDragonFight();
+
+        ArenaFixture() {
+            for (int32_t x = -4; x <= 4; x++) {
+                for (int32_t z = -4; z <= 4; z++)
+                    mEnd.insertChunk(LevelChunk(x, z)).setPopulated(true);
+            }
+        }
+
+        std::vector<EnderDragon *> dragons() {
+            std::vector<EnderDragon *> found;
+            for (auto &entry: mOwner.getActors()) {
+                EnderDragon *dragon = dynamic_cast<EnderDragon *>(entry.second.get());
+                if (dragon != nullptr)
+                    found.push_back(dragon);
+            }
+            return found;
+        }
+
+        void tickDeath(EnderDragon &dragon) {
+            dragon.addDeathTick();
+            dragon.tickDeath(mOwner);
+        }
+    };
+
+    void checkDyingDragon() {
+        ArenaFixture arena;
+        arena.mFight.tick(arena.mOwner, arena.mEnd);
+        require(arena.dragons().size() == 1, "A new fight spawns its dragon");
+
+        EnderDragon &dragon = *arena.dragons().front();
+        dragon.finishDying(arena.mOwner);
+        for (int32_t tick = 0; tick < 5; tick++) {
+            arena.tickDeath(dragon);
+            arena.mFight.tick(arena.mOwner, arena.mEnd);
+        }
+        require(arena.dragons().size() == 1, "A dying dragon does not let a second one spawn");
+        require(arena.mFight.getDragonUniqueId() == dragon.getUniqueId(), "The fight keeps the dying dragon");
+    }
+
+    void checkDyingDragonRecord() {
+        const std::filesystem::path directory = std::filesystem::temp_directory_path()
+                / ("falcon-dragon-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        {
+            ArenaFixture arena;
+            require(arena.mEnd.openStorage(directory.string()), "Could not open the End storage");
+            arena.mFight.tick(arena.mOwner, arena.mEnd);
+            EnderDragon &dragon = *arena.dragons().front();
+            arena.mEnd.saveEntities(0, 0, {dragon.saveNbt()});
+            require(arena.mEnd.hasStoredEntity(dragon.getUniqueId()), "The saved dragon has a record");
+
+            dragon.finishDying(arena.mOwner);
+            arena.tickDeath(dragon);
+            require(!arena.mEnd.hasStoredEntity(dragon.getUniqueId()),
+                    "A dying dragon drops its record, so a restart does not wait for it");
+            arena.mEnd.closeStorage();
+        }
+        std::filesystem::remove_all(directory);
+    }
+
+    void checkRespawnCrystals() {
+        ArenaFixture arena;
+        Tag fight = Tag::ofCompound();
+        fight.putLong("DragonUUID", -1);
+        fight.putBool("DragonKilled", true);
+        fight.putBool("DragonSpawned", true);
+        fight.putBool("PreviouslyKilled", true);
+        fight.putByte("DragonFightVersion", 1);
+        Tag exit = Tag::ofList(Tag::Type::Int);
+        exit.addToList(Tag::ofInt(0));
+        exit.addToList(Tag::ofInt(64));
+        exit.addToList(Tag::ofInt(0));
+        fight.put("ExitPortalLocation", exit);
+        Tag data = Tag::ofCompound();
+        data.put("DragonFight", fight);
+        arena.mFight.load(data);
+
+        const float sides[4][2] = {{0.5f, 3.5f}, {-2.5f, 0.5f}, {0.5f, -2.5f}, {3.5f, 0.5f}};
+        for (const float *side: sides)
+            arena.mOwner.spawnActor(arena.mEnd, EndCrystalActor::IDENTIFIER, Vector3f(side[0], 65.0f, side[1]));
+
+        arena.mFight.tryRespawn(arena.mOwner, arena.mEnd);
+        require(arena.mFight.getRespawnStage() != Stage::None, "Four crystals around the portal start the ritual");
+        for (int32_t tick = 0; tick < 1000 && arena.mFight.getRespawnStage() != Stage::None; tick++)
+            arena.mFight.tick(arena.mOwner, arena.mEnd);
+
+        require(!arena.mFight.isDragonKilled() && arena.dragons().size() == 1, "The ritual brings a new dragon");
+        const BlockState *ring = arena.mEnd.peekBlockPtr(1, 64, 0);
+        require(ring == nullptr || ring->mName != VanillaBlocks::END_PORTAL().toBlockState().mName,
+                "The exploding respawn crystals do not reopen the exit portal");
+    }
 }
 
 int main() {
     try {
+        EntityDefinitions::initialize();
         checkRespawnTimeline();
         checkGateways();
         checkExperience();
         checkPersistence();
         checkSpikes();
         checkNodes();
+        checkDyingDragon();
+        checkDyingDragonRecord();
+        checkRespawnCrystals();
     } catch (const std::exception &exception) {
         std::cerr << "Dragon fight check failed: " << exception.what() << std::endl;
         return 1;
