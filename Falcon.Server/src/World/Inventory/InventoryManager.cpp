@@ -954,11 +954,20 @@ bool InventoryManager::onClientOpenCraftingTable(const Vector3i &position) {
 }
 
 bool InventoryManager::onClientOpenAnvil(const Vector3i &position) {
+    return _openWorkbench(ContainerType::Anvil, position);
+}
+
+bool InventoryManager::onClientOpenCartography(const Vector3i &position) {
+    return _openWorkbench(ContainerType::Cartography, position);
+}
+
+// the anvil and the cartography table share a window: both keep two slots and nothing once closed
+bool InventoryManager::_openWorkbench(ContainerType type, const Vector3i &position) {
     if (mPlayer == nullptr || mSender == nullptr)
         return false;
 
     if (mAnvilWindowId != CONTAINER_ID_NONE)
-        return mAnvilPosition == position;
+        return mAnvilWindowType == type && mAnvilPosition == position;
 
     if (mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
         || mFurnaceWindowId != CONTAINER_ID_NONE || mContainerWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
@@ -969,12 +978,13 @@ bool InventoryManager::onClientOpenAnvil(const Vector3i &position) {
 
     const int windowId = _getNewWindowId();
     mAnvilWindowId = windowId;
+    mAnvilWindowType = type;
     mAnvilPosition = position;
-    mCurrentWindowType = ContainerType::Anvil;
+    mCurrentWindowType = type;
 
     ContainerOpenPacket open;
     open.mWindowId = (int8_t) windowId;
-    open.mType = ContainerType::Anvil;
+    open.mType = type;
     open.mBlockPosition = position;
     open.mUniqueActorId = -1;
     mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
@@ -982,7 +992,11 @@ bool InventoryManager::onClientOpenAnvil(const Vector3i &position) {
 }
 
 bool InventoryManager::isAnvilOpen() const {
-    return mAnvilWindowId != CONTAINER_ID_NONE;
+    return mAnvilWindowId != CONTAINER_ID_NONE && mAnvilWindowType == ContainerType::Anvil;
+}
+
+bool InventoryManager::isCartographyOpen() const {
+    return mAnvilWindowId != CONTAINER_ID_NONE && mAnvilWindowType == ContainerType::Cartography;
 }
 
 const Vector3i &InventoryManager::getAnvilPosition() const {
@@ -995,12 +1009,17 @@ void InventoryManager::_closeAnvil() {
         return;
 
     PlayerInventory &inventory = mPlayer->getInventory();
-    for (int slot = 0; slot < PlayerInventory::ANVIL_SIZE; ++slot) {
-        ItemStack item = inventory.getAnvilItem(slot);
+    const bool cartography = mAnvilWindowType == ContainerType::Cartography;
+    const int size = cartography ? PlayerInventory::CARTOGRAPHY_SIZE : PlayerInventory::ANVIL_SIZE;
+    for (int slot = 0; slot < size; ++slot) {
+        ItemStack item = cartography ? inventory.getCartographyItem(slot) : inventory.getAnvilItem(slot);
         if (item.isAir())
             continue;
 
-        inventory.setAnvilItem(slot, ItemStack::air());
+        if (cartography)
+            inventory.setCartographyItem(slot, ItemStack::air());
+        else
+            inventory.setAnvilItem(slot, ItemStack::air());
         std::vector<int> touched;
         item.mCount = inventory.addItemPartial(item, touched);
         for (int touchedSlot: touched)

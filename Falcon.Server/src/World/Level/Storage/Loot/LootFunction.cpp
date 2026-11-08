@@ -1,6 +1,8 @@
 #include "World/Level/Storage/Loot/LootFunction.h"
 
 #include "World/Item/EnchantmentData.h"
+#include "World/Item/ExplorationMaps.h"
+#include "World/Item/MapItem.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
 #include "World/Item/PotionEffects.h"
@@ -238,12 +240,24 @@ void SetPotionFunction::apply(LootDrop &drop, const LootContext &context) const 
         drop.mData = mPotionId;
 }
 
-ExplorationMapFunction::ExplorationMapFunction(const json::Value &definition) : LootFunction(definition) {
+ExplorationMapFunction::ExplorationMapFunction(const json::Value &definition)
+        : LootFunction(definition),
+          mDestination(definition.get("destination") == nullptr ? std::string()
+                                                                 : definition.get("destination")->string()) {
 }
 
 void ExplorationMapFunction::apply(LootDrop &drop, const LootContext &context) const {
     (void) context;
 
-    drop.mIdentifier = EMPTY_MAP;
-    drop.mData = 0;
+    const ExplorationMaps::Entry *entry = ExplorationMaps::findByDestination(mDestination);
+    if (entry == nullptr) {
+        drop.mIdentifier = EMPTY_MAP;
+        drop.mData = 0;
+        return;
+    }
+
+    // sub_1418BC9A0 flags loot maps with map_regenerate: the first player to carry one searches from where he is
+    drop.mIdentifier = MapItem::IDENTIFIER;
+    drop.mData = entry->mAux;
+    drop.mExtraData.putByte(MapItem::TAG_REGENERATE, 1);
 }

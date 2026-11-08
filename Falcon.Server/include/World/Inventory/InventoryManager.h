@@ -73,6 +73,10 @@ public:
 
     bool isAnvilOpen() const;
 
+    bool onClientOpenCartography(const Vector3i &position);
+
+    bool isCartographyOpen() const;
+
     const Vector3i &getAnvilPosition() const;
 
     bool openContainer(ContainerType type, const Vector3i &position);
@@ -167,6 +171,8 @@ private:
 
     void _closeAnvil();
 
+    bool _openWorkbench(ContainerType type, const Vector3i &position);
+
     void _sendContentPackets(int containerId, const Container &container);
 
     void _sendContentPackets(int containerId, InventoryId inventory);
@@ -191,6 +197,7 @@ private:
     int mCraftingTableWindowId;
     Vector3i mCraftingTablePosition;
     int mAnvilWindowId = CONTAINER_ID_NONE;
+    ContainerType mAnvilWindowType = ContainerType::Anvil;
     Vector3i mAnvilPosition;
     int mContainerWindowId = CONTAINER_ID_NONE;
     Vector3i mContainerPosition;

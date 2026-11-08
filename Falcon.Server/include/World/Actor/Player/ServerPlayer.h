@@ -122,6 +122,9 @@ public:
         mServerBuildRatio = ratio;
     }
 
+    // Player+0xBC0, which EmptyMapItem::use numbers its maps with (sub_147B9F900)
+    int32_t takeMapNameIndex() { return mMapNameIndex++; }
+
     const std::string &getLocale() const { return mLocale; }
 
     void setLocale(const std::string &locale) { mLocale = locale; }
@@ -723,6 +726,7 @@ private:
     int mBuildPlatform = -1;
     bool mClientSideGenerationCompatible = false;
     float mServerBuildRatio = 1.0f;
+    int32_t mMapNameIndex = 0;
     std::string mLocale;
     int64_t mItemUseStartTick = 0;
     int32_t mSpinAttackTicks = 0;

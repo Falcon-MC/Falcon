@@ -6,6 +6,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
+#include "Network/Handler/MapHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/ChangeDimensionPacket.h"
@@ -118,6 +119,7 @@ void ServerNetworkHandler::_tickOverworld(World &world) {
     mProfiler.endSection(ProfilerSection::Fluids);
 
     _tickVillages(level);
+    MapHandler::tickFrames(*this, world);
 
     mProfiler.beginSection(ProfilerSection::FluidBroadcast);
     _broadcastFluidChanges(level);

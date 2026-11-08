@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Inventory/CartographyRecipes.h"
 #include "World/Inventory/CraftingManager.h"
 #include "Protocol/PacketCodecContext.h"
 #include "Protocol/Packets/CreativeContentPacket.h"
@@ -39,5 +40,7 @@ public:
                                           int32_t *outEnchantLevelsConsumed = nullptr,
                                           bool anvilOpen = false,
                                           int32_t *outAnvilLevelsConsumed = nullptr,
-                                          bool *outAnvilUsed = nullptr);
+                                          bool *outAnvilUsed = nullptr,
+                                          const CartographyRecipes::Maps *cartographyMaps = nullptr,
+                                          bool *outCartographyUsed = nullptr);
 };

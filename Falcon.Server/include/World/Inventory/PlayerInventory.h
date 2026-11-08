@@ -18,6 +18,9 @@ public:
     static const int ANVIL_SIZE = 2;
     static const int ANVIL_INPUT = 0;
     static const int ANVIL_MATERIAL = 1;
+    static const int CARTOGRAPHY_SIZE = 2;
+    static const int CARTOGRAPHY_INPUT = 0;
+    static const int CARTOGRAPHY_ADDITIONAL = 1;
     static const int SAVED_SIZE = CONTAINER_SIZE + ARMOR_SIZE;
 
     static const int CONTAINER_ID_INVENTORY = 0;
@@ -80,6 +83,10 @@ public:
 
     void setAnvilItem(int slot, ItemStack item);
 
+    const ItemStack &getCartographyItem(int slot) const;
+
+    void setCartographyItem(int slot, ItemStack item);
+
     const ItemStack &getOffhand() const { return mOffhand; }
 
     void setOffhand(ItemStack item);
@@ -123,6 +130,7 @@ private:
     std::vector<ItemStack> mCraftingTable;
     std::vector<ItemStack> mFurnace;
     std::vector<ItemStack> mAnvil;
+    std::vector<ItemStack> mCartography;
     ItemStack mOffhand;
     ItemStack mCursor;
     ItemStack mEnchantingInput;

@@ -18,6 +18,7 @@
 #include "World/Actor/Player/PlayerAbility.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/CraftingRecipeTable.h"
+#include "World/Inventory/CartographyRecipes.h"
 #include "World/Item/ItemNetworkIdTable.h"
 #include "World/Level/Level.h"
 #include "Network/ConnectionRequest.h"
@@ -916,6 +917,16 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
             owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = source.mRecipeId;
             cached.mShapelessRecipes.push_back(std::move(entry));
         }
+    }
+
+    // the cartography table crafts through the game's multi recipes, which the client finds by uuid
+    const char *const cartographyRecipes[] = {CartographyRecipes::CLONING_UUID, CartographyRecipes::EXTENDING_UUID,
+                                              CartographyRecipes::LOCKING_UUID, CartographyRecipes::UPGRADING_UUID};
+    for (const char *uuid: cartographyRecipes) {
+        MultiRecipeEntry multi;
+        multi.mUuid = Uuid::fromString(uuid);
+        multi.mRecipeNetId = furnaceRecipeNetId++;
+        cached.mMultiRecipes.push_back(multi);
     }
 
     cached.mCleanRecipes = true;

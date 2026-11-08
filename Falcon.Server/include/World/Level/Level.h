@@ -8,6 +8,7 @@
 #include "World/Level/BlockUpdateScheduler.h"
 #include "World/Level/BlockUpdateType.h"
 #include "World/Level/ClientSideGeneration.h"
+#include "World/Level/Map/MapDataManager.h"
 #include "World/Level/Chunk/GeneratedBlockChange.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Chunk/ChunkWorker.h"
@@ -221,11 +222,15 @@ public:
      */
     bool isNearStructure(const std::vector<const StructureFeature *> &features, int32_t chunkX, int32_t chunkZ);
 
-    /**
-     * Applies client pixels to a map saved in the world (sub_14228D8A0). The map stays in memory and is written by
-     * the next saveAll, as the game edits MapItemSavedData and only marks it dirty. Returns false for an unknown map.
-     */
+    // sub_14228D8A0; false for an unknown map
     bool applyMapPixels(int64_t mapId, const std::vector<MapPixel> &pixels);
+
+    // the world's maps, kept on the overworld whose database stores them; written by the next saveAll
+    MapItemSavedData *getMapData(int64_t mapId) { return mMaps.getMap(&mStorage, mapId); }
+
+    MapDataManager &getMaps() { return mMaps; }
+
+    LevelStorage *getMapStorage() { return &mStorage; }
 
     void registerChunkLoader(uint64_t loaderId, int32_t chunkX, int32_t chunkZ);
 
@@ -474,8 +479,7 @@ private:
     void _saveLoadedMaps();
 
     std::unordered_map<int64_t, bool> mSavedChunkCache;
-    // maps read for client pixels since the last save, with whether they changed
-    std::unordered_map<int64_t, std::pair<Tag, bool>> mLoadedMaps;
+    MapDataManager mMaps;
     ClientSideGeneration::StructureGuard mStructureGuard;
 
     std::unordered_set<int64_t> mPendingChunks;

@@ -6,6 +6,7 @@
 #include "World/Level/Storage/Loot/LootRange.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 class LootFunction {
@@ -165,4 +166,7 @@ public:
 
 protected:
     void apply(LootDrop &drop, const LootContext &context) const override;
+
+private:
+    std::string mDestination;
 };
