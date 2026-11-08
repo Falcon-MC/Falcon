@@ -43,6 +43,8 @@ private:
 
     bool _scanDue();
 
+    void _resolveSight(ServerNetworkHandler &owner, MobActor &mob, const Actor &target);
+
     float mRangeSquared;
     int32_t mScanInterval;
     // set by canUse, consumed by start in the same selection: the scan runs once
@@ -50,5 +52,10 @@ private:
     float mMaxRangeSquared;
     std::vector<Entry> mEntries;
     Sight mSight;
+    bool mUsesSight = false;
+    // the current target's sight rule, resolved once per target
+    uint64_t mSightTargetId = 0;
+    bool mTargetMustSee = false;
     int32_t mUnseenTicks = 0;
+    int32_t mReselectTicks = 0;
 };
