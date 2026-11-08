@@ -75,6 +75,20 @@ namespace {
     bool isThinOrFence(const BlockState &state) {
         return state.mStates.contains("minecraft:connection_east");
     }
+
+    // a fence also takes a gate whose bar runs across the side, which a pane does not
+    bool gateConnects(const BlockState &post, const BlockState &neighbour, int32_t sideX, int32_t sideZ) {
+        if (VanillaBlocks::getAs<FenceBlock>(post.mName) == nullptr || !neighbour.mStates.contains("in_wall_bit"))
+            return false;
+
+        const std::string facing = neighbour.mStates.getString("minecraft:cardinal_direction", "south");
+        const bool alongX = facing == "east" || facing == "west";
+        return sideX != 0 ? !alongX : alongX;
+    }
+
+    bool postConnects(const BlockState &post, const BlockState &neighbour, int32_t sideX, int32_t sideZ) {
+        return gateConnects(post, neighbour, sideX, sideZ) || StructureConnections::connects(neighbour, sideX, sideZ);
+    }
 }
 
 bool StructureConnections::connects(const BlockState &neighbour, int32_t sideX, int32_t sideZ) {
@@ -99,8 +113,9 @@ BlockState StructureConnections::connected(const BlockState &post, bool east, bo
 
 BlockState StructureConnections::shaped(const BlockState &block, int32_t x, int32_t y, int32_t z, const Lookup &at) {
     if (isThinOrFence(block))
-        return connected(block, connects(at(x + 1, y, z), 1, 0), connects(at(x, y, z - 1), 0, -1),
-                         connects(at(x, y, z + 1), 0, 1), connects(at(x - 1, y, z), -1, 0));
+        return connected(block, postConnects(block, at(x + 1, y, z), 1, 0),
+                         postConnects(block, at(x, y, z - 1), 0, -1), postConnects(block, at(x, y, z + 1), 0, 1),
+                         postConnects(block, at(x - 1, y, z), -1, 0));
 
     if (isStair(block)) {
         Tag states = block.mStates;

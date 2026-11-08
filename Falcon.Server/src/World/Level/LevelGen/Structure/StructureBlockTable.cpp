@@ -176,7 +176,7 @@ namespace {
         // states the game recomputes from neighbours, reads from block layer 1, or does not carry
         if (key == "waterlogged" || key == "distance" || key == "snowy" || key == "persistent" || key == "stage"
             || key == "signal_fire" || key == "occupied" || key == "has_book" || key == "east" || key == "north"
-            || key == "south" || key == "west" || key == "up" || key == "variant")
+            || key == "south" || key == "west" || key == "up" || key == "variant" || key == "powered")
             return true;
 
         if (key == "axis") {
@@ -257,10 +257,13 @@ namespace {
         }
 
         if (key == "level") {
-            if (!states.contains("composter_fill_level"))
-                return false;
-            states.putInt("composter_fill_level", std::atoi(value.c_str()));
-            return true;
+            for (const char *level : {"composter_fill_level", "liquid_depth"}) {
+                if (states.contains(level)) {
+                    states.putInt(level, std::atoi(value.c_str()));
+                    return true;
+                }
+            }
+            return false;
         }
 
         if (key == "age" || key == "growth") {
@@ -364,7 +367,7 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
         return true;
     }
 
-    if (name == "minecraft:red_bed") {
+    if (name.size() > 4 && name.compare(name.size() - 4, 4, "_bed") == 0) {
         states.putInt("direction", (cardinalIndex(property(entry, "facing")) + quarterTurns) & 3);
         states.putByte("head_piece_bit", property(entry, "part") == "head" ? 1 : 0);
         states.putByte("occupied_bit", 0);
@@ -379,8 +382,11 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
     }
 
     if (name == "minecraft:torch") {
-        // the file names the side the flame leans to, the state the side of the wall behind it
-        states.putString("torch_facing_direction", rotatedFacing(entry, quarterTurns + 2));
+        // the game names a torch standing (sub_1469994B0); a facing in the file names the side the flame leans to,
+        // the state the side of the wall behind it
+        states.putString("torch_facing_direction", entry.mProperties.count("facing") == 0
+                                                           ? std::string("top")
+                                                           : rotatedFacing(entry, quarterTurns + 2));
         out = BlockState(name, states);
         return true;
     }
@@ -446,6 +452,66 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
         for (const char *side : {"east", "north", "south", "west"})
             states.putByte(std::string("minecraft:connection_") + side, property(entry, side) == "true" ? 1 : 0);
         out = BlockState(name, states);
+        return true;
+    }
+
+    // what follows was measured on the villages BDS 1.26.61 saves (seed 42, every style)
+    const Tag *defaults = BlockPaletteRegistry::getInstance().getDefaultStates(name);
+    if (defaults != nullptr && defaults->contains("minecraft:connection_east")) {
+        // fences and panes are shaped from their neighbours once the piece is down
+        out = BlockState(name, *defaults);
+        return true;
+    }
+
+    if (name.size() > 5 && name.compare(name.size() - 5, 5, "_door") == 0) {
+        // the lower half carries the direction, the upper half the hinge; each keeps the other's default
+        const bool upper = property(entry, "half") == "upper";
+        const std::string doorName = name == "minecraft:oak_door" ? "minecraft:wooden_door" : name;
+        const Tag *doorDefaults = BlockPaletteRegistry::getInstance().getDefaultStates(doorName);
+        if (doorDefaults == nullptr)
+            return false;
+        // the default states keep the order the palette knows the block by
+        states = *doorDefaults;
+        states.putString("minecraft:cardinal_direction",
+                         upper ? "south" : CARDINALS[(size_t) ((cardinalIndex(property(entry, "facing")) + quarterTurns + 1) & 3)]);
+        states.putByte("door_hinge_bit", upper && property(entry, "hinge") == "right" ? 1 : 0);
+        states.putByte("open_bit", property(entry, "open") == "true" ? 1 : 0);
+        states.putByte("upper_block_bit", upper ? 1 : 0);
+        out = BlockState(doorName, states);
+        return true;
+    }
+
+    if (name == "minecraft:wall_torch") {
+        states.putString("torch_facing_direction", rotatedFacing(entry, quarterTurns + 2));
+        out = BlockState("minecraft:torch", states);
+        return true;
+    }
+
+    if (name == "minecraft:loom") {
+        states.putInt("direction", (cardinalIndex(property(entry, "facing")) + quarterTurns + 2) & 3);
+        out = BlockState(name, states);
+        return true;
+    }
+
+    if (name == "minecraft:bell") {
+        static const std::unordered_map<std::string, std::string> ATTACHMENTS = {
+                {"floor", "standing"}, {"ceiling", "hanging"}, {"single_wall", "side"}, {"double_wall", "multiple"}};
+        const auto attachment = ATTACHMENTS.find(property(entry, "attachment"));
+        if (attachment == ATTACHMENTS.end())
+            return false;
+        states.putString("attachment", attachment->second);
+        states.putInt("direction", (cardinalIndex(property(entry, "facing")) + quarterTurns) & 3);
+        states.putByte("toggle_bit", 0);
+        out = BlockState(name, states);
+        return true;
+    }
+
+    if (property(entry, "type") == "double" && name.size() > 5 && name.compare(name.size() - 5, 5, "_slab") == 0) {
+        const std::string doubled = name.substr(0, name.size() - 5) + "_double_slab";
+        if (BlockPaletteRegistry::getInstance().getDefaultStates(doubled) == nullptr)
+            return false;
+        states.putString("minecraft:vertical_half", "bottom");
+        out = BlockState(doubled, states);
         return true;
     }
 
