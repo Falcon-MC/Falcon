@@ -1,6 +1,14 @@
 #include "World/Level/Block/CauldronBlock.h"
 
+#include "World/Level/Block/BlockClassRegistry.h"
+
 #include <algorithm>
+
+FALCON_REGISTER_BLOCK(CauldronBlock, 200);
+
+bool CauldronBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:cauldron";
+}
 
 int CauldronBlock::getFillLevel() const {
     return std::clamp(getStates().getInt("fill_level", 0), 0, 6);

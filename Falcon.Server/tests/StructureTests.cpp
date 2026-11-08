@@ -120,7 +120,7 @@ namespace {
         bool bell = false;
         const VillageStructure::Position bellPosition(-1467, 64, -422);
         for (const auto &entity : a.mBlockEntities)
-            bell = bell || (entity.mBlock == "minecraft:bell" && entity.mPosition == bellPosition);
+            bell = bell || (entity.mBlock.mName == "minecraft:bell" && entity.mPosition == bellPosition);
         require(bell, "The meeting point bell has no block actor");
         for (const auto &mob : a.mMobs) {
             if (mob.mIdentifier == "minecraft:villager_v2")

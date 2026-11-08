@@ -7,11 +7,19 @@
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
-#include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/FlowerPotBlockActor.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
+#include "World/Level/Block/BannerBlock.h"
+#include "World/Level/Block/BellBlock.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
+#include "World/Level/Block/CauldronBlock.h"
+#include "World/Level/Block/ContainerBlock.h"
+#include "World/Level/Block/FlowerPotBlock.h"
+#include "World/Level/Block/FurnaceBlock.h"
+#include "World/Level/Block/SignBlock.h"
+#include "World/Level/Block/WallBannerBlock.h"
+#include "World/Level/Block/WallSignBlock.h"
 #include "World/Level/Block/Inventory/FurnaceInventory.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -169,21 +177,19 @@ namespace {
         event = second == std::string::npos ? std::string() : metadata.substr(second + 1);
     }
 
-    bool isSign(const std::string &block) {
-        return block.size() > 5 && block.compare(block.size() - 5, 5, "_sign") == 0;
-    }
-
     // the blocks of the village templates the game gives a block actor as it places them
-    bool hasBlockActor(const std::string &block) {
-        static const char *BLOCKS[] = {"minecraft:bell", "minecraft:barrel", "minecraft:furnace", "minecraft:smoker",
-                                       "minecraft:blast_furnace", "minecraft:lectern", "minecraft:campfire",
-                                       "minecraft:soul_campfire", "minecraft:brewing_stand", "minecraft:wall_banner",
-                                       "minecraft:standing_banner", "minecraft:flower_pot", "minecraft:cauldron"};
-        for (const char *candidate : BLOCKS) {
-            if (block == candidate)
-                return true;
-        }
-        return isSign(block);
+    bool hasBlockActor(const std::string &identifier) {
+        const Block *block = VanillaBlocks::fromIdentifier(identifier);
+        return block != nullptr
+               && (dynamic_cast<const ContainerBlock *>(block) != nullptr
+                   || dynamic_cast<const FurnaceBlock *>(block) != nullptr
+                   || dynamic_cast<const BellBlock *>(block) != nullptr
+                   || dynamic_cast<const BannerBlock *>(block) != nullptr
+                   || dynamic_cast<const WallBannerBlock *>(block) != nullptr
+                   || dynamic_cast<const FlowerPotBlock *>(block) != nullptr
+                   || dynamic_cast<const CauldronBlock *>(block) != nullptr
+                   || dynamic_cast<const SignBlock *>(block) != nullptr
+                   || dynamic_cast<const WallSignBlock *>(block) != nullptr);
     }
 
     // banners take their dye from the Java block name: Base counts from black
@@ -211,38 +217,43 @@ namespace {
     void createBlockActor(BlockActorStore &actors, const VillageStructure::BlockEntity &entity) {
         const Vector3i position(std::get<0>(entity.mPosition), std::get<1>(entity.mPosition),
                                 std::get<2>(entity.mPosition));
-        const std::string &block = entity.mBlock;
-        if (block == "minecraft:bell") {
-            actors.getOrCreate<BellBlockActor>(position);
-        } else if (block == "minecraft:barrel") {
-            actors.getOrCreate<BarrelBlockActor>(position);
-        } else if (block == "minecraft:furnace" || block == "minecraft:smoker" || block == "minecraft:blast_furnace") {
-            FurnaceBlockActor &furnace = actors.getOrCreate<FurnaceBlockActor>(position);
-            furnace.mKind = block == "minecraft:smoker"          ? FurnaceKind::Smoker
-                            : block == "minecraft:blast_furnace" ? FurnaceKind::BlastFurnace
-                                                                 : FurnaceKind::Furnace;
-        } else if (block == "minecraft:lectern") {
-            actors.getOrCreate<LecternBlockActor>(position);
-        } else if (block == "minecraft:campfire" || block == "minecraft:soul_campfire") {
-            actors.getOrCreate<CampfireBlockActor>(position);
-        } else if (block == "minecraft:brewing_stand") {
-            actors.getOrCreate<BrewingStandBlockActor>(position);
-        } else if (block == "minecraft:flower_pot") {
-            FlowerPotBlockActor &pot = actors.getOrCreate<FlowerPotBlockActor>(position);
+        const BlockState &state = entity.mBlock;
+        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+        if (block == nullptr)
+            return;
+
+        std::unique_ptr<BlockActor> actor;
+        if (const ContainerBlockDefinition *container = ContainerBlock::findDefinition(state.mName)) {
+            actor = ContainerBlock::createBlockActor(container->mKind);
+        } else if (dynamic_cast<const FurnaceBlock *>(block) != nullptr) {
+            auto furnace = std::make_unique<FurnaceBlockActor>();
+            furnace->mKind = FurnaceBlock::kind(state);
+            actor = std::move(furnace);
+        } else if (dynamic_cast<const BellBlock *>(block) != nullptr) {
+            actor = std::make_unique<BellBlockActor>();
+        } else if (dynamic_cast<const FlowerPotBlock *>(block) != nullptr) {
+            auto pot = std::make_unique<FlowerPotBlockActor>();
             BlockState plant;
             if (pottedPlant(entity.mTemplateBlock, plant))
-                pot.setPlant(plant);
-        } else if (block == "minecraft:cauldron") {
-            actors.getOrCreate<CauldronBlockActor>(position);
-        } else if (isSign(block)) {
-            if (actors.find(position) == nullptr) {
-                auto sign = std::make_unique<SignBlockActor>(block.find("hanging") != std::string::npos);
-                sign->setPosition(position);
-                actors.insert(std::move(sign));
-            }
-        } else {
-            actors.getOrCreate<BannerBlockActor>(position).setBase(bannerBase(entity.mTemplateBlock));
+                pot->setPlant(plant);
+            actor = std::move(pot);
+        } else if (dynamic_cast<const CauldronBlock *>(block) != nullptr) {
+            actor = std::make_unique<CauldronBlockActor>();
+        } else if (dynamic_cast<const SignBlock *>(block) != nullptr
+                   || dynamic_cast<const WallSignBlock *>(block) != nullptr) {
+            // standing and hanging signs share a class; only hanging ones have the state
+            actor = std::make_unique<SignBlockActor>(state.mStates.contains("hanging"));
+        } else if (dynamic_cast<const BannerBlock *>(block) != nullptr
+                   || dynamic_cast<const WallBannerBlock *>(block) != nullptr) {
+            auto banner = std::make_unique<BannerBlockActor>();
+            banner->setBase(bannerBase(entity.mTemplateBlock));
+            actor = std::move(banner);
         }
+        if (actor == nullptr)
+            return;
+
+        actor->setPosition(position);
+        actors.insert(std::move(actor));
     }
 
     bool insideChunk(int32_t x, int32_t z, int32_t chunkX, int32_t chunkZ) {
@@ -407,7 +418,7 @@ namespace {
             }
 
             if (hasBlockActor(block.mName))
-                mShare.mBlockEntities.push_back({position, block.mName, palette.mName});
+                mShare.mBlockEntities.push_back({position, block, palette.mName});
 
             if (entry.mData.getString("id", std::string()) != "minecraft:chest" || block.mName != "minecraft:chest")
                 return;
