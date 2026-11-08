@@ -11,33 +11,40 @@ StructureTerrain::StructureTerrain(const ChunkGenerator &generator, TerrainCache
 StructureTerrain::~StructureTerrain() = default;
 
 int32_t StructureTerrain::getSolidHeight(int32_t x, int32_t z) {
-    return ChunkGenerator::solidHeight(*_chunkAt(x, z), x & 15, z & 15);
+    return ChunkGenerator::solidHeight(*_chunkAt(x, z).mChunk, x & 15, z & 15);
 }
 
 int32_t StructureTerrain::getTopHeight(int32_t x, int32_t z) {
+    Chunk &chunk = _chunkAt(x, z);
+    int16_t &top = chunk.mTops[(size_t) (((z & 15) << 4) | (x & 15))];
+    if (top != INT16_MIN)
+        return top;
+
     // the chunk heightmap: a snow layer or a plant on top lets the street under it (sub_14775E430)
-    const LevelChunk &chunk = *_chunkAt(x, z);
     int32_t y = LevelChunk::MAX_Y;
     while (y >= LevelChunk::MIN_Y) {
-        const int32_t packed = BlockLightProperties::packed(chunk.getBlock(x & 15, y, z & 15));
+        const int32_t packed = BlockLightProperties::packed(chunk.mChunk->getBlock(x & 15, y, z & 15));
         if (BlockLightProperties::lightFilter(packed) > 1 || BlockLightProperties::diffusesSkyLight(packed))
             break;
         y--;
     }
 
-    return y + 1;
+    top = (int16_t) (y + 1);
+    return top;
 }
 
 const BlockState &StructureTerrain::getBlock(int32_t x, int32_t y, int32_t z) {
-    return _chunkAt(x, z)->getBlock(x & 15, y, z & 15);
+    return _chunkAt(x, z).mChunk->getBlock(x & 15, y, z & 15);
 }
 
-const LevelChunk *StructureTerrain::_chunkAt(int32_t x, int32_t z) {
-    std::shared_ptr<const LevelChunk> &chunk = mChunks[{x >> 4, z >> 4}];
-    if (chunk == nullptr) {
-        chunk = mCache != nullptr ? mCache->sharedTerrain(x >> 4, z >> 4)
-                                  : std::shared_ptr<const LevelChunk>(mGenerator.generateTerrain(x >> 4, z >> 4));
+StructureTerrain::Chunk &StructureTerrain::_chunkAt(int32_t x, int32_t z) {
+    Chunk &chunk = mChunks[{x >> 4, z >> 4}];
+    if (chunk.mChunk == nullptr) {
+        chunk.mChunk = mCache != nullptr
+                       ? mCache->sharedTerrain(x >> 4, z >> 4)
+                       : std::shared_ptr<const LevelChunk>(mGenerator.generateTerrain(x >> 4, z >> 4));
+        chunk.mTops.fill(INT16_MIN);
     }
 
-    return chunk.get();
+    return chunk;
 }

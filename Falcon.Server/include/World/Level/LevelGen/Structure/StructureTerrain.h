@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/BlockState.h"
 
+#include <array>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -26,9 +27,15 @@ public:
     const BlockState &getBlock(int32_t x, int32_t y, int32_t z);
 
 private:
-    const LevelChunk *_chunkAt(int32_t x, int32_t z);
+    struct Chunk {
+        std::shared_ptr<const LevelChunk> mChunk;
+        // getTopHeight by z * 16 + x, INT16_MIN until asked
+        std::array<int16_t, 256> mTops;
+    };
+
+    Chunk &_chunkAt(int32_t x, int32_t z);
 
     const ChunkGenerator &mGenerator;
     TerrainCache *mCache;
-    std::map<std::pair<int32_t, int32_t>, std::shared_ptr<const LevelChunk>> mChunks;
+    std::map<std::pair<int32_t, int32_t>, Chunk> mChunks;
 };
