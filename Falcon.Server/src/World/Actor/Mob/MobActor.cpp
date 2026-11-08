@@ -16,6 +16,7 @@
 #include "World/Inventory/InventoryManager.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/ItemDurability.h"
+#include "World/Level/Storage/BlockStateUpgrades.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
 #include "World/Level/Storage/Loot/LootItems.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
@@ -86,6 +87,7 @@ namespace {
     const char *const CAN_CLIMB_COMPONENT = "minecraft:can_climb";
     const char *const BREATHABLE_COMPONENT = "minecraft:breathable";
     const char *const BURNS_IN_DAYLIGHT_COMPONENT = "minecraft:burns_in_daylight";
+    const char *const SLOWDOWN_IMMUNITY_COMPONENT = "minecraft:block_movement_slowdown_immunity";
     const int32_t SUNLIGHT_HELMET_DAMAGE_BOUND = 2;
     const float DEFAULT_AIR_SECONDS = 15.0f;
     const float EYE_HEIGHT_RATIO = 0.85f;
@@ -1899,6 +1901,19 @@ const json::Value *MobActor::getComponent(const std::string &name) const {
 const json::Value *MobActor::getComponent(const char *name) const {
     mComponentKey.assign(name);
     return getComponent(mComponentKey);
+}
+
+bool MobActor::ignoresMovementSlowdown(const std::string &blockName) const {
+    const json::Value *immunity = getComponent(SLOWDOWN_IMMUNITY_COMPONENT);
+    const json::Value *blocks = immunity == nullptr ? nullptr : immunity->get("blocks");
+    if (blocks == nullptr || !blocks->isArray())
+        return false;
+
+    for (const std::unique_ptr<json::Value> &block: blocks->mArray) {
+        if (BlockStateUpgrades::currentName(block->string()) == blockName)
+            return true;
+    }
+    return false;
 }
 
 bool MobActor::burnsInDaylight() const {

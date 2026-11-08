@@ -123,6 +123,8 @@ public:
         return mEquipment.absorbDamage(amount, source);
     }
 
+    bool ignoresMovementSlowdown(const std::string &blockName) const override;
+
     bool burnsInDaylight() const override;
 
     bool shieldFromSunlight(ServerNetworkHandler &owner) override;
