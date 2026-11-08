@@ -16,7 +16,6 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Inventory/PlayerInventory.h"
-#include "World/Item/ItemDurability.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
 #include "World/Level/Storage/Loot/LootItems.h"
@@ -89,7 +88,6 @@ namespace {
     const char *const BREATHABLE_COMPONENT = "minecraft:breathable";
     const char *const BURNS_IN_DAYLIGHT_COMPONENT = "minecraft:burns_in_daylight";
     const char *const SLOWDOWN_IMMUNITY_COMPONENT = "minecraft:block_movement_slowdown_immunity";
-    const int32_t SUNLIGHT_HELMET_DAMAGE_BOUND = 2;
     const float DEFAULT_AIR_SECONDS = 15.0f;
     const float EYE_HEIGHT_RATIO = 0.85f;
     const int32_t AIR_REFILL_PER_TICK = 5;
@@ -2077,17 +2075,9 @@ bool MobActor::burnsInDaylight() const {
     return getComponent(BURNS_IN_DAYLIGHT_COMPONENT) != nullptr;
 }
 
-bool MobActor::shieldFromSunlight(ServerNetworkHandler &owner) {
-    ItemStack helmet = mEquipment.getSlot(MobEquipment::HEAD);
-    if (helmet.isAir())
-        return false;
-
-    const int32_t damage = std::uniform_int_distribution<int32_t>(0, SUNLIGHT_HELMET_DAMAGE_BOUND - 1)(lifecycleRandom());
-    if (ItemDurability::apply(nullptr, helmet, damage)) {
-        mEquipment.setSlot(MobEquipment::HEAD, helmet);
-        mEquipment.broadcast(owner, *this);
-    }
-    return true;
+// anything in protection_slot (the head by default) blocks the fire and is not worn: sub_14CE80670
+bool MobActor::shieldFromSunlight() const {
+    return !mEquipment.getSlot(MobEquipment::HEAD).isAir();
 }
 
 std::vector<std::string> MobActor::getFamilies() const {
