@@ -404,6 +404,12 @@ public:
         return false;
     }
 
+    // block light of a state; `dataEmission` is the value the block data gives every state
+    virtual int getLightEmission(const BlockState &state, int dataEmission) const {
+        (void) state;
+        return dataEmission;
+    }
+
     virtual PistonMoveReaction getPistonMoveReaction() const {
         return PistonMoveReaction::Normal;
     }

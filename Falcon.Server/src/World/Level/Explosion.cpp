@@ -139,8 +139,11 @@ bool Explosion::_allowByPlugins() {
 }
 
 bool Explosion::_findAffectedBlocks() {
-    // an actor exploding in water still hurts entities, breaks no blocks
-    if (mSourceActor != nullptr) {
+    // an explosion in water still hurts entities, breaks no blocks
+    if (mInWater.has_value()) {
+        if (*mInWater)
+            return true;
+    } else if (mSourceActor != nullptr) {
         const Vector3i floor((int32_t) std::floor(mSource.x), (int32_t) std::floor(mSource.y),
                              (int32_t) std::floor(mSource.z));
         const BlockState layer0 = mLevel.getBlockState(floor.x, floor.y, floor.z);

@@ -7,6 +7,7 @@
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/BedBlock.h"
+#include "World/Level/Block/RespawnAnchorBlock.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Event/GameEvents.h"
 #include "Core/Math/MathConstants.h"
@@ -385,11 +386,27 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     _sendInventory(player);
 }
 
-Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player) {
+Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player, Level *&destination) {
     World &world = getWorldFor(player);
     Level &overworld = world.getOverworld();
+    destination = &overworld;
     if (!player.hasSpawnPoint() || player.getSpawnWorld() != world.getName())
         return overworld.getSpawnPositionForPlayer();
+
+    if (player.getSpawnDimension() == DimensionType::Nether) {
+        Level &nether = world.getLevel(DimensionType::Nether);
+        const std::optional<Vector3f> anchor = RespawnAnchorBlock::respawn(*this, nether, player.getSpawnPoint(),
+                                                                          player.getSpawnStandPosition());
+        if (anchor.has_value()) {
+            destination = &nether;
+            return *anchor;
+        }
+
+        // sub_1402D44A0: the message follows the spawn dimension
+        player.clearSpawnPoint();
+        player.sendTranslation("§7%tile.respawn_anchor.notValid", {});
+        return overworld.getSpawnPositionForPlayer();
+    }
 
     const Vector3i bed = player.getSpawnPoint();
     if (!BedBlock::isValidAt(overworld, bed)) {
@@ -405,7 +422,8 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     if (!player.isDead())
         return;
 
-    Vector3f spawn = _respawnPositionFor(player);
+    Level *destination = nullptr;
+    Vector3f spawn = _respawnPositionFor(player, destination);
 
     PluginEvent respawnEvent;
     respawnEvent.mType = FALCON_EVENT_PLAYER_RESPAWN;
@@ -415,8 +433,8 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     if (respawnEvent.mToChanged)
         spawn = respawnEvent.mTo;
 
-    if (player.getDimension() != DimensionType::Overworld)
-        changePlayerLevel(player, getWorldFor(player).getOverworld(), spawn);
+    if (player.getDimension() != destination->getDimensionType())
+        changePlayerLevel(player, *destination, spawn);
 
     player.setDead(false);
     player.grantSpawnInvulnerability();

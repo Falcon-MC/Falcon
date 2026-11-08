@@ -821,7 +821,7 @@ private:
 
     void _respawnPlayer(ServerPlayer &player);
 
-    Vector3f _respawnPositionFor(ServerPlayer &player);
+    Vector3f _respawnPositionFor(ServerPlayer &player, Level *&destination);
 
     void _updateSleepingPlayerList(World &world);
 
