@@ -271,9 +271,32 @@ bool OverworldTreePlacer::_simpleTrunk(BlockManager &blocks, const Definition &t
 
 bool OverworldTreePlacer::_fancyTrunk(BlockManager &blocks, const Definition &tree, const Fancy &fancy, int32_t x,
                                       int32_t y, int32_t z, int32_t height, std::mt19937 &random) {
-    // FancyTreeTrunk::place (sub_14A290E90); its line checks always pass: the vanilla trees leave their list empty
+    // FancyTreeTrunk::place (sub_14A290E90): the trunk's column up to the height must hold only blocks of the room
+    // list; the first other block cuts the tree there, or fails it at the base height or lower
     if (!mayGrowOn(blocks.getBlockAt(x, y - 1, z)))
         return false;
+    for (int32_t step = 0; step < height; step++) {
+        if (roomFor(tree, blocks.getBlockAt(x, y + step, z)))
+            continue;
+        if (step <= fancy.mBase)
+            return false;
+        height = step;
+        break;
+    }
+    // a line of the room list, each offset rounded from its start like the logs
+    const auto clear = [&](int32_t fromX, int32_t fromY, int32_t fromZ, int32_t dx, int32_t dy, int32_t dz) {
+        const int32_t steps = std::max(std::max(std::abs(dx), std::abs(dy)), std::abs(dz));
+        for (int32_t step = 0; step <= steps; step++) {
+            const float at = static_cast<float>(step);
+            const float total = static_cast<float>(steps);
+            const int32_t lineX = fromX + static_cast<int32_t>(at * (static_cast<float>(dx) / total) + 0.5f);
+            const int32_t lineY = fromY + static_cast<int32_t>(at * (static_cast<float>(dy) / total) + 0.5f);
+            const int32_t lineZ = fromZ + static_cast<int32_t>((static_cast<float>(dz) / total) * at + 0.5f);
+            if (!roomFor(tree, blocks.getBlockAt(lineX, lineY, lineZ)))
+                return false;
+        }
+        return true;
+    };
 
     const float size = static_cast<float>(height);
     const int32_t scaled = static_cast<int32_t>(fancy.mScale * size);
@@ -324,6 +347,10 @@ bool OverworldTreePlacer::_fancyTrunk(BlockManager &blocks, const Definition &tr
             const float branch = static_cast<float>(clusterY)
                                  - static_cast<float>(distance) * fancy.mBranchSlope;
             const int32_t branchY = branch > static_cast<float>(trunkTop) ? trunkTop : static_cast<int32_t>(branch);
+            // the cluster's foliage column, then the branch from the trunk to it
+            if (!clear(clusterX, clusterY, clusterZ, 0, foliageHeight, 0)
+                || !clear(x, branchY, z, clusterX - x, clusterY - branchY, clusterZ - z))
+                continue;
             clusters.push_back({clusterX, clusterY, clusterZ, branchY});
         }
     }
