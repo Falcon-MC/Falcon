@@ -604,18 +604,8 @@ void ServerNetworkHandler::_loadScripts() {
 
     loadWorldDynamicProperties();
 
-    size_t loaded = 0;
-    for (const BehaviorPack &pack: mBehaviorPacks.getPacks()) {
-        if (!pack.hasScript())
-            continue;
-
-        if (mScriptEngine.evaluateFile(pack.scriptPath()))
-            loaded++;
-    }
-
-    (void) loaded;
-
-    mScriptEngine.onWorldInitialize();
+    mScriptEngine.loadPacks(mBehaviorPacks.getPacks());
+    mScriptEngine.startup();
 }
 
 void ServerNetworkHandler::stopServerListening() {
@@ -638,6 +628,7 @@ void ServerNetworkHandler::stopServerListening() {
                 error = std::current_exception();
         }
     };
+    finish([this]() { mScriptEngine.shutdown(); });
     finish([this]() { mPluginManager->disableAll(); });
 
     if (!mPlayers.empty()) {
