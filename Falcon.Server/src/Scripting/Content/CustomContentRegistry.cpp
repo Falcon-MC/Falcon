@@ -116,6 +116,14 @@ int32_t CustomContentRegistry::getItemMaxStackSize(const std::string &identifier
     return 0;
 }
 
+const CustomItemDefinition *CustomContentRegistry::findItem(const std::string &identifier) const {
+    for (const CustomItemDefinition &item: mItems) {
+        if (item.mIdentifier == identifier)
+            return &item;
+    }
+    return nullptr;
+}
+
 int32_t CustomContentRegistry::getDiggerSpeed(const std::string &itemId, const std::string &blockName,
                                               bool blockNeedsStandardTool, bool &useEfficiency) const {
     for (const CustomItemDefinition &item: mItems) {
@@ -494,6 +502,40 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
             if (durability != nullptr && durability->isObject() && durability->get("max_durability") != nullptr)
                 definition.mMaxDurability = durability->get("max_durability")->integer(0);
 
+            // minecraft:repairable: each repair_items entry lists items, as names or {"name": ...}, and a
+            // repair_amount that is a number or a Molang expression
+            const json::Value *repairable = components->get("minecraft:repairable");
+            const json::Value *repairItems = repairable != nullptr && repairable->isObject()
+                                             ? repairable->get("repair_items") : nullptr;
+            if (repairItems != nullptr && repairItems->isArray()) {
+                for (const std::unique_ptr<json::Value> &entry: repairItems->mArray) {
+                    if (!entry->isObject())
+                        continue;
+
+                    CustomRepairEntry repair;
+                    const json::Value *itemList = entry->get("items");
+                    if (itemList != nullptr && itemList->isArray()) {
+                        for (const std::unique_ptr<json::Value> &item: itemList->mArray) {
+                            if (item->isString())
+                                repair.mItems.push_back(qualify(item->string()));
+                            else if (item->isObject() && item->get("name") != nullptr)
+                                repair.mItems.push_back(qualify(item->get("name")->string()));
+                        }
+                    }
+
+                    const json::Value *amount = entry->get("repair_amount");
+                    if (amount != nullptr && amount->isString())
+                        repair.mAmount = amount->string();
+                    else if (amount != nullptr && amount->isNumber())
+                        repair.mAmount = std::to_string(amount->number(0.0));
+                    else if (amount != nullptr && amount->isObject() && amount->get("expression") != nullptr)
+                        repair.mAmount = amount->get("expression")->string();
+
+                    if (!repair.mItems.empty() && !repair.mAmount.empty())
+                        definition.mRepairItems.push_back(std::move(repair));
+                }
+            }
+
             const json::Value *customComponents = components->get("minecraft:custom_components");
             if (customComponents != nullptr && customComponents->isArray()) {
                 for (const std::unique_ptr<json::Value> &entry: customComponents->mArray) {
@@ -569,6 +611,11 @@ void CustomContentRegistry::_registerItem(const CustomItemDefinition &item, Item
               stored.mNetworkId);
 }
 
+namespace {
+    // MolangVersion::Latest (sub_1446C5450): LeafSupportingInFirstSolidBlockBelow, one below NumValidVersions
+    const int16_t MOLANG_VERSION_LATEST = 12;
+}
+
 Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &item, ItemDefinitionRegistry &items) {
     (void) items;
 
@@ -637,6 +684,34 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
         durability.put("damage_chance", damageChance);
 
         components.put("minecraft:durability", durability);
+    }
+
+    // the client previews anvil repairs from this component, so it goes out as the game writes it: each
+    // repair_amount is an ExpressionNode in its object form (sub_141D3B840), the expression and its short
+    // MolangVersion, Latest (12) for pack content
+    if (!item.mRepairItems.empty()) {
+        Tag repairItems = Tag::ofList(Tag::Type::Compound);
+        for (const CustomRepairEntry &entry: item.mRepairItems) {
+            Tag items = Tag::ofList(Tag::Type::Compound);
+            for (const std::string &name: entry.mItems) {
+                Tag descriptor = Tag::ofCompound();
+                descriptor.putString("name", name);
+                items.addToList(descriptor);
+            }
+
+            Tag amount = Tag::ofCompound();
+            amount.putString("expression", entry.mAmount);
+            amount.putShort("version", MOLANG_VERSION_LATEST);
+
+            Tag repair = Tag::ofCompound();
+            repair.put("items", items);
+            repair.put("repair_amount", amount);
+            repairItems.addToList(repair);
+        }
+
+        Tag repairable = Tag::ofCompound();
+        repairable.put("repair_items", repairItems);
+        components.put("minecraft:repairable", repairable);
     }
 
     Tag definition = Tag::ofCompound();

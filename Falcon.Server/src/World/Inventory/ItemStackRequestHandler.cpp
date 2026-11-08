@@ -1,6 +1,7 @@
 #include "World/Inventory/ItemStackRequestHandler.h"
 
 #include "Core/Debug/BedrockLog.h"
+#include "World/Inventory/AnvilRepair.h"
 #include "World/Inventory/BundleInventory.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/EnchantmentHelper.h"
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -57,6 +59,14 @@ namespace {
         int32_t mEnchantMaterialRequired = 0;
         int32_t mEnchantInputConsumed = 0;
         int32_t mEnchantMaterialConsumed = 0;
+        const ItemStackRequest *mRequest = nullptr;
+        bool mAnvilOpen = false;
+        bool mAnvilActive = false;
+        int32_t mAnvilLevelsConsumed = 0;
+        int32_t mAnvilInputRequired = 0;
+        int32_t mAnvilMaterialRequired = 0;
+        int32_t mAnvilInputConsumed = 0;
+        int32_t mAnvilMaterialConsumed = 0;
     };
 
     ItemStack *findBundleOwner(PlayerInventory &inventory, RequestContext &context, int32_t bundleId,
@@ -163,6 +173,10 @@ namespace {
             && slot >= PlayerInventory::CRAFTING_TABLE_NETWORK_SLOT_FIRST
             && slot < PlayerInventory::CRAFTING_TABLE_NETWORK_SLOT_FIRST + PlayerInventory::CRAFTING_TABLE_SIZE
             && !context.mCraftingTableOpen) {
+            return nullptr;
+        }
+        if ((container == ContainerSlotType::AnvilInput || container == ContainerSlotType::AnvilMaterial)
+            && !context.mAnvilOpen) {
             return nullptr;
         }
         if (container == ContainerSlotType::FurnaceIngredient || container == ContainerSlotType::BlastFurnaceIngredient
@@ -476,6 +490,14 @@ namespace {
                 context.mEnchantMaterialConsumed += action.mCount;
         }
 
+        if (context.mAnvilActive && action.mType == ItemStackRequestActionType::Consume) {
+            const ContainerSlotType container = action.mSource.mContainerName.mContainer;
+            if (container == ContainerSlotType::AnvilInput)
+                context.mAnvilInputConsumed += action.mCount;
+            else if (container == ContainerSlotType::AnvilMaterial)
+                context.mAnvilMaterialConsumed += action.mCount;
+        }
+
         if (dropped && context.mDroppedItems != nullptr) {
             ItemStack drop = *source;
             drop.mCount = action.mCount;
@@ -554,6 +576,59 @@ namespace {
         if (!context.mCreativeMode)
             context.mEnchantLevelsConsumed = consumeCost;
 
+        return true;
+    }
+
+    const ItemStack *predictedResult(const ItemStackRequest &request) {
+        for (const ItemStackRequestAction &action: request.mActions) {
+            if (action.mType == ItemStackRequestActionType::CraftResultsDeprecated && !action.mResultItems.empty())
+                return &action.mResultItems.front();
+        }
+        return nullptr;
+    }
+
+    // The anvil sends its typed name as a filter string and leaves the crafting to the server, which recomputes
+    // the result from the input and material slots.
+    bool craftAnvil(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+        if (context.mCraftRecipeSeen || !context.mAnvilOpen || context.mRequest == nullptr)
+            return false;
+        context.mCraftRecipeSeen = true;
+
+        const ItemStack *input = inventory.resolveSlot(ContainerSlotType::AnvilInput, 0);
+        const ItemStack *material = inventory.resolveSlot(ContainerSlotType::AnvilMaterial, 0);
+        if (input == nullptr || material == nullptr || input->isAir())
+            return false;
+
+        const std::vector<std::string> &names = context.mRequest->mFilterStrings;
+        const std::string *name = nullptr;
+        if (action.mFilteredStringIndex >= 0 && (size_t) action.mFilteredStringIndex < names.size())
+            name = &names[(size_t) action.mFilteredStringIndex];
+
+        // An unnamed item shows its localized name in the text box, which never matches the server's own name
+        // for it: the client's predicted result tells whether the player actually typed a new one.
+        const ItemStack *predicted = predictedResult(*context.mRequest);
+        if (name != nullptr && !name->empty() && !AnvilRepair::hasCustomName(*input) && predicted != nullptr
+            && !AnvilRepair::hasCustomName(*predicted))
+            name = nullptr;
+
+        std::shared_ptr<ItemDefinition> enchantedBook;
+        if (context.mCodecContext != nullptr)
+            enchantedBook = context.mCodecContext->getItemDefinitions().getDefinition("minecraft:enchanted_book");
+
+        AnvilResult result = AnvilRepair::createResult(*input, *material, name, context.mCreativeMode, enchantedBook);
+        if (result.mResult.isAir())
+            return false;
+
+        if (!context.mCreativeMode && context.mPlayerXpLevel < result.mCost)
+            return false;
+
+        context.mCreatedOutput = std::move(result.mResult);
+        context.mCreatedOutputActive = true;
+        context.mAnvilActive = true;
+        context.mAnvilInputRequired = input->mCount;
+        context.mAnvilMaterialRequired = std::min(result.mMaterialCost, material->isAir() ? 0 : material->mCount);
+        if (!context.mCreativeMode)
+            context.mAnvilLevelsConsumed = result.mCost;
         return true;
     }
 
@@ -775,6 +850,9 @@ namespace {
             case ItemStackRequestActionType::CraftRecipeAuto:
                 return craftRecipe(inventory, context, action, touched);
 
+            case ItemStackRequestActionType::CraftRecipeOptional:
+                return craftAnvil(inventory, context, action);
+
             case ItemStackRequestActionType::Create:
             case ItemStackRequestActionType::CraftResultsDeprecated:
             case ItemStackRequestActionType::CraftNonImplemented:
@@ -804,7 +882,10 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
                                                        std::vector<BundleSyncData> *outBundles,
                                                        int32_t playerXpLevel,
                                                        bool creativeMode,
-                                                       int32_t *outEnchantLevelsConsumed) {
+                                                       int32_t *outEnchantLevelsConsumed,
+                                                       bool anvilOpen,
+                                                       int32_t *outAnvilLevelsConsumed,
+                                                       bool *outAnvilUsed) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -828,6 +909,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
     context.mCodecContext = codecContext;
     context.mPlayerXpLevel = playerXpLevel;
     context.mCreativeMode = creativeMode;
+    context.mRequest = &request;
+    context.mAnvilOpen = anvilOpen;
 
     if (openContainer != nullptr) {
         const int containerSize = openContainer->getContainerSize();
@@ -863,6 +946,14 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
     if (context.mEnchantActive
         && (context.mEnchantInputConsumed != 1
             || context.mEnchantMaterialConsumed < context.mEnchantMaterialRequired)) {
+        entry.mResult = RESULT_ERROR;
+        entry.mContainers.clear();
+        return entry;
+    }
+
+    if (context.mAnvilActive
+        && (context.mAnvilInputConsumed != context.mAnvilInputRequired
+            || context.mAnvilMaterialConsumed != context.mAnvilMaterialRequired)) {
         entry.mResult = RESULT_ERROR;
         entry.mContainers.clear();
         return entry;
@@ -909,6 +1000,12 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
 
     if (outEnchantLevelsConsumed != nullptr)
         *outEnchantLevelsConsumed = context.mEnchantLevelsConsumed;
+
+    if (outAnvilLevelsConsumed != nullptr)
+        *outAnvilLevelsConsumed = context.mAnvilLevelsConsumed;
+
+    if (outAnvilUsed != nullptr)
+        *outAnvilUsed = context.mAnvilActive;
 
     for (const TouchedSlot &slot: touched) {
         if (slot.mContainerName.mContainer == ContainerSlotType::CreatedOutput) {

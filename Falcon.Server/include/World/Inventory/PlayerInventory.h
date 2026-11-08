@@ -15,6 +15,9 @@ public:
     static const int CRAFTING_SIZE = 4;
     static const int CRAFTING_TABLE_SIZE = 9;
     static const int FURNACE_SIZE = 3;
+    static const int ANVIL_SIZE = 2;
+    static const int ANVIL_INPUT = 0;
+    static const int ANVIL_MATERIAL = 1;
     static const int SAVED_SIZE = CONTAINER_SIZE + ARMOR_SIZE;
 
     static const int CONTAINER_ID_INVENTORY = 0;
@@ -73,6 +76,10 @@ public:
 
     void setFurnaceItem(int slot, ItemStack item);
 
+    const ItemStack &getAnvilItem(int slot) const;
+
+    void setAnvilItem(int slot, ItemStack item);
+
     const ItemStack &getOffhand() const { return mOffhand; }
 
     void setOffhand(ItemStack item);
@@ -115,6 +122,7 @@ private:
     std::vector<ItemStack> mCrafting;
     std::vector<ItemStack> mCraftingTable;
     std::vector<ItemStack> mFurnace;
+    std::vector<ItemStack> mAnvil;
     ItemStack mOffhand;
     ItemStack mCursor;
     ItemStack mEnchantingInput;

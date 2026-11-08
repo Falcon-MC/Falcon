@@ -40,5 +40,8 @@ public:
                                           std::vector<BundleSyncData> *outBundles = nullptr,
                                           int32_t playerXpLevel = 0,
                                           bool creativeMode = false,
-                                          int32_t *outEnchantLevelsConsumed = nullptr);
+                                          int32_t *outEnchantLevelsConsumed = nullptr,
+                                          bool anvilOpen = false,
+                                          int32_t *outAnvilLevelsConsumed = nullptr,
+                                          bool *outAnvilUsed = nullptr);
 };
