@@ -26,6 +26,8 @@ class ServerPlayer;
 struct ProjectileData {
     int32_t mPotionId = -1;
     float mBaseDamage = 0.0f;
+    // impact_damage.damage rolled at launch; unset (-1) scales mBaseDamage by speed instead
+    int32_t mImpactDamage = -1;
     bool mCritical = false;
     int32_t mPunchLevel = 0;
     int32_t mFlameTicks = 0;
@@ -178,12 +180,14 @@ public:
 
     void tickFire(ServerNetworkHandler &owner);
 
-    void tickSunlightBurn(ServerNetworkHandler &owner);
-
     virtual PhysicsComponent getPhysics() const;
 
     virtual bool hasGravity() const {
         return true;
+    }
+
+    bool collidesAtSnowLayerLook() const override {
+        return isProjectile();
     }
 
     // an arrow hitting this actor is used up, whatever its piercing level
@@ -199,8 +203,7 @@ public:
         return false;
     }
 
-    virtual bool shieldFromSunlight(ServerNetworkHandler &owner) {
-        (void) owner;
+    virtual bool shieldFromSunlight() const {
         return false;
     }
 
@@ -307,6 +310,24 @@ public:
 
     std::vector<int64_t> &getPendingPassengers() { return mPendingPassengers; }
 
+    // the minecraft:buoyant wave phase
+    double getBuoyancyTimer() const {
+        return mBuoyancyTimer;
+    }
+
+    void setBuoyancyTimer(double timer) {
+        mBuoyancyTimer = timer;
+    }
+
+    // the last minecraft:pushable_by_entity kick sound
+    int64_t getPushSoundTick() const {
+        return mPushSoundTick;
+    }
+
+    void setPushSoundTick(int64_t tick) {
+        mPushSoundTick = tick;
+    }
+
     virtual bool shouldSave() const { return isAlive() && !mIsProjectile && !hasOwnerPlayer(); }
 
     virtual Tag saveNbt() const;
@@ -315,6 +336,8 @@ public:
 
 private:
     std::string mIdentifier;
+    double mBuoyancyTimer = 0.0;
+    int64_t mPushSoundTick = INT64_MIN / 2;
     Vector3f mSyncedPosition;
     Vector3f mSyncedRotation;
     bool mMovementSynced = false;

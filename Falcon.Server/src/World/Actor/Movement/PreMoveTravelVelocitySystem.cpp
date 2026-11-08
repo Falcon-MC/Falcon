@@ -19,7 +19,7 @@ namespace {
 
 Vector3f PreMoveTravelVelocitySystem::apply(ServerNetworkHandler &owner, ServerActor &actor,
                                             const PhysicsComponent &physics, const LiquidContact &feet,
-                                            bool eyesInWater) {
+                                            bool eyesInWater, bool buoyant) {
     Vector3f motion = actor.getMotion();
 
     if (!physics.mGravityAfterMove)
@@ -31,10 +31,14 @@ Vector3f PreMoveTravelVelocitySystem::apply(ServerNetworkHandler &owner, ServerA
         motion.z += push.z;
     }
 
-    _applyFloating(motion, physics, feet, eyesInWater);
+    // a buoyant actor floats by its own lift; an actor with the friction attributes drags after the move
+    if (!buoyant)
+        _applyFloating(motion, physics, feet, eyesInWater);
     _applyCurrent(motion, feet);
-    _applyGroundFriction(owner.getLevelFor(actor), actor, motion);
-    _applyPassableFriction(motion, physics, feet);
+    if (!physics.mDefinitionFriction)
+        _applyGroundFriction(owner.getLevelFor(actor), actor, motion);
+    if (!physics.mDefinitionFriction || feet.water || feet.lava)
+        _applyPassableFriction(motion, physics, feet);
 
     return motion;
 }
@@ -101,9 +105,14 @@ void PreMoveTravelVelocitySystem::_applyPassableFriction(Vector3f &motion, const
 }
 
 void PreMoveTravelVelocitySystem::applyVerticalAfterMove(Vector3f &motion, const PhysicsComponent &physics,
-                                                         const LiquidContact &feet) {
-    _applyGravity(motion, physics, feet);
+                                                         const LiquidContact &feet, float gravity) {
+    if (physics.mHasGravity && !feet.bubble && !(physics.mSwims && feet.water))
+        motion.y -= gravity;
     if (feet.bubble)
+        return;
+
+    // the uniform air drag already slowed the vertical speed
+    if (physics.mUniformAirDrag && !feet.water && !feet.lava)
         return;
 
     const float waterFriction = physics.mSwims ? SWIMMER_WATER_FRICTION : WATER_FRICTION;

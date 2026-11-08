@@ -30,6 +30,7 @@
 #include <utility>
 #include <vector>
 
+class Actor;
 class Packet;
 class Particle;
 class ServerNetworkHandler;
@@ -319,7 +320,7 @@ public:
 
     bool isSolidAt(int32_t x, int32_t y, int32_t z);
 
-    std::vector<AxisAlignedBB> getCollisionBoxes(const AxisAlignedBB &area);
+    std::vector<AxisAlignedBB> getCollisionBoxes(const AxisAlignedBB &area, const Actor *actor = nullptr);
 
     void setBlock(int32_t x, int32_t y, int32_t z, int32_t blockHash);
 

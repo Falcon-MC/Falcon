@@ -1,5 +1,6 @@
 #include "World/Actor/AI/Goal/MeleeAttackGoal.h"
 
+#include "World/Actor/AI/Goal/MobAttack.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
@@ -87,6 +88,7 @@ void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor 
         return;
 
     mob.getAnger().onAttack(owner, mob, target);
+    MobAttack::applyAttackEffect(owner, mob, target);
 
     const Vector3f mobPosition = mob.getPosition();
     const Vector3f targetPosition = target.getPosition();

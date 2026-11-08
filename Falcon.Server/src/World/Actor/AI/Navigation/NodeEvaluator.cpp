@@ -40,9 +40,10 @@ namespace {
     }
 }
 
-void NodeEvaluator::prepare(Level &level, float width, float height, const Vector3f &start, bool inWater,
-                            const PathOptions &options) {
+void NodeEvaluator::prepare(Level &level, const Actor &actor, float width, float height, const Vector3f &start,
+                            bool inWater, const PathOptions &options) {
     mLevel = &level;
+    mActor = &actor;
     mOptions = &options;
     mRadius = width * HALF_BLOCK;
     mHeight = height;
@@ -273,9 +274,13 @@ NodeEvaluator::CachedBlock NodeEvaluator::_classify(int32_t x, int32_t y, int32_
     if (closedDoor && !opensDoor)
         block.mFlags |= ClosedDoor;
 
-    if (!opensDoor && BlockShape::hasCollision(*state)) {
+    if (opensDoor)
+        return block;
+
+    const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z, mActor);
+    if (shape.mMaxY > shape.mMinY) {
         block.mFlags |= Collides;
-        block.mShape = BlockShape::getShapeAt(*state, x, y, z);
+        block.mShape = shape;
     }
 
     return block;

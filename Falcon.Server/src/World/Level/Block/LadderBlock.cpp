@@ -32,7 +32,9 @@ bool LadderBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFa
 
 // 3/16 plate against the wall: without it the server lets players walk through to the wall while the
 // client stops and climbs
-bool LadderBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+bool LadderBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
+    (void) actor;
+
     if (!state.mStates.contains("facing_direction"))
         return false;
 

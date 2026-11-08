@@ -31,12 +31,28 @@ public:
         return false;
     }
 
+    // sub_14A23ADA0: falling blocks and actors with can_stand_on_powder_snow or leather boots
+    virtual bool canStandOnPowderSnow() const {
+        return false;
+    }
+
+    // sub_14B27C5D0: item entities and projectiles (ActorType bit 0x400000) meet a snow layer at its look
+    virtual bool collidesAtSnowLayerLook() const {
+        return false;
+    }
+
     // AutonomousActorComponent: a player keeps it once sent, out of the actor range too
     virtual bool isAutonomous() const {
         return false;
     }
 
     bool catchFireFrom(const Actor &attacker, Difficulty difficulty);
+
+    // minecraft:block_movement_slowdown_immunity: the block leaves this actor's speed alone
+    virtual bool ignoresMovementSlowdown(const std::string &blockName) const {
+        (void) blockName;
+        return false;
+    }
 
     uint64_t getRuntimeId() const { return mRuntimeId; }
 
@@ -186,6 +202,19 @@ public:
     void setMaxHealth(float maxHealth);
 
     bool isAlive() const;
+
+    // sub_145E14260 freezes mobs only, players included
+    virtual bool canFreeze() const {
+        return false;
+    }
+
+    void markInFreezingBlock(int64_t tick) {
+        mFreezingBlockTick = tick;
+    }
+
+    bool touchedFreezingBlock(int64_t tick) const {
+        return mFreezingBlockTick == tick;
+    }
 
     int getNoDamageTicks() const { return mNoDamageTicks; }
 
@@ -351,6 +380,7 @@ protected:
     int mDifficulty = 2;
     bool mPendingStarveDamage = false;
     bool mIsDead = false;
+    int64_t mFreezingBlockTick = -1;
     int mNoDamageTicks = 0;
     int mSpawnInvulnerabilityTicks = 0;
     int mAttackTime = 0;

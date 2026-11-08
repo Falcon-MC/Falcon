@@ -1,5 +1,7 @@
 #include "World/Actor/Movement/ActorPushSystem.h"
 
+#include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
@@ -35,14 +37,62 @@ AxisAlignedBB ActorPushSystem::boundingBoxOf(const Actor &actor) {
     return boxAround(actor.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
 }
 
-Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, const ServerActor &actor, const Vector3f &motion) {
+Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &actor, const Vector3f &motion) {
     const AxisAlignedBB self = boundingBoxOf(actor).offset(motion.x, motion.y, motion.z);
+    const MobActor *mob = dynamic_cast<const MobActor *>(&actor);
+    const PushableByEntityPresets *presets = mob == nullptr ? nullptr : &mob->getPushPresets();
+    if (presets != nullptr && presets->mPresets.empty())
+        presets = nullptr;
+    const float reach = presets == nullptr ? 0.0f : presets->mReach;
 
     float positiveX = UNSET;
     float negativeX = UNSET;
     float positiveZ = UNSET;
     float negativeZ = UNSET;
     bool touched = false;
+    Vector3f kick(0.0f, 0.0f, 0.0f);
+
+    // the box or the ball reach first: the presets' filters only run for a pusher in contact
+    const auto inContact = [&](const Actor &pusher, const AxisAlignedBB &box, float width) {
+        if (box.intersectsWith(self))
+            return true;
+        if (reach <= 0.0f)
+            return false;
+        const float dx = pusher.getPosition().x - actor.getPosition().x;
+        const float dz = pusher.getPosition().z - actor.getPosition().z;
+        const float limit = reach + width * 0.5f;
+        return dx * dx + dz * dz <= limit * limit;
+    };
+
+    const auto pushBy = [&](const Actor &pusher, const AxisAlignedBB &box, float width, const Vector3f &velocity) {
+        const bool overlaps = box.intersectsWith(self);
+        const PushableByEntityPreset *preset = presets == nullptr ? nullptr
+                                               : PushableByEntity::findPreset(owner, *mob, *presets, pusher);
+        // sub_143A0AF90: push_mode none leaves without pushing
+        if (preset != nullptr && preset->mMode == PushMode::None)
+            return;
+
+        if (preset != nullptr && preset->mMode == PushMode::Ball) {
+            const float offsetX = pusher.getPosition().x - actor.getPosition().x;
+            const float offsetZ = pusher.getPosition().z - actor.getPosition().z;
+            if ((preset->mRequireCollisionOverlap && !overlaps)
+                || !PushableByEntity::inReach(*preset, offsetX, offsetZ, width))
+                return;
+
+            const float speed = std::sqrt(velocity.x * velocity.x + velocity.y * velocity.y
+                                          + velocity.z * velocity.z);
+            const Vector3f added = PushableByEntity::kick(*preset, offsetX, offsetZ, speed, actor.isOnGround());
+            kick = Vector3f(kick.x + added.x, kick.y + added.y, kick.z + added.z);
+            _playKickSound(owner, actor, *preset, added);
+            return;
+        }
+
+        if (!overlaps)
+            return;
+
+        _accumulate(self, box, positiveX, negativeX, positiveZ, negativeZ);
+        touched = true;
+    };
 
     // box test before the virtual checks: getPhysics() on a mob resolves several definition components,
     // keep it out of the pair loop
@@ -51,11 +101,11 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, const ServerA
             return;
 
         const AxisAlignedBB box = boundingBoxOf(other);
-        if (!box.intersectsWith(self) || !other.isAlive() || !other.isPushable())
+        const float width = other.getSize().mWidth;
+        if (!inContact(other, box, width) || !other.isAlive() || !other.isPushable())
             return;
 
-        _accumulate(self, box, positiveX, negativeX, positiveZ, negativeZ);
-        touched = true;
+        pushBy(other, box, width, other.getMotion());
     });
 
     for (auto &entry: owner.getPlayers()) {
@@ -65,23 +115,41 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, const ServerA
             continue;
 
         const AxisAlignedBB box = boxAround(player.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
-        if (!box.intersectsWith(self))
+        if (!inContact(player, box, PLAYER_WIDTH))
             continue;
 
-        _accumulate(self, box, positiveX, negativeX, positiveZ, negativeZ);
-        touched = true;
+        pushBy(player, box, PLAYER_WIDTH, player.getMotion());
     }
 
     if (!touched)
-        return Vector3f(0.0f, 0.0f, 0.0f);
+        return kick;
 
     const float resultX = (positiveX == UNSET ? 0.0f : positiveX) - (negativeX == UNSET ? 0.0f : negativeX);
     const float resultZ = (positiveZ == UNSET ? 0.0f : positiveZ) - (negativeZ == UNSET ? 0.0f : negativeZ);
     const float length = std::sqrt(resultX * resultX + resultZ * resultZ);
     if (!(length > 0.0f))
-        return Vector3f(0.0f, 0.0f, 0.0f);
+        return kick;
 
-    return Vector3f(-(resultX / length * PUSH_STRENGTH), 0.0f, -(resultZ / length * PUSH_STRENGTH));
+    return Vector3f(kick.x - resultX / length * PUSH_STRENGTH, kick.y, kick.z - resultZ / length * PUSH_STRENGTH);
+}
+
+void ActorPushSystem::_playKickSound(ServerNetworkHandler &owner, ServerActor &actor,
+                                     const PushableByEntityPreset &preset, const Vector3f &kick) {
+    // sub_143A0AF90: the sound has its own cooldown and needs a strong enough kick
+    if (!preset.mPlaySound)
+        return;
+
+    const int64_t tick = owner.getCurrentTick();
+    const float impulse = kick.x * kick.x + kick.y * kick.y + kick.z * kick.z;
+    if (tick - actor.getPushSoundTick() < preset.mSoundCooldownTicks
+        || impulse < preset.mSoundImpulseThreshold * preset.mSoundImpulseThreshold)
+        return;
+
+    const Vector3f position = actor.getPosition();
+    owner.playLevelSound(owner.getLevelFor(actor), PushableByEntity::KICK_SOUND,
+                         Vector3f(position.x, position.y + actor.getSize().mHeight * 0.5f, position.z),
+                         actor.getIdentifier());
+    actor.setPushSoundTick(tick);
 }
 
 void ActorPushSystem::_accumulate(const AxisAlignedBB &self, const AxisAlignedBB &other, float &positiveX,

@@ -20,7 +20,8 @@ public:
 
     PhysicsComponent getPhysics() const override {
         PhysicsComponent physics = MobActor::getPhysics();
-        physics.mStepHeight = ANIMAL_STEP_HEIGHT;
+        if (getComponent("minecraft:variable_max_auto_step") == nullptr)
+            physics.mStepHeight = ANIMAL_STEP_HEIGHT;
         return physics;
     }
 };

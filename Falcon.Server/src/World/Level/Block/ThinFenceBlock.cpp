@@ -14,8 +14,9 @@ bool ThinFenceBlock::matches(const std::string &identifier) {
     return BlockIdentifier::endsWith(identifier, "_pane") || BlockIdentifier::endsWith(identifier, "_bars");
 }
 
-bool ThinFenceBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+bool ThinFenceBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
     (void) state;
+    (void) actor;
 
     shape = AxisAlignedBB(THIN_MIN, 0.0f, THIN_MIN, THIN_MAX, 1.0f, THIN_MAX);
     return true;

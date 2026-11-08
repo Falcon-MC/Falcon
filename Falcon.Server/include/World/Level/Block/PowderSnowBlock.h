@@ -11,6 +11,15 @@ public:
 
     bool getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const override;
 
+    bool freezesActorsInside() const override {
+        return true;
+    }
+
+    bool getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                             AxisAlignedBB &shape) const override;
+
+    bool getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const override;
+
     BlockTraversal getTraversal() const override {
         return BlockTraversal::PowderSnow;
     }

@@ -10,6 +10,11 @@ class FallingBlock : public ServerActor {
 public:
     static const char *IDENTIFIER;
 
+    // ActorType 66 rests on powder snow
+    bool canStandOnPowderSnow() const override {
+        return true;
+    }
+
     static const float GRAVITY;
     static const float DRAG;
     static const float BASE_OFFSET;

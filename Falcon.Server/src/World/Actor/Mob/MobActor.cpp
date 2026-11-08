@@ -1,4 +1,5 @@
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include "World/Actor/AI/Goal/BehaviorGoals.h"
 #include "World/Actor/AI/Goal/BehaviorItems.h"
@@ -7,6 +8,7 @@
 #include "World/Actor/Definition/EntityEvents.h"
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Definition/Molang.h"
+#include "World/Actor/Movement/BuoyancySystem.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Block.h"
@@ -15,7 +17,7 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Inventory/PlayerInventory.h"
-#include "World/Item/ItemDurability.h"
+#include "World/Level/Storage/BlockStateUpgrades.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
 #include "World/Level/Storage/Loot/LootItems.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
@@ -86,7 +88,7 @@ namespace {
     const char *const CAN_CLIMB_COMPONENT = "minecraft:can_climb";
     const char *const BREATHABLE_COMPONENT = "minecraft:breathable";
     const char *const BURNS_IN_DAYLIGHT_COMPONENT = "minecraft:burns_in_daylight";
-    const int32_t SUNLIGHT_HELMET_DAMAGE_BOUND = 2;
+    const char *const SLOWDOWN_IMMUNITY_COMPONENT = "minecraft:block_movement_slowdown_immunity";
     const float DEFAULT_AIR_SECONDS = 15.0f;
     const float EYE_HEIGHT_RATIO = 0.85f;
     const int32_t AIR_REFILL_PER_TICK = 5;
@@ -109,6 +111,30 @@ namespace {
     const char *const BODY_ROTATION_BLOCKED_COMPONENT = "minecraft:body_rotation_blocked";
     const char *const KNOCKBACK_RESISTANCE_COMPONENT = "minecraft:knockback_resistance";
     const char *const KNOCKBACK_RESISTANCE_ATTRIBUTE = "minecraft:knockback_resistance";
+    const char *const BOUNCINESS_COMPONENT = "minecraft:bounciness";
+    const char *const FRICTION_MODIFIER_COMPONENT = "minecraft:friction_modifier";
+    const char *const AIR_DRAG_MODIFIER_COMPONENT = "minecraft:air_drag_modifier";
+    const char *const UNIFORM_AIR_DRAG_COMPONENT = "minecraft:uses_uniform_air_drag";
+    const char *const BUOYANT_COMPONENT = "minecraft:buoyant";
+    const char *const AUTO_STEP_COMPONENT = "minecraft:variable_max_auto_step";
+    const char *const HEALTH_COMPONENT = "minecraft:health";
+    const char *const COLLISION_BOX_COMPONENT = "minecraft:collision_box";
+    const char *const PUSHABLE_BY_ENTITY_COMPONENT = "minecraft:pushable_by_entity";
+
+    struct MovementAttribute {
+        const char *mComponent;
+        const char *mAttribute;
+        float mMinimum;
+        float mMaximum;
+        float mDefault;
+    };
+
+    // ranges and defaults registered by sub_142C374F0
+    const MovementAttribute MOVEMENT_ATTRIBUTES[] = {
+            {"minecraft:friction_modifier", "minecraft:friction_modifier", 0.0f, 256.0f, 1.0f},
+            {"minecraft:bounciness", "minecraft:bounciness", 0.0f, 1.0f, 0.0f},
+            {"minecraft:air_drag_modifier", "minecraft:air_drag_modifier", 0.0f, 256.0f, 1.0f}
+    };
     const char *const LEGACY_ZOMBIE_PIGMAN = "minecraft:pig_zombie";
     const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
     const char *const EQUIPPABLE_COMPONENT = "minecraft:equippable";
@@ -253,6 +279,13 @@ namespace {
     }
 }
 
+bool MobActor::canStandOnPowderSnow() const {
+    if (getComponent("minecraft:can_stand_on_powder_snow") != nullptr)
+        return true;
+    const ItemStack &boots = getEquipment().getSlot(MobEquipment::FEET);
+    return !boots.isAir() && boots.mDefinition->getIdentifier() == MovementPhysics::LEATHER_BOOTS;
+}
+
 MobActor::MobActor(uint64_t runtimeId, const std::string &identifier) : ServerActor(runtimeId, identifier) {
 }
 
@@ -272,6 +305,7 @@ void MobActor::startDefinition(ServerNetworkHandler &owner) {
 }
 
 void MobActor::tick(ServerNetworkHandler &owner) {
+    mHitTransformation.clear();
     startDefinition(owner);
     spawnPendingRiders(owner);
 
@@ -290,6 +324,11 @@ void MobActor::tick(ServerNetworkHandler &owner) {
 
     _tickLifecycle(owner);
     _tickSensors(owner);
+    mEquipmentChanged.tick(owner, *this);
+    if (!hasOwnAreaAttack())
+        mAreaAttack.tick(owner, *this);
+    if (!hasOwnExplosion() && !mExplode.tick(owner, *this))
+        return;
     _tickSpellEffects();
     _tickTimer(owner);
     _tickAttackCooldown(owner);
@@ -308,6 +347,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     }
 
     mGoalSelector.tick(owner, *this);
+    _syncTarget(owner);
     if (_tickInstantDespawn(owner))
         return;
 
@@ -316,6 +356,11 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     tickControls(owner);
     ServerActor::tick(owner);
     RideSystem::syncPassengerPositions(owner, *this);
+}
+
+void MobActor::tickDeath(ServerNetworkHandler &owner) {
+    if (mConvertsOnDeath && !mTransformed)
+        _tickTransformation(owner);
 }
 
 void MobActor::_registerGoals(ServerNetworkHandler &owner) {
@@ -602,6 +647,18 @@ float MobActor::getJumpPower() const {
 }
 
 bool MobActor::canSee(ServerNetworkHandler &owner, const Actor &other) const {
+    // the ray marches every 0.25 block: target goals ask about the same pair several times a tick
+    const int64_t tick = owner.getCurrentTick();
+    if (mSightCache.mTick == tick && mSightCache.mTargetId == other.getRuntimeId())
+        return mSightCache.mVisible;
+
+    mSightCache.mTick = tick;
+    mSightCache.mTargetId = other.getRuntimeId();
+    mSightCache.mVisible = _traceSight(owner, other);
+    return mSightCache.mVisible;
+}
+
+bool MobActor::_traceSight(ServerNetworkHandler &owner, const Actor &other) const {
     const Vector3f from = getPosition();
     const Vector3f to = other.getPosition();
     const ServerActor *otherActor = dynamic_cast<const ServerActor *>(&other);
@@ -640,7 +697,24 @@ void MobActor::causeFallDamage(ServerNetworkHandler &owner, float distance) {
                              getIdentifier());
 }
 
+namespace {
+    std::string transformationTarget(const json::Value *transformation) {
+        const json::Value *into = transformation == nullptr ? nullptr : transformation->get("into");
+        return into != nullptr && into->isString() ? into->mString : std::string();
+    }
+}
+
 bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
+    mHitTransformation.clear();
+    const std::string before = transformationTarget(getComponent(TRANSFORMATION_COMPONENT));
+    const bool dealsDamage = _senseDamage(owner, amount, source);
+    const std::string after = transformationTarget(getComponent(TRANSFORMATION_COMPONENT));
+    if (after != before)
+        mHitTransformation = after;
+    return dealsDamage;
+}
+
+bool MobActor::_senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
     const json::Value *sensor = getComponent(DAMAGE_SENSOR_COMPONENT);
     const json::Value *triggers = sensor == nullptr ? nullptr : sensor->get("triggers");
     if (triggers == nullptr)
@@ -659,7 +733,7 @@ bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const Act
     bool dealsDamage = true;
     for (const json::Value *trigger: entries) {
         const json::Value *cause = trigger->get("cause");
-        if (cause != nullptr && !DamageCause::matches(cause->string(), source.mDeathMessageKey))
+        if (cause != nullptr && !DamageCause::matches(cause->string(), source))
             continue;
 
         const json::Value *onDamage = trigger->get("on_damage");
@@ -920,12 +994,59 @@ bool MobActor::canSwim() const {
 
 PhysicsComponent MobActor::getPhysics() const {
     PhysicsComponent physics = ServerActor::getPhysics();
-    physics.mSwims = canSwim();
+    const DefinitionPhysics &definition = _getDefinitionPhysics();
+    physics.mSwims = definition.mSwims;
     physics.mFloatsInLiquid = mGoalSelector.keepsAfloat();
-    physics.mClimbsLadders = getComponent(CAN_CLIMB_COMPONENT) != nullptr;
-    physics.mClimbsWalls = getComponent(CLIMB_NAVIGATION_COMPONENT) != nullptr;
+    physics.mClimbsLadders = definition.mClimbsLadders;
+    physics.mClimbsWalls = definition.mClimbsWalls;
     physics.mGravityAfterMove = true;
+    physics.mDefinitionFriction = definition.mDefinitionFriction;
+    physics.mBounciness = definition.mBounciness;
+    physics.mFrictionModifier = definition.mFrictionModifier;
+    physics.mAirDragModifier = definition.mAirDragModifier;
+    physics.mUniformAirDrag = definition.mUniformAirDrag;
+    if (definition.mHasAutoStep)
+        physics.mStepHeight = getPassengers().empty() ? definition.mAutoStep : definition.mControlledAutoStep;
+    physics.mBuoyancy = definition.mBuoyancy;
     return physics;
+}
+
+const MobActor::DefinitionPhysics &MobActor::_getDefinitionPhysics() const {
+    if (mComponentsDirty)
+        _rebuildComponents();
+    if (!mDefinitionPhysicsStale)
+        return mDefinitionPhysics;
+
+    DefinitionPhysics &definition = mDefinitionPhysics;
+    definition = DefinitionPhysics();
+    definition.mSwims = canSwim();
+    definition.mClimbsLadders = getComponent(CAN_CLIMB_COMPONENT) != nullptr;
+    definition.mClimbsWalls = getComponent(CLIMB_NAVIGATION_COMPONENT) != nullptr;
+
+    const json::Value *bounciness = getComponent(BOUNCINESS_COMPONENT);
+    const json::Value *friction = getComponent(FRICTION_MODIFIER_COMPONENT);
+    const json::Value *airDrag = getComponent(AIR_DRAG_MODIFIER_COMPONENT);
+    definition.mDefinitionFriction = bounciness != nullptr || friction != nullptr || airDrag != nullptr;
+    definition.mBounciness = numberIn(bounciness, "value", definition.mBounciness);
+    definition.mFrictionModifier = numberIn(friction, "value", definition.mFrictionModifier);
+    definition.mAirDragModifier = numberIn(airDrag, "value", definition.mAirDragModifier);
+    definition.mUniformAirDrag = getComponent(UNIFORM_AIR_DRAG_COMPONENT) != nullptr;
+
+    // jump_prevented_value is not read: nothing here prevents a mob's jump
+    if (const json::Value *step = getComponent(AUTO_STEP_COMPONENT)) {
+        definition.mHasAutoStep = true;
+        definition.mAutoStep = numberIn(step, "base_value", PhysicsComponent::LIVING_STEP_HEIGHT);
+        definition.mControlledAutoStep = numberIn(step, "controlled_value", definition.mAutoStep);
+    }
+
+    definition.mBuoyancy = BuoyancySystem::read(getComponent(BUOYANT_COMPONENT));
+    mDefinitionPhysicsStale = false;
+    return definition;
+}
+
+const PushableByEntityPresets &MobActor::getPushPresets() const {
+    mPushPresets.refresh(getComponent(PUSHABLE_BY_ENTITY_COMPONENT));
+    return mPushPresets;
 }
 
 int MobActor::getInventoryCapacity() const {
@@ -1360,6 +1481,13 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
             continue;
 
         const json::Value *equipSlot = interaction->get("equip_item_slot");
+        const json::Value *dropSlot = interaction->get("drop_item_slot");
+        // dropping into the slot being filled is a swap: the old item leaves first
+        const bool swaps = equipSlot != nullptr && dropSlot != nullptr && dropSlot->string() == equipSlot->string()
+                           && MobEquipment::slotIndexOf(equipSlot->string()) >= 0
+                           && !player.getInventory().getItemInHand().isAir();
+        if (swaps)
+            _dropEquipmentSlot(owner, dropSlot->string(), numberIn(interaction, "drop_item_y_offset", 0.0f));
         if (equipSlot != nullptr && !_equipFromHand(owner, player, equipSlot->string()))
             continue;
 
@@ -1375,8 +1503,7 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         if (table != nullptr)
             _spawnLoot(owner, level, table->string());
 
-        const json::Value *dropSlot = interaction->get("drop_item_slot");
-        if (dropSlot != nullptr)
+        if (dropSlot != nullptr && !swaps)
             _dropEquipmentSlot(owner, dropSlot->string(), numberIn(interaction, "drop_item_y_offset", 0.0f));
 
         const int32_t hurtItem = (int32_t) numberIn(interaction, "hurt_item", 0.0f);
@@ -1732,6 +1859,9 @@ void MobActor::_syncBody(ServerNetworkHandler &owner) {
     RideControlSystem::syncFlags(owner, *this);
     getAttributes().setClamped(KNOCKBACK_RESISTANCE_ATTRIBUTE,
                                numberIn(getComponent(KNOCKBACK_RESISTANCE_COMPONENT), "value", 0.0f));
+    const bool healthChanged = followsDefinitionHealth() && _syncHealthComponent();
+    if (_syncMovementAttributes() || healthChanged)
+        owner.syncActorAttributes(*this);
 
     const float scale = numberIn(getComponent("minecraft:scale"), "value", 1.0f);
     if (scale != mScale) {
@@ -1743,6 +1873,49 @@ void MobActor::_syncBody(ServerNetworkHandler &owner) {
     _appendDefinitionData(metadata);
     if (!metadata.mEntries.empty())
         owner.sendActorMetadata(*this, metadata);
+}
+
+bool MobActor::_syncHealthComponent() {
+    const json::Value *health = getComponent(HEALTH_COMPONENT);
+    const json::Value *maximum = health == nullptr ? nullptr : health->get("max");
+    const json::Value *value = health == nullptr ? nullptr : health->get("value");
+    // a rolled health keeps what spawning rolled: only a fixed health follows the group
+    if (maximum == nullptr || value == nullptr || !value->isNumber()
+        || (float) maximum->number(0.0) == getMaxHealth())
+        return false;
+
+    setMaxHealth((float) maximum->number(0.0));
+    if (getHealth() > getMaxHealth())
+        setHealth(getMaxHealth());
+    return true;
+}
+
+ActorSize MobActor::definitionSize(const ActorSize &fallback) const {
+    const json::Value *box = getComponent(COLLISION_BOX_COMPONENT);
+    if (box == nullptr)
+        return fallback;
+    return ActorSize{numberIn(box, "width", fallback.mWidth), numberIn(box, "height", fallback.mHeight)};
+}
+
+bool MobActor::_syncMovementAttributes() {
+    // sub_142C731B0: the three attributes behind MovementAttributesComponent, client synced
+    bool changed = false;
+    for (const MovementAttribute &attribute: MOVEMENT_ATTRIBUTES) {
+        const json::Value *component = getComponent(attribute.mComponent);
+        ActorAttributes &attributes = getAttributes();
+        if (component == nullptr && attributes.getMaximum(attribute.mAttribute) == 0.0f)
+            continue;
+
+        changed = attributes.ensure(attribute.mAttribute, attribute.mMinimum, attribute.mMaximum, attribute.mDefault)
+                  || changed;
+        const float value = numberIn(component, "value", attribute.mDefault);
+        if (attributes.get(attribute.mAttribute) == value)
+            continue;
+
+        attributes.setClamped(attribute.mAttribute, value);
+        changed = true;
+    }
+    return changed;
 }
 
 void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
@@ -1841,6 +2014,7 @@ void MobActor::_rebuildComponents() const {
     mComponents.clear();
     mComponentsDirty = false;
     mSensorComponentsStale = true;
+    mDefinitionPhysicsStale = true;
 
     const json::Value *definition = getDefinition();
     if (definition == nullptr)
@@ -1896,21 +2070,32 @@ const json::Value *MobActor::getComponent(const char *name) const {
     return getComponent(mComponentKey);
 }
 
+bool MobActor::ignoresMovementSlowdown(const std::string &blockName) const {
+    const json::Value *immunity = getComponent(SLOWDOWN_IMMUNITY_COMPONENT);
+    if (immunity != mSlowdownImmunityComponent) {
+        mSlowdownImmunityComponent = immunity;
+        mSlowdownImmuneBlocks.clear();
+        const json::Value *blocks = immunity == nullptr ? nullptr : immunity->get("blocks");
+        if (blocks != nullptr && blocks->isArray()) {
+            for (const std::unique_ptr<json::Value> &block: blocks->mArray)
+                mSlowdownImmuneBlocks.push_back(BlockStateUpgrades::currentName(block->string()));
+        }
+    }
+
+    return std::find(mSlowdownImmuneBlocks.begin(), mSlowdownImmuneBlocks.end(), blockName)
+           != mSlowdownImmuneBlocks.end();
+}
+
 bool MobActor::burnsInDaylight() const {
     return getComponent(BURNS_IN_DAYLIGHT_COMPONENT) != nullptr;
 }
 
-bool MobActor::shieldFromSunlight(ServerNetworkHandler &owner) {
-    ItemStack helmet = mEquipment.getSlot(MobEquipment::HEAD);
-    if (helmet.isAir())
-        return false;
-
-    const int32_t damage = std::uniform_int_distribution<int32_t>(0, SUNLIGHT_HELMET_DAMAGE_BOUND - 1)(lifecycleRandom());
-    if (ItemDurability::apply(nullptr, helmet, damage)) {
-        mEquipment.setSlot(MobEquipment::HEAD, helmet);
-        mEquipment.broadcast(owner, *this);
-    }
-    return true;
+// anything in protection_slot (the head by default) blocks the fire and is not worn: sub_14CE80670
+bool MobActor::shieldFromSunlight() const {
+    const json::Value *component = getComponent(BURNS_IN_DAYLIGHT_COMPONENT);
+    const json::Value *slotName = component == nullptr ? nullptr : component->get("protection_slot");
+    const int slot = slotName == nullptr ? MobEquipment::HEAD : MobEquipment::slotIndexOf(slotName->string());
+    return !mEquipment.getSlot(slot < 0 ? MobEquipment::HEAD : slot).isAir();
 }
 
 std::vector<std::string> MobActor::getFamilies() const {
@@ -2158,6 +2343,21 @@ bool MobActor::setTarget(ServerNetworkHandler &owner, uint64_t runtimeId) {
     return true;
 }
 
+void MobActor::_syncTarget(ServerNetworkHandler &owner) {
+    if (mTargetRuntimeId == mSyncedTargetRuntimeId || !syncsTargetData())
+        return;
+
+    mSyncedTargetRuntimeId = mTargetRuntimeId;
+    const Actor *target = mTargetRuntimeId == 0 ? nullptr : findActor(owner, mTargetRuntimeId);
+    EntityDataEntry entry;
+    entry.mId = ActorFlags::TARGET_DATA_ID;
+    entry.mFormat = EntityDataFormat::Long;
+    entry.mLongValue = target == nullptr ? 0 : target->getUniqueId();
+    EntityDataMap metadata;
+    metadata.mEntries.push_back(entry);
+    owner.sendActorMetadata(*this, metadata);
+}
+
 void MobActor::clearTarget() {
     if (mTargetRuntimeId != 0)
         mTargetEscaped = true;
@@ -2251,6 +2451,13 @@ int MobActor::randomRange(int minimum, int maximum) {
 void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t lootingLevel) {
     if (isDead())
         return;
+
+    // only the transformation the fatal hit's damage sensor added (villager_v2 become_zombie) carries on:
+    // the game keeps ticking transformations of a dying actor until Actor::remove flags it (+649,
+    // sub_140BA3460; checked in sub_14773B730 and sub_147C27700); one from another source dies with it
+    const std::string transformation = transformationTarget(getComponent(TRANSFORMATION_COMPONENT));
+    mConvertsOnDeath = !transformation.empty() && transformation == mHitTransformation;
+    mHitTransformation.clear();
 
     mDweller.onDeath(*this, source);
 

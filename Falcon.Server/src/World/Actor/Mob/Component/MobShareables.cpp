@@ -1,6 +1,7 @@
 #include "World/Actor/Mob/Component/MobShareables.h"
 
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Item/CraftingRecipeTable.h"
 #include "World/Item/Item.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
 #include "World/Item/VanillaItems.h"
@@ -8,6 +9,7 @@
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
 
+#include <algorithm>
 #include <string>
 
 namespace {
@@ -15,6 +17,11 @@ namespace {
     const char *const EQUIP_ITEM_COMPONENT = "minecraft:equip_item";
     const char *const EQUIP_BEHAVIOR = "minecraft:behavior.equip_item";
     const int32_t UNLISTED_PRIORITY = 1000;
+
+    bool flagOr(const json::Value &entry, const char *key, bool fallback) {
+        const json::Value *value = entry.get(key);
+        return value == nullptr ? fallback : value->boolean(fallback);
+    }
 
     bool flagIn(const json::Value &entry, const char *key) {
         const json::Value *value = entry.get(key);
@@ -26,9 +33,17 @@ namespace {
         return value == nullptr ? fallback : value->integer(fallback);
     }
 
+    // an entry names an item or an item tag
     bool matchesName(const json::Value *name, const ItemStack &item) {
-        return name != nullptr && name->isString() && !item.isAir()
-               && LegacyItemMapper::getInstance().resolveWithData(name->mString) == item.mDefinition->getIdentifier();
+        if (name == nullptr || !name->isString() || item.isAir())
+            return false;
+
+        const std::string identifier(item.mDefinition->getIdentifier());
+        if (LegacyItemMapper::getInstance().resolveWithData(name->mString) == identifier)
+            return true;
+
+        const std::vector<std::string> &tags = CraftingRecipeTable::getItemTags(identifier);
+        return std::find(tags.begin(), tags.end(), name->mString) != tags.end();
     }
 
     const json::Value *entryItemName(const json::Value &entry) {
@@ -73,7 +88,7 @@ bool MobShareables::wants(ServerNetworkHandler &owner, const MobActor &mob, cons
     if (flagIn(*entry, "consume_item"))
         return true;
 
-    if (_equipmentSlotFor(item) >= 0 && _isBetterEquipment(mob, item))
+    if (_equipmentSlotFor(mob, item) >= 0 && _isBetterEquipment(mob, item))
         return true;
 
     return flagIn(*entry, "stored_in_inventory") && mob.getInventoryCapacity() > 0;
@@ -95,7 +110,7 @@ bool MobShareables::take(ServerNetworkHandler &owner, MobActor &mob, const ItemS
     if (flagIn(*entry, "consume_item"))
         return true;
 
-    if (_equipmentSlotFor(item) >= 0 && _isBetterEquipment(mob, item)) {
+    if (_equipmentSlotFor(mob, item) >= 0 && _isBetterEquipment(mob, item)) {
         if (mob.getComponent(EQUIP_BEHAVIOR) != nullptr
             && mob.getEquipment().addInventoryItem(item, mob.getInventoryCapacity()))
             return true;
@@ -133,7 +148,8 @@ void MobShareables::equipFromInventory(ServerNetworkHandler &owner, MobActor &mo
 
 bool MobShareables::store(ServerNetworkHandler &owner, MobActor &mob, const ItemStack &item) {
     const json::Value *entry = findEntry(mob, item);
-    if (entry != nullptr && _equipmentSlotFor(item) >= 0 && _isBetterEquipment(mob, item) && !_isExcluded(mob, item)) {
+    if (entry != nullptr && _equipmentSlotFor(mob, item) >= 0 && _isBetterEquipment(mob, item)
+        && !_isExcluded(mob, item)) {
         _equip(owner, mob, item);
         return true;
     }
@@ -148,9 +164,14 @@ bool MobShareables::store(ServerNetworkHandler &owner, MobActor &mob, const Item
     return false;
 }
 
-int MobShareables::_equipmentSlotFor(const ItemStack &item) {
+int MobShareables::_equipmentSlotFor(const MobActor &mob, const ItemStack &item) {
     if (item.isAir())
         return -1;
+
+    // a mob that cannot wear armor carries whatever it shares in its hand: the fox and its mouth
+    const json::Value *equipItem = mob.getComponent(EQUIP_ITEM_COMPONENT);
+    if (equipItem != nullptr && !flagOr(*equipItem, "can_wear_armor", true))
+        return MobEquipment::MAINHAND;
 
     const Item *type = VanillaItems::fromIdentifier(item.mDefinition->getIdentifier());
     if (type == nullptr)
@@ -207,7 +228,7 @@ int32_t MobShareables::_heldCount(const MobActor &mob, const ItemStack &item) {
 }
 
 bool MobShareables::_isBetterEquipment(const MobActor &mob, const ItemStack &item) {
-    const int slot = _equipmentSlotFor(item);
+    const int slot = _equipmentSlotFor(mob, item);
     if (slot < 0)
         return false;
 
@@ -216,7 +237,7 @@ bool MobShareables::_isBetterEquipment(const MobActor &mob, const ItemStack &ite
 }
 
 void MobShareables::_equip(ServerNetworkHandler &owner, MobActor &mob, const ItemStack &item) {
-    const int slot = _equipmentSlotFor(item);
+    const int slot = _equipmentSlotFor(mob, item);
     MobEquipment &equipment = mob.getEquipment();
     ItemStack previous = equipment.getSlot(slot);
 

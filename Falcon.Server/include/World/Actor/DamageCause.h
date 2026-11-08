@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 
+class ActorDamageSource;
+
 class DamageCause {
 public:
     static const char *findDeathMessageKey(const std::string &cause);
@@ -10,4 +12,6 @@ public:
     static std::vector<std::string> getNames();
 
     static bool matches(const std::string &cause, const std::string &deathMessageKey);
+
+    static bool matches(const std::string &cause, const ActorDamageSource &source);
 };

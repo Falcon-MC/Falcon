@@ -5,7 +5,7 @@
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Movement/ActorMovementSystem.h"
-#include "World/Level/Block/Systems/LiquidBlocksFetch.h"
+#include "World/Actor/SunlightBurn.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "Server/Profiler.h"
@@ -20,24 +20,12 @@
 
 #include <algorithm>
 #include <cmath>
-#include <random>
 
 namespace {
     const float SYNC_POSITION_EPSILON = 0.0001f;
     const int32_t INVULNERABILITY_TICKS = 10;
     const float ATTACK_KNOCKBACK = 0.4f;
     const float FIRE_TICK_DAMAGE = 1.0f;
-    const int32_t SUNLIGHT_BURN_TICKS = 8 * 20;
-    const float SUNLIGHT_MIN_BRIGHTNESS = 0.5f;
-    const float SUNLIGHT_BRIGHTNESS_OFFSET = 0.4f;
-    const float SUNLIGHT_CHANCE_SCALE = 30.0f;
-    const float MAX_LIGHT = 15.0f;
-    const float EYE_HEIGHT_RATIO = 0.85f;
-
-    std::mt19937 &sunlightRandom() {
-        static std::mt19937 generator(std::random_device{}());
-        return generator;
-    }
 }
 
 namespace {
@@ -148,7 +136,7 @@ ServerActor::ServerActor(uint64_t runtimeId, const std::string &identifier)
 void ServerActor::tick(ServerNetworkHandler &owner) {
     owner.getProfiler().beginSection(ProfilerSection::ActorEnvironment);
     tickFire(owner);
-    tickSunlightBurn(owner);
+    SunlightBurn::tick(owner, *this);
     owner.getProfiler().endSection(ProfilerSection::ActorEnvironment);
 
     owner.getProfiler().beginSection(ProfilerSection::ActorPhysics);
@@ -183,42 +171,6 @@ void ServerActor::markMovementSynced() {
     mSyncedPosition = getPosition();
     mSyncedRotation = getRotation();
     mMovementSynced = true;
-}
-
-void ServerActor::tickSunlightBurn(ServerNetworkHandler &owner) {
-    if (!burnsInDaylight() || isOnFire() || hasEffect(MobEffectId::FireResistance))
-        return;
-
-    Level &level = owner.getLevelFor(*this);
-    if (!level.hasSkyLight() || level.isRaining())
-        return;
-
-    const Vector3f position = getPosition();
-    const int32_t eyeY = (int32_t) std::floor(position.y + getSize().mHeight * EYE_HEIGHT_RATIO);
-    const int32_t blockX = (int32_t) std::floor(position.x);
-    const int32_t blockZ = (int32_t) std::floor(position.z);
-
-    const float brightness = (float) std::max(0, level.getSkyLightAt(blockX, eyeY, blockZ)
-                                                 - level.getSkyLightSubtracted()) / MAX_LIGHT;
-    if (brightness <= SUNLIGHT_MIN_BRIGHTNESS)
-        return;
-
-    const float roll = std::uniform_real_distribution<float>(0.0f, 1.0f)(sunlightRandom()) * SUNLIGHT_CHANCE_SCALE;
-    if (roll >= (brightness - SUNLIGHT_BRIGHTNESS_OFFSET) * 2.0f)
-        return;
-
-    if (level.getHeightAt(blockX, blockZ) > eyeY)
-        return;
-
-    if (LiquidBlocksFetch::at(level, position).water)
-        return;
-
-    if (shieldFromSunlight(owner))
-        return;
-
-    setFireTicks(SUNLIGHT_BURN_TICKS);
-    setOnFire(true);
-    owner.syncActorFlags(*this);
 }
 
 void ServerActor::tickFire(ServerNetworkHandler &owner) {

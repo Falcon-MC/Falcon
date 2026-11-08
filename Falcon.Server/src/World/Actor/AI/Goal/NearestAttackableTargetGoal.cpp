@@ -17,9 +17,14 @@ namespace {
     }
 }
 
-NearestAttackableTargetGoal::NearestAttackableTargetGoal(float range, std::vector<Entry> entries, int32_t scanInterval)
+NearestAttackableTargetGoal::NearestAttackableTargetGoal(float range, std::vector<Entry> entries, int32_t scanInterval,
+                                                         Sight sight)
         : mRangeSquared(range * range), mScanInterval(scanInterval), mMaxRangeSquared(range * range),
-          mEntries(std::move(entries)) {
+          mEntries(std::move(entries)), mSight(sight) {
+    mUsesSight = mSight.mMustSee;
+    for (const Entry &entry: mEntries)
+        mUsesSight = mUsesSight || entry.mMustSee > 0;
+
     if (!mEntries.empty()) {
         mMaxRangeSquared = 0.0f;
         for (const Entry &entry: mEntries) {
@@ -30,9 +35,12 @@ NearestAttackableTargetGoal::NearestAttackableTargetGoal(float range, std::vecto
     setRequiredControlFlags((uint8_t) GoalControlFlag::Target);
 }
 
+bool NearestAttackableTargetGoal::_scanDue() {
+    return mScanInterval <= 0 || std::uniform_int_distribution<int32_t>(0, mScanInterval - 1)(targetScanRandom()) == 0;
+}
+
 bool NearestAttackableTargetGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
-    if (mScanInterval > 0
-        && std::uniform_int_distribution<int32_t>(0, mScanInterval - 1)(targetScanRandom()) != 0)
+    if (!_scanDue())
         return false;
 
     const Actor *nearest = _findNearest(owner, mob);
@@ -42,13 +50,43 @@ bool NearestAttackableTargetGoal::canUse(ServerNetworkHandler &owner, MobActor &
 
 bool NearestAttackableTargetGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
     const Actor *target = mob.getTarget(owner);
-    return target != nullptr && mob.distanceSquaredTo(*target) <= mRangeSquared;
+    if (target == nullptr || mob.distanceSquaredTo(*target) > mRangeSquared)
+        return false;
+
+    if (target->getRuntimeId() != mSightTargetId)
+        _resolveSight(owner, mob, *target);
+
+    if (mTargetMustSee) {
+        if (mob.canSee(owner, *target))
+            mUnseenTicks = 0;
+        else if (++mUnseenTicks > mSight.mForgetTicks)
+            return false;
+    }
+
+    // TODO: the game's reselect cadence is unverified, rescanned at the scan interval for now
+    if (mSight.mReselect && ++mReselectTicks >= std::max(1, mScanInterval)) {
+        mReselectTicks = 0;
+        const Actor *nearest = _findNearest(owner, mob);
+        if (nearest != nullptr && nearest != target && mob.setTarget(owner, nearest->getRuntimeId()))
+            _resolveSight(owner, mob, *nearest);
+    }
+    return true;
 }
 
 void NearestAttackableTargetGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     if (mFoundTargetRuntimeId != 0)
         mob.setTarget(owner, mFoundTargetRuntimeId);
     mFoundTargetRuntimeId = 0;
+    mReselectTicks = 0;
+    mSightTargetId = 0;
+    if (const Actor *target = mob.getTarget(owner))
+        _resolveSight(owner, mob, *target);
+}
+
+void NearestAttackableTargetGoal::_resolveSight(ServerNetworkHandler &owner, MobActor &mob, const Actor &target) {
+    mSightTargetId = target.getRuntimeId();
+    mUnseenTicks = 0;
+    mTargetMustSee = mUsesSight && _mustSee(owner, mob, target);
 }
 
 void NearestAttackableTargetGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
@@ -62,16 +100,39 @@ bool NearestAttackableTargetGoal::_matches(ServerNetworkHandler &owner, MobActor
         return false;
 
     if (mEntries.empty())
-        return candidate.isPlayer() && distance <= mRangeSquared;
+        return candidate.isPlayer() && distance <= mRangeSquared && (!mSight.mMustSee || mob.canSee(owner, candidate));
 
     for (const Entry &entry: mEntries) {
         const float limit = entry.mMaxDistance > 0.0f ? entry.mMaxDistance * entry.mMaxDistance : mRangeSquared;
         if (distance > limit)
             continue;
-        if (entry.mFilters == nullptr || EntityFilter::test(*entry.mFilters, owner, mob, &candidate))
+        if (entry.mFilters != nullptr && !EntityFilter::test(*entry.mFilters, owner, mob, &candidate))
+            continue;
+        const bool mustSee = entry.mMustSee < 0 ? mSight.mMustSee : entry.mMustSee != 0;
+        if (!mustSee || mob.canSee(owner, candidate))
             return true;
     }
     return false;
+}
+
+bool NearestAttackableTargetGoal::_mustSee(ServerNetworkHandler &owner, MobActor &mob, const Actor &target) const {
+    if (mEntries.empty())
+        return mSight.mMustSee;
+
+    // any entry the target matches without a sight rule frees it, as on acquisition
+    const float distance = mob.distanceSquaredTo(target);
+    bool matched = false;
+    for (const Entry &entry: mEntries) {
+        const float limit = entry.mMaxDistance > 0.0f ? entry.mMaxDistance * entry.mMaxDistance : mRangeSquared;
+        if (distance > limit)
+            continue;
+        if (entry.mFilters != nullptr && !EntityFilter::test(*entry.mFilters, owner, mob, &target))
+            continue;
+        if (!(entry.mMustSee < 0 ? mSight.mMustSee : entry.mMustSee != 0))
+            return false;
+        matched = true;
+    }
+    return matched || mSight.mMustSee;
 }
 
 Actor *NearestAttackableTargetGoal::_findNearest(ServerNetworkHandler &owner, MobActor &mob) const {

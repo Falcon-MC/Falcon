@@ -12,11 +12,15 @@
 #include "World/Actor/Definition/LookedAtSensor.h"
 #include "World/Actor/Mob/Component/MobAddRider.h"
 #include "World/Actor/Mob/Component/MobAdmiration.h"
+#include "World/Actor/Mob/Component/MobAreaAttack.h"
+#include "World/Actor/Mob/Component/MobEquipmentChanged.h"
+#include "World/Actor/Mob/Component/MobExplode.h"
 #include "World/Actor/Mob/Component/MobLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
 #include "World/Actor/Mob/Component/MobDweller.h"
 #include "World/Actor/Mob/MobEntitySpawner.h"
 #include "World/Actor/Mob/MobEquipment.h"
+#include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/Movement/RideControlSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/BlockState.h"
@@ -37,7 +41,13 @@ class ServerPlayer;
 
 class MobActor : public ServerActor {
 public:
+    bool canFreeze() const override {
+        return true;
+    }
+
     MobActor(uint64_t runtimeId, const std::string &identifier);
+
+    bool canStandOnPowderSnow() const override;
 
     virtual ActorCategory getCategory() const = 0;
 
@@ -46,6 +56,9 @@ public:
     }
 
     ActorSize getSize() const override = 0;
+
+    // minecraft:collision_box of the active groups
+    ActorSize definitionSize(const ActorSize &fallback) const;
 
     PhysicsComponent getPhysics() const override;
 
@@ -56,6 +69,20 @@ public:
     virtual float getDefaultMaxHealth() const = 0;
 
     virtual int getExperienceDrop() const { return 0; }
+
+    // a class with its own contact attack, explosion or rolled health keeps it over the definition component
+    virtual bool hasOwnAreaAttack() const {
+        return false;
+    }
+
+    virtual bool hasOwnExplosion() const {
+        return false;
+    }
+
+    // minecraft:health of the active groups sets the maximum: off by default, the classes roll their health
+    virtual bool followsDefinitionHealth() const {
+        return false;
+    }
 
     virtual bool shouldRemoveInPeaceful() const {
         return getComponent("minecraft:remove_in_peaceful") != nullptr;
@@ -91,6 +118,8 @@ public:
 
     void tick(ServerNetworkHandler &owner) override;
 
+    void tickDeath(ServerNetworkHandler &owner) override;
+
     MoveControl &getMoveControl() {
         return mMoveControl;
     }
@@ -121,9 +150,11 @@ public:
         return mEquipment.absorbDamage(amount, source);
     }
 
+    bool ignoresMovementSlowdown(const std::string &blockName) const override;
+
     bool burnsInDaylight() const override;
 
-    bool shieldFromSunlight(ServerNetworkHandler &owner) override;
+    bool shieldFromSunlight() const override;
 
     virtual float getAttackDamage(Difficulty difficulty) const;
 
@@ -136,6 +167,9 @@ public:
     const json::Value *getComponent(const char *name) const;
 
     const std::unordered_map<std::string, const json::Value *> &getComponents() const;
+
+    // minecraft:pushable_by_entity presets, parsed once per component change
+    const PushableByEntityPresets &getPushPresets() const;
 
     std::vector<std::string> getFamilies() const;
 
@@ -283,6 +317,11 @@ public:
 
     void clearTarget();
 
+    // viewers pose the mob from its target data (the skeleton's drawn bow); off where the data means something else
+    virtual bool syncsTargetData() const {
+        return true;
+    }
+
     Actor *getTarget(ServerNetworkHandler &owner) const;
 
     bool canTarget(const Actor &actor) const;
@@ -398,6 +437,24 @@ private:
         const json::Value *mTargetNearbySensor = nullptr;
     };
 
+    // read by getPhysics() every tick: resolved once per component change
+    struct DefinitionPhysics {
+        bool mSwims = false;
+        bool mClimbsLadders = false;
+        bool mClimbsWalls = false;
+        bool mDefinitionFriction = false;
+        float mBounciness = 0.0f;
+        float mFrictionModifier = 1.0f;
+        float mAirDragModifier = 1.0f;
+        bool mUniformAirDrag = false;
+        bool mHasAutoStep = false;
+        float mAutoStep = 0.0f;
+        float mControlledAutoStep = 0.0f;
+        BuoyancySettings mBuoyancy;
+    };
+
+    const DefinitionPhysics &_getDefinitionPhysics() const;
+
     void _rebuildComponents() const;
 
     const SensorComponents &_getSensorComponents() const;
@@ -405,6 +462,8 @@ private:
     void _registerGoals(ServerNetworkHandler &owner);
 
     void _syncBody(ServerNetworkHandler &owner);
+
+    void _syncTarget(ServerNetworkHandler &owner);
 
     void _markComponentsChanged();
 
@@ -444,6 +503,10 @@ private:
     void _tickSpellEffects();
 
     void _tickTransformation(ServerNetworkHandler &owner);
+
+    bool _senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source);
+
+    bool _traceSight(ServerNetworkHandler &owner, const Actor &other) const;
 
     bool _tickInstantDespawn(ServerNetworkHandler &owner);
 
@@ -494,6 +557,11 @@ private:
     void _emitInteractParticle(ServerNetworkHandler &owner, const ServerPlayer &player, const json::Value &particle,
                                const std::string &type);
 
+    // true when an attribute the client must hear about changed
+    bool _syncMovementAttributes();
+
+    bool _syncHealthComponent();
+
     void _appendDefinitionData(EntityDataMap &metadata) const;
 
     void _syncOwner(ServerNetworkHandler &owner);
@@ -523,6 +591,18 @@ private:
     const json::Value *mTransformationComponent = nullptr;
     int32_t mTransformationTicks = 0;
     bool mTransformed = false;
+    bool mConvertsOnDeath = false;
+    // the transformation the last hit's damage sensor added, until the end of the tick
+    // the target, not a pointer: the component table is rebuilt when groups change
+    std::string mHitTransformation;
+    struct SightCache {
+        int64_t mTick = -1;
+        uint64_t mTargetId = 0;
+        bool mVisible = false;
+    };
+    mutable SightCache mSightCache;
+    mutable const json::Value *mSlowdownImmunityComponent = nullptr;
+    mutable std::vector<std::string> mSlowdownImmuneBlocks;
     uint64_t mParentRuntimeId = 0;
     Vector3f mHomePosition;
     bool mHasHome = false;
@@ -547,6 +627,7 @@ private:
     uint64_t mLastHurtBy = 0;
     uint32_t mHurtCount = 0;
     uint64_t mTargetRuntimeId = 0;
+    uint64_t mSyncedTargetRuntimeId = 0;
     PathNavigation mNavigation;
     MoveControl mMoveControl;
     LookControl mLookControl;
@@ -564,6 +645,9 @@ private:
     MobAddRider mAddRider;
     MobAdmiration mAdmiration;
     MobLeash mLeash;
+    MobAreaAttack mAreaAttack;
+    MobExplode mExplode;
+    MobEquipmentChanged mEquipmentChanged;
     const json::Value *mAttackCooldownComponent = nullptr;
     int32_t mAttackCooldownTicks = 0;
     int32_t mCelebrationTicks = 0;
@@ -577,4 +661,7 @@ private:
     bool mTargetOutsideRange = false;
     bool mTargetSeenInsideRange = false;
     const json::Value *mCelebrationComponent = nullptr;
+    mutable DefinitionPhysics mDefinitionPhysics;
+    mutable bool mDefinitionPhysicsStale = true;
+    mutable PushableByEntityPresets mPushPresets;
 };

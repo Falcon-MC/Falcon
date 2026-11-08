@@ -73,7 +73,8 @@ void PrimedTntActor::tick(ServerNetworkHandler &owner) {
     const float halfWidth = SIZE * 0.5f;
     AxisAlignedBB box(position.x - halfWidth, position.y, position.z - halfWidth,
                       position.x + halfWidth, position.y + SIZE, position.z + halfWidth);
-    const std::vector<AxisAlignedBB> colliders = level.getCollisionBoxes(box.addCoord(motion.x, motion.y, motion.z));
+    const AxisAlignedBB sweep = box.addCoord(motion.x, motion.y, motion.z);
+    const std::vector<AxisAlignedBB> colliders = level.getCollisionBoxes(sweep, this);
 
     float moveY = motion.y;
     for (const AxisAlignedBB &collider: colliders)

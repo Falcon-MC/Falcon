@@ -3,6 +3,7 @@
 #include "Core/Math/AxisAlignedBB.h"
 #include "Core/Math/Vector3f.h"
 
+class Actor;
 class Level;
 
 struct ActorMoveResult {
@@ -17,9 +18,10 @@ struct ActorMoveResult {
 // one axis at a time, optional step-up; shared by player simulation and actor physics
 class ActorCollisionSystem {
 public:
+    // actor: the mover, its type picks per-actor block shapes
     static ActorMoveResult move(Level &level, AxisAlignedBB &box, const Vector3f &delta, float stepHeight,
-                                bool wasOnGround);
+                                bool wasOnGround, const Actor *actor);
 
 private:
-    static Vector3f _resolve(Level &level, AxisAlignedBB &box, const Vector3f &delta);
+    static Vector3f _resolve(Level &level, AxisAlignedBB &box, const Vector3f &delta, const Actor *actor);
 };

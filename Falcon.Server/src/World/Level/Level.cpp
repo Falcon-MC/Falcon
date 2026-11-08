@@ -1256,8 +1256,10 @@ void Level::setActiveColumns(std::vector<int64_t> columns) {
 
     // updates due while inactive were parked: resume them
     for (int64_t column: columns) {
-        if (mActiveColumns.find(column) == mActiveColumns.end())
-            mBlockUpdateScheduler.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
+        if (mActiveColumns.find(column) != mActiveColumns.end())
+            continue;
+        mBlockUpdateScheduler.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
+        mBlockUpdates.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
     }
 
     mActiveColumns.swap(next);
@@ -1435,7 +1437,7 @@ bool Level::isSolidAt(int32_t x, int32_t y, int32_t z) {
     return data->mSolid;
 }
 
-std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area) {
+std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area, const Actor *actor) {
     std::vector<AxisAlignedBB> boxes;
     const int32_t minX = (int32_t) std::floor(area.mMinX);
     const int32_t minY = std::max((int32_t) std::floor(area.mMinY) - 1, LevelChunk::MIN_Y);
@@ -1448,11 +1450,11 @@ std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area) {
         for (int32_t z = minZ; z <= maxZ; ++z) {
             for (int32_t y = minY; y <= maxY; ++y) {
                 const BlockState *state = peekBlockPtr(x, y, z);
-                if (state == nullptr || !BlockShape::hasCollision(*state))
+                if (state == nullptr)
                     continue;
 
-                const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z);
-                if (shape.intersectsWith(area))
+                const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z, actor);
+                if (shape.mMaxY > shape.mMinY && shape.intersectsWith(area))
                     boxes.push_back(shape);
             }
         }
@@ -1537,7 +1539,7 @@ void Level::tick() {
 }
 
 void Level::scheduleBlockUpdate(const Vector3i &position, int64_t delay) {
-    mBlockUpdateScheduler.schedule(position, delay);
+    scheduleUpdate(position, delay);
 }
 
 bool Level::canRainAt(int32_t x, int32_t z) {

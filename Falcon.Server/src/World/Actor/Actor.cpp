@@ -187,8 +187,8 @@ void Actor::knockBack(float x, float z, float force, float verticalLimit) {
     if (length <= 0.0f || force <= 0.0f)
         return;
 
-    const float resistance = std::clamp(getAttributes().get("minecraft:knockback_resistance"), 0.0f, 1.0f);
-    const float base = force * (1.0f - resistance);
+    // sub_1437DED50: a negative resistance pushes harder
+    const float base = force * std::max(1.0f - getAttributes().get("minecraft:knockback_resistance"), 0.0f);
     if (base <= 0.0f)
         return;
 
@@ -480,6 +480,8 @@ bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
 void Actor::kill() {
     mIsDead = true;
     mEffects.clear();
+    // a respawn starts thawed
+    mEffects.resetFreezing();
     extinguish();
     mAttributes.set(ATTRIBUTE_HEALTH, 0.0f);
     setMotion(Vector3f(0.0f, 0.0f, 0.0f));
