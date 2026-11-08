@@ -147,6 +147,11 @@ namespace {
         if (const json::Value *biome = condition.get("minecraft:biome_filter"))
             result.mBiomeFilter = std::shared_ptr<json::Value>(biome->clone());
 
+        if (const json::Value *spawnEvent = condition.get("minecraft:spawn_event")) {
+            if (const json::Value *event = spawnEvent->get("event"))
+                result.mSpawnEvent = event->string();
+        }
+
         return result;
     }
 

@@ -47,6 +47,8 @@ struct SpawnCondition {
     std::vector<std::string> mOnBlocks;
     std::vector<std::string> mPreventedBlocks;
     std::shared_ptr<json::Value> mBiomeFilter;
+    // runs instead of minecraft:entity_spawned, as an identifier<event> spawn does
+    std::string mSpawnEvent;
 };
 
 struct SpawnRule {

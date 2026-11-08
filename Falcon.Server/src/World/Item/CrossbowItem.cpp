@@ -10,6 +10,7 @@ FALCON_REGISTER_ITEM_CUSTOM(CrossbowItem, 61,
                                 return std::make_unique<CrossbowItem>(item);
                             });
 
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/EnchantmentData.h"
@@ -105,6 +106,32 @@ bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
 int32_t CrossbowItem::getChargeTicks(const ItemStack &item) {
     const int32_t quickCharge = ItemEnchantments::getLevel(item, EnchantmentIds::QUICK_CHARGE);
     return CROSSBOW_LOAD_TICKS - quickCharge * CROSSBOW_QUICK_CHARGE_TICKS;
+}
+
+void CrossbowItem::loadHeld(ServerNetworkHandler &owner, MobActor &mob) {
+    ItemStack held = mob.getEquipment().getSlot(MobEquipment::MAINHAND);
+    if (held.isAir() || isCrossbowLoaded(held))
+        return;
+
+    if (held.mTag.getType() != Tag::Type::Compound)
+        held.mTag = Tag::ofCompound();
+
+    Tag chargedItem = Tag::ofCompound();
+    chargedItem.put(CHARGED_NAME_TAG, Tag::ofString(ARROW_IDENTIFIER));
+    chargedItem.putInt(CHARGED_LOAD_TICK_TAG, (int32_t) owner.getCurrentTick());
+    held.mTag.put(CHARGED_ITEM_TAG, std::move(chargedItem));
+    mob.getEquipment().setSlot(MobEquipment::MAINHAND, std::move(held));
+    mob.getEquipment().broadcast(owner, mob);
+}
+
+void CrossbowItem::unloadHeld(ServerNetworkHandler &owner, MobActor &mob) {
+    ItemStack held = mob.getEquipment().getSlot(MobEquipment::MAINHAND);
+    if (held.isAir() || !isCrossbowLoaded(held))
+        return;
+
+    held.mTag.remove(CHARGED_ITEM_TAG);
+    mob.getEquipment().setSlot(MobEquipment::MAINHAND, std::move(held));
+    mob.getEquipment().broadcast(owner, mob);
 }
 
 bool CrossbowItem::onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {

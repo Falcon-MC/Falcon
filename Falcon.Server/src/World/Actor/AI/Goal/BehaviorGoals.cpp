@@ -104,8 +104,6 @@ namespace {
     const float AVOID_DEFAULT_DISTANCE = 3.0f;
     const float AVOID_DEFAULT_SPRINT_DISTANCE = 7.0f;
     const float EAT_DEFAULT_SECONDS = 1.8f;
-    const float RANGED_DEFAULT_RANGE = 15.0f;
-    const float RANGED_DEFAULT_INTERVAL = 1.0f;
     const float FOLLOW_OWNER_START = 10.0f;
     const float FOLLOW_OWNER_STOP = 2.0f;
 
@@ -318,6 +316,55 @@ namespace {
     bool isFlagSet(const json::Value &component, const char *key) {
         const json::Value *value = component.get(key);
         return value != nullptr && value->boolean(false);
+    }
+
+    // seconds truncate to ticks and an unset interval reads as 0: sub_14D4170A0
+    int32_t truncatedTicks(float seconds) {
+        return std::max(0, (int32_t) (seconds * TICKS_PER_SECOND));
+    }
+
+    bool hasNavigation(const MobActor &mob) {
+        const std::string prefix = "minecraft:navigation.";
+        for (const auto &entry: mob.getComponents()) {
+            if (entry.first.compare(0, prefix.size(), prefix) == 0)
+                return true;
+        }
+        return false;
+    }
+
+    RangedAttackGoal::Settings rangedSettings(const MobActor &mob, const json::Value &component, float speed) {
+        RangedAttackGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mHasNavigation = hasNavigation(mob);
+
+        if (component.get("attack_range") != nullptr) {
+            settings.mAttackRadiusMin = rangeValue(component, "attack_range", "min", 0.0f);
+            settings.mAttackRadius = rangeValue(component, "attack_range", "max", 0.0f);
+        } else {
+            settings.mAttackRadiusMin = numberOf(component, "attack_radius_min", 0.0f);
+            settings.mAttackRadius = numberOf(component, "attack_radius", 0.0f);
+        }
+
+        const bool split = component.get("attack_interval_min") != nullptr
+                           || component.get("attack_interval_max") != nullptr;
+        const float minimum = split ? numberOf(component, "attack_interval_min", 0.0f)
+                                    : rangeValue(component, "attack_interval", "min", 0.0f);
+        const float maximum = split ? numberOf(component, "attack_interval_max", minimum)
+                                    : rangeValue(component, "attack_interval", "max", minimum);
+        settings.mIntervalMinTicks = truncatedTicks(minimum);
+        settings.mIntervalMaxTicks = std::max(settings.mIntervalMinTicks, truncatedTicks(maximum));
+
+        settings.mBurstShots = (int32_t) numberOf(component, "burst_shots", (float) settings.mBurstShots);
+        settings.mBurstIntervalTicks = truncatedTicks(numberOf(component, "burst_interval", 0.0f));
+        settings.mTargetInSightTicks = truncatedTicks(numberOf(component, "target_in_sight_time", 1.0f));
+        settings.mChargeChargedTriggerTicks = truncatedTicks(numberOf(component, "charge_charged_trigger", 0.0f));
+        settings.mChargeShootTriggerTicks = truncatedTicks(numberOf(component, "charge_shoot_trigger", 0.0f));
+        settings.mRangedFov = numberOf(component, "ranged_fov", settings.mRangedFov);
+        settings.mSwing = isFlagSet(component, "swing");
+        settings.mSetPersistent = isFlagSet(component, "set_persistent");
+        const json::Value *mode = component.get("in_range_movement_mode");
+        settings.mFollowTarget = mode != nullptr && mode->string() == "follow_target";
+        return settings;
     }
 
     int32_t timerFlagIndex(const std::string &behavior) {
@@ -915,24 +962,8 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "move_towards_home_restriction")
         return std::make_unique<MoveTowardsHomeRestrictionGoal>(speed, homeRadius(mob));
 
-    if (behavior == "ranged_attack") {
-        const json::Value *shooter = mob.getComponent("minecraft:shooter");
-        const json::Value *projectile = shooter == nullptr ? nullptr : shooter->get("def");
-        if (projectile == nullptr)
-            return nullptr;
-
-        const float range = component.get("attack_radius") != nullptr
-                            ? numberOf(component, "attack_radius", RANGED_DEFAULT_RANGE)
-                            : rangeValue(component, "attack_range", "max", RANGED_DEFAULT_RANGE);
-        const float minimum = component.get("attack_interval_min") != nullptr
-                              ? numberOf(component, "attack_interval_min", RANGED_DEFAULT_INTERVAL)
-                              : rangeValue(component, "attack_interval", "min", RANGED_DEFAULT_INTERVAL);
-        const float maximum = component.get("attack_interval_max") != nullptr
-                              ? numberOf(component, "attack_interval_max", minimum)
-                              : rangeValue(component, "attack_interval", "max", minimum);
-        return std::make_unique<RangedAttackGoal>(speed, range, secondsToTicks(minimum), secondsToTicks(maximum),
-                                                  projectile->string());
-    }
+    if (behavior == "ranged_attack")
+        return std::make_unique<RangedAttackGoal>(rangedSettings(mob, component, speed));
 
     const int32_t timerFlag = timerFlagIndex(behavior);
     if (timerFlag >= 0) {
