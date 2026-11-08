@@ -1,6 +1,7 @@
 #include "World/Level/Block/ContainerBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/LiquidProperties.h"
 
 FALCON_REGISTER_BLOCK(ContainerBlock, 50);
 
@@ -375,4 +376,16 @@ BlockState ContainerBlock::applyPlacementOrientation(const BlockState &state,
     }
 
     return BlockState(result.mName, states);
+}
+
+// shelves close a face picked through the wrong table: south closes the top, west the bottom (BDS 1.26.61)
+uint8_t ContainerBlock::getLiquidBlockedFaces(const BlockState &state) const {
+    const ContainerBlockDefinition *definition = findDefinition(getIdentifier());
+    if (definition == nullptr || definition->mKind != ContainerBlockKind::Shelf)
+        return 0;
+
+    const std::string direction = state.mStates.getString("minecraft:cardinal_direction", "south");
+    const int face = direction == "east" ? LiquidFace::NORTH : direction == "north" ? LiquidFace::WEST
+                     : direction == "west" ? LiquidFace::DOWN : LiquidFace::UP;
+    return (uint8_t) (1 << face);
 }

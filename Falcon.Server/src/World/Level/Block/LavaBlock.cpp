@@ -7,3 +7,7 @@ FALCON_REGISTER_BLOCK(LavaBlock, 325);
 bool LavaBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:lava" || identifier == "minecraft:flowing_lava";
 }
+
+bool LavaBlock::isDynamic(const std::string &identifier) {
+    return identifier == "minecraft:flowing_lava";
+}

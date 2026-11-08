@@ -21,4 +21,6 @@ public:
                                         BlockState &state) const override;
 
     bool getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const override;
+
+    uint8_t getLiquidBlockedFaces(const BlockState &state) const override;
 };

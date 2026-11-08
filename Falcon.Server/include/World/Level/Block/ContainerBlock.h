@@ -62,4 +62,6 @@ public:
                   const BlockState &state) const override;
 
     void writeDropContents(Level &level, const Vector3i &position, ItemStack &item) const override;
+
+    uint8_t getLiquidBlockedFaces(const BlockState &state) const override;
 };

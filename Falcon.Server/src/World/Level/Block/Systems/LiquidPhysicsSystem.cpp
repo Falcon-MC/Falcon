@@ -4,6 +4,7 @@
 #include "Core/Utility/BinaryStream.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/LiquidProperties.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -58,12 +59,12 @@ const BlockState &LiquidPhysicsSystem::fluidStateAt(const LevelChunk &chunk, int
     return LiquidView(layer1).isWater() ? layer1 : layer0;
 }
 
+// 1: placed water stays; 2: flowing water enters too (BDS canContainLiquid and liquid reaction)
 uint8_t LiquidPhysicsSystem::getWaterloggingLevel(const BlockState &state) {
-    if (state.mName == "minecraft:air")
+    const LiquidProperties properties = LiquidProperties::of(state);
+    if (!properties.containsWater)
         return 0;
-
-    const BlockData *data = BlockDataTable::find(state.mName.c_str());
-    return data == nullptr ? 0 : data->mWaterloggingLevel;
+    return properties.reaction == LiquidReaction::NoReaction ? 2 : 1;
 }
 
 bool LiquidPhysicsSystem::_isLoaded(int32_t x, int32_t z) const {
@@ -260,10 +261,11 @@ bool LiquidPhysicsSystem::isFlowable(const BlockState &state, bool lava) const {
 
     // waterlogging level 1: source only, no flowing water; higher levels take flowing water into layer 1;
     // lava never waterlogs
-    if (!lava && data->mWaterloggingLevel > 1)
+    const uint8_t waterlogging = getWaterloggingLevel(state);
+    if (!lava && waterlogging > 1)
         return true;
 
-    if (!lava && data->mWaterloggingLevel == 1)
+    if (!lava && waterlogging == 1)
         return false;
 
     return !data->mSolid;

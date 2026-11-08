@@ -5,6 +5,7 @@
 FALCON_REGISTER_BLOCK(SlabBlock, 350);
 
 #include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/LiquidProperties.h"
 #include "World/Level/Block/PlacementHelpers.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
@@ -81,4 +82,8 @@ PlacementMergeResult SlabBlock::mergePlacement(Level &level, const Vector3i &cli
 
     state = doubleSlab->toBlockState();
     return PlacementMergeResult::Merged;
+}
+
+uint8_t SlabBlock::getLiquidBlockedFaces(const BlockState &state) const {
+    return (uint8_t) (1 << (isTopSlab(state) ? LiquidFace::UP : LiquidFace::DOWN));
 }

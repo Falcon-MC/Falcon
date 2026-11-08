@@ -6,4 +6,8 @@
 class AirBlock final : public Block {
 public:
     AirBlock() : Block(BlockTypeIds::AIR, "minecraft:air", "Air") {}
+
+    static bool matches(const std::string &identifier) {
+        return identifier == "minecraft:air";
+    }
 };

@@ -55,7 +55,6 @@ struct BlockData {
     bool mSolid;
     uint8_t mBurnChance;
     uint8_t mBurnAbility;
-    uint8_t mWaterloggingLevel;
     BlockDropKind mDropKind;
     const char *mDropIdentifier;
     uint8_t mDropMin;
