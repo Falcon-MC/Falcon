@@ -17,8 +17,8 @@ FeatureNoiseHolder::FeatureNoiseHolder(IRandom &random) {
     const IRandomPtr kelpRandom = random.identical();
     mKelp = std::make_shared<SimplexNoise>(*kelpRandom, -7, std::vector<float>{1.0f});
 
-    const IRandomPtr sulfurRandom = random.fork();
-    mSulfurCaveGradient = std::make_shared<SimplexNoise>(*sulfurRandom, -5, std::vector<float>{1.0f, 0.0f, 1.0f});
+    // keeps the ice caves gradient on its seed
+    random.fork();
 
     const IRandomPtr iceRandom = random.fork();
     mIceCaveGradient = std::make_shared<SimplexNoise>(*iceRandom, -4, std::vector<float>{1.0f, 0.0f, 1.0f});

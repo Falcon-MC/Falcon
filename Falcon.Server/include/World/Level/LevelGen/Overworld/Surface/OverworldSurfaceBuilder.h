@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
+#include "World/Level/LevelGen/Overworld/Surface/NoiseGradientSurfaceBuilder.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 #include "World/Level/LevelGen/Random/XoroshiroPositionalFactory.h"
 
@@ -34,6 +35,11 @@ private:
 
     void _digSwampPuddle(LevelChunk &chunk, int32_t x, int32_t z, int32_t height, int32_t maxDepth) const;
 
+    const NoiseGradientSurfaceBuilder *_noiseGradientFor(int32_t biome) const;
+
+    // after every column has its surface
+    void _buildSubsurface(LevelChunk &chunk) const;
+
     // the lowest block a column's builders may change (sub_14A22FC50)
     int32_t _lowestSurfaceY(int32_t worldX, int32_t worldZ) const;
 
@@ -50,4 +56,5 @@ private:
     NormalNoisePtr mIcebergPillarNoise;
     NormalNoisePtr mIcebergPillarRoofNoise;
     NormalNoisePtr mIcebergSurfaceNoise;
+    NoiseGradientSurfaceBuilder mSulfurCaves;
 };

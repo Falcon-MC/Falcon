@@ -5368,14 +5368,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/LakeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/LakeFeature.h",
-      "sha256": "2aa4de19e66f1fdeca6c861a492a95b3894117d5e315ff94074e9512fda06a48",
-      "classes": [
-        "LakeFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/LegacySmallBrownMushroomsFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/LegacySmallBrownMushroomsFeature.h",
       "sha256": "1f4fec011f7fbf4cce88f1f55683393bab234fb9fe0fb05b4fca05fcfb1cdbcd",
@@ -5469,38 +5461,6 @@
       "sha256": "144112afc6c7d7943b1a492b9ac6ad0edbf48f6958bc5b52604a4eaa58527f3a",
       "classes": [
         "SeaPickleFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/SulfurPoolSnapToSurfaceFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/SulfurPoolSnapToSurfaceFeature.h",
-      "sha256": "73897524475d0f600ba25b2bf612f7a8ca9577c2d1dfe6114d440493a5e1dc02",
-      "classes": [
-        "SulfurPoolSnapToSurfaceFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/SulfurSpikeClusterFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/SulfurSpikeClusterFeature.h",
-      "sha256": "6cd8a1c9f84b4fe7d63d4828af27ac712972e088cea65da3ebe38649f9c237f5",
-      "classes": [
-        "SulfurSpikeClusterFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/SulfurSpikeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/SulfurSpikeFeature.h",
-      "sha256": "24763709854b4cae4556d8261941bf7dd079a032c0d71a076fb3c3769bdef146",
-      "classes": [
-        "SulfurSpikeFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/SulfurSpringTrailToSurfaceFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/SulfurSpringTrailToSurfaceFeature.h",
-      "sha256": "c79ae397ed221e3f396cda695bf601d30211d0230b14b73b25692fcf27dd0a46",
-      "classes": [
-        "SulfurSpringTrailToSurfaceFeature"
       ]
     },
     {
