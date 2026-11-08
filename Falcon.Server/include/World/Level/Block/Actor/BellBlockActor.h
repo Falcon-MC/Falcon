@@ -8,7 +8,9 @@ class BellBlockActor final : public BlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "Bell";
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 

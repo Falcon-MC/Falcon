@@ -8,7 +8,9 @@ class BannerBlockActor final : public BlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "Banner";
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -17,9 +19,13 @@ public:
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
     // the dye index counted from black, as the banner item's damage
-    void setBase(int32_t base) { mBase = base; }
+    void setBase(int32_t base) {
+        mBase = base;
+    }
 
-    int32_t getBase() const { return mBase; }
+    int32_t getBase() const {
+        return mBase;
+    }
 
 private:
     void _putFields(Tag &data) const;

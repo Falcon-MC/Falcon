@@ -9,7 +9,9 @@ class CauldronBlockActor final : public BlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "Cauldron";
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 

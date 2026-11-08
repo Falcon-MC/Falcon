@@ -6,7 +6,9 @@ class FlowerPotBlockActor final : public BlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "FlowerPot";
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 

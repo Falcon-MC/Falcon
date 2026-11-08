@@ -12,7 +12,9 @@ public:
 
     explicit SignBlockActor(bool hanging = false) : mHanging(hanging) {}
 
-    const char *getBlockActorId() const override { return mHanging ? HANGING_ID : BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return mHanging ? HANGING_ID : BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
