@@ -31,6 +31,15 @@ namespace {
                 "generated properties omit signaling-private-key");
         require(generated.find("signaling-extra-port=0\n") != std::string::npos,
                 "generated properties omit signaling-extra-port");
+
+        require(defaults.getSignalingAcmeDomain().empty(), "ACME is on by default");
+        require(defaults.getSignalingAcmeDirectory() == "https://acme-v02.api.letsencrypt.org/directory",
+                "the ACME directory is not the production one by default");
+        require(defaults.getSignalingAcmeChallenge() == "tls-alpn-01", "the default challenge is not tls-alpn-01");
+        require(generated.find("signaling-acme-domain=\n") != std::string::npos
+                && generated.find("signaling-acme-email=\n") != std::string::npos
+                && generated.find("signaling-acme-challenge=tls-alpn-01\n") != std::string::npos,
+                "generated properties omit the ACME settings");
     }
 
     void checkValues(const std::filesystem::path &directory) {
@@ -41,6 +50,21 @@ namespace {
         require(configured.getSignalingPrivateKey() == "/etc/falcon/privkey.pem", "private key path differs");
         require(configured.getSignalingExtraPort() == 443, "extra signaling port differs");
         require(configured.getInvalidProperties().empty(), "valid signaling settings were reported");
+
+        const std::string staging = "https://acme-staging-v02.api.letsencrypt.org/directory";
+        auto issuing = settings(directory, "signaling-acme-domain=play.example.org\n"
+                                           "signaling-acme-email=ops@example.org\n"
+                                           "signaling-acme-directory=" + staging + "\n"
+                                           "signaling-acme-challenge=http-01\n");
+        require(issuing.getSignalingAcmeDomain() == "play.example.org"
+                && issuing.getSignalingAcmeEmail() == "ops@example.org", "ACME domain or email differs");
+        require(issuing.getSignalingAcmeDirectory() == staging, "the staging directory was not kept");
+        require(issuing.getSignalingAcmeChallenge() == "http-01" && issuing.getInvalidProperties().empty(),
+                "http-01 was not accepted");
+
+        auto dns = settings(directory, "signaling-acme-challenge=dns-01\n");
+        require(dns.getSignalingAcmeChallenge() == "tls-alpn-01" && dns.getInvalidProperties().size() == 1,
+                "an unsupported challenge was accepted");
 
         for (const std::string value: {"-1", "65536", "https", "4.43"}) {
             auto invalid = settings(directory, "signaling-extra-port=" + value + "\n");

@@ -132,7 +132,14 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"signaling-certificate", "", PropertyKind::String, 0, 0, nullptr},
             {"signaling-private-key", "", PropertyKind::String, 0, 0, nullptr},
             // Falcon only: second signaling listener, 0 for none; the game probes 443 and 80 beside port 19132 only
-            {"signaling-extra-port", "0", PropertyKind::Int, 0, 65535, nullptr}
+            {"signaling-extra-port", "0", PropertyKind::Int, 0, 65535, nullptr},
+            // Falcon only: domain the players type, empty for no ACME; the certificate lands in certificates/
+            {"signaling-acme-domain", "", PropertyKind::String, 0, 0, nullptr},
+            {"signaling-acme-email", "", PropertyKind::String, 0, 0, nullptr},
+            {"signaling-acme-directory", "https://acme-v02.api.letsencrypt.org/directory", PropertyKind::String, 0, 0,
+             nullptr},
+            // tls-alpn-01 answers on TCP 443, http-01 on TCP 80
+            {"signaling-acme-challenge", "tls-alpn-01", PropertyKind::Enum, 0, 0, "tls-alpn-01,http-01"}
     };
 
     return definitions;
