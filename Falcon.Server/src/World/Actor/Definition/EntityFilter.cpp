@@ -531,7 +531,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
 
         const std::string cause = value->string();
         const bool result = cause == FATAL_DAMAGE ? activeDamageAmount >= self.getHealth()
-                                                  : DamageCause::matches(cause, activeDamage->mDeathMessageKey);
+                                                  : DamageCause::matches(cause, *activeDamage);
         return isNegation(op) ? !result : result;
     }
 
@@ -724,16 +724,14 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     if (test == "has_equipment") {
         const json::Value *domain = filter.get("domain");
         const bool result = value != nullptr
-                            && hasEquipmentIn(*target, domain == nullptr ? "any" : domain->string(),
-                                              BehaviorItems(value));
+                            && hasEquipmentIn(*target, equipmentDomain(domain), BehaviorItems(value));
         return isNegation(op) ? !result : result;
     }
 
     if (test == "has_equipment_tag") {
         const json::Value *domain = filter.get("domain");
         const bool result = value != nullptr
-                            && hasEquipmentTagIn(*target, domain == nullptr ? "any" : domain->string(),
-                                                 value->string());
+                            && hasEquipmentTagIn(*target, equipmentDomain(domain), value->string());
         return isNegation(op) ? !result : result;
     }
 

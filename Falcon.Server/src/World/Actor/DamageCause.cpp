@@ -1,5 +1,7 @@
 #include "World/Actor/DamageCause.h"
 
+#include "World/Actor/ActorDamageSource.h"
+
 #include <algorithm>
 
 namespace {
@@ -63,4 +65,10 @@ bool DamageCause::matches(const std::string &cause, const std::string &deathMess
     }
 
     return false;
+}
+
+bool DamageCause::matches(const std::string &cause, const ActorDamageSource &source) {
+    if (source.mCause.empty())
+        return matches(cause, source.mDeathMessageKey);
+    return cause.empty() || cause == ALL_CAUSES || cause == source.mCause;
 }

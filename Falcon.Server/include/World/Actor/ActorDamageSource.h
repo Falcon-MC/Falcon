@@ -63,12 +63,19 @@ public:
         return *this;
     }
 
+    // a cause the death message does not tell: minecraft:area_attack overrides the message of its cause
+    ActorDamageSource &withCause(const std::string &cause) {
+        mCause = cause;
+        return *this;
+    }
+
     ActorDamageSource &withDamager(Actor *damager) {
         mDamager = damager;
         return *this;
     }
 
     std::string mDeathMessageKey;
+    std::string mCause;
     std::vector<std::string> mDeathMessageParameters;
     Actor *mAttacker = nullptr;
     Actor *mDamager = nullptr;

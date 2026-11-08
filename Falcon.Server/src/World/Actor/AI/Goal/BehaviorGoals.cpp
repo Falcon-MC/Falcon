@@ -726,7 +726,10 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         return std::make_unique<PickupItemsGoal>(speed, numberOf(component, "max_dist", 0.0f),
                                                  numberOf(component, "goal_radius", PICKUP_DEFAULT_GOAL_RADIUS),
                                                  secondsToTicks(numberOf(component, "cooldown_after_being_attacked",
-                                                                         0.0f)));
+                                                                         0.0f)),
+                                                 isFlagSet(component, "stop_if_holding_item"),
+                                                 cloneOf(component.get("on_pickup_item_start")),
+                                                 cloneOf(component.get("on_pickup_item_end")));
 
     if (behavior == "charge_held_item")
         return std::make_unique<ChargeHeldItemGoal>();

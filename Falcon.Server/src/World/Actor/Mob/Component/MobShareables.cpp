@@ -1,6 +1,7 @@
 #include "World/Actor/Mob/Component/MobShareables.h"
 
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Item/CraftingRecipeTable.h"
 #include "World/Item/Item.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
 #include "World/Item/VanillaItems.h"
@@ -8,6 +9,7 @@
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
 
+#include <algorithm>
 #include <string>
 
 namespace {
@@ -26,9 +28,17 @@ namespace {
         return value == nullptr ? fallback : value->integer(fallback);
     }
 
+    // an entry names an item or an item tag: the sulfur cube shares its archetype tags
     bool matchesName(const json::Value *name, const ItemStack &item) {
-        return name != nullptr && name->isString() && !item.isAir()
-               && LegacyItemMapper::getInstance().resolveWithData(name->mString) == item.mDefinition->getIdentifier();
+        if (name == nullptr || !name->isString() || item.isAir())
+            return false;
+
+        const std::string identifier(item.mDefinition->getIdentifier());
+        if (LegacyItemMapper::getInstance().resolveWithData(name->mString) == identifier)
+            return true;
+
+        const std::vector<std::string> &tags = CraftingRecipeTable::getItemTags(identifier);
+        return std::find(tags.begin(), tags.end(), name->mString) != tags.end();
     }
 
     const json::Value *entryItemName(const json::Value &entry) {
@@ -169,7 +179,10 @@ int MobShareables::_equipmentSlotFor(const ItemStack &item) {
             break;
     }
 
-    return type->getMaxStackSize() == 1 && !type->isBlock() ? MobEquipment::MAINHAND : -1;
+    // a shared block is carried in the hand
+    if (type->isBlock())
+        return MobEquipment::MAINHAND;
+    return type->getMaxStackSize() == 1 ? MobEquipment::MAINHAND : -1;
 }
 
 int32_t MobShareables::_priorityOf(const MobActor &mob, const ItemStack &item) {

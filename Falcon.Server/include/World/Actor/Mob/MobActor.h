@@ -12,6 +12,9 @@
 #include "World/Actor/Definition/LookedAtSensor.h"
 #include "World/Actor/Mob/Component/MobAddRider.h"
 #include "World/Actor/Mob/Component/MobAdmiration.h"
+#include "World/Actor/Mob/Component/MobAreaAttack.h"
+#include "World/Actor/Mob/Component/MobEquipmentChanged.h"
+#include "World/Actor/Mob/Component/MobExplode.h"
 #include "World/Actor/Mob/Component/MobLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
 #include "World/Actor/Mob/Component/MobDweller.h"
@@ -46,6 +49,9 @@ public:
     }
 
     ActorSize getSize() const override = 0;
+
+    // minecraft:collision_box of the active groups
+    ActorSize definitionSize(const ActorSize &fallback) const;
 
     PhysicsComponent getPhysics() const override;
 
@@ -337,6 +343,10 @@ public:
         return mAnger;
     }
 
+    const MobExplode &getExplode() const {
+        return mExplode;
+    }
+
     int getInventoryCapacity() const;
 
     std::vector<ItemStack> rollLoot(ServerNetworkHandler &owner, const std::string &path);
@@ -494,6 +504,11 @@ private:
     void _emitInteractParticle(ServerNetworkHandler &owner, const ServerPlayer &player, const json::Value &particle,
                                const std::string &type);
 
+    // true when an attribute the client must hear about changed
+    bool _syncMovementAttributes();
+
+    bool _syncHealthComponent();
+
     void _appendDefinitionData(EntityDataMap &metadata) const;
 
     void _syncOwner(ServerNetworkHandler &owner);
@@ -564,6 +579,9 @@ private:
     MobAddRider mAddRider;
     MobAdmiration mAdmiration;
     MobLeash mLeash;
+    MobAreaAttack mAreaAttack;
+    MobExplode mExplode;
+    MobEquipmentChanged mEquipmentChanged;
     const json::Value *mAttackCooldownComponent = nullptr;
     int32_t mAttackCooldownTicks = 0;
     int32_t mCelebrationTicks = 0;
@@ -577,4 +595,6 @@ private:
     bool mTargetOutsideRange = false;
     bool mTargetSeenInsideRange = false;
     const json::Value *mCelebrationComponent = nullptr;
+    mutable const json::Value *mBuoyantComponent = nullptr;
+    mutable BuoyancySettings mBuoyancy;
 };

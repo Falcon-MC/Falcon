@@ -307,6 +307,24 @@ public:
 
     std::vector<int64_t> &getPendingPassengers() { return mPendingPassengers; }
 
+    // the minecraft:buoyant wave phase
+    double getBuoyancyTimer() const {
+        return mBuoyancyTimer;
+    }
+
+    void setBuoyancyTimer(double timer) {
+        mBuoyancyTimer = timer;
+    }
+
+    // the last minecraft:pushable_by_entity kick sound
+    int64_t getPushSoundTick() const {
+        return mPushSoundTick;
+    }
+
+    void setPushSoundTick(int64_t tick) {
+        mPushSoundTick = tick;
+    }
+
     virtual bool shouldSave() const { return isAlive() && !mIsProjectile && !hasOwnerPlayer(); }
 
     virtual Tag saveNbt() const;
@@ -315,6 +333,8 @@ public:
 
 private:
     std::string mIdentifier;
+    double mBuoyancyTimer = 0.0;
+    int64_t mPushSoundTick = INT64_MIN / 2;
     Vector3f mSyncedPosition;
     Vector3f mSyncedRotation;
     bool mMovementSynced = false;

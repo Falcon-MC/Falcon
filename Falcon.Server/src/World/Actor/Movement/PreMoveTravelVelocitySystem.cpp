@@ -1,6 +1,7 @@
 #include "World/Actor/Movement/PreMoveTravelVelocitySystem.h"
 
 #include "World/Actor/Movement/ActorPushSystem.h"
+#include "World/Actor/Movement/BuoyancySystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
@@ -31,10 +32,14 @@ Vector3f PreMoveTravelVelocitySystem::apply(ServerNetworkHandler &owner, ServerA
         motion.z += push.z;
     }
 
-    _applyFloating(motion, physics, feet, eyesInWater);
+    // a buoyant actor floats by its own lift; an actor with the friction attributes drags after the move
+    if (!BuoyancySystem::floats(physics.mBuoyancy, feet))
+        _applyFloating(motion, physics, feet, eyesInWater);
     _applyCurrent(motion, feet);
-    _applyGroundFriction(owner.getLevelFor(actor), actor, motion);
-    _applyPassableFriction(motion, physics, feet);
+    if (!physics.mDefinitionFriction)
+        _applyGroundFriction(owner.getLevelFor(actor), actor, motion);
+    if (!physics.mDefinitionFriction || feet.water || feet.lava)
+        _applyPassableFriction(motion, physics, feet);
 
     return motion;
 }
@@ -101,9 +106,14 @@ void PreMoveTravelVelocitySystem::_applyPassableFriction(Vector3f &motion, const
 }
 
 void PreMoveTravelVelocitySystem::applyVerticalAfterMove(Vector3f &motion, const PhysicsComponent &physics,
-                                                         const LiquidContact &feet) {
-    _applyGravity(motion, physics, feet);
+                                                         const LiquidContact &feet, float gravity) {
+    if (physics.mHasGravity && !feet.bubble && !(physics.mSwims && feet.water))
+        motion.y -= gravity;
     if (feet.bubble)
+        return;
+
+    // the uniform air drag already slowed the vertical speed
+    if (physics.mUniformAirDrag && !feet.water && !feet.lava)
         return;
 
     const float waterFriction = physics.mSwims ? SWIMMER_WATER_FRICTION : WATER_FRICTION;
