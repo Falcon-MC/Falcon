@@ -1218,7 +1218,7 @@ bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, co
     if (renaming != nullptr && !renaming->boolean(true))
         return false;
 
-    const Tag *display = held.mTag.get(ITEM_DISPLAY_TAG);
+    const Tag *display = held.mTag.isCompound() ? held.mTag.get(ITEM_DISPLAY_TAG) : nullptr;
     const std::string name = display == nullptr || !display->isCompound()
                              ? std::string() : display->getString(ITEM_DISPLAY_NAME_TAG, std::string());
     if (name.empty())
