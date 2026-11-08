@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "World/Level/ClientSideGeneration.h"
 
@@ -79,6 +80,10 @@ public:
      * drops them, since each one sent would push the publisher update and the view move back.
      */
     static void dropPendingChunks(ChunkStreamState &state);
+
+    // actors and players a client hears about: 57 chunks around its own, not the streamed view
+    // sub_14292F0B0 adds the offsets of sub_1430054F0 to the viewer chunk (sub_142FD2AF0)
+    static bool isInActorRange(const Vector3f &viewer, const Vector3f &position);
 
     static int64_t packChunk(int32_t chunkX, int32_t chunkZ);
 

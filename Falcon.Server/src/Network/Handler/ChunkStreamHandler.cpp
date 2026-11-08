@@ -555,6 +555,15 @@ void ChunkStreamHandler::dropPendingChunks(ChunkStreamState &state) {
     state.mClientBuiltCursor = 0;
 }
 
+bool ChunkStreamHandler::isInActorRange(const Vector3f &viewer, const Vector3f &position) {
+    // the game table holds every offset with dx * dx + dz * dz <= 17
+    static const int64_t ACTOR_RANGE_SQUARED = 17;
+
+    const int64_t dx = (int64_t) ((int32_t) std::floor(position.x) >> 4) - ((int32_t) std::floor(viewer.x) >> 4);
+    const int64_t dz = (int64_t) ((int32_t) std::floor(position.z) >> 4) - ((int32_t) std::floor(viewer.z) >> 4);
+    return dx * dx + dz * dz <= ACTOR_RANGE_SQUARED;
+}
+
 int64_t ChunkStreamHandler::packChunk(int32_t chunkX, int32_t chunkZ) {
     return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 }

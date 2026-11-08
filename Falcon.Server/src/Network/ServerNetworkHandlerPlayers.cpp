@@ -16,7 +16,7 @@ namespace {
     const float PLAYER_EYE_HEIGHT = 1.62f;
 }
 
-bool ServerNetworkHandler::canPlayerSeePlayer(ServerPlayer &viewer, const ServerPlayer &target) const {
+bool ServerNetworkHandler::canPlayerSeePlayer(ServerPlayer &viewer, const ServerPlayer &target) {
     if (&viewer == &target || !viewer.isSpawned() || !target.isSpawned())
         return false;
 
@@ -24,10 +24,11 @@ bool ServerNetworkHandler::canPlayerSeePlayer(ServerPlayer &viewer, const Server
         return false;
 
     const Vector3f position = target.getPosition();
-    const int64_t hash = ChunkStreamHandler::packChunk((int32_t) std::floor(position.x) >> 4,
-                                                       (int32_t) std::floor(position.z) >> 4);
+    if (!ChunkStreamHandler::isInActorRange(viewer.getPosition(), position))
+        return false;
 
-    return viewer.getSentChunks().find(hash) != viewer.getSentChunks().end();
+    return getLevelFor(target).isChunkPopulated((int32_t) std::floor(position.x) >> 4,
+                                                (int32_t) std::floor(position.z) >> 4);
 }
 
 void ServerNetworkHandler::_sendPlayerSpawn(ServerPlayer &viewer, ServerPlayer &target) {
