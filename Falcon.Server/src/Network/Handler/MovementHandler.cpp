@@ -53,9 +53,7 @@ namespace {
         plugins->dispatch(event);
     }
 
-    /**
-     * Respiration level N skips losing air on a tick with probability N / (N + 1).
-     */
+    // Respiration N skips the air loss on a tick with probability N / (N + 1)
     bool consumesAir(const ServerPlayer &player) {
         const int32_t respiration = ItemEnchantments::getLevel(
                 player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD), EnchantmentIds::RESPIRATION);
@@ -209,7 +207,7 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
     const bool wasOnGround = player.isOnGround();
     Level &level = owner.getLevelFor(player);
-    // Preserve collision output: a proximity probe can report ground during a jump or above shallow water.
+    // keep the collision result: a proximity probe can report ground mid-jump or above shallow water
     const bool onGround = player.hasSimulatedGround() ? player.isSimulatedOnGround()
                                                      : checkGroundState(level, feetPosition);
     player.setOnGround(onGround);
@@ -245,7 +243,7 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
         player.resetFallDistance();
     } else {
-        // Without a simulated velocity the motion is the client's own delta, which must not clear a fall.
+        // no simulated velocity: the motion is the client's own delta; it can't clear a fall
         if (wasOnGround || requestedY > 0.0f || (player.hasSimulatedVelocity() && player.getMotion().y > 0.0f))
             player.resetFallDistance();
 
@@ -289,8 +287,7 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
     const bool turtleHelmet = !helmet.isAir() && helmet.mDefinition != nullptr
                               && helmet.mDefinition->getIdentifier() == TURTLE_HELMET;
 
-    // A turtle helmet worn out of water charges a 10 second timer that keeps the player
-    // breathing after diving in.
+    // a turtle helmet out of water charges a 10 s timer: the player keeps breathing after diving in
     if (breathing && turtleHelmet) {
         player.setTurtleHelmetTicks(TURTLE_HELMET_TICKS);
     } else if (player.getTurtleHelmetTicks() > 0) {
@@ -338,7 +335,7 @@ bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkId
         return false;
     }
 
-    // Unticked AuthInput packets predate this un-timestamped ability request.
+    // unticked AuthInput packets predate this un-timestamped ability request
     if (deferUntilInput && (player.getMovementInputs().pendingCount() != 0
                             || player.getMovementInputs().hasPendingFlightRequest())) {
         player.getMovementInputs().deferFlightRequest(flying);
@@ -385,30 +382,27 @@ static bool isActiveInput(ServerPlayer &player, const PlayerAuthInputPacket &pac
 
 void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                             ServerPlayer &player, const PlayerAuthInputPacket &packet) {
-    // BDS LoadingScreenPlayerProtectionsSystem disables movement until loading completes.
+    // LoadingScreenPlayerProtectionsSystem: no movement until loading completes
     if (!player.isSpawned())
         return;
 
     if (isActiveInput(player, packet))
         player.markActive(owner.getCurrentTick());
 
-    // Resolve sprinting before replay so physics and the advertised actor state use the same decision.
-    // The client toggles sprint on StartSprinting and keeps it until StopSprinting. The Sprinting bit is not
-    // its state: it can be missing on the tick after a start, and it stays set while a held sprint key with
-    // no movement starts and stops sprint in the same tick, which leaves sprint off.
+    // sprint resolved before replay: physics and advertised state agree; the client sprints from StartSprinting
+    // to StopSprinting; the Sprinting bit can miss the tick after a start, and stays set when one tick starts+stops
     bool sprinting = player.getFlags().get(ActorFlag::Sprinting)
                      || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
 
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSprinting) || !player.canSprint())
         sprinting = false;
 
-    // Player positions on the wire are at eye height; the server works with feet positions.
+    // wire positions are at eye height; the server works in feet positions
     Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
                           packet.mPosition.z);
     PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition, sprinting);
 
-    // The client queues a flight toggle and keeps its old travel for the input that carries it, so the new
-    // flight state applies from the next input on.
+    // the client keeps its old travel for the input carrying a flight toggle: the new state applies from the next
     const bool stopFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopFlying);
     const bool startFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartFlying);
     if ((startFlying || stopFlying) && !requestFlight(owner, id, player, startFlying && !stopFlying))
@@ -451,8 +445,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
             flags.set(ActorFlag::Swimming, false);
     }
 
-    // The client sets StartGliding itself; without an elytra it is not gliding, and the flag also turns off critical
-    // hits and lunges and changes the liquid probe.
+    // the client sets StartGliding itself; no elytra, no gliding; the flag also disables crits and lunges,
+    // and changes the liquid probe
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartGliding) && ElytraItem::isWearingElytra(player))
         flags.set(ActorFlag::Gliding, true);
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopGliding))
@@ -473,8 +467,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (sneaking != previous.get(ActorFlag::Sneaking))
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SNEAK, sneaking);
     if (sprinting != previous.get(ActorFlag::Sprinting)) {
-        // Sprint changes the movement attribute as well as actor metadata in BDS (0x140F4D3F0).
-        // This client-requested transition must not reset authoritative validation.
+        // sprint changes the movement attribute too (0x140F4D3F0); client-requested: no validation reset
         owner._sendAttributes(player, false);
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting);
     }
@@ -489,8 +482,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     for (const PlayerBlockActionData &action: packet.mPlayerActions) {
         if (action.mAction == PlayerActionType::StartBreak
             || action.mAction == PlayerActionType::BlockContinueDestroy) {
-            // The client keeps reporting the block it is hitting; restarting the break on each
-            // repeat would reset the break progress.
+            // the client keeps reporting the hit block; restarting on each repeat resets the progress
             if (player.hasLastBlockAttacked() && player.getLastBlockAttacked() == action.mBlockPosition)
                 continue;
 
@@ -505,8 +497,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
             BlockActionHandler::stopBreakingBlock(owner, player);
             player.clearLastBlockAttacked();
         } else if (action.mAction == PlayerActionType::StopBreak) {
-            // The client sends StopBreak when a break finishes, in the same input as the destroy that completes it;
-            // only AbortBreak cancels, so the break stays tracked until that destroy is validated.
+            // StopBreak arrives with the finishing destroy; only AbortBreak cancels: the break stays tracked until validated
             player.clearLastBlockAttacked();
         } else if (action.mAction == PlayerActionType::BlockPredictDestroy ||
                   action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock) {

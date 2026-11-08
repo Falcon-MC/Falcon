@@ -45,10 +45,8 @@ std::vector<Level *> ServerNetworkHandler::getLevels() {
     return levels;
 }
 
-/**
- * Ticks the overworld of one world. Unlike the other dimensions it ticks every column within
- * `tick-distance` of a player, and only rebuilds that set when the player chunk centres change.
- */
+// unlike other dimensions: every column within `tick-distance` of a player;
+// the set is rebuilt only when player chunk centres change
 void ServerNetworkHandler::_tickOverworld(World &world) {
     Level &level = world.getOverworld();
 
@@ -195,10 +193,7 @@ void ServerNetworkHandler::_tickDimension(World &world, Level &level) {
     _processChunkUnloads(level);
 }
 
-/**
- * Actors outside the active columns are only saved away when their column leaves the active set,
- * so one that walked out on its own keeps ticking there. Its chunk stays resident while it does.
- */
+// actors leave only with their column: one walking out alone keeps ticking there, its chunk resident
 void ServerNetworkHandler::_processChunkUnloads(Level &level) {
     std::unordered_set<int64_t> occupied;
     const auto occupy = [&](const Actor &actor) {
@@ -278,7 +273,7 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
     previous.unregisterAllChunkLoaders(player.getRuntimeId());
 
     player.moveToLevel(destinationLevel);
-    // an awake player leaving the overworld can bring the remaining sleepers up to the threshold.
+    // an awake player leaving the overworld can bring the remaining sleepers up to the threshold
     _updateSleepingPlayerList(previousWorld);
     player.getVisibleActors().clear();
     player.getVisiblePlayers().clear();
@@ -297,8 +292,8 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
     if (otherWorld)
         _sendWorldState(player);
 
-    // The client only drops its terrain when the dimension id changes, so a move between two worlds
-    // in the same dimension first goes through another dimension and completes on the first ack.
+    // the client drops terrain only on a dimension id change: same-dimension world moves hop through
+    // another dimension and complete on the first ack
     if (sameDimension) {
         player.setPendingDimensionHop(true);
         _sendDimensionChange(player, dimension == DimensionType::Overworld ? DimensionType::Nether

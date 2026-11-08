@@ -108,10 +108,8 @@ namespace {
         return value.substr(begin, end - begin);
     }
 
-    /**
-     * Parses "@k" and "@k[key=value,...]". Only type, name and c are understood: an unknown argument makes
-     * the selector invalid rather than silently widening it to every target.
-     */
+    // "@k" and "@k[key=value,...]"; only type, name and c: an unknown argument invalidates the selector
+    // instead of widening it to every target
     SelectorFilter parseSelector(const std::string &selector) {
         SelectorFilter filter;
         if (selector.size() < 2 || selector[0] != '@')

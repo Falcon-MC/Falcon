@@ -90,10 +90,10 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     inputs.beginTick(mCurrentTick, mProperties.getPlayerTickThrottledMaxTickCredits(),
                      mProperties.getPlayerTickThrottledInputBatchSize());
     const double previousTickMs = mTickDurationSamples.empty() ? 0.0 : mTickDurationSamples.back();
-    // Vehicles still travel in tickActors; consuming several rider inputs here would overwrite their controls.
+    // vehicles still travel in tickActors; several rider inputs here would overwrite their controls
     const size_t steps = player.isRiding() ? 1 : 1 + ServerPlayerMovementComponent::catchupSteps(previousTickMs);
     const auto applyFlightRequest = [&](bool flying) {
-        // A server-side game mode change can revoke an already validated, queued request.
+        // a server-side game mode change can revoke an already validated queued request
         if (flying && player.getGameType() != (int32_t) GameType::Creative
             && player.getGameType() != (int32_t) GameType::Spectator)
             return;
@@ -111,7 +111,7 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
         while (inputs.takeFlightRequest(packet->mTick, false, flying))
             applyFlightRequest(flying);
         MovementHandler::handlePlayerAuthInput(*this, player.getNetworkIdentifier(), player, *packet);
-        // Collision state, position and plugin cancellation must settle before the next replay step.
+        // collision state, position and plugin cancellation settle before the next replay step
         _applyPendingPlayerMove(player);
         while (inputs.takeFlightRequest(packet->mTick, true, flying))
             applyFlightRequest(flying);

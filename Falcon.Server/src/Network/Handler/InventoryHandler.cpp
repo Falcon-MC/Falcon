@@ -595,7 +595,7 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
 
         if (packet.mActionType == 0) {
             ServerActor *target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-            // The client predicted the click, and the actor may have gone since it was sent.
+            // the click was predicted: the actor may be gone since
             if (target == nullptr) {
                 player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
                                                       player.getInventory().getSelectedSlot());
@@ -795,7 +795,7 @@ void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer 
         inventory.setCraftingTableItem(slot, ItemStack::air());
     }
 
-    // the anvil keeps nothing, so a player who leaves with it open gets its input and material back
+    // the anvil keeps nothing: leaving with it open returns the input and material
     for (int slot = 0; slot < PlayerInventory::ANVIL_SIZE; ++slot) {
         if (!inventory.getAnvilItem(slot).isAir())
             returned.push_back(inventory.getAnvilItem(slot));

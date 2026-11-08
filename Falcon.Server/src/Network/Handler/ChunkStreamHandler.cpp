@@ -43,11 +43,8 @@ namespace {
         return dot >= cosFov;
     }
 
-    /**
-     * Send order: chunks in front of the player first, then nearest first. Chunks within a
-     * few chunks of the player always count as visible so the ground underfoot is never
-     * delayed by looking away.
-     */
+    // chunks in front first, then nearest; the few closest always count as visible:
+    // the ground underfoot never waits on looking away
     bool comesBefore(const ChunkStreamState &state, int64_t left, int64_t right) {
         const int32_t leftDx = ChunkStreamHandler::unpackChunkX(left) - state.mComparatorChunkX;
         const int32_t leftDz = ChunkStreamHandler::unpackChunkZ(left) - state.mComparatorChunkZ;
@@ -66,10 +63,7 @@ namespace {
         return leftDistance < rightDistance;
     }
 
-    /**
-     * The queues are binary heaps over a plain vector, with the comparator reversed so the
-     * best chunk is at the front.
-     */
+    // binary heap over a vector, comparator reversed: the best chunk at the front
     void makeQueue(const ChunkStreamState &state, std::vector<int64_t> &queue) {
         std::make_heap(queue.begin(), queue.end(), [&state](int64_t left, int64_t right) {
             return comesBefore(state, right, left);
@@ -160,8 +154,8 @@ namespace {
         }
     }
 
-    // Decorating a chunk spills features such as trees and grass into its neighbours, so a chunk is complete only
-    // once all eight neighbours are populated. Sending it earlier makes that vegetation appear in front of the player.
+    // decoration spills trees and grass into neighbours: complete only once all eight are populated,
+    // else the vegetation pops in front of the player
     bool neighboursPopulated(Level &level, int32_t chunkX, int32_t chunkZ) {
         bool populated = true;
         for (int32_t dx = -1; dx <= 1; ++dx) {
@@ -209,8 +203,7 @@ namespace {
                 continue;
             }
 
-            // Admission can be deferred by generation backpressure. Level deduplicates
-            // accepted requests, so retry even when this stream already wants the chunk.
+            // generation backpressure can defer admission; Level dedupes accepted requests: retry anyway
             level.requestChunkAsync(chunkX, chunkZ);
             state.mLoading.insert(hash);
 
@@ -229,8 +222,7 @@ namespace {
         if (state.mReadyToSend.empty() || state.mSendsThisTick >= ChunkStreamHandler::MAX_SENDS_PER_TICK)
             return;
 
-        // Chunks encoded faster than the network thread compresses them would only pile up in memory and
-        // delay everything else sent to the player.
+        // chunks encoded faster than the network thread compresses only pile up and delay everything else
         NetworkHandler &network = owner.getNetworkHandler();
         const NetworkIdentifier &id = player.getNetworkIdentifier();
         if (network.getPendingOutboundBytes(id) >= ChunkStreamHandler::MAX_QUEUED_CHUNK_BYTES)
@@ -348,8 +340,7 @@ void ChunkStreamHandler::handleTeleport(ServerNetworkHandler &owner, ServerPlaye
 void ChunkStreamHandler::invalidateChunk(ServerPlayer &player, int64_t hash) {
     ChunkStreamState &state = player.getChunkStreamState();
 
-    // A sent chunk outside the radius stays in the sent set so that leaving the radius still
-    // releases its loader.
+    // a sent chunk outside the radius stays in the sent set: leaving the radius still releases its loader
     if (state.mInRadius.find(hash) == state.mInRadius.end())
         return;
 

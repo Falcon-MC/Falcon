@@ -10,7 +10,6 @@ class PlayerAuthInputPacket;
 
 class MovementHandler {
 public:
-    //TODO: MORE INFORMATIONS
     static void handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                       const PlayerAuthInputPacket &packet);
 
@@ -24,10 +23,7 @@ public:
 
     static void tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer &player);
 
-    /**
-     * Drains or refills the player's air: it drops by one each tick with the eyes in water and hurts every 20 ticks
-     * once empty, a turtle helmet grants 200 ticks of breath after surfacing, and water breathing or conduit power
-     * stop it from dropping at all. Creative and spectator players never lose air.
-     */
+    // one air per tick with eyes in water, a drowning hit every 20 ticks once empty; turtle helmet: 200 ticks
+    // of breath after diving in; water breathing or conduit power stop the drop; creative/spectator never lose air
     static void tickBreathing(ServerNetworkHandler &owner, ServerPlayer &player, bool eyeInWater);
 };
