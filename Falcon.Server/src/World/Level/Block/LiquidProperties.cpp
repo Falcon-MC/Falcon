@@ -1,5 +1,6 @@
 #include "World/Level/Block/LiquidProperties.h"
 
+#include "World/Level/Block/AirBlock.h"
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Block/LavaBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -843,7 +844,7 @@ namespace {
     LiquidProperties compute(const BlockState &state) {
         LiquidProperties result;
         const std::string &name = state.mName;
-        if (name == "minecraft:air") {
+        if (AirBlock::matches(name)) {
             result.air = true;
             result.reaction = LiquidReaction::Broken;
             result.lavaBlocking = false;
@@ -862,7 +863,7 @@ namespace {
         const bool lava = LavaBlock::matches(name);
         if (water || lava) {
             result.material = lava ? LiquidMaterial::Lava : LiquidMaterial::Water;
-            result.dynamic = name == "minecraft:flowing_water" || name == "minecraft:flowing_lava";
+            result.dynamic = lava ? LavaBlock::isDynamic(name) : WaterBlock::isDynamic(name);
             result.depth = (uint8_t) std::max(0, std::min(15, state.mStates.getInt("liquid_depth")));
             result.reaction = LiquidReaction::Broken;
             result.lavaBlocking = false;

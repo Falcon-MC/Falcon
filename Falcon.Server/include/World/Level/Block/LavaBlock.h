@@ -13,6 +13,9 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    // flowing_*: turns still on its queued tick (sub_149C43290)
+    static bool isDynamic(const std::string &identifier);
+
     bool suppressesFreezing() const override {
         return true;
     }
