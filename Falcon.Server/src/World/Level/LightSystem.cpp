@@ -295,16 +295,16 @@ void LightSystem::onBlockChanged(Level &level, int32_t x, int32_t y, int32_t z) 
     if (chunk == nullptr)
         return;
 
-    const int localX = x & 15;
-    const int localZ = z & 15;
-
-    if (chunk->hasHeightmap())
-        updateHeightAt(*chunk, localX, localZ);
-
-    if (chunk->hasSkyLight())
-        _computeSkyColumn(*chunk, localX, localZ);
-
+    relightColumn(*chunk, x & 15, z & 15);
     level.addBlockLightUpdate(x, y, z);
+}
+
+void LightSystem::relightColumn(LevelChunk &chunk, int x, int z) {
+    if (chunk.hasHeightmap())
+        updateHeightAt(chunk, x, z);
+
+    if (chunk.hasSkyLight())
+        _computeSkyColumn(chunk, x, z);
 }
 
 void LightSystem::updateBlockLight(Level &level, std::unordered_set<int64_t> &pending) {

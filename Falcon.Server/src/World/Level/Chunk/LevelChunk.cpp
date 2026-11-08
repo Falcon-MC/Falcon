@@ -204,6 +204,11 @@ void LevelChunk::setBiomeAt(int x, int32_t y, int z, uint32_t biomeId) {
     mNetworkAnchorValid = false;
 }
 
+void LevelChunk::fillSubChunkBiome(int index, uint32_t biomeId) {
+    mSubChunks[index].fillBiome(biomeId);
+    mNetworkAnchorValid = false;
+}
+
 uint32_t LevelChunk::getBiomeAt(int x, int32_t y, int z) const {
     if (y < MIN_Y || y > MAX_Y)
         return mBiomeId;

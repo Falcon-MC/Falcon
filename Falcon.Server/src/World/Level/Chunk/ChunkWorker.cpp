@@ -6,6 +6,7 @@
 #include "World/Level/LightSystem.h"
 
 #include <algorithm>
+#include <iterator>
 #include <utility>
 
 #include <pthread.h>
@@ -54,9 +55,10 @@ void ChunkWorker::start(size_t threadCount) {
 
     mSources.clear();
     mSources.reserve(count);
+    mTerrainCache.reset(new TerrainCache(mGenerator));
     for (size_t i = 0; i < count; ++i)
         mSources.push_back(std::unique_ptr<GeneratorChunkSource>(
-                new GeneratorChunkSource(mGenerator.getSeed(), mGenerator.getDimensionType())));
+                new GeneratorChunkSource(mGenerator.getSeed(), mGenerator.getDimensionType(), *mTerrainCache)));
 
     mRunning.store(true);
     mDiscardGeneration.store(false);
@@ -87,16 +89,23 @@ void ChunkWorker::stop() {
     mThreads.clear();
     mQueues.clear();
     mSources.clear();
+    mTerrainCache.reset();
     mCompleted.close();
 }
 
 /**
  * Every task for a given chunk lands on the same queue, so a save and a later load of that
- * chunk are processed in order by one thread and never race in storage.
+ * chunk are processed in order by one thread and never race in storage. The position is fully
+ * mixed so the chunks a player streams spread evenly over the workers.
  */
 size_t ChunkWorker::_queueIndexFor(int32_t chunkX, int32_t chunkZ) const {
-    const uint64_t key = ((uint64_t) (uint32_t) (chunkX >> 1) << 32) | (uint32_t) (chunkZ >> 1);
-    return (size_t) ((key * 1099511628211ull) >> 32) % mQueues.size();
+    uint64_t key = ((uint64_t) (uint32_t) chunkX << 32) | (uint32_t) chunkZ;
+    key ^= key >> 33;
+    key *= 0xff51afd7ed558ccdull;
+    key ^= key >> 33;
+    key *= 0xc4ceb9fe1a85ec53ull;
+    key ^= key >> 33;
+    return (size_t) (key % mQueues.size());
 }
 
 bool ChunkWorker::_reserveGeneration() {
@@ -111,7 +120,7 @@ bool ChunkWorker::_reserveGeneration() {
     return false;
 }
 
-bool ChunkWorker::requestLoad(int32_t chunkX, int32_t chunkZ) {
+bool ChunkWorker::requestLoad(int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> &parked) {
     if (mQueues.empty() || !_reserveGeneration())
         return false;
 
@@ -119,6 +128,8 @@ bool ChunkWorker::requestLoad(int32_t chunkX, int32_t chunkZ) {
     task.mKind = ChunkTask::Kind::Load;
     task.mX = chunkX;
     task.mZ = chunkZ;
+    task.mChanges = std::move(parked);
+    parked.clear();
     mQueues[_queueIndexFor(chunkX, chunkZ)]->push(std::move(task));
     return true;
 }
@@ -244,16 +255,19 @@ void ChunkWorker::_processLoad(ChunkTask &task, size_t sourceIndex) {
     if (mStorage.isOpen() && mStorage.loadChunk(*chunk)) {
         mLoadedCount.fetch_add(1);
     } else {
-        mGenerator.generate(*chunk);
+        // The terrain is often cached already, generated as the neighbour of a chunk populated
+        // earlier; a fresh one is cached for the neighbours populated next. Only the raw terrain is
+        // taken, never a neighbour another decoration already spilled into.
+        *chunk = mTerrainCache->terrain(task.mX, task.mZ);
         mGeneratedCount.fetch_add(1);
         generated = true;
     }
 
-    _finishChunk(std::move(chunk), sourceIndex, false, generated);
+    _finishChunk(std::move(chunk), sourceIndex, false, generated, std::move(task.mChanges));
 }
 
 void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident,
-                               bool generated) {
+                               bool generated, std::vector<GeneratedBlockChange> parked) {
     ChunkLoadResult result;
     result.mX = chunk->getX();
     result.mZ = chunk->getZ();
@@ -287,19 +301,29 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
     // Features populated in a neighbouring chunk may have spilled blocks into this one while
     // it was not loaded; those were stored and are applied now.
     if (mStorage.isOpen()) {
-        const std::vector<GeneratedBlockChange> stored = mStorage.loadPendingBlockChanges(result.mX, result.mZ);
+        result.mSpilledChanges = mStorage.loadPendingBlockChanges(result.mX, result.mZ);
 
-        if (!stored.empty()) {
-            for (const GeneratedBlockChange &change: stored) {
+        if (!result.mSpilledChanges.empty()) {
+            for (const GeneratedBlockChange &change: result.mSpilledChanges) {
                 if (change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y)
                     continue;
 
-                chunk->setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, change.mState);
+                chunk->setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
             }
 
             mStorage.erasePendingBlockChanges(result.mX, result.mZ);
         }
     }
+
+    // Spilled blocks still held in memory are newer than the stored ones, so they go last.
+    for (const GeneratedBlockChange &change: parked) {
+        if (change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y)
+            continue;
+
+        chunk->setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
+    }
+    result.mSpilledChanges.insert(result.mSpilledChanges.end(), std::make_move_iterator(parked.begin()),
+                                  std::make_move_iterator(parked.end()));
 
     chunk->compactBiomes();
     LightSystem::computeSkyLight(*chunk);
@@ -389,18 +413,30 @@ void ChunkWorker::_run(size_t queueIndex) {
         // Saves are never dropped, even when pending generation is discarded, or player
         // changes would be lost.
         if (task.mKind != ChunkTask::Kind::Save && mDiscardGeneration.load()) {
-            mOutstandingGeneration.fetch_sub(1);
+            // The parked blocks a dropped load carried exist nowhere else; they go back to the main
+            // thread, which keeps them for the final save. The result returns the generation credit.
+            if (task.mKind == ChunkTask::Kind::Load && !task.mChanges.empty()) {
+                ChunkLoadResult result;
+                result.mX = task.mX;
+                result.mZ = task.mZ;
+                result.mSpilledChanges = std::move(task.mChanges);
+                mCompleted.push(std::move(result));
+            } else {
+                mOutstandingGeneration.fetch_sub(1);
+            }
             task.mChunk.reset();
+            task.mChanges.clear();
             continue;
         }
 
         if (task.mKind == ChunkTask::Kind::Load)
             _processLoad(task, queueIndex);
         else if (task.mKind == ChunkTask::Kind::Populate)
-            _finishChunk(std::move(task.mChunk), queueIndex, true, false);
+            _finishChunk(std::move(task.mChunk), queueIndex, true, false, std::move(task.mChanges));
         else
             _processSave(task);
 
         task.mChunk.reset();
+        task.mChanges.clear();
     }
 }

@@ -395,14 +395,25 @@ private:
 
     void _replayPendingChanges(int64_t key);
 
+    void _restoreSpilledChanges(int64_t key, std::vector<GeneratedBlockChange> changes);
+
     void _dispatchChunkEvent(uint32_t type, int32_t chunkX, int32_t chunkZ, bool generated);
 
     void _flushPendingBlockChanges(bool includeInFlight);
 
+    void _flushParkedChanges();
+
+    bool _persistSpillAround(int32_t chunkX, int32_t chunkZ);
+
+    void _queueCompletedSaves(int32_t chunkX, int32_t chunkZ);
+
     void _finishPendingChangeWrite(bool wait);
 
     size_t _generationBacklog() const {
-        return mIncomingChanges.size() + mPendingBlockChangeCount + mPersistingChangeCount;
+        // Parked changes only hold generation back once far more accumulate than storage is asked to take.
+        const size_t parkedOverflow = mPendingBlockChangeCount > MAX_PARKED_CHANGES
+                                      ? mPendingBlockChangeCount - MAX_PARKED_CHANGES : 0;
+        return mIncomingChanges.size() + parkedOverflow;
     }
 
     ServerNetworkHandler *mOwner = nullptr;
@@ -434,6 +445,13 @@ private:
     static constexpr std::chrono::milliseconds GENERATED_CHANGES_BUDGET{8};
     // Admission high-water mark; the finite set of already accepted results may overshoot it.
     static constexpr size_t MAX_GENERATION_BACKLOG = 65536;
+    /**
+     * Changes parked for absent chunks stay in memory, where a load picks them up, until this many pile up.
+     * Merging them into storage rewrites each chunk's whole list, so doing it as they arrive would keep the
+     * database compacting; a level save writes the ones parked at that moment instead.
+     */
+    static constexpr size_t PARKED_CHANGES_IN_MEMORY = 1 << 21;
+    static constexpr size_t MAX_PARKED_CHANGES = PARKED_CHANGES_IN_MEMORY * 2;
 
     void _sweepOrphanChunks();
 
@@ -445,6 +463,8 @@ private:
     // Copies wait in the worker queue until LevelDB writes them, so they are only made while few are queued.
     static constexpr size_t MAX_QUEUED_BACKGROUND_SAVES = 64;
     std::deque<int64_t> mDeferredSaves;
+    // chunks whose generated content is final, saved while no generation is running
+    std::deque<int64_t> mIdleSaves;
     // Actor deletions run on a worker because a LevelDB write can block for seconds while it
     // compacts; actors still being deleted are hidden from loads so they cannot come back.
     std::vector<int64_t> mQueuedEntityErasures;
@@ -467,6 +487,8 @@ private:
     std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> mPendingBlockChanges;
     size_t mPendingBlockChangeCount = 0;
     size_t mPersistingChangeCount = 0;
+    // how many parked changes a background save still has to hand to storage
+    size_t mParkedChangesToFlush = 0;
     // Chunks whose pending changes are in the write in flight; one write carries a batch of chunks
     // so persisting keeps up with generation.
     std::unordered_set<int64_t> mPersistingChangeKeys;

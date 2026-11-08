@@ -1,5 +1,6 @@
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
 
+#include <atomic>
 #include <cmath>
 
 namespace {
@@ -17,6 +18,9 @@ namespace {
 }
 
 OverworldClimate::OverworldClimate(const XoroshiroPositionalFactory &noiseFactory) {
+    static std::atomic<uint64_t> nextId{1};
+    mId = nextId.fetch_add(1);
+
     mTemperature = NormalNoise::create(noiseFactory, "minecraft:temperature", -10,
                                        {1.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f});
     mVegetation = NormalNoise::create(noiseFactory, "minecraft:vegetation", -8, {1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f});
@@ -87,6 +91,29 @@ float OverworldClimate::offsetAt(int32_t quartX, int32_t quartZ, float *erosion)
 }
 
 int32_t OverworldClimate::preliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const {
+    // The terrain filler, the aquifer, the surface builder and feature placement all ask for the same few columns
+    // of a chunk, often per block; the level is a pure function of the column, so each worker remembers recent ones.
+    struct Remembered {
+        uint64_t mClimate = 0;
+        int32_t mQuartX = 0;
+        int32_t mQuartZ = 0;
+        int32_t mLevel = 0;
+    };
+    thread_local Remembered remembered[1024];
+
+    const uint32_t slot = ((uint32_t) quartX * 73856093u ^ (uint32_t) quartZ * 19349663u) & 1023u;
+    Remembered &entry = remembered[slot];
+    if (entry.mClimate == mId && entry.mQuartX == quartX && entry.mQuartZ == quartZ)
+        return entry.mLevel;
+
+    entry.mClimate = mId;
+    entry.mQuartX = quartX;
+    entry.mQuartZ = quartZ;
+    entry.mLevel = _computePreliminarySurfaceLevel(quartX, quartZ);
+    return entry.mLevel;
+}
+
+int32_t OverworldClimate::_computePreliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const {
     const TerrainSpline::Climate climate = _climate(_shift(quartX, quartZ));
     const float offset = mOffsetSpline->apply(climate) + OFFSET_BASE;
     const float factor = mFactorSpline->apply(climate) * FACTOR_SCALE;
