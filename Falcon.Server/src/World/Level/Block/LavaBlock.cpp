@@ -11,3 +11,7 @@ bool LavaBlock::matches(const std::string &identifier) {
 bool LavaBlock::isDynamic(const std::string &identifier) {
     return identifier == "minecraft:flowing_lava";
 }
+
+int32_t LavaBlock::getTickDelay(DimensionType dimension) const {
+    return dimension == DimensionType::Nether ? 10 : 30;
+}

@@ -20,9 +20,9 @@ public:
         return true;
     }
 
-    int getTickRate() const override { return 30; }
-    int getFlowDecayPerBlock() const override { return 2; }
-    int getMinAdjacentSourcesToFormSource() const override { return 0; }
+    // ultrawarm dimensions run lava three times faster
+    int32_t getTickDelay(DimensionType dimension) const override;
+
     const char *getBucketFillSound() const override { return LevelSoundEvent::BUCKET_FILL_LAVA; }
     const char *getBucketEmptySound() const override { return LevelSoundEvent::BUCKET_EMPTY_LAVA; }
 };

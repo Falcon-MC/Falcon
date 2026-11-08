@@ -33,3 +33,17 @@ scriptevent fl:solid 220 60
 ```
 
 then `python3 measure.py props.txt grid.txt solid.txt` with the three sets of lines, the prefix removed.
+
+## The traces
+
+`tests/data/fluids` holds what BDS did, tick by tick, in each scenario of `harness/scenarios.py`. With BDS
+running as above and its folder in `FLUID_BDS_DIR` (the one holding `bds.log` and `console.fifo`):
+
+```
+python3 harness/capture.py platform drain
+python3 harness/export.py platform drain
+```
+
+`capture.py` clears the box three times, runs the scenario and keeps the `FL` lines in `harness/traces/`;
+`export.py` turns them into the test data `FalconFluidParityTests` replays. `fmt.py` prints a trace as one grid
+per tick and layer. The pack reads `system.currentTick`: a loaded server skips callbacks, never ticks.

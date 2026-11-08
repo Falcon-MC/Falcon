@@ -853,9 +853,12 @@ namespace {
         }
 
         if (name == "minecraft:bubble_column") {
-            // not of water material: sponges clear it by name, liquids never feed from it (sub_148F9A380)
+            // not of water material: sponges clear it by name, liquids never feed from it (sub_148F9A380); its
+            // water sits on layer 1
             result.bubbleColumn = true;
             result.solid = false;
+            result.containsWater = true;
+            result.ticking = true;
             return result;
         }
 
@@ -892,6 +895,7 @@ namespace {
         result.solid = (flags & NOT_SOLID) == 0;
         const Block *block = VanillaBlocks::fromIdentifier(name);
         result.blockedFaces = block == nullptr ? 0 : block->getLiquidBlockedFaces(state);
+        result.ticking = block != nullptr && block->usesBlockTicks();
         return result;
     }
 
@@ -900,7 +904,8 @@ namespace {
         return 0x80000000u | (uint32_t) value.material | (uint32_t) value.dynamic << 2 | (uint32_t) value.air << 3
                | (uint32_t) value.bubbleColumn << 4 | (uint32_t) value.depth << 5 | (uint32_t) value.reaction << 9
                | (uint32_t) value.lavaBlocking << 11 | (uint32_t) value.solid << 12
-               | (uint32_t) value.containsWater << 13 | (uint32_t) value.blockedFaces << 14;
+               | (uint32_t) value.containsWater << 13 | (uint32_t) value.blockedFaces << 14
+               | (uint32_t) value.ticking << 20;
     }
 
     LiquidProperties unpack(uint32_t value) {
@@ -915,6 +920,7 @@ namespace {
         result.solid = (value >> 12 & 1) != 0;
         result.containsWater = (value >> 13 & 1) != 0;
         result.blockedFaces = (uint8_t) (value >> 14 & 63);
+        result.ticking = (value >> 20 & 1) != 0;
         return result;
     }
 }

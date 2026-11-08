@@ -317,6 +317,17 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     endif()
     add_test(NAME signaling-properties COMMAND FalconSignalingPropertiesTests)
     set_tests_properties(signaling-properties PROPERTIES TIMEOUT 60)
+    add_executable(FalconFluidParityTests tests/FluidParityTests.cpp)
+    target_link_libraries(FalconFluidParityTests PRIVATE FalconCore)
+    target_compile_definitions(FalconFluidParityTests PRIVATE
+            FALCON_FLUID_TRACE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/fluids")
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconFluidParityTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME fluid-parity COMMAND FalconFluidParityTests
+            platform drain stairs twosrc twosrcair hole hole2 holefar waterfall ledge still placeflow
+            lavaplat lavawater basalt drops waterlog waterlogout waterlogslab sourceabove netherlava)
+    set_tests_properties(fluid-parity PROPERTIES TIMEOUT 300)
     add_executable(FalconFastJoinTests tests/FastJoinTests.cpp)
     target_link_libraries(FalconFastJoinTests PRIVATE FalconCore)
     if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

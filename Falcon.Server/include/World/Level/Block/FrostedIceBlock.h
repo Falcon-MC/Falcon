@@ -13,6 +13,10 @@ public:
 
     static int32_t nextMeltDelay();
 
+    bool isIceMaterial() const override {
+        return true;
+    }
+
     void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) const override;
 

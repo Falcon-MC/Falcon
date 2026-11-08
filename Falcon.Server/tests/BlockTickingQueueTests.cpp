@@ -1,6 +1,7 @@
 #include "World/Level/BlockTickingQueue.h"
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 
 #include <iostream>
@@ -89,9 +90,29 @@ namespace {
         require(runTick(queue, 5, {first, second}).size() == 1, "the waiting chunk counts from the last tick");
     }
 
+    void randomClock() {
+        BlockTickingQueue queue(true);
+        const int64_t first = BlockTickingQueue::column(0, 0);
+        queue.add(Vector3i(0, 64, 0), water(), 2);
+        const auto runAt = [&](int64_t tick, int32_t speed) {
+            size_t fired = 0;
+            queue.beginTick(tick, speed);
+            queue.tickColumn(tick, first, [&](const Vector3i &, const Block *) {
+                ++fired;
+            }, [](int32_t, int32_t) {
+                return true;
+            });
+            queue.endTick();
+            return fired;
+        };
+        require(runAt(1, 0) == 0 && runAt(2, 0) == 0, "a random tick speed of 0 stops the second queue");
+        require(runAt(3, 1) == 0, "the second queue moves one step a tick at speed 1");
+        require(runAt(4, 1) == 1, "the tick runs once its own clock reaches it");
+    }
+
     void persistence() {
         Level level("tick-queue-test", 2, 1);
-        level.getChunk(0, 0);
+        LevelChunk &chunk = level.getChunk(0, 0);
         level.setActiveColumns({BlockTickingQueue::column(0, 0)});
         Tag states = Tag::ofCompound();
         states.putInt("liquid_depth", 0);
@@ -101,13 +122,45 @@ namespace {
         require(queued > 0, "the water waits for its tick");
 
         LiquidPhysicsSystem &liquids = level.getLiquidPhysics();
-        const std::string record = liquids.savePendingTicks(0, 0);
-        require(!record.empty(), "a chunk with ticks has a PendingTicks record");
+        require(liquids.savePendingTicks(chunk), "a chunk with ticks gets a PendingTicks record");
+        const std::string record = chunk.getPendingTicks();
+        require(!record.empty(), "the record holds the ticks");
         liquids.dropPendingTicks(0, 0);
         require(level.getScheduledFluidCount() == 0, "an unloaded chunk keeps no ticks in memory");
-        liquids.loadPendingTicks(0, 0, record);
+        liquids.loadPendingTicks(chunk);
         require(level.getScheduledFluidCount() == queued, "the record brings every tick back");
-        require(liquids.savePendingTicks(0, 0) == record, "a reloaded queue saves the same record");
+        require(!liquids.savePendingTicks(chunk) && chunk.getPendingTicks() == record,
+                "a reloaded queue saves the same record");
+    }
+
+    // old Falcon saved falling water as flowing_water at depth 0
+    void migration() {
+        Level level("tick-queue-migration", 2, 1);
+        LevelChunk &chunk = level.getChunk(0, 0);
+        Tag falling = Tag::ofCompound();
+        falling.putInt("liquid_depth", 0);
+        Tag spreading = Tag::ofCompound();
+        spreading.putInt("liquid_depth", 3);
+        chunk.setBlock(1, 200, 1, BlockState("minecraft:flowing_water", falling));
+        chunk.setBlock(2, 200, 1, BlockState("minecraft:flowing_lava", spreading));
+        chunk.setBlock(3, 200, 1, BlockState("minecraft:flowing_water", falling));
+        level.getLiquidPhysics().dropPendingTicks(0, 0);
+
+        chunk.setNeedsLiquidMigration(false);
+        level.getLiquidPhysics().loadPendingTicks(chunk);
+        require(chunk.getBlock(1, 200, 1).mName == "minecraft:flowing_water", "a chunk the game wrote stays as it is");
+
+        chunk.setNeedsLiquidMigration(true);
+        chunk.clearDirty();
+        level.getLiquidPhysics().loadPendingTicks(chunk);
+        const BlockState &water = chunk.getBlock(1, 200, 1);
+        const BlockState &lava = chunk.getBlock(2, 200, 1);
+        require(water.mName == "minecraft:water" && water.mStates.getInt("liquid_depth") == 8,
+                "falling water becomes still water at depth 8");
+        require(lava.mName == "minecraft:lava" && lava.mStates.getInt("liquid_depth") == 3,
+                "spreading lava keeps its depth");
+        require(level.getScheduledFluidCount() == 3, "every rewritten block waits for its tick");
+        require(chunk.isDirty() && !chunk.needsLiquidMigration(), "the chunk is saved once, migrated");
     }
 }
 
@@ -117,7 +170,9 @@ int main() {
         duplicates();
         chunkBudget();
         laggingColumn();
+        randomClock();
         persistence();
+        migration();
         std::cout << "block ticking queue checks passed\n";
         return 0;
     } catch (const std::exception &error) {

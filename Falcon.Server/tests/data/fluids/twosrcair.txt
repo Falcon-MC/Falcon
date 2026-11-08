@@ -1,0 +1,17 @@
+# BDS 1.26.61 trace, written by the fluid parity harness
+ticks 60
+box 16 195 16 31 206 31
+dimension overworld
+cmd 0 fill 18 199 22 28 199 24 stone
+cmd 0 setblock 21 199 23 air
+cmd 0 fill 18 200 22 28 200 22 stone
+cmd 0 fill 18 200 24 28 200 24 stone
+cmd 0 setblock 20 200 23 flowing_water
+cmd 0 setblock 22 200 23 flowing_water
+T 0 10,4,6=stone 10,4,7=stone 10,4,8=stone 10,5,6=stone 10,5,8=stone 11,4,6=stone 11,4,7=stone 11,4,8=stone 11,5,6=stone 11,5,8=stone 12,4,6=stone 12,4,7=stone 12,4,8=stone 12,5,6=stone 12,5,8=stone 2,4,6=stone 2,4,7=stone 2,4,8=stone 2,5,6=stone 2,5,8=stone 3,4,6=stone 3,4,7=stone 3,4,8=stone 3,5,6=stone 3,5,8=stone 4,4,6=stone 4,4,7=stone 4,4,8=stone 4,5,6=stone 4,5,7=water:0 4,5,8=stone 5,4,6=stone 5,4,8=stone 5,5,6=stone 5,5,8=stone 6,4,6=stone 6,4,7=stone 6,4,8=stone 6,5,6=stone 6,5,7=water:0 6,5,8=stone 7,4,6=stone 7,4,7=stone 7,4,8=stone 7,5,6=stone 7,5,8=stone 8,4,6=stone 8,4,7=stone 8,4,8=stone 8,5,6=stone 8,5,8=stone 9,4,6=stone 9,4,7=stone 9,4,8=stone 9,5,6=stone 9,5,8=stone
+T 5 5,5,7=water:1
+T 10 5,4,7=water:9
+T 15 5,3,7=water:9
+T 20 5,2,7=water:9
+T 25 5,1,7=water:9
+T 30 5,0,7=water:9

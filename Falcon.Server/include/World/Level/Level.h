@@ -416,6 +416,9 @@ private:
 
     void _syncPendingTicks(LevelChunk &chunk);
 
+    // sky columns relit once at the end of a liquid tick instead of once a write
+    void _flushLightBatch();
+
     static constexpr int MAX_UPDATE_DEPTH = 512;
 
     static int64_t _packChunk(int32_t x, int32_t z);
@@ -472,6 +475,8 @@ private:
     LevelStorage mStorage;
     LiquidPhysicsSystem mLiquidPhysics;
     int64_t mLiquidTick = 0;
+    bool mBatchLight = false;
+    std::unordered_set<int64_t> mBatchedLightColumns;
     VillageManager mVillageManager;
     std::unordered_map<int64_t, LevelChunk> mChunks;
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 32;

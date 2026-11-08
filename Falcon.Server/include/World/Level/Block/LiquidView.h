@@ -20,25 +20,24 @@ public:
 
     bool isBubbleColumn() const { return mState.mName == "minecraft:bubble_column"; }
 
-    int getDecay() const { return mState.mStates.getInt("liquid_depth", 0); }
+    int getDepth() const {
+        return mState.mStates.getInt("liquid_depth", 0);
+    }
+
+    // falling liquid has bit 3 of liquid_depth set
+    int getDecay() const {
+        return getDepth() >= 8 ? 0 : getDepth();
+    }
 
     bool isSource() const {
-        return isLiquid() && mState.mName != "minecraft:flowing_water"
-               && mState.mName != "minecraft:flowing_lava" && getDecay() == 0;
+        return isLiquid() && getDepth() == 0;
     }
 
     bool isFalling() const {
-        return isLiquid() && mState.mName != "minecraft:water" && mState.mName != "minecraft:lava"
-               && getDecay() == 0;
+        return isLiquid() && getDepth() >= 8;
     }
 
     bool isDragDown() const { return mState.mStates.getBool("drag_down", false); }
-
-    int getFlowDecayPerBlock() const { return isLava() ? 2 : 1; }
-
-    int getTickRate() const { return isLava() ? 30 : 5; }
-
-    int getMinAdjacentSourcesToFormSource() const { return isWater() ? 2 : 0; }
 
     float getFluidHeightPercent() const {
         if (isBubbleColumn())

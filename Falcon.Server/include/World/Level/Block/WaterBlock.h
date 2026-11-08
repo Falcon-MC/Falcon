@@ -20,9 +20,8 @@ public:
 
     static bool isSource(const BlockState &state);
 
-    int getTickRate() const override { return 5; }
-    int getFlowDecayPerBlock() const override { return 1; }
-    int getMinAdjacentSourcesToFormSource() const override { return 2; }
+    int32_t getTickDelay(DimensionType dimension) const override;
+
     const char *getBucketFillSound() const override { return LevelSoundEvent::BUCKET_FILL_WATER; }
     const char *getBucketEmptySound() const override { return LevelSoundEvent::BUCKET_EMPTY_WATER; }
 };
