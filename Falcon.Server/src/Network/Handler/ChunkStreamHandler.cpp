@@ -6,6 +6,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Utility/BinaryStream.h"
 #include "Protocol/Packets/LevelChunkPacket.h"
 #include "Protocol/Packets/NetworkChunkPublisherUpdatePacket.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
@@ -336,18 +337,69 @@ namespace {
             pushQueue(state, state.mSendQueue, hash);
     }
 
+    LevelChunkPacket makeChunkPacket(Level &level, int32_t chunkX, int32_t chunkZ, const PacketCodecContext &context,
+                                     const std::string &blockActors) {
+        LevelChunkPacket chunk;
+        chunk.mChunkX = chunkX;
+        chunk.mChunkZ = chunkZ;
+        chunk.mDimension = level.getDimensionId();
+        chunk.mCachingEnabled = false;
+
+        chunk.mSubChunksLength = (uint32_t) level.getChunkSubChunkCount(chunkX, chunkZ);
+        chunk.mRequestSubChunks = false;
+        chunk.mData = level.getChunkData(chunkX, chunkZ, context.getBlockNetworkIds()) + blockActors;
+        return chunk;
+    }
+
+    // players sent the same chunk revision share one encoding and one compression
+    void sendChunk(ServerNetworkHandler &owner, ServerPlayer &player, Level &level, int32_t chunkX, int32_t chunkZ,
+                   int64_t hash) {
+        const NetworkIdentifier &id = player.getNetworkIdentifier();
+        const PacketCodecContext &context = owner.getCodecContext(id);
+
+        BlockActorStore &blockActors = level.getBlockActors();
+        ChunkPacketCache::Stamp stamp;
+        if (blockActors.isChunkLoaded(chunkX, chunkZ))
+            stamp.mBlockActors = blockActors.encodeChunkNetwork(chunkX, chunkZ);
+        else
+            stamp.mBlockActors = BlockActorStore::encodeNetwork(level.loadBlockEntities(chunkX, chunkZ));
+
+        const LevelChunk &levelChunk = level.getChunk(chunkX, chunkZ);
+        stamp.mInstance = levelChunk.getNetworkInstance();
+        stamp.mRevision = levelChunk.getNetworkRevision();
+
+        const ChunkPacketCache::Key key{&level, hash, &context};
+        owner.getNetworkHandler().sendShared(id, owner.getChunkPacketCache().get(
+                key, stamp, owner.getChunkStreamTick(), [&]() {
+            BinaryStream stream;
+            makeChunkPacket(level, chunkX, chunkZ, context, stamp.mBlockActors).writeWithHeader(stream, context);
+            return stream.getBuffer();
+        }));
+    }
+
     void sendReadyChunks(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player) {
         if (state.mSendTick != owner.getChunkStreamTick()) {
             state.mSendTick = owner.getChunkStreamTick();
             state.mSendsThisTick = 0;
         }
-        if (state.mReadyToSend.empty() || state.mSendsThisTick >= ChunkStreamHandler::MAX_SENDS_PER_TICK)
+        // the spawn status waits on the nearest chunks: one tick sends them, their compression is shared;
+        // meanwhile players already in hold back the link and the clients' decoding
+        const bool spawning = !player.hasSpawnChunksReady();
+        unsigned budget = ChunkStreamHandler::MAX_SENDS_PER_TICK;
+        if (spawning)
+            budget = (unsigned) ChunkStreamHandler::SPAWN_CHUNK_COUNT;
+        else if (owner.isJoinBurst())
+            budget = ChunkStreamHandler::JOIN_BURST_SENDS_PER_TICK;
+        if (state.mReadyToSend.empty() || state.mSendsThisTick >= budget)
             return;
 
         // chunks encoded faster than the network thread compresses only pile up and delay everything else
         NetworkHandler &network = owner.getNetworkHandler();
         const NetworkIdentifier &id = player.getNetworkIdentifier();
-        if (network.getPendingOutboundBytes(id) >= ChunkStreamHandler::MAX_QUEUED_CHUNK_BYTES)
+        const auto hasRoom = [&]() {
+            return spawning || network.getPendingOutboundBytes(id) < ChunkStreamHandler::MAX_QUEUED_CHUNK_BYTES;
+        };
+        if (!hasRoom())
             return;
 
         Level &level = owner.getLevelFor(player);
@@ -369,8 +421,7 @@ namespace {
 
         // Encoding a chunk and loading its block entities runs on the main thread, so a burst
         // of ready chunks after a teleport is spread over several ticks in priority order.
-        while (!state.mReadyToSend.empty() && state.mSendsThisTick < ChunkStreamHandler::MAX_SENDS_PER_TICK
-               && network.getPendingOutboundBytes(id) < ChunkStreamHandler::MAX_QUEUED_CHUNK_BYTES) {
+        while (!state.mReadyToSend.empty() && state.mSendsThisTick < budget && hasRoom()) {
             const int64_t hash = popQueue(state, state.mReadyToSend);
 
             if (state.mInRadius.find(hash) == state.mInRadius.end()) {
@@ -383,23 +434,7 @@ namespace {
             const int32_t chunkX = ChunkStreamHandler::unpackChunkX(hash);
             const int32_t chunkZ = ChunkStreamHandler::unpackChunkZ(hash);
 
-            LevelChunkPacket chunk;
-            chunk.mChunkX = chunkX;
-            chunk.mChunkZ = chunkZ;
-            chunk.mDimension = level.getDimensionId();
-            chunk.mCachingEnabled = false;
-
-            chunk.mSubChunksLength = (uint32_t) level.getChunkSubChunkCount(chunkX, chunkZ);
-            chunk.mRequestSubChunks = false;
-            chunk.mData = level.getChunkData(chunkX, chunkZ, owner.getCodecContext(id).getBlockNetworkIds());
-
-            BlockActorStore &blockActors = level.getBlockActors();
-            if (blockActors.isChunkLoaded(chunkX, chunkZ))
-                chunk.mData += blockActors.encodeChunkNetwork(chunkX, chunkZ);
-            else
-                chunk.mData += BlockActorStore::encodeNetwork(level.loadBlockEntities(chunkX, chunkZ));
-
-            owner.getNetworkHandler().send(id, chunk, owner.getCodecContext());
+            sendChunk(owner, player, level, chunkX, chunkZ, hash);
             level.registerChunkLoader(player.getRuntimeId(), chunkX, chunkZ);
             sent.insert(hash);
             ++added;
@@ -552,7 +587,10 @@ void ChunkStreamHandler::tick(ServerNetworkHandler &owner, ServerPlayer &player)
         }
     }
 
-    loadQueuedChunks(state, owner, player, owner.getChunksPerTick());
+    const int32_t attempts = player.hasSpawnChunksReady()
+                             ? (int32_t) owner.getChunksPerTick()
+                             : std::max((int32_t) owner.getChunksPerTick(), (int32_t) SPAWN_CHUNK_COUNT);
+    loadQueuedChunks(state, owner, player, attempts);
     sendReadyChunks(state, owner, player);
     if (clientSideGeneration)
         recheckClientBuilt(state, owner, player);

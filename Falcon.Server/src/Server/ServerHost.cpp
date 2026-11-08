@@ -30,6 +30,7 @@
 #include <atomic>
 #include <exception>
 #include <stdexcept>
+#include <thread>
 #include "World/Level/WorldManager.h"
 
 namespace {
@@ -366,6 +367,21 @@ bool ServerHost::start(const ServerHostOptions &options) {
 void ServerHost::tick(bool paused) {
     if (mHandler != nullptr && !mShutDown)
         mHandler->tick(paused);
+}
+
+void ServerHost::waitForNextTick(std::chrono::steady_clock::time_point nextTick) {
+    const std::chrono::nanoseconds pollInterval(2000000);
+
+    for (;;) {
+        if (mHandler != nullptr && !mShutDown)
+            mHandler->pumpLoginEvents();
+
+        const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        if (now >= nextTick)
+            return;
+
+        std::this_thread::sleep_for(std::min<std::chrono::nanoseconds>(nextTick - now, pollInterval));
+    }
 }
 
 void ServerHost::shutdown() {

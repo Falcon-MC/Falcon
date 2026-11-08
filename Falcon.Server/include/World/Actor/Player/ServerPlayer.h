@@ -68,6 +68,10 @@ public:
 
     void setLoginState(LoginState state) { mLoginState = state; }
 
+    int64_t getLoggedInTick() const { return mLoggedInTick; }
+
+    void setLoggedInTick(int64_t tick) { mLoggedInTick = tick; }
+
     // chosen from the announced version, fixed for the session
     const std::shared_ptr<const ProtocolCodec> &getCodec() const { return mCodec; }
 
@@ -791,6 +795,7 @@ private:
     SerializedSkin mSkin;
     int32_t mGameType = 0;
     int64_t mLastActiveTick = 0;
+    int64_t mLoggedInTick = 0;
     Vector3f mLastInputRotation;
     int64_t mFirstPlayed = 0;
     bool mIsOp = false;

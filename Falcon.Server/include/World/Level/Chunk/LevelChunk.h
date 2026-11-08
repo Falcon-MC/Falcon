@@ -10,6 +10,22 @@
 #include <unordered_map>
 #include <vector>
 
+// fresh on construction and on every copy: a copy can diverge from its source
+struct LevelChunkInstance {
+    LevelChunkInstance() : mId(next()) {}
+
+    LevelChunkInstance(const LevelChunkInstance &) : mId(next()) {}
+
+    LevelChunkInstance &operator=(const LevelChunkInstance &) {
+        mId = next();
+        return *this;
+    }
+
+    static uint64_t next();
+
+    uint64_t mId;
+};
+
 // main thread once resident; workers only see copies; network encodings cached per sub-chunk
 class LevelChunk {
 public:
@@ -86,6 +102,11 @@ public:
 
     void invalidateNetworkCaches();
 
+    // instance and revision together name one network encoding: a shared packet stays valid while both match
+    uint64_t getNetworkInstance() const { return mInstance.mId; }
+
+    uint32_t getNetworkRevision() const { return mNetworkRevision; }
+
     std::string encodeBiomes(int sectionCount) const;
 
     std::string encodeBiomesPersistent(int firstSection, int sectionCount) const;
@@ -94,6 +115,7 @@ public:
 
     int getNetworkSubChunkCount() const;
 
+    // writes through it skip the network revision: only for chunks not resident yet, like a storage load
     SubChunk &getSubChunk(int index) {
         _ensureUnpacked();
         return mSubChunks[index];
@@ -190,4 +212,6 @@ private:
     mutable std::string mNetworkAnchorCache;
     mutable bool mTopHeightsValid = false;
     mutable bool mNetworkAnchorValid = false;
+    LevelChunkInstance mInstance;
+    uint32_t mNetworkRevision = 0;
 };

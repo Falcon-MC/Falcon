@@ -244,7 +244,7 @@ void EmbeddedServer::_run(EmbeddedServerConfig config, std::shared_ptr<std::prom
             nextTick += TICK_INTERVAL;
             const auto now = std::chrono::steady_clock::now();
             if (now - nextTick > CATCHUP_RESET_INTERVAL) nextTick = now;
-            else std::this_thread::sleep_until(nextTick);
+            else host.waitForNextTick(nextTick);
         }
     } catch (const std::exception &error) {
         std::lock_guard<std::mutex> lock(mMutex);

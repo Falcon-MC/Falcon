@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <map>
 #include <memory>
 #include <optional>
@@ -39,6 +40,9 @@ public:
     void release() noexcept;
 
     void tick(bool paused = false);
+
+    // joining players are answered meanwhile: each login step would otherwise wait a whole tick
+    void waitForNextTick(std::chrono::steady_clock::time_point nextTick);
 
     // keeps the server's objects alive: the dedicated server exits right after,
     // skipping destructors plugin hosts can block
