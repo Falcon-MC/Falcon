@@ -6,7 +6,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/MobEffect.h"
 
-#include <cmath>
+#include <algorithm>
 
 namespace {
     const char *const DEATH_MESSAGE = "death.attack.mob";
@@ -48,13 +48,19 @@ bool MobAttack::attackEffect(const MobActor &mob, MobEffectInstance &effect) {
 
     const json::Value *duration = attack->get("effect_duration");
     const json::Value *amplifier = attack->get("effect_amplifier");
-    effect.mDuration = duration == nullptr ? 0 : (int32_t) std::lround(duration->number(0.0) * TICKS_PER_SECOND);
+    // truncated to ticks, never below 0; sub_1437DA310
+    effect.mDuration = duration == nullptr ? 0
+                                           : std::max(0, (int32_t) ((float) duration->number(0.0) * TICKS_PER_SECOND));
     effect.mAmplifier = amplifier == nullptr ? 0 : amplifier->integer(0);
     // the easy cave spider poison group sets a zero duration: no ailment at all
     return effect.mDuration > 0;
 }
 
 void MobAttack::applyAttackEffect(ServerNetworkHandler &owner, const MobActor &mob, Actor &target) {
+    // a fatal hit already cleared the victim's effects: one added now would survive the respawn
+    if (!target.isAlive() || target.isDead())
+        return;
+
     MobEffectInstance effect;
     if (attackEffect(mob, effect))
         owner.addEffect(target, effect.mId, effect.mAmplifier, effect.mDuration);
