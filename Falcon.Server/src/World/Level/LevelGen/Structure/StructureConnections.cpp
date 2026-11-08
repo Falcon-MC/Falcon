@@ -7,6 +7,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 
 #include <array>
+#include <string>
 
 namespace {
     struct Side {
@@ -89,6 +90,78 @@ namespace {
     bool postConnects(const BlockState &post, const BlockState &neighbour, int32_t sideX, int32_t sideZ) {
         return gateConnects(post, neighbour, sideX, sideZ) || StructureConnections::connects(neighbour, sideX, sideZ);
     }
+
+    bool isWall(const BlockState &state) {
+        return state.mStates.contains("wall_connection_type_east");
+    }
+
+    bool isFullSolid(const BlockState &state) {
+        return BlockSupport::isSolid(state) && !DecorationSupport::isTransparent(state) && !isWall(state);
+    }
+
+    // walls meet walls, panes, bars, gates across the side and full faces, never fences
+    bool wallConnects(const BlockState &neighbour, int32_t sideX, int32_t sideZ) {
+        if (isWall(neighbour) || VanillaBlocks::getAs<ThinFenceBlock>(neighbour.mName) != nullptr)
+            return true;
+        if (neighbour.mStates.contains("in_wall_bit")) {
+            const std::string facing = neighbour.mStates.getString("minecraft:cardinal_direction", "south");
+            const bool alongX = facing == "east" || facing == "west";
+            return sideX != 0 ? !alongX : alongX;
+        }
+        return isFullSolid(neighbour) || (isStair(neighbour) && stairConnects(neighbour, sideX, sideZ));
+    }
+
+    // a side rises when the block above covers it: a full block or a wall reaching the same side
+    const char *wallSide(bool connected, const BlockState &above, bool aboveReaches) {
+        if (!connected)
+            return "none";
+        return isFullSolid(above) || (isWall(above) && aboveReaches) ? "tall" : "short";
+    }
+
+    bool raisesPost(const BlockState &above) {
+        static const char *OVERRIDES[] = {"torch", "lantern", "sign", "banner", "pressure_plate"};
+        for (const char *override : OVERRIDES) {
+            if (above.mName.find(override) != std::string::npos)
+                return true;
+        }
+        return isWall(above) || isFullSolid(above);
+    }
+
+    BlockState shapedWall(const BlockState &wall, int32_t x, int32_t y, int32_t z,
+                          const StructureConnections::Lookup &at) {
+        static const std::array<Side, 4> SIDES = {{{1, 0}, {0, -1}, {0, 1}, {-1, 0}}};
+        static const char *KEYS[] = {"wall_connection_type_east", "wall_connection_type_north",
+                                     "wall_connection_type_south", "wall_connection_type_west"};
+        const BlockState above = at(x, y + 1, z);
+        std::array<const char *, 4> sides{};
+        for (size_t i = 0; i < SIDES.size(); ++i) {
+            const Side &side = SIDES[i];
+            const bool connected = wallConnects(at(x + side.mX, y, z + side.mZ), side.mX, side.mZ);
+            const bool aboveReaches = isWall(above)
+                                      && wallConnects(at(x + side.mX, y + 1, z + side.mZ), side.mX, side.mZ);
+            sides[i] = wallSide(connected, above, aboveReaches);
+        }
+
+        // a lone post or an uneven pair keeps the post, two tall opposite sides drop it, else the block above decides
+        const auto none = [&](size_t i) {
+            return std::string(sides[i]) == "none";
+        };
+        const auto tall = [&](size_t i) {
+            return std::string(sides[i]) == "tall";
+        };
+        bool post = true;
+        const bool alone = none(0) && none(1) && none(2) && none(3);
+        if (!alone && none(1) == none(2) && none(0) == none(3)) {
+            const bool tallRun = (tall(1) && tall(2)) || (tall(0) && tall(3));
+            post = !tallRun && raisesPost(above);
+        }
+
+        Tag states = wall.mStates;
+        for (size_t i = 0; i < SIDES.size(); ++i)
+            states.putString(KEYS[i], sides[i]);
+        states.putByte("wall_post_bit", post ? 1 : 0);
+        return BlockState(wall.mName, states);
+    }
 }
 
 bool StructureConnections::connects(const BlockState &neighbour, int32_t sideX, int32_t sideZ) {
@@ -116,6 +189,9 @@ BlockState StructureConnections::shaped(const BlockState &block, int32_t x, int3
         return connected(block, postConnects(block, at(x + 1, y, z), 1, 0),
                          postConnects(block, at(x, y, z - 1), 0, -1), postConnects(block, at(x, y, z + 1), 0, 1),
                          postConnects(block, at(x - 1, y, z), -1, 0));
+
+    if (isWall(block))
+        return shapedWall(block, x, y, z, at);
 
     if (isStair(block)) {
         Tag states = block.mStates;
