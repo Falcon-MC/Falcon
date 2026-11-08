@@ -274,9 +274,13 @@ NodeEvaluator::CachedBlock NodeEvaluator::_classify(int32_t x, int32_t y, int32_
     if (closedDoor && !opensDoor)
         block.mFlags |= ClosedDoor;
 
-    if (!opensDoor && BlockShape::hasCollision(*state, mActor)) {
+    if (opensDoor)
+        return block;
+
+    const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z, mActor);
+    if (shape.mMaxY > shape.mMinY) {
         block.mFlags |= Collides;
-        block.mShape = BlockShape::getShapeAt(*state, x, y, z, mActor);
+        block.mShape = shape;
     }
 
     return block;

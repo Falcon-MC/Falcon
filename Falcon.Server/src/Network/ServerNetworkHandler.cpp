@@ -8,7 +8,6 @@
 #include "Core/Math/MathConstants.h"
 
 #include "Server/Commands/ServerCommandOrigin.h"
-#include "World/Level/BaseGameVersion.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/BlockNetworkIdTable.h"
 #include "World/Level/Block/BlockPickItem.h"
@@ -472,8 +471,6 @@ void ServerNetworkHandler::setMotd(const std::string &serverName, const std::str
 void ServerNetworkHandler::setProtocolVersion(int protocolVersion, const std::string &gameVersion) {
     mAnnouncement.mProtocolVersion = protocolVersion;
     mAnnouncement.mGameVersion = gameVersion;
-    // StartGame base game version: the client shapes blocks from it
-    BaseGameVersion::setCurrent(BaseGameVersion::parse(gameVersion));
 
     if (mIsListening)
         _updateServerAnnouncement();

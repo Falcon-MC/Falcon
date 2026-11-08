@@ -16,6 +16,10 @@ public:
 
     const char *getIdentifier() const override { return IDENTIFIER; }
 
+    bool collidesAtSnowLayerLook() const override {
+        return true;
+    }
+
     const ItemStack &getItem() const { return mItem; }
 
     ItemStack &getItem() { return mItem; }

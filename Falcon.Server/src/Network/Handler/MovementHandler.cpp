@@ -171,7 +171,7 @@ namespace {
     }
 }
 
-bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPosition) {
+bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPosition, const Actor *actor) {
     const float shrink = 0.01f;
     const float minX = feetPosition.x - PLAYER_HALF_WIDTH + shrink;
     const float maxX = feetPosition.x + PLAYER_HALF_WIDTH - shrink;
@@ -180,19 +180,20 @@ bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPositio
 
     const AxisAlignedBB support(minX, feetPosition.y - AABB_EPSILON, minZ,
                                 maxX, feetPosition.y, maxZ);
-    for (const AxisAlignedBB &shape: level.getCollisionBoxes(support)) {
+    for (const AxisAlignedBB &shape: level.getCollisionBoxes(support, actor)) {
         if (shape.intersectsWith(support))
             return true;
     }
     return false;
 }
 
-bool MovementHandler::checkGroundState(Level &level, const Vector3f &previousFeet, const Vector3f &feetPosition) {
-    if (checkGroundState(level, feetPosition))
+bool MovementHandler::checkGroundState(Level &level, const Vector3f &previousFeet, const Vector3f &feetPosition,
+                                       const Actor *actor) {
+    if (checkGroundState(level, feetPosition, actor))
         return true;
     // Y resolves before X/Z (sub_147B42620): a move sliding off an edge lands on the column it left
     return feetPosition.y <= previousFeet.y
-           && checkGroundState(level, Vector3f(previousFeet.x, feetPosition.y, previousFeet.z));
+           && checkGroundState(level, Vector3f(previousFeet.x, feetPosition.y, previousFeet.z), actor);
 }
 
 void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &feetPosition,
@@ -217,7 +218,7 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
     Level &level = owner.getLevelFor(player);
     // keep the collision result: a proximity probe can report ground mid-jump or above shallow water
     const bool onGround = player.hasSimulatedGround() ? player.isSimulatedOnGround()
-                                                     : checkGroundState(level, previous, feetPosition);
+                                                     : checkGroundState(level, previous, feetPosition, &player);
     player.setOnGround(onGround);
 
     const LiquidContact water = liquidContact(level, player, feetPosition);
@@ -368,7 +369,7 @@ bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkId
     player.setFlying(flying);
 
     if (!flying)
-        player.setOnGround(MovementHandler::checkGroundState(owner.getLevelFor(player), player.getPosition()));
+        player.setOnGround(MovementHandler::checkGroundState(owner.getLevelFor(player), player.getPosition(), &player));
 
     owner._sendAbilities(player);
     return true;

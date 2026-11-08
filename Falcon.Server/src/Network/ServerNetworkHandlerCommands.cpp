@@ -424,7 +424,7 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
     const bool mayFly = gameMode == (int32_t) GameType::Creative || gameMode == (int32_t) GameType::Spectator;
     if (!mayFly && player.isFlying()) {
         player.setFlying(false);
-        player.setOnGround(MovementHandler::checkGroundState(getLevelFor(player), player.getPosition()));
+        player.setOnGround(MovementHandler::checkGroundState(getLevelFor(player), player.getPosition(), &player));
     }
 
     if (gameMode == (int32_t) GameType::Spectator) {

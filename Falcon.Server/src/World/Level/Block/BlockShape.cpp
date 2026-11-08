@@ -56,15 +56,17 @@ bool BlockShape::isFullCube(const BlockState &state) {
 
 // local 0..1 coordinates; fence-like shapes are 1.5 tall: not jumpable
 AxisAlignedBB BlockShape::getRelativeShape(const BlockState &state, const Actor *actor) {
-    if (!hasCollision(state, actor))
-        return EMPTY_SHAPE;
-
     const std::string &name = state.mName;
 
+    // asked once: the class shape can depend on the actor
     const Block *block = VanillaBlocks::fromIdentifier(name);
     AxisAlignedBB shape = FULL_CUBE;
     if (block != nullptr && block->getCollisionShape(state, actor, shape))
-        return shape;
+        return shape.mMaxY > shape.mMinY ? shape : EMPTY_SHAPE;
+
+    const BlockData *data = BlockDataTable::find(name.c_str());
+    if (data == nullptr || !data->mSolid)
+        return EMPTY_SHAPE;
 
     // one box per block: a stair collides as its slab half only
     if (endsWith(name, "_stairs")) {

@@ -1,20 +1,15 @@
 #include "World/Level/Block/SnowLayerBlock.h"
 
+#include "World/Actor/Actor.h"
 #include "World/Level/Block/BlockClassRegistry.h"
-
-FALCON_REGISTER_BLOCK(SnowLayerBlock, 340);
-
-#include "World/Actor/Misc/ItemActor.h"
-#include "World/Actor/Misc/PaintingActor.h"
-#include "World/Actor/Mob/Neutral/PolarBearActor.h"
-#include "World/Actor/Mob/Passive/RabbitActor.h"
-#include "World/Level/BaseGameVersion.h"
 #include "World/Level/Block/PlacementHelpers.h"
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/Level.h"
 
 #include <algorithm>
+
+FALCON_REGISTER_BLOCK(SnowLayerBlock, 340);
 
 using namespace PlacementHelpers;
 
@@ -34,21 +29,9 @@ bool SnowLayerBlock::canBeReplaced(const BlockState &state) const {
 
 // sub_14B27C5D0: one layer below its look, a single layer is walked through
 bool SnowLayerBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
-    const int height = std::min(SNOW_LAYER_MAX_HEIGHT, std::max(0, state.mStates.getInt(SNOW_LAYER_HEIGHT, 0)));
-
-    // worlds before 1.20.20 keep the old steps: none, half, full
-    int eighths = height;
-    if (BaseGameVersion::current().isBefore(1, 20, 20))
-        eighths = height == SNOW_LAYER_MAX_HEIGHT ? 8 : height >= 3 ? 4 : 0;
-
-    const ServerActor *serverActor = dynamic_cast<const ServerActor *>(actor);
-    const bool projectile = serverActor != nullptr && serverActor->isProjectile();
-    if (dynamic_cast<const RabbitActor *>(actor) != nullptr || dynamic_cast<const PolarBearActor *>(actor) != nullptr)
-        eighths = height;
-    else if (dynamic_cast<const ItemActor *>(actor) != nullptr || projectile)
-        eighths = height + 1;
-    else if (dynamic_cast<const PaintingActor *>(actor) != nullptr)
-        eighths = 0;
+    int eighths = std::min(SNOW_LAYER_MAX_HEIGHT, std::max(0, state.mStates.getInt(SNOW_LAYER_HEIGHT, 0)));
+    if (actor != nullptr && actor->collidesAtSnowLayerLook())
+        eighths++;
 
     shape = AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, (float) eighths / 8.0f, 1.0f);
     return true;

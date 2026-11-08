@@ -31,6 +31,11 @@ public:
         return false;
     }
 
+    // sub_14B27C5D0: item entities and projectiles (ActorType bit 0x400000) meet a snow layer at its look
+    virtual bool collidesAtSnowLayerLook() const {
+        return false;
+    }
+
     // AutonomousActorComponent: a player keeps it once sent, out of the actor range too
     virtual bool isAutonomous() const {
         return false;

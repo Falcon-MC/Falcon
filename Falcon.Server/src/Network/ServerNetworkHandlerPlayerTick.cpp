@@ -74,7 +74,7 @@ void ServerNetworkHandler::_applyPendingPlayerMove(ServerPlayer &player) {
             player.setOnGround(player.hasSimulatedGround()
                                ? player.isSimulatedOnGround()
                                : MovementHandler::checkGroundState(getLevelFor(player), previous,
-                                                                   player.getPosition()));
+                                                                   player.getPosition(), &player));
         }
         player.clearPendingMove();
     }

@@ -49,9 +49,10 @@ namespace MovementPhysics {
             for (int32_t y = (int32_t) std::floor(probe.mMinY) - 1; y <= (int32_t) std::floor(probe.mMaxY); y++) {
                 for (int32_t z = (int32_t) std::floor(probe.mMinZ); z <= (int32_t) std::floor(probe.mMaxZ); z++) {
                     const BlockState *state = level.peekBlockPtr(x, y, z);
-                    if (state == nullptr || !BlockShape::hasCollision(*state, &actor))
+                    if (state == nullptr)
                         continue;
-                    if (!BlockShape::getShapeAt(*state, x, y, z, &actor).intersectsWith(probe))
+                    const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z, &actor);
+                    if (shape.mMaxY <= shape.mMinY || !shape.intersectsWith(probe))
                         continue;
 
                     const float dx = (float) x - centerX;

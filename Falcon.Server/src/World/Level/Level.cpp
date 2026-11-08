@@ -1448,11 +1448,11 @@ std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area, c
         for (int32_t z = minZ; z <= maxZ; ++z) {
             for (int32_t y = minY; y <= maxY; ++y) {
                 const BlockState *state = peekBlockPtr(x, y, z);
-                if (state == nullptr || !BlockShape::hasCollision(*state, actor))
+                if (state == nullptr)
                     continue;
 
                 const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z, actor);
-                if (shape.intersectsWith(area))
+                if (shape.mMaxY > shape.mMinY && shape.intersectsWith(area))
                     boxes.push_back(shape);
             }
         }
