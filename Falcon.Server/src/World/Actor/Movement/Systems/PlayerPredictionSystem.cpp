@@ -54,8 +54,17 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
 
     const Vector3f reported = *prediction.feetPosition;
     // the exit moves the player itself; reconciling it would turn up to 15 blocks into velocity
-    if (prediction.validator->takeDismountPosition(state.simulated, reported))
+    if (prediction.validator->takeDismountPosition(state.simulated, reported)) {
         state.simulated = reported;
+        // jumping off a seat: the client lifts off on the exit input itself (0.42, then 0.333, 0.248...); the
+        // replay skipped that tick while riding, so it starts the fall with the jump's next-tick velocity
+        if (input.jumpHeld) {
+            const MobEffectInstance *jumpBoost = context.player.getEffects().get(MobEffectId::JumpBoost);
+            const float jumpBonus = jumpBoost == nullptr ? 0.0f : JUMP_BOOST_PER_LEVEL * (float) jumpBoost->level();
+            state.velocity.y = (JUMP_VELOCITY + jumpBonus - GRAVITY) * GRAVITY_MULTIPLIER;
+            state.jumpDelay = JUMP_DELAY_TICKS;
+        }
+    }
     // measured on every input: the validator skips its comparison right after a correction and corrections are
     // spaced: most inputs of a dropped correction would look fine
     const float errorX = reported.x - state.simulated.x;

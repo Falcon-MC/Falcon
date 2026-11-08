@@ -37,6 +37,7 @@ public:
     // the client predicts its own exit point; the next input reports it once
     void allowDismountPosition() {
         mDismountPending = true;
+        mDismountInputsLeft = DISMOUNT_INPUTS;
     }
 
     // true when the input must move the player straight to the reported position
@@ -90,6 +91,9 @@ private:
     int64_t mLastInputTick = 0;
     uint8_t mAdjustmentCount = 0;
     bool mDismountPending = false;
+    // the exit lands a tick after the leave request: inputs still at the seat keep the allowance
+    static constexpr int32_t DISMOUNT_INPUTS = 4;
+    int32_t mDismountInputsLeft = 0;
     bool mHasMovementEffect = false;
     uint64_t mLastMovementEffectTick = 0;
 };
