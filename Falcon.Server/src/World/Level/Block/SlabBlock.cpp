@@ -32,7 +32,9 @@ std::string SlabBlock::getDoubleSlabIdentifier() const {
     return replaceSuffix(getIdentifier(), SLAB_SUFFIX, DOUBLE_SLAB_SUFFIX);
 }
 
-bool SlabBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+bool SlabBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
+    (void) actor;
+
     shape = isTopSlab(state) ? AxisAlignedBB(0.0f, SLAB_HEIGHT, 0.0f, 1.0f, 1.0f, 1.0f)
                              : AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, SLAB_HEIGHT, 1.0f);
     return true;

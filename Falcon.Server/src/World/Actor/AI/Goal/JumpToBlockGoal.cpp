@@ -29,10 +29,10 @@ namespace {
         return range <= 0 ? 0 : std::uniform_int_distribution<int32_t>(-range, range)(jumpRandom());
     }
 
-    bool hasCollisionAt(Level &level, float x, float y, float z) {
+    bool hasCollisionAt(Level &level, const MobActor &mob, float x, float y, float z) {
         const BlockState *state = level.peekBlockPtr((int32_t) std::floor(x), (int32_t) std::floor(y),
                                                      (int32_t) std::floor(z));
-        return state == nullptr || BlockShape::hasCollision(*state);
+        return state == nullptr || BlockShape::hasCollision(*state, &mob);
     }
 }
 
@@ -112,7 +112,8 @@ bool JumpToBlockGoal::_isLandingSpot(Level &level, const MobActor &mob, int32_t 
         return false;
 
     const BlockState *ground = level.peekBlockPtr(x, y - 1, z);
-    if (ground == nullptr || !BlockShape::hasCollision(*ground) || mSettings.mForbiddenBlocks.count(ground->mName) != 0)
+    if (ground == nullptr || !BlockShape::hasCollision(*ground, &mob)
+        || mSettings.mForbiddenBlocks.count(ground->mName) != 0)
         return false;
 
     if (preferredOnly && mSettings.mPreferredBlocks.count(ground->mName) == 0)
@@ -121,7 +122,7 @@ bool JumpToBlockGoal::_isLandingSpot(Level &level, const MobActor &mob, int32_t 
     const int32_t clearance = std::max(1, (int32_t) std::ceil(mob.getSize().mHeight));
     for (int32_t offset = 0; offset < clearance; ++offset) {
         const BlockState *space = level.peekBlockPtr(x, y + offset, z);
-        if (space == nullptr || BlockShape::hasCollision(*space) || LiquidView(*space).isLiquid()
+        if (space == nullptr || BlockShape::hasCollision(*space, &mob) || LiquidView(*space).isLiquid()
             || mSettings.mForbiddenBlocks.count(space->mName) != 0)
             return false;
     }
@@ -179,8 +180,8 @@ bool JumpToBlockGoal::_isTrajectoryClear(Level &level, const MobActor &mob, Vect
     for (int32_t step = 0; step < steps - 1; ++step) {
         point = Vector3f(point.x + motion.x, point.y + motion.y, point.z + motion.z);
         motion.y -= gravity;
-        if (hasCollisionAt(level, point.x, point.y, point.z)
-            || hasCollisionAt(level, point.x, point.y + height, point.z))
+        if (hasCollisionAt(level, mob, point.x, point.y, point.z)
+            || hasCollisionAt(level, mob, point.x, point.y + height, point.z))
             return false;
     }
     return true;

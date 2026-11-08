@@ -5,12 +5,12 @@
 #include <vector>
 
 ActorMoveResult ActorCollisionSystem::move(Level &level, AxisAlignedBB &box, const Vector3f &delta, float stepHeight,
-                                           bool wasOnGround) {
+                                           bool wasOnGround, const Actor *actor) {
     ActorMoveResult result;
     result.mRequested = delta;
 
     const AxisAlignedBB original = box;
-    Vector3f moved = _resolve(level, box, delta);
+    Vector3f moved = _resolve(level, box, delta, actor);
 
     const bool landing = wasOnGround || (moved.y != delta.y && delta.y < 0.0f);
     const bool blockedHorizontally = moved.x != delta.x || moved.z != delta.z;
@@ -22,9 +22,9 @@ ActorMoveResult ActorCollisionSystem::move(Level &level, AxisAlignedBB &box, con
         const Vector3f flatMoved = moved;
 
         box = original;
-        const Vector3f stepped = _resolve(level, box, Vector3f(delta.x, stepHeight, delta.z));
+        const Vector3f stepped = _resolve(level, box, Vector3f(delta.x, stepHeight, delta.z), actor);
         AxisAlignedBB steppedBox = box;
-        const Vector3f settle = _resolve(level, steppedBox, Vector3f(0.0f, -stepped.y, 0.0f));
+        const Vector3f settle = _resolve(level, steppedBox, Vector3f(0.0f, -stepped.y, 0.0f), actor);
 
         const float flatDistance = flatMoved.x * flatMoved.x + flatMoved.z * flatMoved.z;
         const float steppedDistance = stepped.x * stepped.x + stepped.z * stepped.z;
@@ -48,8 +48,10 @@ ActorMoveResult ActorCollisionSystem::move(Level &level, AxisAlignedBB &box, con
     return result;
 }
 
-Vector3f ActorCollisionSystem::_resolve(Level &level, AxisAlignedBB &box, const Vector3f &delta) {
-    const std::vector<AxisAlignedBB> obstacles = level.getCollisionBoxes(box.addCoord(delta.x, delta.y, delta.z));
+Vector3f ActorCollisionSystem::_resolve(Level &level, AxisAlignedBB &box, const Vector3f &delta,
+                                        const Actor *actor) {
+    const std::vector<AxisAlignedBB> obstacles =
+            level.getCollisionBoxes(box.addCoord(delta.x, delta.y, delta.z), actor);
 
     // Y, X, Z order, each axis against the box moved on the previous ones: a corner move slides along the wall it misses
     float dy = delta.y;

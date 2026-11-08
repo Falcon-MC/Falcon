@@ -3,6 +3,7 @@
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/ContainerBlock.h"
 #include "World/Level/Block/FireBlock.h"
 #include "World/Level/Block/LavaBlock.h"
@@ -177,6 +178,16 @@ namespace {
                                           (int32_t) std::floor(position.z));
     }
 
+    // snow layers land items at their look; other blocks at the cell top
+    float landingHeight(Level &level, const ItemActor &actor, int32_t x, int32_t y, int32_t z) {
+        const BlockState *state = level.peekBlockPtr(x, y, z);
+        const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+        if (block == nullptr || !block->shapesCollisionPerActor())
+            return (float) (y + 1);
+
+        return (float) y + std::min(1.0f, BlockShape::getRelativeShape(*state, &actor).mMaxY);
+    }
+
     void moveItemActor(ServerNetworkHandler &owner, ItemActor &actor) {
         if (actor.isOnGround()) {
             if (hasSupportBelow(owner, actor))
@@ -218,11 +229,13 @@ namespace {
         const int32_t blockZ = (int32_t) std::floor(next.z);
         const int32_t blockY = (int32_t) std::floor(next.y);
 
-        if (motion.y < 0.0f && level.isSolidAt(blockX, blockY, blockZ)) {
-            next.y = (float) (blockY + 1);
+        const bool solid = level.isSolidAt(blockX, blockY, blockZ);
+        const float landing = solid ? landingHeight(level, actor, blockX, blockY, blockZ) : 0.0f;
+        if (motion.y < 0.0f && solid && next.y < landing) {
+            next.y = landing;
             motion = Vector3f(0.0f, 0.0f, 0.0f);
             actor.setOnGround(true);
-        } else if (motion.y > 0.0f && level.isSolidAt(blockX, blockY, blockZ)) {
+        } else if (motion.y > 0.0f && solid) {
             next.y = position.y;
             motion.y = 0.0f;
         } else {

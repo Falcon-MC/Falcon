@@ -11,8 +11,9 @@ bool EndGatewayBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:end_gateway";
 }
 
-bool EndGatewayBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+bool EndGatewayBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
     (void) state;
+    (void) actor;
 
     // entities walk into the gateway, which has no collision box in the game
     shape = AxisAlignedBB(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);

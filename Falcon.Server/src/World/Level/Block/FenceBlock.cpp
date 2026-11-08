@@ -10,8 +10,9 @@ bool FenceBlock::matches(const std::string &identifier) {
     return BlockIdentifier::endsWith(identifier, "_fence");
 }
 
-bool FenceBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+bool FenceBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
     (void) state;
+    (void) actor;
 
     shape = FenceHelpers::postShape();
     return true;

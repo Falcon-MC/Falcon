@@ -1435,7 +1435,7 @@ bool Level::isSolidAt(int32_t x, int32_t y, int32_t z) {
     return data->mSolid;
 }
 
-std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area) {
+std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area, const Actor *actor) {
     std::vector<AxisAlignedBB> boxes;
     const int32_t minX = (int32_t) std::floor(area.mMinX);
     const int32_t minY = std::max((int32_t) std::floor(area.mMinY) - 1, LevelChunk::MIN_Y);
@@ -1448,10 +1448,10 @@ std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area) {
         for (int32_t z = minZ; z <= maxZ; ++z) {
             for (int32_t y = minY; y <= maxY; ++y) {
                 const BlockState *state = peekBlockPtr(x, y, z);
-                if (state == nullptr || !BlockShape::hasCollision(*state))
+                if (state == nullptr || !BlockShape::hasCollision(*state, actor))
                     continue;
 
-                const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z);
+                const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z, actor);
                 if (shape.intersectsWith(area))
                     boxes.push_back(shape);
             }

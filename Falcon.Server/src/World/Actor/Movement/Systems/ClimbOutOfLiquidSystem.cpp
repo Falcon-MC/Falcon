@@ -1,5 +1,6 @@
 #include "World/Actor/Movement/Systems/ClimbOutOfLiquidSystem.h"
 #include "World/Actor/Movement/PlayerMovementContext.h"
+#include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
 
 #include <cmath>
@@ -13,7 +14,7 @@ void ClimbOutOfLiquidSystem::tick(PlayerMovementContext &context) {
     // 0x14103CD10 probes from the moved box with post-drag velocity and this input's rise
     const float lift = 0.6f - (state.simulated.y - state.start.y) + state.velocity.y;
     const AxisAlignedBB probe = context.travel.box.offset(state.velocity.x, lift, state.velocity.z);
-    if (MovementPhysics::collides(context.level, probe))
+    if (MovementPhysics::collides(context.level, probe, &context.player))
         return;
     for (int32_t x = (int32_t) std::floor(probe.mMinX); x < (int32_t) std::ceil(probe.mMaxX); ++x) {
         for (int32_t y = (int32_t) std::floor(probe.mMinY); y < (int32_t) std::ceil(probe.mMaxY); ++y) {

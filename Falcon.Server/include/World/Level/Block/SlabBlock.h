@@ -20,5 +20,5 @@ public:
                                         const Vector3f &clickPosition, Vector3i &position,
                                         BlockState &state) const override;
 
-    bool getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const override;
+    bool getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const override;
 };
