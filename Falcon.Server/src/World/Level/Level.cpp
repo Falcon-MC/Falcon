@@ -15,6 +15,9 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
+#include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Movement/ActorPushSystem.h"
+#include "World/Actor/ServerActor.h"
 
 #include <algorithm>
 #include <bitset>
@@ -1486,6 +1489,22 @@ std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area, c
                     boxes.push_back(shape);
             }
         }
+    }
+
+    // a mob with minecraft:is_collidable carries actor flag 121 (sub_147C52140): others stand on it like a block
+    if (mOwner != nullptr) {
+        const Vector3f center((area.mMinX + area.mMaxX) * 0.5f, (area.mMinY + area.mMaxY) * 0.5f,
+                              (area.mMinZ + area.mMaxZ) * 0.5f);
+        const float radius = std::max(area.mMaxX - area.mMinX, area.mMaxZ - area.mMinZ) * 0.5f;
+        mOwner->forEachActorNear(center, radius, [&](ServerActor &other) {
+            if (&other == actor || !other.isIn(*this) || !other.getFlags().get(ActorFlag::Collidable))
+                return;
+            if (actor != nullptr && actor->getVehicleId() == other.getUniqueId())
+                return;
+            const AxisAlignedBB shape = ActorPushSystem::boundingBoxOf(other);
+            if (shape.intersectsWith(area))
+                boxes.push_back(shape);
+        });
     }
 
     return boxes;
