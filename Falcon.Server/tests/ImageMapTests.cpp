@@ -6,6 +6,11 @@
 
 #include <zlib.h>
 
+#ifndef _WIN32
+#include <sys/resource.h>
+#endif
+
+#include <chrono>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -44,7 +49,7 @@ namespace {
             png.push_back((uint8_t) (crc >> shift));
     }
 
-    std::vector<uint8_t> header(uint32_t width, uint32_t height) {
+    std::vector<uint8_t> header(uint32_t width, uint32_t height, uint8_t interlace = 0) {
         std::vector<uint8_t> data;
         for (const uint32_t value: {width, height}) {
             for (int shift = 24; shift >= 0; shift -= 8)
@@ -54,20 +59,34 @@ namespace {
         data.push_back(6);
         data.push_back(0);
         data.push_back(0);
-        data.push_back(0);
+        data.push_back(interlace);
         return data;
     }
 
-    // rgba, 8 bits, no filter
-    std::vector<uint8_t> encodePng(uint32_t width, uint32_t height, const std::vector<uint8_t> &rgba) {
+    // rgba, 8 bits, no filter; adam7 when interlaced
+    std::vector<uint8_t> encodePng(uint32_t width, uint32_t height, const std::vector<uint8_t> &rgba,
+                                   bool interlaced = false) {
         std::vector<uint8_t> png = {0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a};
-        appendChunk(png, "IHDR", header(width, height));
+        appendChunk(png, "IHDR", header(width, height, interlaced ? 1 : 0));
 
+        const uint32_t whole[1][4] = {{0, 0, 1, 1}};
+        const uint32_t adam7[7][4] = {{0, 0, 8, 8}, {4, 0, 8, 8}, {0, 4, 4, 8}, {2, 0, 4, 4},
+                                      {0, 2, 2, 4}, {1, 0, 2, 2}, {0, 1, 1, 2}};
+        const uint32_t (*passes)[4] = interlaced ? adam7 : whole;
+        const size_t passCount = interlaced ? 7 : 1;
         std::vector<uint8_t> raw;
-        for (uint32_t y = 0; y < height; ++y) {
-            raw.push_back(0);
-            raw.insert(raw.end(), rgba.begin() + (ptrdiff_t) (y * width * 4),
-                       rgba.begin() + (ptrdiff_t) ((y + 1) * width * 4));
+        for (size_t pass = 0; pass < passCount; ++pass) {
+            const uint32_t *step = passes[pass];
+            if (step[0] >= width || step[1] >= height)
+                continue;
+
+            for (uint32_t y = step[1]; y < height; y += step[3]) {
+                raw.push_back(0);
+                for (uint32_t x = step[0]; x < width; x += step[2]) {
+                    const auto pixel = rgba.begin() + (ptrdiff_t) ((x + y * width) * 4);
+                    raw.insert(raw.end(), pixel, pixel + 4);
+                }
+            }
         }
         uLongf size = compressBound((uLong) raw.size());
         std::vector<uint8_t> packed(size);
@@ -76,6 +95,21 @@ namespace {
         appendChunk(png, "IDAT", packed);
         appendChunk(png, "IEND", {});
         return png;
+    }
+
+    // peak resident size in bytes, 0 where the platform has no getrusage
+    size_t peakMemory() {
+#ifdef _WIN32
+        return 0;
+#else
+        rusage usage{};
+        getrusage(RUSAGE_SELF, &usage);
+#ifdef __APPLE__
+        return (size_t) usage.ru_maxrss;
+#else
+        return (size_t) usage.ru_maxrss * 1024;
+#endif
+#endif
     }
 
     class StoneSource final : public MapRenderSource {
@@ -277,6 +311,25 @@ namespace {
         oversized.resize(ImageMap::MAX_PNG_SIZE + 1, 0);
         require(!ImageMap::decodePng(oversized.data(), oversized.size(), image, error), "a png over 32 MB is refused");
 
+        // 1 x 1 rgba needs 5 bytes once inflated; this idat inflates to 64 MB of zeros
+        std::vector<uint8_t> bomb = {0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a};
+        appendChunk(bomb, "IHDR", header(1, 1));
+        {
+            const std::vector<uint8_t> zeros(64u * 1024u * 1024u, 0);
+            uLongf packedSize = compressBound((uLong) zeros.size());
+            std::vector<uint8_t> packed(packedSize);
+            compress2(packed.data(), &packedSize, zeros.data(), (uLong) zeros.size(), 9);
+            packed.resize(packedSize);
+            appendChunk(bomb, "IDAT", packed);
+        }
+        appendChunk(bomb, "IEND", {});
+        const size_t peakBefore = peakMemory();
+        const auto start = std::chrono::steady_clock::now();
+        require(!ImageMap::decodePng(bomb.data(), bomb.size(), image, error), "a decompression bomb is refused");
+        const auto spent = std::chrono::steady_clock::now() - start;
+        require(peakMemory() < peakBefore + 16u * 1024u * 1024u, "a decompression bomb allocates nothing big");
+        require(spent < std::chrono::milliseconds(500), "a decompression bomb is refused at once");
+
         const std::vector<uint8_t> garbage(64, 7);
         require(!ImageMap::decodePng(garbage.data(), garbage.size(), image, error), "garbage is refused");
 
@@ -285,6 +338,15 @@ namespace {
         require(ImageMap::decodePng(small.data(), small.size(), image, error), "a real png decodes");
         require(image.mWidth == 2 && image.mPixels[0] == ImageMap::pack(255, 0, 0, 255)
                 && image.mPixels[3] == ImageMap::pack(1, 2, 3, 0), "rgba comes through, alpha included");
+
+        std::vector<uint8_t> odd(5 * 3 * 4);
+        for (size_t index = 0; index < odd.size(); ++index)
+            odd[index] = (uint8_t) (index * 7);
+        const std::vector<uint8_t> interlaced = encodePng(5, 3, odd, true);
+        require(ImageMap::decodePng(interlaced.data(), interlaced.size(), image, error),
+                "an interlaced png fits its announced size");
+        require(image.mPixels[14] == ImageMap::pack(odd[56], odd[57], odd[58], odd[59]),
+                "adam7 pixels land in place");
     }
 }
 
