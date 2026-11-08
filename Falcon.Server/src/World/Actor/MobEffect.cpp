@@ -291,10 +291,6 @@ bool MobEffectManager::remove(MobEffectId id) {
     MobEffectInstance instance = it->second;
     effect(id).onRemove(mActor, instance);
     mEffects.erase(it);
-    if (id == MobEffectId::Freezing) {
-        mFreezingTicks = 0;
-        mFreezingDamageTicks = 0;
-    }
     refreshDerivedAttributes();
     emit(instance, MobEffectEvent::Remove);
     return true;
@@ -373,13 +369,14 @@ void MobEffectManager::setMovementSpeedBonus(float bonus) {
     refreshDerivedAttributes();
 }
 
-float MobEffectManager::advanceFreezing(bool suppressed) {
-    if (!has(MobEffectId::Freezing) || suppressed) {
-        const bool changed = mFreezingTicks != 0;
-        mFreezingTicks = 0;
+// sub_145E14260: climbs 1/140 a tick, thaws 1/70 a tick
+float MobEffectManager::advanceFreezing(bool rising) {
+    if (!rising) {
         mFreezingDamageTicks = 0;
-        if (changed)
-            refreshDerivedAttributes();
+        if (mFreezingTicks == 0)
+            return 0.0f;
+        mFreezingTicks = std::max(0, mFreezingTicks - 2);
+        refreshDerivedAttributes();
         return 0.0f;
     }
     bool damage = false;

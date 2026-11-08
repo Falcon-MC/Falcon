@@ -11,6 +11,10 @@ public:
 
     bool getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const override;
 
+    bool freezesActorsInside() const override {
+        return true;
+    }
+
     BlockTraversal getTraversal() const override {
         return BlockTraversal::PowderSnow;
     }

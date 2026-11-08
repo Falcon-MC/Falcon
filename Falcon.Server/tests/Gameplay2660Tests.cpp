@@ -102,6 +102,8 @@ namespace {
     }
 
     void freezing() {
+        const bool RISE = true;
+        const bool THAW = false;
         MobEffectId parsed;
         require(parseMobEffect("minecraft:freezing", parsed) && (int32_t) parsed == 38,
                 "freezing effect name/id is not registered");
@@ -115,15 +117,15 @@ namespace {
         const float walk = PlayerMovementSimulator::groundAcceleration(player, friction, false);
         const float sprint = PlayerMovementSimulator::groundAcceleration(player, friction, true);
         for (int tick = 1; tick <= 139; ++tick)
-            require(player.getEffects().advanceFreezing(false) == 0.0f, "freezing damaged before warmup");
-        require(player.getEffects().advanceFreezing(false) == 1.5f, "freezing did not damage at full freeze");
+            require(player.getEffects().advanceFreezing(RISE) == 0.0f, "freezing damaged before warmup");
+        require(player.getEffects().advanceFreezing(RISE) == 1.5f, "freezing did not damage at full freeze");
         require(std::abs(PlayerMovementSimulator::groundAcceleration(player, friction, false) - walk * 0.5f) < 0.000001f,
                 "server walking simulation ignored freezing");
         require(std::abs(PlayerMovementSimulator::groundAcceleration(player, friction, true) - sprint * 0.5f) < 0.000001f,
                 "server sprint simulation ignored freezing");
         for (int tick = 1; tick <= 39; ++tick)
-            require(player.getEffects().advanceFreezing(false) == 0.0f, "freezing damage interval too short");
-        require(player.getEffects().advanceFreezing(false) == 1.5f, "freezing damage interval incorrect");
+            require(player.getEffects().advanceFreezing(RISE) == 0.0f, "freezing damage interval too short");
+        require(player.getEffects().advanceFreezing(RISE) == 1.5f, "freezing damage interval incorrect");
         player.setOnFire(true);
         require(!FreezingMobEffect::isProtected(player), "being on fire protected against freezing");
         ItemStack leather;
@@ -131,22 +133,23 @@ namespace {
         leather.mCount = 1;
         player.getInventory().setArmor(PlayerInventory::ARMOR_HEAD, leather);
         require(FreezingMobEffect::isProtected(player), "leather armor did not protect");
-        require(player.getEffects().advanceFreezing(true) == 0.0f && player.hasEffect(MobEffectId::Freezing),
+        require(player.getEffects().advanceFreezing(THAW) == 0.0f && player.hasEffect(MobEffectId::Freezing),
                 "protection removed the effect instead of nullifying it");
-        require(player.getMovementSpeedMultiplier() == 1.0f, "protection retained slowdown");
+        require(player.getEffects().getFreezingTicks() == 138, "freezing does not thaw twice as fast as it climbs");
+        for (int tick = 0; tick < 69; ++tick)
+            player.getEffects().advanceFreezing(THAW);
+        require(player.getEffects().getFreezingTicks() == 0 && player.getMovementSpeedMultiplier() == 1.0f,
+                "thawed freezing retained slowdown");
         player.getInventory().setArmor(PlayerInventory::ARMOR_HEAD, ItemStack::air());
         require(!FreezingMobEffect::isProtected(player), "removed armor still protects");
         for (int tick = 0; tick < 70; ++tick)
-            player.getEffects().advanceFreezing(false);
+            player.getEffects().advanceFreezing(RISE);
         require(std::abs(player.getMovementSpeedMultiplier() - 0.75f) < 0.000001f, "freezing ramp is not gradual");
         player.removeEffect(MobEffectId::Freezing);
+        require(player.getEffects().getFreezingTicks() == 70, "removing the effect dropped freezing at once");
+        for (int tick = 0; tick < 35; ++tick)
+            player.getEffects().advanceFreezing(THAW);
         require(player.getMovementSpeedMultiplier() == 1.0f, "removing freezing retained slowdown");
-        effect.mDuration = 1;
-        player.addEffect(effect);
-        player.getEffects().advanceFreezing(false);
-        player.tickEffects();
-        require(!player.hasEffect(MobEffectId::Freezing) && player.getMovementSpeedMultiplier() == 1.0f,
-                "expired freezing retained slowdown");
         effect.mDuration = 900;
         Level heat("freezing-heat-test", 2);
         heat.insertChunk(LevelChunk(0, 0));
@@ -156,6 +159,19 @@ namespace {
         require(FreezingSystem::isSuppressed(heat, player), "standing in fire did not suppress freezing");
         heat.setBlock(Vector3i(8, 20, 8), block("minecraft:lava"), false);
         require(FreezingSystem::isSuppressed(heat, player), "standing in lava did not suppress freezing");
+        heat.setBlock(Vector3i(8, 20, 8), block("minecraft:air"), false);
+        require(!FreezingSystem::isInFreezingBlock(heat, player), "air froze the player");
+        heat.setBlock(Vector3i(8, 21, 8), block("minecraft:powder_snow"), false);
+        require(FreezingSystem::isInFreezingBlock(heat, player), "powder snow at head height did not freeze");
+        heat.setBlock(Vector3i(8, 21, 8), block("minecraft:air"), false);
+        heat.setBlock(Vector3i(8, 19, 8), block("minecraft:powder_snow"), false);
+        require(!FreezingSystem::isInFreezingBlock(heat, player), "powder snow under the feet froze the player");
+        heat.setBlock(Vector3i(9, 20, 8), block("minecraft:powder_snow"), false);
+        player.setPosition(Vector3f(8.7f, 20.0f, 8.5f));
+        require(!FreezingSystem::isInFreezingBlock(heat, player), "a box ending on the block edge froze the player");
+        player.setPosition(Vector3f(8.71f, 20.0f, 8.5f));
+        require(FreezingSystem::isInFreezingBlock(heat, player), "a box reaching into powder snow did not freeze");
+        player.setPosition(Vector3f(8.5f, 20.0f, 8.5f));
         require(VanillaBlocks::fromIdentifier("minecraft:fire")->suppressesFreezing()
                 && VanillaBlocks::fromIdentifier("minecraft:lava")->suppressesFreezing()
                 && !VanillaBlocks::fromIdentifier("minecraft:stone")->suppressesFreezing(), "heat block protection incorrect");
@@ -170,7 +186,7 @@ namespace {
             require(FreezingMobEffect::isVulnerable(*actor), "missing vulnerability component");
             float damage = 0.0f;
             for (int tick = 0; tick < 140; ++tick)
-                damage = actor->getEffects().advanceFreezing(false);
+                damage = actor->getEffects().advanceFreezing(RISE);
             require(damage == 7.5f, "vulnerable freezing damage incorrect");
         }
         for (const char *name: {"minecraft:polar_bear", "minecraft:snow_golem", "minecraft:skeleton", "minecraft:stray"}) {
