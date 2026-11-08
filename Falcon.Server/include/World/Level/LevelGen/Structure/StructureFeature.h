@@ -13,16 +13,13 @@ struct StructureChunkPos {
     int32_t z = 0;
 };
 
-/**
- * A structure the world spreads over a grid of square regions. Each region holds one candidate chunk picked from
- * the world seed, and the structure starts there when the candidate passes the structure's own checks. Only reads
- * the generator's seed and biome source, so it is safe off the main thread.
- */
+// one candidate chunk per square region, from the world seed, kept when it passes the structure's checks; reads
+// only the seed and biome source: safe off the main thread
 class StructureFeature {
 public:
     enum class Spread {
         Linear,
-        // the mean of two draws, which pulls the start towards the middle of the region
+        // the mean of two draws: pulls the start towards the middle of the region
         Triangular
     };
 

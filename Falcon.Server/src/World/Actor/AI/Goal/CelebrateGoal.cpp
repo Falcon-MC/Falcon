@@ -9,7 +9,7 @@
 
 namespace {
     const float TICKS_PER_SECOND = 20.0f;
-    // the jump control asks for a full jump, which takes the mob's own jump power
+    // the jump control asks for a full jump: the mob's own jump power
     const float FULL_JUMP_HEIGHT = 1.0f;
 
     std::mt19937 &celebrateRandom() {

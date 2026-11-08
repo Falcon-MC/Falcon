@@ -2,10 +2,7 @@
 
 class Level;
 
-/**
- * Background thread that periodically compacts the database of every tracked world. A world must be
- * untracked before its storage closes: untrack waits for a compaction that is running on it.
- */
+// untrack a world before its storage closes: untrack waits for a running compaction on it
 class AutoCompaction {
 public:
     static void start(int intervalSeconds);

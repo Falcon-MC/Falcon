@@ -14,7 +14,7 @@ FALCON_REGISTER_BLOCK(AnvilBlock, 10);
 namespace {
     const float DAMAGE_CHANCE = 0.12f;
 
-    // LevelEvent ids sent by sub_14A231EA0: 1021 after every use, 1020 when the anvil breaks.
+    // sub_14A231EA0 LevelEvents: 1021 after every use, 1020 when the anvil breaks
     const int32_t LEVEL_EVENT_ANVIL_USED = 1021;
     const int32_t LEVEL_EVENT_ANVIL_BROKEN = 1020;
 

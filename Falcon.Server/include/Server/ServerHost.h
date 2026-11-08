@@ -16,21 +16,17 @@ struct ServerHostOptions {
     int maxPlayers = 20;
     unsigned short port = 19132;
     unsigned short portV6 = 19133;
-    // Replaces the port server.properties asks for, without writing it back to the file. Port 0 lets the
-    // system pick a free one, which getPort() then reports.
+    // not written back to server.properties; 0 lets the system pick, getPort() reports it
     std::optional<unsigned short> portOverride;
-    // Listens on this IPv4 address alone, such as the loopback address. Empty listens everywhere.
+    // IPv4 only (e.g. loopback); empty listens everywhere
     std::string bindAddress;
-    // Written into server.properties before it is read, so they persist like any other setting.
+    // written into server.properties before it is read: they persist like any setting
     std::map<std::string, std::string> properties;
     bool plugins = true;
 };
 
-/**
- * Brings a server up, ticks it and takes it down without owning the process, so the dedicated executable
- * and a program embedding the server drive it the same way. One host runs at a time; once stopped, another
- * can start in the same process.
- */
+// doesn't own the process: the dedicated executable and an embedder drive it alike;
+// one host at a time, another can start once it stops
 class ServerHost {
 public:
     ServerHost();
@@ -38,21 +34,17 @@ public:
     ~ServerHost();
 
     bool start(const ServerHostOptions &options);
-    // Reserve before changing process-wide paths. Release after stop and path restoration.
+    // reserve before changing process-wide paths; release after stop and path restoration
     bool acquire();
     void release() noexcept;
 
     void tick(bool paused = false);
 
-    /**
-     * Saves the players and worlds and closes the connections, but keeps the server's objects alive. The
-     * dedicated server ends the process right after, without running destructors that plugin hosts can block.
-     */
+    // keeps the server's objects alive: the dedicated server exits right after,
+    // skipping destructors plugin hosts can block
     void shutdown();
 
-    /**
-     * Shuts down, then destroys the server and clears the process wide state, so another world can start.
-     */
+    // also clears the process-wide state: another world can start
     void stop();
 
     bool isRunning() const;

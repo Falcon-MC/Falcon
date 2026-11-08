@@ -23,8 +23,8 @@ namespace {
 }
 
 BlockStateData BlockStateUpgrades::upgrade(const BlockStateData &state) {
-    // Preview releases can add states without changing the block-state version. Schemas
-    // sharing that version must still fill missing properties, while preserving existing ones.
+    // > not >=: previews add states without a version bump; same-version schemas still fill missing
+    // properties and keep existing ones
     if (state.getVersion() > upgrader().getOutputVersion())
         return state;
 

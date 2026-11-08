@@ -126,16 +126,12 @@ namespace {
         return 0;
     }
 
-    /**
-     * Collects the blocks a piston moves, like PistonBlockActor::_attachedBlockWalker (client 26.60 sub_144C4AFD0):
-     * a walk from the block in front of the arm that follows slime and honey to every neighbour but the one it came
-     * from, and pushes whatever stands ahead of each moved block. A block reached along the move direction is pushed;
-     * one reached from the side of a sticky block is only dragged if it can be pulled.
-     */
+    // PistonBlockActor::_attachedBlockWalker (client 26.60 sub_144C4AFD0): slime and honey reach every neighbour
+    // but the one walked from; along the move direction pushed, from a sticky side only dragged if pullable
     struct MoveResolver {
         Level &mLevel;
         Vector3i mPiston;
-        // the arm being retracted: the game removes it before it walks the pulled blocks, so it counts as air
+        // the retracting arm: removed by the game before walking the pulled blocks, counts as air
         Vector3i mFreed;
         bool mHasFreed;
         int mDirection;
@@ -164,8 +160,8 @@ namespace {
                 return true;
 
             const bool ahead = branch == mDirection;
-            // the game keeps a block with a piston block actor (type 18) in place unless that actor allows the move,
-            // which covers the moving piston itself
+            // the game keeps a block with a piston block actor (type 18) in place unless its actor allows the move,
+            // the moving piston included
             if (position == mPiston || !PistonSystem::canBePushed(state))
                 return !ahead;
 
@@ -173,7 +169,7 @@ namespace {
                 if (!isInWorld(relative(position, mDirection)))
                     return false;
                 mToMove.push_back(position);
-                // the structure fails anyway past the limit, so stop walking it
+                // past the limit the structure fails anyway
                 if (mToMove.size() > (size_t) PistonSystem::MOVE_BLOCK_LIMIT)
                     return false;
 
@@ -224,10 +220,7 @@ bool PistonSystem::isArmCollision(const std::string &identifier) {
     return identifier == PISTON_ARM_COLLISION || identifier == STICKY_PISTON_ARM_COLLISION;
 }
 
-/**
- * The stored facing_direction of a piston points the opposite way on the horizontal axes,
- * so it is flipped here to get the face the arm actually extends towards.
- */
+// stored facing_direction is reversed on the horizontal axes
 int PistonSystem::getPistonFace(const BlockState &state) {
     const int index = getStoredFacing(state);
     if (index == RedstoneFace::DOWN || index == RedstoneFace::UP)
@@ -400,9 +393,8 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
         level.setBlock(destroyed, BlockState(AIR), false);
     }
 
-    // Moved blocks are lifted out of the world now, with their block actors detached and any
-    // open container screens closed, and only placed at their destination once the arm
-    // animation completes in tick(). The client draws them in between from the arm's data.
+    // lifted out now (actors detached, container screens closed), placed when the arm animation ends in
+    // tick(); the client draws them meanwhile from the arm's data
     std::vector<BlockState> moved;
     std::vector<std::unique_ptr<BlockActor>> movedActors;
     moved.reserve(toMove.size());
@@ -490,10 +482,7 @@ void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
     }
 }
 
-/**
- * True while a piston move touching the area is still animating. Movement checks use it to
- * avoid judging a player against blocks that are mid-move.
- */
+// movement checks: never judge a player against blocks mid-move
 bool PistonSystem::isMovingNear(const Level &level, const AxisAlignedBB &area) {
     const auto touches = [&area](const Vector3i &position) {
         return position.x + 1.0f > area.mMinX && position.x < area.mMaxX && position.y + 1.0f > area.mMinY

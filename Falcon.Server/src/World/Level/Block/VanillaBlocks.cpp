@@ -36,7 +36,7 @@ namespace {
     };
 
     std::atomic<const BlockOverrides *> gBlockOverrides{nullptr};
-    // Starts above the zero a fresh BlockState holds, so no state reads as resolved before its first lookup.
+    // above the 0 of a fresh BlockState: no state reads as resolved before its first lookup
     std::atomic<uint32_t> gResolvedBlockGeneration{1};
 
     std::vector<std::unique_ptr<BlockOverrides>> &publishedOverrides() {

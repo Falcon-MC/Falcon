@@ -28,14 +28,14 @@ bool ShearsItem::getDestroySpeed(const std::string &blockIdentifier, float &spee
         return true;
     }
 
-    // Besides wool, the data table only assigns shears to plants that break instantly.
+    // besides wool, the data table only gives shears to instantly broken plants
     const BlockData *data = BlockDataTable::find(blockIdentifier.c_str());
     if (data != nullptr && data->mToolType == BlockToolType::Shears) {
         speed = WOOL_SPEED;
         return true;
     }
 
-    // Glow lichen has no block class of its own; the client lists it next to vines.
+    // glow lichen has no block class; the client lists it next to vines
     if (dynamic_cast<const VineBlock *>(block) != nullptr || blockIdentifier == "minecraft:glow_lichen") {
         speed = VINE_SPEED;
         return true;

@@ -5,11 +5,8 @@
 #include <memory>
 #include <vector>
 
-/**
- * The overworld biome climate table and its search tree. Climate values are quantized like the game
- * ((int64) (value * 10000.0) in double, sub_147186B10); a biome is the entry closest to the climate, where the
- * distance is the squared distance to each parameter range (sub_147186B70).
- */
+// climate quantized like the game: (int64) (value * 10000.0) in double (sub_147186B10); a biome is the entry at the
+// smallest squared distance to its parameter ranges (sub_147186B70)
 class OverworldBiomeParameters {
 public:
     static constexpr int32_t DIMENSIONS = 7;

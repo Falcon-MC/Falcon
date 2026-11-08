@@ -343,7 +343,7 @@ void ServerNetworkHandler::_refreshActorIndex() {
         return;
 
     mActorIndexDirty = false;
-    // Buckets are cleared rather than freed so a tick does not reallocate them; ones left empty are dropped.
+    // buckets cleared, not freed: no reallocation per tick; empty ones dropped
     for (auto it = mActorIndex.begin(); it != mActorIndex.end();) {
         if (it->second.empty()) {
             it = mActorIndex.erase(it);

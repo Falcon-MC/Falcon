@@ -5,7 +5,7 @@
 class ServerNetworkHandler;
 class ServerPlayer;
 
-/** nothing is measured while the page is off, so the hud costs nothing for players who never open it */
+// nothing measured while the page is off: no cost for players who never open it
 class DebugHud {
 public:
     enum class Page {

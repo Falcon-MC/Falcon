@@ -29,7 +29,7 @@ void ServerPlayerMovementComponent::beginTick(int64_t serverTick, int maxCredits
 }
 
 std::shared_ptr<const PlayerAuthInputPacket> ServerPlayerMovementComponent::takeNext() {
-    // BDS 1.26.10 tick policy (0x140B45360): discard old inputs beyond credits + 1 or batch size.
+    // tick policy (0x140B45360, 1.26.10): discard old inputs beyond credits + 1 or batch size
     while (!mInputs.empty()) {
         if (mCredits == 0 && mInputs.size() <= 1)
             return nullptr;
@@ -67,7 +67,7 @@ bool ServerPlayerMovementComponent::takeFlightRequest(int64_t inputTick, bool in
 }
 
 void ServerPlayerMovementComponent::clearPending() {
-    // A teleport invalidates pending coordinates, but must not reopen the accepted tick sequence.
+    // a teleport invalidates pending coordinates but keeps the accepted tick sequence closed
     for (auto &input: mInputs)
         mDropped.push_back(std::move(input));
     mInputs.clear();
@@ -75,7 +75,7 @@ void ServerPlayerMovementComponent::clearPending() {
 }
 
 size_t ServerPlayerMovementComponent::catchupSteps(double previousTickMilliseconds) {
-    // BDS catchup loop (0x1432502B0): 2 * min(elapsed 50 ms steps, 20) + 1.
+    // catch-up loop (0x1432502B0): 2 * min(elapsed 50 ms steps, 20) + 1
     if (!std::isfinite(previousTickMilliseconds) || previousTickMilliseconds <= 0.0)
         return 1;
     const size_t elapsed = (size_t) std::min(previousTickMilliseconds / 50.0, 20.0);

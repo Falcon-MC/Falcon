@@ -989,8 +989,7 @@ const Vector3i &InventoryManager::getAnvilPosition() const {
     return mAnvilPosition;
 }
 
-// The anvil keeps nothing: closing it hands the input and material back, and whatever the inventory cannot hold
-// is dropped at the player.
+// the anvil keeps nothing: closing it hands input and material back, dropping what the inventory can't hold
 void InventoryManager::_closeAnvil() {
     if (mPlayer == nullptr || mOwner == nullptr)
         return;

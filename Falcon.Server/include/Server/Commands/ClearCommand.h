@@ -14,7 +14,7 @@ public:
     std::vector<CommandOverloadData> getOverloads() const override;
 
 private:
-    // An empty identifier clears everything, a maxCount of 0 only counts and -1 takes every match.
+    // empty identifier clears everything; maxCount 0 only counts, -1 takes every match
     static int32_t clearMatching(ServerPlayer &target, const std::string &identifier, int32_t data,
                                  int32_t maxCount);
 

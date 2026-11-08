@@ -67,7 +67,7 @@ bool ReplaceableBlock::getDrops(const BlockState &state, const ItemStack &tool, 
     }
 
     if (state.mName == "minecraft:seagrass") {
-        // Either half of tall seagrass drops two.
+        // either half of tall seagrass drops two
         const bool tall = state.mStates.getString("sea_grass_type", "default") != "default";
         if (isShears(tool))
             drops.push_back({state.mName, tall ? 2 : 1});

@@ -39,7 +39,7 @@ namespace {
         std::vector<SurfaceSimplexNoise> mOctaves;
     };
 
-    // minecraft:partially_frozen, on frozen_ocean and deep_frozen_ocean in the BDS 1.26.61 biomes
+    // minecraft:partially_frozen, on frozen_ocean and deep_frozen_ocean in the game's 1.26.61 biomes
     bool partiallyFrozen(int32_t biomeId) {
         return biomeId == BiomeIds::FROZEN_OCEAN || biomeId == BiomeIds::DEEP_FROZEN_OCEAN;
     }

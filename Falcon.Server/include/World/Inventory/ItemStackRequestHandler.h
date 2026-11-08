@@ -18,11 +18,7 @@ public:
     std::vector<ItemStack> mContents;
 };
 
-/**
- * Validates and applies one client item stack request (moves, swaps, drops, crafting,
- * creative picks, bundles) atomically, and builds the response listing the slots the
- * client must resync.
- */
+// one request applied atomically; the response lists the slots the client must resync
 class ItemStackRequestHandler {
 public:
     static const int RESULT_OK = 0;

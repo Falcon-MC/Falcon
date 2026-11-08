@@ -17,7 +17,7 @@
 using namespace PluginApiHelpers;
 
 namespace {
-    // Script forms count up from 1; plugin forms start far above so both share a player's callbacks safely.
+    // script forms count up from 1; plugin forms start far above: both share a player's callbacks
     constexpr uint32_t PLUGIN_FORM_ID_BASE = 0x40000000u;
 
     ServerPlayer *spawnedPlayerAt(uint32_t index) {

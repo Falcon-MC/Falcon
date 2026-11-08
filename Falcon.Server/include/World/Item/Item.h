@@ -63,7 +63,7 @@ public:
         return false;
     }
 
-    // Returns false to fall back to the digger tool type and tier of the block data.
+    // false: fall back to the block data's digger tool type and tier
     virtual bool getDestroySpeed(const std::string &blockIdentifier, float &speed) const {
         (void) blockIdentifier;
         (void) speed;

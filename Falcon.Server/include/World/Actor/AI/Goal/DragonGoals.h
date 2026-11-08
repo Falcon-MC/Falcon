@@ -6,11 +6,8 @@
 #include <memory>
 #include <string>
 
-/**
- * The eight behaviors of the ender dragon (minecraft:behavior.dragon*). Each belongs to one of the dragon's component
- * groups and only starts while that group is on the dragon, since an event that swaps the groups rebuilds the goals
- * on the next tick.
- */
+// minecraft:behavior.dragon*: a goal starts only while its component group is on the dragon;
+// an event swapping the groups rebuilds the goals on the next tick
 class DragonGoal : public Goal {
 public:
     explicit DragonGoal(const char *group);
@@ -22,7 +19,7 @@ protected:
 
     static EnderDragon &dragonOf(MobActor &mob);
 
-    /** Flies to the next node of path, at a random height up to 20 blocks above it. */
+    // random height up to 20 blocks above the node
     static void navigate(EnderDragon &dragon, EnderDragon::Path *path);
 
     // the node a ring walk ends on: the outer ring while crystals stand, the inner ones once they are gone
@@ -36,7 +33,7 @@ private:
     const char *mGroup;
 };
 
-/** Circles the island and decides when to land or to go after a player (sub_14D1D0480). */
+// sub_14D1D0480: circles the island, decides when to land or chase a player
 class DragonHoldingPatternGoal final : public DragonGoal {
 public:
     DragonHoldingPatternGoal();
@@ -59,7 +56,7 @@ private:
     bool mClockwise = false;
 };
 
-/** Flies around its target and spits a fireball once it faces it (sub_14D1D2E50). */
+// sub_14D1D2E50: fireball once it faces the target
 class DragonStrafePlayerGoal final : public DragonGoal {
 public:
     struct Settings {
@@ -98,7 +95,7 @@ private:
     int32_t mInView = 0;
 };
 
-/** Dives at the nearest player once the dragon leaves the portal to charge (sub_14D1CEA20). */
+// sub_14D1CEA20: dives at the nearest player once it leaves the portal to charge
 class DragonChargePlayerGoal final : public DragonGoal {
 public:
     struct Settings {
@@ -128,7 +125,7 @@ private:
     int32_t mTimer = 0;
 };
 
-/** Follows the nodes down to the exit portal and sits on it (sub_14D1D1110). */
+// sub_14D1D1110: follows the nodes down to the exit portal
 class DragonLandingGoal final : public DragonGoal {
 public:
     DragonLandingGoal();
@@ -149,7 +146,7 @@ private:
     bool mFinalApproach = false;
 };
 
-/** Roars, then breathes a cloud of dragon's breath in front of the portal (sub_14D1CF740). */
+// sub_14D1CF740: roars, then breathes dragon's breath in front of the portal
 class DragonFlamingGoal final : public DragonGoal {
 public:
     struct Settings {
@@ -183,7 +180,7 @@ private:
     int32_t mRoar = 0;
 };
 
-/** Looks around the portal for a player to flame or to charge (sub_14D1D1B20, sub_14D1D2130). */
+// sub_14D1D1B20, sub_14D1D2130: looks for a player to flame or charge
 class DragonScanningGoal final : public DragonGoal {
 public:
     DragonScanningGoal();
@@ -203,7 +200,7 @@ private:
     float mScanTime = 0.0f;
 };
 
-/** Leaves the portal toward the node it is looking at (sub_14D1D3B50). */
+// sub_14D1D3B50: leaves toward the node it looks at
 class DragonTakeoffGoal final : public DragonGoal {
 public:
     DragonTakeoffGoal();
@@ -224,7 +221,7 @@ private:
     bool mFirstTick = false;
 };
 
-/** Flies back over the portal to die there (sub_14D1CED00). */
+// sub_14D1CED00: flies back over the portal to die there
 class DragonDeathGoal final : public DragonGoal {
 public:
     DragonDeathGoal();
@@ -246,7 +243,7 @@ private:
 
 class DragonGoals {
 public:
-    /** The goal for a minecraft:behavior.dragon* component, or nullptr for another behavior or mob. */
+    // nullptr for another behavior or mob
     static std::unique_ptr<Goal> create(const MobActor &mob, const std::string &behavior,
                                         const json::Value &component);
 };

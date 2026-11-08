@@ -14,11 +14,8 @@
 
 class ServerNetworkHandler;
 
-/**
- * One world folder (`worlds/<name>`) with its overworld, Nether and End. Time, weather, game rules, seed and
- * spawn stay on the overworld Level, which is the only dimension that saves level.dat; the Nether and the End
- * share its database.
- */
+// time, weather, game rules, seed and spawn live on the overworld Level, the only one saving level.dat;
+// the Nether and the End share its database
 class World {
 public:
     World(uint32_t id, const std::string &name, int viewDistance, int64_t seed);
@@ -32,7 +29,7 @@ public:
 
     void saveAll(bool wait = false);
 
-    /** Closes the Nether and the End before the overworld, since they write through its database. */
+    // Nether and End first: they write through the overworld database
     void close();
 
     uint32_t getId() const {
@@ -80,7 +77,7 @@ private:
     std::unique_ptr<Level> mNether;
     std::unique_ptr<Level> mTheEnd;
     std::unique_ptr<EndDragonFight> mDragonFight;
-    // the End's saved data, kept so the fields Falcon does not use are written back unchanged
+    // kept whole: fields the server ignores are written back unchanged
     Tag mTheEndData = Tag::ofCompound();
     TickingAreaManager mTickingAreas;
     std::array<std::unordered_set<int64_t>, Dimension::DIMENSION_COUNT> mActorLoadedChunks;

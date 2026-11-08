@@ -48,7 +48,7 @@ public:
 
     Tag saveWithPosition() const;
 
-    /** Container loot the game rolls on first access. A seed of 0 means an unseeded roll. */
+    // rolled by the game on first access; seed 0: unseeded roll
     void setLootTable(const std::string &table, int32_t seed);
 
     void loadLootTable(const Tag &data);

@@ -14,11 +14,8 @@
 class Level;
 class ServerNetworkHandler;
 
-/**
- * Natural mob spawning as the dedicated server does it: every ticking chunk rolls for a spawn
- * column, and each floor of that column spawns one herd against per-pool caps that are counted
- * separately for surface and underground mobs in the surrounding chunks.
- */
+// every ticking chunk rolls a spawn column; each floor of it spawns one herd against per-pool caps,
+// counted separately for surface and underground mobs in the surrounding chunks
 class NaturalSpawner {
 public:
     static const int32_t POOL_COUNT = 7;

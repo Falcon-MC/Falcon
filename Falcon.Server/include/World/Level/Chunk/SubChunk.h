@@ -8,24 +8,19 @@
 #include <cstdint>
 #include <vector>
 
-/**
- * A 16x16x16 section stored as palette indices, with a second, lazily allocated layer for
- * waterlogging and per-block biome ids.
- */
+// layer 1 (waterlogging) allocated lazily
 class SubChunk {
 public:
     static const int BLOCK_COUNT = 4096;
     static const uint8_t STORAGE_VERSION = 9;
     static const uint8_t LAYER_COUNT = 2;
-    // one-byte biome section that repeats the section below
+    // one-byte biome section: same as the section below
     static const uint8_t BIOME_COPY_PREVIOUS = 0xff;
 
     explicit SubChunk(int8_t y);
 
-    /**
-     * The shared copy of a block state, which lives as long as the process. Sections hold these, so a
-     * state passed back by address is found in a palette without comparing it.
-     */
+    // lives as long as the process; sections hold these: a state passed back by address is found in a
+    // palette without comparing
     static const BlockState *intern(const BlockState &state);
 
     int8_t getY() const { return mY; }
@@ -46,26 +41,22 @@ public:
 
     bool hasDynamicShapes() const;
 
-    // Questions asked of a section's palettes often enough to be remembered; each always comes with the same test.
+    // cached palette questions; each always comes with the same test
     enum class PaletteQuery : uint8_t {
         RandomTick = 0,
         Water = 1
     };
 
-    /**
-     * Whether a state of either layer's palette passes `matches`, remembered until a palette changes. A palette may
-     * keep a state no block uses any more, so a true answer only means the section is worth scanning.
-     */
+    // cached until a palette changes; a palette may keep unused states: true only means worth scanning
     bool paletteMatches(PaletteQuery query, bool (*matches)(const BlockState &)) const;
 
     uint32_t getBiome(int x, int y, int z) const;
 
     void setBiome(int x, int y, int z, uint32_t biomeId);
 
-    // Gives every block of the section the same biome.
     void fillBiome(uint32_t biomeId);
 
-    // Drops the index array of a section that ended up holding a single biome, which is most of them.
+    // most sections end up holding a single biome: drops their index array
     void compactBiomes();
 
     void writeBiomes(BinaryStream &stream, bool persistent) const;
@@ -73,14 +64,11 @@ public:
     // a section saved as a copy of the previous one takes previous's biomes
     bool readBiomes(ReadOnlyBinaryStream &stream, const SubChunk *previous);
 
-    /**
-     * Writes the section as a client sees it, with its block states translated by blockIds when it is set.
-     */
     void writeNetwork(BinaryStream &stream, const BlockNetworkIdMap *blockIds = nullptr) const;
 
     void writePersistent(BinaryStream &stream) const;
 
-    // The section's storage as LevelChunk::pack() keeps it; unpackRaw() restores it exactly.
+    // LevelChunk::pack() form; unpackRaw() restores it exactly
     void packRaw(std::string &out) const;
 
     bool unpackRaw(RawPack::Reader &in);
@@ -110,7 +98,7 @@ private:
     uint16_t _biomePaletteIndexFor(uint32_t biomeId);
 
     int8_t mY;
-    // Entries point at interned states shared by every sub-chunk, so a palette entry costs a pointer.
+    // interned states: an entry costs a pointer
     std::vector<const BlockState *> mPalette;
     PaletteIndices mBlocks;
     std::vector<const BlockState *> mPalette2;

@@ -32,11 +32,7 @@ class Packet;
 class Particle;
 class ServerNetworkHandler;
 
-/**
- * One dimension of the world: resident chunks, block access, block updates, fluids, light,
- * block actors and storage. Main-thread only; chunk loading and generation are delegated
- * to a ChunkWorker and merged back through drainCompletedChunks().
- */
+// one dimension; main thread only: loading and generation go to a ChunkWorker, back via drainCompletedChunks()
 class Level {
     friend class LevelPersistenceProbe;
 public:
@@ -117,7 +113,7 @@ public:
 
     BlockActorStore &getBlockActors() { return mBlockActors; }
 
-    /** Mobs a structure spawns while it generates; the chunk worker stores them with the chunk. */
+    // mobs spawned by a generating structure; the chunk worker stores them with the chunk
     void addGeneratedEntity(Tag entity) { mGeneratedEntities.push_back(std::move(entity)); }
 
     std::vector<Tag> takeGeneratedEntities() { return std::exchange(mGeneratedEntities, std::vector<Tag>()); }
@@ -128,7 +124,7 @@ public:
 
     const GameRules &getGameRules() const { return mRulesOwner == nullptr ? mGameRules : mRulesOwner->mGameRules; }
 
-    /** Game rules belong to a world, so the Nether and the End read and write the rules of its overworld. */
+    // game rules belong to the world: Nether and End use the overworld ones
     void shareGameRulesWith(Level &overworld) { mRulesOwner = &overworld; }
 
     void initializeGameRules();
@@ -161,7 +157,7 @@ public:
 
     void eraseEntity(int64_t uniqueId);
 
-    /** Whether the actor is saved with a chunk that is not loaded. */
+    // saved in an unloaded chunk
     bool hasStoredEntity(int64_t uniqueId) const;
 
     void saveTickingArea(const std::string &id, const Tag &area);
@@ -220,23 +216,18 @@ public:
 
     size_t processChunkUnloads();
 
-    // Hands a bounded number of the chunks queued by a background save to the workers.
+    // a bounded number per call
     void processDeferredSaves();
 
-    /**
-     * Packs, a few per tick, the populated chunks nobody has read for a whole pass and that no player
-     * simulates or actor stands in. A packed chunk unpacks itself on its next read.
-     */
+    // a few per tick: populated chunks unread for a whole pass, with no simulating player or actor;
+    // unpacked on the next read
     void packIdleChunks();
 
-    // Returns freed heap pages to the system; the heap is process-wide, so one call covers every level.
+    // process-wide heap: one call covers every level
     static void releaseFreedHeap();
 
-    /**
-     * The columns an actor stands in. Actors tick wherever they are and read their blocks with
-     * synchronous loads, so a chunk under one is kept resident instead of being unloaded and loaded
-     * straight back.
-     */
+    // columns under actors stay resident: actors tick anywhere and read blocks with synchronous loads,
+    // it would unload and load straight back
     void setOccupiedColumns(std::unordered_set<int64_t> columns);
 
     void releaseChunkIfUnused(int32_t chunkX, int32_t chunkZ);
@@ -263,11 +254,8 @@ public:
 
     int32_t getHeightAt(int32_t x, int32_t z);
 
-    /**
-     * BlockSource::getAboveTopSolidBlock without water or leaves (0x1432D1700, LevelChunk part sub_1438650A0): the
-     * block above the first solid one found scanning down from y, looking through leaves. In the Nether the solid
-     * blocks at y are skipped first, so a column under the ceiling finds the ground.
-     */
+    // BlockSource::getAboveTopSolidBlock without water or leaves (0x1432D1700, LevelChunk part sub_1438650A0);
+    // Nether: skips the solid blocks at y first, a column under the ceiling finds the ground
     int32_t getAboveTopSolidBlock(int32_t x, int32_t y, int32_t z);
 
     int32_t getSkyLightSubtracted() const { return mSkyLightSubtracted; }
@@ -282,10 +270,7 @@ public:
 
     const ChunkWorker *getChunkWorker() const { return mChunkWorker.get(); }
 
-    /**
-     * The chunk's network payload, translated by blockIds for clients of another version and cached per
-     * translation. Main thread only: the caches are filled here and cleared on block changes without a lock.
-     */
+    // cached per translation; main thread only: caches filled here, cleared on block changes without a lock
     std::string getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds = nullptr);
 
     int getChunkSubChunkCount(int32_t chunkX, int32_t chunkZ);
@@ -378,7 +363,7 @@ public:
         return *mGenerator;
     }
 
-    // for work that may outlive the level, such as a biome search on its own thread
+    // for work outliving the level (biome search on its own thread)
     std::shared_ptr<const ChunkGenerator> shareGenerator() const {
         return mGenerator;
     }
@@ -423,7 +408,7 @@ private:
     void _finishPendingChangeWrite(bool wait);
 
     size_t _generationBacklog() const {
-        // Parked changes only hold generation back once far more accumulate than storage is asked to take.
+        // parked changes only hold generation back once far beyond what storage is asked to take
         const size_t parkedOverflow = mPendingBlockChangeCount > MAX_PARKED_CHANGES
                                       ? mPendingBlockChangeCount - MAX_PARKED_CHANGES : 0;
         return mIncomingChanges.size() + parkedOverflow;
@@ -451,18 +436,15 @@ private:
     VillageManager mVillageManager;
     std::unordered_map<int64_t, LevelChunk> mChunks;
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 32;
-    // Drained results waiting for insertion; new requests wait while this many are queued.
+    // drained results awaiting insertion; new requests wait at this many
     static const size_t MAX_COMPLETED_BACKLOG = 64;
     static const size_t GENERATED_CHANGES_BATCH = 1024;
-    // Generation admission waits on this queue, so the main thread drains it for as long as this budget allows.
+    // generation admission waits on this queue: drained for the whole budget
     static constexpr std::chrono::milliseconds GENERATED_CHANGES_BUDGET{8};
-    // Admission high-water mark; the finite set of already accepted results may overshoot it.
+    // high-water mark; results already accepted may overshoot it
     static constexpr size_t MAX_GENERATION_BACKLOG = 65536;
-    /**
-     * Changes parked for absent chunks stay in memory, where a load picks them up, until this many pile up.
-     * Merging them into storage rewrites each chunk's whole list, so doing it as they arrive would keep the
-     * database compacting; a level save writes the ones parked at that moment instead.
-     */
+    // parked changes stay in memory for a load to pick up; merging rewrites each chunk's whole list: done as
+    // they arrive it keeps the database compacting; a level save writes them instead
     static constexpr size_t PARKED_CHANGES_IN_MEMORY = 1 << 21;
     static constexpr size_t MAX_PARKED_CHANGES = PARKED_CHANGES_IN_MEMORY * 2;
 
@@ -476,10 +458,10 @@ private:
     // Copies wait in the worker queue until LevelDB writes them, so they are only made while few are queued.
     static constexpr size_t MAX_QUEUED_BACKGROUND_SAVES = 64;
     std::deque<int64_t> mDeferredSaves;
-    // chunks whose generated content is final, saved while no generation is running
+    // generated content final; saved while no generation runs
     std::deque<int64_t> mIdleSaves;
-    // Actor deletions run on a worker because a LevelDB write can block for seconds while it
-    // compacts; actors still being deleted are hidden from loads so they cannot come back.
+    // on a worker: a LevelDB write can block for seconds while compacting; actors being deleted are hidden
+    // from loads, they cannot come back
     std::vector<int64_t> mQueuedEntityErasures;
     std::vector<int64_t> mErasingEntityBatch;
     std::unordered_set<int64_t> mErasingEntities;
@@ -494,7 +476,7 @@ private:
     static constexpr size_t HEAP_TRIM_UNLOAD_THRESHOLD = 256;
     static constexpr size_t MAX_PACK_VISITS_PER_TICK = 4096;
     static constexpr std::chrono::microseconds PACK_BUDGET{2000};
-    // The pass in progress walks this snapshot of the loaded chunks.
+    // snapshot of the loaded chunks for the pass in progress
     std::vector<int64_t> mPackKeys;
     size_t mPackCursor = 0;
     std::unordered_set<int64_t> mOrphanCandidates;
@@ -507,8 +489,7 @@ private:
     size_t mPersistingChangeCount = 0;
     // how many parked changes a background save still has to hand to storage
     size_t mParkedChangesToFlush = 0;
-    // Chunks whose pending changes are in the write in flight; one write carries a batch of chunks
-    // so persisting keeps up with generation.
+    // in the write in flight; a batch of chunks per write: persisting keeps up with generation
     std::unordered_set<int64_t> mPersistingChangeKeys;
     static constexpr size_t MAX_PERSIST_BATCH_CHUNKS = 64;
     std::future<std::vector<GeneratedBlockChange>> mPendingChangeWrite;

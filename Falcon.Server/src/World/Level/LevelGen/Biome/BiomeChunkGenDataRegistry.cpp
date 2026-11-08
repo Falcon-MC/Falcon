@@ -123,7 +123,7 @@ namespace {
         return (uint16_t) (strings.size() - 1);
     }
 
-    // chunk generation data is left out: the game only sends it with client-side generation, which is never on here
+    // chunk generation data is left out: the game only sends it with client-side generation, never on here
     BiomeDefinitionData readDefinition(const Tag &data) {
         BiomeDefinitionData definition;
         if (data.contains("id", Tag::Type::Short))

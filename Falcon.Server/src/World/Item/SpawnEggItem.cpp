@@ -31,7 +31,7 @@ namespace {
         return identifier;
     }
 
-    // The client turns the spawned mob towards the player, measured from the player's box corner.
+    // the client turns the mob toward the player, measured from the player's box corner
     float yawTowards(const ServerPlayer &player, const Vector3f &spawnPosition) {
         const Vector3f &position = player.getPosition();
         const float dx = position.x - PLAYER_HALF_WIDTH - spawnPosition.x;

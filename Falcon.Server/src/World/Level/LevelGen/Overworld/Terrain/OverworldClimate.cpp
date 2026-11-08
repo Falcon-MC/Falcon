@@ -91,8 +91,8 @@ float OverworldClimate::offsetAt(int32_t quartX, int32_t quartZ, float *erosion)
 }
 
 int32_t OverworldClimate::preliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const {
-    // The terrain filler, the aquifer, the surface builder and feature placement all ask for the same few columns
-    // of a chunk, often per block; the level is a pure function of the column, so each worker remembers recent ones.
+    // filler, aquifer, surface builder and feature placement ask for the same few columns, often per block; a pure
+    // function of the column: each worker remembers recent ones
     struct Remembered {
         uint64_t mClimate = 0;
         int32_t mQuartX = 0;

@@ -65,17 +65,10 @@ public:
         return mPoseIndex;
     }
 
-    /**
-     * The equipment slot a click at offsetY above the feet reaches with an empty hand, or -1. The
-     * chest band gives way to the main hand while the stand holds something.
-     */
+    // -1 for none; the chest band gives way to the main hand while the stand holds something
     static int slotForClick(float offsetY, bool mainhandOccupied);
 
-    /**
-     * Applies an exchange between a stand slot and the held stack, or changes nothing and returns
-     * false. Every item leaving one side reaches the other, except that a creative player keeps
-     * the held stack when filling an empty slot.
-     */
+    // false changes nothing; a creative player keeps the held stack when filling an empty slot
     static bool exchange(ItemStack &slot, ItemStack &held, bool creative);
 
 private:

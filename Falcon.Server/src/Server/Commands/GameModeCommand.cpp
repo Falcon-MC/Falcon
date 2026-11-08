@@ -60,8 +60,7 @@ int GameModeCommand::parseGameMode(const std::string &value) {
 }
 
 const char *GameModeCommand::getGameModeName(int gameMode) {
-    // The client resolves a leading % inside a translation parameter, so the mode name gets
-    // localised the same way the vanilla command does it.
+    // the client resolves a leading % inside a translation parameter: the mode name localises like the game's
     switch ((GameType) gameMode) {
         case GameType::Survival:
             return "%gameMode.survival";

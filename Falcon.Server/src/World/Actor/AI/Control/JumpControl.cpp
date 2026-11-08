@@ -38,9 +38,8 @@ void JumpControl::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (block != nullptr)
         jumpFactor = block->getJumpFactor();
 
-    // A full-block obstacle takes the mob's jump power, which clears about 1.25 blocks: stronger impulses
-    // would carry chickens and armadillos over fences. The jump replaces the vertical speed instead of adding
-    // to it, or the ground's gravity step (-0.0784) leaves too little to climb a block.
+    // a full-block obstacle takes the mob's jump power (~1.25 blocks): more would carry chickens and armadillos
+    // over fences; the jump replaces vertical speed: added to the ground gravity step (-0.0784) it can't climb a block
     const bool fullJump = !inWater && mHeight >= FULL_JUMP_HEIGHT;
     Vector3f motion = mob.getMotion();
     const float impulse = (fullJump ? mob.getJumpPower() : jumpingMotion(mHeight, inWater)) * jumpFactor;

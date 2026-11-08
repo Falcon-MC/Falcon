@@ -184,8 +184,7 @@ ScriptEngine::ScriptEngine()
         return;
     }
 
-    // a behavior pack script is untrusted, so cap its heap and native stack: without these a script can
-    // exhaust the server's memory or overflow the stack. the watchdog only bounds run time.
+    // behavior pack scripts are untrusted: cap heap and native stack; the watchdog only bounds run time
     JS_SetMemoryLimit(mRuntime, SCRIPT_MEMORY_LIMIT_BYTES);
     JS_SetMaxStackSize(mRuntime, SCRIPT_MAX_STACK_BYTES);
 

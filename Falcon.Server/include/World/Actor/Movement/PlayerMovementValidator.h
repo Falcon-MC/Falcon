@@ -16,7 +16,7 @@ struct MovementCorrectionDetails {
     uint64_t previousCorrectionTick = 0;
 };
 
-/** Position reconciliation policy, independent of travel physics and client velocity. */
+// independent of travel physics and client velocity
 class PlayerMovementValidator {
 public:
     bool reconcile(Vector3f &simulated, const Vector3f &reported, uint64_t tick, float threshold, bool strict,
@@ -34,7 +34,7 @@ public:
 
     void onMovementEffect(uint64_t tick);
 
-    // the client predicts its own exit point, which the next input reports once
+    // the client predicts its own exit point; the next input reports it once
     void allowDismountPosition() {
         mDismountPending = true;
     }
@@ -42,12 +42,9 @@ public:
     // true when the input must move the player straight to the reported position
     bool takeDismountPosition(const Vector3f &simulated, const Vector3f &reported);
 
-    /**
-     * Proves that a correction reached the client: a network stack latency request goes out right after it, and
-     * once the client acknowledges that request it has received the correction too. Inputs that still diverge
-     * after the acknowledgement mean the client dropped it. The acknowledgement is handled on arrival while inputs
-     * wait in a queue, so only inputs newer than the last one received with it can carry the correction.
-     */
+    // proves a correction reached the client: a network stack latency request follows it, its ack means the
+    // correction arrived too; inputs still diverging after it mean a drop; the ack is handled on arrival while inputs
+    // queue: only inputs newer than the last one received with it can carry the correction
     bool armCorrectionCheck() {
         if (mCorrectionCheck != CorrectionCheck::None)
             return false;
@@ -62,9 +59,8 @@ public:
         mAcknowledgedInputTick = lastReceivedInputTick;
     }
 
-    // Returns the number of inputs that ignored an acknowledged correction so far. Only consecutive inputs count: when
-    // the input queue discarded some (a burst after lag or blink), the simulation skipped them and its divergence
-    // says nothing about the client, so the check starts over.
+    // inputs ignoring an acknowledged correction so far; consecutive only: inputs the queue discarded (burst
+    // after lag or blink) were skipped by the simulation, their divergence says nothing: start over
     uint32_t noteInputAfterCorrection(int64_t inputTick, bool diverging) {
         const bool consecutive = inputTick == mLastInputTick + 1;
         mLastInputTick = inputTick;

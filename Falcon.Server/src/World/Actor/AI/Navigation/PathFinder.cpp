@@ -240,10 +240,7 @@ void PathFinder::_expandGround(int32_t nodeIndex) {
     }
 }
 
-/**
- * Expands to the 18 neighbours that share a face or an edge with the node. Corner moves are left out, and an
- * edge move is only allowed when both face moves it cuts across are open, so the mob never clips a corner.
- */
+// 18 face and edge neighbours, no corners; an edge move needs both face moves it cuts across open: no corner clipping
 void PathFinder::_expandVolume(int32_t nodeIndex, bool swimming) {
     const Node node = mNodes[nodeIndex];
 

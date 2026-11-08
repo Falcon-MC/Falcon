@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string>
 
-/** A point of interest found in the world, created from its block's blueprint with no owners yet. */
+// created from its block's blueprint with no owners yet
 struct PoiInstance {
     PoiInstance(const Vector3i &position, const PoiBlueprint &blueprint);
 

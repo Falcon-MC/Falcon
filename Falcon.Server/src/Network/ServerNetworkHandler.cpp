@@ -152,12 +152,8 @@ int64_t ServerNetworkHandler::randomSeed() {
 }
 
 namespace {
-    /**
-     * The game's own WebRTC stack never aborts an SCTP association over retransmissions and leaves
-     * liveness to ICE consent checks, backing its timers off to at most 3 s. The transport library
-     * defaults instead abort after 5 unacknowledged retransmissions, about 6 s on a local link, so a
-     * client stalled for a few seconds under load is dropped although it would have caught up.
-     */
+    // the game's WebRTC never aborts SCTP over retransmissions (ICE consent checks, timers capped at 3 s);
+    // libdatachannel aborts after 5 retransmits (~6 s locally): drops a client stalled under load
     void configureNetherNetSctp() {
         rtc::SctpSettings settings;
         settings.maxRetransmitAttempts = 60;
@@ -620,7 +616,7 @@ void ServerNetworkHandler::stopServerListening() {
     if (!mIsListening)
         return;
 
-    // Prevent destruction from retrying partially completed shutdown after an exception.
+    // set first: after an exception mid-shutdown the destructor won't retry it
     mIsListening = false;
     struct DisconnectOnExit {
         NetworkHandler *handler;
@@ -737,7 +733,7 @@ void ServerNetworkHandler::tick(bool paused) {
     const int autoSaveInterval = mProperties.getAutoSaveInterval();
     if (mAutoSaveEnabled && autoSaveInterval > 0 && mCurrentTick % autoSaveInterval == 0)
         autoSave();
-    // Chunk generation and saving copy whole chunks, so freed memory piles up even when nothing unloads.
+    // chunk generation and saving copy whole chunks: freed memory piles up even without unloads
     if (mCurrentTick % HEAP_RELEASE_INTERVAL_TICKS == 0)
         Level::releaseFreedHeap();
     mProfiler.beginTick(mCurrentTick);
@@ -960,7 +956,7 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
 
     mModalFormCallbacks.erase(id);
     erasePlayer(id);
-    // an awake player leaving can bring the remaining sleepers up to the threshold.
+    // an awake player leaving can bring the remaining sleepers up to the threshold
     if (playerWorld != nullptr)
         _updateSleepingPlayerList(*playerWorld);
     LOG_INFO(LogAreaID::Network, "%s disconnected, reason: %s", playerName.c_str(), toString(reason));
@@ -1074,8 +1070,7 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
             }
         }
 
-        // the shared codec can build clientbound packets too; decoding those on the server exposes large,
-        // never-hardened client-side decoders to remote input, so only the packets the server handles are read
+        // the shared codec builds clientbound packets too; decoding those exposes unhardened client-side decoders
         if (!_isServerboundPacket(packetId)) {
             LOG_TRACE(LogAreaID::Network, "Dropping non-serverbound packet id %d from %s", (int) packetId,
                       id.getAddress().c_str());
@@ -1103,8 +1098,7 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
             packet->handle(id, *this);
         }
     } catch (const BinaryDataException &exception) {
-        // Any decode or handler failure ends that connection instead of propagating: a
-        // malformed packet must never take the server down.
+        // a decode or handler failure ends only this connection, never the server
         LOG_WARN(LogAreaID::Network, "Malformed packet from %s: %s", id.getAddress().c_str(), exception.what());
         _disconnect(id, DisconnectReason::BadPacket, "disconnectionScreen.unexpectedPacket");
     } catch (const std::exception &exception) {
@@ -1132,8 +1126,8 @@ bool ServerNetworkHandler::_allowPacket(const NetworkIdentifier &id, RateLimited
     if (limiter->second.tryAcquire(category))
         return true;
 
-    // Only exceeding the overall inbound budget disconnects, and only once; other categories
-    // just drop the packet so a burst of chat or commands does not kick the player.
+    // only the overall inbound budget disconnects, once; other categories drop the packet:
+    // a chat or command burst does not kick
     if (category == RateLimitedPacket::Inbound && limiter->second.markFlooded()) {
         LOG_WARN(LogAreaID::Network, "Disconnecting %s for packet flooding", id.getAddress().c_str());
         _disconnect(id, DisconnectReason::BadPacket, "disconnectionScreen.unexpectedPacket");
@@ -1143,11 +1137,8 @@ bool ServerNetworkHandler::_allowPacket(const NetworkIdentifier &id, RateLimited
 }
 
 const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverboundPackets() {
-    // single source of truth for what the server decodes from a client: the login/cache packets the client
-    // sends before it has a player, plus one entry per handle() override below. the shared codec can also build
-    // clientbound packets (it is used to send them), and decoding those exposes large client-side decoders to
-    // remote input, so anything not in this set is dropped before createPacket. keep this list in step with the
-    // handle() overrides in ServerNetworkHandler.h; _validateServerboundPackets() checks it at startup.
+    // login/cache packets sent before a player exists, plus one entry per handle() override;
+    // anything else is dropped before createPacket; _validateServerboundPackets() checks it at startup
     static const std::unordered_set<MinecraftPacketIds> allowed = {
         MinecraftPacketIds::RequestNetworkSettings,
         MinecraftPacketIds::Login,
@@ -1193,8 +1184,7 @@ bool ServerNetworkHandler::_isServerboundPacket(MinecraftPacketIds packetId) {
 }
 
 void ServerNetworkHandler::_validateServerboundPackets() const {
-    // a packet the server means to handle but that the active codec cannot build would be dropped before decode:
-    // surface that drift at startup rather than losing the packet silently in production.
+    // a handled packet the codec cannot build would be dropped silently: log it at startup
     const ProtocolCodec &codec = mCodecContext.getCodec();
     for (const MinecraftPacketIds id: _serverboundPackets()) {
         if (!codec.supports(id))
@@ -1293,8 +1283,7 @@ void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, DisconnectRe
 
     mNetworkHandler->send(id, disconnect, mCodecContext);
     mNetworkHandler->flush(id);
-    // the Disconnect packet is advisory: a hostile client can ignore it, so the connection is also dropped.
-    // the commands are queued in order, so the kick message is delivered before the socket is closed.
+    // Disconnect is advisory: a hostile client can ignore it; commands are queued, the message goes out first
     mNetworkHandler->closeConnection(id);
 }
 
@@ -1758,8 +1747,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     if (dx * dx + dy * dy + dz * dz > 10000.0f)
         return;
 
-    // peek only, and require an actual sign at the position: without this any block in range would relay an
-    // arbitrary client NBT compound to everyone, and a far position could force a chunk to load.
+    // peek only, and require a sign: else any block in range relays arbitrary client NBT to everyone,
+    // and a far position forces a chunk load
     const BlockState *statePtr = getLevelFor(*player).peekBlockPtr(packet.mBlockPosition.x, packet.mBlockPosition.y,
                                                                    packet.mBlockPosition.z);
     if (statePtr == nullptr || !isSignBlock(statePtr->mName))
@@ -1767,7 +1756,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     if (!packet.mData.isCompound())
         return;
 
-    // cap each relayed line so a client cannot push an oversized string to every player
+    // cap each relayed line: no oversized string pushed to every player
     static const size_t MAX_SIGN_TEXT = 512;
     BlockActorDataPacket relayed = packet;
     const char *const textKeys[] = {"Text1", "Text2", "Text3", "Text4"};
@@ -1813,7 +1802,6 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     }
 
     for (auto &entry: mPlayers) {
-        // only players in the same world and dimension should receive the sign update
         if (entry.second.isSpawned() && entry.second.sharesLevelWith(*player))
             mNetworkHandler->send(entry.second.getNetworkIdentifier(), relayed, mCodecContext);
     }

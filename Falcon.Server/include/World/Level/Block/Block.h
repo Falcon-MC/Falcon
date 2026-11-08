@@ -121,12 +121,12 @@ public:
         return false;
     }
 
-    // a replaceable block that stays in place when an actor item such as an armor stand is placed into it
+    // replaceable, yet stays when an actor item (armor stand) is placed into it
     virtual bool staysUnderPlacedActor() const {
         return false;
     }
 
-    // the item of this block goes in the head slot when an armor stand is given it
+    // head slot when given to an armor stand
     virtual bool isWornOnHead() const {
         return false;
     }
@@ -159,7 +159,7 @@ public:
         return BlockTraversal::None;
     }
 
-    /** How mob pathfinding treats this block: navigation options decide whether a hazard is avoided. */
+    // navigation options decide whether the hazard is avoided
     virtual PathHazard getPathHazard() const {
         return PathHazard::None;
     }
@@ -244,7 +244,7 @@ public:
         return false;
     }
 
-    // Must return true in every class that overrides onRandomTick, so random ticks can skip inert blocks.
+    // true in every class overriding onRandomTick: random ticks skip inert blocks
     virtual bool hasRandomTick() const {
         return false;
     }

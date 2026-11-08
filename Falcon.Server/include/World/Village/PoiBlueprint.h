@@ -3,14 +3,14 @@
 #include <cstdint>
 #include <string>
 
-/** Point of interest kinds, in the order the vanilla village manager indexes its per-type POI maps. */
+// order of the game's per-type poi maps in the village manager
 enum class PoiType : int32_t {
     Bed = 0,
     MeetingArea = 1,
     JobSite = 2
 };
 
-/** What a block becomes when a dweller's scan turns it into a point of interest. */
+// what a dweller's scan turns the block into
 struct PoiBlueprint {
     std::string mName;
     std::string mInitEvent;
@@ -22,6 +22,5 @@ struct PoiBlueprint {
 
 class PoiBlueprints {
 public:
-    /** The blueprint registered for a block identifier, or nullptr when the block is not a point of interest. */
     static const PoiBlueprint *find(const std::string &identifier);
 };

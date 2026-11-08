@@ -502,8 +502,8 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
             if (durability != nullptr && durability->isObject() && durability->get("max_durability") != nullptr)
                 definition.mMaxDurability = durability->get("max_durability")->integer(0);
 
-            // minecraft:repairable: each repair_items entry lists items, as names or {"name": ...}, and a
-            // repair_amount that is a number or a Molang expression
+            // minecraft:repairable: each repair_items entry lists items (names or {"name": ...})
+            // and a repair_amount: number or Molang expression
             const json::Value *repairable = components->get("minecraft:repairable");
             const json::Value *repairItems = repairable != nullptr && repairable->isObject()
                                              ? repairable->get("repair_items") : nullptr;
@@ -686,9 +686,8 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
         components.put("minecraft:durability", durability);
     }
 
-    // the client previews anvil repairs from this component, so it goes out as the game writes it: each
-    // repair_amount is an ExpressionNode in its object form (sub_141D3B840), the expression and its short
-    // MolangVersion, Latest (12) for pack content
+    // the client previews anvil repairs from this: sent as the game writes it, each repair_amount an ExpressionNode
+    // in object form (sub_141D3B840): expression plus short MolangVersion, Latest (12) for pack content
     if (!item.mRepairItems.empty()) {
         Tag repairItems = Tag::ofList(Tag::Type::Compound);
         for (const CustomRepairEntry &entry: item.mRepairItems) {

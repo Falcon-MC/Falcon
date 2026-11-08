@@ -15,7 +15,6 @@ class Level;
 class PacketCodecContext;
 class ServerNetworkHandler;
 
-/** The block actors of one level. Every stored actor knows that level through BlockActor::getLevel(). */
 class BlockActorStore {
 public:
     explicit BlockActorStore(Level &level) : mLevel(&level) {}

@@ -10,11 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-/**
- * One 16x16 column of sub-chunks with its light, heightmap and biomes. Encoded network
- * forms are cached per sub-chunk and invalidated by block changes. Owned by the main
- * thread once resident; workers only ever see copies.
- */
+// main thread once resident; workers only see copies; network encodings cached per sub-chunk
 class LevelChunk {
 public:
     static constexpr int SUB_CHUNK_COUNT = 24;
@@ -63,19 +59,13 @@ public:
 
     uint32_t getColumnBiome(int x, int z) const;
 
-    /**
-     * The chunk as a client sees it, with the block states translated by blockIds when it is set.
-     */
     std::string encodeNetwork(const BlockNetworkIdMap *blockIds = nullptr) const;
 
     const std::string &encodeNetworkAnchor() const;
 
     const std::string &encodeSubChunkNetwork(int index) const;
 
-    /**
-     * A section translated for clients of another version, cached per translation like the untranslated one.
-     * Main thread only: the cache is filled here and cleared by setBlock without a lock.
-     */
+    // cached per translation; main thread only: filled here, cleared by setBlock without a lock
     const std::string &encodeSubChunkNetwork(int index, const BlockNetworkIdMap &blockIds) const;
 
     const std::vector<int32_t> &getTopBlockHeights() const;
@@ -141,18 +131,15 @@ public:
 
     int getFirstNetworkSubChunk() const { return mFirstNetworkSubChunk; }
 
-    /**
-     * Folds the sections and light into one compressed buffer while nobody reads the chunk: most loaded chunks
-     * are only kept for the players who see them. Any read or write unpacks it again, exactly as it was.
-     * Main thread only, like the chunk itself; a copy keeps the packed form.
-     */
+    // sections and light into one compressed buffer: most loaded chunks are only kept for viewers; any read
+    // or write unpacks it; main thread only, a copy stays packed
     void pack();
 
     bool isPacked() const {
         return mPacked;
     }
 
-    // Whether the chunk was read or written since the last call, which a packer uses to leave busy chunks alone.
+    // read or written since the last call: the packer leaves busy chunks alone
     bool consumeAccessed();
 
 private:
@@ -172,7 +159,7 @@ private:
     int mNetworkSubChunkLimit = SUB_CHUNK_COUNT;
     bool mDirty;
     bool mPopulated = false;
-    // Mutable because const reads unpack a packed chunk first.
+    // mutable: const reads unpack a packed chunk first
     mutable std::vector<SubChunk> mSubChunks;
     std::vector<int16_t> mHeightmap;
     mutable LightStorage mSkyLight;

@@ -16,7 +16,7 @@ using namespace PlantGrowthHelpers;
 namespace {
     const int32_t MAX_CACTUS_HEIGHT = 3;
     const float CACTUS_DAMAGE = 1.0f;
-    // Inset by 1/16 on the sides, so an actor pressed against a cactus overlaps its cell and touches it.
+    // 1/16 side inset: an actor pressed against it overlaps the cell and touches it
     const float CACTUS_INSET = 0.0625f;
 
     bool isHorizontalNeighbourhoodClear(Level &level, const Vector3i &position) {

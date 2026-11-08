@@ -37,7 +37,7 @@ private:
 
     void _jitter(int32_t gridX, int32_t gridZ, float &x, float &z) const;
 
-    // index of the nearest of the four corners of a cell, for the block at (localX, localZ) of that cell
+    // index of the nearest of a cell's four corners to the block at (localX, localZ) in it
     static int32_t _nearestCorner(const float *cornerX, const float *cornerZ, int32_t localX, int32_t localZ);
 
     std::array<ClimateNoise, 4> mNoises;

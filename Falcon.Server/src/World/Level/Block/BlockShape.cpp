@@ -53,11 +53,7 @@ bool BlockShape::isFullCube(const BlockState &state) {
            && shape.mMaxX >= 1.0f && shape.mMaxY >= 1.0f && shape.mMaxZ >= 1.0f;
 }
 
-/**
- * Collision box of a block in local 0..1 coordinates. A block class can provide its own
- * shape; the table below covers the remaining non-cubic blocks. Fence-like shapes are 1.5
- * blocks tall so they cannot be jumped over.
- */
+// local 0..1 coordinates; fence-like shapes are 1.5 tall: not jumpable
 AxisAlignedBB BlockShape::getRelativeShape(const BlockState &state) {
     if (!hasCollision(state))
         return EMPTY_SHAPE;
@@ -69,8 +65,7 @@ AxisAlignedBB BlockShape::getRelativeShape(const BlockState &state) {
     if (block != nullptr && block->getCollisionShape(state, shape))
         return shape;
 
-    // A single box cannot describe a stair, so only its slab half is used; the raised step
-    // is not part of the collision shape.
+    // one box per block: a stair collides as its slab half only
     if (endsWith(name, "_stairs")) {
         if (isUpsideDown(state))
             return AxisAlignedBB(0.0f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f);

@@ -15,7 +15,7 @@ class OverworldClimate;
 // the feature rules whose feature is ported, scattered and shaped like the game's feature rules (sub_14A22D800)
 class OverworldRulePlacer {
 public:
-    // whether apply places this rule, so the feature builder must not place it again
+    // true when apply places this rule: the feature builder skips it
     static bool handles(const BiomeFeatureEntry &entry);
 
     // pass by pass, biomes in the order the game visits them; with more than one, each rule only places in its own
@@ -23,20 +23,17 @@ public:
     static void apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate &climate,
                       uint32_t levelSeed, const std::vector<int32_t> &biomes);
 
-    // every pass of one biome's rules, for the generators without a climate that decorate with a single biome; the
-    // rules' math.random draws from that generator's decoration random, which its decoration goes on with
+    // for the climate-less single-biome generators; math.random draws from their decoration random, their own
+    // decoration continues from it
     static void applyBiome(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed, int32_t biome,
                            std::mt19937 &decoration);
 
-    /**
-     * Draws the rules of one biome from the random a generator's own decoration goes on with afterwards, without
-     * placing them: each rule seeds that random again, then draws its chance, its iterations and its coordinates
-     * from it, so the decoration continues from the state the last rule leaves.
-     */
+    // draws without placing: each rule reseeds `shared`, then draws its chance, iterations and coordinates;
+    // the generator's decoration continues from the last rule's state
     static void drawBiomeRules(BlockManager &blocks, const LevelChunk &chunk, int32_t biome, uint32_t decorationSeed,
                                std::mt19937 &shared);
 
-    // one vein of OreFeature for the generators that place their ores themselves
+    // one vein of OreFeature, for generators placing their own ores
     static bool placeOreVein(BlockManager &blocks, int32_t count, Block (*places)(),
                              const std::vector<std::string> &mayReplace, int32_t x, int32_t y, int32_t z,
                              std::mt19937 &random);
@@ -61,9 +58,9 @@ private:
     struct GrowingPlantDefinition;
     struct DripstoneDefinition;
 
-    // one of the game's features a rule or another feature places
     struct FossilDefinition;
 
+    // one of the game's features a rule or another feature places
     struct Placed {
         const SeagrassDefinition *mSeagrass = nullptr;
         const ScatterDefinition *mScatter = nullptr;

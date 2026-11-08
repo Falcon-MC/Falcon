@@ -53,7 +53,7 @@ public:
 
     uint32_t getWorldId() const { return mWorldId; }
 
-    /** Places the actor in `level`: its dimension and its world change together. */
+    // dimension and world change together
     void moveToLevel(const Level &level);
 
     bool isIn(const Level &level) const;

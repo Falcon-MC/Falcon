@@ -32,7 +32,7 @@ namespace {
     const int32_t FINALIZED_STATE_NEEDS_POPULATION = 1;
     const int32_t FINALIZED_STATE_DONE = 2;
     const char *PENDING_BLOCK_CHANGES_PREFIX = "falcon_pending_block_changes";
-    // An NBT root starts with its tag type, never this byte, so the compact format is told apart from the old one.
+    // an NBT root starts with its tag type, never 0xff: tells the compact format from the old one
     const unsigned char PENDING_CHANGES_COMPACT_MARKER = 0xff;
     const unsigned char PENDING_CHANGES_COMPACT_VERSION = 1;
     const std::string ACTOR_PREFIX = "actorprefix";
@@ -120,8 +120,7 @@ void LevelStorage::_appendLInt(std::string &out, int32_t value) {
 }
 
 std::string LevelStorage::_makeKey(int32_t chunkX, int32_t chunkZ, LevelDbTag tag) const {
-    // World database key layout: x and z as little-endian ints, the dimension id only for
-    // dimensions other than the overworld, then the record tag byte.
+    // x, z as LE ints, dimension id unless overworld, then the record tag byte
     std::string key;
     _appendLInt(key, chunkX);
     _appendLInt(key, chunkZ);
@@ -179,13 +178,11 @@ bool LevelStorage::open(const std::string &worldsDirectory, const std::string &l
 
     leveldb::Options options;
     options.create_if_missing = true;
-    // Raw zlib is the block compression the game uses for its world databases, which keeps
-    // worlds interchangeable with it.
+    // raw zlib: the game's block compression, worlds stay interchangeable
     options.compression = leveldb::kZlibRawCompression;
     options.block_size = 163840;
-    // Chunk keys are spread over the whole key space, so every table flushed from the memtable overlaps all of
-    // level 1 and makes it be rewritten. With a 4 MB memtable, about 0.5 MB once compressed, saving freshly
-    // generated terrain kept compaction so far behind that writes stalled, an auto-save for seconds.
+    // chunk keys span the whole key space: every flushed table overlaps all of level 1 and rewrites it;
+    // a 4 MB memtable (0.5 MB compressed) let compaction fall behind and stalled auto-saves for seconds
     options.write_buffer_size = 32 * 1024 * 1024;
     mFilterPolicy.reset(leveldb::NewBloomFilterPolicy(10));
     mBlockCache.reset(leveldb::NewLRUCache(8 * 1024 * 1024));
@@ -243,8 +240,7 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
     if (mDb == nullptr)
         return false;
 
-    // All records of a chunk go in one batch so a crash mid-save never leaves a chunk with
-    // some sub-chunks from the old version and some from the new.
+    // one batch: a crash mid-save never mixes old and new sub-chunks
     leveldb::WriteBatch batch;
 
     const std::string version(1, (char) LevelChunk::STORAGE_VERSION);
@@ -268,8 +264,7 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
         batch.Put(_makeSubChunkKey(chunk.getX(), chunk.getZ(), subChunk.getY()), stream.getBuffer());
     }
 
-    // The 3D data record starts with a 256-entry 16-bit heightmap. It is written as zeros
-    // because the server never reads it back: loadChunk skips those 512 bytes.
+    // Data3D starts with a 256-entry 16-bit heightmap: zeros, loadChunk skips those 512 bytes
     BinaryStream heightAndBiomes;
     for (int i = 0; i < 256; i++) {
         heightAndBiomes.putByte(0);
@@ -392,8 +387,8 @@ bool LevelStorage::mergePendingBlockChanges(int32_t chunkX, int32_t chunkZ,
         merged.push_back(change);
     }
 
-    // Each state is written once, and every change refers to it by index: a chunk often holds thousands of
-    // spilled blocks of a few states, which as one NBT compound each would make every save rewrite megabytes.
+    // states once, changes by index: thousands of spilled blocks of a few states; one compound each would
+    // rewrite megabytes per save
     BinaryStream stream;
     stream.putByte(PENDING_CHANGES_COMPACT_MARKER);
     stream.putByte(PENDING_CHANGES_COMPACT_VERSION);

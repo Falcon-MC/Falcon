@@ -54,7 +54,7 @@ def verify(root, verify_content):
                 relative = path.relative_to(root).as_posix()
                 if relative not in inventoried:
                     errors.append('File missing from inventory: ' + relative)
-    # A legacy owned include must not silently resolve to a different dependency header.
+    # a legacy owned include must not silently resolve to another dependency header
     legacy = {row['old'].removeprefix('Falcon.Server/include/')
               for row in records if row['old'].startswith('Falcon.Server/include/')
               and row['old'] != row['path']}

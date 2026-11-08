@@ -24,9 +24,6 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
-    /**
-     * Wears the anvil after a player takes a result from it, as sub_14A231EA0 does: outside creative there is a
-     * 12% chance it drops one damage stage, and a damaged anvil is destroyed.
-     */
+    // sub_14A231EA0: outside creative, 12% chance to drop one damage stage; past the last stage it breaks
     static void onUsed(ServerNetworkHandler &owner, Level &level, const Vector3i &position, bool creative);
 };

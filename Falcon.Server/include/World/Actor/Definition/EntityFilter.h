@@ -11,10 +11,7 @@ class ActorDamageSource;
 
 class EntityFilter {
 public:
-    /**
-     * Exposes the damage being evaluated to `has_damage` while a damage sensor runs its filters.
-     * Filters are only ever tested on the main thread, so one active scope at a time is enough.
-     */
+    // exposes the evaluated damage to has_damage; filters run on the main thread only: one scope at a time
     class DamageScope {
     public:
         DamageScope(const ActorDamageSource &source, float amount);
@@ -29,7 +26,7 @@ public:
     static bool test(const json::Value &filter, ServerNetworkHandler &owner, const MobActor &self,
                      const Actor *other = nullptr);
 
-    /** Whether the actor's `minecraft:type_family` lists family; a player is only of the `player` family. */
+    // a player is only of the player family
     static bool hasFamily(const Actor &actor, const std::string &family);
 
 private:

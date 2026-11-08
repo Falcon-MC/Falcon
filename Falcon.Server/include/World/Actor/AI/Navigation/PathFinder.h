@@ -22,10 +22,7 @@ public:
 
     bool findPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options, Path &path);
 
-    /**
-     * Straight-line path for swimmers and fliers when nothing blocks the way. It costs a single ray test, so
-     * callers try it before spending one of the per-tick search slots.
-     */
+    // one ray test: callers try it before spending a per-tick search slot
     bool findDirectPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options,
                         Path &path);
 

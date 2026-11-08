@@ -15,17 +15,9 @@
 class ChunkGenerator;
 class LevelChunk;
 
-/**
- * Terrain shared by every worker of a level. Populating a chunk needs the terrain of its eight
- * neighbours, and adjacent chunks usually land on different workers, so a per-worker cache would
- * regenerate most of them. Entries are handed out as copies, so callers need no locking.
- *
- * A chunk can hold two versions: its raw terrain, as the generator produced it, and the neighbour
- * a decoration left behind, with the blocks it spilled. A chunk that is loaded must start from the
- * raw terrain, or its content would depend on which neighbours happened to be decorated first;
- * the decorated version only serves as context when the next neighbour is decorated, as the
- * per-worker cache did before it was shared.
- */
+// shared by every worker: a chunk's eight neighbours usually land on other workers; entries handed out as copies
+// two versions per chunk, raw terrain and the neighbour a decoration left behind: a loaded chunk starts from the raw
+// one, or its content would depend on which neighbours were decorated first
 class TerrainCache {
 public:
     static constexpr size_t MAX_CACHED_CHUNKS = 1024;
@@ -36,27 +28,24 @@ public:
 
     TerrainCache &operator=(const TerrainCache &) = delete;
 
-    /**
-     * The raw terrain of a chunk, generated and cached when it is not cached yet. A caller asking
-     * for terrain another worker is generating waits for it instead of generating it again.
-     */
+    // waits when another worker is generating the same chunk
     LevelChunk terrain(int32_t chunkX, int32_t chunkZ);
 
-    // The chunk as the last decoration of a neighbour left it, or its raw terrain when none did.
+    // the chunk as the last neighbour decoration left it, else its raw terrain
     LevelChunk neighbour(int32_t chunkX, int32_t chunkZ);
 
-    // Keeps a neighbour as a decoration left it, for the decoration of the next one.
+    // the neighbour as a decoration left it: context for the next one
     void put(LevelChunk chunk);
 
 private:
     struct Entry {
-        // both shared and never changed once stored, so a worker copies one out after letting go of the lock
+        // shared and immutable once stored: a worker copies one out after releasing the lock
         std::shared_ptr<const LevelChunk> mTerrain;
         std::shared_ptr<const LevelChunk> mDecorated;
         std::list<int64_t>::iterator mOrder;
     };
 
-    // Releases the claim on a chunk being generated, even when generation throws, so waiting workers carry on.
+    // releases the claim even when generation throws: waiting workers carry on
     struct GenerationClaim {
         TerrainCache &mCache;
         int64_t mKey;
@@ -78,10 +67,7 @@ private:
     std::list<int64_t> mOrder;
 };
 
-/**
- * Per-worker population context: a private scratch level that holds a chunk and its
- * neighbours while it is decorated. The neighbours come from the level's shared terrain cache.
- */
+// per worker: a private scratch level holding a chunk and its neighbours, from the shared TerrainCache, while decorated
 class GeneratorChunkSource {
 public:
     GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache);

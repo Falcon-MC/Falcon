@@ -38,8 +38,7 @@ void GroundTravelSystem::tick(PlayerMovementContext &context) {
         float accelerationMultiplier = ground == nullptr ? 1.0f : ground->getAccelerationFrictionMultiplier();
         if (ItemEnchantments::getLevel(boots, EnchantmentIds::SOUL_SPEED) > 0)
             accelerationMultiplier = 1.0f;
-        // Ground acceleration scales with the cube of (default friction / block friction), so
-        // slippery blocks such as ice accelerate slowly but keep their momentum.
+        // ground acceleration scales with (default friction / block friction)^3: ice accelerates slowly, keeps momentum
         const float accelerationFriction = (groundFriction * accelerationMultiplier) * AIR_FRICTION;
         travel.acceleration = PlayerMovementSimulator::groundAcceleration(context.player, accelerationFriction,
                                                                           abilities.sprinting);

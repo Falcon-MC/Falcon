@@ -149,7 +149,7 @@ private:
     }
 
     // between two numbers the game folds the bounds when it compiles the call (sub_1416A29C0, opcodes 0x21 and
-    // 0x22), which rounds the draw differently from the call between two expressions
+    // 0x22): rounds the draw differently from the call between two expressions
     int32_t _random(Operation operation, int32_t first, int32_t second) {
         const int32_t index = _node(operation, first, second);
         if (!mValid)

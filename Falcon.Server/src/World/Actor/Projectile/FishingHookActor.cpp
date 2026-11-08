@@ -29,7 +29,7 @@ namespace {
     const char *const JUNGLE_FISHING_LOOT = "gameplay/jungle_fishing.json";
     const char *const JUNGLE_TAG = "jungle";
 
-    // Client-side particles for the fish swimming towards the hook, the bite, and a fish teasing the hook.
+    // client-side particles: fish swimming toward the hook, the bite, a fish teasing it
     const EntityEventType FISH_HOOK_BUBBLE = (EntityEventType) 12;
     const EntityEventType FISH_HOOK_HOOK = (EntityEventType) 13;
     const EntityEventType FISH_HOOK_TEASE = (EntityEventType) 14;
@@ -87,7 +87,7 @@ namespace {
     const float PULL_STRENGTH = 0.1f;
     const float PULL_LIFT = 0.08f;
 
-    // Actors with the WaterAnimal actor type (0x2300) in 1.26.52, which make fish bite sooner.
+    // WaterAnimal actor type (0x2300) in 1.26.52: fish bite sooner
     const char *const WATER_ANIMALS[] = {
             "minecraft:squid", "minecraft:glow_squid", "minecraft:dolphin", "minecraft:cod", "minecraft:salmon",
             "minecraft:pufferfish", "minecraft:tropicalfish", "minecraft:tadpole", "minecraft:nautilus"
@@ -138,7 +138,7 @@ FishingHookActor::FishingHookActor(uint64_t runtimeId, const std::string &identi
 }
 
 void FishingHookActor::fillSpawnMetadata(EntityDataMap &metadata) const {
-    // The client draws the fishing line from the actor named in the owner data.
+    // the client draws the line from the actor in the owner data
     EntityDataEntry entry;
     entry.mId = ActorFlags::OWNER_DATA_ID;
     entry.mFormat = EntityDataFormat::Long;
@@ -410,7 +410,7 @@ void FishingHookActor::_tickCatching(ServerNetworkHandler &owner, Level &level, 
     if (randomFloat() < teaseChance) {
         const float angle = randomFloat() * FISH_ANGLE_RANGE;
         const float distance = randomFloat() * TEASE_DISTANCE_RANGE + TEASE_DISTANCE_BASE;
-        // The binary writes the absolute tease position here, unlike the hook-relative offset while approaching.
+        // absolute tease position here, unlike the hook-relative offset while approaching
         _sendFishData(owner, position.x + distance * std::sin(angle) * FISH_OFFSET_SCALE,
                       position.z + distance * std::cos(angle) * FISH_OFFSET_SCALE, nullptr);
         owner.broadcastActorEvent(*this, FISH_HOOK_TEASE);

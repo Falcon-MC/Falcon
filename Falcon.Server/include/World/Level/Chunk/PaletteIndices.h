@@ -6,13 +6,8 @@
 #include <cstdint>
 #include <vector>
 
-/**
- * Per-position palette indices of one sub-chunk storage, bit-packed into 32-bit words like the
- * Bedrock storage format. Entry widths are limited to 1, 2, 4, 8 and 16 bits so a lookup is two
- * shifts and a mask; the width grows on the first index that does not fit. These arrays are the
- * largest allocation of a loaded chunk, so packing them sets most of the server's memory use. A
- * storage whose indices are all zero, such as a single-biome section, keeps no words at all.
- */
+// bit-packed in 32-bit words like the Bedrock storage format; widths 1, 2, 4, 8, 16 only: a lookup is
+// two shifts and a mask; the largest allocation of a loaded chunk, and all-zero storage keeps no words
 class PaletteIndices {
 public:
     bool empty() const {
@@ -56,12 +51,12 @@ public:
         mWords.assign(_wordCount(count, mWidthLog2), word);
     }
 
-    // Bits each index takes in words(), which then hold the indices in the Bedrock storage layout.
+    // words() hold the indices in the Bedrock storage layout at this width
     uint32_t bitsPerIndex() const {
         return 1u << mWidthLog2;
     }
 
-    // Empty while every index is zero.
+    // empty while every index is zero
     const std::vector<uint32_t> &words() const {
         return mWords;
     }
@@ -83,7 +78,7 @@ public:
         return mWords.empty() || mWords.size() == _wordCount(mCount, mWidthLog2);
     }
 
-    // Releases the storage, unlike std::vector::clear().
+    // releases the storage, unlike std::vector::clear()
     void clear() {
         std::vector<uint32_t>().swap(mWords);
         mCount = 0;

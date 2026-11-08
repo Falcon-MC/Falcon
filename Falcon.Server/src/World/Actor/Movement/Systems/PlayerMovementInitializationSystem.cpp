@@ -21,7 +21,7 @@ void PlayerMovementInitializationSystem::tick(PlayerMovementContext &context) {
                           || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::StartJumping)
                           || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::AutoJumpingInWater)
                           || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::AscendBlock);
-    // BDS DecrementNoJumpDelaySystem (0x140EB0DA0) runs before the jump systems.
+    // DecrementNoJumpDelaySystem (0x140EB0DA0) runs before the jump systems
     if (state.jumpDelay > 0)
         --state.jumpDelay;
     if (!input.jumpHeld)

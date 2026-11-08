@@ -20,7 +20,7 @@ FALCON_REGISTER_BLOCK(LeavesBlock, 290);
 namespace {
     const int LEAVES_SEARCH_DISTANCE = 7;
 
-    // One-in-N chances indexed by Fortune level, clamped to the last entry.
+    // one-in-N chances by Fortune level, clamped to the last entry
     const int32_t SAPLING_CHANCE[] = {20, 16, 12, 10, 10};
     const int32_t STICK_CHANCE[] = {50, 40, 30, 10, 10};
     const int32_t APPLE_CHANCE[] = {200, 180, 160, 120, 40};

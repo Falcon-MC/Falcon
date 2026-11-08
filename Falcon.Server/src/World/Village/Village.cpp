@@ -29,7 +29,7 @@ namespace {
     const int32_t CLAIM_PARTICLE_COUNT = 5;
     const char *const NITWIT_FAMILY = "nitwit";
     const float RAID_BOUNDS_MARGIN = 32.0f;
-    // a wave that is not cleared within this many ticks expires the raid (0x1439e90e6)
+    // a wave not cleared within this many ticks expires the raid (0x1439e90e6)
     const int64_t RAID_EXPIRY_TICKS = 48001;
     const char *const RAID_EXPIRY_MESSAGE = R"({"rawtext":[{"text":"\u00a77"},{"translate":"raid.expiry"}]})";
 
@@ -58,7 +58,7 @@ namespace {
 }
 
 Village::Village() {
-    // vanilla fills the box with all-ones bits, so it contains nothing until the first bed or claim sets it
+    // vanilla fills the box with all-ones bits: it contains nothing until the first bed or claim sets it
     const float unset = std::numeric_limits<float>::quiet_NaN();
     mBounds = AxisAlignedBB(unset, unset, unset, unset, unset, unset);
 }
@@ -114,7 +114,7 @@ void Village::addDweller(ServerNetworkHandler &owner, DwellerRole role, int64_t 
     if (role != DwellerRole::Inhabitant)
         return;
 
-    // an inhabitant listed again gives its claims back first, so owner counts and the queues stay balanced
+    // an inhabitant listed again gives its claims back first: owner counts and queues stay balanced
     _releaseInhabitant(id);
     _findOrAddInhabitant(id);
 
@@ -209,7 +209,7 @@ void Village::tick(ServerNetworkHandler &owner, Level &level, int64_t currentTic
 
     _tickDwellerTimeouts(owner, level);
 
-    // types that had nothing to claim when the pass started are skipped for every inhabitant
+    // types with nothing to claim when the pass started are skipped for every inhabitant
     std::array<bool, POI_TYPE_COUNT> skipped{};
     for (size_t type = 0; type < POI_TYPE_COUNT; ++type)
         skipped[type] = mUnclaimed[type].empty();
@@ -315,8 +315,8 @@ void Village::_claimJobSite(ServerNetworkHandler &owner, int64_t id) {
     if (EntityFilter::hasFamily(*mob, NITWIT_FAMILY))
         return;
 
-    // a villager that has traded only takes a job site of its preferred profession; trades are not tracked yet, so
-    // every villager takes the weighted roll
+    // a villager having traded only takes its preferred profession's job site
+    // TODO: track trades; every villager takes the weighted roll for now
     PoiQueue &queue = mUnclaimed[(size_t) PoiType::JobSite];
     std::vector<std::shared_ptr<PoiInstance>> candidates;
     uint32_t totalWeight = 0;
@@ -332,7 +332,7 @@ void Village::_claimJobSite(ServerNetworkHandler &owner, int64_t id) {
         ++it;
     }
 
-    // the queue now holds exactly the candidates, so the rolled index is used on both
+    // the queue now holds exactly the candidates: the rolled index works on both
     int32_t roll = (int32_t) nextInt(totalWeight);
     for (size_t index = 0; index < candidates.size(); ++index) {
         roll -= (int32_t) candidates[index]->mWeight;
@@ -371,13 +371,13 @@ void Village::_tickPoiValidity(ServerNetworkHandler &owner, Level &level) {
             if (poi == nullptr)
                 continue;
 
-            // a point in a chunk that is not loaded is left alone
+            // a point in an unloaded chunk is left alone
             const Vector3i &position = poi->mPosition;
             const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
             if (state == nullptr)
                 continue;
 
-            // the scan's own check, so an occupied bed is lost too: a player sleeping in it frees it (0x1439d2164)
+            // the scan's own check: an occupied bed is lost too, a player sleeping in it frees it (0x1439d2164)
             const PoiBlueprint *blueprint = PoiScanner::findValidBlueprint(*state);
             if (blueprint != nullptr && manager.isRegistered(blueprint->mType, position, blueprint->mName))
                 continue;
@@ -389,7 +389,7 @@ void Village::_tickPoiValidity(ServerNetworkHandler &owner, Level &level) {
                 _spawnPoiParticles(owner, *mob, LOSS_PARTICLE_DATA);
             }
 
-            // the manager holds the only strong reference, so this expires the claim and any queue entry
+            // the manager holds the only strong reference: this expires the claim and any queue entry
             manager.releasePoi(*poi);
             released = true;
         }

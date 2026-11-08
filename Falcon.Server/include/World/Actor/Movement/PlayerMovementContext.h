@@ -8,7 +8,6 @@ class NetworkIdentifier;
 class ServerNetworkHandler;
 class ServerPlayer;
 
-/** The current player entity and world services supplied to one system invocation. */
 struct PlayerMovementContext {
     ServerNetworkHandler &owner;
     const NetworkIdentifier &id;

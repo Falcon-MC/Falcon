@@ -2,7 +2,7 @@
 
 #include "World/Level/Block/BlockState.h"
 
-// the precipitation interaction of a block's data (BlockData::mPrecipitation)
+// BlockData::mPrecipitation
 namespace BlockPrecipitation {
     // interaction none or snowlogging
     bool letsRainThrough(const BlockState &state);

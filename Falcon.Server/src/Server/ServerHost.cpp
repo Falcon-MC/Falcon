@@ -203,10 +203,8 @@ namespace {
         LOG_WARN(LogAreaID::Server, "=======================================================");
     }
 
-    /**
-     * State that outlives a server in process wide registries. The dedicated server never restarts, but an
-     * embedding host opens one world after another and must not see the previous one's players or packs.
-     */
+    // process-wide registries outlive a server; an embedder opens world after world:
+    // none may see the previous one's players or packs
     void resetProcessState() {
         EnderChestInventoryStore::getInstance().clear();
         CustomContentRegistry::getInstance().reset();
@@ -240,8 +238,7 @@ bool ServerHost::start(const ServerHostOptions &options) {
     if (mHandler != nullptr || !acquire())
         return false;
 
-    // These embedded registries are independent. Join before constructing the handler so
-    // the game only sees fully initialized definitions.
+    // independent registries; joined before the handler exists: the game sees only complete definitions
     auto entityDefinitions = std::async(std::launch::async, EntityDefinitions::initialize);
     auto biomeData = std::async(std::launch::async, BiomeChunkGenDataRegistry::initialize);
     BlockPaletteRegistry::getInstance().initialize();

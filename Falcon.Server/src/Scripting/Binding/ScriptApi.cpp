@@ -27,7 +27,7 @@
 #include <string>
 
 namespace {
-    /** Non-enumerable property tying a script Dimension object to the world it was made for. */
+    // non-enumerable: ties a script Dimension object to its world
     const char *const WORLD_ID_PROPERTY = "__falconWorldId";
 
     std::string toStdString(JSContext *ctx, JSValueConst value) {
@@ -275,8 +275,6 @@ ScriptApi::~ScriptApi() {
 ScriptApi *ScriptApi::fromRuntime(JSRuntime *runtime) {
     return (ScriptApi *) JS_GetRuntimeOpaque(runtime);
 }
-
-// ========================= Player =========================
 
 ServerPlayer *ScriptApi::resolvePlayer(JSValueConst value) {
     void *opaque = JS_GetOpaque(value, mPlayerClassId);
@@ -1180,8 +1178,6 @@ namespace {
     }
 }
 
-// ========================= System =========================
-
 namespace {
     JSValue systemRun(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int magic) {
         ScriptApi *api = ScriptApi::fromRuntime(JS_GetRuntime(ctx));
@@ -1239,8 +1235,6 @@ void ScriptApi::_buildSystem() {
     JS_DefinePropertyGetSet(mContext, mSystem, tickAtom, tickGetter, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
     JS_FreeAtom(mContext, tickAtom);
 }
-
-// ========================= World =========================
 
 namespace {
     JSValue worldSendMessage(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
@@ -1363,8 +1357,6 @@ void ScriptApi::_buildWorld() {
     JS_SetPropertyStr(mContext, mWorld, "afterEvents", JS_DupValue(mContext, mAfterEvents));
     JS_SetPropertyStr(mContext, mWorld, "beforeEvents", JS_DupValue(mContext, mBeforeEvents));
 }
-
-// ========================= Events =========================
 
 namespace {
     JSValue eventSubscribe(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int magic) {
@@ -1920,8 +1912,6 @@ void ScriptApi::_subscribeGameEvents() {
             event.cancel();
     });
 }
-
-// ========================= Entity (Actor) =========================
 
 ServerActor *ScriptApi::resolveActor(JSValueConst value) {
     void *opaque = JS_GetOpaque(value, mActorClassId);
@@ -2788,8 +2778,6 @@ void ScriptApi::_buildActorClass() {
     JS_SetClassProto(mContext, mActorClassId, JS_DupValue(mContext, mActorPrototype));
 }
 
-// ========================= Block =========================
-
 namespace {
     struct ScriptBlockData {
         DimensionType mDimension = DimensionType::Overworld;
@@ -3048,8 +3036,6 @@ JSValue ScriptApi::makeBlock(const Level &level, int32_t x, int32_t y, int32_t z
     JS_SetOpaque(object, data);
     return object;
 }
-
-// ========================= ItemStack =========================
 
 namespace {
     JSValue itemStackGetTypeId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -3335,8 +3321,6 @@ JSValue ScriptApi::makeHeldItemStack(ServerPlayer &player, const std::string &id
     }
     return jsItem;
 }
-
-// ========================= Dimension =========================
 
 namespace {
     JSValue dimensionGetBlock(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -3649,8 +3633,6 @@ JSValue ScriptApi::makeDimension(const Level &level) {
                       JS_NewCFunction(mContext, dimensionGetEntities, "getEntities", 1));
     return dimension;
 }
-
-// ========================= Server UI =========================
 
 JSValue ScriptApi::showForm(JSValueConst playerValue, const std::string &formData) {
     JSValue resolvingFuncs[2];
@@ -4057,8 +4039,6 @@ void ScriptApi::_registerUiModule() {
     JS_AddModuleExport(mContext, module, "MessageFormData");
     JS_AddModuleExport(mContext, module, "ModalFormData");
 }
-
-// ========================= Module + lifecycle =========================
 
 namespace {
     JSValue stateValueToJs(JSContext *ctx, const Tag &value) {

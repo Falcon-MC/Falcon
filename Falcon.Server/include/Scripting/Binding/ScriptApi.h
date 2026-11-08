@@ -89,13 +89,11 @@ public:
 
     JSValue makeDimension(const Level &level);
 
-    /**
-     * The level a script Dimension object stands for: its `id` names the dimension and a hidden world id,
-     * set by makeDimension, names the world. Objects built by scripts themselves resolve in the default world.
-     */
+    // `id` names the dimension, a hidden world id set by makeDimension the world;
+    // objects built by scripts resolve in the default world
     Level &levelOf(JSContext *ctx, JSValueConst dimension);
 
-    /** A dimension of a world by id, falling back to the default world once that world is unloaded. */
+    // falls back to the default world once unloaded
     Level &resolveLevel(uint32_t worldId, DimensionType dimension);
 
     JSClassID blockClassId() const { return mBlockClassId; }
@@ -196,7 +194,7 @@ private:
         Vector3i mPosition;
     };
 
-    // the custom block each actor stands on, so a block fires once per step and not once per tick
+    // the custom block each actor stands on: fires once per step, not per tick
     std::unordered_map<int64_t, SteppedBlock> mStepping;
     std::mt19937 mTickRandom{std::random_device{}()};
     ScriptScheduler mScheduler;

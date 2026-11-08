@@ -12,7 +12,7 @@ namespace {
         const char *mItemName;
     };
 
-    // Registration order of the 1.26.52 trim registries.
+    // registration order of the 1.26.52 trim registries
     const PatternEntry PATTERNS[] = {
             {"minecraft:ward_armor_trim_smithing_template",      "ward"},
             {"minecraft:snout_armor_trim_smithing_template",     "snout"},

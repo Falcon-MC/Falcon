@@ -10,8 +10,8 @@
 #include <algorithm>
 #include <cstdlib>
 
-// Port of the 26.60 speleothem cluster feature (the class behind dripstone_cluster_feature) with the
-// parameters registered for minecraft:icicle_cluster_feature.
+// the 26.60 speleothem cluster feature (behind dripstone_cluster_feature) with the parameters of
+// minecraft:icicle_cluster_feature
 namespace {
     const int32_t MIN_ATTEMPTS = 24;
     const int32_t EXTRA_ATTEMPTS = 40;
@@ -43,7 +43,7 @@ namespace {
         return index == 0 ? "base" : "middle";
     }
 
-    // The block touching the ceiling is the only one marked as attached.
+    // only the block touching the ceiling is attached
     BlockState icicleState(int32_t index, int32_t length) {
         BlockState state = DecorationSupport::withByteState(icicleBaseState(), "hanging", true);
         state = DecorationSupport::withByteState(state, "attached_bit", index == 0);
@@ -58,8 +58,7 @@ namespace {
         return state == IceCavesSupport::packedIceState() || IceCavesSupport::isLava(state);
     }
 
-    // Walks up from an empty origin and reports the first block that ends the open column, if it can
-    // carry an icicle.
+    // up from an empty origin to the first block closing the column, if it can carry an icicle
     bool findCeiling(BlockManager &manager, int32_t x, int32_t y, int32_t z, int32_t &ceilingY) {
         int32_t steps = 0;
         int32_t currentY = y + 1;
@@ -93,9 +92,8 @@ namespace {
         }
     }
 
-    // icicle_cluster_feature only grows from the ceiling and has no wetness, so the stalagmite, merge and
-    // water passes of the shared cluster code never run for it. Its base layer swaps packed ice for packed
-    // ice, so it is skipped as well.
+    // ceiling only and no wetness: the shared cluster code's stalagmite, merge and water passes never run;
+    // its base layer swaps packed ice for packed ice, skipped too
     void placeCluster(BlockManager &manager, IRandom &random, int32_t originX, int32_t originY, int32_t originZ) {
         if (!isEmpty(manager.getBlockAt(originX, originY, originZ)))
             return;

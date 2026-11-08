@@ -12,7 +12,7 @@ class BehaviorPackManager;
 class ItemDefinitionRegistry;
 class BlockDefinitionRegistry;
 
-// one minecraft:repairable repair_items entry: the items that repair, and the repair_amount Molang or number
+// one minecraft:repairable repair_items entry: repairing items and repair_amount (Molang or number)
 struct CustomRepairEntry {
     std::vector<std::string> mItems;
     std::string mAmount;
@@ -147,10 +147,7 @@ public:
         return mFrozen;
     }
 
-    /**
-     * Drops every pack's content and unfreezes, so a host that runs one world after another loads the next
-     * world's packs from scratch.
-     */
+    // a host running world after world loads the next world's packs from scratch
     void reset();
 
     static CustomContentRegistry &getInstance();

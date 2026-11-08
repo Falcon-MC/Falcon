@@ -2,10 +2,6 @@
 
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 
-/**
- * Shipwrecks: one candidate per 24 x 24 chunk region, kept in the ocean and beach biomes when the biome around the
- * centre does not change and no monument starts within five chunks.
- */
 class ShipwreckFeature : public StructureFeature {
 public:
     ShipwreckFeature();

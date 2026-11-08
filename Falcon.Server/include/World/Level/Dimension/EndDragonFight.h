@@ -29,7 +29,7 @@ public:
         SummoningDragon = 4
     };
 
-    /** What one tick of the respawn ritual does, from its stage and the ticks spent in it (sub_14716C8B0). */
+    // one ritual tick from its stage and ticks spent in it (sub_14716C8B0)
     struct RespawnStep {
         RespawnStage mNextStage = RespawnStage::None;
         bool mRestartTimer = false;
@@ -59,15 +59,15 @@ public:
 
     static RespawnStep stepRespawn(RespawnStage stage, int32_t ticks, size_t spikeCount);
 
-    /** Gateway indices in the order they open: 0 to 19 shuffled with the level seed (sub_147170120). */
+    // opening order: 0 to 19 shuffled with the level seed (sub_147170120)
     static std::vector<int32_t> createGatewayOrder(int64_t seed);
 
     static Vector3i getGatewayPosition(int32_t index);
 
-    /** The experience a dying dragon drops on one tick of its death (sub_144AE8C40). */
+    // per tick of the death (sub_144AE8C40)
     static int32_t getDeathExperience(int32_t deathTicks, bool previouslyKilled);
 
-    // the point the dragon spawns at and the respawn crystals aim at (the fight's constructor, sub_14716B720)
+    // dragon spawn point, aimed at by the respawn crystals (fight constructor, sub_14716B720)
     static Vector3i getSummonPoint();
 
     void load(const Tag &dimensionData);
@@ -76,7 +76,7 @@ public:
 
     void tick(ServerNetworkHandler &owner, Level &level);
 
-    /** Called when a crystal is placed in the End: four crystals around the exit portal start the respawn. */
+    // on crystal placement: four around the exit portal start the respawn
     void tryRespawn(ServerNetworkHandler &owner, Level &level);
 
     void onCrystalDestroyed(ServerNetworkHandler &owner, Level &level, EndCrystalActor &crystal, Actor *attacker);

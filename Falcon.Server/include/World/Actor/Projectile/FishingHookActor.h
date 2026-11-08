@@ -21,10 +21,10 @@ public:
 
     void fillSpawnMetadata(EntityDataMap &metadata) const override;
 
-    /** Gives the motion of a freshly cast hook, aimed along the angler's view. */
+    // aimed along the angler's view
     void cast(ServerNetworkHandler &owner, ServerPlayer &angler);
 
-    /** Reels the hook in, removes it and returns the durability the rod loses. */
+    // returns the durability the rod loses
     int32_t retrieve(ServerNetworkHandler &owner, ServerPlayer &angler);
 
     bool isOwnedBy(const ServerPlayer &player) const;

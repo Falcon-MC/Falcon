@@ -105,14 +105,8 @@ void GeneratorChunkSource::_stageNeighbour(int32_t chunkX, int32_t chunkZ) {
     mScratch.insertChunk(mCache.neighbour(chunkX, chunkZ));
 }
 
-/**
- * Decorates one chunk inside a private scratch level that holds its 3x3 neighbourhood as
- * terrain, so trees and other features can be placed across chunk borders. Blocks that land in
- * a neighbour are reported through `overflow` so the real neighbour receives them. The
- * neighbours go back to the shared cache afterwards, with what this decoration placed in them,
- * because adjacent chunks are usually populated soon after and would otherwise regenerate the
- * same terrain.
- */
+// the 3x3 neighbourhood lets features cross chunk borders; blocks landing in a neighbour go to `overflow`;
+// neighbours return to the cache with this decoration's blocks: adjacent chunks are usually populated next
 void GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow,
                                     std::vector<Tag> &blockActors, std::vector<Tag> &entities) {
     const int32_t chunkX = chunk.getX();

@@ -4,7 +4,7 @@
 
 #include <string>
 
-// Vegetation without other behaviour whose only drop is itself, when cut with shears or Silk Touch.
+// drops itself only, with shears or Silk Touch
 class ShearableVegetationBlock : public Block {
 public:
     explicit ShearableVegetationBlock(const Block &block) : Block(block) {

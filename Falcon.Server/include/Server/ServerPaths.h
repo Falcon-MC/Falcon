@@ -3,10 +3,7 @@
 #include <filesystem>
 #include <string>
 
-/**
- * Where the server keeps its files. The dedicated server leaves the root empty and works in the current
- * directory; a host that embeds the server points it at its own data folder instead.
- */
+// empty root for the dedicated server (current directory); an embedder points it at its data folder
 class ServerPaths {
 public:
     static void setRoot(const std::filesystem::path &root);

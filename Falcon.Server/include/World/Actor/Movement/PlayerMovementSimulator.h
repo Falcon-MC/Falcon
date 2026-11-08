@@ -9,11 +9,8 @@ class PlayerAuthInputPacket;
 class ServerNetworkHandler;
 class ServerPlayer;
 
-/**
- * Server-side replay of player travel physics for each PlayerAuthInput. The
- * simulation property enables replay; the strict movement property chooses the BDS
- * position reconciliation policy. Velocity always comes from server physics.
- */
+// replays travel physics per PlayerAuthInput; the simulation property enables it, the strict movement
+// property picks the position reconciliation policy; velocity always comes from server physics
 class PlayerMovementSimulator {
 public:
     static constexpr float PLAYER_BASE_OFFSET = 1.62f;

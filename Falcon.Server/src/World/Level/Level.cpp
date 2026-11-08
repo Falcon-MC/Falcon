@@ -178,14 +178,14 @@ void Level::saveAll(bool wait) {
         _flushPendingBlockChanges(true);
         mParkedChangesToFlush = 0;
     } else {
-        // Every change parked now is written over the next ticks, one batch at a time, so this save
-        // covers the blocks that the chunks it saves spilled into their neighbours.
+        // parked changes written over the next ticks, a batch at a time: the save covers what its chunks
+        // spilled into neighbours
         mParkedChangesToFlush = mPendingBlockChangeCount;
         _flushParkedChanges();
     }
 
     size_t saved = 0;
-    // A full save covers everything a background save still has queued.
+    // a full save covers what a background save still has queued
     if (wait || !async) {
         mDeferredSaves.clear();
         mIdleSaves.clear();
@@ -197,17 +197,15 @@ void Level::saveAll(bool wait) {
                 !mChunkWorker->hasFailedSave(entry.second.getX(), entry.second.getZ())))
             continue;
 
-        // Copying every dirty chunk at once stalls the tick for seconds after a burst of
-        // generation, so a background save only queues them and processDeferredSaves() copies
-        // a few per tick.
+        // copying every dirty chunk at once stalls the tick for seconds after a generation burst:
+        // processDeferredSaves() copies a few per tick
         if (async && !wait) {
             mDeferredSaves.push_back(entry.first);
             continue;
         }
 
         if (async) {
-            // The worker gets its own copy: resident chunks belong to the main thread and
-            // keep changing while the save runs.
+            // copy: resident chunks belong to the main thread and keep changing during the save
             std::unique_ptr<LevelChunk> copy(new LevelChunk(entry.second));
             copy->invalidateNetworkCaches();
             mChunkWorker->requestSave(std::move(copy));
@@ -492,8 +490,8 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
     if (it != mChunks.end())
         return it->second;
 
-    // A synchronous read must not overtake an older pending-change write. Normal
-    // streaming retries instead of waiting on the tick thread.
+    // a synchronous read never overtakes an older pending-change write; streaming retries instead of
+    // waiting on the tick thread
     if (mPendingChangeWrite.valid() && mPersistingChangeKeys.count(key) != 0)
         _finishPendingChangeWrite(true);
 
@@ -548,8 +546,7 @@ LevelChunk &Level::insertChunk(LevelChunk chunk) {
 }
 
 void Level::_refreshChunkShapes(int32_t chunkX, int32_t chunkZ) {
-    // Only inspect sections whose palette contains a derived shape. Revisit neighbours so a
-    // connection held at an unloaded chunk border is resolved when that chunk arrives.
+    // neighbours too: a connection held at an unloaded chunk border resolves on its arrival
     for (int32_t dx = -1; dx <= 1; ++dx) {
         for (int32_t dz = -1; dz <= 1; ++dz) {
             LevelChunk *chunk = peekChunkPtr(chunkX + dx, chunkZ + dz);
@@ -616,11 +613,8 @@ void Level::_replayPendingChanges(int64_t key) {
     _queueGeneratedChanges(std::move(changes));
 }
 
-/**
- * Puts back the spilled blocks of a chunk result that was not inserted. They are older than any block parked
- * or applied for the chunk since its task left, so a resident chunk gets them right away and parked ones go
- * in front of the blocks parked meanwhile.
- */
+// older than anything parked or applied since the task left: a resident chunk gets them at once, else
+// they go before the blocks parked meanwhile
 void Level::_restoreSpilledChanges(int64_t key, std::vector<GeneratedBlockChange> changes) {
     if (changes.empty())
         return;
@@ -637,8 +631,7 @@ void Level::_restoreSpilledChanges(int64_t key, std::vector<GeneratedBlockChange
 }
 
 void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &changes) {
-    // A feature spills many blocks into the same few columns; each touched column is relit once
-    // after the whole batch instead of once per block, which gives the same light.
+    // features spill into the same few columns: relit once per column after the batch, same light
     std::unordered_map<int64_t, std::pair<LevelChunk *, std::bitset<256>>> touchedColumns;
     int64_t lastKey = 0;
     LevelChunk *lastChunk = nullptr;
@@ -661,8 +654,7 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
         }
 
         LevelChunk *chunk = lastChunk;
-        // Feature blocks that spill into a chunk which is absent or still being loaded are
-        // kept aside, replayed once it arrives, or merged into storage on save.
+        // absent or loading chunk: kept aside, replayed on arrival or merged into storage on save
         if (lastParked) {
             mPendingBlockChanges[key].push_back(change);
             ++mPendingBlockChangeCount;
@@ -672,7 +664,7 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
         const int32_t localX = change.mX & 15;
         const int32_t localZ = change.mZ & 15;
 
-        // Both states are interned, so they are equal exactly when they are the same object.
+        // both interned: equal exactly when the same object
         const BlockState &previous = chunk->getBlock(localX, change.mY, localZ, change.mLayer);
         if (&previous == change.mState)
             continue;
@@ -683,9 +675,8 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
         std::pair<LevelChunk *, std::bitset<256>> &touched = touchedColumns[key];
         touched.first = chunk;
 
-        // Most spilled blocks are stone variants swapped for one another: a block with the same light
-        // properties leaves the column's height and sky light as they were, and an opaque block that
-        // emits nothing holds no block light either way.
+        // mostly stone variants swapped: same light properties keep height and sky light, and an opaque
+        // non-emitter holds no block light either way
         if (previousLight == nextLight) {
             if (!BlockLightProperties::isTransparent(nextLight) && BlockLightProperties::lightLevel(nextLight) == 0)
                 continue;
@@ -712,8 +703,8 @@ size_t Level::processGeneratedChanges() {
     if (mIncomingChanges.empty())
         return 0;
 
-    // Batches are applied until the time budget is spent, always at least one, so a large backlog
-    // uses the tick's spare time without stretching a busy tick by more than one batch.
+    // until the budget is spent, at least one batch: a backlog uses spare time, a busy tick grows by one
+    // batch at most
     const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + GENERATED_CHANGES_BUDGET;
     std::vector<GeneratedBlockChange> batch;
     size_t applied = 0;
@@ -745,8 +736,8 @@ void Level::_finishPendingChangeWrite(bool wait) {
     if (failed.empty())
         return;
 
-    // Failed writes retain their payload. Older changes must precede changes received
-    // while the write was running, so a retry still keeps the newest state per position.
+    // failed writes keep their payload, ahead of changes received meanwhile: a retry keeps the newest
+    // state per position
     mPendingBlockChangeCount += failed.size();
     std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> older;
     for (GeneratedBlockChange &change: failed)
@@ -773,11 +764,8 @@ void Level::_flushParkedChanges() {
                             ? 0 : mParkedChangesToFlush - handed;
 }
 
-/**
- * Whether nothing is parked or being written for the eight neighbours of a chunk; otherwise starts writing
- * what is parked for them when no other write runs. Only the neighbours of a chunk saved early are written
- * this way, so storage is not asked to merge every parked change as it arrives.
- */
+// true: nothing parked or in flight for the eight neighbours; else starts writing theirs if no write runs;
+// only for early saves: storage never merges every parked change as it arrives
 bool Level::_persistSpillAround(int32_t chunkX, int32_t chunkZ) {
     _finishPendingChangeWrite(false);
 
@@ -919,12 +907,8 @@ void Level::releaseChunkIfUnused(int32_t chunkX, int32_t chunkZ) {
         mUnloadQueue.insert(key);
 }
 
-/**
- * Chunks can become resident without ever getting a loader: a synchronous getChunk() from a
- * game system, or an async load that completes after the player who asked for it moved on.
- * Nothing would queue those for unload, so they are collected here once they have stayed
- * without a loader, outside the ticking columns, for two sweeps in a row.
- */
+// resident without a loader (synchronous getChunk(), async load finished after the player moved on):
+// nothing queues them for unload; collected after two sweeps loaderless and outside ticking columns
 void Level::_sweepOrphanChunks() {
     std::unordered_set<int64_t> orphans;
 
@@ -948,12 +932,8 @@ void Level::setOccupiedColumns(std::unordered_set<int64_t> columns) {
     mOccupiedColumns = std::move(columns);
 }
 
-/**
- * A chunk whose eight neighbours are populated receives no more spilled feature blocks, so its generated
- * content is final: it is queued for a background save that runs once generation goes quiet. Freshly
- * streamed terrain is then on disk well before the next auto-save, which no longer has to write it all at
- * once, and the saves never compete with players waiting for terrain.
- */
+// eight populated neighbours: no more spilled blocks, content final; saved once generation goes quiet,
+// fresh terrain hits disk before the auto-save without competing with players waiting for terrain
 void Level::_queueCompletedSaves(int32_t chunkX, int32_t chunkZ) {
     if (!mStorage.isOpen() || mChunkWorker == nullptr || !mChunkWorker->isRunning())
         return;
@@ -977,7 +957,7 @@ void Level::_queueCompletedSaves(int32_t chunkX, int32_t chunkZ) {
 void Level::processDeferredSaves() {
     _flushEntityErasures(false);
 
-    // Spilled blocks still waiting to be applied could yet be parked for a chunk next to one saved now.
+    // unapplied spilled blocks could still be parked next to a chunk saved now
     const bool generationIdle = mChunkWorker != nullptr && mChunkWorker->getOutstandingGenerationCount() == 0
                                 && mPendingChunks.empty() && mCompletedChunks.empty() && mIncomingChanges.empty();
     const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + DEFERRED_SAVE_BUDGET;
@@ -993,10 +973,8 @@ void Level::processDeferredSaves() {
             continue;
         if (!chunk->second.isDirty() && !mChunkWorker->hasFailedSave(chunk->second.getX(), chunk->second.getZ()))
             continue;
-        // An idle save waits until what the chunk spilled into absent neighbours is in storage, so a crash
-        // cannot leave it saved with half its trees. The queue moves on once that one write has landed.
-        // Blocks spilled into a resident neighbour are only written with that neighbour; saving it here
-        // too would write the generation frontier twice.
+        // idle save waits for its spill into absent neighbours to reach storage: no crash with half its trees;
+        // spill into a resident neighbour is written with it, else the generation frontier is written twice
         if (&queue == &mIdleSaves && !_persistSpillAround(chunk->second.getX(), chunk->second.getZ())) {
             mIdleSaves.push_front(key);
             break;
@@ -1025,7 +1003,7 @@ void Level::packIdleChunks() {
         if (it == mChunks.end() || it->second.isPacked())
             continue;
 
-        // A chunk read since the last pass gets another pass before it is packed.
+        // read since the last pass: another pass before packing
         LevelChunk &chunk = it->second;
         if (chunk.consumeAccessed() || !chunk.isPopulated() || mActiveColumns.count(key) != 0
             || mOccupiedColumns.count(key) != 0 || mPendingChunks.count(key) != 0)
@@ -1058,8 +1036,7 @@ size_t Level::processChunkUnloads() {
             continue;
         }
 
-        // A load or populate still in flight would insert the chunk again after it is freed;
-        // it stays queued until the result has been drained.
+        // a load or populate in flight would insert it again after the free: wait for the drain
         if (mPendingChunks.find(key) != mPendingChunks.end()) {
             ++it;
             continue;
@@ -1071,16 +1048,14 @@ size_t Level::processChunkUnloads() {
             continue;
         }
 
-        // A chunk is only freed once no save of it is queued: a synchronous getChunk() would otherwise read
-        // the old version back from storage. A chunk whose save failed stays resident instead of losing
-        // its changes.
+        // no free while a save is queued: a synchronous getChunk() would read the old version back; a failed
+        // save keeps it resident
         if (mChunkWorker != nullptr && mChunkWorker->hasPendingSave(chunk->second.getX(), chunk->second.getZ())) {
             ++it;
             continue;
         }
 
-        // A dirty chunk is saved by a worker from a copy, so the tick never waits on storage; it stays
-        // resident and queued until that save has landed.
+        // saved by a worker from a copy, the tick never waits on storage; resident until it lands
         if (chunk->second.isDirty() && mStorage.isOpen() && mChunkWorker != nullptr && mChunkWorker->isRunning()) {
             std::unique_ptr<LevelChunk> copy(new LevelChunk(chunk->second));
             copy->invalidateNetworkCaches();
@@ -1116,8 +1091,8 @@ size_t Level::processChunkUnloads() {
 }
 
 void Level::releaseFreedHeap() {
-    // The allocator keeps freed memory instead of returning it to the system, so the resident size
-    // would stay at its peak after players leave an area or generation stops copying chunks around.
+    // the allocator keeps freed memory: RSS would stay at its peak after players leave or generation
+    // stops copying chunks
 #if defined(__linux__) && defined(__GLIBC__)
     malloc_trim(0);
 #elif defined(__APPLE__)
@@ -1220,8 +1195,7 @@ bool Level::isColumnActive(int32_t chunkX, int32_t chunkZ) const {
 void Level::setActiveColumns(std::vector<int64_t> columns) {
     std::unordered_set<int64_t> next(columns.begin(), columns.end());
 
-    // Block updates that came due in a column while it was inactive were parked; they
-    // resume as soon as the column becomes active again.
+    // updates due while inactive were parked: resume them
     for (int64_t column: columns) {
         if (mActiveColumns.find(column) == mActiveColumns.end())
             mBlockUpdateScheduler.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
@@ -1263,8 +1237,7 @@ bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
         return false;
     }
 
-    // The blocks spilled into the chunk while it was absent travel with the load and are applied on the
-    // worker, so the main thread does not replay them once it arrives.
+    // spilled blocks travel with the load, applied on the worker: no replay on the main thread
     std::vector<GeneratedBlockChange> parked;
     const auto pending = mPendingBlockChanges.find(key);
     if (pending != mPendingBlockChanges.end())
@@ -1303,17 +1276,15 @@ size_t Level::drainCompletedChunks() {
     if (mChunkWorker == nullptr)
         return 0;
 
-    // Draining every tick returns worker credits as soon as results are taken, so generation
-    // keeps running while earlier results wait for their insert slot.
+    // drain every tick: credits return at once, generation runs while results wait for an insert slot
     std::vector<ChunkLoadResult> results = mChunkWorker->drainCompleted();
     for (ChunkLoadResult &result: results)
         mCompletedChunks.push_back(std::move(result));
 
     size_t added = 0;
 
-    // Inserts are capped per tick to bound main-thread work; leftovers stay queued for the
-    // next tick. A populated result only replaces a resident chunk that is still
-    // unpopulated, so it never overwrites edits made since the copy was taken.
+    // capped per tick; a populated result only replaces a still-unpopulated resident chunk: never
+    // overwrites edits made since the copy
     while (!mCompletedChunks.empty() && added < MAX_CHUNK_INSERTS_PER_TICK) {
         ChunkLoadResult &result = mCompletedChunks.front();
         const int64_t key = _packChunk(result.mX, result.mZ);
@@ -1338,8 +1309,7 @@ size_t Level::drainCompletedChunks() {
             _refreshChunkShapes(result.mX, result.mZ);
             _queueCompletedSaves(result.mX, result.mZ);
         } else {
-            // A synchronous getChunk() overtook the load, or shutdown discarded it: the spilled blocks the
-            // task carried would be lost with the result.
+            // overtaken by a synchronous getChunk(), or discarded at shutdown: keep the spilled blocks it carried
             _restoreSpilledChanges(key, std::move(result.mSpilledChanges));
         }
 
@@ -1351,8 +1321,8 @@ size_t Level::drainCompletedChunks() {
 }
 
 std::string Level::getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds) {
-    // Encoding is cheap next to what the sections would cost if kept for every loaded chunk, and most chunks
-    // have a single viewer, so nothing is kept once the chunk is sent.
+    // encoding is cheap next to caching sections for every loaded chunk; most have a single viewer: nothing
+    // kept once sent
     LevelChunk &chunk = getChunk(chunkX, chunkZ);
     std::string data = chunk.encodeNetwork(blockIds);
     chunk.invalidateNetworkCaches();

@@ -1,51 +1,42 @@
-/**
- * Measures how closely Falcon's world generators reproduces a world generated and saved by BDS.
- *
- * The BDS database is never opened in place: LevelDB writes to any database it opens, so the "db" folder (and
- * the level.dat next to it) is copied to a temporary directory that is removed on exit. The copy is read with
- * LevelStorage, the decoder the server itself uses. The same chunks are generated and populated the way the
- * chunk workers do it: terrain, heightmap, population inside a GeneratorChunkSource, then the blocks that
- * neighbouring chunks spilled into the chunk.
- *
- * Usage:
- *   FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1 [--csv file] [--json file]
- *                        [--min-block-match pct] [--terrain-only] [--dimension 0|1|2]
- *   FalconWorldGenParity --db <path> --seed <int64> --column x,z [--terrain-only]
- *   FalconWorldGenParity --db <path> --seed <int64> --far [--min-block-match pct] [--terrain-only]
- *
- * --dimension picks the dimension, 0 overworld (default), 1 nether, 2 end; only its build range is compared.
- * --terrain-only compares the chunks as the noise fills them, before any population.
- *
- * --far compares 6x6 chunks at +-1000 and +-10000 blocks on both axes, one report each: terrain that only
- * goes wrong in some climates can match around the origin and be wrong elsewhere.
- *
- * Area corners are chunk coordinates, both inclusive; the column is a block position. Exit codes: 0 success,
- * 1 invalid input or unreadable world, 2 block match below --min-block-match.
- *
- * Definitions:
- *   - blocks compare layer 0 only; waterlogging (layer 1) is ignored;
- *   - coarse class: air, fluid (water or lava, still or flowing) or solid (everything else);
- *   - surface height: the highest Y whose layer 0 is not air, MIN_Y - 1 for an empty column;
- *   - biomes are sampled once per 4x4x4 cell, at the cell's lowest corner; above the highest non-empty BDS section
- *     the generated biomes are read from that section, which the game saves in place of the sections above;
- *   - ore spills: mismatches between a block the underground ore rules place and either another such block or one of
- *     their host rocks (stone, deepslate); stone against deepslate stays a terrain mismatch.
- *     The game drops part of the blobs an ore rule spills into a neighbour that is still generating, depending on
- *     its thread scheduling, so these are set aside from the "outside ore spills" match;
- *   - each block position belongs to the highest category of its two blocks, in the order base terrain
- *     (air, stone, deepslate, bedrock, water, lava), surface (the blocks surface builders place), features
- *     (everything else).
- *
- * JSON summary keys (stable; every percentage is in [0, 100] and is 0 when its total is 0):
- *   seed, area {x0, z0, x1, z1}, chunks {requested, compared, missing, not_finalized, unreadable},
- *   blocks {total, match_pct, coarse_match_pct, ore_spills, outside_ore_spills_match_pct},
- *   height {columns, match_pct, mean_abs_diff, max_abs_diff, histogram {"0", "1", "2", "3", "4-7", "8-15",
- *   "16-31", "32+"}},
- *   biomes {cells, match_pct},
- *   categories {base_terrain, surface, features} each {total, match_pct},
- *   y_bands [{min_y, max_y, total, match_pct}],
- *   top_block_mismatches [{expected, generated, count}], top_biome_mismatches [{expected, generated, count}].
- */
+// compares Falcon's generators against a world generated and saved by BDS
+//
+// the BDS "db" (and its level.dat) is copied to a temp dir removed on exit: LevelDB writes to any database it
+// opens; read with LevelStorage; chunks are generated like the chunk workers do: terrain, heightmap, population
+// in a GeneratorChunkSource, then the blocks neighbours spilled in
+//
+// usage:
+//   FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1 [--csv file] [--json file]
+//                        [--min-block-match pct] [--terrain-only] [--dimension 0|1|2]
+//   FalconWorldGenParity --db <path> --seed <int64> --column x,z [--terrain-only]
+//   FalconWorldGenParity --db <path> --seed <int64> --far [--min-block-match pct] [--terrain-only]
+//
+// --dimension: 0 overworld (default), 1 nether, 2 end; only its build range is compared
+// --terrain-only: chunks as the noise fills them, before population
+// --far: 6x6 chunks at +-1000 and +-10000 on both axes, one report each: climate-only bugs hide near the origin
+// area corners: chunk coordinates, inclusive; column: a block position
+// exit codes: 0 success, 1 invalid input or unreadable world, 2 block match below --min-block-match
+//
+// definitions:
+//   - blocks: layer 0 only, waterlogging (layer 1) ignored
+//   - coarse class: air, fluid (water or lava, still or flowing), solid (everything else)
+//   - surface height: highest Y with non-air layer 0, MIN_Y - 1 for an empty column
+//   - biomes: one sample per 4x4x4 cell at its lowest corner; above the highest non-empty BDS section, read from
+//     that section: the game saves it in place of the sections above
+//   - ore spills: an underground ore rule block against another such block or a host rock (stone, deepslate);
+//     stone vs deepslate stays a terrain mismatch; the game drops part of the blobs spilled into a still
+//     generating neighbour depending on thread scheduling: kept out of the "outside ore spills" match
+//   - category: the highest of the two blocks', in order base terrain (air, stone, deepslate, bedrock, water,
+//     lava), surface (surface builder blocks), features (everything else)
+//
+// JSON summary keys (stable; percentages in [0, 100], 0 when their total is 0):
+//   seed, area {x0, z0, x1, z1}, chunks {requested, compared, missing, not_finalized, unreadable},
+//   blocks {total, match_pct, coarse_match_pct, ore_spills, outside_ore_spills_match_pct},
+//   height {columns, match_pct, mean_abs_diff, max_abs_diff, histogram {"0", "1", "2", "3", "4-7", "8-15",
+//   "16-31", "32+"}},
+//   biomes {cells, match_pct},
+//   categories {base_terrain, surface, features} each {total, match_pct},
+//   y_bands [{min_y, max_y, total, match_pct}],
+//   top_block_mismatches [{expected, generated, count}], top_biome_mismatches [{expected, generated, count}]
 
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Debug/ContentLogEndPoint.h"
@@ -81,7 +72,7 @@
 #include <vector>
 
 namespace {
-    // the report lines that gather samples in a loop are built here, then logged once
+    // report lines gathered in a loop are built here, then logged once
     std::string formatted(const char *format, ...) BEDROCK_LOG_PRINTF_FORMAT(1, 2);
 
     std::string formatted(const char *format, ...) {
@@ -109,8 +100,8 @@ namespace {
     const char *const HEIGHT_BUCKET_NAMES[] = {"0", "1", "2", "3", "4-7", "8-15", "16-31", "32+"};
     const size_t HEIGHT_BUCKETS = sizeof(HEIGHT_BUCKET_NAMES) / sizeof(HEIGHT_BUCKET_NAMES[0]);
 
-    // the nether and the end store the same chunk layout as the overworld, but only their own build range is
-    // compared, so that the empty sections above and below do not inflate the match
+    // nether and end share the overworld chunk layout; only their build range is compared:
+    // the empty sections around would inflate the match
     DimensionType gDimension = DimensionType::Overworld;
     int32_t gMinY = LevelChunk::MIN_Y;
     int32_t gMaxY = LevelChunk::MAX_Y;
@@ -327,9 +318,7 @@ namespace {
         return true;
     }
 
-    /**
-     * A private copy of the BDS world, so that LevelDB's recovery and lock files never touch the original.
-     */
+    // LevelDB's recovery and lock files must never touch the original BDS world
     class WorldCopy {
     public:
         ~WorldCopy() {
@@ -501,10 +490,8 @@ namespace {
         return state.mName + " " + state.mStates.toString();
     }
 
-    /**
-     * The game saves no biomes above the highest non-empty section and repeats that section instead, so a generated
-     * biome there is read from the section the saved world repeats, whatever blocks the generated chunk has.
-     */
+    // the game saves no biomes above the highest non-empty section, repeating it instead:
+    // generated biomes there are read from that section, whatever the generated blocks
     uint32_t savedBiomeAt(const LevelChunk &generated, const LevelChunk &expected, int x, int32_t y, int z) {
         const int32_t savedSections = std::max(1, expected.getNetworkSubChunkCount());
         const int32_t section = (y - gMinY) >> 4;
@@ -546,11 +533,8 @@ namespace {
         return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
     }
 
-    /**
-     * Generates and populates every chunk of an area the way the chunk workers do, and hands each one over once
-     * all of its neighbours are populated, so that the blocks they spilled into it are present. Chunks are
-     * produced row by row, which keeps only about two rows in memory.
-     */
+    // hands a chunk over once all neighbours are populated: their spills are in;
+    // row by row, about two rows in memory
     void generateArea(int64_t seed, const ChunkArea &area, bool terrainOnly,
                       const std::function<void(LevelChunk &)> &visit) {
         const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(gDimension,
@@ -586,7 +570,7 @@ namespace {
                 if (area.contains(chunkX, chunkZ))
                     waiting.emplace(packChunk(chunkX, chunkZ), std::move(chunk));
 
-                // The chunk diagonally behind has just had its last neighbour populated.
+                // the chunk diagonally behind just got its last neighbour populated
                 if (!area.contains(chunkX - 1, chunkZ - 1))
                     continue;
 
@@ -1111,7 +1095,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    // the log endpoints write from a worker thread, so the report must be drained before the process exits
+    // log endpoints write from a worker thread: drain the report before the process exits
     BedrockLog::flush();
     return result;
 }

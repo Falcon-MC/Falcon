@@ -27,7 +27,7 @@ public:
     bool getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
                   std::vector<BlockDrop> &drops) const override;
 
-    // Shared with flowered azalea leaves, which have their own block class.
+    // shared with flowered azalea leaves, a block class of their own
     static void leafDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
                           std::vector<BlockDrop> &drops);
 };

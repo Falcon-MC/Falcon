@@ -65,8 +65,8 @@ namespace {
     const float PLAYER_BASE_OFFSET = 1.62f;
     const double BREAK_SPEED_CHANGE_EPSILON = 0.0001;
     const double BREAK_PROGRESS_EPSILON = 0.000001;
-    // The server starts counting break progress on the tick after the start and counts server ticks, not input
-    // ticks, so a client-predicted destroy can arrive up to this many ticks before the server's count completes.
+    // progress counts server ticks from the tick after the start, not input ticks:
+    // a client-predicted destroy can arrive up to this many ticks early
     const int64_t BREAK_TICK_TOLERANCE = 2;
     const float REACH_MAX_DIFF = 6.0f;
     const uint64_t RIGHT_CLICK_DEDUP_MICROSECONDS = 100000;
@@ -285,8 +285,7 @@ namespace {
         if (position.y < level.getMinY() || position.y > level.getMaxY())
             return;
 
-        // peek only: a rejected action on a far or unloaded position must not force a synchronous chunk
-        // load or generation on the tick thread. an unloaded chunk means there is nothing to correct.
+        // peek only: no synchronous chunk load or generation on the tick thread; unloaded: nothing to correct
         const BlockState *statePtr = level.peekBlockPtr(position.x, position.y, position.z);
         if (statePtr == nullptr)
             return;
@@ -341,7 +340,7 @@ namespace {
                 continue;
 
             for (int32_t layer = 0; layer < 2; ++layer) {
-                // peek only: syncing around a click must not generate chunks from client coordinates
+                // peek only: no chunk generation from client coordinates when syncing around a click
                 const BlockState *statePtr = level.peekBlockPtr(position.x, position.y, position.z, layer);
                 if (statePtr == nullptr)
                     continue;
@@ -432,10 +431,7 @@ void BlockActionHandler::broadcastBlockActorData(ServerNetworkHandler &owner, Le
                        data);
 }
 
-/**
- * The block-cracking level events carry the per-tick break progress as a fraction of
- * 65535; the client uses it to animate the crack at the same pace as the server.
- */
+// per-tick progress as a fraction of 65535: the client animates the crack at the server's pace
 int32_t BlockActionHandler::breakSpeedEventData(double speed) {
     return (int32_t) std::clamp(65535.0 * speed, 0.0, 65535.0);
 }
@@ -472,8 +468,7 @@ bool BlockActionHandler::_canInteractWithBlock(ServerPlayer &player, const Vecto
         directionZ /= length;
     }
 
-    // Besides the reach distance, reject blocks clearly behind the player: the target must
-    // not lie more than REACH_MAX_DIFF behind the plane through the eyes facing the yaw.
+    // beyond reach, also reject blocks more than REACH_MAX_DIFF behind the eye plane facing the yaw
     const float dot = directionX * eyePosition.x + directionZ * eyePosition.z;
     const float dot1 = directionX * target.x + directionZ * target.z;
     return (dot1 - dot) >= -REACH_MAX_DIFF;
@@ -487,8 +482,7 @@ bool BlockActionHandler::canBreakBlock(ServerNetworkHandler &owner, ServerPlayer
             return false;
     }
 
-    // a deny block below forbids changing the block, breaking as much as placing: otherwise it is bypassed
-    // simply by breaking instead of placing.
+    // a deny block forbids breaking as much as placing: else breaking bypasses it
     if (!isBlockChangeAllowed(owner.getLevelFor(player), position, player))
         return false;
 
@@ -881,10 +875,7 @@ bool BlockActionHandler::matchesTransactionItem(const PacketCodecContext &contex
            && held.mDamage == sent.mDamage;
 }
 
-/**
- * Allow and deny blocks: the nearest one below the position in the same column decides,
- * and deny still lets creative players build.
- */
+// the nearest allow/deny below in the same column decides; deny still lets creative build
 bool BlockActionHandler::isBlockChangeAllowed(Level &level, const Vector3i &position, const ServerPlayer &player) {
     for (int32_t y = position.y - 1; y >= level.getMinY(); --y) {
         const std::string &identifier = level.getBlockState(position.x, y, position.z).mName;
@@ -1143,7 +1134,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     const bool merged = mergeResult == PlacementMergeResult::Merged;
 
-    //TODO: snowlogging is not implemented
+    // TODO: snowlogging
     const BlockState targetState = level.getBlockState(target.x, target.y, target.z);
     if (!merged && !BlockSupport::isReplaceable(targetState))
         return false;

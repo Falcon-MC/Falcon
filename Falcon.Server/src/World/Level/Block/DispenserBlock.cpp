@@ -21,7 +21,7 @@ namespace {
     const char *const SOUND_DISPENSE_FAIL = "block.click.fail";
     const int32_t LEVEL_EVENT_PARTICLE_SHOOT = 2000;
 
-    // Down, up, north, south, west, east.
+    // facing order: down, up, north, south, west, east
     const int32_t FACE_OFFSETS[6][3] = {
             {0,  -1, 0},
             {0,  1,  0},
@@ -67,7 +67,7 @@ namespace {
         return BlockState(state.mName, states);
     }
 
-    // Every non-empty slot has the same chance, as vanilla picks one by reservoir sampling.
+    // reservoir sampling like the game: every non-empty slot equally likely
     int pickSlot(const Container &container) {
         int picked = -1;
         int candidates = 0;
@@ -127,7 +127,7 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
     const Vector3i target(position.x + FACE_OFFSETS[facing][0], position.y + FACE_OFFSETS[facing][1],
                           position.z + FACE_OFFSETS[facing][2]);
 
-    // A dropper facing a container only feeds it, and keeps the item when the container is full.
+    // a dropper facing a container only feeds it; keeps the item when it is full
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
     BlockActor *targetActor = definition != nullptr && definition->mKind == ContainerBlockKind::Dropper
                               ? level.getBlockActors().find(target)

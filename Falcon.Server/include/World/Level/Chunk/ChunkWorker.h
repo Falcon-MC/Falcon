@@ -45,27 +45,19 @@ struct ChunkLoadResult {
     int32_t mZ = 0;
     std::unique_ptr<LevelChunk> mChunk;
     std::vector<GeneratedBlockChange> mOverflowChanges;
-    /**
-     * The blocks neighbours spilled into this chunk that the worker applied to it, stored ones first. They
-     * no longer exist anywhere else, so the main thread restores them when it drops the result. A load
-     * discarded at shutdown comes back with no chunk and only the parked blocks its task carried.
-     */
+    // applied by the worker, stored ones first; exist nowhere else: restored if the result is dropped;
+    // a load discarded at shutdown returns no chunk, only its task's parked blocks
     std::vector<GeneratedBlockChange> mSpilledChanges;
     bool mReplacesResident = false;
     bool mGenerated = false;
 };
 
-/**
- * Background threads that load, generate, populate, light and save chunks for one level.
- * Results come back through drainCompleted() on the main thread; workers never touch
- * resident chunks, only chunks handed to them by value.
- */
+// workers never touch resident chunks, only copies handed by value; results via drainCompleted()
 class ChunkWorker {
 public:
     static constexpr size_t MAX_THREADS = 64;
-    // Credits stay held until the main thread drains completed results, not just until
-    // generation finishes, so slow consumers cannot accumulate an unbounded result queue.
-    // Generation takes hundreds of milliseconds, so every worker needs several chunks in flight.
+    // credits held until the main thread drains the result: no unbounded result queue; generation takes
+    // hundreds of ms: several chunks in flight per worker
     static constexpr size_t MAX_OUTSTANDING_GENERATION = 64;
 
     ChunkWorker(const ChunkGenerator &generator, LevelStorage &storage);
@@ -84,7 +76,7 @@ public:
 
     size_t getThreadCount() const { return mQueues.size(); }
 
-    // `parked` are feature blocks spilled into the chunk while it was absent; they are applied before it is lit.
+    // `parked`: feature blocks spilled in while absent, applied before lighting
     bool requestLoad(int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> &parked);
 
     void requestSave(std::unique_ptr<LevelChunk> chunk);
@@ -94,17 +86,14 @@ public:
     std::future<std::vector<GeneratedBlockChange>> requestPersistChanges(
             int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes);
 
-    // Deletes stored actors off the main thread; the future completes once every deletion ran.
+    // off the main thread; the future completes once every deletion ran
     std::future<void> requestEraseEntities(std::vector<int64_t> uniqueIds);
 
     size_t getOutstandingGenerationCount() const {
         return mOutstandingGeneration.load();
     }
 
-    /**
-     * Whether a save requested for this chunk has not been written yet. A chunk must not be
-     * freed and written synchronously meanwhile, or the older queued copy would overwrite it.
-     */
+    // meanwhile no free + synchronous write: the older queued copy would overwrite it
     bool hasPendingSave(int32_t chunkX, int32_t chunkZ) const;
 
     size_t getPendingSaveCount() const;

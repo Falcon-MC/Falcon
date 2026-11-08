@@ -354,7 +354,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         for (const FoodEffect &effect: food->getEffects())
             addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
 
-        // Effects the item cures, such as poison for the honey bottle, come only from the vanilla components.
+        // cured effects (poison for the honey bottle) come only from the vanilla components
         const Tag *vanilla = vanillaFood(usedItem);
         const Tag *removed = vanilla == nullptr ? nullptr : vanilla->get("remove_effects");
         if (removed != nullptr && removed->isList()) {

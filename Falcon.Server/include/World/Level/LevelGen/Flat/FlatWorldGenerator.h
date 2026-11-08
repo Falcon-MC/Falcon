@@ -7,11 +7,8 @@
 #include <string>
 #include <vector>
 
-/**
- * Overworld generator for worlds whose level.dat sets Generator to flat. Every chunk is the same column
- * built from the FlatWorldLayers JSON, stacked from the bottom of the dimension, with one biome and no
- * features or structures.
- */
+// level.dat Generator flat: the same FlatWorldLayers column everywhere from the dimension bottom, one biome, no
+// features or structures
 class FlatWorldGenerator : public ChunkGenerator {
 public:
     FlatWorldGenerator(int64_t seed, const std::string &layers);

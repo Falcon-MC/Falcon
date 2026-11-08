@@ -20,10 +20,7 @@
 #include <vector>
 
 namespace {
-    /**
-     * The chunk column an actor is stored under, packed as (x << 32) | z, or false when the actor is not
-     * saved with `level`. Both the per-chunk save and the level-wide save sort actors with it.
-     */
+    // packed (x << 32) | z; false when not saved with `level`; both the chunk and level-wide saves sort by it
     bool savedActorColumn(const ServerActor &actor, const Level &level, int64_t &column) {
         if (!actor.shouldSave() || !actor.isIn(level))
             return false;
@@ -97,9 +94,8 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
         if (loaded != mActors.end() && loaded->second->isIn(level))
             continue;
 
-        // Unique ids are only unique within one world database, so an actor from another world can
-        // carry the id of one already loaded here; it gets a fresh id instead of being dropped.
-        // Generated mobs have no id yet: chunk workers cannot allocate one.
+        // unique ids are unique only per world database: a clashing actor from another world gets a fresh id;
+        // generated mobs have none yet: chunk workers can't allocate one
         const bool idTaken = loaded != mActors.end() || !tag.contains("UniqueID");
 
         const uint64_t runtimeId = allocateRuntimeId();
@@ -197,8 +193,7 @@ void ServerNetworkHandler::saveAllActors() {
     for (Level *level: getLevels()) {
         const std::unordered_set<int64_t> &columns = getWorldOf(*level).getActorLoadedChunks(level->getDimensionType());
 
-        // One pass sorts the actors into their chunks, in the order saveActorsForChunk() would find them;
-        // asking every loaded chunk for its actors walked all of them once per chunk.
+        // one pass, in saveActorsForChunk() order; asking each loaded chunk walks every actor once per chunk
         std::unordered_map<int64_t, std::vector<Tag>> byChunk;
         for (auto &entry: mActors) {
             ServerActor &actor = *entry.second;

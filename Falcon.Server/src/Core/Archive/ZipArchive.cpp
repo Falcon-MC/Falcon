@@ -66,8 +66,7 @@ bool ZipArchive::listEntries(const std::string &zip, std::vector<ZipEntry> &out)
         return false;
 
     const uint16_t entryCount = readU16(zip, eocd + 10);
-    // the offsets come from the archive, so the arithmetic is done in 64 bits: a 32-bit sum could wrap past
-    // the size check and lead readU32 to read out of bounds.
+    // archive offsets: 64-bit arithmetic, a 32-bit sum could wrap past the size check into an OOB readU32
     size_t offset = readU32(zip, eocd + 16);
 
     for (uint16_t entry = 0; entry < entryCount; entry++) {
@@ -130,9 +129,8 @@ bool ZipArchive::extractToDirectory(const std::string &zip, const std::string &d
     const std::filesystem::path safeRoot = canonicalRoot.empty() ? root : canonicalRoot;
 
     for (const ZipEntry &entry: entries) {
-        // the archive is attacker-controlled, so an entry name must not escape the destination directory.
-        // reject separators the host may not treat as such, absolute names and any traversal, then confirm
-        // the resolved path stays under the root (zip slip).
+        // attacker-controlled names (zip slip): reject foreign separators, absolute names, traversal;
+        // then confirm the resolved path stays under the root
         if (entry.mName.empty() || entry.mName.find('\\') != std::string::npos
             || entry.mName.find('\0') != std::string::npos) {
             return false;

@@ -250,8 +250,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
 
     ServerPlayer *victim = nullptr;
     for (auto &entry: owner.getPlayers()) {
-        // the target must be in the same world and dimension, or a client could attack players across
-        // dimensions and worlds, including worlds where pvp is disabled.
+        // same world and dimension only: else a client could attack across dimensions and worlds, pvp-off ones included
         if (entry.second.getRuntimeId() == targetRuntimeId && entry.second.sharesLevelWith(*this)) {
             victim = &entry.second;
             break;

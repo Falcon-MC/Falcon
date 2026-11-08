@@ -53,8 +53,7 @@ float ArmorProtection::apply(const ItemStack *armor, size_t count, float amount,
     const float effectiveFactor = (float) enchantmentProtectionFactor * efficiency;
 
     if (armorDamage)
-        // armor gives at most 80% reduction in vanilla: 20 armour points at 4% each. the extra clamp keeps
-        // that ceiling even if a damage source passes an efficiency above one.
+        // vanilla caps armor at 80%: 20 points at 4% each; the clamp holds even for an efficiency above one
         amount *= std::max(0.0f, 1.0f - std::min(0.8f, effectivePoints * 0.04f));
 
     if (effectiveFactor > 0.0f) {

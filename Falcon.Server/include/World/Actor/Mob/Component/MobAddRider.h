@@ -8,17 +8,13 @@
 class MobActor;
 class ServerNetworkHandler;
 
-/**
- * `minecraft:addrider`: the riders listed by a definition or component group are spawned on the mob and seated when
- * that definition is added, as the component's add hook does in the game. Groups restored from a save are not added
- * again, so they spawn no riders.
- */
+// minecraft:addrider: riders spawn when the definition is added, as the component's add hook does;
+// groups restored from a save aren't added again: no riders
 class MobAddRider {
 public:
-    /** Queues the riders of an `minecraft:addrider` component that was just added. */
     void queue(const json::Value *component);
 
-    /** Spawns the queued riders, each mounted on the mob or removed when it cannot ride it. */
+    // a rider unable to ride the mob is removed
     void spawnPending(ServerNetworkHandler &owner, MobActor &vehicle);
 
 private:

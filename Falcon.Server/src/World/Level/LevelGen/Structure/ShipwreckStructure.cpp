@@ -251,7 +251,7 @@ std::vector<ShipwreckStructure::PlacedBlock> ShipwreckStructure::build(const Chu
             block.mState = water;
         block.mChest = entry.mData.getString("id", std::string()) == "minecraft:chest";
         if (block.mChest) {
-            // placing a chest draws a seed of its own, which only a marker replaces
+            // placing a chest draws a seed of its own; only a marker replaces it
             block.mLootSeed = FeatureRandom::nextInt(random);
             chests[{block.x, block.y, block.z}] = blocks.size();
         }

@@ -4,7 +4,7 @@
 
 #include <string>
 
-// Stores player data in a single .dat file per player, gzipped big endian NBT.
+// one .dat file per player: gzipped big endian NBT
 class PlayerDataProvider {
 public:
     explicit PlayerDataProvider(const std::string &directory);
@@ -16,7 +16,7 @@ public:
     bool saveData(const std::string &name, const Tag &data) const;
 
 private:
-    // whether a name maps to a file name that stays inside the data directory (no path separators, no traversal)
+    // no path separators, no traversal
     static bool _isSafeName(const std::string &name);
 
     std::string _getPlayerDataPath(const std::string &name) const;

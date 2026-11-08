@@ -23,7 +23,7 @@ namespace {
 
     const int32_t LEASH_HOLDER_DATA_ID = 37;
 
-    // Defaults of the leashable preset in 1.26.52.
+    // leashable preset defaults, 1.26.52
     const float DEFAULT_SOFT_DISTANCE = 4.0f;
     const float DEFAULT_HARD_DISTANCE = 7.0f;
     const float DEFAULT_MAX_DISTANCE = 12.0f;
@@ -44,8 +44,8 @@ namespace {
         float z;
     };
 
-    // Local attachment points scaled by the half extents: the mob's front for the dampened spring, its
-    // four lower corners for the quad spring.
+    // local attach points scaled by half extents: the mob's front for the dampened spring, its four lower
+    // corners for the quad spring
     const AttachPoint DAMPENED_MOB_POINTS[] = {{0.0f, 0.0f, 1.0f}};
     const AttachPoint DAMPENED_HOLDER_POINTS[] = {{0.0f, 0.0f, 0.0f}};
     const AttachPoint QUAD_POINTS[] = {{-1.0f, 0.0f, 1.0f}, {-1.0f, 0.0f, -1.0f}, {1.0f, 0.0f, -1.0f},
@@ -133,7 +133,7 @@ void MobLeash::tick(ServerNetworkHandler &owner, MobActor &mob) {
         return;
 
     Actor *holder = findHolder(owner, mHolderId);
-    // An offline holder keeps the leash, so it reconnects when the player joins again.
+    // an offline holder keeps the leash: it reconnects when the player rejoins
     if (holder == nullptr)
         return;
 
@@ -160,7 +160,7 @@ void MobLeash::tick(ServerNetworkHandler &owner, MobActor &mob) {
             const float moved = (target.x - mPathTarget.x) * (target.x - mPathTarget.x)
                                 + (target.y - mPathTarget.y) * (target.y - mPathTarget.y)
                                 + (target.z - mPathTarget.z) * (target.z - mPathTarget.z);
-            // Re-pathing every tick would restart the search and stall the mob.
+            // re-pathing every tick restarts the search and stalls the mob
             if (mob.getNavigation().isDone() || moved > REPATH_DISTANCE_SQUARED) {
                 mPathTarget = target;
                 mob.getNavigation().moveTo(target, FOLLOW_SPEED);
@@ -240,7 +240,7 @@ void MobLeash::_pull(MobActor &mob, const Actor &holder, const Preset &preset, f
 
         const float stretch = length - preset.mHardDistance;
         Vector3f pull(fx / length * stretch, fy / length * stretch, fz / length * stretch);
-        // The spring pulls fully only while the mob moves away; otherwise it is softened.
+        // full pull only while the mob moves away; softened otherwise
         if (pull.x * motion.x + pull.y * motion.y + pull.z * motion.z >= 0.0f)
             pull = Vector3f(pull.x * SPRING_TOWARDS_ONLY, pull.y * SPRING_TOWARDS_ONLY, pull.z * SPRING_TOWARDS_ONLY);
         force = Vector3f(force.x + pull.x, force.y + pull.y, force.z + pull.z);

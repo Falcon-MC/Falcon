@@ -70,13 +70,13 @@ int32_t MaceItem::computeSmashDamage(int32_t fallHeight) {
     if ((float) fallHeight < SMASH_MINIMUM_FALL)
         return BASE_ATTACK_DAMAGE;
 
-    // the fall height derives from the client-reported highest position, so it is clamped before use: an
-    // unbounded value would otherwise be summed block by block on the tick thread.
+    // fall height from the client-reported highest position: clamped, or an unbounded value is summed block by
+    // block on the tick thread
     if (fallHeight > MAX_SMASH_FALL)
         fallHeight = MAX_SMASH_FALL;
 
-    // closed form of the per-block tiers (4 for the first three blocks, 2 up to the eighth, 1 beyond),
-    // so the cost does not grow with the fall height
+    // closed form of the per-block tiers (4 for the first three blocks, 2 up to the eighth, 1 beyond):
+    // cost doesn't grow with the height
     if (fallHeight <= 2)
         return 4 * (fallHeight + 1);
     if (fallHeight <= 7)
@@ -85,7 +85,7 @@ int32_t MaceItem::computeSmashDamage(int32_t fallHeight) {
 }
 
 float MaceItem::getAttackDamageBonus(const ItemStack &item, ServerPlayer &attacker) const {
-    // the highest position is client-reported, so the fall height is clamped before it drives damage
+    // highest position is client-reported: clamp before it drives damage
     const float height = std::min(rise(attacker), (float) MAX_SMASH_FALL);
     const int32_t flooredHeight = (int32_t) std::floor(height);
     attacker.updateFallDistance();

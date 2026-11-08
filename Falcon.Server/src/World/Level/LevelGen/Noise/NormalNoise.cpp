@@ -61,12 +61,8 @@ std::shared_ptr<NormalNoise> NormalNoise::create(XoroshiroRandom &random, int32_
     return std::shared_ptr<NormalNoise>(new NormalNoise(std::move(first), std::move(second), valueFactor));
 }
 
-/**
- * Sum of two independent Perlin stacks, the second sampled at a slightly scaled position so
- * their lattices never line up; this smooths out grid artefacts and gives a roughly normal
- * value distribution. The scale factor and normalisation must stay exact for seeds to
- * produce the expected terrain.
- */
+// second stack sampled at a slightly scaled position: the lattices never line up; scale and normalisation stay
+// exact, or seeds give other terrain
 float NormalNoise::getValue(double x, double y, double z) const {
     // stacks summed separately, then added (sub_145C2C790)
     const float fx = static_cast<float>(x);

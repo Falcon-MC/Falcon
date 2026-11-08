@@ -33,11 +33,7 @@ struct LiquidChange {
 
 class Level;
 
-/**
- * Water, lava and bubble column flow for one level, driven by scheduled block updates.
- * Water inside a waterlogged block lives on block layer 1; every change is also recorded
- * so callers can broadcast it.
- */
+// waterlogged water lives on block layer 1; every change is recorded for callers to broadcast
 class LiquidPhysicsSystem {
 public:
     explicit LiquidPhysicsSystem(Level &level) : mLevel(level) {}

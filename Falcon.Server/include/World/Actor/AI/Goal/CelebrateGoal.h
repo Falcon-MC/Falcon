@@ -7,10 +7,7 @@
 #include <memory>
 #include <string>
 
-/**
- * `minecraft:behavior.celebrate`: while the mob has no target, it jumps and plays its celebration sound at random
- * intervals for a fixed time, with the celebrating flag set, then fires `on_celebration_end_event`.
- */
+// minecraft:behavior.celebrate: random jumps and sounds while targetless, then on_celebration_end_event
 class CelebrateGoal : public Goal {
 public:
     struct Settings {

@@ -14,10 +14,6 @@ enum class RateLimitedPacket : uint8_t {
     Count
 };
 
-/**
- * Per-connection token buckets that cap how often a client may send each category of
- * packet, so a flooding client cannot monopolise the main thread.
- */
 class PacketRateLimiter {
 public:
     using Rates = std::array<int, (size_t) RateLimitedPacket::Count>;

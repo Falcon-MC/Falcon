@@ -19,9 +19,7 @@ public:
 
     std::vector<std::string> getKnownAliases() const;
 
-    /**
-     * Forgets the aliases behavior packs added, so the next world only parses its own content.
-     */
+    // forgets behavior pack aliases: the next world parses only its own content
     void reset();
 
 private:

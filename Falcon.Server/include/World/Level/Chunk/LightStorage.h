@@ -7,12 +7,8 @@
 #include <cstdint>
 #include <vector>
 
-/**
- * Light levels of a chunk column, kept per sub-chunk section. Most sections hold a single level (open
- * sky above the terrain, darkness below it, no block light), so a section only allocates its nibble
- * array once it stops being uniform, and compact() folds uniform arrays back into one value. The table of
- * section arrays itself only exists while one of them is allocated.
- */
+// most sections hold one level (open sky, darkness underground, no block light): nibble arrays only once
+// non-uniform, compact() folds them back; the section table only exists while one is allocated
 class LightStorage {
 public:
     static constexpr int SECTION_COUNT = 24;
@@ -70,7 +66,6 @@ public:
             packed = (uint8_t) ((packed & 0xF0) | (value & 0x0F));
     }
 
-    // Releases section arrays that hold a single level again, typically right after a full recompute.
     void compact() {
         bool kept = false;
         for (size_t section = 0; section < mSections.size(); ++section) {

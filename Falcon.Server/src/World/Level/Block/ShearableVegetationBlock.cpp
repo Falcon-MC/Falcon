@@ -13,7 +13,7 @@ bool ShearableVegetationBlock::getDrops(const BlockState &state, const ItemStack
                                         std::vector<BlockDrop> &drops) const {
     (void) fortuneLevel;
 
-    // Small dripleaf ignores Silk Touch; the others accept either tool.
+    // small dripleaf ignores Silk Touch
     const bool silkTouchAllowed = state.mName != "minecraft:small_dripleaf_block";
     if (isShears(tool) || (silkTouchAllowed && hasSilkTouch(tool)))
         drops.push_back({state.mName, 1});

@@ -93,7 +93,7 @@ namespace {
 
     using ComponentMap = std::unordered_map<int32_t, SurfaceBuilderComponent>;
 
-    // every biome here has a stone foundation and a water sea in the BDS 1.26.61 biome definitions
+    // every biome here has a stone foundation and a water sea in the game's 1.26.61 biome definitions
     void addComponent(ComponentMap &components, int32_t biomeId, const BlockState &topBlock,
                       const BlockState &midBlock, const BlockState &seaFloorBlock, int32_t seaFloorDepth,
                       SurfaceBuilderType type = SurfaceBuilderType::Overworld) {

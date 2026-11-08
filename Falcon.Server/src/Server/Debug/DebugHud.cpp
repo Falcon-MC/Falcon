@@ -32,7 +32,7 @@ namespace {
     uint64_t residentBytes() {
 #if defined(_WIN32)
         PROCESS_MEMORY_COUNTERS counters;
-        // the kernel32 entry point, which needs no psapi import library
+        // kernel32 entry point: no psapi import library needed
         if (K32GetProcessMemoryInfo(GetCurrentProcess(), &counters, sizeof(counters)))
             return (uint64_t) counters.WorkingSetSize;
         return 0;
@@ -77,7 +77,7 @@ void DebugHud::tick(ServerNetworkHandler &owner, ServerPlayer &player) {
     if (mPage == Page::Off)
         return;
 
-    // an operator who loses the rank must not keep reading the server state
+    // a deopped player stops reading the server state
     if (!player.isOp()) {
         setPage(player, Page::Off);
         return;

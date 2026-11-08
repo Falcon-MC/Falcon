@@ -359,7 +359,7 @@ void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
             const Vector3f previous = actor.getPosition();
             moveItemActor(owner, actor);
 
-            // The block under an item that has not changed cell was checked just above.
+            // same cell: the block under it was checked just above
             if (!sameBlock(previous, actor.getPosition()) && isInFire(owner, actor)
                 && !isFireResistant(actor.getItem()))
                 actor.setRemoved(true);

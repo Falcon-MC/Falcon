@@ -189,10 +189,7 @@ namespace {
         level.onBlockPlaced(position, placed);
     }
 
-    /**
-     * Rain puts fire out if the fire or any horizontal neighbour is open to the sky, except
-     * on blocks that burn forever.
-     */
+    // fire or a horizontal neighbour open to the sky, unless on a block burning forever
     bool checkRain(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
         if (!level.hasSkyLight() || !level.isRaining())
             return false;
@@ -251,8 +248,7 @@ namespace {
         if (!allowFire(owner, level, FALCON_EVENT_BLOCK_BURN, position, source))
             return;
 
-        // The burning block is either replaced by fire, more likely while the source fire is
-        // young, or simply destroyed.
+        // replaced by fire (likelier while the source is young) or destroyed
         if (nextInt(age + 10) < 5) {
             setFire(owner, level, position, "minecraft:fire", std::min(age + nextInt(5) / 4, FireSystem::MAX_AGE));
             FireSystem::scheduleUpdate(level, position, FireSystem::TICK_RATE);
@@ -262,10 +258,7 @@ namespace {
         extinguish(owner, level, position);
     }
 
-    /**
-     * Contact checks run for every player and actor each tick, so they peek the block in place
-     * instead of copying its state.
-     */
+    // every player and actor each tick: peek, no state copy
     bool isFireAt(Level &level, const Vector3i &position) {
         const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
         return state != nullptr && FireSystem::matches(state->mName);
@@ -419,8 +412,7 @@ void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, co
 
     scheduleUpdate(level, position, TICK_RATE + nextInt(MAX_EXTRA_DELAY));
 
-    // With nothing flammable around, fire on solid ground lingers for a few ages before
-    // going out; fire with no solid floor goes out at once.
+    // nothing flammable around: lingers a few ages on solid ground, out at once without a floor
     if (!forever && !canNeighbourBurn(level, position)) {
         if (!isTopFacingSurfaceSolid(belowState) || age > SUPPORTED_FADE_AGE)
             extinguish(owner, level, position);
@@ -439,9 +431,8 @@ void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, co
     tryToCatchBlockOnFire(owner, level, relative(position, 0, 0, 1), NEIGHBOUR_BOUND_HORIZONTAL, age, position);
     tryToCatchBlockOnFire(owner, level, relative(position, 0, 0, -1), NEIGHBOUR_BOUND_HORIZONTAL, age, position);
 
-    // Fire also jumps into air blocks next to something flammable, in a 3x3 area from one
-    // block below to four above. Each level above the first makes it less likely, older fire
-    // spreads less, and higher difficulty spreads more.
+    // jumps into air next to flammables, 3x3 from one below to four above; less likely per level above
+    // the first and with age, more with difficulty
     const int difficulty = (int) owner.getProperties().getDifficulty();
 
     for (int32_t x = position.x - 1; x <= position.x + 1; ++x) {
@@ -499,9 +490,8 @@ void FireSystem::tick(ServerNetworkHandler &owner, Level &level) {
     FireSchedule &schedule = scheduleOf(level);
     ++schedule.mTick;
 
-    // Due entries are copied out before running them because updates reschedule fire and
-    // would otherwise insert into the buckets being walked. Stale bucket entries are
-    // skipped by checking mScheduled, the single source of truth per position.
+    // copied out first: updates reschedule into the buckets being walked; stale entries skipped against
+    // mScheduled
     std::vector<ScheduledPosition> due;
 
     while (!schedule.mBuckets.empty()) {

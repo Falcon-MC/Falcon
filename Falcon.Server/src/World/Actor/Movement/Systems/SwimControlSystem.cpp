@@ -9,7 +9,7 @@ void SwimControlSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &contact = context.contact;
 
-    // BDS's view (0x140F54910) requires WasInWater and excludes MobIsJumping.
+    // the game's view (0x140F54910) requires WasInWater, excludes MobIsJumping
     if (context.waterTravel.active && abilities.swimming && !input.jumpHeld) {
         const float lookY = mojangSinDegrees(-input.getPacket().mRotation.x);
         const float factor = lookY < -0.2f ? 0.085f : 0.06f;

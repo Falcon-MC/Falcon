@@ -181,7 +181,7 @@ namespace {
         return value == nullptr ? fallback : (float) value->number(fallback);
     }
 
-    // Default of the vanilla 26.60 nearest_attackable_target definition.
+    // vanilla 26.60 nearest_attackable_target default
     const int32_t TARGET_SCAN_INTERVAL = 10;
 
     std::vector<NearestAttackableTargetGoal::Entry> targetEntries(const json::Value &component) {
@@ -863,7 +863,7 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     }
 
     if (behavior == "move_to_village") {
-        // sub_147534DC0 turns the cooldown into ticks after dropping its fraction of a second. search_range only
+        // sub_147534DC0 drops the cooldown's fraction of a second before converting to ticks; search_range only
         // seeds the closest-village search (sub_1439EA7F0), which takes its first candidate regardless
         MoveToVillageGoal::Settings settings;
         settings.mSpeed = speed;

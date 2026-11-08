@@ -10,7 +10,7 @@ class ServerNetworkHandler;
 class Tag;
 class EntityDataMap;
 
-/** Leash held by a player, following the `minecraft:leashable` presets. */
+// held by a player; follows the minecraft:leashable presets
 class MobLeash {
 public:
     bool isLeashed() const {

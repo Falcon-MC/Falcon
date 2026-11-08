@@ -75,12 +75,7 @@ struct QueuedActorCommand {
     std::string mCommand;
 };
 
-/**
- * The server's central object: owns the players, levels and actors, receives every decoded
- * packet and drives the game tick. Packet handling is split across the
- * ServerNetworkHandler*.cpp files and the helpers in Network/Handler. All player damage
- * goes through hurt().
- */
+// packet handling spans ServerNetworkHandler*.cpp and Network/Handler; all player damage goes through hurt()
 class ServerNetworkHandler : public NetworkHandler::Listener,
                              public NetworkPacketHandler,
                              public RakPeerHelper::IPSupportInterface,
@@ -143,10 +138,10 @@ public:
 
     NetworkHandler &getNetworkHandler() { return *mNetworkHandler; }
 
-    /** Overworld of the default world, the one named by `level-name`. */
+    // overworld of the `level-name` world
     Level &getLevel() { return mWorlds.getDefault().getOverworld(); }
 
-    /** A dimension of the default world. Code that has an actor or a level must use getLevelFor or getWorldOf. */
+    // default world only: code holding an actor or a level uses getLevelFor or getWorldOf
     Level &getDimension(DimensionType dimension);
 
     Level &getLevelFor(const Actor &actor);
@@ -157,22 +152,21 @@ public:
 
     World &getWorldOf(const Level &level);
 
-    /** The default world when `level` is null, as for a console sender. */
+    // null level (console sender): the default world
     World &getWorldOf(const Level *level) { return level == nullptr ? mWorlds.getDefault() : getWorldOf(*level); }
 
-    /** Every dimension of every loaded world. */
     std::vector<Level *> getLevels();
 
     World *loadWorld(const std::string &name, bool create, int64_t seed);
 
-    /** Saves and closes a world. Refuses the default world and worlds that still hold players. */
+    // refuses the default world and worlds still holding players
     bool unloadWorld(const std::string &name, std::string &error);
 
     static int64_t randomSeed();
 
     void changePlayerDimension(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
 
-    /** Moves a player to another dimension or world through the dimension change handshake. */
+    // goes through the dimension change handshake
     void changePlayerLevel(ServerPlayer &player, Level &destination, const Vector3f &position);
 
     void changeActorDimension(Actor &actor, DimensionType dimension, const Vector3f &position);
@@ -189,11 +183,7 @@ public:
 
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> &getActors() { return mActors; }
 
-    /**
-     * Visits the actors standing in the chunk columns within radius blocks of position. The index behind it is
-     * rebuilt at most once per tick, so positions can lag by one tick of movement: callers still check exact
-     * distances.
-     */
+    // index rebuilt at most once per tick: positions can lag one tick; callers check exact distances
     template<typename Visitor>
     void forEachActorNear(const Vector3f &position, float radius, Visitor &&visit) {
         _refreshActorIndex();
@@ -226,7 +216,7 @@ public:
 
     void spawnExperienceOrbs(Level &level, const Vector3f &position, int amount);
 
-    // Bows fire from eye level while thrown items leave the hand slightly lower.
+    // bows fire from eye level; thrown items leave the hand slightly lower
     static constexpr float THROWN_PROJECTILE_DROP = -0.3f;
 
     ServerActor *spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
@@ -266,7 +256,6 @@ public:
 
     void spawnLingeringCloud(Level &level, const Vector3f &position, int32_t potionId);
 
-    /** An area effect cloud applying a potion to the players standing in it. */
     struct AreaEffectCloudSettings {
         int32_t mPotionId = -1;
         float mRadius = 3.0f;
@@ -277,7 +266,7 @@ public:
         int32_t mReapplicationDelay = 0;
         int32_t mParticle = 0;
         std::optional<int32_t> mColor;
-        // the runtime id of the actor that made the cloud, which it leaves alone
+        // runtime id of the cloud's creator; the cloud leaves it alone
         int64_t mOwnerRuntimeId = -1;
     };
 
@@ -301,13 +290,11 @@ public:
 
     void updateActorVisibility();
 
-    /** Whether the viewer's client should have the other player spawned: same dimension, chunk sent. */
+    // same dimension and chunk already sent
     bool canPlayerSeePlayer(ServerPlayer &viewer, const ServerPlayer &target) const;
 
-    /** Spawns and despawns players for each other as they come in and out of view. */
     void updatePlayerVisibility();
 
-    /** Sends the player's movement to every client that has them spawned. */
     void broadcastPlayerMove(ServerPlayer &player);
 
     /** Despawns the player for every client that has them spawned, as they leave the server. */
@@ -362,9 +349,7 @@ public:
     void playLevelSound(Level &level, const std::string &sound, const Vector3f &position,
                         const std::string &actorType = ":", int32_t extraData = -1);
 
-    /**
-     * Plays a sound whose extra data is a block state, translated for each viewer's version.
-     */
+    // block-state extra data, translated per viewer's protocol
     void playBlockSound(Level &level, const std::string &sound, const Vector3f &position, int32_t blockHash,
                         const std::string &actorType = "");
 
@@ -449,20 +434,14 @@ public:
 
     const PacketCodecContext &getCodecContext() const { return mCodecContext; }
 
-    /**
-     * The context of the protocol this connection chose when it connected, or the current protocol's before it
-     * chose one.
-     */
+    // the current protocol's context until the connection picks one
     const PacketCodecContext &getCodecContext(const NetworkIdentifier &id);
 
     ServerPlayer *getPlayerByName(const std::string &name);
 
     std::vector<ServerPlayer *> resolveTargets(CommandOrigin &sender, const std::string &selector);
 
-    /**
-     * The non-player actors an @e selector matches in the sender's world. Players are returned by
-     * resolveTargets, so a command that accepts any entity calls both.
-     */
+    // non-player actors only: players come from resolveTargets; any-entity commands call both
     std::vector<ServerActor *> resolveActorTargets(CommandOrigin &sender, const std::string &selector);
 
     std::vector<std::string> getPlayerNames() const;
@@ -539,11 +518,8 @@ public:
     ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
                         int pickupDelay);
 
-    /**
-     * Single entry point for player damage. Applies, in order: game mode and spawn
-     * invulnerability, damage game rules, scripts and plugins, the invulnerability window,
-     * shields, armor, Resistance and the totem, then kills the player if health runs out.
-     */
+    // single entry point for player damage, in order: game mode and spawn invulnerability, damage game rules,
+    // scripts and plugins, invulnerability window, shields, armor, Resistance, totem, then death
     DamageResult hurt(ServerPlayer &player, float amount, const ActorDamageSource &source);
 
     void killPlayer(ServerPlayer &player, const std::string &deathMessageKey,
@@ -573,14 +549,10 @@ public:
 
     std::vector<uint32_t> &getRecipeSourceIndicesMutable() { return mRecipeSourceIndices; }
 
-    /**
-     * The vanilla recipe each recipe network ID was built from. Custom recipes are absent.
-     */
+    // custom recipes absent
     std::unordered_map<int32_t, std::string> &getVanillaRecipeIdsMutable() { return mVanillaRecipeIds; }
 
-    /**
-     * The creative content table index of each creative item, or -1 for a custom one.
-     */
+    // -1 for a custom item
     std::vector<int32_t> &getCreativeSourceIndicesMutable() { return mCreativeSourceIndices; }
 
     CraftingDataPacket &getCachedCraftingData() { return mCachedCraftingData; }
@@ -599,7 +571,7 @@ public:
 
     void _refreshActorIndex();
 
-    // Actor updates only matter to players the actor was spawned for; anyone else gets the state with the spawn.
+    // only players the actor was spawned for; others get the state with the spawn
     void _sendToViewers(const ServerActor &actor, const Packet &packet);
 
     ServerActor *_registerActor(std::unique_ptr<ServerActor> actor);
@@ -636,12 +608,8 @@ public:
         Reject
     };
 
-    /**
-     * Checks the packet against the login step the connection has reached, so a client cannot skip
-     * authentication, bans or the allowlist by sending later packets early. A login packet out of its step is
-     * rejected; any other packet arriving before the game started is ignored, since vanilla clients send a few
-     * of them during the login.
-     */
+    // a login packet out of step is rejected: no skipping auth, bans or the allowlist;
+    // other packets before the game starts are ignored: vanilla clients send a few during login
     LoginGate _checkLoginState(const NetworkIdentifier &id, MinecraftPacketIds packetId);
 
     // the packet ids the server decodes from a client; clientbound and ignored packets are dropped before decode
@@ -698,7 +666,7 @@ public:
     void sendPacketTo(const NetworkIdentifier &id, const Packet &packet) override;
 
     void queueConsoleCommand(const std::string &commandLine);
-    // Only call on the thread that owns the server state.
+    // server-state thread only
     void executeConsoleCommand(std::string commandLine);
 
     void postToMainThread(std::function<void()> task);
@@ -786,10 +754,7 @@ private:
 
     ServerPlayer *_getPlayer(const NetworkIdentifier &id);
 
-    /**
-     * The vanilla translation for this protocol, with the custom items kept at their own IDs. A custom item whose
-     * ID the client already uses for a vanilla item gets the first ID the client leaves free.
-     */
+    // custom items keep their ids; one colliding with a vanilla id gets the first id the client leaves free
     std::shared_ptr<const ItemNetworkIdMap> _itemNetworkIdsFor(int protocol) const;
 
     int _getServerViewDistance() const;
@@ -896,7 +861,7 @@ private:
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> mPlayers;
     std::unique_ptr<PlayerMovementRegistry> mPlayerMovementRegistry;
     std::unordered_map<int64_t, std::unique_ptr<ServerActor>> mActors;
-    // Actors move up to a few blocks per tick, more than any mob walks, so stale index entries stay in range.
+    // actors move a few blocks per tick, more than any mob walks: stale entries stay in range
     static constexpr float ACTOR_INDEX_MARGIN = 4.0f;
     std::unordered_map<int64_t, std::vector<ServerActor *>> mActorIndex;
     bool mActorIndexDirty = true;

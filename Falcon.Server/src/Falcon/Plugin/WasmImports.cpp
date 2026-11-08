@@ -13,8 +13,8 @@
 #include <string>
 #include <vector>
 
-// canonical abi lowering of falcon.wit: guest arguments checked before the c api, which trusts its pointers
-// costs: player and level handles are a scan each, strings are copied once; only when the plugin calls
+// canonical abi lowering of falcon.wit: guest arguments checked before the c api: it trusts its pointers
+// costs paid only when the plugin calls: a scan per player/level handle, one copy per string
 
 namespace {
     using Call = WasmCall;
@@ -121,7 +121,7 @@ namespace {
         return FalconBlockPos{call.s32(index), call.s32(index + 1), call.s32(index + 2)};
     }
 
-    // false for a handle that is no longer valid
+    // false for a stale handle
     bool optionalItem(Call &call, size_t index, FalconItem *&out) {
         bool present = false;
         if (!call.option(call.u32(index), present))

@@ -18,7 +18,7 @@ namespace {
         return std::isfinite(value) && value >= -1.001f && value <= 1.001f;
     }
 
-    // Beyond the world border; a position out here is never one the client really reached.
+    // beyond the world border: never a position the client really reached
     const double MAX_COORDINATE = 30000000.0;
     const uint32_t MAX_STALE_INPUT_TICKS = 20;
 
@@ -37,9 +37,8 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const PlayerAuthInputPacket
         outReason = "input tick returned to zero";
         return true;
     }
-    // The client tick always advances. A repeated or older tick is dropped from the input queue without simulation,
-    // so a client stuck on one tick would move with no validation or correction at all. A few stale ticks in a row
-    // are tolerated for reordered packets.
+    // the client tick always advances; a repeated or older one skips simulation: a client stuck on one tick
+    // would move unvalidated; a few stale ticks in a row tolerated for reordering
     if (player.getMovementInputs().noteInputTick(tick) > MAX_STALE_INPUT_TICKS) {
         outReason = "input tick did not advance";
         return true;

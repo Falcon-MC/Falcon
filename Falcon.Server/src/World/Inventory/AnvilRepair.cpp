@@ -22,8 +22,7 @@ namespace {
     const char *const BOOK = "minecraft:book";
     const char *const ENCHANTED_BOOK = "minecraft:enchanted_book";
 
-    // Tier::getTierItem (sub_144743010) lists these planks for the wooden tier and these three blocks for the
-    // stone tier.
+    // Tier::getTierItem (sub_144743010): these planks for the wooden tier, these three blocks for stone
     const char *const PLANKS[] = {
             "minecraft:oak_planks", "minecraft:spruce_planks", "minecraft:birch_planks", "minecraft:jungle_planks",
             "minecraft:acacia_planks", "minecraft:dark_oak_planks", "minecraft:mangrove_planks",
@@ -72,9 +71,8 @@ namespace {
         return custom == nullptr ? 0 : custom->mMaxDurability;
     }
 
-    // The repair_amount Molang a pack writes: numbers, + - * /, parentheses, math.floor, math.ceil, math.round,
-    // math.abs, math.min and math.max, and the durability queries of the repaired item (query.*) and of the
-    // material (context.other->query.*).
+    // repair_amount Molang: numbers, + - * /, parentheses, math.floor/ceil/round/abs/min/max, and the durability
+    // queries of the repaired item (query.*) and the material (context.other->query.*)
     class RepairAmountParser {
     public:
         RepairAmountParser(const std::string &text, const ItemStack &item, const ItemStack &other)
@@ -248,8 +246,8 @@ namespace {
         }
     };
 
-    // RepairableItemComponent (sub_148F1BBF0): the first repair_items entry that lists the material gives the
-    // amount, evaluated with the material as context.other; -1 when the item has no entry for it.
+    // RepairableItemComponent (sub_148F1BBF0): the first repair_items entry listing the material gives the amount,
+    // evaluated with the material as context.other; -1 without an entry
     int32_t customRepairAmount(const ItemStack &item, const ItemStack &material) {
         const CustomItemDefinition *custom = customOf(item);
         if (custom == nullptr || material.isAir())
@@ -269,7 +267,7 @@ namespace {
         return -1;
     }
 
-    // ItemStackBase::isDamageableItem (sub_141ACF450): the item can take damage and is not Unbreakable.
+    // ItemStackBase::isDamageableItem (sub_141ACF450): damageable and not Unbreakable
     bool isDamageable(const ItemStack &item) {
         return maxDamageOf(item) > 0 && !ItemProperties::isUnbreakable(item);
     }
@@ -282,7 +280,7 @@ namespace {
         return list != nullptr && list->getType() == Tag::Type::List;
     }
 
-    // sub_141AD0BD0: the material counts as a book only when it is an enchanted book that carries enchantments.
+    // sub_141AD0BD0: a book only when it is an enchanted book carrying enchantments
     bool isEnchantedBook(const ItemStack &item) {
         return identifierOf(item) == ENCHANTED_BOOK && hasEnchantList(item);
     }
@@ -291,13 +289,13 @@ namespace {
         return identifier == BOOK || identifier == ENCHANTED_BOOK;
     }
 
-    // The anvil keeps maps for their own recipes, so they never repair or merge here.
+    // the anvil keeps maps for their own recipes: they never repair or merge here
     bool isMap(const ItemStack &item) {
         const std::string &identifier = identifierOf(item);
         return identifier == "minecraft:filled_map" || identifier == "minecraft:empty_map";
     }
 
-    // sub_148EEB790: the chemistry glow stick and sparkler are never merged with a second copy.
+    // sub_148EEB790: chemistry glow stick and sparkler never merge with a second copy
     bool isUnmergeable(const ItemStack &item) {
         const std::string &identifier = identifierOf(item);
         return identifier == "minecraft:glow_stick" || identifier == "minecraft:sparkler";
@@ -328,7 +326,7 @@ namespace {
         }
     }
 
-    // ArmorItem::getTierItem (sub_141A53300).
+    // ArmorItem::getTierItem (sub_141A53300)
     bool matchesArmorTier(int32_t tier, const std::string &material) {
         switch ((ArmorTier) tier) {
             case ArmorTier::Leather:
@@ -349,8 +347,8 @@ namespace {
         }
     }
 
-    // RepairableItemComponent::_repairItem (sub_148F1C560): each material item takes up to amount damage off, and
-    // the number of items used is returned.
+    // RepairableItemComponent::_repairItem (sub_148F1C560): each material item takes up to amount damage off;
+    // returns the items used
     int32_t repairWith(ItemStack &result, int32_t materialCount, int32_t amount) {
         int32_t step = std::min(amount, result.mDamage);
         int32_t used = 0;
@@ -382,7 +380,7 @@ namespace {
         return *display;
     }
 
-    // ItemStackBase::resetHoverName (sub_141AD96B0).
+    // ItemStackBase::resetHoverName (sub_141AD96B0)
     void resetHoverName(ItemStack &item) {
         if (!item.mTag.isCompound())
             return;
@@ -442,9 +440,8 @@ int32_t AnvilRepair::mergeEnchantments(const ItemStack &input, const ItemStack &
     if (!hasEnchantList(material))
         return 0;
 
-    // ItemEnchants::addEnchants (sub_14555AAA0) runs canEnchant (sub_14555A940) on each enchantment: an
-    // enchantment the item cannot hold, one that conflicts with an enchantment already on it, or one already at
-    // its maximum level is skipped; an equal level goes up by one, otherwise the higher level wins.
+    // ItemEnchants::addEnchants (sub_14555AAA0) runs canEnchant (sub_14555A940) on each: skipped when the item
+    // can't hold it, it conflicts with one on the item, or is at max level; equal levels go up by one, else the higher wins
     const std::string &identifier = identifierOf(result);
     std::vector<EnchantmentInstance> merged = ItemEnchantments::read(result);
     int32_t changed = 0;
@@ -481,7 +478,7 @@ int32_t AnvilRepair::mergeEnchantments(const ItemStack &input, const ItemStack &
         }
     }
 
-    // EnchantUtils::applyEnchant (sub_1436AB5D0) turns a plain book into an enchanted book.
+    // EnchantUtils::applyEnchant (sub_1436AB5D0) turns a plain book into an enchanted book
     if (changed > 0) {
         if (identifier == BOOK && enchantedBook != nullptr)
             result.mDefinition = enchantedBook;
@@ -504,8 +501,8 @@ bool AnvilRepair::isValidRepairItem(const ItemStack &item, const ItemStack &mate
     const std::string &identifier = identifierOf(item);
     const std::string &repairItem = identifierOf(material);
 
-    // MaceItem (sub_141AE0880), wolf armor (sub_1447CC510), the shield's wooden tier (sub_14357EC30) and the
-    // elytra and turtle shell materials of ArmorItem::getTierItem (sub_141A53300).
+    // MaceItem (sub_141AE0880), wolf armor (sub_1447CC510), the shield's wooden tier (sub_14357EC30), elytra and
+    // turtle shell materials of ArmorItem::getTierItem (sub_141A53300)
     if (identifier == "minecraft:mace")
         return repairItem == "minecraft:breeze_rod";
     if (identifier == "minecraft:wolf_armor")
@@ -517,7 +514,7 @@ bool AnvilRepair::isValidRepairItem(const ItemStack &item, const ItemStack &mate
     if (identifier == "minecraft:turtle_helmet")
         return repairItem == "minecraft:turtle_scute";
 
-    // ArmorItem (sub_141A53520), then the tiered tools and weapons (sub_147B9A490, sub_1447CB770).
+    // ArmorItem (sub_141A53520), then tiered tools and weapons (sub_147B9A490, sub_1447CB770)
     if (data->mArmorSlot != ArmorSlot::None)
         return matchesArmorTier(data->mArmorTier, repairItem);
 
@@ -544,9 +541,8 @@ AnvilResult AnvilRepair::createResult(const ItemStack &input, const ItemStack &m
         const bool sameItem = identifierOf(material) == identifierOf(input);
         int32_t amount = -1;
         if (isSpear(input)) {
-            // Spears are repaired through their minecraft:repairable component: a second spear restores its
-            // remaining durability, a tier material a quarter of the maximum durability per item
-            // (sub_148F1BBF0).
+            // spears repair through minecraft:repairable (sub_148F1BBF0): a second spear restores its remaining durability,
+            // a tier material a quarter of max durability per item
             if (sameItem)
                 amount = maxDamageOf(material) - material.mDamage;
             else if (dataOf(input) != nullptr && matchesToolTier(dataOf(input)->mToolTier, identifierOf(material)))

@@ -58,6 +58,6 @@ private:
     TerrainSplinePtr mOffsetSpline;
     TerrainSplinePtr mFactorSpline;
     TerrainSplinePtr mJaggednessSpline;
-    // tells the climates apart in the per-thread preliminary surface cache, unlike an address that may be reused
+    // tells climates apart in the per-thread preliminary surface cache; an address may be reused
     uint64_t mId;
 };

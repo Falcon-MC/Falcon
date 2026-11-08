@@ -10,10 +10,7 @@
 class ChunkGenerator;
 class LevelChunk;
 
-/**
- * The bare terrain under a structure being planned. A structure reads many columns of few chunks, and a throwaway
- * chunk is the expensive part.
- */
+// bare terrain under a planned structure: many columns of few chunks, the throwaway chunk being the costly part
 class StructureTerrain {
 public:
     explicit StructureTerrain(const ChunkGenerator &generator);

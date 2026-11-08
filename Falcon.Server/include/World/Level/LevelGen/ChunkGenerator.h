@@ -28,13 +28,12 @@ public:
 
     virtual int32_t pickBiome(int32_t x, int32_t y, int32_t z) const = 0;
 
-    // y above the top solid or liquid block a column gets from terrain generation alone, which is
-    // what the game reads for a column that is not loaded (sub_14A2298E0). generates a throwaway
-    // chunk, so it is safe off the main thread but not cheap.
+    // y above the top solid or liquid block from terrain generation alone: what the game reads for an unloaded
+    // column (sub_14A2298E0); generates a throwaway chunk: any thread, but not cheap
     virtual int32_t getPreliminaryHeight(int32_t x, int32_t z) const;
 
     // y above the top solid block of the generated column, carvers included and liquids skipped: where the game
-    // lays a structure on the ground. generates a throwaway chunk.
+    // lays a structure on the ground; generates a throwaway chunk
     int32_t getGeneratedSolidHeight(int32_t x, int32_t z) const;
 
     // a throwaway chunk of terrain, for reading many columns of the same chunk

@@ -114,15 +114,13 @@ public:
         DisconnectFailReason mReason = DisconnectFailReason::Unknown;
         uint16_t mMtuSize = 0;
         std::unique_ptr<Connection> mConnection;
-        // The connection's count of queued bytes, released once its shard has taken the data.
+        // released once the shard has taken the data
         std::shared_ptr<std::atomic<size_t>> mPendingBytes;
     };
 
     using OutboundFilter = std::function<bool(const NetworkIdentifier &, std::string &)>;
 
-    /**
-     * Returns the codec context of the protocol a connection chose, or nullptr to keep the one the caller passed.
-     */
+    // nullptr: keep the caller's context
     using ContextResolver = std::function<const PacketCodecContext *(const NetworkIdentifier &)>;
 
     explicit NetworkHandler(std::unique_ptr<Connector> connector);
@@ -143,20 +141,14 @@ public:
 
     size_t getPendingOutboundCount() const;
 
-    /**
-     * Bytes sent to a connection that its IO shard has not batched yet, so a sender can hold back bulk data
-     * instead of queueing it faster than it is compressed. Main thread only, like every send.
-     */
+    // not yet batched by the IO shard: lets bulk senders hold back; main thread only, like every send
     size_t getPendingOutboundBytes(const NetworkIdentifier &id) const;
 
     size_t getPendingInboundCount() const { return mInbound.size(); }
 
     void send(const NetworkIdentifier &id, const Packet &packet, const PacketCodecContext &context);
 
-    /**
-     * Sends one packet to several connections, encoding it once per codec context and queueing every copy under a
-     * single lock.
-     */
+    // encodes once per codec context, queues every copy under one lock
     void sendToMany(const std::vector<NetworkIdentifier> &ids, const Packet &packet, const PacketCodecContext &context);
 
     void send(const NetworkIdentifier &id, const std::string &data,
@@ -167,7 +159,7 @@ public:
                    NetworkPeer::Reliability reliability = NetworkPeer::Reliability::ReliableOrdered,
                    Compressibility compressibility = Compressibility::Compressible);
 
-    // Flushes the pending batch immediately, needed before the connection settings change
+    // needed before the connection settings change
     void flush(const NetworkIdentifier &id);
 
     void enableCompression(const NetworkIdentifier &id, CompressedNetworkPeer::CompressionAlgorithm algorithm,
@@ -175,9 +167,7 @@ public:
 
     void enableEncryption(const NetworkIdentifier &id, const EncryptionKey &key);
 
-    /**
-     * Drops a connection without sending it anything, then reports it as closed.
-     */
+    // sends nothing, then reports the connection closed
     void closeConnection(const NetworkIdentifier &id);
 
     size_t getConnectionCount() const { return mConnectionCount.load(); }
@@ -190,10 +180,7 @@ public:
 
     void setOutboundFilter(OutboundFilter filter);
 
-    /**
-     * Makes every packet sent to a connection use the codec of its protocol, so callers keep passing the
-     * server's context whatever version the client speaks.
-     */
+    // callers keep passing the server's context whatever version the client speaks
     void setContextResolver(ContextResolver resolver);
 
     void addListener(Listener *listener);
@@ -212,11 +199,7 @@ private:
 
     static Compressibility _toPeerCompressibility(const Packet &packet);
 
-    /**
-     * One IO thread's share of the connections. A connection always maps to the same shard, which alone
-     * batches, compresses and sends its packets and reads what it received, so its order is kept while
-     * the compression of several connections runs on several cores.
-     */
+    // a connection always maps to one shard: its order is kept while compression spreads over cores
     struct Shard {
         TaskQueue<OutboundCommand> mOutbound;
         std::deque<OutboundCommand> mBacklog;
@@ -240,22 +223,22 @@ private:
 
     void _applyOutbound(Shard &shard, OutboundCommand &command);
 
-    // Reports a connection whose transport failed, once, so the game drops it.
+    // once per connection: the game drops it
     void _reportFailure(Connection &connection);
 
     Profiler *mProfiler = nullptr;
     std::vector<std::unique_ptr<Connector>> mConnectors;
     std::vector<std::unique_ptr<Shard>> mShards;
-    // Connections the connectors reported open and not closed yet; only the control pump touches it.
+    // only the control pump touches it
     std::unordered_set<NetworkIdentifier, NetworkIdentifier::Hasher> mLive;
-    // Connections a shard dropped on the server's request, for the control pump to close in their connector.
+    // dropped by a shard on server request; the control pump closes them in their connector
     TaskQueue<NetworkIdentifier> mServerClosed;
     std::vector<Listener *> mListeners;
     OutboundFilter mOutboundFilter;
     ContextResolver mContextResolver;
 
     TaskQueue<InboundEvent> mInbound;
-    // Open connections as the main thread knows them, from their Opened event to their Closed one.
+    // main thread view: from the Opened event to the Closed one
     std::unordered_map<NetworkIdentifier, std::shared_ptr<std::atomic<size_t>>, NetworkIdentifier::Hasher> mPendingBytes;
 
     std::atomic<bool> mIoRunning;

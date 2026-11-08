@@ -25,20 +25,12 @@ public:
 
     static const ItemNetworkIdEntry *find(const std::string &identifier);
 
-    /**
-     * The block a slab, double slab or stairs is made of, or an empty string for any other identifier. An older
-     * client lacking such a variant shows it as this block.
-     */
+    // empty for anything but a slab, double slab or stairs; an older client lacking the variant shows this block
     static std::string getVariantBase(const std::string &identifier);
 
-    /**
-     * The item palette a client of this protocol knows, sent to it in its item registry.
-     */
+    // sent in the client's item registry
     static const std::vector<ItemNetworkIdEntry> &getPalette(int32_t protocol);
 
-    /**
-     * How the server's item IDs translate for a client of this protocol, or nullptr when they are its own. An item
-     * the client lacks shows as its base block when it is a slab or stairs of one, and otherwise as nothing.
-     */
+    // nullptr when the ids are its own; a missing item shows as its base block for a slab or stairs, else as nothing
     static std::shared_ptr<const ItemNetworkIdMap> getNetworkIds(int32_t protocol);
 };

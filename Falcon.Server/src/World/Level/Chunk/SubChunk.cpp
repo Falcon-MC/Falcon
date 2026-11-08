@@ -14,11 +14,8 @@
 #include <vector>
 
 namespace {
-    /**
-     * Appends the index words of one paletted storage in a single write. Chunk encoding runs on the main
-     * thread for every chunk streamed to a player, so packing byte by byte into the stream cost most of a
-     * tick while many players load terrain.
-     */
+    // one write: encoding runs on the main thread for every streamed chunk; byte by byte cost most of a tick
+    // with many players loading terrain
     void putIndexWords(BinaryStream &stream, const PaletteIndices &indices, int bitsPerBlock) {
         const int blocksPerWord = 32 / bitsPerBlock;
         const int wordCount = (SubChunk::BLOCK_COUNT + blocksPerWord - 1) / blocksPerWord;
@@ -55,8 +52,7 @@ namespace {
         }
     };
 
-    // States are shared across chunk worker threads, so their lazily cached fields are filled before
-    // the state is published.
+    // shared across chunk workers: lazy cached fields filled before publishing
     const BlockState *internState(const BlockState &state) {
         static std::mutex mutex;
         static std::unordered_set<BlockState, InternedStateHash> states;
@@ -71,8 +67,7 @@ namespace {
         return &*found;
     }
 
-    // A worker interns the same few feature states over and over; remembering them per thread spares the shared
-    // table's lock.
+    // a worker interns the same few feature states over and over: per-thread cache spares the lock
     const BlockState *internStateCached(const BlockState &state) {
         thread_local std::unordered_map<int32_t, std::vector<const BlockState *>> known;
 
@@ -87,8 +82,8 @@ namespace {
         return interned;
     }
 
-    // Sections are asked whether they are empty for every section of every ticked chunk each tick; the interned
-    // air is recognised by address, and the length check sends almost every other name away at once.
+    // asked for every section of every ticked chunk each tick: address first, the length check rejects
+    // almost every other name
     bool isAir(const BlockState *state, const BlockState *air) {
         return state == air || (state->mName.size() == 13 && state->mName == "minecraft:air");
     }
@@ -143,11 +138,8 @@ void SubChunk::fillBiome(uint32_t biomeId) {
     mBiomes.clear();
 }
 
-/**
- * Paletted storage: the header byte holds bits-per-entry in its upper bits and a "runtime"
- * flag in bit 0. Disk (persistent) palettes use little-endian ints while network palettes
- * use varints, and a single-entry palette is written with no index words at all.
- */
+// header byte: bits-per-entry << 1 | runtime flag; disk palettes in little-endian ints, network ones
+// in varints; a single-entry palette has no index words
 void SubChunk::writeBiomes(BinaryStream &stream, bool persistent) const {
     if (mBiomePalette.size() <= 1) {
         stream.putByte((unsigned char) ((0 << 1) | (persistent ? 0 : 1)));
@@ -236,8 +228,7 @@ bool SubChunk::readBiomes(ReadOnlyBinaryStream &stream, const SubChunk *previous
     for (uint32_t i = 0; i < paletteSize; i++)
         mBiomePalette.push_back(stream.getLInt());
 
-    // Indices are checked after reading the palette because the words come first in the
-    // stream; a corrupt index falls back to the first entry instead of reading out of bounds.
+    // words come before the palette: corrupt indices fall back to entry 0 once it is read
     for (int i = 0; i < BLOCK_COUNT; i++) {
         if (mBiomes[i] >= mBiomePalette.size())
             mBiomes.set(i, 0);
@@ -247,10 +238,7 @@ bool SubChunk::readBiomes(ReadOnlyBinaryStream &stream, const SubChunk *previous
     return true;
 }
 
-/**
- * Only the widths the format allows are used (no 7 bits, nothing between 8 and 16), since
- * entries must pack into 32-bit words.
- */
+// format widths only (no 7, nothing between 8 and 16): entries pack into 32-bit words
 int SubChunk::_bitsPerBlock(size_t paletteSize) {
     if (paletteSize <= 2)
         return 1;
@@ -281,9 +269,7 @@ const BlockState &SubChunk::getBlock(int x, int y, int z, int layer) const {
     if (layer <= 0)
         return getBlock(x, y, z);
 
-    // Layer 1 storage is only allocated once something is placed in it, so sub-chunks
-    // without waterlogged blocks pay for a single layer. The air returned is the interned one,
-    // like every state a section hands out.
+    // layer 1 unallocated until used: interned air, like every state a section hands out
     if (mBlocks2.empty())
         return *airState();
 
@@ -313,8 +299,7 @@ uint16_t SubChunk::_paletteIndexForLayer1(const BlockState &state) {
 }
 
 void SubChunk::setBlock(int x, int y, int z, const BlockState &state) {
-    // Layer 0 indices are only allocated once the section holds a second state: most
-    // sections above the terrain stay uniform air and cost no 8 KB index array.
+    // no indices until a second state: most sections above the terrain stay uniform air
     if (mBlocks.empty()) {
         if (mPalette[0] == &state || *mPalette[0] == state)
             return;

@@ -15,10 +15,7 @@
 class EndCrystalActor;
 class ServerPlayer;
 
-/**
- * The dragon of the End. Its goals (DragonGoals) choose where it flies; the dragon itself steers toward that point,
- * moves its body parts, heals from the spike crystals and breaks the blocks it flies through (sub_14ACCA850).
- */
+// goals pick where it flies; the dragon steers, moves its parts, heals from crystals, breaks blocks (sub_14ACCA850)
 class EnderDragon : public HostileActor {
 public:
     static constexpr const char *IDENTIFIER = "minecraft:ender_dragon";
@@ -39,7 +36,6 @@ public:
         Count
     };
 
-    /** A path over the dragon's flight nodes, walked one node at a time. */
     class Path {
     public:
         explicit Path(std::vector<Vector3i> nodes) : mNodes(std::move(nodes)) {
@@ -121,12 +117,12 @@ public:
 
     void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0) override;
 
-    /** Hurts the dragon through one of its parts, the head taking the full damage (sub_14ACCD880). */
+    // sub_14ACCD880: the head takes the full damage
     bool hurtPart(ServerNetworkHandler &owner, Part part, float amount, const ActorDamageSource &source);
 
     void onCrystalDestroyed(ServerNetworkHandler &owner, EndCrystalActor &crystal, Actor *attacker);
 
-    /** The death goal reached the exit portal: the dragon dies there. */
+    // the death goal reached the exit portal
     void finishDying(ServerNetworkHandler &owner);
 
     const AxisAlignedBB &getPartBox(Part part) const {
@@ -187,35 +183,34 @@ public:
         mFlameCount = 0;
     }
 
-    /** Fires one of the dragon's definition triggers, such as minecraft:on_start_landing. */
     void fireTrigger(ServerNetworkHandler &owner, const char *component);
 
     float nextFloat();
 
     int32_t nextInt(int32_t bound);
 
-    /** The air block above the top of the exit portal's column, where the dragon lands (heightmap at 0, 0). */
+    // landing spot: the air block above the exit portal column's top (heightmap at 0, 0)
     static int32_t getPortalY(Level &level);
 
-    /** The flight node closest to the dragon, from the ring the alive crystals allow. */
+    // ring chosen by the alive crystals
     int32_t findClosestNode(ServerNetworkHandler &owner);
 
     int32_t findClosestNode(ServerNetworkHandler &owner, float x, float y, float z);
 
-    /** A path between two flight nodes, ending on finalNode when one is given (sub_14ACCFA90). */
+    // sub_14ACCFA90: ends on finalNode when given
     std::unique_ptr<Path> findPath(int32_t from, int32_t to, const std::optional<Vector3i> &finalNode);
 
-    /** The nodes of the dragon's flight graph once built, for tests: 12 outer, 8 middle and 4 inner. */
+    // for tests: 12 outer, 8 middle, 4 inner
     const std::vector<Vector3i> &getNodes() const {
         return mNodes;
     }
 
     static uint32_t getNodeAdjacency(int32_t node);
 
-    /** The circle of flight nodes, from the heights of the island under them. */
+    // from the island heights under them
     void buildNodes(const std::function<int32_t(int32_t x, int32_t z)> &surfaceAt, int32_t seaLevel);
 
-    /** The nearest player within range of position, who is not a spectator. */
+    // spectators excluded
     static ServerPlayer *nearestPlayer(ServerNetworkHandler &owner, const Level &level, const Vector3f &position,
                                        float range);
 

@@ -78,7 +78,7 @@ BiomeSearch::Result BiomeSearch::findNearest(const ChunkGenerator &generator, co
 }
 
 Vector3i BiomeSearch::findOpening(Level &level, const Vector3i &position, int32_t biomeId) {
-    // near the floor the lowest levels are dropped so the search stays above it
+    // near the floor the lowest levels are dropped: the search stays above it
     const int32_t belowFloor = std::min(0, position.y - level.getMinY() - 1 - OPENING_RANGE);
     const int32_t lowestOffset = -OPENING_RANGE - belowFloor;
 
@@ -165,7 +165,7 @@ bool BiomeSearch::_searchGroup(const ChunkGenerator &generator, int32_t biomeId,
     const int32_t shells = std::max(countX - 1, std::max(countY - 1, countZ - 1));
 
     // the game fills the whole group from the biome source first (vfunc +0x20, sub_147186360); each
-    // cell lies on one shell only, so sampling it when it is visited gives the same answer for less work
+    // cell lies on one shell only: sampling it when visited gives the same answer for less work
     for (int32_t shell = 0; shell <= shells; shell++) {
         for (int32_t x = centerCell.x - shell; x <= centerCell.x + shell; x++) {
             if (x < 0 || x >= countX)
@@ -196,7 +196,7 @@ bool BiomeSearch::_isBiomeAt(Level &level, int32_t x, int32_t y, int32_t z, int3
     if (y < level.getMinY() || y > level.getMaxY())
         return false;
 
-    // a column that is not loaded is unknown, never a match
+    // an unloaded column is unknown, never a match
     const LevelChunk *chunk = level.peekChunkPtr(x >> 4, z >> 4);
     return chunk != nullptr && (int32_t) chunk->getBiomeAt(x & 15, y, z & 15) == biomeId;
 }

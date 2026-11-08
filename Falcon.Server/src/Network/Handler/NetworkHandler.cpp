@@ -13,11 +13,8 @@
 namespace {
     const unsigned MAX_IO_SHARDS = 8;
 
-    /**
-     * Compressible bytes a shard hands to its connections before it reads what they received again. Zlib
-     * compresses a few tens of megabytes a second, so a burst of chunks is spread over many short passes
-     * instead of one that leaves the transport's receive queues full and stalls every connection.
-     */
+    // compressible bytes per shard pass before reading again; zlib does a few tens of MB/s: a chunk burst
+    // spreads over short passes, not one long pass filling the receive queues and stalling every connection
     const size_t MAX_OUTBOUND_BYTES_PER_PASS = 256 * 1024;
     const std::chrono::milliseconds MAX_OUTBOUND_TIME_PER_PASS(4);
 
@@ -103,7 +100,7 @@ void NetworkHandler::stopIoThread() {
             shard->mThread.join();
     }
 
-    // A shard that stopped after the control shard may still have queued transport closes.
+    // a shard stopped after the control shard may still hold queued transport closes
     _pumpControl();
 
     for (std::unique_ptr<Shard> &shard: mShards)
@@ -114,7 +111,7 @@ void NetworkHandler::stopIoThread() {
 
 void NetworkHandler::_ioLoop(size_t shardIndex) {
     Shard &shard = *mShards[shardIndex];
-    // The connectors are not thread safe, so only the first shard runs them.
+    // connectors aren't thread safe: only the first shard runs them
     const bool control = shardIndex == 0;
 
     while (mIoRunning.load()) {
@@ -249,7 +246,7 @@ void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, con
 
 void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const Packet &packet,
                                 const PacketCodecContext &context) {
-    // Sessions on the same protocol share a codec context, so most recipients reuse one encoding.
+    // same-protocol sessions share a codec context: most recipients reuse one encoding
     std::vector<std::pair<const PacketCodecContext *, std::string>> encoded;
     std::vector<std::vector<OutboundCommand>> commands(mShards.size());
 
@@ -342,8 +339,7 @@ void NetworkHandler::_applyOutbound(Shard &shard, OutboundCommand &command) {
     if (command.mKind == OutboundCommand::Kind::Adopt) {
         shard.mConnections[command.mId] = std::move(command.mConnection);
 
-        // Reported by the shard so the game sees the connection before any of its data, and anything it
-        // sends in reply is queued behind the adoption.
+        // reported by the shard: the game sees the connection before its data, and replies queue behind the adoption
         InboundEvent event;
         event.mKind = InboundEvent::Kind::Opened;
         event.mId = command.mId;
@@ -399,13 +395,12 @@ void NetworkHandler::_pumpControl() {
 void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
     std::string data;
 
-    // Reading comes first: a transport holds off its own threads while a connection's receive queue is full.
+    // read first: a transport holds off its own threads while a receive queue is full
     for (auto &entry: shard.mConnections) {
         NetworkPeer *peer = entry.second->getBatchedPeer();
         bool failed = false;
 
-        // A transport can throw for one connection (for example a data channel closing mid-send);
-        // that connection is dropped instead of the exception ending the whole server.
+        // a transport can throw for one connection (data channel closing mid-send): drop it, not the server
         try {
             while (peer->receivePacket(data) == NetworkPeer::DataStatus::HasData) {
                 InboundEvent event;
@@ -432,8 +427,8 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
             std::chrono::steady_clock::now() + MAX_OUTBOUND_TIME_PER_PASS;
     size_t bytes = 0;
     while (!shard.mBacklog.empty()) {
-        // Only data waits for the next pass. A flush and the compression or encryption switch behind it go
-        // out together, otherwise the reading half of the next pass decodes the client's answer in the old state.
+        // only data waits for the next pass; a flush and its compression/encryption switch go out together,
+        // else the next pass decodes the client's answer in the old state
         if (bounded && shard.mBacklog.front().mKind == OutboundCommand::Kind::Data
             && (bytes >= MAX_OUTBOUND_BYTES_PER_PASS || std::chrono::steady_clock::now() >= deadline))
             break;
@@ -552,7 +547,7 @@ void NetworkHandler::onConnectionClosed(const NetworkIdentifier &id, DisconnectF
 
     mConnectionCount.store(mLive.size());
 
-    // The shard reports the close once it dropped the connection, so no data of it follows the event.
+    // reported once the shard dropped the connection: no data follows the event
     OutboundCommand remove;
     remove.mKind = OutboundCommand::Kind::Remove;
     remove.mId = id;

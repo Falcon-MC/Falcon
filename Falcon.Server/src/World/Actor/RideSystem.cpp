@@ -80,9 +80,8 @@ namespace {
         return actor->getSeatOffset(index, passengerCount);
     }
 
-    // Vanilla writes the passenger's height offset into the seat it syncs: the client places the passenger's
-    // network position (eyes for a player) on that seat. Falcon positions are feet based, so the server side
-    // position keeps the bare seat.
+    // vanilla writes the passenger's height offset into the synced seat: the client puts the passenger's network
+    // position (eyes for a player) there; our positions are feet based: the server side keeps the bare seat
     float heightOffsetOf(const Actor &passenger) {
         if (dynamic_cast<const ServerPlayer *>(&passenger) != nullptr)
             return PlayerMovementSimulator::PLAYER_BASE_OFFSET;

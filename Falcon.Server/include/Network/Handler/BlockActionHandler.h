@@ -43,7 +43,7 @@ public:
 
     static void completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 
-    // Resends the blocks an unprocessed input predicted to break or place, so the client drops its prediction.
+    // resends blocks an unprocessed input predicted to break or place: the client drops its prediction
     static void resyncDroppedInput(ServerNetworkHandler &owner, ServerPlayer &player,
                                    const PlayerAuthInputPacket &packet);
 
@@ -65,9 +65,7 @@ private:
     static bool interactBlock(ServerNetworkHandler &owner, ServerPlayer &player,
                               const ItemUseTransaction &transaction, bool selectedSlotChanged);
 
-    /**
-     * Compares the items as the client sees them, so an item it only knows under another one still matches.
-     */
+    // compares as the client sees them: an item it only knows under another one still matches
     static bool matchesTransactionItem(const PacketCodecContext &context, const ItemStack &held,
                                        const ItemStack &sent);
 

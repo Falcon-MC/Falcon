@@ -94,11 +94,8 @@ namespace {
         Level &mLevel;
     };
 
-    /**
-     * Two-pass flood removal. Neighbours dimmer than the removed level were lit by it and are
-     * cleared in turn (re-seeding any that emit light themselves); brighter or equal
-     * neighbours have another source and are queued to spread back into the cleared area.
-     */
+    // dimmer neighbours were lit by the removed level: cleared too (emitters re-seeded); brighter or equal
+    // ones have another source and spread back in
     template<typename Access>
     void removeBlockLight(Access &access, std::deque<LightNode> &removal, std::deque<LightNode> &spread) {
         while (!removal.empty()) {
@@ -222,8 +219,8 @@ void LightSystem::_computeSkyColumn(LevelChunk &chunk, int x, int z) {
     for (int32_t y = LevelChunk::MAX_Y; y >= height; --y)
         chunk.setSkyLight(x, y, z, MAX_LIGHT);
 
-    // Below the heightmap, light loss accumulates: each filtering block adds to the amount
-    // subtracted at every block further down, and the first opaque block cuts it to zero.
+    // below the heightmap the loss accumulates: each filtering block adds to it for every block further
+    // down; the first opaque block cuts to zero
     int light = MAX_LIGHT;
     int nextDecrease = 0;
 
@@ -265,8 +262,6 @@ void LightSystem::computeBlockLight(LevelChunk &chunk) {
     ChunkLightAccess access(chunk);
     std::deque<LightNode> spread;
 
-    // Sub-chunks track whether they contain any emitter, which lets the full scan skip most
-    // of the chunk.
     for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; ++index) {
         if (!chunk.getSubChunk(index).hasLightEmitter())
             continue;
@@ -336,8 +331,7 @@ void LightSystem::updateBlockLight(Level &level, std::unordered_set<int64_t> &pe
         if (newLevel > oldLevel)
             access.setLight(x, y, z, newLevel);
 
-        // Lit neighbours are re-spread too, so light flows into a block that just became
-        // transparent.
+        // lit neighbours re-spread too: light flows into a block just made transparent
         spread.push_back(LightNode{x, y, z, newLevel});
         for (const auto &offset: NEIGHBOUR_OFFSETS) {
             const int32_t neighbourX = x + offset[0];

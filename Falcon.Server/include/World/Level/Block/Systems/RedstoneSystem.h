@@ -40,10 +40,7 @@ namespace RedstoneFace {
     int fromName(const std::string &name);
 }
 
-/**
- * Redstone power queries (weak and strong power per face) and the reactions of redstone
- * components to block updates. Unloaded chunks are treated as unpowered air.
- */
+// unloaded chunks read as unpowered air
 class RedstoneSystem {
 public:
     static constexpr int MAX_SIGNAL = 15;

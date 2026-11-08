@@ -37,8 +37,8 @@ public:
         (void) mob;
     }
 
-    // mobs have no buoyancy of their own: the game keeps one at the surface through its float goal, so a mob
-    // without one, like a zombie or a drowned, sinks and walks on the bottom.
+    // mobs have no buoyancy: the game's float goal keeps them at the surface;
+    // without one (zombie, drowned) a mob sinks and walks on the bottom
     virtual bool keepsAfloat() const {
         return false;
     }

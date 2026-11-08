@@ -264,7 +264,7 @@ bool SpearItem::onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, 
                          "minecraft:player");
     stab(owner, player, item);
 
-    // Staying in the using state is what drives the sweep in onUsingTick.
+    // staying in the using state drives the sweep in onUsingTick
     return true;
 }
 
@@ -317,6 +317,6 @@ bool SpearItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player, c
     (void) item;
     (void) elapsedTicks;
 
-    // The jab already ran when the spear was raised, releasing it only ends the sweep.
+    // the jab ran when the spear was raised; releasing only ends the sweep
     return true;
 }

@@ -8,8 +8,8 @@ struct GeneratedBlockChange {
     int32_t mX = 0;
     int32_t mY = 0;
     int32_t mZ = 0;
-    // 1 for the second block of the position, the water of a waterlogged block
+    // 1: second block of the position, the water of a waterlogged block
     int32_t mLayer = 0;
-    // interned (SubChunk::intern), so a change is small to keep and to copy
+    // interned (SubChunk::intern): a change is cheap to keep and copy
     const BlockState *mState = nullptr;
 };

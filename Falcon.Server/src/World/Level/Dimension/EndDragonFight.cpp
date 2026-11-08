@@ -330,7 +330,7 @@ void EndDragonFight::_tickDragon(ServerNetworkHandler &owner, Level &level) {
     if (dragon != nullptr) {
         _attachDragon(*dragon);
     } else if (!mDragonSpawned || !level.hasStoredEntity(mDragonUniqueId)) {
-        // a spawned dragon saved with a chunk that is not loaded is waited for instead (sub_1432BAB90)
+        // a spawned dragon saved in an unloaded chunk is waited for instead (sub_1432BAB90)
         _initializeDragon(owner, level);
         _spawnExitPortal(owner, level, false);
     }
@@ -383,7 +383,7 @@ void EndDragonFight::_initializeDragon(ServerNetworkHandler &owner, Level &level
     if (dragon != nullptr)
         _attachDragon(*dragon);
 
-    // _initializeDragon puts back the obsidian of a spike that is gone, without its crystal (sub_1471E91E0)
+    // _initializeDragon rebuilds a missing spike's obsidian, without its crystal (sub_1471E91E0)
     for (const EndSpike &spike: EndSpikes::create((uint32_t) mSeed)) {
         bool standing = true;
         for (int32_t x = -spike.mRadius; x <= spike.mRadius && standing; x++) {
@@ -594,7 +594,7 @@ void EndDragonFight::_rebuildSpike(ServerNetworkHandler &owner, Level &level, co
 }
 
 void EndDragonFight::_finishRespawn(ServerNetworkHandler &owner, Level &level) {
-    // the ritual ends before the crystals explode, so one caught in the blast is not a broken ritual (sub_14716C8B0)
+    // the ritual ends before the crystals explode: one caught in the blast is no broken ritual (sub_14716C8B0)
     mRespawnStage = RespawnStage::None;
     mDragonKilled = false;
     _initializeDragon(owner, level);
