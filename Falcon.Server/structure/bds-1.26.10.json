@@ -5360,14 +5360,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/JungleGrassFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/JungleGrassFeature.h",
-      "sha256": "07ef894c59131527b0efb0ccc7befd33f9b6e9887434a49520a5a4935f3e0041",
-      "classes": [
-        "JungleGrassFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/LegacySmallBrownMushroomsFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/LegacySmallBrownMushroomsFeature.h",
       "sha256": "1f4fec011f7fbf4cce88f1f55683393bab234fb9fe0fb05b4fca05fcfb1cdbcd",
@@ -5381,14 +5373,6 @@
       "sha256": "f9e926d6bd8cb6a98976bca9bf5da4291951eaa3e70f2ababfcd55983db925d2",
       "classes": [
         "LegacySmallMushroomsFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Decoration/MelonFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Decoration/MelonFeature.h",
-      "sha256": "c22aefea74b2d9dc5888566fd51b3eaea2fb5c4c975ebdbe9301ff88bd46c10a",
-      "classes": [
-        "MelonFeature"
       ]
     },
     {
@@ -5512,14 +5496,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Multi/JunglePlantAggregateFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Multi/JunglePlantAggregateFeature.h",
-      "sha256": "e8ba3ff6e3e6cd2f6f39b5da155c8b502d62494a208f468a61f000423794c759",
-      "classes": [
-        "JunglePlantAggregateFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Multi/OverworldCaveCarverAggregateFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Multi/OverworldCaveCarverAggregateFeature.h",
       "sha256": "f14296c8d4633965e08ed4ca6098bebdffb85292fa619eb2441f07f0a991eb0d",
@@ -5557,30 +5533,6 @@
       "sha256": "399b24a62268764f323f1c048eccc005348bd8612ab36eeac154cfa38c147885",
       "classes": [
         "AzaleaTree"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/BambooJungleTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/BambooJungleTreeFeature.h",
-      "sha256": "624510c00b8720717497ddb55a2fa66fdea47b2e1703181b21c6310fa30d2ae3",
-      "classes": [
-        "BambooJungleTreeFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/CherryTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/CherryTree.h",
-      "sha256": "79d7b94d54396f58c9bbd43f16621a808c0a08af6d45050fbe1ec8836e31f3f4",
-      "classes": [
-        "CherryTree"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/CherryTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/CherryTreeFeature.h",
-      "sha256": "d2ef73eada2ca4aa3100c0af25ce8a2cb1c945c5a9b4c585090c64d8101eaa21",
-      "classes": [
-        "CherryTreeFeature"
       ]
     },
     {
@@ -5632,54 +5584,6 @@
       "sha256": "b644dcedfdb5bc5967d22f987e2207284b1ce4d44114761c3414b54fc75630e6",
       "classes": [
         "HugeMushroom"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/JungleBigTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/JungleBigTree.h",
-      "sha256": "f8197f85fa14b9f90a4947448c085430c947d52fac00b699da8497f4ac023e2a",
-      "classes": [
-        "JungleBigTree"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/JungleBush.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/JungleBush.h",
-      "sha256": "b439b629b4229a79c926c803556c775ce791e30652519d78be733e82bc406050",
-      "classes": [
-        "JungleBush"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/JungleBushFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/JungleBushFeature.h",
-      "sha256": "11385255a308491192a16a182da788971285633ecc2ed5c0e4ab2356b30704e3",
-      "classes": [
-        "JungleBushFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/JungleEdgeTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/JungleEdgeTreeFeature.h",
-      "sha256": "df506f886035b4b1666308b7beba5d21be76a60130e39257f8d08393199bdc20",
-      "classes": [
-        "JungleEdgeTreeFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/JungleTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/JungleTree.h",
-      "sha256": "1e9f95062d695476d49aeef04b520b1ab1fc2a86f93a02f31fad86ad764ebc24",
-      "classes": [
-        "JungleTree"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/JungleTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/JungleTreeFeature.h",
-      "sha256": "6df00f97304b4d6e0a5f907cfe5622ea2a9d369d5512e90b9c8cceaef281ba16",
-      "classes": [
-        "JungleTreeFeature"
       ]
     },
     {
@@ -5747,24 +5651,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/MangroveTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/MangroveTree.h",
-      "sha256": "85b03aaa2b6de129415ce556d754f00966d83c741c935b1ef9d3498193a19d68",
-      "classes": [
-        "MangroveTree",
-        "Coordinate",
-        "MangroveProperties"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/MangroveTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/MangroveTreeFeature.h",
-      "sha256": "48743c969c136c8228fda8b5f898b2e11b94a0b942b69b8b30f42ed07d7bfef3",
-      "classes": [
-        "MangroveTreeFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/MeadowTreeFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/MeadowTreeFeature.h",
       "sha256": "76230c159dfefb65652228d622c08c9e449875c52aa50a921354f5b2c28c9866",
@@ -5818,30 +5704,6 @@
       "sha256": "46f40cc2822ec3017ee55481cb030f6e7156fb42411b61756ce00e7f8c7a80a2",
       "classes": [
         "PlainsTreeFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/SavannaMutatedTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/SavannaMutatedTreeFeature.h",
-      "sha256": "f299cd26657a181a8f1daee0b5726d2e6a853cfc9d101bcc4b3ac2f6ada16e56",
-      "classes": [
-        "SavannaMutatedTreeFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/SavannaTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/SavannaTree.h",
-      "sha256": "c78e5eee94aa19f8597882532d9e95fd6acc1cb15f44caef4b9b9bc4c63c09b7",
-      "classes": [
-        "SavannaTree"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/SavannaTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/SavannaTreeFeature.h",
-      "sha256": "1d4c39cc8588f27dce53a7f7be50c6c9476b3b85dc5b0cea4a9729f97af742b5",
-      "classes": [
-        "SavannaTreeFeature"
       ]
     },
     {
@@ -9492,11 +9354,6 @@
       "sha256": "0dc6f16b237d28bea08855bf020477d13bd0d87828832de0304f686ea7d245ce"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/JungleGrassFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/JungleGrassFeature.cpp",
-      "sha256": "9ad44c0323d5b3d561fe2795b3568a3ab344f7deaa88b1ede90ae269a9b5ee90"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/LakeFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/LakeFeature.cpp",
       "sha256": "af92c700b7921dd0261e5902c791667b38cc840d5159ad7372abe1267eddf52e"
@@ -9510,11 +9367,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/LegacySmallMushroomsFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/LegacySmallMushroomsFeature.cpp",
       "sha256": "e5dfee6c6f92dff040f1c4db779643116bf27318e21544d8e22d71e0c4ef4045"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/MelonFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Decoration/MelonFeature.cpp",
-      "sha256": "14ec7c21228c3355d0fa71ead3503e5332d3470b943029ce433fad5bbf213dab"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Decoration/MesaFoliageFeature.cpp",
@@ -9617,11 +9469,6 @@
       "sha256": "8c87cb44ac94b6148b1afda8bb22642a1fecd9cbee4c14e12a94fc18d21dc27a"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Multi/JunglePlantAggregateFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Multi/JunglePlantAggregateFeature.cpp",
-      "sha256": "968d409e2b6c961c638779fa2cc62d155b3681d2cb61e3bcaaf5a8626b9a36ca"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Multi/OverworldCaveCarverAggregateFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Multi/OverworldCaveCarverAggregateFeature.cpp",
       "sha256": "077fedaec1965c099cbcbd7e1100defebcfe8b2b7ace862297350b62f11fac39"
@@ -9652,21 +9499,6 @@
       "sha256": "3ac0b48b2a90a8306e4fed3c126854aea37e43cd35b8bd7601e4a680d965f07d"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/BambooJungleTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/BambooJungleTreeFeature.cpp",
-      "sha256": "836c2fea50f33d6d0e8976e8f38eb8daf64d362bad962b4a624f55e007d6b9d3"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/CherryTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/CherryTree.cpp",
-      "sha256": "3b8aebaa5ed35ee98706469f388cac81b230b2b0c8144a4772e2b4d655af7840"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/CherryTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/CherryTreeFeature.cpp",
-      "sha256": "aae3103fa150c15e32b408dde4d6a950d8fa32755d6520872ccbf112a2cb0949"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/FallenTree.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/FallenTree.cpp",
       "sha256": "636ec6117418e0723296fc007ca5aeabb6304d28c481b83f370e75ac193686da"
@@ -9695,36 +9527,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/HugeMushroom.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/HugeMushroom.cpp",
       "sha256": "4dd4d91eb056d58859b24956045fdca42e8ae88c88232bf0f843748e1d1b97cc"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/JungleBigTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/JungleBigTree.cpp",
-      "sha256": "bc73d71aa7cba589a2a4fcad4d1ba5da5d4084db0a57611020ba1c15deaa6c35"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/JungleBush.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/JungleBush.cpp",
-      "sha256": "d45670a3dfd0d85b120a39a3fe6f533128f37f8d9050dcc6248bf10f4417fa40"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/JungleBushFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/JungleBushFeature.cpp",
-      "sha256": "ac573de2b4eadc42d93123fdf455d18e12c30b51069b4c83172774a79ab78e9d"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/JungleEdgeTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/JungleEdgeTreeFeature.cpp",
-      "sha256": "253cf5e0fe27ffbc5fa2fad15e6a9af1572083d849cee8ec37bd695293d32a48"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/JungleTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/JungleTree.cpp",
-      "sha256": "d799d9ada9859147b9a06a3a50fead54bd5e76385615c372eb940b8c660fc0d9"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/JungleTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/JungleTreeFeature.cpp",
-      "sha256": "d5590fae9b81980c28936dcb9849514fb8e96f8f9773a82f39453cbd2b015a89"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/LegacyBigSpruceTree.cpp",
@@ -9767,16 +9569,6 @@
       "sha256": "c1dd3e37c29e2a57e2ababc0ad9bca273ebbb49c25db265702185df6bc5a01a4"
     },
     {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/MangroveTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/MangroveTree.cpp",
-      "sha256": "cbcfe74df8092f8f853d8e6974651f968115c599c5c0a01eec0e1bfefd0547ff"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/MangroveTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/MangroveTreeFeature.cpp",
-      "sha256": "5b21d8bc36333eec4d8f2137f8427428a267e3d0c72920fa43035ed36cb77058"
-    },
-    {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/MeadowTreeFeature.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/MeadowTreeFeature.cpp",
       "sha256": "6d5c7878eb5df54620ef5fa4fab1fe7b3545c57cada663ec24f8412dd634ca25"
@@ -9815,21 +9607,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/RegisterTreeFeatures.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/RegisterTreeFeatures.cpp",
       "sha256": "9ad17ee37c053167f78e0cc3f2d0ef3bbe7dc1d03143f9f7fcb7bbe35be79841"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/SavannaMutatedTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/SavannaMutatedTreeFeature.cpp",
-      "sha256": "be531652a6d0a860261675e3cd90596f213a3921780cb94bb3a1a82f9ec702e8"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/SavannaTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/SavannaTree.cpp",
-      "sha256": "ef460665c58fd8048190fc38cac7860a0b553bbfe1442c52f1f85c150c941823"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/SavannaTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/SavannaTreeFeature.cpp",
-      "sha256": "22436495d2b8605fc10e196ce5bbe8dff7e00c32df75486c6a9b9e202c086bab"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/SmallPaleOakTree.cpp",
