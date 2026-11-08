@@ -1283,7 +1283,7 @@ void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner
     player.syncEffects();
 
     owner._sendInventory(player);
-    owner._sendHealth(player);
+    owner._sendAttributes(player);
     ItemActorHandler::sendItemActorsTo(owner, player);
     owner.sendActorsTo(player);
     owner.sendWeatherTo(player);
@@ -1299,6 +1299,9 @@ void LoginHandler::checkTerrainReady(ServerNetworkHandler &owner, ServerPlayer &
         return;
 
     player.setSpawnChunksReady(true);
+
+    // before the spawn status: the client starts at full health, and a lower value once it plays reads as a hit
+    owner._sendHealth(player);
 
     PlayStatusPacket spawn;
     spawn.mStatus = PlayStatusPacket::Status::PlayerSpawn;
