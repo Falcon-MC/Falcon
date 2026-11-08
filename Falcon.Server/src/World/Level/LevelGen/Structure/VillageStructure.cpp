@@ -602,7 +602,9 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
         BlockManager features(level);
         features.setOverflowSink(chunk.getX(), chunk.getZ(), overflow);
         // the parts in chunks post-processed earlier read their blocks, the others the terrain
-        const Neighbours neighbours = [&level](int32_t x, int32_t y, int32_t z) -> const BlockState * {
+        const Neighbours neighbours = [&level, &chunk](int32_t x, int32_t y, int32_t z) -> const BlockState * {
+            if ((x >> 4) == chunk.getX() && (z >> 4) == chunk.getZ())
+                return nullptr;
             LevelChunk *other = level.peekChunkPtr(x >> 4, z >> 4);
             return other != nullptr && other->isPopulated() ? &other->getBlock(x & 15, y, z & 15) : nullptr;
         };
@@ -616,9 +618,13 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
             for (int32_t dz = -1; dz <= 1; ++dz) {
                 if (dx == 0 && dz == 0)
                     continue;
+                // a decorated neighbour placed its own share: read as it is, never rewritten
+                LevelChunk *neighbourChunk = level.peekChunkPtr(chunk.getX() + dx, chunk.getZ() + dz);
+                if (neighbourChunk != nullptr && neighbourChunk->isPopulated())
+                    continue;
+
                 ChunkShare next = placeInChunk(generator, *pieces, chunk.getX() + dx, chunk.getZ() + dz, terrain);
                 around.insert(next.mBlocks.begin(), next.mBlocks.end());
-                LevelChunk *neighbourChunk = level.peekChunkPtr(chunk.getX() + dx, chunk.getZ() + dz);
                 if (neighbourChunk != nullptr)
                     staged.emplace_back(neighbourChunk, std::move(next));
             }
@@ -626,7 +632,10 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
 
         const auto neighbour = [&](int32_t x, int32_t y, int32_t z) -> BlockState {
             const auto found = around.find({x, y, z});
-            return found != around.end() ? found->second : terrain.getBlock(x, y, z);
+            if (found != around.end())
+                return found->second;
+            const BlockState *decorated = neighbours(x, y, z);
+            return decorated != nullptr ? *decorated : terrain.getBlock(x, y, z);
         };
         const auto write = [&](LevelChunk &target, const ChunkShare &share) {
             for (const auto &entry : share.mBlocks) {
