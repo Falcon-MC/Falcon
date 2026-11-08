@@ -94,44 +94,70 @@ public:
 
     explicit MapItemSavedData(int64_t mapId);
 
-    int64_t getMapId() const { return mMapId; }
+    int64_t getMapId() const {
+        return mMapId;
+    }
 
-    int64_t getParentMapId() const { return mParentMapId; }
+    int64_t getParentMapId() const {
+        return mParentMapId;
+    }
 
     void setParentMapId(int64_t parentMapId);
 
-    int8_t getScale() const { return mScale; }
+    int8_t getScale() const {
+        return mScale;
+    }
 
     void setScale(int8_t scale);
 
-    int32_t getDimension() const { return mDimension; }
+    int32_t getDimension() const {
+        return mDimension;
+    }
 
-    const Vector3i &getOrigin() const { return mOrigin; }
+    const Vector3i &getOrigin() const {
+        return mOrigin;
+    }
 
     // sub_1483ED0B0, with the infinite world settings the game passes
     void setOrigin(const Vector3f &position, int8_t scale, int32_t dimension);
 
-    bool isLocked() const { return mLocked; }
+    bool isLocked() const {
+        return mLocked;
+    }
 
     void setLocked(bool locked);
 
-    bool hasUnlimitedTracking() const { return mUnlimitedTracking; }
+    bool hasUnlimitedTracking() const {
+        return mUnlimitedTracking;
+    }
 
     void setUnlimitedTracking(bool unlimited);
 
-    bool isPreviewIncomplete() const { return mPreviewIncomplete; }
+    bool isPreviewIncomplete() const {
+        return mPreviewIncomplete;
+    }
 
-    void setPreviewIncomplete(bool incomplete) { mPreviewIncomplete = incomplete; }
+    void setPreviewIncomplete(bool incomplete) {
+        mPreviewIncomplete = incomplete;
+    }
 
-    bool isFullyExplored() const { return mFullyExplored; }
+    bool isFullyExplored() const {
+        return mFullyExplored;
+    }
 
-    bool hasUnexploredPixels() const { return mHasUnexploredPixels; }
+    bool hasUnexploredPixels() const {
+        return mHasUnexploredPixels;
+    }
 
     void refreshUnexploredPixels();
 
-    bool isDirtyForSave() const { return mDirtyForSave; }
+    bool isDirtyForSave() const {
+        return mDirtyForSave;
+    }
 
-    void clearDirtyForSave() { mDirtyForSave = false; }
+    void clearDirtyForSave() {
+        mDirtyForSave = false;
+    }
 
     void markDirty();
 
@@ -140,13 +166,17 @@ public:
     // stores a colour and grows the changed area of every tracker; false when the pixel already had it
     bool setPixel(int32_t x, int32_t y, uint32_t color);
 
-    const std::vector<uint32_t> &getPixels() const { return mPixels; }
+    const std::vector<uint32_t> &getPixels() const {
+        return mPixels;
+    }
 
     // sub_14228D8A0: client side generation pixels; blank ones and those out of the map are dropped
     bool applyClientPixels(const std::vector<MapPixel> &pixels);
 
     // the tick counter of MapItem::inventoryTick (sub_141AE31C0): the map renders when it reaches 20
-    int64_t &getUpdateCounter() { return mUpdateCounter; }
+    int64_t &getUpdateCounter() {
+        return mUpdateCounter;
+    }
 
     void save(Tag &tag) const;
 
@@ -155,7 +185,9 @@ public:
     // sub_1483F2E30: a copy through save and load, keeping this map's id
     void copyFrom(const MapItemSavedData &other);
 
-    const std::vector<MapDecorationEntry> &getDecorations() const { return mDecorations; }
+    const std::vector<MapDecorationEntry> &getDecorations() const {
+        return mDecorations;
+    }
 
     // sub_1483EFEB0; position holds x, the rotation in degrees, then z
     void addDecoration(MapDecorationType type, const MapItemTrackedActorKey &key, const Vector3f &position,
@@ -164,7 +196,9 @@ public:
     // sub_1483F13D0
     void removeDecoration(const MapItemTrackedActorKey &key);
 
-    std::vector<MapItemTrackingInfo> &getTracked() { return mTracked; }
+    std::vector<MapItemTrackingInfo> &getTracked() {
+        return mTracked;
+    }
 
     MapItemTrackingInfo *findTracked(const MapItemTrackedActorKey &key);
 

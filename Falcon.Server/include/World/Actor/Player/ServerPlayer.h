@@ -123,7 +123,9 @@ public:
     }
 
     // Player+0xBC0, which EmptyMapItem::use numbers its maps with (sub_147B9F900)
-    int32_t takeMapNameIndex() { return mMapNameIndex++; }
+    int32_t takeMapNameIndex() {
+        return mMapNameIndex++;
+    }
 
     const std::string &getLocale() const { return mLocale; }
 

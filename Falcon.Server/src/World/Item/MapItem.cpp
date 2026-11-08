@@ -72,11 +72,17 @@ namespace {
                                                z & 15));
         }
 
-        int32_t getMinY() const override { return mLevel.getMinY(); }
+        int32_t getMinY() const override {
+            return mLevel.getMinY();
+        }
 
-        int32_t getMaxY() const override { return mLevel.getMaxY() + 1; }
+        int32_t getMaxY() const override {
+            return mLevel.getMaxY() + 1;
+        }
 
-        bool hasCeiling() const override { return mLevel.getDimensionType() == DimensionType::Nether; }
+        bool hasCeiling() const override {
+            return mLevel.getDimensionType() == DimensionType::Nether;
+        }
 
     private:
         static constexpr const char *AIR = "minecraft:air";

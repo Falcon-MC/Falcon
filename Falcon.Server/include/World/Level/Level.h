@@ -226,11 +226,17 @@ public:
     bool applyMapPixels(int64_t mapId, const std::vector<MapPixel> &pixels);
 
     // the world's maps, kept on the overworld whose database stores them; written by the next saveAll
-    MapItemSavedData *getMapData(int64_t mapId) { return mMaps.getMap(&mStorage, mapId); }
+    MapItemSavedData *getMapData(int64_t mapId) {
+        return mMaps.getMap(&mStorage, mapId);
+    }
 
-    MapDataManager &getMaps() { return mMaps; }
+    MapDataManager &getMaps() {
+        return mMaps;
+    }
 
-    LevelStorage *getMapStorage() { return &mStorage; }
+    LevelStorage *getMapStorage() {
+        return &mStorage;
+    }
 
     void registerChunkLoader(uint64_t loaderId, int32_t chunkX, int32_t chunkZ);
 

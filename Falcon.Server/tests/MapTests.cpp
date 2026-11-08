@@ -76,11 +76,17 @@ namespace {
             return plains;
         }
 
-        int32_t getMinY() const override { return -64; }
+        int32_t getMinY() const override {
+            return -64;
+        }
 
-        int32_t getMaxY() const override { return 320; }
+        int32_t getMaxY() const override {
+            return 320;
+        }
 
-        bool hasCeiling() const override { return mCeiling; }
+        bool hasCeiling() const override {
+            return mCeiling;
+        }
 
         BlockState mSurface;
         BlockState mWater = BlockState("minecraft:water");
