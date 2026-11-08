@@ -1,5 +1,7 @@
 #include "World/Actor/FreezingSystem.h"
 
+#include "Protocol/Types/StartGameTypes.h"
+
 #include "World/Actor/ActorDamageSource.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -10,6 +12,10 @@
 #include <cmath>
 
 bool FreezingSystem::isSuppressed(Level &level, const Actor &actor) {
+    // sub_145E14260: spectators always thaw
+    const auto *player = dynamic_cast<const ServerPlayer *>(&actor);
+    if (player != nullptr && player->getGameType() == (int32_t) GameType::Spectator)
+        return true;
     bool suppressed = FreezingMobEffect::isProtected(actor) || FreezingMobEffect::isImmune(actor);
     const auto *serverActor = dynamic_cast<const ServerActor *>(&actor);
     const ActorSize size = serverActor != nullptr ? serverActor->getSize() : ActorSize{0.6f, 1.8f};
@@ -34,11 +40,44 @@ bool FreezingSystem::isSuppressed(Level &level, const Actor &actor) {
     return suppressed;
 }
 
+// sub_145E14260: the same blocks as the game, its box trimmed by 0.001 on every side
+bool FreezingSystem::isInFreezingBlock(Level &level, const Actor &actor) {
+    const auto *serverActor = dynamic_cast<const ServerActor *>(&actor);
+    const ActorSize size = serverActor != nullptr ? serverActor->getSize() : ActorSize{0.6f, 1.8f};
+    const Vector3f position = actor.getPosition();
+    const int minX = (int) std::floor(position.x - size.mWidth * 0.5f + 0.001f);
+    const int maxX = (int) std::floor(position.x + size.mWidth * 0.5f - 0.001f);
+    const int minY = (int) std::floor(position.y + 0.001f);
+    const int maxY = (int) std::floor(position.y + size.mHeight - 0.001f);
+    const int minZ = (int) std::floor(position.z - size.mWidth * 0.5f + 0.001f);
+    const int maxZ = (int) std::floor(position.z + size.mWidth * 0.5f - 0.001f);
+    for (int x = minX; x <= maxX; ++x) {
+        for (int z = minZ; z <= maxZ; ++z) {
+            for (int y = minY; y <= maxY; ++y) {
+                const BlockState *state = level.peekBlockPtr(x, y, z);
+                const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromState(*state);
+                if (block != nullptr && block->freezesActorsInside())
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
 void FreezingSystem::tick(ServerNetworkHandler &owner, Actor &actor) {
-    if (!actor.isAlive() || !actor.hasEffect(MobEffectId::Freezing))
+    if (!actor.isAlive() || !actor.canFreeze())
+        return;
+    const bool effect = actor.hasEffect(MobEffectId::Freezing);
+    // the contact pass flags actors touching powder snow: only those need the trimmed scan
+    const bool touched = actor.touchedFreezingBlock(owner.getCurrentTick());
+    if (!effect && !touched && actor.getEffects().getFreezingTicks() == 0)
         return;
     Level &level = owner.getLevelFor(actor);
-    const float damage = actor.getEffects().advanceFreezing(isSuppressed(level, actor));
+    const bool freezingBlock = !effect && touched && isInFreezingBlock(level, actor);
+
+    // the effect or a freezing block climbs; immunity, warm armor and heat thaw
+    const bool rising = (effect || freezingBlock) && !isSuppressed(level, actor);
+    const float damage = actor.getEffects().advanceFreezing(rising);
     if (damage <= 0.0f || !level.getGameRules().getBool("freezedamage"))
         return;
     const ActorDamageSource source = ActorDamageSource::environment("death.attack.freeze", actor.getName()).withoutArmor();

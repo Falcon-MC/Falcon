@@ -36,6 +36,10 @@ class ServerNetworkHandler;
 
 class ServerPlayer : public Actor {
 public:
+    bool canFreeze() const override {
+        return true;
+    }
+
     // world the player was saved in; one player data file is shared by every world
     static constexpr const char *TAG_LEVEL = "Level";
 

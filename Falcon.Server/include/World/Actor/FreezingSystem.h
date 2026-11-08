@@ -8,5 +8,7 @@ class FreezingSystem {
 public:
     static bool isSuppressed(Level &level, const Actor &actor);
 
+    static bool isInFreezingBlock(Level &level, const Actor &actor);
+
     static void tick(ServerNetworkHandler &owner, Actor &actor);
 };

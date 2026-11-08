@@ -143,6 +143,10 @@ public:
         return false;
     }
 
+    virtual bool freezesActorsInside() const {
+        return false;
+    }
+
     virtual float getSpeedFactor() const {
         return 1.0f;
     }

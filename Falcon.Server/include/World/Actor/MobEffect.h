@@ -204,7 +204,11 @@ public:
 
     float movementSpeedMultiplier() const;
     void setMovementSpeedBonus(float bonus);
-    float advanceFreezing(bool suppressed);
+    float advanceFreezing(bool rising);
+    void resetFreezing();
+    int32_t getFreezingTicks() const {
+        return mFreezingTicks;
+    }
     bool hasResistance() const { return has(MobEffectId::Resistance); }
 
     bool consumeAttributesDirty() {

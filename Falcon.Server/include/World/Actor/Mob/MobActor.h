@@ -37,6 +37,10 @@ class ServerPlayer;
 
 class MobActor : public ServerActor {
 public:
+    bool canFreeze() const override {
+        return true;
+    }
+
     MobActor(uint64_t runtimeId, const std::string &identifier);
 
     virtual ActorCategory getCategory() const = 0;
