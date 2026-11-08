@@ -505,29 +505,32 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
 
         const std::string certificate = mProperties.getSignalingCertificate();
         const std::string privateKey = mProperties.getSignalingPrivateKey();
+        const bool certificatePair = !certificate.empty() && !privateKey.empty();
         if (certificate.empty() != privateKey.empty())
-            LOG_WARN(LogAreaID::Server, "signaling-certificate and signaling-private-key go together, serving "
-                                        "plain HTTP");
-        if (!certificate.empty() && !privateKey.empty())
+            LOG_WARN(LogAreaID::Server, "signaling-certificate and signaling-private-key go together, both are "
+                                        "ignored");
+        if (certificatePair)
             mNetherNetInstance->setTlsCertificate(ServerPaths::file(certificate), ServerPaths::file(privateKey));
         else
             mNetherNetInstance->setTlsCertificate(std::string(), std::string());
         mNetherNetInstance->setExtraSignalingPort(mProperties.getSignalingExtraPort());
 
-        const std::string acmeDomain = mProperties.getSignalingAcmeDomain();
+        const std::string acmeDomain = acme::normalizeDomain(mProperties.getSignalingAcmeDomain());
+        const std::string acmeDirectory = mProperties.getSignalingAcmeDirectory();
         acme::ChallengeType challenge = acme::ChallengeType::TlsAlpn01;
         acme::parseChallengeType(mProperties.getSignalingAcmeChallenge(), challenge);
-        if (acmeDomain.empty()) {
-            mNetherNetInstance->disableAcme();
-        } else if (!certificate.empty()) {
-            LOG_WARN(LogAreaID::Server, "signaling-certificate is set, signaling-acme-domain is ignored");
-            mNetherNetInstance->disableAcme();
-        } else if (acmeDomain.find_first_not_of("0123456789.") == std::string::npos) {
-            LOG_WARN(LogAreaID::Server, "signaling-acme-domain must be a domain name, not an IP address");
-            mNetherNetInstance->disableAcme();
+        mNetherNetInstance->disableAcme();
+        if (acmeDomain.empty() || certificatePair) {
+            if (!acmeDomain.empty())
+                LOG_WARN(LogAreaID::Server, "signaling-certificate is set, signaling-acme-domain is ignored");
+        } else if (!acme::isDomain(acmeDomain)) {
+            LOG_WARN(LogAreaID::Server, "signaling-acme-domain must be a public domain name such as "
+                                        "play.example.org, ACME is off");
+        } else if (acmeDirectory.rfind("https://", 0) != 0) {
+            LOG_WARN(LogAreaID::Server, "signaling-acme-directory must be an https:// URL, ACME is off");
         } else {
             acme::ManagerSettings acmeSettings;
-            acmeSettings.mClient.mDirectoryUrl = mProperties.getSignalingAcmeDirectory();
+            acmeSettings.mClient.mDirectoryUrl = acmeDirectory;
             acmeSettings.mClient.mDomain = acmeDomain;
             acmeSettings.mClient.mEmail = mProperties.getSignalingAcmeEmail();
             acmeSettings.mClient.mChallenge = challenge;

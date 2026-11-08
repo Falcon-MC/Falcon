@@ -183,11 +183,16 @@ namespace {
     const unsigned short DEFAULT_GAME_PORT = 19132;
     const unsigned short HTTPS_PORT = 443;
 
+    // a half-set pair is ignored: only both paths take precedence over ACME
+    bool hasCertificatePair(const PropertiesSettings &properties) {
+        return !properties.getSignalingCertificate().empty() && !properties.getSignalingPrivateKey().empty();
+    }
+
     // ACME validates on fixed ports whatever the game port: RFC 8737 on 443, RFC 8555 http-01 on 80
     void logAcmeNotice(const PropertiesSettings &properties, const ServerNetworkHandler &handler,
                        unsigned short port) {
         const std::string domain = properties.getSignalingAcmeDomain();
-        if (domain.empty() || !properties.getSignalingCertificate().empty())
+        if (domain.empty() || hasCertificatePair(properties))
             return;
 
         const bool tlsAlpn = properties.getSignalingAcmeChallenge() != "http-01";
@@ -216,7 +221,7 @@ namespace {
                 else if (port == DEFAULT_GAME_PORT && handler.getExtraSignalingPort() != HTTPS_PORT)
                     LOG_INFO(LogAreaID::Server, "Players first try HTTPS here and on TCP 443 of this host: a firewall "
                                                 "that drops 443 delays every join by 3 s. Set signaling-extra-port=443,"
-                                                 " signaling-acme-domain, or signaling-certificate and "
+                                                " signaling-acme-domain, or signaling-certificate and "
                                                 "signaling-private-key to answer over HTTPS.");
             }
             if (handler.getExtraSignalingPort() != 0)
@@ -397,7 +402,7 @@ bool ServerHost::start(const ServerHostOptions &options) {
 
     LOG_INFO(LogAreaID::Server, "Server started.");
     logTransportNotice(transport, *mHandler, mPort,
-                       !properties.getSignalingAcmeDomain().empty() && properties.getSignalingCertificate().empty());
+                       !properties.getSignalingAcmeDomain().empty() && !hasCertificatePair(properties));
     logAcmeNotice(properties, *mHandler, mPort);
     BedrockLog::flush();
 
