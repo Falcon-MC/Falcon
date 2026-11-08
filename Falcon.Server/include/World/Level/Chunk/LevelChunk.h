@@ -148,7 +148,9 @@ public:
      */
     void pack();
 
-    bool isPacked() const { return mPacked; }
+    bool isPacked() const {
+        return mPacked;
+    }
 
     // Whether the chunk was unpacked since the last call, which a packer uses to leave busy chunks alone.
     bool consumeUnpacked();

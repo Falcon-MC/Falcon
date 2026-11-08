@@ -125,7 +125,9 @@ namespace {
     // Fails its first chunk, the way a generator bug would surface on a worker.
     class ThrowOnceGenerator : public ChunkGenerator {
     public:
-        DimensionType getDimensionType() const override { return DimensionType::Overworld; }
+        DimensionType getDimensionType() const override {
+            return DimensionType::Overworld;
+        }
 
         void generate(LevelChunk &) const override {
             if (!mThrown) {
@@ -136,13 +138,21 @@ namespace {
 
         void decorate(Level &, LevelChunk &, std::vector<GeneratedBlockChange> *) const override {}
 
-        int64_t getSeed() const override { return 1; }
+        int64_t getSeed() const override {
+            return 1;
+        }
 
-        int getSpawnY() const override { return 64; }
+        int getSpawnY() const override {
+            return 64;
+        }
 
-        int32_t getAirHash() const override { return 0; }
+        int32_t getAirHash() const override {
+            return 0;
+        }
 
-        int32_t pickBiome(int32_t, int32_t, int32_t) const override { return 0; }
+        int32_t pickBiome(int32_t, int32_t, int32_t) const override {
+            return 0;
+        }
 
     private:
         mutable bool mThrown = false;
