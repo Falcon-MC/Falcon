@@ -795,6 +795,13 @@ void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer 
         inventory.setCraftingTableItem(slot, ItemStack::air());
     }
 
+    // the anvil keeps nothing, so a player who leaves with it open gets its input and material back
+    for (int slot = 0; slot < PlayerInventory::ANVIL_SIZE; ++slot) {
+        if (!inventory.getAnvilItem(slot).isAir())
+            returned.push_back(inventory.getAnvilItem(slot));
+        inventory.setAnvilItem(slot, ItemStack::air());
+    }
+
     if (!inventory.getCursor().isAir())
         returned.push_back(inventory.getCursor());
     inventory.setCursor(ItemStack::air());
