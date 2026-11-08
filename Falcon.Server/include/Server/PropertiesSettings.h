@@ -118,6 +118,22 @@ public:
         return (unsigned short) getInt("signaling-extra-port");
     }
 
+    std::string getSignalingAcmeDomain() const {
+        return getString("signaling-acme-domain");
+    }
+
+    std::string getSignalingAcmeEmail() const {
+        return getString("signaling-acme-email");
+    }
+
+    std::string getSignalingAcmeDirectory() const {
+        return getString("signaling-acme-directory");
+    }
+
+    std::string getSignalingAcmeChallenge() const {
+        return getString("signaling-acme-challenge");
+    }
+
     bool getEnableLanVisibility() const { return getBool("enable-lan-visibility"); }
 
     int getViewDistance() const { return getInt("view-distance"); }

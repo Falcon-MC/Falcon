@@ -513,6 +513,27 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
         else
             mNetherNetInstance->setTlsCertificate(std::string(), std::string());
         mNetherNetInstance->setExtraSignalingPort(mProperties.getSignalingExtraPort());
+
+        const std::string acmeDomain = mProperties.getSignalingAcmeDomain();
+        acme::ChallengeType challenge = acme::ChallengeType::TlsAlpn01;
+        acme::parseChallengeType(mProperties.getSignalingAcmeChallenge(), challenge);
+        if (acmeDomain.empty()) {
+            mNetherNetInstance->disableAcme();
+        } else if (!certificate.empty()) {
+            LOG_WARN(LogAreaID::Server, "signaling-certificate is set, signaling-acme-domain is ignored");
+            mNetherNetInstance->disableAcme();
+        } else if (acmeDomain.find_first_not_of("0123456789.") == std::string::npos) {
+            LOG_WARN(LogAreaID::Server, "signaling-acme-domain must be a domain name, not an IP address");
+            mNetherNetInstance->disableAcme();
+        } else {
+            acme::ManagerSettings acmeSettings;
+            acmeSettings.mClient.mDirectoryUrl = mProperties.getSignalingAcmeDirectory();
+            acmeSettings.mClient.mDomain = acmeDomain;
+            acmeSettings.mClient.mEmail = mProperties.getSignalingAcmeEmail();
+            acmeSettings.mClient.mChallenge = challenge;
+            acmeSettings.mStorageDirectory = ServerPaths::file("certificates");
+            mNetherNetInstance->enableAcme(acmeSettings);
+        }
     }
 
     const int64_t levelSeed = properties.getLevelSeed().empty()
