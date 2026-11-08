@@ -113,6 +113,24 @@ bool StructureFeature::isStartChunk(const ChunkGenerator &generator, int32_t chu
     return candidate.x == chunkX && candidate.z == chunkZ && _isValidStart(generator, chunkX, chunkZ);
 }
 
+std::vector<StructureChunkPos> StructureFeature::getCandidatesIn(int64_t seed, int32_t minChunkX, int32_t minChunkZ,
+                                                                int32_t maxChunkX, int32_t maxChunkZ) const {
+    std::vector<StructureChunkPos> candidates;
+    for (int32_t regionX = floorDiv(minChunkX, mSpacing); regionX <= floorDiv(maxChunkX, mSpacing); ++regionX) {
+        for (int32_t regionZ = floorDiv(minChunkZ, mSpacing); regionZ <= floorDiv(maxChunkZ, mSpacing); ++regionZ) {
+            const StructureChunkPos candidate = getCandidate(seed, regionX, regionZ);
+            if (candidate.x >= minChunkX && candidate.x <= maxChunkX && candidate.z >= minChunkZ
+                && candidate.z <= maxChunkZ)
+                candidates.push_back(candidate);
+        }
+    }
+
+    std::sort(candidates.begin(), candidates.end(), [](const StructureChunkPos &a, const StructureChunkPos &b) {
+        return a.x != b.x ? a.x < b.x : a.z < b.z;
+    });
+    return candidates;
+}
+
 bool StructureFeature::findNearest(const ChunkGenerator &generator, int32_t blockX, int32_t blockZ,
                                    StructureChunkPos &out) const {
     const int32_t originRegionX = floorDiv(blockX >> 4, mSpacing);

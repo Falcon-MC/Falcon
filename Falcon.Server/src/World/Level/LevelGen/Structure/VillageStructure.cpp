@@ -471,6 +471,22 @@ std::shared_ptr<const std::vector<JigsawPiece>> VillageStructure::cachedPlan(con
     return pieces;
 }
 
+std::vector<std::shared_ptr<const std::vector<JigsawPiece>>> VillageStructure::plansNear(
+        const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) {
+    std::vector<std::shared_ptr<const std::vector<JigsawPiece>>> found;
+    const StructureFeature *village = StructureFeature::get("village");
+    if (village == nullptr)
+        return found;
+
+    for (const StructureChunkPos &start : village->getCandidatesIn(generator.getSeed(), chunkX - REACH, chunkZ - REACH,
+                                                                    chunkX + REACH, chunkZ + REACH)) {
+        std::shared_ptr<const std::vector<JigsawPiece>> pieces = cachedPlan(generator, start.x, start.z);
+        if (pieces != nullptr)
+            found.push_back(std::move(pieces));
+    }
+    return found;
+}
+
 VillageStructure::ChunkShare VillageStructure::placeInChunk(const ChunkGenerator &generator,
                                                             const std::vector<JigsawPiece> &pieces, int32_t chunkX,
                                                             int32_t chunkZ, StructureTerrain &terrain,
@@ -501,106 +517,95 @@ VillageStructure::ChunkShare VillageStructure::placeInChunk(const ChunkGenerator
 
 void VillageStructure::addBeard(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ,
                                 TerrainBeard &beard) {
-    for (int32_t startX = chunkX - REACH; startX <= chunkX + REACH; ++startX) {
-        for (int32_t startZ = chunkZ - REACH; startZ <= chunkZ + REACH; ++startZ) {
-            const std::shared_ptr<const std::vector<JigsawPiece>> pieces = cachedPlan(generator, startX, startZ);
-            if (pieces == nullptr)
+    for (const std::shared_ptr<const std::vector<JigsawPiece>> &pieces : plansNear(generator, chunkX, chunkZ)) {
+        // rigid pieces only: streets follow the ground
+        for (const JigsawPiece &piece : *pieces) {
+            if (piece.mElement->mTerrainMatching)
                 continue;
 
-            // rigid pieces only: streets follow the ground
-            for (const JigsawPiece &piece : *pieces) {
-                if (piece.mElement->mTerrainMatching)
-                    continue;
-
-                const JigsawBox &box = piece.mBox;
-                beard.addPiece(chunkX, chunkZ,
-                               {box.mMinX, box.mMinY, box.mMinZ, box.mMaxX, box.mMaxY, box.mMaxZ,
-                                piece.mGroundLevelDelta});
-            }
+            const JigsawBox &box = piece.mBox;
+            beard.addPiece(chunkX, chunkZ,
+                           {box.mMinX, box.mMinY, box.mMinZ, box.mMaxX, box.mMaxY, box.mMaxZ,
+                            piece.mGroundLevelDelta});
         }
     }
 }
 
 void VillageStructure::place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk,
                              std::vector<GeneratedBlockChange> *overflow) {
-    for (int32_t startX = chunk.getX() - REACH; startX <= chunk.getX() + REACH; ++startX) {
-        for (int32_t startZ = chunk.getZ() - REACH; startZ <= chunk.getZ() + REACH; ++startZ) {
-            const std::shared_ptr<const std::vector<JigsawPiece>> pieces = cachedPlan(generator, startX, startZ);
-            if (pieces == nullptr)
-                continue;
+    for (const std::shared_ptr<const std::vector<JigsawPiece>> &pieces :
+         plansNear(generator, chunk.getX(), chunk.getZ())) {
+        bool reaches = false;
+        for (const JigsawPiece &piece : *pieces)
+            reaches = reaches || touchesChunk(piece.mBox, chunk.getX(), chunk.getZ());
+        if (!reaches)
+            continue;
 
-            bool reaches = false;
-            for (const JigsawPiece &piece : *pieces)
-                reaches = reaches || touchesChunk(piece.mBox, chunk.getX(), chunk.getZ());
-            if (!reaches)
-                continue;
+        StructureTerrain terrain(generator);
+        BlockManager features(level);
+        features.setOverflowSink(chunk.getX(), chunk.getZ(), overflow);
+        // the parts in chunks post-processed earlier read their blocks, the others the terrain
+        const Neighbours neighbours = [&level](int32_t x, int32_t y, int32_t z) -> const BlockState * {
+            LevelChunk *other = level.peekChunkPtr(x >> 4, z >> 4);
+            return other != nullptr && other->isPopulated() ? &other->getBlock(x & 15, y, z & 15) : nullptr;
+        };
+        const ChunkShare own = placeInChunk(generator, *pieces, chunk.getX(), chunk.getZ(), terrain, &features,
+                                            &neighbours);
 
-            StructureTerrain terrain(generator);
-            BlockManager features(level);
-            features.setOverflowSink(chunk.getX(), chunk.getZ(), overflow);
-            // the parts in chunks post-processed earlier read their blocks, the others the terrain
-            const Neighbours neighbours = [&level](int32_t x, int32_t y, int32_t z) -> const BlockState * {
-                LevelChunk *other = level.peekChunkPtr(x >> 4, z >> 4);
-                return other != nullptr && other->isPopulated() ? &other->getBlock(x & 15, y, z & 15) : nullptr;
-            };
-            const ChunkShare own = placeInChunk(generator, *pieces, chunk.getX(), chunk.getZ(), terrain, &features,
-                                                &neighbours);
-
-            // shapes connect across chunk borders
-            std::map<Position, BlockState> around = own.mBlocks;
-            std::vector<std::pair<LevelChunk *, ChunkShare>> staged;
-            for (int32_t dx = -1; dx <= 1; ++dx) {
-                for (int32_t dz = -1; dz <= 1; ++dz) {
-                    if (dx == 0 && dz == 0)
-                        continue;
-                    ChunkShare next = placeInChunk(generator, *pieces, chunk.getX() + dx, chunk.getZ() + dz, terrain);
-                    around.insert(next.mBlocks.begin(), next.mBlocks.end());
-                    LevelChunk *neighbourChunk = level.peekChunkPtr(chunk.getX() + dx, chunk.getZ() + dz);
-                    if (neighbourChunk != nullptr)
-                        staged.emplace_back(neighbourChunk, std::move(next));
-                }
+        // shapes connect across chunk borders
+        std::map<Position, BlockState> around = own.mBlocks;
+        std::vector<std::pair<LevelChunk *, ChunkShare>> staged;
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            for (int32_t dz = -1; dz <= 1; ++dz) {
+                if (dx == 0 && dz == 0)
+                    continue;
+                ChunkShare next = placeInChunk(generator, *pieces, chunk.getX() + dx, chunk.getZ() + dz, terrain);
+                around.insert(next.mBlocks.begin(), next.mBlocks.end());
+                LevelChunk *neighbourChunk = level.peekChunkPtr(chunk.getX() + dx, chunk.getZ() + dz);
+                if (neighbourChunk != nullptr)
+                    staged.emplace_back(neighbourChunk, std::move(next));
             }
-
-            const auto neighbour = [&](int32_t x, int32_t y, int32_t z) -> BlockState {
-                const auto found = around.find({x, y, z});
-                return found != around.end() ? found->second : terrain.getBlock(x, y, z);
-            };
-            const auto write = [&](LevelChunk &target, const ChunkShare &share) {
-                for (const auto &entry : share.mBlocks) {
-                    const int32_t x = std::get<0>(entry.first);
-                    const int32_t y = std::get<1>(entry.first);
-                    const int32_t z = std::get<2>(entry.first);
-                    target.setBlock(x & 15, y, z & 15, StructureConnections::shaped(entry.second, x, y, z, neighbour));
-                }
-            };
-
-            write(chunk, own);
-            // neighbour features then meet the village whatever the post process order
-            for (const auto &entry : staged)
-                write(*entry.first, entry.second);
-
-            features.applySubChunkUpdate();
-
-            for (const Chest &chest : own.mChests) {
-                ChestBlockActor &actor = level.getBlockActors().getOrCreate<ChestBlockActor>(
-                        Vector3i(std::get<0>(chest.mPosition), std::get<1>(chest.mPosition),
-                                 std::get<2>(chest.mPosition)));
-                if (!chest.mLootTable.empty())
-                    actor.setLootTable(chest.mLootTable, chest.mLootSeed);
-            }
-
-            for (const Bed &bed : own.mBeds) {
-                level.getBlockActors()
-                        .getOrCreate<BedBlockActor>(Vector3i(std::get<0>(bed.mPosition), std::get<1>(bed.mPosition),
-                                                             std::get<2>(bed.mPosition)))
-                        .setColor((int8_t) bed.mColor);
-            }
-
-            for (const BlockEntity &entity : own.mBlockEntities)
-                createBlockActor(level.getBlockActors(), entity);
-
-            for (const Mob &mob : own.mMobs)
-                level.addGeneratedEntity(generatedMob(mob));
         }
+
+        const auto neighbour = [&](int32_t x, int32_t y, int32_t z) -> BlockState {
+            const auto found = around.find({x, y, z});
+            return found != around.end() ? found->second : terrain.getBlock(x, y, z);
+        };
+        const auto write = [&](LevelChunk &target, const ChunkShare &share) {
+            for (const auto &entry : share.mBlocks) {
+                const int32_t x = std::get<0>(entry.first);
+                const int32_t y = std::get<1>(entry.first);
+                const int32_t z = std::get<2>(entry.first);
+                target.setBlock(x & 15, y, z & 15, StructureConnections::shaped(entry.second, x, y, z, neighbour));
+            }
+        };
+
+        write(chunk, own);
+        // neighbour features then meet the village whatever the post process order
+        for (const auto &entry : staged)
+            write(*entry.first, entry.second);
+
+        features.applySubChunkUpdate();
+
+        for (const Chest &chest : own.mChests) {
+            ChestBlockActor &actor = level.getBlockActors().getOrCreate<ChestBlockActor>(
+                    Vector3i(std::get<0>(chest.mPosition), std::get<1>(chest.mPosition),
+                             std::get<2>(chest.mPosition)));
+            if (!chest.mLootTable.empty())
+                actor.setLootTable(chest.mLootTable, chest.mLootSeed);
+        }
+
+        for (const Bed &bed : own.mBeds) {
+            level.getBlockActors()
+                    .getOrCreate<BedBlockActor>(Vector3i(std::get<0>(bed.mPosition), std::get<1>(bed.mPosition),
+                                                         std::get<2>(bed.mPosition)))
+                    .setColor((int8_t) bed.mColor);
+        }
+
+        for (const BlockEntity &entity : own.mBlockEntities)
+            createBlockActor(level.getBlockActors(), entity);
+
+        for (const Mob &mob : own.mMobs)
+            level.addGeneratedEntity(generatedMob(mob));
     }
 }

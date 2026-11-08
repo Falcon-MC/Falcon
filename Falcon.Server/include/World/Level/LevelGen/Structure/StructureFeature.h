@@ -45,6 +45,10 @@ public:
 
     bool isStartChunk(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const;
 
+    // candidates inside the chunk box, x then z ascending, before the structure's checks: one draw per region
+    std::vector<StructureChunkPos> getCandidatesIn(int64_t seed, int32_t minChunkX, int32_t minChunkZ,
+                                                   int32_t maxChunkX, int32_t maxChunkZ) const;
+
     // the first valid start of the region rings around the block position, which is what /locate structure reports
     bool findNearest(const ChunkGenerator &generator, int32_t blockX, int32_t blockZ, StructureChunkPos &out) const;
 
