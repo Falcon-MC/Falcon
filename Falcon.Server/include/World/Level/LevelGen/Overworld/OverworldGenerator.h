@@ -63,6 +63,6 @@ private:
     std::unique_ptr<SurfaceOverwriteBuilder> mSurfaceOverwriteBuilder;
     std::unique_ptr<OverworldClimate> mClimate;
     std::unique_ptr<OverworldTerrainFiller> mTerrainFiller;
-    std::unique_ptr<OverworldBiomeParameters> mBiomeParameters;
+    const OverworldBiomeParameters *mBiomeParameters;
     std::unique_ptr<OverworldCarvers> mCarvers;
 };

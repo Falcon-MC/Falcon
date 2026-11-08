@@ -33,6 +33,9 @@ public:
 
     OverworldBiomeParameters();
 
+    // seed independent and immutable: one tree for every generator, built on first use
+    static const OverworldBiomeParameters &shared();
+
     // nearest leaf, starting from the previous result of the same column like the game (sub_147188720)
     const Node *search(const Target &target, const Node *lastResult) const;
 

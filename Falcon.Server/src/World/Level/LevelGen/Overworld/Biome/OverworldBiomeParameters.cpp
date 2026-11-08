@@ -630,6 +630,11 @@ OverworldBiomeParameters::OverworldBiomeParameters() {
     mRoot = build(std::move(mLeaves));
 }
 
+const OverworldBiomeParameters &OverworldBiomeParameters::shared() {
+    static const OverworldBiomeParameters parameters;
+    return parameters;
+}
+
 void OverworldBiomeParameters::_addEntry(const Space &space, int32_t biome) {
     std::unique_ptr<Node> leaf = std::make_unique<Node>();
     leaf->mSpace = space;
