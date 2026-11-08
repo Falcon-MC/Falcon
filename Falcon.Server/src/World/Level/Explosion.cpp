@@ -358,9 +358,9 @@ void Explosion::_ignite() {
         if (!isAir(state) || below == nullptr || !below->mSolid)
             continue;
 
-        const BlockState fire("minecraft:fire");
-        mLevel.setBlockState(position.x, position.y, position.z, fire);
-        BlockActionHandler::broadcastBlockUpdate(mOwner, mLevel, position, fire);
+        Tag states = Tag::ofCompound();
+        states.putInt("age", 0);
+        mLevel.setBlock(position, BlockState("minecraft:fire", states), false);
     }
 }
 

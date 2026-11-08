@@ -19,9 +19,7 @@ bool FireBlock::canBeReplaced(const BlockState &state) const {
 }
 
 BlockState FireBlock::updateShape(Level &level, const Vector3i &position, const BlockState &state) const {
-    if (!state.mStates.contains("minecraft:connection_up"))
-        return state;
-
+    // a state without its five connections matches no palette entry: the client draws nothing
     const BlockData *neighbours[6] = {};
     bool supported = false;
     for (int face = 0; face < 6; ++face) {

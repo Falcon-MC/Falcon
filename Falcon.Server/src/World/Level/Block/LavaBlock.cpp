@@ -5,6 +5,7 @@
 #include "World/Level/Block/Systems/FireSystem.h"
 #include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 #include "World/Level/Block/Systems/RandomTickSystem.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 
 FALCON_REGISTER_BLOCK(LavaBlock, 325);
@@ -30,7 +31,11 @@ void LavaBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
 }
 
 void LavaBlock::spreadFire(LiquidPhysicsSystem &ticks, const Vector3i &position) {
-    static const BlockState fire("minecraft:fire");
+    static const BlockState fire("minecraft:fire", [] {
+        Tag states = Tag::ofCompound();
+        states.putInt("age", 0);
+        return states;
+    }());
     static const int32_t sides[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
     if (!ticks.getLevel().getGameRules().getBool("dofiretick"))
         return;
@@ -53,8 +58,10 @@ void LavaBlock::spreadFire(LiquidPhysicsSystem &ticks, const Vector3i &position)
             const Vector3i target(candidate.x + side[0], candidate.y + side[1], candidate.z + side[2]);
             if (!LiquidProperties::of(ticks.stateAt(target)).air)
                 continue;
-            if (ticks.allows(target, fire, BlockChangeCause::Spread, &position))
-                ticks.write(target, 0, fire);
+            const Block *block = VanillaBlocks::fromIdentifier(fire.mName);
+            const BlockState placed = block != nullptr ? block->updateShape(ticks.getLevel(), target, fire) : fire;
+            if (ticks.allows(target, placed, BlockChangeCause::Spread, &position))
+                ticks.write(target, 0, placed);
             return;
         }
     }
