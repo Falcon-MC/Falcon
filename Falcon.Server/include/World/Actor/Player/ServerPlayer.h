@@ -68,9 +68,13 @@ public:
 
     void setLoginState(LoginState state) { mLoginState = state; }
 
-    int64_t getLoggedInTick() const { return mLoggedInTick; }
+    int64_t getLoggedInTick() const {
+        return mLoggedInTick;
+    }
 
-    void setLoggedInTick(int64_t tick) { mLoggedInTick = tick; }
+    void setLoggedInTick(int64_t tick) {
+        mLoggedInTick = tick;
+    }
 
     // chosen from the announced version, fixed for the session
     const std::shared_ptr<const ProtocolCodec> &getCodec() const { return mCodec; }

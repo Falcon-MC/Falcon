@@ -135,9 +135,13 @@ namespace {
             return DataStatus::HasData;
         }
 
-        NetworkStatus getNetworkStatus() const override { return NetworkStatus(); }
+        NetworkStatus getNetworkStatus() const override {
+            return NetworkStatus();
+        }
 
-        bool usesGamePacketId() const override { return false; }
+        bool usesGamePacketId() const override {
+            return false;
+        }
 
     private:
         std::mutex mMutex;
@@ -149,7 +153,9 @@ namespace {
         AnnouncingConnector(NetworkIdentifier first, NetworkIdentifier second)
                 : mFirst(std::move(first)), mSecond(std::move(second)) {}
 
-        bool host(const ConnectionDefinition &) override { return true; }
+        bool host(const ConnectionDefinition &) override {
+            return true;
+        }
 
         void disconnect() override {}
 
@@ -164,13 +170,21 @@ namespace {
                     std::vector<std::string>{"move"}));
         }
 
-        std::shared_ptr<NetworkPeer> getPeerForUser(const NetworkIdentifier &) override { return nullptr; }
+        std::shared_ptr<NetworkPeer> getPeerForUser(const NetworkIdentifier &) override {
+            return nullptr;
+        }
 
-        TransportLayer getNetworkType() const override { return TransportLayer::NetherNet; }
+        TransportLayer getNetworkType() const override {
+            return TransportLayer::NetherNet;
+        }
 
-        bool isIPv4Supported() const override { return true; }
+        bool isIPv4Supported() const override {
+            return true;
+        }
 
-        bool isIPv6Supported() const override { return false; }
+        bool isIPv6Supported() const override {
+            return false;
+        }
 
     private:
         NetworkIdentifier mFirst;

@@ -115,7 +115,9 @@ public:
     int64_t getCurrentTick() const { return mCurrentTick; }
 
     // a player is still waiting for its spawn chunks: the others' streaming makes way
-    bool isJoinBurst() const { return mJoinBurst; }
+    bool isJoinBurst() const {
+        return mJoinBurst;
+    }
 
     uint64_t getChunkStreamTick() const {
         return mChunkStreamTick;
@@ -152,7 +154,9 @@ public:
         return mSharedLoginPackets[std::make_pair((int) kind, protocol)];
     }
 
-    ChunkPacketCache &getChunkPacketCache() { return mChunkPacketCache; }
+    ChunkPacketCache &getChunkPacketCache() {
+        return mChunkPacketCache;
+    }
 
     double getPeakMillisecondsPerTick() const;
 

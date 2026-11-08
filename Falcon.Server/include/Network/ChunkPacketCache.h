@@ -40,7 +40,9 @@ public:
 
     void expire(uint64_t tick);
 
-    size_t size() const { return mEntries.size(); }
+    size_t size() const {
+        return mEntries.size();
+    }
 
 private:
     struct KeyHasher {

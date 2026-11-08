@@ -103,9 +103,13 @@ public:
     void invalidateNetworkCaches();
 
     // instance and revision together name one network encoding: a shared packet stays valid while both match
-    uint64_t getNetworkInstance() const { return mInstance.mId; }
+    uint64_t getNetworkInstance() const {
+        return mInstance.mId;
+    }
 
-    uint32_t getNetworkRevision() const { return mNetworkRevision; }
+    uint32_t getNetworkRevision() const {
+        return mNetworkRevision;
+    }
 
     std::string encodeBiomes(int sectionCount) const;
 
