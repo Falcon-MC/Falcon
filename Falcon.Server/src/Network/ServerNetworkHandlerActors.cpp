@@ -1475,7 +1475,7 @@ void ServerNetworkHandler::tickActors() {
         if (actor.isDead()) {
             actor.addDeathTick();
             actor.tickDeath(*this);
-            if (actor.getDeathTicks() >= actor.getDeathDuration())
+            if (actor.getDeathTicks() >= actor.getDeathDuration() || actor.isExpired())
                 expired.push_back(actorId);
             continue;
         }

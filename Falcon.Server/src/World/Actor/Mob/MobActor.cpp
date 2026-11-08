@@ -16,6 +16,7 @@
 #include "World/Inventory/InventoryManager.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/ItemDurability.h"
+#include "World/Level/Storage/BlockStateUpgrades.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
 #include "World/Level/Storage/Loot/LootItems.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
@@ -86,6 +87,7 @@ namespace {
     const char *const CAN_CLIMB_COMPONENT = "minecraft:can_climb";
     const char *const BREATHABLE_COMPONENT = "minecraft:breathable";
     const char *const BURNS_IN_DAYLIGHT_COMPONENT = "minecraft:burns_in_daylight";
+    const char *const SLOWDOWN_IMMUNITY_COMPONENT = "minecraft:block_movement_slowdown_immunity";
     const int32_t SUNLIGHT_HELMET_DAMAGE_BOUND = 2;
     const float DEFAULT_AIR_SECONDS = 15.0f;
     const float EYE_HEIGHT_RATIO = 0.85f;
@@ -272,6 +274,7 @@ void MobActor::startDefinition(ServerNetworkHandler &owner) {
 }
 
 void MobActor::tick(ServerNetworkHandler &owner) {
+    mHitTransformation = nullptr;
     startDefinition(owner);
     spawnPendingRiders(owner);
 
@@ -316,6 +319,11 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     tickControls(owner);
     ServerActor::tick(owner);
     RideSystem::syncPassengerPositions(owner, *this);
+}
+
+void MobActor::tickDeath(ServerNetworkHandler &owner) {
+    if (mConvertsOnDeath && !mTransformed)
+        _tickTransformation(owner);
 }
 
 void MobActor::_registerGoals(ServerNetworkHandler &owner) {
@@ -602,6 +610,18 @@ float MobActor::getJumpPower() const {
 }
 
 bool MobActor::canSee(ServerNetworkHandler &owner, const Actor &other) const {
+    // the ray marches every 0.25 block: target goals ask about the same pair several times a tick
+    const int64_t tick = owner.getCurrentTick();
+    if (mSightCache.mTick == tick && mSightCache.mTargetId == other.getRuntimeId())
+        return mSightCache.mVisible;
+
+    mSightCache.mTick = tick;
+    mSightCache.mTargetId = other.getRuntimeId();
+    mSightCache.mVisible = _traceSight(owner, other);
+    return mSightCache.mVisible;
+}
+
+bool MobActor::_traceSight(ServerNetworkHandler &owner, const Actor &other) const {
     const Vector3f from = getPosition();
     const Vector3f to = other.getPosition();
     const ServerActor *otherActor = dynamic_cast<const ServerActor *>(&other);
@@ -641,6 +661,16 @@ void MobActor::causeFallDamage(ServerNetworkHandler &owner, float distance) {
 }
 
 bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
+    mHitTransformation = nullptr;
+    const json::Value *transformationBefore = getComponent(TRANSFORMATION_COMPONENT);
+    const bool dealsDamage = _senseDamage(owner, amount, source);
+    const json::Value *transformationAfter = getComponent(TRANSFORMATION_COMPONENT);
+    if (transformationAfter != transformationBefore)
+        mHitTransformation = transformationAfter;
+    return dealsDamage;
+}
+
+bool MobActor::_senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
     const json::Value *sensor = getComponent(DAMAGE_SENSOR_COMPONENT);
     const json::Value *triggers = sensor == nullptr ? nullptr : sensor->get("triggers");
     if (triggers == nullptr)
@@ -1896,6 +1926,22 @@ const json::Value *MobActor::getComponent(const char *name) const {
     return getComponent(mComponentKey);
 }
 
+bool MobActor::ignoresMovementSlowdown(const std::string &blockName) const {
+    const json::Value *immunity = getComponent(SLOWDOWN_IMMUNITY_COMPONENT);
+    if (immunity != mSlowdownImmunityComponent) {
+        mSlowdownImmunityComponent = immunity;
+        mSlowdownImmuneBlocks.clear();
+        const json::Value *blocks = immunity == nullptr ? nullptr : immunity->get("blocks");
+        if (blocks != nullptr && blocks->isArray()) {
+            for (const std::unique_ptr<json::Value> &block: blocks->mArray)
+                mSlowdownImmuneBlocks.push_back(BlockStateUpgrades::currentName(block->string()));
+        }
+    }
+
+    return std::find(mSlowdownImmuneBlocks.begin(), mSlowdownImmuneBlocks.end(), blockName)
+           != mSlowdownImmuneBlocks.end();
+}
+
 bool MobActor::burnsInDaylight() const {
     return getComponent(BURNS_IN_DAYLIGHT_COMPONENT) != nullptr;
 }
@@ -2251,6 +2297,13 @@ int MobActor::randomRange(int minimum, int maximum) {
 void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t lootingLevel) {
     if (isDead())
         return;
+
+    // only the transformation the fatal hit's damage sensor added (villager_v2 become_zombie) carries on:
+    // the game keeps ticking transformations of a dying actor until Actor::remove flags it (+649,
+    // sub_140BA3460; checked in sub_14773B730 and sub_147C27700); one from another source dies with it
+    const json::Value *transformation = getComponent(TRANSFORMATION_COMPONENT);
+    mConvertsOnDeath = transformation != nullptr && transformation == mHitTransformation;
+    mHitTransformation = nullptr;
 
     mDweller.onDeath(*this, source);
 

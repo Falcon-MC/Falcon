@@ -43,6 +43,12 @@ public:
 
     bool catchFireFrom(const Actor &attacker, Difficulty difficulty);
 
+    // minecraft:block_movement_slowdown_immunity: the block leaves this actor's speed alone
+    virtual bool ignoresMovementSlowdown(const std::string &blockName) const {
+        (void) blockName;
+        return false;
+    }
+
     uint64_t getRuntimeId() const { return mRuntimeId; }
 
     int64_t getUniqueId() const { return mUniqueId; }

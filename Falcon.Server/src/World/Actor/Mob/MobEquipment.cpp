@@ -287,6 +287,12 @@ void MobEquipment::dropOnDeath(ServerNetworkHandler &owner, Level &level, const 
                        ItemActorHandler::DROP_PICKUP_DELAY);
     }
 
+    // a private inventory (villager_v2) stays with the body; flag parsed by sub_1437ABF50
+    const json::Value *inventory = mob.getComponent("minecraft:inventory");
+    const json::Value *hidden = inventory == nullptr ? nullptr : inventory->get("private");
+    if (hidden != nullptr && hidden->boolean(false))
+        return;
+
     for (ItemStack &slot: mInventory) {
         ItemStack item = std::move(slot);
         slot = ItemStack::air();

@@ -18,11 +18,13 @@ void CobwebBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const
                                 const BlockState &state) const {
     (void) owner;
     (void) position;
-    (void) state;
+    actor.resetFallDistance();
+    if (actor.ignoresMovementSlowdown(state.mName))
+        return;
+
     Vector3f multiplier;
     getStuckMultiplier(actor, multiplier);
     actor.makeStuckInBlock(multiplier);
-    actor.resetFallDistance();
 }
 
 bool CobwebBlock::getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const {
