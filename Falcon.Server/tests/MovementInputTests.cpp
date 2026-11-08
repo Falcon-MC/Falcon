@@ -1335,6 +1335,11 @@ namespace {
         level.getBlockActors().loadChunk(3, 0, {}, owner.getCodecContext());
         int64_t nextId = 3001;
         const auto terrain = [&](const BlockState &floor, const BlockState &body) {
+            // cleared first: a write next to the previous liquid reacts with it, lava beside water turns to obsidian
+            for (int x = 49; x <= 52; ++x)
+                for (int z = 1; z <= 4; ++z)
+                    for (int y = 247; y <= 254; ++y)
+                        level.setBlockState(x, y, z, BlockState("minecraft:air"));
             for (int x = 49; x <= 52; ++x)
                 for (int z = 1; z <= 4; ++z)
                     for (int y = 247; y <= 254; ++y)
