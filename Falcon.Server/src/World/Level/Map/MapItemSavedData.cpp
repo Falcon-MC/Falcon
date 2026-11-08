@@ -14,6 +14,9 @@ namespace {
     // dword_1528F4AA4 and the following entries of the exploration table: their markers never turn
     const uint8_t FIXED_ROTATION_DECORATIONS[] = {15, 14, 4, 20, 21, 18, 19, 17, 22, 23, 24, 25, 26, 27, 28, 29};
 
+    // not a game key: the game ignores it and keeps the map as a locked one
+    const char *const IMAGE_TAG = "falconImageMap";
+
     const int32_t FAR_TRACKING_LIMIT = 320;
     const int8_t FIXED_ROTATION = 8;
 
@@ -143,6 +146,14 @@ void MapItemSavedData::setUnlimitedTracking(bool unlimited) {
     markDirty();
 }
 
+void MapItemSavedData::setImage(bool image) {
+    if (mImage == image)
+        return;
+
+    mImage = image;
+    markDirty();
+}
+
 void MapItemSavedData::refreshUnexploredPixels() {
     const size_t unexplored = (size_t) std::count(mPixels.begin(), mPixels.end(), UNEXPLORED_PIXEL);
     mHasUnexploredPixels = unexplored >= (size_t) (int64_t) ((float) mPixels.size() * 0.005f);
@@ -170,7 +181,44 @@ bool MapItemSavedData::setPixel(int32_t x, int32_t y, uint32_t color) {
     return true;
 }
 
+bool MapItemSavedData::writePixels(int32_t x, int32_t y, int32_t width, int32_t height, const uint32_t *pixels,
+                                   MapPixelArea &changed) {
+    changed = MapPixelArea();
+    if (pixels == nullptr || width <= 0 || height <= 0 || x < 0 || y < 0 || x > MAP_SIZE - width
+        || y > MAP_SIZE - height)
+        return false;
+
+    for (int32_t row = 0; row < height; ++row) {
+        for (int32_t column = 0; column < width; ++column) {
+            uint32_t &pixel = mPixels[(size_t) (x + column + (y + row) * MAP_SIZE)];
+            const uint32_t color = pixels[(size_t) (column + row * width)];
+            if (pixel == color)
+                continue;
+
+            pixel = color;
+            if (changed.isEmpty()) {
+                changed.mMinX = changed.mMaxX = x + column;
+                changed.mMinY = changed.mMaxY = y + row;
+                continue;
+            }
+            changed.mMinX = std::min(changed.mMinX, x + column);
+            changed.mMaxX = std::max(changed.mMaxX, x + column);
+            changed.mMinY = std::min(changed.mMinY, y + row);
+            changed.mMaxY = std::max(changed.mMaxY, y + row);
+        }
+    }
+
+    if (changed.isEmpty())
+        return false;
+
+    markDirty();
+    return true;
+}
+
 bool MapItemSavedData::applyClientPixels(const std::vector<MapPixel> &pixels) {
+    if (mImage)
+        return false;
+
     bool changed = false;
     for (const MapPixel &pixel: pixels) {
         // the game indexes its array without a bound check
@@ -225,6 +273,8 @@ void MapItemSavedData::save(Tag &tag) const {
     }
     tag.put("decorations", std::move(decorations));
     tag.putByte("mapLocked", mLocked ? 1 : 0);
+    if (mImage)
+        tag.putByte(IMAGE_TAG, 1);
 }
 
 void MapItemSavedData::load(const Tag &tag) {
@@ -305,6 +355,7 @@ void MapItemSavedData::load(const Tag &tag) {
 
     if (tag.contains("mapLocked"))
         mLocked = tag.getByte("mapLocked", 0) != 0;
+    mImage = tag.getByte(IMAGE_TAG, 0) != 0;
 
     refreshUnexploredPixels();
 }
@@ -490,6 +541,13 @@ bool MapItemSavedData::buildUpdatePacket(MapItemTrackingInfo &tracking, Clientbo
 
     packet = _buildPacket(0, 0, 0, 0);
     return true;
+}
+
+ClientboundMapItemDataPacket MapItemSavedData::buildAreaPacket(const MapPixelArea &area) const {
+    if (area.isEmpty())
+        return _buildPacket(0, 0, 0, 0);
+
+    return _buildPacket(area.mMinX, area.mMinY, area.mMaxX - area.mMinX + 1, area.mMaxY - area.mMinY + 1);
 }
 
 ClientboundMapItemDataPacket MapItemSavedData::buildCreationPacket(const std::vector<int64_t> &mapIds) const {

@@ -56,6 +56,18 @@ struct MapItemTrackedActorKey {
     bool operator==(const MapItemTrackedActorKey &other) const;
 };
 
+// the changed pixels of a map, inclusive bounds
+struct MapPixelArea {
+    int32_t mMinX = 0;
+    int32_t mMinY = 0;
+    int32_t mMaxX = -1;
+    int32_t mMaxY = -1;
+
+    bool isEmpty() const {
+        return mMaxX < mMinX || mMaxY < mMinY;
+    }
+};
+
 struct MapDecorationEntry {
     MapItemTrackedActorKey mKey;
     MapDecorationType mType = MapDecorationType::MarkerWhite;
@@ -133,6 +145,13 @@ public:
 
     void setUnlimitedTracking(bool unlimited);
 
+    // a plugin picture: locked, never rendered from the world nor from client pixels, without markers
+    bool isImage() const {
+        return mImage;
+    }
+
+    void setImage(bool image);
+
     bool isPreviewIncomplete() const {
         return mPreviewIncomplete;
     }
@@ -169,6 +188,10 @@ public:
     const std::vector<uint32_t> &getPixels() const {
         return mPixels;
     }
+
+    // copies a width x height block, rows packed; trackers are left alone: the caller sends the changed area
+    bool writePixels(int32_t x, int32_t y, int32_t width, int32_t height, const uint32_t *pixels,
+                     MapPixelArea &changed);
 
     // sub_14228D8A0: client side generation pixels; blank ones and those out of the map are dropped
     bool applyClientPixels(const std::vector<MapPixel> &pixels);
@@ -237,6 +260,8 @@ public:
     // sub_144169380: the ids of this map and of its parents, which the client links for zooming
     ClientboundMapItemDataPacket buildCreationPacket(const std::vector<int64_t> &mapIds) const;
 
+    ClientboundMapItemDataPacket buildAreaPacket(const MapPixelArea &area) const;
+
     static bool isSavedDecoration(MapDecorationType type);
 
     static bool isFixedRotationDecoration(MapDecorationType type);
@@ -261,4 +286,5 @@ private:
     std::vector<MapDecorationEntry> mDecorations;
     std::vector<MapItemTrackingInfo> mTracked;
     bool mHasUnexploredPixels = false;
+    bool mImage = false;
 };

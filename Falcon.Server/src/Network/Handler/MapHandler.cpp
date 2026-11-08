@@ -98,8 +98,14 @@ void MapHandler::tickPlayer(ServerNetworkHandler &owner, ServerPlayer &player) {
     }
 
     for (const int64_t mapId: player.getMapRequests().takeDue()) {
-        if (MapItemSavedData *data = mapLevel.getMapData(mapId))
-            sendMap(owner, player, *data);
+        MapItemSavedData *data = mapLevel.getMapData(mapId);
+        if (data == nullptr)
+            continue;
+
+        sendMap(owner, player, *data);
+        // the client asks once per session, so this is who sees a picture: framed or held
+        if (data->isImage())
+            player.getMapRequests().markViewing(mapId);
     }
 }
 
@@ -160,7 +166,7 @@ void MapHandler::onFrameItemChanged(ServerNetworkHandler &owner, Level &level, c
         return;
 
     MapItemSavedData *data = mapLevel.getMapData(MapItem::getMapId(current));
-    if (data == nullptr)
+    if (data == nullptr || data->isImage())
         return;
 
     MapItemTrackingInfo &tracking = data->addTracked(key, level.getDimensionId(), MapDecorationType::MarkerGreen);

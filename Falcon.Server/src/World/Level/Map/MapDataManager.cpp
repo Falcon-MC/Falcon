@@ -125,6 +125,14 @@ void MapDataManager::saveDirty(LevelStorage &storage) {
     }
 }
 
+bool MapDataManager::removeMap(LevelStorage *storage, int64_t mapId) {
+    mMaps.erase(mapId);
+    if (mMissing.size() >= MISSING_CACHE_LIMIT)
+        mMissing.clear();
+    mMissing.insert(mapId);
+    return storage == nullptr || storage->eraseMapData(mapId);
+}
+
 void MapDataManager::unloadUnused() {
     for (auto it = mMaps.begin(); it != mMaps.end();) {
         Entry &entry = it->second;

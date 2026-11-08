@@ -175,6 +175,7 @@ find_package(OpenSSL REQUIRED)
 target_include_directories(FalconCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${FALCON_GENERATED_DIR} ${FALCON_LEGACY_INCLUDE_DIR} ${ZLIB_INCLUDE_DIRS}
         ${OPENSSL_INCLUDE_DIR})
+target_include_directories(FalconCore SYSTEM PRIVATE ${stb_image_SOURCE_DIR})
 target_link_libraries(FalconCore PUBLIC FalconNetwork FalconProtocol FalconBlockStateUpdater leveldb qjs LibDataChannel::LibDataChannelStatic
         Falcon::PluginAPI wasmtime ${CMAKE_DL_LIBS})
 
@@ -246,6 +247,13 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     endif()
     add_test(NAME maps COMMAND FalconMapTests)
     set_tests_properties(maps PROPERTIES TIMEOUT 60)
+    add_executable(FalconImageMapTests tests/ImageMapTests.cpp)
+    target_link_libraries(FalconImageMapTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconImageMapTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME image-maps COMMAND FalconImageMapTests)
+    set_tests_properties(image-maps PROPERTIES TIMEOUT 60)
     add_test(NAME dragon-fight COMMAND FalconDragonFightTests)
     set_tests_properties(dragon-fight PROPERTIES TIMEOUT 60)
     add_test(NAME sulfur-caves-generation COMMAND FalconSulfurCavesTests)

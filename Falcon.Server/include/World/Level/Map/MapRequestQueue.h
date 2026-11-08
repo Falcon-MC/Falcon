@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <unordered_set>
 #include <vector>
 
 // the MapInfoRequestPacket ids a player waits on: each answer costs a storage read and ~64 KB; a few drain per tick,
@@ -21,6 +22,16 @@ public:
         return mIds.size();
     }
 
+    // image maps answered this session; bounded by the image maps that exist, a request for others adds nothing
+    void markViewing(int64_t mapId) {
+        mViewing.insert(mapId);
+    }
+
+    bool isViewing(int64_t mapId) const {
+        return mViewing.count(mapId) != 0;
+    }
+
 private:
     std::vector<int64_t> mIds;
+    std::unordered_set<int64_t> mViewing;
 };

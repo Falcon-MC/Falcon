@@ -905,6 +905,14 @@ bool LevelStorage::saveMapData(int64_t mapId, const Tag &data) {
     return true;
 }
 
+bool LevelStorage::eraseMapData(int64_t mapId) {
+    if (mDb == nullptr)
+        return false;
+
+    const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), MAP_PREFIX + std::to_string(mapId));
+    return _recordWrite(status.ok() || status.IsNotFound());
+}
+
 bool LevelStorage::saveGameRules(const Tag &rules) {
     if (mDb == nullptr)
         return false;

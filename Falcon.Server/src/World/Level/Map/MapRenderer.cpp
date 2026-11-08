@@ -70,6 +70,9 @@ uint32_t MapRenderer::shade(const float color[4], int32_t brightness) {
 }
 
 void MapRenderer::update(MapItemSavedData &data, MapRenderSource &source, const Vector3i &playerPosition) {
+    if (data.isImage())
+        return;
+
     const int32_t size = MapItemSavedData::MAP_SIZE;
     const int32_t scale = 1 << data.getScale();
     const int32_t samples = scale * scale;

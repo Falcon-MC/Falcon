@@ -109,6 +109,8 @@ public:
 
     bool saveMapData(int64_t mapId, const Tag &data);
 
+    bool eraseMapData(int64_t mapId);
+
     bool saveGameRules(const Tag &rules);
 
     /** Data the game saves under a plain key, such as "TheEnd", as {"data": compound}. */
