@@ -71,6 +71,12 @@ public:
     static bool isPublisherUpdateDue(const ChunkStreamState &state, const Vector3i &position, uint32_t radius,
                                      std::chrono::steady_clock::time_point now);
 
+    /**
+     * Forgets the chunks still waiting to be sent for the current view. Under client side generation a teleport
+     * drops them, since each one sent would push the publisher update and the view move back.
+     */
+    static void dropPendingChunks(ChunkStreamState &state);
+
     static int64_t packChunk(int32_t chunkX, int32_t chunkZ);
 
     static int32_t unpackChunkX(int64_t hash);

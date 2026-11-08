@@ -75,6 +75,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mEntityEraseWrite = std::move(other.mEntityEraseWrite);
     mRepopulatedChunks = std::move(other.mRepopulatedChunks);
     mSavedChunkCache = std::move(other.mSavedChunkCache);
+    mLoadedMaps = std::move(other.mLoadedMaps);
     mStructureGuard = std::move(other.mStructureGuard);
     mIncomingChanges = std::move(other.mIncomingChanges);
     mPendingBlockChanges = std::move(other.mPendingBlockChanges);
@@ -172,6 +173,7 @@ void Level::saveAll(bool wait) {
         saveWeather();
         saveGameRules();
         saveLevelDat();
+        _saveLoadedMaps();
     }
 
     if (wait || !async) {
@@ -216,12 +218,14 @@ void Level::saveAll(bool wait) {
             copy->invalidateNetworkCaches();
             mChunkWorker->requestSave(std::move(copy));
             entry.second.clearDirty();
+            _markChunkSaved(entry.first);
             saved++;
             continue;
         }
 
         if (mStorage.saveChunk(entry.second)) {
             entry.second.clearDirty();
+            _markChunkSaved(entry.first);
             saved++;
         }
     }
@@ -991,6 +995,7 @@ void Level::processDeferredSaves() {
         copy->invalidateNetworkCaches();
         mChunkWorker->requestSave(std::move(copy));
         chunk->second.clearDirty();
+        _markChunkSaved(key);
     }
 }
 
@@ -1068,6 +1073,7 @@ size_t Level::processChunkUnloads() {
             copy->invalidateNetworkCaches();
             mChunkWorker->requestSave(std::move(copy));
             chunk->second.clearDirty();
+            _markChunkSaved(key);
             ++it;
             queuedSaves++;
             continue;
@@ -1077,6 +1083,8 @@ size_t Level::processChunkUnloads() {
             it = mUnloadQueue.erase(it);
             continue;
         }
+        if (chunk->second.isDirty())
+            _markChunkSaved(key);
 
         const int32_t chunkX = chunk->second.getX();
         const int32_t chunkZ = chunk->second.getZ();
@@ -1118,15 +1126,41 @@ bool Level::isChunkSaved(int32_t chunkX, int32_t chunkZ) {
     if (cached != mSavedChunkCache.end())
         return cached->second;
 
-    // sub_1406C99E0 empties the whole cache rather than evicting single entries. Saving a chunk does not
-    // update it either (DBChunkStorage::_serializeChunk, sub_1406D1BC0, even caches the chunk as missing just
-    // before writing it), so the neighbour rule of client side generation does not spread during a session.
+    // the game empties the whole cache rather than evicting single entries // sub_1406C99E0
     if (mSavedChunkCache.size() >= ClientSideGeneration::SAVED_CHUNK_CACHE_LIMIT)
         mSavedChunkCache.clear();
 
     const bool saved = mStorage.hasChunk(chunkX, chunkZ);
     mSavedChunkCache.emplace(key, saved);
     return saved;
+}
+
+bool Level::applyMapPixels(int64_t mapId, const std::vector<MapPixel> &pixels) {
+    auto loaded = mLoadedMaps.find(mapId);
+    if (loaded == mLoadedMaps.end()) {
+        Tag data;
+        if (!mStorage.loadMapData(mapId, data))
+            return false;
+
+        loaded = mLoadedMaps.emplace(mapId, std::make_pair(std::move(data), false)).first;
+    }
+
+    if (ClientSideGeneration::applyClientMapPixels(loaded->second.first, pixels))
+        loaded->second.second = true;
+    return true;
+}
+
+void Level::_saveLoadedMaps() {
+    for (const auto &entry: mLoadedMaps) {
+        if (entry.second.second)
+            mStorage.saveMapData(entry.first, entry.second.first);
+    }
+    mLoadedMaps.clear();
+}
+
+void Level::_markChunkSaved(int64_t key) {
+    // the game flags a chunk queued for saving so storage is read again // sub_1406D1BC0
+    mSavedChunkCache[key] = true;
 }
 
 bool Level::isNearStructure(const std::vector<const StructureFeature *> &features, int32_t chunkX, int32_t chunkZ) {

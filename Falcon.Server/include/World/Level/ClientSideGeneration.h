@@ -92,7 +92,7 @@ namespace ClientSideGeneration {
 
     /**
      * Whether the chunk view of a CSG level loads the chunk (sub_1430014E0, generate mode 1). Storage is asked for
-     * the chunk and its neighbours only when no player or ticking area already keeps it.
+     * the chunk first, and for its neighbours only when no player or ticking area keeps it.
      */
     bool isServerBuilt(int32_t chunkX, int32_t chunkZ, const BuildContext &context);
 

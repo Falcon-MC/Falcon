@@ -2113,13 +2113,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const MapInfoRequ
     if (packet.mPixels.empty() || !holdsMap(*player, packet.mUniqueMapId))
         return;
 
-    Level &overworld = getWorldFor(*player).getOverworld();
-    Tag mapData;
-    if (!overworld.loadMapData(packet.mUniqueMapId, mapData))
-        return;
-
-    if (ClientSideGeneration::applyClientMapPixels(mapData, packet.mPixels))
-        overworld.saveMapData(packet.mUniqueMapId, mapData);
+    getWorldFor(*player).getOverworld().applyMapPixels(packet.mUniqueMapId, packet.mPixels);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SubChunkRequestPacket &packet) {

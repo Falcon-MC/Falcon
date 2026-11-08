@@ -512,6 +512,14 @@ bool ChunkStreamHandler::isPublisherUpdateDue(const ChunkStreamState &state, con
     return dx * dx + dy * dy + dz * dz >= threshold * threshold;
 }
 
+void ChunkStreamHandler::dropPendingChunks(ChunkStreamState &state) {
+    state.mSendQueue.clear();
+    state.mLoading.clear();
+    state.mReadyToSend.clear();
+    state.mClientBuilt.clear();
+    state.mClientBuiltCursor = 0;
+}
+
 int64_t ChunkStreamHandler::packChunk(int32_t chunkX, int32_t chunkZ) {
     return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 }
@@ -559,6 +567,8 @@ void ChunkStreamHandler::handleTeleport(ServerNetworkHandler &owner, ServerPlaye
 
     // The view moves with the next publisher update, which a teleport no longer makes wait for distance.
     if (isClientSideGeneration(owner)) {
+        // the old view would keep sending and rearm the publisher delay; its chunks are never registered as loaded
+        dropPendingChunks(state);
         state.mForcePublisherMove = true;
         publishClientSideGeneration(state, owner, player);
         loadQueuedChunks(state, owner, player, TELEPORT_LOAD_COUNT);

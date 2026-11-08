@@ -22,21 +22,23 @@ namespace {
             throw std::runtime_error(message);
     }
 
-    bool near(float value, float expected) {
+    bool isClose(float value, float expected) {
         return std::fabs(value - expected) < 1e-5f;
     }
 
     void serverBuildRatio() {
         using ClientSideGeneration::computeServerBuildRatio;
 
-        require(near(computeServerBuildRatio(32, 8), 1.0f), "a client below nine chunks leaves everything to the server");
-        require(near(computeServerBuildRatio(32, 28), 0.0f), "a client handling 28 chunks takes everything it can");
-        require(near(computeServerBuildRatio(10, 12), 5.0f / 23.0f), "the server share caps the ratio");
-        require(near(computeServerBuildRatio(32, 20), 8.0f / 23.0f), "the client share caps the ratio");
-        require(near(computeServerBuildRatio(32, 12), 1.0f), "a gap of 16 chunks on a large server keeps the larger share");
-        require(near(computeServerBuildRatio(16, 9), 19.0f / 23.0f - 11.0f / 23.0f),
+        require(isClose(computeServerBuildRatio(32, 8), 1.0f),
+                "a client below nine chunks leaves everything to the server");
+        require(isClose(computeServerBuildRatio(32, 28), 0.0f), "a client handling 28 chunks takes everything it can");
+        require(isClose(computeServerBuildRatio(10, 12), 5.0f / 23.0f), "the server share caps the ratio");
+        require(isClose(computeServerBuildRatio(32, 20), 8.0f / 23.0f), "the client share caps the ratio");
+        require(isClose(computeServerBuildRatio(32, 12), 1.0f),
+                "a gap of 16 chunks on a large server keeps the larger share");
+        require(isClose(computeServerBuildRatio(16, 9), 19.0f / 23.0f - 11.0f / 23.0f),
                 "a small gap on a small server takes the difference of the shares");
-        require(near(computeServerBuildRatio(32, 4), 1.0f), "four chunks is below the nine chunk floor");
+        require(isClose(computeServerBuildRatio(32, 4), 1.0f), "four chunks is below the nine chunk floor");
     }
 
     void serverBuildRadius() {
@@ -157,6 +159,16 @@ namespace {
         state.mForcePublisherMove = true;
         require(ChunkStreamHandler::isPublisherUpdateDue(state, Vector3i(0, 64, 0), 160, now),
                 "a teleport moves the update without travelling");
+
+        state.mSendQueue = {ChunkStreamHandler::packChunk(1, 2)};
+        state.mLoading = {ChunkStreamHandler::packChunk(3, 4)};
+        state.mReadyToSend = {ChunkStreamHandler::packChunk(5, 6)};
+        state.mClientBuilt = {ChunkStreamHandler::packChunk(7, 8)};
+        state.mClientBuiltCursor = 1;
+        ChunkStreamHandler::dropPendingChunks(state);
+        require(state.mSendQueue.empty() && state.mLoading.empty() && state.mReadyToSend.empty()
+                && state.mClientBuilt.empty() && state.mClientBuiltCursor == 0,
+                "a teleport leaves nothing of the old view to send");
     }
 
     void mapPixels() {
@@ -213,7 +225,27 @@ namespace {
             require(level.isChunkSaved(3, -2), "the level reads saved chunks from storage");
             require(!level.isChunkSaved(4, 4), "the level does not invent chunks");
             require(level.isChunkSaved(3, -2) && !level.isChunkSaved(4, 4), "cached answers do not change");
+
+            LevelChunk &built = level.insertChunk(LevelChunk(4, 4));
+            built.setPopulated(true);
+            built.markDirty();
+            level.saveAll(true);
+            require(level.isChunkSaved(4, 4), "a chunk saved during the session is seen as saved");
+
+            std::vector<MapPixel> pixels(1);
+            pixels[0].mPixel = 9;
+            pixels[0].mIndex = 3;
+            require(level.applyMapPixels(-9, pixels), "a saved map takes pixels");
+            require(!level.applyMapPixels(-8, pixels), "an unknown map takes nothing");
             level.closeStorage();
+        }
+        {
+            LevelStorage storage;
+            require(storage.open(directory.string(), "World"), "could not reopen the storage");
+            Tag map;
+            require(storage.loadMapData(-9, map), "the map is still saved");
+            const Tag *colors = map.get("colors");
+            require(colors != nullptr && colors->asByteArray()[3 * 4] == 9, "map pixels are written by the save");
         }
     }
 
