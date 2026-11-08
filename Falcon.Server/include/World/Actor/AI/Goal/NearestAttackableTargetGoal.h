@@ -14,9 +14,17 @@ public:
     struct Entry {
         std::shared_ptr<json::Value> mFilters;
         float mMaxDistance = 0.0f;
+        // -1 inherits the goal's must_see, otherwise 0 or 1
+        int8_t mMustSee = -1;
     };
 
-    NearestAttackableTargetGoal(float range, std::vector<Entry> entries, int32_t scanInterval);
+    struct Sight {
+        bool mMustSee = false;
+        int32_t mForgetTicks = 0;
+        bool mReselect = false;
+    };
+
+    NearestAttackableTargetGoal(float range, std::vector<Entry> entries, int32_t scanInterval, Sight sight);
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
@@ -31,10 +39,16 @@ private:
 
     bool _matches(ServerNetworkHandler &owner, MobActor &mob, const Actor &candidate) const;
 
+    bool _mustSee(ServerNetworkHandler &owner, MobActor &mob, const Actor &target) const;
+
+    bool _scanDue();
+
     float mRangeSquared;
     int32_t mScanInterval;
     // set by canUse, consumed by start in the same selection: the scan runs once
     uint64_t mFoundTargetRuntimeId = 0;
     float mMaxRangeSquared;
     std::vector<Entry> mEntries;
+    Sight mSight;
+    int32_t mUnseenTicks = 0;
 };

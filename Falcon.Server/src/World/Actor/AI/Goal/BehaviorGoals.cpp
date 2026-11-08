@@ -181,8 +181,9 @@ namespace {
         return value == nullptr ? fallback : (float) value->number(fallback);
     }
 
-    // vanilla 26.60 nearest_attackable_target default
+    // vanilla 26.60 nearest_attackable_target defaults: must_see false, forget after 3 s (sub_147C0B710)
     const int32_t TARGET_SCAN_INTERVAL = 10;
+    const float TARGET_FORGET_DEFAULT_SECONDS = 3.0f;
 
     std::vector<NearestAttackableTargetGoal::Entry> targetEntries(const json::Value &component) {
         std::vector<NearestAttackableTargetGoal::Entry> entries;
@@ -195,6 +196,8 @@ namespace {
             if (const json::Value *filters = type.get("filters"))
                 entry.mFilters = std::shared_ptr<json::Value>(filters->clone());
             entry.mMaxDistance = numberOf(type, "max_dist", 0.0f);
+            if (const json::Value *mustSee = type.get("must_see"))
+                entry.mMustSee = mustSee->boolean(false) ? 1 : 0;
             entries.push_back(std::move(entry));
         };
 
@@ -216,6 +219,18 @@ namespace {
                                                     : types;
         const json::Value *filters = first == nullptr ? nullptr : first->get("filters");
         return filters == nullptr ? nullptr : std::shared_ptr<json::Value>(filters->clone());
+    }
+
+    NearestAttackableTargetGoal::Sight targetSight(const json::Value &component) {
+        NearestAttackableTargetGoal::Sight sight;
+        const json::Value *mustSee = component.get("must_see");
+        sight.mMustSee = mustSee != nullptr && mustSee->boolean(false);
+        // the game truncates seconds * 20 to whole ticks
+        sight.mForgetTicks = (int32_t) (numberOf(component, "must_see_forget_duration", TARGET_FORGET_DEFAULT_SECONDS)
+                                        * TICKS_PER_SECOND);
+        const json::Value *reselect = component.get("reselect_targets");
+        sight.mReselect = reselect != nullptr && reselect->boolean(false);
+        return sight;
     }
 
     float targetRange(const MobActor &mob, const json::Value &component) {
@@ -533,7 +548,7 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "nearest_attackable_target" || behavior == "nearest_prioritized_attackable_target")
         return std::make_unique<NearestAttackableTargetGoal>(
                 targetRange(mob, component), targetEntries(component),
-                (int32_t) numberOf(component, "scan_interval", (float) TARGET_SCAN_INTERVAL));
+                (int32_t) numberOf(component, "scan_interval", (float) TARGET_SCAN_INTERVAL), targetSight(component));
 
     if (behavior == "owner_hurt_by_target")
         return std::make_unique<OwnerTargetGoal>(OwnerTargetGoal::Mode::OwnerHurtBy);
