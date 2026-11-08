@@ -189,7 +189,7 @@ namespace {
                 old.putInt("age", 7);
             if (std::string(name) == "minecraft:redstone_wire")
                 old.putInt("redstone_signal", 11);
-            // 26.50 and 26.60 have the same serialized state version.
+            // 26.50 and 26.60 share a serialized state version
             const BlockStateData upgraded = BlockStateUpgrades::upgrade(BlockStateData(name, old, 18168865));
             const Tag &states = upgraded.getStates();
             const bool wire = std::string(name) == "minecraft:redstone_wire";
@@ -321,7 +321,7 @@ namespace {
         require(!level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"), "loaded empty neighbour kept stale connection");
     }
 
-    // A piston at (8, 100, 8) facing up, powered by a redstone block beside it.
+    // piston at (8, 100, 8) facing up, powered by a redstone block beside it
     struct PistonFixture {
         ServerNetworkHandler mOwner{"Piston regression", "", 1};
         Level &mLevel = mOwner.getLevel();

@@ -39,7 +39,7 @@ namespace {
     }
 }
 
-// Only component fixtures and isolated system steps require private access.
+// private access only for component fixtures and isolated system steps
 class RideControlProbe {
 public:
     static void components(MobActor &mob, const json::Value &definition) {

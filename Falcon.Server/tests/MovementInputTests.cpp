@@ -36,7 +36,7 @@ public:
 
     static void step(ServerNetworkHandler &owner, ServerPlayer &player, int64_t tick, double milliseconds = 0) {
         owner.mCurrentTick = tick;
-        // These fixtures exercise movement; chunk streaming has its own lifecycle tests.
+        // movement only; chunk streaming has its own lifecycle tests
         player.setLastChunkPosition((int32_t) std::floor(player.getPosition().x) >> 4,
                                     (int32_t) std::floor(player.getPosition().z) >> 4);
         owner.mTickDurationSamples.clear();
@@ -290,7 +290,7 @@ namespace {
         context.state.velocity = Vector3f(0.1f, 0.0f, 0.0f);
         Vector3f clientPosition = context.state.simulated;
         float clientVelocity = 0.11f;
-        // A small initial speed mismatch must converge instead of exhausting the adjustment budget.
+        // a small initial speed mismatch converges instead of exhausting the adjustment budget
         for (int tick = 100; tick < 140; ++tick) {
             packet.mTick = tick;
             clientVelocity += 0.049f;
@@ -419,7 +419,7 @@ namespace {
         require(delayed.getMovementInputs().lastProcessedTick() == 10, "Catchup used the server tick as the input tick");
     }
 
-    // BDS jump 0x140EAFAF0, cooldown 0x140EB0DA0, ground/air travel and gravity.
+    // jump 0x140EAFAF0, cooldown 0x140EB0DA0, ground/air travel and gravity
     void checkGroundJumpTrajectory() {
         for (bool strict: {false, true}) {
             ServerNetworkHandler owner("Ground trajectory regression", "", 1);
@@ -447,8 +447,8 @@ namespace {
             int jumps = 0;
             player.setPosition(expected);
             player.setOnGround(true);
-            // the trajectory sprints from its first input: the sprint started on an earlier one, since the server
-            // keeps sprint from StartSprinting and the Sprinting bit alone does not start it
+            // sprints from the first input: started earlier, since the server keeps sprint from StartSprinting
+            // and the Sprinting bit alone does not start it
             player.getFlags().set(ActorFlag::Sprinting, true);
             for (int tick = 1; tick <= 60; ++tick) {
                 const bool wasGrounded = grounded;
@@ -546,7 +546,7 @@ namespace {
                 if (sneaking)
                     packet.mInputData.push_back((int32_t) PlayerAuthInputData::WantDownSlow);
                 Vector3f feet = expected;
-                // Isolate travel integration from prediction feedback, which has its own regression above.
+                // isolate travel integration from prediction feedback (own regression above)
                 player.getMovementValidator().onMovementEffect((uint64_t) tick);
                 PlayerMovementSimulator::apply(owner, id, player, packet, feet, sprinting);
                 player.setPosition(feet);
@@ -860,7 +860,7 @@ namespace {
         player.getAttributes() = ActorAttributes::createPlayerDefaults();
         player.setGameType((int32_t) GameType::Creative);
         player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
-        // This fixture measures transition timing; prediction feedback is exercised separately.
+        // transition timing only; prediction feedback is tested separately
         player.getMovementValidator().onMovementEffect(100);
         Level &level = owner.getLevelFor(player);
         level.getChunk(9, 0);
@@ -873,8 +873,8 @@ namespace {
         packet.mPosition = Vector3f(150.5f, 251.62f, 2.5f);
         player.getMovementInputs().enqueue(packet);
         MovementInputProbe::step(owner, player, 1);
-        // The client's FlyTriggerActionSystem (client 26.60 sub_145E0FB40) only queues the flying ability change,
-        // so the input that carries the toggle still travels with the old abilities.
+        // the client's FlyTriggerActionSystem (26.60 sub_145E0FB40) only queues the ability change:
+        // the input carrying the toggle still travels with the old abilities
         require(player.isFlying() && std::fabs(player.getSimulatedVelocity().y - 0.09f) > 0.000002f,
                 "AuthInput StartFlying was not applied after the input that carries it");
         player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
@@ -899,8 +899,8 @@ namespace {
         packet.mInputData = {(int32_t) PlayerAuthInputData::StopFlying};
         player.getMovementInputs().enqueue(packet);
         MovementInputProbe::step(owner, player, 4);
-        // The StopFlying input still travels as flying, idle, with the rules of checkCreativeFlightTrajectory: the
-        // previous input left (0.09 + 0.15 WantUp) * 0.6 drag, then idle mouse damping 0.375 and drag 0.6 again.
+        // the StopFlying input still travels as flying, idle, per checkCreativeFlightTrajectory: previous input left
+        // (0.09 + 0.15 WantUp) * 0.6 drag, then idle mouse damping 0.375 and drag 0.6 again
         const float idleFlyingVelocity = (0.09f + 0.15f) * 0.6f * 0.375f * 0.6f;
         require(!player.isFlying() && std::fabs(player.getSimulatedVelocity().y - idleFlyingVelocity) < 0.000002f,
                 "AuthInput StopFlying did not keep flying travel on its own tick");
@@ -955,7 +955,7 @@ namespace {
                     "Liquid exit boost ignored clearance or did not run after drag");
             if (ceiling)
                 continue;
-            // After the boost, the contracted sensing box is dry and air gravity resumes.
+            // after the boost the contracted sensing box is dry: air gravity resumes
             Vector3f expected = feet;
             Vector3f velocity = player.getSimulatedVelocity();
             for (int tick = 2; tick <= 5; ++tick) {
@@ -1055,7 +1055,7 @@ namespace {
             ServerPlayer delayed(id, 4002 + scenario * 2);
             for (ServerPlayer *player: {&immediate, &delayed}) {
                 player->setLoginState(ServerPlayer::LoginState::Spawned);
-                // Like a fresh login, keep lava damage out of the movement replay comparison.
+                // like a fresh login: keep lava damage out of the replay comparison
                 player->grantSpawnInvulnerability();
                 player->getAttributes() = ActorAttributes::createPlayerDefaults();
                 player->setPosition(Vector3f(70.5f, 250.0f, 2.5f));
@@ -1241,8 +1241,8 @@ namespace {
         }
     }
 
-    // BDS 1.26.10: ground 0x140E104A0, water 0x140F1E690/0x14103D110,
-    // levitation 0x14104F680, flight 0x14104F280/0x140F1D980, glide 0x140C66F70.
+    // 1.26.10: ground 0x140E104A0, water 0x140F1E690/0x14103D110,
+    // levitation 0x14104F680, flight 0x14104F280/0x140F1D980, glide 0x140C66F70
     void checkTravelPhysics() {
         ServerNetworkHandler owner("Travel regression", "", 1);
         const auto path = ServerPaths::getRoot() / "travel.properties";
@@ -1361,7 +1361,7 @@ namespace {
         }
 
         terrain(stone, WaterBlock::source());
-        // BDS LiquidPhysicsSystem 0x140FC98E0 contracts the sensing volume, independently of eye water.
+        // LiquidPhysicsSystem 0x140FC98E0 contracts the sensing volume, independent of eye water
         const Vector3f shallowFeet(50.5f, 250.75f, 2.5f);
         for (int x = 49; x <= 52; ++x)
             for (int z = 1; z <= 4; ++z)
@@ -1405,7 +1405,7 @@ namespace {
         close(swimming->getSimulatedVelocity().y, 0.0f, "Persistent swimming state was lost");
         step(*swimming, {(int32_t) PlayerAuthInputData::StopSwimming});
         close(swimming->getSimulatedVelocity().y, -0.005f, "StopSwimming failed to restore sinking gravity");
-        // BDS SwimControlSystem 0x140F4FB60 and MobJumpSystem 0x140EB1110.
+        // SwimControlSystem 0x140F4FB60 and MobJumpSystem 0x140EB1110
         terrain(air, WaterBlock::source());
         const std::vector<int32_t> swimFlags{(int32_t) PlayerAuthInputData::StartSwimming};
         for (bool sprinting: {false, true}) {
@@ -1427,7 +1427,7 @@ namespace {
                              (int32_t) PlayerAuthInputData::Jumping}, false, 0.0f, 90.0f);
         close(swimmingJump->getSimulatedVelocity().y, 0.032f,
               "Swim steering ran while MobIsJumping should exclude it");
-        // Recorded ticks 560..563 hold Y still until the ten-tick pose transition completes.
+        // recorded ticks 560..563 hold Y still until the ten-tick pose transition ends
         auto transition = makePlayer(false);
         step(*transition, {(int32_t) PlayerAuthInputData::StartSwimming}, false, 0.0f);
         transition->getFlags().set(ActorFlag::Swimming, true);
@@ -1498,7 +1498,7 @@ namespace {
         step(*surfaceJump, {(int32_t) PlayerAuthInputData::StartSwimming,
                            (int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
         close(surfaceJump->getSimulatedVelocity().y, 0.0f, "Swimming jump escaped the head-out-water clamp");
-        // A low tunnel must not collide with the standing head while swimming.
+        // a low tunnel must not hit the standing head while swimming
         terrain(stone, WaterBlock::source());
         level.setBlockState(50, 251, 2, stone);
         auto tunnel = makePlayer(false);

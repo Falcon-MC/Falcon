@@ -75,7 +75,7 @@ namespace {
         player.setPosition(Vector3f(std::numeric_limits<float>::quiet_NaN(), 250, 0.5f));
         require(!BlockActionHandler::canBreakBlock(owner, player, block), "Nonfinite position passed reach validation");
         player.setPosition(Vector3f(0.5f, 250.0f, 0.5f));
-        // setProperties reloads worlds, so no Level reference may survive a settings change.
+        // setProperties reloads worlds: no Level reference survives a settings change
         const auto level = [&]() -> Level & {
             return owner.getLevelFor(player);
         };

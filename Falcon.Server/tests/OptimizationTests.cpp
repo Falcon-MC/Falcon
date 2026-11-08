@@ -122,7 +122,7 @@ namespace {
             throw std::runtime_error(message);
     }
 
-    // Fails its first chunk, the way a generator bug would surface on a worker.
+    // fails its first chunk, like a generator bug surfacing on a worker
     class ThrowOnceGenerator : public ChunkGenerator {
     public:
         DimensionType getDimensionType() const override {
@@ -187,7 +187,7 @@ namespace {
             return false;
         }
 
-        // Queues one game packet the way a client batches it, behind the compression header once it is on.
+        // batched like a client does, behind the compression header once it is on
         void deliver(const std::string &packet, bool compressed = false) {
             std::string batch;
             if (compressed)
@@ -205,7 +205,7 @@ namespace {
         std::deque<std::string> mIncoming;
     };
 
-    // Answers the first packet put on its wire at once, as a client on a fast link does.
+    // answers the first packet at once, like a client on a fast link
     class AnsweringPeer : public FakePeer {
     public:
         explicit AnsweringPeer(std::string reply) : mReply(std::move(reply)) {
@@ -596,7 +596,7 @@ int main() {
             Level parked("ParkedClose", 4, 1);
             require(parked.openStorage(WorldManager::getWorldsDirectory()), "Could not open parked close fixture");
             parked.startWorkers(1);
-            // Fresh terrain keeps the only worker busy, so the last load is still queued when close discards it.
+            // fresh terrain keeps the only worker busy: the last load is still queued when close discards it
             for (int x = 90; x < 94; ++x)
                 parked.requestChunkAsync(x, 90);
             LevelPersistenceProbe::stagePending(parked, 95, 90, 256, "minecraft:gold_block");
@@ -645,7 +645,7 @@ int main() {
                 thrown = true;
             }
             require(thrown, "Generation failure was swallowed");
-            // A claim left behind would make this wait forever.
+            // a leftover claim would make this wait forever
             cache.terrain(5, 5);
         });
         check("generation backlog survives close", [&]() {
@@ -827,7 +827,7 @@ int main() {
             pumpUntil(network, [&]() { return !listener.mEvents.empty(); }, "Connection never opened");
             network.enableCompression(client, CompressedNetworkPeer::CompressionAlgorithm::ZLib, 0);
 
-            // Random bytes keep deflate slow, so the backlog takes far longer than one read pass.
+            // random bytes keep deflate slow: the backlog outlasts one read pass
             std::mt19937 random(7);
             std::string payload(64 * 1024, '\0');
             for (char &byte: payload)
@@ -856,8 +856,8 @@ int main() {
             connector->join(client, peer);
             pumpUntil(network, [&]() { return !listener.mEvents.empty(); }, "Connection never opened");
 
-            // A packet filling the whole per-pass budget, queued before the shard threads start so one pass
-            // drains it together with the flush and the compression switch that follow it.
+            // fills the whole per-pass budget, queued before the shard threads start: one pass drains it
+            // with the flush and compression switch after it
             network.send(client, std::string(256 * 1024, 'x'));
             network.flush(client);
             network.enableCompression(client, CompressedNetworkPeer::CompressionAlgorithm::ZLib, 0);
