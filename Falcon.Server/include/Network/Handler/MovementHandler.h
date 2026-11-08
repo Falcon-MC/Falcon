@@ -21,6 +21,8 @@ public:
 
     static bool checkGroundState(Level &level, const Vector3f &feetPosition);
 
+    static bool checkGroundState(Level &level, const Vector3f &previousFeet, const Vector3f &feetPosition);
+
     static void tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer &player);
 
     // one air per tick with eyes in water, a drowning hit every 20 ticks once empty; turtle helmet: 200 ticks

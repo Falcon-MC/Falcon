@@ -68,11 +68,13 @@ void ServerNetworkHandler::_applyPendingPlayerMove(ServerPlayer &player) {
             MovementHandler::handleMovement(*this, player, player.getPendingMovePosition(),
                                             player.getPendingMoveRotation());
         } else {
+            const Vector3f previous = player.getPosition();
             player.setPosition(player.getPendingMovePosition());
             player.setRotation(player.getPendingMoveRotation());
             player.setOnGround(player.hasSimulatedGround()
                                ? player.isSimulatedOnGround()
-                               : MovementHandler::checkGroundState(getLevelFor(player), player.getPosition()));
+                               : MovementHandler::checkGroundState(getLevelFor(player), previous,
+                                                                   player.getPosition()));
         }
         player.clearPendingMove();
     }

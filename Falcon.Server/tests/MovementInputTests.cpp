@@ -492,6 +492,85 @@ namespace {
         }
     }
 
+    // a block update arms a movement change on the tick the sprint leaves the edge; the client kept its ground
+    // from the Y-first collision and jumps on the next input
+    void checkEdgeJumpAfterMovementChange() {
+        ServerNetworkHandler owner("Edge jump regression", "", 1);
+        enableMovementSimulation(owner);
+        NetworkIdentifier id;
+        ServerPlayer player(id, 5001);
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.getAttributes() = ActorAttributes::createPlayerDefaults();
+        Level &level = owner.getLevelFor(player);
+        for (int chunkZ = 0; chunkZ < 4; ++chunkZ) {
+            level.getChunk(4, chunkZ);
+            level.getBlockActors().loadChunk(4, chunkZ, {}, owner.getCodecContext());
+        }
+        const float edgeZ = 10.0f;
+        for (int x = 69; x <= 72; ++x)
+            for (int z = 0; z < 64; ++z)
+                for (int y = 240; y <= 254; ++y)
+                    level.setBlockState(x, y, z, BlockState(y == 249 && (float) z < edgeZ ? "minecraft:stone"
+                                                                                        : "minecraft:air"));
+        Vector3f expected(70.5f, 250.0f, 2.5f);
+        Vector3f velocity;
+        bool grounded = true;
+        int64_t edgeTick = -1;
+        player.setPosition(expected);
+        player.setOnGround(true);
+        player.getFlags().set(ActorFlag::Sprinting, true);
+        for (int tick = 1; tick <= 40 && (edgeTick < 0 || tick <= edgeTick + 3); ++tick) {
+            const bool wasGrounded = grounded;
+            const bool jump = edgeTick >= 0 && tick == edgeTick + 1;
+            if (jump) {
+                require(grounded, "Edge fixture lost the Y-first ground before the jump");
+                velocity.y = 0.42f;
+                velocity.z += 0.2f;
+            }
+            velocity.z += (grounded ? 0.13f : 0.026f) * 0.98f;
+            // Y first: the floor under the box before its horizontal move stops the fall
+            const bool supported = expected.z - 0.3f < edgeZ;
+            const float requestedY = expected.y + velocity.y;
+            const bool collidedY = supported && requestedY < 250.0f;
+            grounded = collidedY || (grounded && velocity.y == 0.0f);
+            expected.y = collidedY ? 250.0f : requestedY;
+            expected.z += velocity.z;
+            if (collidedY)
+                velocity.y = 0.0f;
+            velocity.y = (velocity.y - 0.08f) * 0.98f;
+            velocity.z *= wasGrounded ? 0.54600006f : 0.91f;
+            const bool leavesEdge = edgeTick < 0 && supported && expected.z - 0.3f >= edgeZ;
+
+            PlayerAuthInputPacket packet;
+            packet.mTick = 100 + tick;
+            packet.mPosition = Vector3f(expected.x, expected.y + 1.62f, expected.z);
+            packet.mDelta = velocity;
+            packet.mMotionY = 1.0f;
+            packet.mInputData = {(int32_t) PlayerAuthInputData::Sprinting};
+            if (jump)
+                packet.mInputData.insert(packet.mInputData.end(), {(int32_t) PlayerAuthInputData::Jumping,
+                                                                   (int32_t) PlayerAuthInputData::StartJumping});
+            if (leavesEdge) {
+                edgeTick = tick;
+                player.awaitMovementChange();
+            }
+            player.getMovementInputs().enqueue(packet);
+            MovementInputProbe::step(owner, player, tick);
+            if (leavesEdge) {
+                require(!player.hasSimulatedPosition(), "Pending movement change did not pause the simulation");
+                player.getAcknowledgements().flush(owner, id);
+                for (uint64_t timestamp = 1; timestamp < 64 && player.hasPendingMovementChange(); ++timestamp)
+                    player.getAcknowledgements().acknowledge(timestamp);
+                require(!player.hasPendingMovementChange(), "Edge fixture could not acknowledge the movement change");
+                require(player.isOnGround(), "Skipped input dropped the ground kept by the Y-first collision");
+            }
+            require(std::fabs(player.getPosition().y - expected.y) < 0.00005f
+                    && std::fabs(player.getPosition().z - expected.z) < 0.00005f,
+                    "Sprint jump past an edge after a movement change diverged from the client");
+        }
+        require(edgeTick > 0, "Edge fixture never left the floor");
+    }
+
     void checkCreativeFlightTrajectory() {
         ServerNetworkHandler owner("Creative flight regression", "", 1);
         const auto path = ServerPaths::getRoot() / "flight.properties";
@@ -1617,6 +1696,7 @@ int main() {
         checkTravelPhysics();
         checkTravelReplay();
         checkGroundJumpTrajectory();
+        checkEdgeJumpAfterMovementChange();
         checkShallowWaterWalking();
         checkCreativeFlightTrajectory();
         checkAnalogInputSlowdown();
