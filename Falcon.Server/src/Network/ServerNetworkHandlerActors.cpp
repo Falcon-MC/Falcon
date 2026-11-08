@@ -32,6 +32,7 @@
 #include "Protocol/Packets/RemoveObjectivePacket.h"
 #include "Protocol/Packets/SetDisplayObjectivePacket.h"
 #include "Protocol/Packets/SetPlayerGameTypePacket.h"
+#include "Protocol/Packets/TakeItemActorPacket.h"
 #include "Protocol/Packets/SetScorePacket.h"
 #include "Protocol/Packets/SetTitlePacket.h"
 #include "Protocol/Packets/TextPacket.h"
@@ -124,6 +125,13 @@ namespace {
     const float FIREWORK_VERTICAL_ACCELERATION = 0.04f;
     const int32_t FIREWORK_ITEM_DATA_ID = 16;
     const int32_t PROJECTILE_MAX_LIFETIME = 1200;
+    const int32_t STUCK_ARROW_LIFETIME = 1200;
+    // the player box grown by (1, 0.5, 1) picks up a planted arrow
+    const float ARROW_PICKUP_REACH_XZ = 1.0f;
+    const float ARROW_PICKUP_REACH_Y = 0.5f;
+    // ActorEvent shake, with 7 as its data: the arrow quivers where it lands
+    const uint8_t ACTOR_EVENT_SHAKE = 39;
+    const int32_t ARROW_SHAKE_TIME = 7;
     const float ACTOR_SUFFOCATION_DAMAGE = 1.0f;
     const int32_t LINGERING_CLOUD_WAIT_TIME = 10;
     const int32_t LINGERING_CLOUD_DURATION = 600;
@@ -406,6 +414,19 @@ void ServerNetworkHandler::_resolvePendingRides() {
         mVehiclesWithPendingPassengers.erase(vehicleId);
 }
 
+namespace {
+    // the client draws a projectile along its rotation, the reverse of the shooter's (yaw = -yaw, pitch = -pitch);
+    // head yaw follows yaw, or the arrow keeps pointing its spawn way
+    void faceMotion(ServerActor &actor, const Vector3f &motion) {
+        const float horizontal = std::sqrt(motion.x * motion.x + motion.z * motion.z);
+        if (horizontal < 1.0e-6f && std::fabs(motion.y) < 1.0e-6f)
+            return;
+        const float yaw = std::atan2(motion.x, motion.z) / MathConstants::DEGREES_TO_RADIANS_F;
+        const float pitch = std::atan2(motion.y, horizontal) / MathConstants::DEGREES_TO_RADIANS_F;
+        actor.setRotation(Vector3f(pitch, yaw, yaw));
+    }
+}
+
 ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
                                                    float verticalOffset) {
     const Vector3f &rotation = player.getRotation();
@@ -426,6 +447,9 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     projectile->getProjectileData().mLootingLevel =
             ItemEnchantments::getLevel(player.getInventory().getItemInHand(), EnchantmentIds::LOOTING);
     projectile->setMotion(Vector3f(direction.x * speed, direction.y * speed, direction.z * speed));
+    faceMotion(*projectile, projectile->getMotion());
+    // the spawn packet went out before the motion was known
+    broadcastActorMove(*projectile);
     return allowProjectileLaunch(*projectile, &player) ? projectile : nullptr;
 }
 
@@ -466,7 +490,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
             return false;
         }
 
-        dropProjectileItem(projectile, hitPosition);
+        data.mStuck = true;
         return true;
     }
 
@@ -569,6 +593,87 @@ void ServerNetworkHandler::dropProjectileItem(ServerActor &projectile, const Vec
 
     ItemActorHandler::dropItem(*this, getLevelFor(projectile), position, data.mPickupItem,
                                ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
+}
+
+// stops at the last free point of this tick's path, so the arrow shows half sunk in the face it hit
+void ServerNetworkHandler::plantProjectile(ServerActor &projectile, Level &level, const Vector3f &from,
+                                           const Vector3i &block) {
+    ProjectileData &data = projectile.getProjectileData();
+    const Vector3f to = projectile.getPosition();
+    Vector3f resting = from;
+    const int32_t steps = 16;
+    for (int32_t step = 1; step <= steps; ++step) {
+        const float progress = (float) step / (float) steps;
+        const Vector3f sample(from.x + (to.x - from.x) * progress, from.y + (to.y - from.y) * progress,
+                              from.z + (to.z - from.z) * progress);
+        if (blocksProjectile(level, projectile, sample, (int32_t) std::floor(sample.x),
+                             (int32_t) std::floor(sample.y), (int32_t) std::floor(sample.z)))
+            break;
+        resting = sample;
+    }
+
+    data.mStuckBlock = block;
+    data.mStuckTicks = 0;
+    data.mCritical = false;
+    projectile.setMotion(Vector3f());
+    projectile.setPosition(resting);
+    broadcastActorMove(projectile);
+
+    ActorEventPacket shake;
+    shake.mRuntimeActorId = projectile.getRuntimeId();
+    shake.mEventId = ACTOR_EVENT_SHAKE;
+    shake.mEventData = ARROW_SHAKE_TIME;
+    shake.mHasFirePosition = false;
+    _sendToViewers(projectile, shake);
+}
+
+// true once the planted projectile is gone: picked up or expired
+bool ServerNetworkHandler::tickPlantedProjectile(ServerActor &projectile, Level &level) {
+    ProjectileData &data = projectile.getProjectileData();
+    if (++data.mStuckTicks >= STUCK_ARROW_LIFETIME)
+        return true;
+
+    const Vector3i &block = data.mStuckBlock;
+    if (!level.isSolidAt(block.x, block.y, block.z)) {
+        // the block went: the arrow falls again
+        data.mStuck = false;
+        return false;
+    }
+
+    const Vector3f &position = projectile.getPosition();
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(projectile)
+            || player.getGameType() == (int32_t) GameType::Spectator)
+            continue;
+
+        const Vector3f &feet = player.getPosition();
+        const float halfWidth = PLAYER_WIDTH * 0.5f + ARROW_PICKUP_REACH_XZ;
+        if (std::fabs(position.x - feet.x) > halfWidth || std::fabs(position.z - feet.z) > halfWidth
+            || position.y < feet.y - ARROW_PICKUP_REACH_Y || position.y > feet.y + PLAYER_HEIGHT + ARROW_PICKUP_REACH_Y)
+            continue;
+
+        const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+        if (data.mPickupCreativeOnly && !creative)
+            continue;
+
+        if (!creative && !data.mPickupCreativeOnly && !data.mPickupItem.isAir()) {
+            std::vector<int> touched;
+            if (!player.getInventory().addItem(data.mPickupItem, touched))
+                continue;
+            for (int touchedSlot: touched)
+                player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, touchedSlot);
+        }
+
+        TakeItemActorPacket take;
+        take.mItemRuntimeActorId = projectile.getRuntimeId();
+        take.mRuntimeActorId = player.getRuntimeId();
+        _sendToViewers(projectile, take);
+        mNetworkHandler->send(player.getNetworkIdentifier(), take, mCodecContext);
+        return true;
+    }
+
+    return false;
 }
 
 void ServerNetworkHandler::returnProjectileToOwner(ServerPlayer &player, ServerActor &projectile) {
@@ -1554,6 +1659,12 @@ void ServerNetworkHandler::tickActors() {
             continue;
         }
 
+        if (actor.isProjectile() && actor.getProjectileData().mStuck) {
+            if (tickPlantedProjectile(actor, level))
+                expired.push_back(actorId);
+            continue;
+        }
+
         if (actor.isProjectile()) {
             Vector3f motion = actor.getMotion();
             const ProjectileActor *projectile = dynamic_cast<const ProjectileActor *>(&actor);
@@ -1608,6 +1719,7 @@ void ServerNetworkHandler::tickActors() {
 
             actor.setMotion(motion);
             actor.setPosition(position);
+            faceMotion(actor, motion);
 
             const int32_t blockX = (int32_t) std::floor(position.x);
             const int32_t blockY = (int32_t) std::floor(position.y);
@@ -1636,6 +1748,11 @@ void ServerNetworkHandler::tickActors() {
 
                 if (!onThrownProjectileHit(actor, hitPosition, nullptr))
                     mScriptEngine.onProjectileHitBlock(actor, blockX, blockY, blockZ);
+
+                if (actor.getProjectileData().mStuck) {
+                    plantProjectile(actor, level, previousPosition, Vector3i(blockX, blockY, blockZ));
+                    continue;
+                }
 
                 if (!actor.getProjectileData().mReturning) {
                     expired.push_back(actorId);

@@ -38,6 +38,10 @@ struct ProjectileData {
     bool mChanneling = false;
     bool mReturning = false;
     bool mHadCollision = false;
+    // arrows and tridents planted in a block: they stay until picked up, the block goes, or 1200 ticks pass
+    bool mStuck = false;
+    int32_t mStuckTicks = 0;
+    Vector3i mStuckBlock;
     bool mPickupCreativeOnly = false;
     ItemStack mPickupItem;
     int32_t mFavoredSlot = -1;
