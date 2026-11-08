@@ -1256,8 +1256,10 @@ void Level::setActiveColumns(std::vector<int64_t> columns) {
 
     // updates due while inactive were parked: resume them
     for (int64_t column: columns) {
-        if (mActiveColumns.find(column) == mActiveColumns.end())
-            mBlockUpdateScheduler.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
+        if (mActiveColumns.find(column) != mActiveColumns.end())
+            continue;
+        mBlockUpdateScheduler.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
+        mBlockUpdates.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
     }
 
     mActiveColumns.swap(next);
@@ -1537,7 +1539,7 @@ void Level::tick() {
 }
 
 void Level::scheduleBlockUpdate(const Vector3i &position, int64_t delay) {
-    mBlockUpdateScheduler.schedule(position, delay);
+    scheduleUpdate(position, delay);
 }
 
 bool Level::canRainAt(int32_t x, int32_t z) {
