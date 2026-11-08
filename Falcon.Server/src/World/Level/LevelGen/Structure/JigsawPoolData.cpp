@@ -686,7 +686,7 @@ namespace JigsawPoolData {
             {"minecraft:village/plains/decor", "empty", {{"minecraft:plains_lamp", 2}, {"minecraft:oak_tree", 1}, {"minecraft:hay_pile", 1}, {"empty", 3}}},
             {"minecraft:village/savanna/decor", "empty", {{"minecraft:savanna_lamp", 4}, {"minecraft:savanna_tree", 4}, {"minecraft:hay_pile", 4}, {"minecraft:melon_pile", 1}, {"empty", 4}}},
             {"minecraft:village/snowy/decor", "empty", {{"minecraft:snowy_lamp_1", 4}, {"minecraft:snowy_lamp_2", 4}, {"minecraft:snowy_lamp_3", 1}, {"minecraft:spruce_tree", 4}, {"minecraft:snow_pile", 4}, {"minecraft:ice_pile", 1}, {"empty", 9}}},
-            {"minecraft:village/taiga/decor", "empty", {{"minecraft:taiga_lamp", 10}, {"minecraft:taiga_decoration_1", 4}, {"minecraft:taiga_decoration_2", 1}, {"minecraft:taiga_decoration_3", 1}, {"minecraft:taiga_decoration_4", 1}, {"minecraft:taiga_decoration_5", 2}, {"minecraft:pine_tree", 4}, {"minecraft:pumpkin_pile", 2}, {"minecraft:fern", 2}, {"minecraft:sweet_berry_bush", 1}, {"empty", 4}}},
+            {"minecraft:village/taiga/decor", "empty", {{"minecraft:taiga_lamp", 10}, {"minecraft:taiga_decoration_1", 4}, {"minecraft:taiga_decoration_2", 1}, {"minecraft:taiga_decoration_3", 1}, {"minecraft:taiga_decoration_4", 1}, {"minecraft:taiga_decoration_5", 2}, {"minecraft:pine_tree", 4}, {"minecraft:pumpkin_pile", 2}, {"minecraft:fern", 4}, {"minecraft:sweet_berry_bush", 1}, {"empty", 4}}},
             {"minecraft:village/desert/decor", "empty", {{"minecraft:desert_lamp", 10}, {"minecraft:cactus", 4}, {"minecraft:hay_pile", 4}, {"empty", 10}}},
             {"minecraft:village/common/well_bottom", "empty", {{"minecraft:well", 1}}},
             {"minecraft:village/common/animals", "empty", {{"minecraft:animals_cow", 7}, {"minecraft:animals_pig", 7}, {"minecraft:animals_horses_1", 3}, {"minecraft:animals_horses_2", 2}, {"minecraft:animals_sheep_1", 2}}},
@@ -711,7 +711,7 @@ namespace JigsawPoolData {
             {"minecraft:village/abandoned/plains/decor", "empty", {{"minecraft:abandoned_plains_lamp", 1}, {"minecraft:oak_tree", 1}, {"minecraft:hay_pile", 1}, {"empty", 3}}},
             {"minecraft:village/abandoned/savanna/decor", "empty", {{"minecraft:abandoned_savanna_lamp", 4}, {"minecraft:savanna_tree", 4}, {"minecraft:hay_pile", 4}, {"minecraft:melon_pile", 1}, {"empty", 4}}},
             {"minecraft:village/abandoned/snowy/decor", "empty", {{"minecraft:abandoned_snowy_lamp_1", 1}, {"minecraft:abandoned_snowy_lamp_2", 1}, {"minecraft:abandoned_snowy_lamp_3", 1}, {"minecraft:spruce_tree", 4}, {"minecraft:snow_pile", 4}, {"minecraft:ice_pile", 4}, {"empty", 7}}},
-            {"minecraft:village/abandoned/taiga/decor", "empty", {{"minecraft:taiga_decoration_1", 4}, {"minecraft:taiga_decoration_2", 1}, {"minecraft:taiga_decoration_3", 1}, {"minecraft:taiga_decoration_4", 1}, {"minecraft:pine_tree", 4}, {"minecraft:pumpkin_pile", 2}, {"minecraft:fern", 2}, {"minecraft:sweet_berry_bush", 1}, {"empty", 4}}},
+            {"minecraft:village/abandoned/taiga/decor", "empty", {{"minecraft:taiga_decoration_1", 4}, {"minecraft:taiga_decoration_2", 1}, {"minecraft:taiga_decoration_3", 1}, {"minecraft:taiga_decoration_4", 1}, {"minecraft:pine_tree", 4}, {"minecraft:pumpkin_pile", 2}, {"minecraft:fern", 4}, {"minecraft:sweet_berry_bush", 1}, {"empty", 4}}},
             {"minecraft:village/abandoned/desert/decor", "empty", {{"minecraft:abandoned_desert_lamp", 10}, {"minecraft:cactus", 4}, {"minecraft:hay_pile", 4}, {"empty", 10}}},
     };
 }
