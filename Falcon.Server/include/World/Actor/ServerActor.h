@@ -186,6 +186,10 @@ public:
         return true;
     }
 
+    bool collidesAtSnowLayerLook() const override {
+        return isProjectile();
+    }
+
     // an arrow hitting this actor is used up, whatever its piercing level
     virtual bool stopsProjectiles() const {
         return false;

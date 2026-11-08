@@ -133,11 +133,11 @@ void MoveControl::_tryJump(ServerNetworkHandler &owner, MobActor &mob, JumpContr
         for (int32_t z = minZ; z <= maxZ; ++z) {
             for (int32_t y = minY; y <= maxY; ++y) {
                 const BlockState *state = level.peekBlockPtr(x, y, z);
-                if (state == nullptr || !BlockShape::hasCollision(*state))
+                if (state == nullptr)
                     continue;
 
-                const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z);
-                if (!shape.intersectsWith(box))
+                const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z, &mob);
+                if (shape.mMaxY <= shape.mMinY || !shape.intersectsWith(box))
                     continue;
 
                 blocked = true;

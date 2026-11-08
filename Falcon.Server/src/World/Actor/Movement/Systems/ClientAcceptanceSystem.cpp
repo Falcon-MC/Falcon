@@ -50,7 +50,8 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
     const float spent = std::fabs(accepted.x) + std::fabs(accepted.y) + std::fabs(accepted.z);
     if (spent > minimum) {
         // 0x141038C40 collision-tests acceptance separately; physical velocity untouched
-        const auto moved = ActorCollisionSystem::move(context.level, travel.box, accepted, 0.0f, state.onGround);
+        const auto moved = ActorCollisionSystem::move(context.level, travel.box, accepted, 0.0f, state.onGround,
+                                                      &context.player);
         travel.accepted = moved.mMoved;
         travel.moved.mMoved.x += moved.mMoved.x;
         travel.moved.mMoved.y += moved.mMoved.y;

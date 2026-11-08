@@ -56,7 +56,7 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
     AxisAlignedBB box = ActorPushSystem::boundingBoxOf(actor);
     ActorMoveResult result;
     if (physics.mHasCollision) {
-        result = ActorCollisionSystem::move(level, box, motion, physics.mStepHeight, actor.isOnGround());
+        result = ActorCollisionSystem::move(level, box, motion, physics.mStepHeight, actor.isOnGround(), &actor);
     } else {
         box = box.offset(motion.x, motion.y, motion.z);
         result.mRequested = motion;

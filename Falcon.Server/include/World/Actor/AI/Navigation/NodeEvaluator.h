@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 
+class Actor;
 class Level;
 
 // ground modes (walk, climb) need a block to stand on; swim and fly accept any open position in their medium;
@@ -18,7 +19,7 @@ public:
     static constexpr int32_t LIQUID_EXTRA_COST = 20;
     static constexpr int32_t HAZARD_EXTRA_COST = 80;
 
-    void prepare(Level &level, float width, float height, const Vector3f &start, bool inWater,
+    void prepare(Level &level, const Actor &actor, float width, float height, const Vector3f &start, bool inWater,
                  const PathOptions &options);
 
     const PathOptions &getOptions() const {
@@ -78,6 +79,7 @@ private:
     bool _isSampleOpen(const Vector3f &position);
 
     Level *mLevel = nullptr;
+    const Actor *mActor = nullptr;
     const PathOptions *mOptions = nullptr;
     float mRadius = 0.3f;
     float mHeight = 1.8f;

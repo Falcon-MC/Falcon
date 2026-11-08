@@ -7,6 +7,7 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
 #include "Server/Commands/ServerCommandOrigin.h"
@@ -62,6 +63,20 @@
 
 namespace {
     const char *const UNDEAD_FAMILY = "undead";
+
+    // a snow layer stops it inside its shape only; other blocks across the whole cell
+    bool blocksProjectile(Level &level, const ServerActor &projectile, const Vector3f &position, int32_t x,
+                          int32_t y, int32_t z) {
+        if (!level.isSolidAt(x, y, z))
+            return false;
+
+        const BlockState *state = level.peekBlockPtr(x, y, z);
+        const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+        if (block == nullptr || !block->shapesCollisionPerActor())
+            return true;
+
+        return BlockShape::isPositionInside(*state, x, y, z, position.x, position.y, position.z, &projectile);
+    }
 
     MobEffectInstance potionEffectInstance(const PotionEffect &effect, float durationScale) {
         MobEffectInstance instance;
@@ -1604,7 +1619,7 @@ void ServerNetworkHandler::tickActors() {
                 continue;
             }
 
-            if (actor.getLifetimeTicks() > 1 && level.isSolidAt(blockX, blockY, blockZ)) {
+            if (actor.getLifetimeTicks() > 1 && blocksProjectile(level, actor, position, blockX, blockY, blockZ)) {
                 const Vector3f hitPosition((float) blockX + 0.5f, (float) blockY + 0.5f, (float) blockZ + 0.5f);
                 const Vector3i hitBlock(blockX, blockY, blockZ);
                 if (!allowProjectileHit(*this, actor, level, hitPosition, nullptr, &hitBlock)) {

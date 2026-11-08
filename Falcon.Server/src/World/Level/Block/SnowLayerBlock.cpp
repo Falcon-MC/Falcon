@@ -1,15 +1,15 @@
 #include "World/Level/Block/SnowLayerBlock.h"
 
+#include "World/Actor/Actor.h"
 #include "World/Level/Block/BlockClassRegistry.h"
-
-FALCON_REGISTER_BLOCK(SnowLayerBlock, 340);
-
 #include "World/Level/Block/PlacementHelpers.h"
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/Level.h"
 
 #include <algorithm>
+
+FALCON_REGISTER_BLOCK(SnowLayerBlock, 340);
 
 using namespace PlacementHelpers;
 
@@ -28,10 +28,12 @@ bool SnowLayerBlock::canBeReplaced(const BlockState &state) const {
 }
 
 // sub_14B27C5D0: one layer below its look, a single layer is walked through
-bool SnowLayerBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
-    const int height = std::min(SNOW_LAYER_MAX_HEIGHT, std::max(0, state.mStates.getInt(SNOW_LAYER_HEIGHT, 0)));
+bool SnowLayerBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
+    int eighths = std::min(SNOW_LAYER_MAX_HEIGHT, std::max(0, state.mStates.getInt(SNOW_LAYER_HEIGHT, 0)));
+    if (actor != nullptr && actor->collidesAtSnowLayerLook())
+        eighths++;
 
-    shape = AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, (float) (height * 2) / 16.0f, 1.0f);
+    shape = AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, (float) eighths / 8.0f, 1.0f);
     return true;
 }
 

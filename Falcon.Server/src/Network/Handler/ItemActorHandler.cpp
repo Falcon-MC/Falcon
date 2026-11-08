@@ -3,6 +3,7 @@
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/ContainerBlock.h"
 #include "World/Level/Block/FireBlock.h"
 #include "World/Level/Block/LavaBlock.h"
@@ -177,10 +178,47 @@ namespace {
                                           (int32_t) std::floor(position.z));
     }
 
+    // top an item rests on in a solid cell: a snow layer's look, the cell top for other blocks
+    float itemFloor(Level &level, const ItemActor &actor, int32_t x, int32_t y, int32_t z) {
+        const BlockState *state = level.peekBlockPtr(x, y, z);
+        const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+        if (block == nullptr || !block->shapesCollisionPerActor())
+            return (float) (y + 1);
+
+        return (float) y + BlockShape::getRelativeShape(*state, &actor).mMaxY;
+    }
+
+    bool blocksItem(Level &level, const ItemActor &actor, int32_t x, int32_t y, int32_t z, float feetY) {
+        return level.isSolidAt(x, y, z) && feetY < itemFloor(level, actor, x, y, z);
+    }
+
+    // a snow layer grown under a resting item lifts it to its new look
+    void liftOutOfLayer(ServerNetworkHandler &owner, ItemActor &actor) {
+        Level &level = owner.getLevelFor(actor);
+        Vector3f position = actor.getPosition();
+        const int32_t x = (int32_t) std::floor(position.x);
+        const int32_t y = (int32_t) std::floor(position.y);
+        const int32_t z = (int32_t) std::floor(position.z);
+        const BlockState *state = level.peekBlockPtr(x, y, z);
+        const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+        if (block == nullptr || !block->shapesCollisionPerActor())
+            return;
+
+        const float top = itemFloor(level, actor, x, y, z);
+        if (position.y >= top)
+            return;
+
+        position.y = top;
+        actor.setPosition(position);
+        broadcastItemActorMove(owner, actor);
+    }
+
     void moveItemActor(ServerNetworkHandler &owner, ItemActor &actor) {
         if (actor.isOnGround()) {
-            if (hasSupportBelow(owner, actor))
+            if (hasSupportBelow(owner, actor)) {
+                liftOutOfLayer(owner, actor);
                 return;
+            }
 
             actor.setOnGround(false);
         }
@@ -198,7 +236,7 @@ namespace {
 
         if (motion.x != 0.0f) {
             const float candidateX = position.x + motion.x;
-            if (level.isSolidAt((int32_t) std::floor(candidateX), currentY, currentZ))
+            if (blocksItem(level, actor, (int32_t) std::floor(candidateX), currentY, currentZ, position.y))
                 motion.x = 0.0f;
             else
                 next.x = candidateX;
@@ -206,7 +244,8 @@ namespace {
 
         if (motion.z != 0.0f) {
             const float candidateZ = position.z + motion.z;
-            if (level.isSolidAt((int32_t) std::floor(next.x), currentY, (int32_t) std::floor(candidateZ)))
+            if (blocksItem(level, actor, (int32_t) std::floor(next.x), currentY, (int32_t) std::floor(candidateZ),
+                           position.y))
                 motion.z = 0.0f;
             else
                 next.z = candidateZ;
@@ -218,11 +257,13 @@ namespace {
         const int32_t blockZ = (int32_t) std::floor(next.z);
         const int32_t blockY = (int32_t) std::floor(next.y);
 
-        if (motion.y < 0.0f && level.isSolidAt(blockX, blockY, blockZ)) {
-            next.y = (float) (blockY + 1);
+        const bool solid = level.isSolidAt(blockX, blockY, blockZ);
+        const float landing = solid ? itemFloor(level, actor, blockX, blockY, blockZ) : 0.0f;
+        if (motion.y < 0.0f && solid && next.y < landing) {
+            next.y = landing;
             motion = Vector3f(0.0f, 0.0f, 0.0f);
             actor.setOnGround(true);
-        } else if (motion.y > 0.0f && level.isSolidAt(blockX, blockY, blockZ)) {
+        } else if (motion.y > 0.0f && solid) {
             next.y = position.y;
             motion.y = 0.0f;
         } else {

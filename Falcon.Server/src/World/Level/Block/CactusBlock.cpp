@@ -32,8 +32,9 @@ bool CactusBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:cactus";
 }
 
-bool CactusBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+bool CactusBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
     (void) state;
+    (void) actor;
 
     shape = AxisAlignedBB(CACTUS_INSET, 0.0f, CACTUS_INSET, 1.0f - CACTUS_INSET, 1.0f, 1.0f - CACTUS_INSET);
     return true;

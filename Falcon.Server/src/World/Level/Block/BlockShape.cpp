@@ -33,11 +33,11 @@ namespace {
 
 }
 
-bool BlockShape::hasCollision(const BlockState &state) {
+bool BlockShape::hasCollision(const BlockState &state, const Actor *actor) {
     const Block *block = VanillaBlocks::fromIdentifier(state.mName);
     AxisAlignedBB shape = FULL_CUBE;
     // a class shape with no height lets actors through
-    if (block != nullptr && block->getCollisionShape(state, shape))
+    if (block != nullptr && block->getCollisionShape(state, actor, shape))
         return shape.mMaxY > shape.mMinY;
 
     const BlockData *data = BlockDataTable::find(state.mName.c_str());
@@ -55,16 +55,18 @@ bool BlockShape::isFullCube(const BlockState &state) {
 }
 
 // local 0..1 coordinates; fence-like shapes are 1.5 tall: not jumpable
-AxisAlignedBB BlockShape::getRelativeShape(const BlockState &state) {
-    if (!hasCollision(state))
-        return EMPTY_SHAPE;
-
+AxisAlignedBB BlockShape::getRelativeShape(const BlockState &state, const Actor *actor) {
     const std::string &name = state.mName;
 
+    // asked once: the class shape can depend on the actor
     const Block *block = VanillaBlocks::fromIdentifier(name);
     AxisAlignedBB shape = FULL_CUBE;
-    if (block != nullptr && block->getCollisionShape(state, shape))
-        return shape;
+    if (block != nullptr && block->getCollisionShape(state, actor, shape))
+        return shape.mMaxY > shape.mMinY ? shape : EMPTY_SHAPE;
+
+    const BlockData *data = BlockDataTable::find(name.c_str());
+    if (data == nullptr || !data->mSolid)
+        return EMPTY_SHAPE;
 
     // one box per block: a stair collides as its slab half only
     if (endsWith(name, "_stairs")) {
@@ -176,8 +178,8 @@ AxisAlignedBB BlockShape::getRelativeShape(const BlockState &state) {
     return FULL_CUBE;
 }
 
-AxisAlignedBB BlockShape::getShapeAt(const BlockState &state, int32_t x, int32_t y, int32_t z) {
-    const AxisAlignedBB shape = getRelativeShape(state);
+AxisAlignedBB BlockShape::getShapeAt(const BlockState &state, int32_t x, int32_t y, int32_t z, const Actor *actor) {
+    const AxisAlignedBB shape = getRelativeShape(state, actor);
     if (shape.isEmpty())
         return shape;
 
@@ -185,8 +187,8 @@ AxisAlignedBB BlockShape::getShapeAt(const BlockState &state, int32_t x, int32_t
 }
 
 bool BlockShape::isPositionInside(const BlockState &state, int32_t blockX, int32_t blockY, int32_t blockZ,
-                                  float x, float y, float z) {
-    const AxisAlignedBB shape = getShapeAt(state, blockX, blockY, blockZ);
+                                  float x, float y, float z, const Actor *actor) {
+    const AxisAlignedBB shape = getShapeAt(state, blockX, blockY, blockZ, actor);
     if (shape.isEmpty())
         return false;
 

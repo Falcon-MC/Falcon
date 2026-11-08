@@ -69,7 +69,7 @@ bool PathFinder::findPath(Level &level, const MobActor &mob, const Vector3f &tar
     const Vector3f position = mob.getPosition();
     const ActorSize size = mob.getSize();
     const bool inWater = LiquidBlocksFetch::at(level, position).water;
-    mEvaluator.prepare(level, size.mWidth, size.mHeight, position, inWater, options);
+    mEvaluator.prepare(level, mob, size.mWidth, size.mHeight, position, inWater, options);
 
     mTargetX = (int32_t) std::floor(target.x);
     mTargetY = (int32_t) std::floor(target.y);
@@ -127,8 +127,8 @@ bool PathFinder::findDirectPath(Level &level, const MobActor &mob, const Vector3
 
     const Vector3f position = mob.getPosition();
     const ActorSize size = mob.getSize();
-    mEvaluator.prepare(level, size.mWidth, size.mHeight, position, LiquidBlocksFetch::at(level, position).water,
-                       options);
+    mEvaluator.prepare(level, mob, size.mWidth, size.mHeight, position,
+                       LiquidBlocksFetch::at(level, position).water, options);
     if (mEvaluator.hasBarrier(position, target))
         return false;
 

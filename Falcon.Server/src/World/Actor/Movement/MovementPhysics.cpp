@@ -95,8 +95,8 @@ namespace MovementPhysics {
                                                     (int32_t) std::floor(position.z) >> 4);
     }
 
-    bool collides(Level &level, const AxisAlignedBB &box) {
-        for (const AxisAlignedBB &obstacle: level.getCollisionBoxes(box)) {
+    bool collides(Level &level, const AxisAlignedBB &box, const Actor *actor) {
+        for (const AxisAlignedBB &obstacle: level.getCollisionBoxes(box, actor)) {
             if (obstacle.intersectsWith(box))
                 return true;
         }

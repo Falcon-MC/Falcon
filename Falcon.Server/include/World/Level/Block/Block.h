@@ -306,8 +306,15 @@ public:
         (void) drop;
     }
 
-    virtual bool getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+    // item and projectile physics read the shape only of these; other blocks stop them at the cell
+    virtual bool shapesCollisionPerActor() const {
+        return false;
+    }
+
+    // actor null outside a move: placement, explosions, block rays
+    virtual bool getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
         (void) state;
+        (void) actor;
         (void) shape;
         return false;
     }
