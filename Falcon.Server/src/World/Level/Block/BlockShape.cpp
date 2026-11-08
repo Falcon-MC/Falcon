@@ -143,10 +143,13 @@ AxisAlignedBB BlockShape::getRelativeShape(const BlockState &state) {
         return AxisAlignedBB((1.0f + (float) bites * 2.0f) / 16.0f, 0.0f, 0.0625f, 0.9375f, 0.5f, 0.9375f);
     }
 
+    // collides one layer below its look: a single layer is walked through
     if (name == "minecraft:snow_layer") {
-        const int32_t height = state.mStates.getInt("height", 0);
-        return AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f,
-                             (float) (std::min(16, height + 1) * 2) / 16.0f, 1.0f);
+        const int32_t height = std::min(7, state.mStates.getInt("height", 0));
+        if (height <= 0)
+            return EMPTY_SHAPE;
+
+        return AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, (float) (height * 2) / 16.0f, 1.0f);
     }
 
     if (name == "minecraft:scaffolding")
