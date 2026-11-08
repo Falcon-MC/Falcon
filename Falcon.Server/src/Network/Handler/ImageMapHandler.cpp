@@ -141,6 +141,13 @@ bool ImageMapHandler::place(ServerNetworkHandler &owner, Level &level, const Vec
         return false;
     }
 
+    // made before the first frame: a failure here leaves the wall untouched
+    const ItemStack blankMap = owner.createItemStack(MapItem::IDENTIFIER, 1);
+    if (blankMap.isAir()) {
+        error = "filled maps are missing from the item registry";
+        return false;
+    }
+
     std::vector<Vector3i> positions;
     ImageMap::wallPositions(topLeft, facing, columns, rows, positions);
     BlockActorStore &blockActors = level.getBlockActors();
@@ -166,11 +173,7 @@ bool ImageMapHandler::place(ServerNetworkHandler &owner, Level &level, const Vec
             blockActors.insert(std::move(created));
         }
 
-        ItemStack map = owner.createItemStack(MapItem::IDENTIFIER, 1);
-        if (map.isAir()) {
-            error = "filled maps are missing from the item registry";
-            return false;
-        }
+        ItemStack map = blankMap;
         MapItem::setMapId(map, *findImage(world, mapIds[index]));
 
         const ItemStack previous = frame->getItem();
