@@ -221,6 +221,11 @@ void LevelStorage::preopen(const std::string &worldsDirectory, const std::string
     discardPreopened();
 
     const std::filesystem::path root = levelRoot(worldsDirectory, levelName);
+    // existing worlds only: create_if_missing would leave an empty world behind if startup stops before opening it
+    std::error_code missing;
+    if (!std::filesystem::exists(root / "db", missing))
+        return;
+
     std::lock_guard<std::mutex> lock(preopenedMutex);
     try {
         preopened = std::async(std::launch::async, openDatabase, root);
