@@ -238,3 +238,61 @@ bool ImageMapHandler::update(ServerNetworkHandler &owner, World &world, int64_t 
 bool ImageMapHandler::isImageMap(World &world, int64_t mapId) {
     return findImage(world, mapId) != nullptr;
 }
+
+bool ImageMapHandler::remove(ServerNetworkHandler &owner, World &world, int64_t mapId, std::string &error) {
+    if (findImage(world, mapId) == nullptr) {
+        error = "map " + std::to_string(mapId) + " is not an image map of this world";
+        return false;
+    }
+
+    const auto holds = [mapId](const ItemStack &item) {
+        return MapItem::isFilledMap(item) && MapItem::getMapId(item) == mapId;
+    };
+
+    for (Level *level: world.getLevels()) {
+        for (ItemFrameBlockActor *frame: level->getBlockActors().findAll<ItemFrameBlockActor>()) {
+            if (!holds(frame->getItem()))
+                continue;
+
+            const Vector3i position = frame->getPosition();
+            MapHandler::onFrameItemChanged(owner, *level, position, frame->getItem(), ItemStack::air());
+            frame->setItem(ItemStack::air());
+            frame->setRotation(0);
+            const BlockState state = level->getBlockState(position.x, position.y, position.z);
+            if (state.mStates.getByte("item_frame_map_bit", 0) != 0) {
+                Tag states = state.mStates;
+                states.putByte("item_frame_map_bit", 0);
+                const BlockState emptied(state.mName, states);
+                level->setBlockState(position.x, position.y, position.z, emptied);
+                BlockActionHandler::broadcastBlockUpdate(owner, *level, position, emptied);
+            }
+            BlockActionHandler::broadcastBlockActorData(owner, *level, *frame);
+        }
+    }
+
+    for (auto &entry: owner.getPlayers()) {
+        ServerPlayer &player = entry.second;
+        if (&owner.getWorldFor(player) != &world)
+            continue;
+
+        PlayerInventory &inventory = player.getInventory();
+        for (int slot = 0; slot < inventory.getContainerSize(); ++slot) {
+            if (!holds(inventory.getItem(slot)))
+                continue;
+
+            inventory.setItem(slot, ItemStack::air());
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
+        }
+        if (holds(inventory.getOffhand())) {
+            inventory.setOffhand(ItemStack::air());
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Offhand, 0);
+        }
+    }
+
+    Level &mapLevel = world.getOverworld();
+    if (!mapLevel.getMaps().removeMap(mapLevel.getMapStorage(), mapId)) {
+        error = "map " + std::to_string(mapId) + " could not be erased from the world";
+        return false;
+    }
+    return true;
+}

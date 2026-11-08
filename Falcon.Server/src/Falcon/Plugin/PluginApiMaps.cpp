@@ -125,14 +125,20 @@ namespace {
     }
 
     int mapPlaceImageGrid(FalconLevel *handle, FalconBlockPos topLeft, uint32_t facing, const int64_t *mapIds,
-                          uint32_t columns, uint32_t rows, int glowing) {
+                          uint32_t count, uint32_t columns, uint32_t rows, int glowing) {
         if (handle == nullptr || mapIds == nullptr || columns == 0 || rows == 0
             || columns > (uint32_t) ImageMap::MAX_GRID_SIDE || rows > (uint32_t) ImageMap::MAX_GRID_SIDE) {
             fail("a grid needs a level, its ids and 1 to 32 maps a side");
             return 0;
         }
+        // the caller's buffer holds count ids: never read past it
+        if ((size_t) count != (size_t) columns * rows) {
+            fail("a " + std::to_string(columns) + " x " + std::to_string(rows) + " grid needs "
+                 + std::to_string(columns * rows) + " ids, not " + std::to_string(count));
+            return 0;
+        }
 
-        const std::vector<int64_t> ids(mapIds, mapIds + (size_t) columns * rows);
+        const std::vector<int64_t> ids(mapIds, mapIds + count);
         std::string error;
         if (!ImageMapHandler::place(owner(), *level(handle), Vector3i(topLeft.x, topLeft.y, topLeft.z),
                                     (int32_t) facing, ids, (int32_t) columns, (int32_t) rows, glowing != 0,
@@ -184,6 +190,21 @@ namespace {
         return 1;
     }
 
+    int mapDeleteImage(FalconLevel *handle, int64_t mapId) {
+        World *world = worldOf(handle);
+        if (world == nullptr)
+            return 0;
+
+        std::string error;
+        if (!ImageMapHandler::remove(owner(), *world, mapId, error)) {
+            fail(error);
+            return 0;
+        }
+
+        gLastError.clear();
+        return 1;
+    }
+
     const char *mapLastError() {
         return gLastError.c_str();
     }
@@ -198,4 +219,5 @@ void PluginServerApi::fillMaps(FalconServerApi &api) {
     api.mapIsImage = &mapIsImage;
     api.playerGiveMap = &playerGiveMap;
     api.mapLastError = &mapLastError;
+    api.mapDeleteImage = &mapDeleteImage;
 }

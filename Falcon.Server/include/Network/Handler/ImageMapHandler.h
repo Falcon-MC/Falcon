@@ -35,4 +35,8 @@ public:
                        int32_t width, int32_t height, const uint32_t *pixels, std::string &error);
 
     static bool isImageMap(World &world, int64_t mapId);
+
+    // gone from memory, storage, the frames of loaded chunks and the inventories of online players; copies kept
+    // elsewhere stay as blank maps
+    static bool remove(ServerNetworkHandler &owner, World &world, int64_t mapId, std::string &error);
 };

@@ -45,6 +45,9 @@ public:
 
     void saveDirty(LevelStorage &storage);
 
+    // forgets the map in memory and in storage; false when storage kept it
+    bool removeMap(LevelStorage *storage, int64_t mapId);
+
     // drops saved maps no lookup touched since the last call and no frame shows; storage reloads them on demand
     void unloadUnused();
 

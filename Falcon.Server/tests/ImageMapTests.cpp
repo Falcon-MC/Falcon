@@ -1,8 +1,11 @@
 #include "Core/NBT/Tag.h"
+#include "Falcon/Plugin/PluginServerApi.h"
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Map/ImageMap.h"
 #include "World/Level/Map/MapItemSavedData.h"
+#include "World/Level/Map/MapDataManager.h"
 #include "World/Level/Map/MapRenderer.h"
+#include "World/Level/Storage/LevelStorage.h"
 
 #include <zlib.h>
 
@@ -11,6 +14,7 @@
 #endif
 
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -348,9 +352,45 @@ namespace {
         require(image.mPixels[14] == ImageMap::pack(odd[56], odd[57], odd[58], odd[59]),
                 "adam7 pixels land in place");
     }
+
+    void removal(const std::filesystem::path &directory) {
+        {
+            LevelStorage storage;
+            require(storage.open(directory.string(), "World"), "could not create the storage");
+            MapDataManager maps;
+            maps.createMap(42).setImage(true);
+            maps.saveDirty(storage);
+            Tag saved;
+            require(storage.loadMapData(42, saved), "the map is saved");
+
+            require(maps.removeMap(&storage, 42), "a saved map is removed");
+            require(maps.findLoaded(42) == nullptr && maps.getMap(&storage, 42) == nullptr,
+                    "a removed map is gone from memory");
+            require(!storage.loadMapData(42, saved), "a removed map is gone from storage");
+        }
+        LevelStorage storage;
+        require(storage.open(directory.string(), "World"), "could not reopen the storage");
+        Tag saved;
+        require(!storage.loadMapData(42, saved), "a removed map stays gone after a restart");
+    }
+
+    // the count check runs before the level is touched, so any non null handle reaches it
+    void shortIdBuffer() {
+        FalconServerApi api{};
+        PluginServerApi::fillMaps(api);
+        int placeholder = 0;
+        FalconLevel *handle = reinterpret_cast<FalconLevel *>(&placeholder);
+        const int64_t ids[1] = {7};
+        require(api.mapPlaceImageGrid(handle, FalconBlockPos{0, 70, 0}, 3, ids, 1, 2, 2, 0) == 0,
+                "a 2 x 2 grid with one id is refused");
+        require(std::string(api.mapLastError()).find("needs 4 ids") != std::string::npos, "and says why");
+    }
 }
 
 int main() {
+    const auto directory = std::filesystem::temp_directory_path()
+            / ("falcon-image-map-test-"
+               + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         gridCutting();
         fitting();
@@ -358,9 +398,13 @@ int main() {
         neverRendered();
         partialUpdate();
         limits();
-        std::cout << "image map cutting, walls, rendering, updates and limits checks passed\n";
+        removal(directory);
+        shortIdBuffer();
+        std::filesystem::remove_all(directory);
+        std::cout << "image map cutting, walls, rendering, updates, limits and removal checks passed\n";
         return 0;
     } catch (const std::exception &error) {
+        std::filesystem::remove_all(directory);
         std::cout << error.what() << '\n';
         return 1;
     }
