@@ -75,10 +75,10 @@ int RandomTickSystem::getFullLight(Level &level, const Vector3i &position) {
     const int localZ = position.z & 15;
 
     const int blockLight = chunk->hasBlockLight() ? chunk->getBlockLight(localX, position.y, localZ) : 0;
-    if (!chunk->hasSkyLight())
+    if (!level.hasSkyLight())
         return blockLight;
 
-    const int skyLight = chunk->getSkyLight(localX, position.y, localZ) - level.getSkyLightSubtracted();
+    const int skyLight = level.getSkyLightAt(position.x, position.y, position.z) - level.getSkyLightSubtracted();
     return skyLight > blockLight ? skyLight : blockLight;
 }
 

@@ -80,8 +80,6 @@ public:
 
     const std::vector<int32_t> &getTopBlockHeights() const;
 
-    void buildNetworkCaches() const;
-
     void invalidateNetworkCaches();
 
     std::string encodeBiomes(int sectionCount) const;
@@ -92,9 +90,15 @@ public:
 
     int getNetworkSubChunkCount() const;
 
-    SubChunk &getSubChunk(int index) { return mSubChunks[index]; }
+    SubChunk &getSubChunk(int index) {
+        _ensureUnpacked();
+        return mSubChunks[index];
+    }
 
-    const SubChunk &getSubChunk(int index) const { return mSubChunks[index]; }
+    const SubChunk &getSubChunk(int index) const {
+        _ensureUnpacked();
+        return mSubChunks[index];
+    }
 
     static int subChunkIndexFor(int32_t y) { return (y - MIN_Y) >> 4; }
 
@@ -114,9 +118,15 @@ public:
 
     void setBlockLight(int x, int32_t y, int z, int value);
 
-    bool hasSkyLight() const { return mSkyLight.isAllocated(); }
+    bool hasSkyLight() const {
+        _ensureUnpacked();
+        return mSkyLight.isAllocated();
+    }
 
-    bool hasBlockLight() const { return mBlockLight.isAllocated(); }
+    bool hasBlockLight() const {
+        _ensureUnpacked();
+        return mBlockLight.isAllocated();
+    }
 
     bool hasHeightmap() const { return !mHeightmap.empty(); }
 
@@ -131,7 +141,29 @@ public:
 
     int getFirstNetworkSubChunk() const { return mFirstNetworkSubChunk; }
 
+    /**
+     * Folds the sections and light into one compressed buffer while nobody reads the chunk: most loaded chunks
+     * are only kept for the players who see them. Any read or write unpacks it again, exactly as it was.
+     * Main thread only, like the chunk itself; a copy keeps the packed form.
+     */
+    void pack();
+
+    bool isPacked() const {
+        return mPacked;
+    }
+
+    // Whether the chunk was read or written since the last call, which a packer uses to leave busy chunks alone.
+    bool consumeAccessed();
+
 private:
+    void _ensureUnpacked() const {
+        mAccessed = true;
+        if (mPacked)
+            _unpack();
+    }
+
+    void _unpack() const;
+
     int32_t mX;
     int32_t mZ;
     uint32_t mBiomeId;
@@ -140,10 +172,14 @@ private:
     int mNetworkSubChunkLimit = SUB_CHUNK_COUNT;
     bool mDirty;
     bool mPopulated = false;
-    std::vector<SubChunk> mSubChunks;
+    // Mutable because const reads unpack a packed chunk first.
+    mutable std::vector<SubChunk> mSubChunks;
     std::vector<int16_t> mHeightmap;
-    LightStorage mSkyLight;
-    LightStorage mBlockLight;
+    mutable LightStorage mSkyLight;
+    mutable LightStorage mBlockLight;
+    mutable std::string mPackedData;
+    mutable bool mPacked = false;
+    mutable bool mAccessed = false;
     mutable std::vector<std::string> mSubChunkNetworkCache;
     mutable std::vector<uint8_t> mSubChunkNetworkValid;
     mutable std::unordered_map<const BlockNetworkIdMap *, std::vector<std::string>> mTranslatedSubChunkCache;

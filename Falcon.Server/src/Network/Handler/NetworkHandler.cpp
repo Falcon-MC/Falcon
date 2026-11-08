@@ -6,8 +6,26 @@
 
 #include <algorithm>
 #include <chrono>
+#include <iterator>
 #include <stdexcept>
 #include <utility>
+
+namespace {
+    const unsigned MAX_IO_SHARDS = 8;
+
+    /**
+     * Compressible bytes a shard hands to its connections before it reads what they received again. Zlib
+     * compresses a few tens of megabytes a second, so a burst of chunks is spread over many short passes
+     * instead of one that leaves the transport's receive queues full and stalls every connection.
+     */
+    const size_t MAX_OUTBOUND_BYTES_PER_PASS = 256 * 1024;
+    const std::chrono::milliseconds MAX_OUTBOUND_TIME_PER_PASS(4);
+
+    size_t ioShardCount() {
+        const unsigned cores = std::thread::hardware_concurrency();
+        return (size_t) std::max(1u, std::min(MAX_IO_SHARDS, cores / 2));
+    }
+}
 
 NetworkHandler::Connection::Connection(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer)
         : mId(id), mPeer(std::move(peer)) {
@@ -18,6 +36,10 @@ NetworkHandler::Connection::Connection(const NetworkIdentifier &id, std::shared_
 
 NetworkHandler::NetworkHandler(std::unique_ptr<Connector> connector)
         : mIoRunning(false), mConnectionCount(0) {
+    const size_t shards = ioShardCount();
+    for (size_t index = 0; index < shards; ++index)
+        mShards.push_back(std::unique_ptr<Shard>(new Shard()));
+
     addConnector(std::move(connector));
 }
 
@@ -53,7 +75,11 @@ void NetworkHandler::disconnect() {
     for (std::unique_ptr<Connector> &connector: mConnectors)
         connector->disconnect();
 
-    mConnections.clear();
+    for (std::unique_ptr<Shard> &shard: mShards) {
+        shard->mConnections.clear();
+        shard->mBacklog.clear();
+    }
+    mLive.clear();
     mConnectionCount.store(0);
 }
 
@@ -62,7 +88,8 @@ void NetworkHandler::startIoThread() {
         return;
 
     mIoRunning.store(true);
-    mIoThread = std::thread(&NetworkHandler::_ioLoop, this);
+    for (size_t index = 0; index < mShards.size(); ++index)
+        mShards[index]->mThread = std::thread(&NetworkHandler::_ioLoop, this, index);
 }
 
 void NetworkHandler::stopIoThread() {
@@ -71,20 +98,71 @@ void NetworkHandler::stopIoThread() {
 
     mIoRunning.store(false);
 
-    if (mIoThread.joinable())
-        mIoThread.join();
+    for (std::unique_ptr<Shard> &shard: mShards) {
+        if (shard->mThread.joinable())
+            shard->mThread.join();
+    }
 
-    mOutbound.close();
+    // A shard that stopped after the control shard may still have queued transport closes.
+    _pumpControl();
+
+    for (std::unique_ptr<Shard> &shard: mShards)
+        shard->mOutbound.close();
+    mServerClosed.close();
     mInbound.close();
 }
 
-void NetworkHandler::_ioLoop() {
+void NetworkHandler::_ioLoop(size_t shardIndex) {
+    Shard &shard = *mShards[shardIndex];
+    // The connectors are not thread safe, so only the first shard runs them.
+    const bool control = shardIndex == 0;
+
     while (mIoRunning.load()) {
-        _pumpIo();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        if (control)
+            _pumpControl();
+        _pumpShard(shard, true);
+        if (shard.mBacklog.empty())
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
-    _pumpIo();
+    if (control)
+        _pumpControl();
+    _pumpShard(shard, false);
+}
+
+void NetworkHandler::_pumpIo() {
+    _pumpControl();
+    for (std::unique_ptr<Shard> &shard: mShards)
+        _pumpShard(*shard, false);
+}
+
+size_t NetworkHandler::getPendingOutboundCount() const {
+    size_t pending = 0;
+    for (const std::unique_ptr<Shard> &shard: mShards)
+        pending += shard->mOutbound.size();
+    return pending;
+}
+
+NetworkHandler::Shard &NetworkHandler::_shardFor(const NetworkIdentifier &id) {
+    return *mShards[NetworkIdentifier::Hasher()(id) % mShards.size()];
+}
+
+void NetworkHandler::_pushOutbound(OutboundCommand command) {
+    _shardFor(command.mId).mOutbound.push(std::move(command));
+}
+
+size_t NetworkHandler::getPendingOutboundBytes(const NetworkIdentifier &id) const {
+    auto it = mPendingBytes.find(id);
+    return it == mPendingBytes.end() ? 0 : it->second->load(std::memory_order_relaxed);
+}
+
+void NetworkHandler::_trackPending(OutboundCommand &command) {
+    auto it = mPendingBytes.find(command.mId);
+    if (it == mPendingBytes.end())
+        return;
+
+    command.mPendingBytes = it->second;
+    it->second->fetch_add(command.mData.size(), std::memory_order_relaxed);
 }
 
 void NetworkHandler::addListener(Listener *listener) {
@@ -96,16 +174,11 @@ void NetworkHandler::removeListener(Listener *listener) {
     mListeners.erase(std::remove(mListeners.begin(), mListeners.end(), listener), mListeners.end());
 }
 
-NetworkHandler::Connection *NetworkHandler::getConnection(const NetworkIdentifier &id) {
-    auto it = mConnections.find(id);
-    return it == mConnections.end() ? nullptr : it->second.get();
-}
-
 void NetworkHandler::flush(const NetworkIdentifier &id) {
     OutboundCommand command;
     command.mKind = OutboundCommand::Kind::Flush;
     command.mId = id;
-    mOutbound.push(std::move(command));
+    _pushOutbound(std::move(command));
 }
 
 void NetworkHandler::enableCompression(const NetworkIdentifier &id,
@@ -116,7 +189,7 @@ void NetworkHandler::enableCompression(const NetworkIdentifier &id,
     command.mId = id;
     command.mAlgorithm = algorithm;
     command.mThreshold = threshold;
-    mOutbound.push(std::move(command));
+    _pushOutbound(std::move(command));
 }
 
 void NetworkHandler::enableEncryption(const NetworkIdentifier &id, const EncryptionKey &key) {
@@ -124,14 +197,14 @@ void NetworkHandler::enableEncryption(const NetworkIdentifier &id, const Encrypt
     command.mKind = OutboundCommand::Kind::EnableEncryption;
     command.mId = id;
     command.mEncryptionKey = key;
-    mOutbound.push(std::move(command));
+    _pushOutbound(std::move(command));
 }
 
 void NetworkHandler::closeConnection(const NetworkIdentifier &id) {
     OutboundCommand command;
     command.mKind = OutboundCommand::Kind::Close;
     command.mId = id;
-    mOutbound.push(std::move(command));
+    _pushOutbound(std::move(command));
 }
 
 NetworkPeer::Reliability NetworkHandler::_toPeerReliability(const Packet &packet) {
@@ -178,8 +251,7 @@ void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const
                                 const PacketCodecContext &context) {
     // Sessions on the same protocol share a codec context, so most recipients reuse one encoding.
     std::vector<std::pair<const PacketCodecContext *, std::string>> encoded;
-    std::vector<OutboundCommand> commands;
-    commands.reserve(ids.size());
+    std::vector<std::vector<OutboundCommand>> commands(mShards.size());
 
     for (const NetworkIdentifier &id: ids) {
         const PacketCodecContext *own = mContextResolver ? mContextResolver(id) : nullptr;
@@ -210,10 +282,12 @@ void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const
 
         command.mReliability = _toPeerReliability(packet);
         command.mCompressibility = _toPeerCompressibility(packet);
-        commands.push_back(std::move(command));
+        _trackPending(command);
+        commands[NetworkIdentifier::Hasher()(id) % mShards.size()].push_back(std::move(command));
     }
 
-    mOutbound.pushAll(std::move(commands));
+    for (size_t index = 0; index < mShards.size(); ++index)
+        mShards[index]->mOutbound.pushAll(std::move(commands[index]));
 }
 
 void NetworkHandler::setOutboundFilter(OutboundFilter filter) {
@@ -232,45 +306,71 @@ void NetworkHandler::send(const NetworkIdentifier &id, const std::string &data, 
     command.mData = data;
     command.mReliability = reliability;
     command.mCompressibility = compressibility;
-    mOutbound.push(std::move(command));
+    _trackPending(command);
+    _pushOutbound(std::move(command));
 }
 
 void NetworkHandler::sendToAll(const std::string &data, NetworkPeer::Reliability reliability,
                                Compressibility compressibility) {
-    OutboundCommand command;
-    command.mKind = OutboundCommand::Kind::Data;
-    command.mData = data;
-    command.mBroadcast = true;
-    command.mReliability = reliability;
-    command.mCompressibility = compressibility;
-    mOutbound.push(std::move(command));
+    for (std::unique_ptr<Shard> &shard: mShards) {
+        OutboundCommand command;
+        command.mKind = OutboundCommand::Kind::Data;
+        command.mData = data;
+        command.mBroadcast = true;
+        command.mReliability = reliability;
+        command.mCompressibility = compressibility;
+        shard->mOutbound.push(std::move(command));
+    }
 }
 
-void NetworkHandler::_applyOutbound(OutboundCommand &command) {
+void NetworkHandler::_applyOutbound(Shard &shard, OutboundCommand &command) {
     if (command.mKind == OutboundCommand::Kind::Data) {
         if (command.mBroadcast) {
-            for (auto &entry: mConnections)
+            for (auto &entry: shard.mConnections)
                 entry.second->getBatchedPeer()->sendPacket(command.mData, command.mReliability,
                                                            command.mCompressibility);
             return;
         }
 
-        Connection *connection = getConnection(command.mId);
-        if (connection != nullptr)
-            connection->getBatchedPeer()->sendPacket(command.mData, command.mReliability, command.mCompressibility);
+        auto it = shard.mConnections.find(command.mId);
+        if (it != shard.mConnections.end())
+            it->second->getBatchedPeer()->sendPacket(command.mData, command.mReliability,
+                                                     command.mCompressibility);
         return;
     }
 
-    Connection *connection = getConnection(command.mId);
-    if (connection == nullptr)
-        return;
+    if (command.mKind == OutboundCommand::Kind::Adopt) {
+        shard.mConnections[command.mId] = std::move(command.mConnection);
 
-    if (command.mKind == OutboundCommand::Kind::Close) {
-        for (std::unique_ptr<Connector> &connector: mConnectors) {
-            if (connector->closeConnection(command.mId))
-                break;
+        // Reported by the shard so the game sees the connection before any of its data, and anything it
+        // sends in reply is queued behind the adoption.
+        InboundEvent event;
+        event.mKind = InboundEvent::Kind::Opened;
+        event.mId = command.mId;
+        event.mMtuSize = command.mMtuSize;
+        mInbound.push(std::move(event));
+        return;
+    }
+
+    auto it = shard.mConnections.find(command.mId);
+    if (it == shard.mConnections.end())
+        return;
+    Connection *connection = it->second.get();
+
+    if (command.mKind == OutboundCommand::Kind::Close || command.mKind == OutboundCommand::Kind::Remove) {
+        shard.mConnections.erase(it);
+
+        InboundEvent event;
+        event.mKind = InboundEvent::Kind::Closed;
+        event.mId = command.mId;
+        if (command.mKind == OutboundCommand::Kind::Close) {
+            event.mReason = DisconnectFailReason::ConnectionRefused;
+            mServerClosed.push(command.mId);
+        } else {
+            event.mReason = command.mReason;
+            event.mData = command.mData;
         }
-        onConnectionClosed(command.mId, DisconnectFailReason::ConnectionRefused, "");
+        mInbound.push(std::move(event));
         return;
     }
 
@@ -282,17 +382,25 @@ void NetworkHandler::_applyOutbound(OutboundCommand &command) {
         connection->getCompressedPeer()->enableCompression(command.mAlgorithm, command.mThreshold);
 }
 
-void NetworkHandler::_pumpIo() {
+void NetworkHandler::_pumpControl() {
     for (std::unique_ptr<Connector> &connector: mConnectors)
         connector->runEvents();
 
-    std::vector<OutboundCommand> commands = mOutbound.drain();
-    for (OutboundCommand &command: commands)
-        _applyOutbound(command);
+    for (const NetworkIdentifier &id: mServerClosed.drain()) {
+        mLive.erase(id);
+        mConnectionCount.store(mLive.size());
+        for (std::unique_ptr<Connector> &connector: mConnectors) {
+            if (connector->closeConnection(id))
+                break;
+        }
+    }
+}
 
+void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
     std::string data;
 
-    for (auto &entry: mConnections) {
+    // Reading comes first: a transport holds off its own threads while a connection's receive queue is full.
+    for (auto &entry: shard.mConnections) {
         NetworkPeer *peer = entry.second->getBatchedPeer();
         bool failed = false;
 
@@ -308,20 +416,64 @@ void NetworkHandler::_pumpIo() {
             }
 
             peer->update();
-            peer->flush();
         } catch (const std::exception &) {
             failed = true;
         }
 
-        if ((failed || entry.second->getEncryptedPeer()->hasFailed()) && !entry.second->isFailureReported()) {
-            entry.second->markFailureReported();
+        if (failed || entry.second->getEncryptedPeer()->hasFailed())
+            _reportFailure(*entry.second);
+    }
 
-            InboundEvent event;
-            event.mKind = InboundEvent::Kind::Failed;
-            event.mId = entry.first;
-            mInbound.push(std::move(event));
+    std::vector<OutboundCommand> commands = shard.mOutbound.drain();
+    shard.mBacklog.insert(shard.mBacklog.end(), std::make_move_iterator(commands.begin()),
+                          std::make_move_iterator(commands.end()));
+
+    const std::chrono::steady_clock::time_point deadline =
+            std::chrono::steady_clock::now() + MAX_OUTBOUND_TIME_PER_PASS;
+    size_t bytes = 0;
+    while (!shard.mBacklog.empty()) {
+        // Only data waits for the next pass. A flush and the compression or encryption switch behind it go
+        // out together, otherwise the reading half of the next pass decodes the client's answer in the old state.
+        if (bounded && shard.mBacklog.front().mKind == OutboundCommand::Kind::Data
+            && (bytes >= MAX_OUTBOUND_BYTES_PER_PASS || std::chrono::steady_clock::now() >= deadline))
+            break;
+
+        OutboundCommand command = std::move(shard.mBacklog.front());
+        shard.mBacklog.pop_front();
+        if (command.mCompressibility == Compressibility::Compressible)
+            bytes += command.mBroadcast ? command.mData.size() * shard.mConnections.size() : command.mData.size();
+
+        if (command.mPendingBytes != nullptr)
+            command.mPendingBytes->fetch_sub(command.mData.size(), std::memory_order_relaxed);
+
+        try {
+            _applyOutbound(shard, command);
+        } catch (const std::exception &) {
+            auto it = shard.mConnections.find(command.mId);
+            if (it != shard.mConnections.end())
+                _reportFailure(*it->second);
         }
     }
+
+    for (auto &entry: shard.mConnections) {
+        try {
+            entry.second->getBatchedPeer()->flush();
+        } catch (const std::exception &) {
+            _reportFailure(*entry.second);
+        }
+    }
+}
+
+void NetworkHandler::_reportFailure(Connection &connection) {
+    if (connection.isFailureReported())
+        return;
+
+    connection.markFailureReported();
+
+    InboundEvent event;
+    event.mKind = InboundEvent::Kind::Failed;
+    event.mId = connection.getId();
+    mInbound.push(std::move(event));
 }
 
 void NetworkHandler::runEvents() {
@@ -342,6 +494,7 @@ void NetworkHandler::runEvents() {
         switch (event.mKind) {
             case InboundEvent::Kind::Opened: {
                 ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
+                mPendingBytes[event.mId] = std::make_shared<std::atomic<size_t>>(0);
                 for (Listener *listener: mListeners)
                     listener->onNewIncomingConnection(event.mId, event.mMtuSize);
                 break;
@@ -351,6 +504,7 @@ void NetworkHandler::runEvents() {
                 ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
                 for (Listener *listener: mListeners)
                     listener->onConnectionClosed(event.mId, event.mReason, event.mData);
+                mPendingBytes.erase(event.mId);
                 break;
             }
 
@@ -380,27 +534,29 @@ bool NetworkHandler::onValidateIncomingConnection(const NetworkIdentifier &id) {
 
 void NetworkHandler::onNewIncomingConnection(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer) {
     const uint16_t mtuSize = peer != nullptr ? peer->getMtuSize() : 0;
-    mConnections[id] = std::unique_ptr<Connection>(new Connection(id, std::move(peer)));
-    mConnectionCount.store(mConnections.size());
+    mLive.insert(id);
+    mConnectionCount.store(mLive.size());
 
-    InboundEvent event;
-    event.mKind = InboundEvent::Kind::Opened;
-    event.mId = id;
-    event.mMtuSize = mtuSize;
-    mInbound.push(std::move(event));
+    OutboundCommand adopt;
+    adopt.mKind = OutboundCommand::Kind::Adopt;
+    adopt.mId = id;
+    adopt.mMtuSize = mtuSize;
+    adopt.mConnection = std::unique_ptr<Connection>(new Connection(id, std::move(peer)));
+    _pushOutbound(std::move(adopt));
 }
 
 void NetworkHandler::onConnectionClosed(const NetworkIdentifier &id, DisconnectFailReason reason,
                                         const std::string &message) {
-    if (mConnections.erase(id) == 0)
+    if (mLive.erase(id) == 0)
         return;
 
-    mConnectionCount.store(mConnections.size());
+    mConnectionCount.store(mLive.size());
 
-    InboundEvent event;
-    event.mKind = InboundEvent::Kind::Closed;
-    event.mId = id;
-    event.mReason = reason;
-    event.mData = message;
-    mInbound.push(std::move(event));
+    // The shard reports the close once it dropped the connection, so no data of it follows the event.
+    OutboundCommand remove;
+    remove.mKind = OutboundCommand::Kind::Remove;
+    remove.mId = id;
+    remove.mReason = reason;
+    remove.mData = message;
+    _pushOutbound(std::move(remove));
 }

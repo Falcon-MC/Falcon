@@ -1,5 +1,7 @@
 #pragma once
 
+#include "World/Level/Chunk/RawPack.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -52,6 +54,33 @@ public:
         for (uint32_t slot = 0; slot < (1u << (5 - mWidthLog2)); ++slot)
             word |= (uint32_t) value << (slot << mWidthLog2);
         mWords.assign(_wordCount(count, mWidthLog2), word);
+    }
+
+    // Bits each index takes in words(), which then hold the indices in the Bedrock storage layout.
+    uint32_t bitsPerIndex() const {
+        return 1u << mWidthLog2;
+    }
+
+    // Empty while every index is zero.
+    const std::vector<uint32_t> &words() const {
+        return mWords;
+    }
+
+    void packRaw(std::string &out) const {
+        RawPack::put(out, (uint32_t) mCount);
+        RawPack::put(out, (uint8_t) mWidthLog2);
+        RawPack::putVector(out, mWords);
+    }
+
+    bool unpackRaw(RawPack::Reader &in) {
+        uint32_t count = 0;
+        uint8_t widthLog2 = 0;
+        if (!in.get(count) || !in.get(widthLog2) || widthLog2 > 4 || !in.getVector(mWords))
+            return false;
+
+        mCount = count;
+        mWidthLog2 = widthLog2;
+        return mWords.empty() || mWords.size() == _wordCount(mCount, mWidthLog2);
     }
 
     // Releases the storage, unlike std::vector::clear().

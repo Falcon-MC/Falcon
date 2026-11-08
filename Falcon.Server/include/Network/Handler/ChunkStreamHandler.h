@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <unordered_set>
 #include <vector>
@@ -33,6 +34,8 @@ public:
     static constexpr int32_t FIELD_OF_VIEW_DEGREES = 70;
     static constexpr int32_t TELEPORT_LOAD_COUNT = 8;
     static constexpr unsigned MAX_SENDS_PER_TICK = 16;
+    // Chunk bytes a player may have waiting for its network thread before more are encoded for it.
+    static constexpr size_t MAX_QUEUED_CHUNK_BYTES = 256 * 1024;
 
     static void tick(ServerNetworkHandler &owner, ServerPlayer &player);
 

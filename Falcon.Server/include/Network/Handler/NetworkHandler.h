@@ -9,11 +9,13 @@
 
 #include <atomic>
 #include <cstddef>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class Packet;
@@ -95,7 +97,9 @@ public:
             Flush = 1,
             EnableCompression = 2,
             EnableEncryption = 3,
-            Close = 4
+            Close = 4,
+            Adopt = 5,
+            Remove = 6
         };
 
         Kind mKind = Kind::Data;
@@ -107,6 +111,11 @@ public:
         CompressedNetworkPeer::CompressionAlgorithm mAlgorithm = CompressedNetworkPeer::CompressionAlgorithm::ZLib;
         unsigned short mThreshold = 0;
         EncryptionKey mEncryptionKey{};
+        DisconnectFailReason mReason = DisconnectFailReason::Unknown;
+        uint16_t mMtuSize = 0;
+        std::unique_ptr<Connection> mConnection;
+        // The connection's count of queued bytes, released once its shard has taken the data.
+        std::shared_ptr<std::atomic<size_t>> mPendingBytes;
     };
 
     using OutboundFilter = std::function<bool(const NetworkIdentifier &, std::string &)>;
@@ -132,7 +141,13 @@ public:
 
     void runEvents();
 
-    size_t getPendingOutboundCount() const { return mOutbound.size(); }
+    size_t getPendingOutboundCount() const;
+
+    /**
+     * Bytes sent to a connection that its IO shard has not batched yet, so a sender can hold back bulk data
+     * instead of queueing it faster than it is compressed. Main thread only, like every send.
+     */
+    size_t getPendingOutboundBytes(const NetworkIdentifier &id) const;
 
     size_t getPendingInboundCount() const { return mInbound.size(); }
 
@@ -197,25 +212,52 @@ private:
 
     static Compressibility _toPeerCompressibility(const Packet &packet);
 
-    Connection *getConnection(const NetworkIdentifier &id);
+    /**
+     * One IO thread's share of the connections. A connection always maps to the same shard, which alone
+     * batches, compresses and sends its packets and reads what it received, so its order is kept while
+     * the compression of several connections runs on several cores.
+     */
+    struct Shard {
+        TaskQueue<OutboundCommand> mOutbound;
+        std::deque<OutboundCommand> mBacklog;
+        std::unordered_map<NetworkIdentifier, std::unique_ptr<Connection>, NetworkIdentifier::Hasher> mConnections;
+        std::thread mThread;
+    };
 
-    void _ioLoop();
+    Shard &_shardFor(const NetworkIdentifier &id);
+
+    void _pushOutbound(OutboundCommand command);
+
+    void _trackPending(OutboundCommand &command);
+
+    void _ioLoop(size_t shardIndex);
 
     void _pumpIo();
 
-    void _applyOutbound(OutboundCommand &command);
+    void _pumpControl();
+
+    void _pumpShard(Shard &shard, bool bounded);
+
+    void _applyOutbound(Shard &shard, OutboundCommand &command);
+
+    // Reports a connection whose transport failed, once, so the game drops it.
+    void _reportFailure(Connection &connection);
 
     Profiler *mProfiler = nullptr;
     std::vector<std::unique_ptr<Connector>> mConnectors;
-    std::unordered_map<NetworkIdentifier, std::unique_ptr<Connection>, NetworkIdentifier::Hasher> mConnections;
+    std::vector<std::unique_ptr<Shard>> mShards;
+    // Connections the connectors reported open and not closed yet; only the control pump touches it.
+    std::unordered_set<NetworkIdentifier, NetworkIdentifier::Hasher> mLive;
+    // Connections a shard dropped on the server's request, for the control pump to close in their connector.
+    TaskQueue<NetworkIdentifier> mServerClosed;
     std::vector<Listener *> mListeners;
     OutboundFilter mOutboundFilter;
     ContextResolver mContextResolver;
 
     TaskQueue<InboundEvent> mInbound;
-    TaskQueue<OutboundCommand> mOutbound;
+    // Open connections as the main thread knows them, from their Opened event to their Closed one.
+    std::unordered_map<NetworkIdentifier, std::shared_ptr<std::atomic<size_t>>, NetworkIdentifier::Hasher> mPendingBytes;
 
-    std::thread mIoThread;
     std::atomic<bool> mIoRunning;
     std::atomic<size_t> mConnectionCount;
 };

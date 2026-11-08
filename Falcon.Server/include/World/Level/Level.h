@@ -216,6 +216,12 @@ public:
     // Hands a bounded number of the chunks queued by a background save to the workers.
     void processDeferredSaves();
 
+    /**
+     * Packs, a few per tick, the populated chunks nobody has read for a whole pass and that no player
+     * simulates or actor stands in. A packed chunk unpacks itself on its next read.
+     */
+    void packIdleChunks();
+
     // Returns freed heap pages to the system; the heap is process-wide, so one call covers every level.
     static void releaseFreedHeap();
 
@@ -479,6 +485,11 @@ private:
     static constexpr size_t MAX_CHUNK_UNLOADS_PER_TICK = 8;
     static constexpr int32_t UNLOAD_SWEEP_INTERVAL_TICKS = 200;
     static constexpr size_t HEAP_TRIM_UNLOAD_THRESHOLD = 256;
+    static constexpr size_t MAX_PACK_VISITS_PER_TICK = 4096;
+    static constexpr std::chrono::microseconds PACK_BUDGET{2000};
+    // The pass in progress walks this snapshot of the loaded chunks.
+    std::vector<int64_t> mPackKeys;
+    size_t mPackCursor = 0;
     std::unordered_set<int64_t> mOrphanCandidates;
     std::unordered_set<int64_t> mOccupiedColumns;
     int32_t mUnloadSweepTicks = 0;

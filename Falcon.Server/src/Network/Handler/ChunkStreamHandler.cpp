@@ -229,8 +229,14 @@ namespace {
         if (state.mReadyToSend.empty() || state.mSendsThisTick >= ChunkStreamHandler::MAX_SENDS_PER_TICK)
             return;
 
-        Level &level = owner.getLevelFor(player);
+        // Chunks encoded faster than the network thread compresses them would only pile up in memory and
+        // delay everything else sent to the player.
+        NetworkHandler &network = owner.getNetworkHandler();
         const NetworkIdentifier &id = player.getNetworkIdentifier();
+        if (network.getPendingOutboundBytes(id) >= ChunkStreamHandler::MAX_QUEUED_CHUNK_BYTES)
+            return;
+
+        Level &level = owner.getLevelFor(player);
         const Vector3f position = player.getPosition();
 
         // The client discards chunks outside the last publisher radius it received, so the
@@ -245,7 +251,8 @@ namespace {
 
         // Encoding a chunk and loading its block entities runs on the main thread, so a burst
         // of ready chunks after a teleport is spread over several ticks in priority order.
-        while (!state.mReadyToSend.empty() && state.mSendsThisTick < ChunkStreamHandler::MAX_SENDS_PER_TICK) {
+        while (!state.mReadyToSend.empty() && state.mSendsThisTick < ChunkStreamHandler::MAX_SENDS_PER_TICK
+               && network.getPendingOutboundBytes(id) < ChunkStreamHandler::MAX_QUEUED_CHUNK_BYTES) {
             const int64_t hash = popQueue(state, state.mReadyToSend);
 
             if (state.mInRadius.find(hash) == state.mInRadius.end()) {

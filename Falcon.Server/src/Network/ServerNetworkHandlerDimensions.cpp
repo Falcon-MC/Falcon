@@ -217,6 +217,7 @@ void ServerNetworkHandler::_processChunkUnloads(Level &level) {
     level.setOccupiedColumns(std::move(occupied));
     level.processDeferredSaves();
     level.processChunkUnloads();
+    level.packIdleChunks();
 }
 
 void ServerNetworkHandler::changePlayerDimension(ServerPlayer &player, DimensionType dimension,

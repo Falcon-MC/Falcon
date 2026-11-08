@@ -144,12 +144,27 @@
 #include <utility>
 #include "Protocol/Packets/UpdateAttributesPacket.h"
 
+#include <rtc/global.hpp>
+
 int64_t ServerNetworkHandler::randomSeed() {
     std::random_device device;
     return (int64_t) (((uint64_t) device() << 32) | (uint64_t) device());
 }
 
 namespace {
+    /**
+     * The game's own WebRTC stack never aborts an SCTP association over retransmissions and leaves
+     * liveness to ICE consent checks, backing its timers off to at most 3 s. The transport library
+     * defaults instead abort after 5 unacknowledged retransmissions, about 6 s on a local link, so a
+     * client stalled for a few seconds under load is dropped although it would have caught up.
+     */
+    void configureNetherNetSctp() {
+        rtc::SctpSettings settings;
+        settings.maxRetransmitAttempts = 60;
+        settings.maxRetransmitTimeout = std::chrono::milliseconds(3000);
+        rtc::SetSctpSettings(settings);
+    }
+
     class JsonValidator {
     public:
         explicit JsonValidator(const std::string &value) : mValue(value) {}
@@ -357,6 +372,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mPlayerMovementRegistry = std::make_unique<PlayerMovementRegistry>();
     mWorlds.add("Bedrock level", DEFAULT_VIEW_DISTANCE, 0);
 
+    configureNetherNetSctp();
     std::unique_ptr<Connector> netherNet = TransportFactory::createConnector(transport, *this, true);
 
     if (netherNet != nullptr) {

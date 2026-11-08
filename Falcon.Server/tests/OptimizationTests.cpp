@@ -8,13 +8,21 @@
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Protocol/Packets/CommandRequestPacket.h"
 #include "World/Level/Chunk/SubChunk.h"
+#include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Chunk/LightStorage.h"
+#include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <deque>
 #include <filesystem>
+#include <mutex>
+#include <random>
 #include <stdexcept>
+#include <thread>
 
 class LevelPersistenceProbe {
 public:
@@ -117,7 +125,9 @@ namespace {
     // Fails its first chunk, the way a generator bug would surface on a worker.
     class ThrowOnceGenerator : public ChunkGenerator {
     public:
-        DimensionType getDimensionType() const override { return DimensionType::Overworld; }
+        DimensionType getDimensionType() const override {
+            return DimensionType::Overworld;
+        }
 
         void generate(LevelChunk &) const override {
             if (!mThrown) {
@@ -128,17 +138,175 @@ namespace {
 
         void decorate(Level &, LevelChunk &, std::vector<GeneratedBlockChange> *) const override {}
 
-        int64_t getSeed() const override { return 1; }
+        int64_t getSeed() const override {
+            return 1;
+        }
 
-        int getSpawnY() const override { return 64; }
+        int getSpawnY() const override {
+            return 64;
+        }
 
-        int32_t getAirHash() const override { return 0; }
+        int32_t getAirHash() const override {
+            return 0;
+        }
 
-        int32_t pickBiome(int32_t, int32_t, int32_t) const override { return 0; }
+        int32_t pickBiome(int32_t, int32_t, int32_t) const override {
+            return 0;
+        }
 
     private:
         mutable bool mThrown = false;
     };
+}
+
+namespace {
+    class FakePeer : public NetworkPeer {
+    public:
+        void sendPacket(const std::string &data, Reliability, Compressibility) override {
+            mSentBytes += data.size();
+        }
+
+        DataStatus receivePacket(std::string &outData) override {
+            std::lock_guard<std::mutex> lock(mMutex);
+            if (mIncoming.empty())
+                return DataStatus::NoData;
+            outData = std::move(mIncoming.front());
+            mIncoming.pop_front();
+            return DataStatus::HasData;
+        }
+
+        NetworkStatus getNetworkStatus() const override {
+            return NetworkStatus();
+        }
+
+        bool usesGamePacketId() const override {
+            return false;
+        }
+
+        bool encryptsGamePackets() const override {
+            return false;
+        }
+
+        // Queues one game packet the way a client batches it, behind the compression header once it is on.
+        void deliver(const std::string &packet, bool compressed = false) {
+            std::string batch;
+            if (compressed)
+                batch.push_back((char) CompressedNetworkPeer::CompressionAlgorithm::None);
+            batch.push_back((char) packet.size());
+            batch += packet;
+            std::lock_guard<std::mutex> lock(mMutex);
+            mIncoming.push_back(batch);
+        }
+
+        std::atomic<size_t> mSentBytes{0};
+
+    private:
+        std::mutex mMutex;
+        std::deque<std::string> mIncoming;
+    };
+
+    // Answers the first packet put on its wire at once, as a client on a fast link does.
+    class AnsweringPeer : public FakePeer {
+    public:
+        explicit AnsweringPeer(std::string reply) : mReply(std::move(reply)) {
+        }
+
+        void sendPacket(const std::string &data, Reliability reliability, Compressibility compressibility) override {
+            FakePeer::sendPacket(data, reliability, compressibility);
+            if (mReply.empty())
+                return;
+
+            deliver(mReply, true);
+            mReply.clear();
+        }
+
+    private:
+        std::string mReply;
+    };
+
+    class FakeConnector : public Connector {
+    public:
+        bool host(const ConnectionDefinition &) override {
+            return true;
+        }
+
+        void disconnect() override {
+        }
+
+        void runEvents() override {
+            std::vector<std::pair<NetworkIdentifier, std::shared_ptr<NetworkPeer>>> joining;
+            {
+                std::lock_guard<std::mutex> lock(mMutex);
+                joining.swap(mJoining);
+            }
+            for (const auto &entry: joining)
+                mCallbacks->onNewIncomingConnection(entry.first, entry.second);
+        }
+
+        std::shared_ptr<NetworkPeer> getPeerForUser(const NetworkIdentifier &) override {
+            return nullptr;
+        }
+
+        bool closeConnection(const NetworkIdentifier &id) override {
+            std::lock_guard<std::mutex> lock(mMutex);
+            mClosed.push_back(id);
+            return true;
+        }
+
+        TransportLayer getNetworkType() const override {
+            return TransportLayer::NetherNet;
+        }
+
+        bool isIPv4Supported() const override {
+            return true;
+        }
+
+        bool isIPv6Supported() const override {
+            return false;
+        }
+
+        void join(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer) {
+            std::lock_guard<std::mutex> lock(mMutex);
+            mJoining.emplace_back(id, std::move(peer));
+        }
+
+        size_t closedCount() {
+            std::lock_guard<std::mutex> lock(mMutex);
+            return mClosed.size();
+        }
+
+    private:
+        std::mutex mMutex;
+        std::vector<std::pair<NetworkIdentifier, std::shared_ptr<NetworkPeer>>> mJoining;
+        std::vector<NetworkIdentifier> mClosed;
+    };
+
+    class RecordingListener : public NetworkHandler::Listener {
+    public:
+        void onNewIncomingConnection(const NetworkIdentifier &) override {
+            mEvents.push_back("open");
+        }
+
+        void onConnectionClosed(const NetworkIdentifier &, DisconnectFailReason reason, const std::string &) override {
+            mEvents.push_back(reason == DisconnectFailReason::ConnectionRefused ? "refused" : "closed");
+        }
+
+        void onDataReceived(const NetworkIdentifier &, const std::string &data) override {
+            mEvents.push_back("data:" + data);
+        }
+
+        std::vector<std::string> mEvents;
+    };
+
+    template<typename Predicate>
+    void pumpUntil(NetworkHandler &network, Predicate done, const char *message) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+        while (!done()) {
+            require(std::chrono::steady_clock::now() < deadline, message);
+            network.runEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
 }
 
 int main() {
@@ -528,6 +696,196 @@ int main() {
             require(LevelPersistenceProbe::savedBlock(retry, 1, 140, 1, "minecraft:diamond_block"),
                     "Retry lost the failed snapshot");
             retry.closeStorage();
+        });
+        check("packed sub-chunk storage reads back for every palette width", [&]() {
+            const char *names[] = {"minecraft:stone", "minecraft:dirt", "minecraft:cobblestone", "minecraft:sand",
+                                   "minecraft:gravel", "minecraft:gold_ore", "minecraft:iron_ore", "minecraft:coal_ore",
+                                   "minecraft:glass", "minecraft:diamond_block", "minecraft:gold_block",
+                                   "minecraft:iron_block", "minecraft:bedrock", "minecraft:bookshelf",
+                                   "minecraft:obsidian", "minecraft:ice", "minecraft:clay", "minecraft:netherrack",
+                                   "minecraft:soul_sand", "minecraft:glowstone"};
+            std::mt19937 random(11);
+            for (size_t kinds = 1; kinds <= sizeof(names) / sizeof(names[0]); ++kinds) {
+                SubChunk section(3);
+                for (int index = 0; index < SubChunk::BLOCK_COUNT; ++index) {
+                    if (random() % 4 != 0)
+                        section.setBlock(index >> 8, index & 15, (index >> 4) & 15,
+                                         BlockState(names[random() % kinds]));
+                    section.setBiome(index >> 8, index & 15, (index >> 4) & 15, (uint32_t) (random() % kinds));
+                }
+                section.setBlock(1, 2, 3, 1, BlockState(names[kinds - 1]));
+
+                BinaryStream persistent;
+                section.writePersistent(persistent);
+                section.writeBiomes(persistent, true);
+                ReadOnlyBinaryStream input(persistent.getBuffer());
+                SubChunk read(3);
+                require(read.readPersistent(input) && read.readBiomes(input, nullptr), "Packed section did not parse");
+                for (int index = 0; index < SubChunk::BLOCK_COUNT; ++index) {
+                    const int x = index >> 8, y = index & 15, z = (index >> 4) & 15;
+                    require(read.getBlock(x, y, z).getHash() == section.getBlock(x, y, z).getHash()
+                            && read.getBlock(x, y, z, 1).getHash() == section.getBlock(x, y, z, 1).getHash(),
+                            "Packed section read back other blocks");
+                    require(read.getBiome(x, y, z) == section.getBiome(x, y, z), "Packed section read back other biomes");
+                }
+
+                BinaryStream network;
+                section.writeNetwork(network);
+                ReadOnlyBinaryStream packet(network.getBuffer());
+                require(packet.getByte() == SubChunk::STORAGE_VERSION && packet.getByte() == SubChunk::LAYER_COUNT
+                        && packet.getByte() == 3, "Network section header changed");
+                const int bits = packet.getByte() >> 1;
+                const int perWord = 32 / bits;
+                std::vector<uint32_t> indices;
+                for (int word = 0; word < (SubChunk::BLOCK_COUNT + perWord - 1) / perWord; ++word) {
+                    const uint32_t packed = packet.getLInt();
+                    for (int slot = 0; slot < perWord && (int) indices.size() < SubChunk::BLOCK_COUNT; ++slot)
+                        indices.push_back((packed >> (slot * bits)) & ((1u << bits) - 1u));
+                }
+                std::vector<int32_t> palette((size_t) packet.getVarInt());
+                for (int32_t &entry: palette)
+                    entry = packet.getVarInt();
+                for (int index = 0; index < SubChunk::BLOCK_COUNT; ++index)
+                    require(palette.at(indices[(size_t) index])
+                            == section.getBlock(index >> 8, index & 15, (index >> 4) & 15).getHash(),
+                            "Network section indices point at other blocks");
+            }
+        });
+        check("a packed chunk unpacks to exactly the same storage", [&]() {
+            const char *names[] = {"minecraft:stone", "minecraft:dirt", "minecraft:water", "minecraft:glowstone",
+                                   "minecraft:oak_log"};
+            std::mt19937 random(3);
+            LevelChunk chunk(2, -3);
+            for (int i = 0; i < 20000; ++i) {
+                const int x = (int) (random() % 16), z = (int) (random() % 16);
+                const int32_t y = LevelChunk::MIN_Y + (int32_t) (random() % 200);
+                chunk.setBlock(x, y, z, BlockState(names[random() % 5]));
+                chunk.setBiomeAt(x, y, z, (uint32_t) (random() % 4));
+                chunk.setSkyLight(x, y, z, (int) (random() % 16));
+                chunk.setBlockLight(x, y, z, (int) (random() % 16));
+            }
+            chunk.setBlock(4, 10, 4, 1, BlockState("minecraft:water"));
+            const auto persistent = [&chunk]() {
+                BinaryStream stream;
+                for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; ++index)
+                    chunk.getSubChunk(index).writePersistent(stream);
+                return stream.getBuffer() + chunk.encodeBiomesPersistent(0, LevelChunk::SUB_CHUNK_COUNT);
+            };
+            const auto light = [&chunk]() {
+                std::string levels;
+                for (int32_t y = LevelChunk::MIN_Y; y <= LevelChunk::MAX_Y; ++y) {
+                    for (int x = 0; x < 16; ++x) {
+                        levels += (char) chunk.getSkyLight(x, y, 15 - x);
+                        levels += (char) chunk.getBlockLight(x, y, x);
+                    }
+                }
+                return levels;
+            };
+            const std::string network = chunk.encodeNetwork();
+            const std::string stored = persistent();
+            const std::string levels = light();
+
+            chunk.pack();
+            require(chunk.isPacked(), "Chunk did not pack");
+            require(chunk.encodeNetwork() == network && !chunk.isPacked(), "Unpacked chunk encodes differently");
+            require(persistent() == stored && light() == levels, "Unpacked chunk lost storage");
+            require(chunk.consumeAccessed() && !chunk.consumeAccessed(), "An access was not reported once");
+            chunk.getBlock(1, 1, 1);
+            require(chunk.consumeAccessed(), "A read of an unpacked chunk was not reported");
+
+            chunk.pack();
+            LevelChunk copy(chunk);
+            copy.setBlock(1, 1, 1, BlockState("minecraft:dirt"));
+            require(chunk.isPacked() && copy.getBlock(1, 1, 1).mName == "minecraft:dirt",
+                    "A copy of a packed chunk did not unpack on its own");
+        });
+        check("light sections fold back to one level and release their table", [&]() {
+            LightStorage light;
+            light.set(0, 0, 0, 0);
+            require(light.isAllocated() && light.get(3, 0, 3) == 0, "Uniform light allocated a section");
+            light.set(1, 70, 2, 9);
+            light.set(1, -60, 2, 4);
+            require(light.get(1, 70, 2) == 9 && light.get(1, -60, 2) == 4 && light.get(2, 70, 2) == 0,
+                    "Light levels were not kept");
+            light.set(1, 70, 2, 0);
+            light.compact();
+            require(light.get(1, 70, 2) == 0 && light.get(1, -60, 2) == 4, "Compaction changed a light level");
+            light.set(1, -60, 2, 0);
+            light.compact();
+            light.set(5, 5, 5, 0);
+            require(light.get(1, -60, 2) == 0 && light.get(5, 5, 5) == 0, "Released sections kept a level");
+        });
+        check("inbound packets are read while a large outbound backlog compresses", [&]() {
+            FakeConnector *connector = new FakeConnector();
+            NetworkHandler network{std::unique_ptr<Connector>(connector)};
+            RecordingListener listener;
+            network.addListener(&listener);
+            network.startIoThread();
+            const NetworkIdentifier client("backlog", 1);
+            std::shared_ptr<FakePeer> peer = std::make_shared<FakePeer>();
+            connector->join(client, peer);
+            pumpUntil(network, [&]() { return !listener.mEvents.empty(); }, "Connection never opened");
+            network.enableCompression(client, CompressedNetworkPeer::CompressionAlgorithm::ZLib, 0);
+
+            // Random bytes keep deflate slow, so the backlog takes far longer than one read pass.
+            std::mt19937 random(7);
+            std::string payload(64 * 1024, '\0');
+            for (char &byte: payload)
+                byte = (char) random();
+            const size_t packets = 1024;
+            for (size_t index = 0; index < packets; ++index)
+                network.send(client, payload);
+            peer->deliver("ping", true);
+
+            require(network.getPendingOutboundBytes(client) > 0, "Queued bytes were not counted");
+
+            pumpUntil(network, [&]() { return listener.mEvents.back() == "data:ping"; }, "Inbound packet never read");
+            require(peer->mSentBytes.load() < packets * payload.size() / 2,
+                    "Inbound packet waited for the outbound backlog");
+            pumpUntil(network, [&]() { return network.getPendingOutboundBytes(client) == 0; },
+                      "Queued bytes were never released");
+            network.stopIoThread();
+        });
+        check("a reply is read in the state enabled right after the packet it answers", [&]() {
+            FakeConnector *connector = new FakeConnector();
+            NetworkHandler network{std::unique_ptr<Connector>(connector)};
+            RecordingListener listener;
+            network.addListener(&listener);
+            const NetworkIdentifier client("settings", 1);
+            std::shared_ptr<AnsweringPeer> peer = std::make_shared<AnsweringPeer>("pong");
+            connector->join(client, peer);
+            pumpUntil(network, [&]() { return !listener.mEvents.empty(); }, "Connection never opened");
+
+            // A packet filling the whole per-pass budget, queued before the shard threads start so one pass
+            // drains it together with the flush and the compression switch that follow it.
+            network.send(client, std::string(256 * 1024, 'x'));
+            network.flush(client);
+            network.enableCompression(client, CompressedNetworkPeer::CompressionAlgorithm::ZLib, 0);
+            network.startIoThread();
+            pumpUntil(network, [&]() { return listener.mEvents.size() >= 2; }, "Reply never read");
+            network.stopIoThread();
+            require(listener.mEvents.back() == "data:pong", "Reply was read before compression was enabled");
+        });
+        check("a server close is reported once and stops the connection's data", [&]() {
+            FakeConnector *connector = new FakeConnector();
+            NetworkHandler network{std::unique_ptr<Connector>(connector)};
+            RecordingListener listener;
+            network.addListener(&listener);
+            network.startIoThread();
+            const NetworkIdentifier client("close", 1);
+            std::shared_ptr<FakePeer> peer = std::make_shared<FakePeer>();
+            connector->join(client, peer);
+            peer->deliver("first");
+            pumpUntil(network, [&]() { return listener.mEvents.size() >= 2; }, "First packet never read");
+            network.closeConnection(client);
+            pumpUntil(network, [&]() { return connector->closedCount() == 1; }, "Transport never closed");
+            peer->deliver("late");
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            network.runEvents();
+            network.stopIoThread();
+            const std::vector<std::string> expected = {"open", "data:first", "refused"};
+            require(listener.mEvents == expected, "Close was not reported once after the connection's data");
+            require(network.getConnectionCount() == 0, "Closed connection still counted");
         });
         handler.getPlayers().clear();
         host.stop();
