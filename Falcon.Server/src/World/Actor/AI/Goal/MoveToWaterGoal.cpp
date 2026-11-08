@@ -24,8 +24,7 @@ namespace {
         return liquid.isWater() || liquid.isBubbleColumn();
     }
 
-    // Whether the section holding the block has any water or bubble column in its palettes; one without
-    // can be passed over without asking each of its blocks.
+    // a section without water or bubble column in its palettes is skipped without asking each block
     bool sectionMayHoldWater(Level &level, int32_t x, int32_t y, int32_t z) {
         if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
             return false;
@@ -35,11 +34,8 @@ namespace {
                 .paletteMatches(SubChunk::PaletteQuery::Water, holdsWater);
     }
 
-    /**
-     * Whether the block holds water or a bubble column, as LiquidPhysicsSystem reads it: its first layer, or the
-     * water of its second layer when the first can be waterlogged. Asking the cheap layers first spares the block
-     * data lookup for almost every block.
-     */
+    // as LiquidPhysicsSystem reads it: layer 0, or layer 1's water when layer 0 can be waterlogged;
+    // cheap layers first spare the block data lookup for almost every block
     bool holdsWaterAt(Level &level, int32_t x, int32_t y, int32_t z) {
         const BlockState *layer0 = level.peekBlockPtr(x, y, z, 0);
         if (layer0 == nullptr)

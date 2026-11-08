@@ -10,10 +10,8 @@
 class ServerNetworkHandler;
 class ServerPlayer;
 
-/**
- * the client draws one bar per boss actor and the player is the only actor every client knows, so only the newest bar
- * is displayed and the others wait behind it; a raid bar uses the same actor and takes the place of all of them
- */
+// the client draws one bar per boss actor, and the player is the only actor every client knows: only the
+// newest bar shows, the others wait; a raid bar uses the same actor and replaces all of them
 class PlayerBossBars {
 public:
     // wire values of the client's BossBarColor (0x147E1D5A0)

@@ -19,7 +19,7 @@ public:
         return 1.0f;
     }
 
-    // a projectile that never hits the actor that shot it, however long it flies through its box
+    // never hits its shooter, however long it flies through its box
     virtual bool passesThroughOwner() const {
         return false;
     }
@@ -133,10 +133,7 @@ public:
     bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
 };
 
-/**
- * The dragon's fireball: it flies straight and leaves a cloud of dragon's breath where it lands
- * (dragon_fireball.json, minecraft:projectile and its spawn_aoe_cloud).
- */
+// flies straight, leaves dragon's breath where it lands (dragon_fireball.json: minecraft:projectile, spawn_aoe_cloud)
 class DragonFireballActor final : public ThrownProjectileActor {
 public:
     using ThrownProjectileActor::ThrownProjectileActor;

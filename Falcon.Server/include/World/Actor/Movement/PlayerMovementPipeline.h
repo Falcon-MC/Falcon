@@ -6,7 +6,7 @@
 
 struct PlayerMovementContext;
 
-/** ECS system schedule shared by live inputs and catch-up replay. */
+// shared by live inputs and catch-up replay
 class PlayerMovementSystemRegistry {
 public:
     enum class Phase : uint8_t { Admission, PreTravel, Travel, PostTravel, Prediction };
@@ -24,7 +24,6 @@ private:
     std::vector<Entry> mSystems;
 };
 
-/** Builds and executes the same registered ECS schedule for live and replayed inputs. */
 class PlayerMovementPipeline {
 public:
     static void tick(PlayerMovementContext &context);

@@ -9,10 +9,8 @@
 
 class Village;
 
-/**
- * `minecraft:behavior.move_to_village`: walks to a random point of the mob's village, the one it dwells in or else the
- * closest one, while the mob is outside the village box. Long trips go in legs of three quarters of the follow range.
- */
+// minecraft:behavior.move_to_village: a random point of the dwelt-in or else closest village, while outside its box;
+// long trips go in legs of three quarters of the follow range
 class MoveToVillageGoal : public Goal {
 public:
     struct Settings {

@@ -35,7 +35,7 @@ void PlayerPostTravelSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &travel = context.travel;
 
-    // Slime and honey slow the walk after gravity and drag; a fast rise such as a slime bounce is not damped.
+    // slime and honey slow the walk after gravity and drag; a fast rise (slime bounce) isn't damped
     if (travel.standsOnSlowingBlock && !context.pose.mSneaking && !context.input.pressingSneak
         && state.velocity.y < WALK_SLOWDOWN_LIMIT) {
         const float slowdown = WALK_SLOWDOWN_BASE + std::fabs(state.velocity.y) * WALK_SLOWDOWN_PER_VELOCITY;

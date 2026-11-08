@@ -26,7 +26,7 @@ struct MovementTraceFrame {
     uint32_t state = 0;
 };
 
-/** Bounded replay history, formatted only when a correction is emitted. */
+// bounded; formatted only when a correction goes out
 class MovementTraceComponent {
 public:
     void record(const MovementTraceFrame &frame) {

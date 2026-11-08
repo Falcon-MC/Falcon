@@ -13,7 +13,7 @@ void PlayerLiquidJumpSystem::tick(PlayerMovementContext &context) {
     if (context.waterTravel.active || context.liquidTravel.lava) {
         if (input.jumpHeld) {
             const float amount = context.player.getSwimAmount().mCurrent;
-            // BDS MobJumpSystem (0x140EB1110) also clamps jumps during both pose transitions.
+            // MobJumpSystem (0x140EB1110) also clamps jumps during both pose transitions
             if ((abilities.swimming && !contact.liquid.eyeSubmerged)
                 || (amount > 0.0f && amount < 1.0f)) {
                 if (context.waterTravel.active)

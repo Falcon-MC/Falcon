@@ -253,8 +253,7 @@ bool ArmorStandActor::_canInteract(ServerNetworkHandler &owner, ServerPlayer &pl
     if (dx * dx + dy * dy + dz * dz > MAX_INTERACT_DISTANCE * MAX_INTERACT_DISTANCE)
         return false;
 
-    // The client sends one transaction per click, so a repeat within the tick is a duplicate that
-    // would undo the exchange it follows.
+    // one transaction per click: a repeat within the tick is a duplicate undoing the exchange it follows
     return owner.getCurrentTick() != mLastInteractTick;
 }
 
@@ -317,7 +316,7 @@ bool ArmorStandActor::senseDamage(ServerNetworkHandler &owner, float &amount, co
     (void) owner;
     (void) amount;
 
-    // onHurt only receives the attacking player, and the stand reacts to the kind of damage.
+    // onHurt only receives the attacking player; the stand reacts to the damage kind
     const std::string &key = source.mDeathMessageKey;
     mPendingProjectile = source.mProjectile;
     mPendingMobAttacker = source.mAttacker != nullptr && !source.mAttacker->isPlayer();
@@ -358,7 +357,7 @@ bool ArmorStandActor::onHurt(ServerNetworkHandler &owner, float amount, ServerPl
             owner.broadcastLevelEvent(owner.getLevelFor(*this), LEVEL_EVENT_LAND, getPosition(), 0);
             break;
         case HitKind::Fire: {
-            // Standing in fire or lava burns through the contact damage instead.
+            // standing in fire or lava burns through the contact damage instead
             Level &level = owner.getLevelFor(*this);
             if (!FireBlocksFetch::at(level, getPosition()).fire && !LiquidBlocksFetch::at(level, getPosition()).lava)
                 _burn(owner, FIRE_TICK_DAMAGE);
@@ -414,8 +413,8 @@ void ArmorStandActor::_burn(ServerNetworkHandler &owner, float amount) {
 }
 
 void ArmorStandActor::_destroy(ServerNetworkHandler &owner, bool dropStand, bool dropEquipment) {
-    // Set before anything drops: every later hit, explosion or click in this tick stops here, and
-    // the actor is no longer saved, so nothing can exist both as a drop and on the stand.
+    // set before anything drops: later hits, explosions or clicks this tick stop here, and the actor is no longer
+    // saved: nothing exists both as a drop and on the stand
     if (mExpired)
         return;
     mExpired = true;

@@ -8,10 +8,10 @@
 
 class PlayerAuthInputPacket;
 
-/** Main-thread input timeline. Network arrival never advances movement simulation itself. */
+// main-thread input timeline; network arrival never advances the simulation
 class ServerPlayerMovementComponent {
 public:
-    // BDS 1.26.10 ServerPlayerMovementComponent input admission (0x14127B1A0).
+    // ServerPlayerMovementComponent input admission (0x14127B1A0, 1.26.10)
     static constexpr size_t MAX_PENDING_INPUTS = 1000;
 
     bool enqueue(const PlayerAuthInputPacket &packet);
@@ -21,7 +21,7 @@ public:
     std::shared_ptr<const PlayerAuthInputPacket> takeNext();
 
     void clearPending();
-    // Inputs dropped unprocessed since the last call; their predicted block changes must be resent to the client.
+    // inputs dropped unprocessed since the last call: resend their predicted block changes
     std::vector<std::shared_ptr<const PlayerAuthInputPacket>> takeDropped() {
         std::vector<std::shared_ptr<const PlayerAuthInputPacket>> dropped;
         dropped.swap(mDropped);
@@ -52,7 +52,7 @@ public:
         return mLastReceivedTick;
     }
 
-    // Counts consecutive inputs whose tick does not advance past the last received one; returns the current streak.
+    // streak of inputs whose tick doesn't advance past the last received one
     uint32_t noteInputTick(int64_t tick) {
         mStaleTicks = mLastReceivedTick >= 0 && tick <= mLastReceivedTick ? mStaleTicks + 1 : 0;
         return mStaleTicks;

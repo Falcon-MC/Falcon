@@ -15,9 +15,8 @@ ActorMoveResult ActorCollisionSystem::move(Level &level, AxisAlignedBB &box, con
     const bool landing = wasOnGround || (moved.y != delta.y && delta.y < 0.0f);
     const bool blockedHorizontally = moved.x != delta.x || moved.z != delta.z;
 
-    // Step-up: replay the move from the original box lifted by the step height, then drop
-    // back down onto whatever is there. The stepped result is kept only if it gets further
-    // horizontally than the plain move, so slabs and stairs are climbed but walls are not.
+    // step-up: replay the move lifted by the step height, then drop back down; kept only when it goes further
+    // horizontally: slabs and stairs climbed, walls not
     if (stepHeight > 0.0f && landing && blockedHorizontally) {
         const AxisAlignedBB flat = box;
         const Vector3f flatMoved = moved;
@@ -43,7 +42,7 @@ ActorMoveResult ActorCollisionSystem::move(Level &level, AxisAlignedBB &box, con
     result.mCollidedX = moved.x != delta.x;
     result.mCollidedY = moved.y != delta.y;
     result.mCollidedZ = moved.z != delta.z;
-    // BDS FinalizeMoveSystem (0x140C638A0) retains grounded state for a zero-Y move.
+    // FinalizeMoveSystem (0x140C638A0) keeps the grounded state for a zero-Y move
     result.mOnGround = (result.mCollidedY && delta.y < 0.0f)
                        || (wasOnGround && !result.mCollidedY && delta.y == 0.0f);
     return result;
@@ -52,8 +51,7 @@ ActorMoveResult ActorCollisionSystem::move(Level &level, AxisAlignedBB &box, con
 Vector3f ActorCollisionSystem::_resolve(Level &level, AxisAlignedBB &box, const Vector3f &delta) {
     const std::vector<AxisAlignedBB> obstacles = level.getCollisionBoxes(box.addCoord(delta.x, delta.y, delta.z));
 
-    // Axes are resolved one at a time in Y, X, Z order, each against the box already moved
-    // on the previous axes, so a move into a corner slides along the wall it does not hit.
+    // Y, X, Z order, each axis against the box moved on the previous ones: a corner move slides along the wall it misses
     float dy = delta.y;
     for (const AxisAlignedBB &obstacle: obstacles)
         dy = obstacle.calculateYOffset(box, dy);

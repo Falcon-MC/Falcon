@@ -503,11 +503,8 @@ int32_t MobActor::_countSensedEntities(ServerNetworkHandler &owner, const json::
     return count;
 }
 
-/**
- * Fires the range events of `minecraft:target_nearby_sensor` on transitions only: entering the inside range,
- * leaving past the outside range, and losing sight of the target while still inside. The gap between the two
- * ranges is a hysteresis band so a target on the boundary does not toggle the events every tick.
- */
+// minecraft:target_nearby_sensor events on transitions only: entering inside range, leaving past outside range,
+// losing sight while inside; the gap between ranges is hysteresis: no toggling on the boundary
 void MobActor::_tickTargetNearbySensor(ServerNetworkHandler &owner) {
     const json::Value *sensor = _getSensorComponents().mTargetNearbySensor;
     const Actor *target = sensor == nullptr ? nullptr : getTarget(owner);
@@ -565,10 +562,7 @@ void MobActor::_tickHurtOnCondition(ServerNetworkHandler &owner) {
     }
 }
 
-/**
- * Counts the ticks spent without a nearby player or recent damage, which is what the `inactivity_timer`
- * filter measures for despawn rules.
- */
+// ticks without a nearby player or recent damage: what the inactivity_timer despawn filter measures
 void MobActor::_tickInactivity(ServerNetworkHandler &owner) {
     if (owner.getCurrentTick() - mLastHurtTick <= 1) {
         mInactivityTicks = 0;
@@ -1113,7 +1107,7 @@ bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, co
     owner.sendActorNameTag(*this);
     _setFlag(owner, ActorFlag::CanShowName, true);
 
-    // A matching name action fires its event; any other name fires the default trigger instead.
+    // a matching name action fires its event; any other name fires default_trigger
     const json::Value *trigger = nameable->get("default_trigger");
     const json::Value *actions = nameable->get("name_actions");
     if (actions != nullptr && actions->isArray()) {

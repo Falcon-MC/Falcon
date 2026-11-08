@@ -93,7 +93,7 @@ void MobDweller::onDeath(const MobActor &mob, const ServerPlayer *killer) {
 }
 
 void MobDweller::joinVillage(ServerNetworkHandler &owner, const MobActor &mob, Village &village) {
-    // the raid_configuration group that adds the component may have been added after the last tick read it
+    // the raid_configuration group adding the component may have come after the last tick read it
     const json::Value *component = mob.getComponent(DWELLER_COMPONENT);
     if (component != mComponent) {
         mComponent = component;
@@ -139,8 +139,8 @@ void MobDweller::_updateVillage(ServerNetworkHandler &owner, MobActor &mob) {
                          : 0;
     mUpdateCountdown = mUpdateIntervalBase + roll;
 
-    // the game saves the dweller's village with the actor; a reloaded dweller finds it again here instead of joining
-    // anew, which would drop its claims without releasing them
+    // the game saves the dweller's village with the actor; a reloaded dweller finds it again here: joining anew
+    // would drop its claims without releasing them
     if (!mHasJoinedVillage) {
         mVillage = villages.getDwellerVillage(mRole, id);
         mHasJoinedVillage = !mVillage.expired();

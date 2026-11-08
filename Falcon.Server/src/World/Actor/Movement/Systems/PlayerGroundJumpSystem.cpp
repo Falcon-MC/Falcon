@@ -38,7 +38,7 @@ void PlayerGroundJumpSystem::tick(PlayerMovementContext &context) {
         state.velocity.y = std::max(jumpHeight * jumpFactor(context.level, state.start), state.velocity.y);
         state.jumpDelay = JUMP_DELAY_TICKS;
         if (abilities.sprinting) {
-            // BDS 0x140EAFAF0 indexes the sine table directly in degrees.
+            // 0x140EAFAF0 indexes the sine table directly in degrees
             state.velocity.x -= mojangSinDegrees(input.getPacket().mRotation.y) * 0.2f;
             state.velocity.z += mojangCosDegrees(input.getPacket().mRotation.y) * 0.2f;
         }

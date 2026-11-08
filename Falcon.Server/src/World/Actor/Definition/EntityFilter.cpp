@@ -329,10 +329,7 @@ namespace {
     }
 }
 
-/**
- * Reads the family list in place instead of copying it: `is_family` runs for every candidate a targeting or sensing
- * scan looks at, every tick.
- */
+// family list read in place: is_family runs for every candidate of every targeting or sensing scan, every tick
 bool EntityFilter::hasFamily(const Actor &actor, const std::string &family) {
     if (actor.isPlayer())
         return family == PLAYER_FAMILY;
@@ -367,10 +364,7 @@ EntityFilter::DamageScope::~DamageScope() {
     activeDamageAmount = 0.0f;
 }
 
-/**
- * Filters run for every candidate of every targeting and sensing scan, so the keys are matched in one pass over
- * the object instead of a hashed lookup (and a key string) per possible group. The precedence is unchanged.
- */
+// runs for every candidate of every scan: keys matched in one pass over the object, not a hashed lookup per group
 bool EntityFilter::test(const json::Value &filter, ServerNetworkHandler &owner, const MobActor &self,
                         const Actor *other) {
     if (filter.isArray())

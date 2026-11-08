@@ -80,7 +80,7 @@ public:
 
     void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0) override;
 
-    /** Fires the spawn event and equips the mob now instead of on its first tick, at most once. */
+    // now instead of on the first tick; at most once
     void startDefinition(ServerNetworkHandler &owner);
 
     void applyDefaults(Difficulty difficulty);
@@ -131,10 +131,8 @@ public:
 
     const json::Value *getComponent(const std::string &name) const;
 
-    /**
-     * Same lookup for a literal name. Component names are longer than the small string buffer, so building a
-     * temporary std::string for every per-tick lookup allocated; this reuses one key buffer instead.
-     */
+    // component names exceed the small string buffer: a temporary std::string per tick lookup allocates;
+    // this reuses one key buffer
     const json::Value *getComponent(const char *name) const;
 
     const std::unordered_map<std::string, const json::Value *> &getComponents() const;
@@ -149,7 +147,6 @@ public:
 
     void removeComponentGroup(const std::string &group);
 
-    /** Spawns the riders of `minecraft:addrider` components added since the last call. */
     void spawnPendingRiders(ServerNetworkHandler &owner) {
         mAddRider.spawnPending(owner, *this);
     }
@@ -290,18 +287,18 @@ public:
 
     bool canTarget(const Actor &actor) const;
 
-    /** Whether rider may take a seat: `minecraft:rideable` with a free seat and a family it accepts. */
+    // minecraft:rideable with a free seat and an accepted family
     bool acceptsRider(const MobActor &rider) const;
 
     float distanceSquaredTo(const Actor &other) const;
 
-    /** Largest body turn per tick in degrees, from the active `minecraft:movement.*` component. */
+    // degrees per tick, from the active minecraft:movement.* component
     float getMaxTurn() const;
 
-    /** Upward velocity of a full jump from `minecraft:jump.static`, or a negative value without it. */
+    // from minecraft:jump.static; negative without it
     float getJumpPower() const;
 
-    /** True when no block lies on the ray between this mob's eyes and the eyes of `other`. */
+    // no block on the eye-to-eye ray
     bool canSee(ServerNetworkHandler &owner, const Actor &other) const;
 
     static ServerPlayer *findPlayer(ServerNetworkHandler &owner, uint64_t runtimeId);
@@ -393,10 +390,7 @@ private:
     friend class RideControlSystem;
     friend class RideControlProbe;
 
-    /**
-     * The sensor components are read by every mob every tick, so they are resolved once per component change
-     * instead of by name each tick.
-     */
+    // read by every mob every tick: resolved once per component change, not by name
     struct SensorComponents {
         const json::Value *mEntitySensor = nullptr;
         const json::Value *mEnvironmentSensor = nullptr;

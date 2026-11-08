@@ -71,7 +71,7 @@ public:
     virtual void onAdd(Actor &, const MobEffectInstance &) const {}
     virtual void onRemove(Actor &, const MobEffectInstance &) const {}
 
-    /** A stronger or longer instance replaces the running one. */
+    // a stronger or longer instance replaces the running one
     virtual void onRefresh(Actor &actor, const MobEffectInstance &previous, const MobEffectInstance &instance) const {
         onRemove(actor, previous);
         onAdd(actor, instance);
@@ -148,19 +148,14 @@ public:
     void tick(Actor &, const MobEffectInstance &) const override;
 };
 
-/**
- * Raid Omen: the position where it was first applied is kept on the player, and its removal asks for a raid at the
- * village there.
- */
+// first application's position kept on the player; removal asks for a raid at the village there
 class RaidOmenMobEffect final : public MobEffect {
 public:
     void onAdd(Actor &, const MobEffectInstance &) const override;
     void onRemove(Actor &, const MobEffectInstance &) const override;
 
-    /**
-     * Actor::addEffect updates a running effect in place (sub_140BCF250 -> sub_14355C370) and only refreshes its
-     * attribute modifiers (sub_14355CC80), so a refreshed omen neither stores a position nor asks for a raid.
-     */
+    // Actor::addEffect updates a running effect in place (sub_140BCF250 -> sub_14355C370), only refreshing its
+    // modifiers (sub_14355CC80): a refreshed omen stores no position and asks for no raid
     void onRefresh(Actor &, const MobEffectInstance &, const MobEffectInstance &) const override {}
 };
 
@@ -178,7 +173,7 @@ public:
     int32_t getApplyInterval(const MobEffectInstance &) const override;
 };
 
-// BDS names retained for effects whose gameplay hooks are not actor-local yet.
+// game names kept for effects whose gameplay hooks aren't actor-local yet
 class AttackDamageMobEffect final : public MobEffect {};
 class InfestedMobEffect final : public MobEffect {};
 class OozingMobEffect final : public MobEffect {};

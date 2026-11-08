@@ -15,10 +15,10 @@ void PlayerFlightSystem::tick(PlayerMovementContext &context) {
     auto &travel = context.travel;
 
     if (abilities.flying) {
-        // Same fly speed as the ability advertised by LoginHandler; BDS doubles it when sprinting.
+        // fly speed advertised by LoginHandler; the game doubles it when sprinting
         travel.acceleration = FLY_SPEED * (abilities.sprinting ? 2.0f : 1.0f);
-        // On the input that stops flight the client still travels as flying, but its input request already has
-        // flight off, so the vertical fly controls do nothing.
+        // the input that stops flight still travels as flying, but its input request already has flight off:
+        // vertical fly controls do nothing
         const bool controls = !MovementPhysics::input(input.getPacket(), PlayerAuthInputData::StopFlying);
         const bool ascend = controls && MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantUp);
         const bool descend = controls && MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantDown);
@@ -29,7 +29,7 @@ void PlayerFlightSystem::tick(PlayerMovementContext &context) {
             const Block *ground = blockAt(context.level, state.start.x, state.start.y - GROUND_PROBE_DEPTH, state.start.z);
             travel.friction *= ground == nullptr ? DEFAULT_BLOCK_FRICTION : ground->getFrictionFactor();
         }
-        // VerticalFlySpeedControlSystem also sets FrictionModifierComponent for idle flight.
+        // VerticalFlySpeedControlSystem also sets FrictionModifierComponent for idle flight
         if (std::max(std::fabs(input.sideways), std::fabs(input.forward)) < 0.01f) {
             const bool mouse = input.getPacket().mInputMode == PlayerInputMode::Mouse;
             travel.frictionModifier = mouse ? 0.375f : 0.75f;

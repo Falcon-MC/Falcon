@@ -9,11 +9,8 @@
 
 class Level;
 
-/**
- * Classifies block positions for the pathfinder. Ground modes (walk, climb) look for a block to stand on,
- * volumetric modes (swim, fly) accept any open position in their medium. Every lookup is cached for the
- * duration of one search because A* asks about the same blocks many times.
- */
+// ground modes (walk, climb) need a block to stand on; swim and fly accept any open position in their medium;
+// lookups cached per search: A* revisits the same blocks
 class NodeEvaluator {
 public:
     static constexpr int32_t NO_OFFSET = INT32_MIN;
@@ -32,15 +29,15 @@ public:
         return mInWater;
     }
 
-    /** Vertical offset from `feetY` to the nearest standable position in this column, or NO_OFFSET. */
+    // offset from feetY to the nearest standable y in this column, or NO_OFFSET
     int32_t availableOffset(int32_t x, int32_t feetY, int32_t z);
 
     bool isStandable(int32_t x, int32_t y, int32_t z);
 
-    /** A climber can hang at this position: the body fits and a solid block is beside it. */
+    // body fits and a solid block is beside it
     bool canClimb(int32_t x, int32_t feetY, int32_t z);
 
-    /** A swimmer or flier can occupy this position. `swimming` selects water as the medium. */
+    // medium: water when swimming, air otherwise
     bool isOpen(int32_t x, int32_t feetY, int32_t z, bool swimming);
 
     bool isPassable(float centerX, float feetY, float centerZ);

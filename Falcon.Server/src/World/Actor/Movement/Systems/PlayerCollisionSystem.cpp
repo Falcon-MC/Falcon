@@ -124,7 +124,7 @@ namespace MovementPhysics {
         return value > 0.0f ? value - EDGE_STEP : value + EDGE_STEP;
     }
 
-    /** Sneaking shortens each axis, then both together, until support remains under the box. */
+    // sneaking: shorten each axis, then both, until support remains under the box
     void avoidEdge(Level &level, const AxisAlignedBB &box, Vector3f &velocity) {
         const AxisAlignedBB support = box.expand(-EDGE_INSET, 0.0f, -EDGE_INSET);
         const float drop = -STEP_HEIGHT * 1.01f;
@@ -165,7 +165,7 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
 
     travel.box = boxAt(state.start, context.pose.mHeight);
     Vector3f stuck;
-    // Creative flight is immune to cobweb, powder snow and berry bush slowdown.
+    // spectators and creative flight ignore cobweb, powder snow and berry bush slowdown
     const bool slowdownImmune = abilities.spectator || (abilities.flying && abilities.gameType == (int32_t) GameType::Creative);
     travel.isStuck = !slowdownImmune && stuckMultiplier(context.level, context.player, travel.box, stuck);
     if (travel.isStuck) {
@@ -203,7 +203,7 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
     if (travel.moved.mCollidedY)
         state.velocity.y = wasOnGround || state.velocity.y >= 0.0f || input.pressingSneak ? 0.0f : landingVelocity(under, state.velocity.y);
 
-    // A wall bump on a climbable block lifts after the move, and that tick skips gravity and vertical drag.
+    // a wall bump on a climbable lifts after the move; that tick skips gravity and vertical drag
     if (!abilities.flying && !abilities.gliding && !context.waterTravel.active && !context.liquidTravel.lava
         && (travel.moved.mCollidedX || travel.moved.mCollidedZ)) {
         const Block *inside = blockAt(context.level, state.simulated.x, state.simulated.y, state.simulated.z);

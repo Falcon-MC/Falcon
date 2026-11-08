@@ -12,10 +12,7 @@ enum class NavigationMode {
     Fly
 };
 
-/**
- * Pathfinding rules of a mob, read from its active `minecraft:navigation.*` component. Defaults are the
- * component defaults, so a field missing from the definition behaves like the game.
- */
+// from the active minecraft:navigation.* component; defaults match the component's
 struct PathOptions {
     NavigationMode mMode = NavigationMode::Walk;
     bool mCanOpenDoors = false;

@@ -15,7 +15,6 @@
 #include <tuple>
 #include <unordered_map>
 
-/** Per-player ECS storage for the components consumed by the movement systems. */
 class PlayerMovementRegistry {
 public:
     using Entity = uint64_t;

@@ -10,7 +10,7 @@
 using namespace MovementPhysics;
 
 namespace {
-    // A client applies a correction on its next input; a few inputs absorb one already in flight when it arrived.
+    // a client applies a correction on its next input; a few inputs absorb one already in flight
     const uint32_t MAX_IGNORED_CORRECTIONS = 3;
 }
 
@@ -56,8 +56,8 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     // the exit moves the player itself; reconciling it would turn up to 15 blocks into velocity
     if (prediction.validator->takeDismountPosition(state.simulated, reported))
         state.simulated = reported;
-    // Measured on every input: right after a correction the validator skips its comparison, and the server spaces
-    // its corrections, so most inputs of a dropped correction would otherwise look fine.
+    // measured on every input: the validator skips its comparison right after a correction and corrections are
+    // spaced: most inputs of a dropped correction would look fine
     const float errorX = reported.x - state.simulated.x;
     const float errorY = reported.y - state.simulated.y;
     const float errorZ = reported.z - state.simulated.z;
@@ -68,8 +68,8 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     const bool needsCorrection = prediction.validator->reconcile(
             acceptedPosition, *prediction.feetPosition, (uint64_t) input.getPacket().mTick,
             context.owner.getProperties().getPlayerPositionAcceptanceThreshold(), prediction.strict, &details);
-    // BDS ReplayState (0x140E70E40) steers the next tick's velocity toward acceptPos;
-    // it leaves this tick's physical position unchanged, including fine-threshold adoption.
+    // ReplayState (0x140E70E40) steers next tick's velocity toward acceptPos; this tick's position stays,
+    // fine-threshold adoption included
     state.velocity.x += acceptedPosition.x - state.simulated.x;
     state.velocity.y += acceptedPosition.y - state.simulated.y;
     state.velocity.z += acceptedPosition.z - state.simulated.z;
@@ -79,8 +79,7 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     *prediction.feetPosition = state.simulated;
     context.player.setMotion(state.velocity);
 
-    // A client that keeps diverging after acknowledging a correction dropped it (a movement "disabler"), so the
-    // server could never move it back.
+    // still diverging after acking a correction: the client dropped it (movement "disabler"); it can't be moved back
     if (prediction.validator->noteInputAfterCorrection(input.getPacket().mTick, diverging) >= MAX_IGNORED_CORRECTIONS) {
         context.owner._disconnect(context.id, DisconnectReason::KickedForExploit,
                                   context.player.localize("falcon.disconnect.kicked"));
@@ -100,7 +99,7 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     const auto &contact = context.contact;
     const auto &abilities = context.abilities;
     const auto &timeline = context.player.getMovementInputs();
-    // Keep the measured mismatch before position adoption overwrites the reported position.
+    // keep the measured mismatch before position adoption overwrites the reported position
     LOG_WARN(LogAreaID::Network,
              "[MovementCorrection] player=%s reason=%s tick=%llu server_tick=%lld previous_correction=%llu "
              "strict=%d error=(%.9g,%.9g,%.9g) distance_squared=%.9g threshold=%.9g fine_threshold=%.9g adjustments=%u "
@@ -158,9 +157,8 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
                  entry.swimAmount, entry.movementSpeed);
     }
 
-    // The client rewinds to the tick named in the correction and replays its inputs from the
-    // server's position and velocity; the position is sent at eye level like other player
-    // positions.
+    // the client rewinds to the correction's tick and replays from the server's position and velocity;
+    // position at eye level like other player positions
     CorrectPlayerMovePredictionPacket correction;
     correction.mPredictionType = PredictionType::Player;
     correction.mPosition = Vector3f(state.simulated.x, state.simulated.y + PlayerMovementSimulator::PLAYER_BASE_OFFSET, state.simulated.z);

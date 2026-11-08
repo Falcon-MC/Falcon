@@ -12,7 +12,7 @@ namespace {
     const float PLAYER_WIDTH = 0.6f;
     const float PLAYER_HEIGHT = 1.8f;
     const float PUSH_STRENGTH = 0.2f * 0.32f;
-    // Wide enough for the widest actor box (the ender dragon) to still reach the pushed actor.
+    // wide enough for the widest box (ender dragon) to reach the pushed actor
     const float PUSH_SEARCH_RADIUS = 16.0f;
     const float UNSET = -std::numeric_limits<float>::infinity();
 
@@ -44,8 +44,8 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, const ServerA
     float negativeZ = UNSET;
     bool touched = false;
 
-    // The box test comes before the virtual checks: getPhysics() on a mob resolves several definition
-    // components and must stay out of the pair loop.
+    // box test before the virtual checks: getPhysics() on a mob resolves several definition components,
+    // keep it out of the pair loop
     owner.forEachActorNear(actor.getPosition(), PUSH_SEARCH_RADIUS, [&](const ServerActor &other) {
         if (&other == &actor || other.isProjectile() || !other.sharesLevelWith(actor))
             return;

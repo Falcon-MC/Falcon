@@ -7,11 +7,8 @@
 #include <cmath>
 
 namespace MovementPhysics {
-    /**
-     * Single-precision sine with the client's own range reduction and polynomial. The result
-     * feeds the sine table below, so it has to match the client bit for bit or simulated
-     * positions drift away from the client's prediction and trigger needless corrections.
-     */
+    // the client's own range reduction and polynomial: feeds the sine table below, must match bit for bit or
+    // simulated positions drift from the client's prediction and trigger corrections
     float mojangFloatSin(float value) {
         if (value == 0.0f || std::isnan(value))
             return value;
@@ -67,10 +64,7 @@ namespace MovementPhysics {
         return table;
     }
 
-    /**
-     * The client looks movement trigonometry up in a 65536-entry table rather than calling
-     * sin/cos; 10430.378 is 65536 / 2pi, and cosine is the same table shifted a quarter turn.
-     */
+    // the client looks movement trig up in a 65536-entry table; 10430.378 = 65536 / 2pi, cosine a quarter turn later
     float mojangSin(float radians) {
         return mojangSineTable()[(int) (radians * 10430.378f) & 65535];
     }
@@ -128,7 +122,7 @@ namespace MovementPhysics {
         sideways *= force;
         forward *= force;
         const float yaw = yawDegrees * MOJANG_PI / 180.0f;
-        // BDS moveRelative (0x1432674C0) uses sincosf; the jump and look-vector paths use the table.
+        // moveRelative (0x1432674C0) uses sincosf; the jump and look-vector paths use the table
         const float sine = std::sin(yaw);
         const float cosine = std::cos(yaw);
         velocity.x += sideways * cosine - forward * sine;

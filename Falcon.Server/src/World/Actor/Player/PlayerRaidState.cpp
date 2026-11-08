@@ -13,7 +13,7 @@
 
 namespace {
     // player.json: gain_raid_omen adds 30 seconds of raid_omen with the on screen animation and removes bad_omen;
-    // no amplifier is given, so the bad omen level is not carried over
+    // no amplifier given: the bad omen level isn't carried over
     const int32_t RAID_OMEN_DURATION_TICKS = 600;
 
     // RaidBossComponent, set up in sub_141022F80 and named in sub_142CD7520
@@ -100,8 +100,8 @@ void PlayerRaidState::_tickBossBar(ServerNetworkHandler &owner, ServerPlayer &pl
         mBarDimension = player.getDimension();
     }
 
-    // the village manager read above is the new dimension's, so a bar kept across a dimension change would never
-    // be removed: take it down until a raid in the new dimension offers one
+    // the village manager read above is the new dimension's: a bar kept across a dimension change would never
+    // be removed; take it down until a raid in the new dimension offers one
     if (!mBarVillage.expired() && player.getDimension() != mBarDimension) {
         _hideBossBar(owner, player);
         return;

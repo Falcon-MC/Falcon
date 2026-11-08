@@ -50,7 +50,7 @@ public:
 
     void sendTo(ServerNetworkHandler &owner, const ServerPlayer &player, const Actor &actor) const;
 
-    /** Sends every slot, empty ones included, so a client drops what it still shows. */
+    // empty slots included: the client drops what it still shows
     void sendAllTo(ServerNetworkHandler &owner, const ServerPlayer &player, const Actor &actor) const;
 
     void broadcast(ServerNetworkHandler &owner, const Actor &actor) const;

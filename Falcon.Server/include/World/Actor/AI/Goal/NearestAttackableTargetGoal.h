@@ -33,7 +33,7 @@ private:
 
     float mRangeSquared;
     int32_t mScanInterval;
-    // Found by canUse and consumed by start in the same goal selection, so the scan is not run twice.
+    // set by canUse, consumed by start in the same selection: the scan runs once
     uint64_t mFoundTargetRuntimeId = 0;
     float mMaxRangeSquared;
     std::vector<Entry> mEntries;

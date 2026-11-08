@@ -12,8 +12,8 @@ struct PhysicsComponent {
     bool mSwims = false;
     bool mClimbsLadders = false;
     bool mClimbsWalls = false;
-    // Mobs move with their vertical speed first and take gravity and vertical drag after the move, so a
-    // 0.42 jump power climbs a full block; other actors apply both before moving.
+    // mobs move with vertical speed first, gravity and drag after: a 0.42 jump climbs a full block;
+    // other actors apply both before moving
     bool mGravityAfterMove = false;
     float mGravity = DEFAULT_GRAVITY;
     float mStepHeight = LIVING_STEP_HEIGHT;

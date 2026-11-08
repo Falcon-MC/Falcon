@@ -172,7 +172,7 @@ void LevitationMobEffect::onRemove(Actor &actor, const MobEffectInstance &) cons
 }
 
 void LevitationMobEffect::tick(Actor &actor, const MobEffectInstance &instance) const {
-    // Players integrate levitation once per replayed input, including catchup steps.
+    // players integrate levitation once per replayed input, catch-up steps included
     const auto *player = dynamic_cast<const ServerPlayer *>(&actor);
     if (player != nullptr && player->hasSimulatedVelocity())
         return;

@@ -60,7 +60,7 @@ std::vector<AttributeData> ActorAttributes::getPlayerUpdate(bool sprinting) cons
     for (auto &attribute: attributes) {
         if (attribute.mName != "minecraft:movement")
             continue;
-        // BDS 0x1400ACB30/0x143900150: synchronize the same modifier the client uses.
+        // 0x1400ACB30/0x143900150: the same modifier the client uses
         if (sprinting) {
             AttributeModifierData modifier;
             modifier.mId = "d208fc00-42aa-4aad-9276-d5446530de43";

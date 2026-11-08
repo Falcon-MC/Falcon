@@ -57,10 +57,10 @@ public:
 
     virtual void tick(ServerNetworkHandler &owner);
 
-    /** Moves the actor by its motion; an actor that steers its own flight replaces it. */
+    // an actor steering its own flight overrides this
     virtual void tickMovement(ServerNetworkHandler &owner);
 
-    /** Runs each tick between the actor's death and its removal. */
+    // every tick between death and removal
     virtual void tickDeath(ServerNetworkHandler &owner) {
         (void) owner;
     }
@@ -117,7 +117,7 @@ public:
         return false;
     }
 
-    /** A click on the actor. clickPosition comes from the client and may hold any float. */
+    // clickPosition comes from the client: any float
     virtual bool onInteractAt(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &clickPosition) {
         (void) clickPosition;
         return onInteract(owner, player);
@@ -151,19 +151,12 @@ public:
         return EntityEventType::DeathAnimation;
     }
 
-    /**
-     * Damages the actor. On death the drops use lootingLevel; a negative level reads it from the
-     * item source is holding, which is right for melee but not for a projectile, whose level is
-     * captured when it is launched.
-     */
+    // a negative lootingLevel reads the source's held item: right for melee, not for a projectile (captured at launch)
     bool hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel = -1);
 
     bool hurt(ServerNetworkHandler &owner, float amount, const ActorDamageSource &damageSource, int32_t lootingLevel = -1);
 
-    /**
-     * Called when the actor lands after falling the given distance. Only mobs take fall damage, so other actors
-     * ignore it.
-     */
+    // only mobs take fall damage
     virtual void causeFallDamage(ServerNetworkHandler &owner, float distance) {
         (void) owner;
         (void) distance;
@@ -193,7 +186,7 @@ public:
         return true;
     }
 
-    // an arrow that hits this actor is used up, whatever its piercing level
+    // an arrow hitting this actor is used up, whatever its piercing level
     virtual bool stopsProjectiles() const {
         return false;
     }

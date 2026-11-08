@@ -18,17 +18,16 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
 
     input.pressingSneak = input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::Sneaking);
 
-    // The client keeps sprinting only while its move vector points forward: forward > 0, a length of at least
-    // 1/sqrt(2) and no more than 1/sqrt(2) sideways, otherwise it stops sprint on its own. Sprinting in any other
-    // direction (omnisprint) is simulated as walking.
+    // the client keeps sprinting only while moving forward: forward > 0, length >= 1/sqrt(2), sideways <= 1/sqrt(2),
+    // else it stops on its own; omnisprint is simulated as walking
     const float moveForward = input.getPacket().mMotionY;
     const float moveSideways = input.getPacket().mMotionX;
     const float moveLength = std::sqrt(moveForward * moveForward + moveSideways * moveSideways);
     if (moveForward <= 0.0f || moveLength < SPRINT_INPUT_AXIS || std::fabs(moveSideways) > SPRINT_INPUT_AXIS)
         abilities.sprinting = false;
 
-    // The client already scales the move vector it sends by the item-use slowdown (0.35 squared while eating or
-    // drawing a bow), so applying it again here would slow the simulation twice.
+    // the client already scales its move vector by the item-use slowdown (0.35 squared eating or drawing a bow):
+    // don't apply it twice
     float maxImpulse = 1.0f;
     const int32_t slowdownTicks = context.pose.mSneaking || context.pose.mCrawling ? context.player.getSlowdownTicks() + 1 : 0;
     context.player.setSlowdownTicks(slowdownTicks);
@@ -41,7 +40,7 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
         }
         maxImpulse *= std::clamp(sneakMultiplier, 0.0f, 1.0f);
     }
-    // BDS 0x140E70890 normalizes the raw 2D input before applying pose slowdown and damping.
+    // 0x140E70890 normalizes the raw 2D input before pose slowdown and damping
     const float length = std::sqrt(input.getPacket().mMotionX * input.getPacket().mMotionX
                                    + input.getPacket().mMotionY * input.getPacket().mMotionY);
     const float scale = maxImpulse * IMPULSE_SCALE / std::max(1.0f, length);

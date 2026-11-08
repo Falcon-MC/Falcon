@@ -18,7 +18,7 @@ bool PlayerMovementAdmissionSystem::prepare(PlayerMovementContext &context) {
     const ItemStack &boots = context.player.getInventory().getArmor(PlayerInventory::ARMOR_FEET);
     state.start = context.player.hasSimulatedPosition() ? context.player.getSimulatedPosition() : context.player.getPosition();
     const Block *soulSupport = blockAt(context.level, state.start.x, state.start.y - SUPPORT_PROBE_DEPTH, state.start.z);
-    // BDS keeps the modifier over air while jumping, and refreshes it on the next non-air block.
+    // the modifier stays over air while jumping, refreshed on the next non-air block
     if (soulSupport != nullptr && soulSupport->getTypeId() != BlockTypeIds::AIR) {
         const int enchantmentLevel = ItemEnchantments::getLevel(boots, EnchantmentIds::SOUL_SPEED);
         const float bonus = enchantmentLevel > 0 && soulSupport->getBehavior().supportsSoulSpeed()
@@ -30,9 +30,8 @@ bool PlayerMovementAdmissionSystem::prepare(PlayerMovementContext &context) {
         return false;
     }
 
-    // Only server state decides to skip: a server teleport keeps a movement change pending until the client
-    // acknowledges it, and riding is the server's own state. The client's HandleTeleport and vehicle input flags are
-    // not trusted, or a single bit would let it place itself anywhere.
+    // only server state decides to skip: a server teleport keeps a movement change pending until acked, riding is
+    // server state; the client's HandleTeleport and vehicle flags aren't trusted: one bit would let it go anywhere
     const bool skip = context.player.isRiding() || context.player.isSleeping()
                       || context.player.skipsForPendingMovementChange();
     if (skip || !chunkLoaded(context.level, state.start)

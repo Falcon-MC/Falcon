@@ -12,16 +12,13 @@ class ServerNetworkHandler;
 class ServerPlayer;
 class Village;
 
-/**
- * The raid side of a player: Bad Omen turning into Raid Omen inside a village, the raid that Raid Omen starts when it
- * is removed, and the raid boss bar. Main-thread only.
- */
+// Bad Omen -> Raid Omen in a village, the raid it starts when removed, the raid boss bar; main thread only
 class PlayerRaidState {
 public:
-    /** Raid Omen applied: only the floored position of the first application is kept (sub_14355FB10). */
+    // sub_14355FB10: only the floored position of the first application is kept
     void onRaidOmenAdded(const Vector3i &position);
 
-    /** Raid Omen removed: the raid is asked for on the next tick (`minecraft:trigger_raid`, sub_14355FD20). */
+    // sub_14355FD20: raid asked for on the next tick (minecraft:trigger_raid)
     void onRaidOmenRemoved() {
         mTriggerPending = true;
     }

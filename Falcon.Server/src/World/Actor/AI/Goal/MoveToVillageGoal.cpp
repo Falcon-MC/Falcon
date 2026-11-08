@@ -84,7 +84,7 @@ bool MoveToVillageGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &
     const float dx = (float) goal.x + BLOCK_CENTER - position.x;
     const float dy = (float) goal.y + BLOCK_CENTER - position.y;
     const float dz = (float) goal.z + BLOCK_CENTER - position.z;
-    // close to the target the goal only goes on for a mob that has been in the village and walked out again
+    // close to the target the goal only goes on for a mob having been in the village and walked out again
     if (mGoalRadiusSquared + mGoalRadiusSquared > dx * dx + dy * dy + dz * dz)
         return mEnteredVillage && outside;
     return true;
@@ -119,7 +119,7 @@ void MoveToVillageGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         ++mTicksAtTarget;
     } else {
         ++mTravelTicks;
-        // a finished path stops the navigation here, so isDone covers both no path and a walked one
+        // a finished path stops the navigation here: isDone covers both no path and a walked one
         if (mob.getNavigation().isDone() || mTravelTicks % REPATH_INTERVAL == 0) {
             _moveCloser(owner, mob);
             mPathCheckPending = true;
@@ -192,8 +192,8 @@ void MoveToVillageGoal::_moveCloser(ServerNetworkHandler &owner, MobActor &mob) 
 }
 
 void MoveToVillageGoal::_checkRepeatedPath(const MobActor &mob) {
-    // sub_143A08990, checked once the new path is computed: no path, or a path starting from the block the last one
-    // started from, puts the goal on cooldown. Falcon paths keep no start node, so the mob's block stands for it.
+    // sub_143A08990, once the new path is computed: no path, or one starting from the last one's start block, puts
+    // the goal on cooldown; our paths keep no start node: the mob's block stands in
     const PathNavigation &navigation = mob.getNavigation();
     if (navigation.getPath() == nullptr && !navigation.isDone())
         return;

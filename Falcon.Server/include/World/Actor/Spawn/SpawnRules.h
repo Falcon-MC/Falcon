@@ -38,7 +38,7 @@ struct SpawnCondition {
     bool mHasHeight = false;
     int32_t mMinHeight = 0;
     int32_t mMaxHeight = 0;
-    // Without a distance_filter the dedicated server still keeps mobs between 24 and 128 blocks of a player.
+    // without a distance_filter the game still keeps mobs 24 to 128 blocks from a player
     int32_t mMinDistance = 24;
     int32_t mMaxDistance = 128;
     int64_t mMinWorldAge = 0;

@@ -35,7 +35,7 @@ class ServerNetworkHandler;
 
 class ServerPlayer : public Actor {
 public:
-    /** Name of the world the player was in when saved; the player data file is shared by every world. */
+    // world the player was saved in; one player data file is shared by every world
     static constexpr const char *TAG_LEVEL = "Level";
 
     enum class LoginState : int {
@@ -55,11 +55,8 @@ public:
     void teleport(ServerNetworkHandler &owner, const Vector3f &position,
                   MovePlayerTeleportationCause cause = MovePlayerTeleportationCause::Behavior);
 
-    /**
-     * Sets a velocity the client applies itself, such as a lunge. The packet carries the last input tick the
-     * server received: the client applies the motion on the next input tick and replays from there, so the
-     * movement simulation takes it on that same tick, even when inputs are still queued.
-     */
+    // a velocity the client applies itself (lunge); the packet carries the last received input tick: the client
+    // applies it on the next input tick and replays from there, the simulation takes it on that tick, queue or not
     void applyServerMotion(ServerNetworkHandler &owner, const Vector3f &motion);
 
     const char *getIdentifier() const override { return "minecraft:player"; }
@@ -70,9 +67,7 @@ public:
 
     void setLoginState(LoginState state) { mLoginState = state; }
 
-    /**
-     * The protocol this connection chose from the version it announced, fixed for the rest of the session.
-     */
+    // chosen from the announced version, fixed for the session
     const std::shared_ptr<const ProtocolCodec> &getCodec() const { return mCodec; }
 
     void setCodec(std::shared_ptr<const ProtocolCodec> codec) { mCodec = std::move(codec); }
@@ -127,9 +122,7 @@ public:
         mLastActiveTick = tick;
     }
 
-    /**
-     * Records the look direction of an input and tells whether it moved since the previous one.
-     */
+    // true when the look direction changed since the previous input
     bool updateInputRotation(const Vector3f &rotation) {
         const bool changed = rotation.x != mLastInputRotation.x || rotation.y != mLastInputRotation.y;
         mLastInputRotation = rotation;
@@ -257,7 +250,7 @@ public:
 
     void clearPendingKnockback() { mHasPendingKnockback = false; }
 
-    // The server motion due on this input tick or an earlier one, see applyServerMotion.
+    // motion due on this input tick or an earlier one (applyServerMotion)
     bool takeServerMotion(int64_t inputTick, Vector3f &out) {
         if (!mHasPendingServerMotion || inputTick < mPendingServerMotionTick)
             return false;
@@ -284,11 +277,8 @@ public:
 
     bool hasPendingMovementChange() const { return mPendingMovementChanges > 0; }
 
-    /**
-     * Whether this input should skip the movement simulation for a pending movement change. A client acknowledges one
-     * within a round trip; one that holds the acknowledgement back would otherwise move unchecked until the timeout,
-     * so the simulation resumes after a bounded number of inputs.
-     */
+    // a client acks a movement change within a round trip; one holding the ack back would move unchecked until the
+    // timeout: the simulation resumes after a bounded number of inputs
     bool skipsForPendingMovementChange() {
         if (!hasPendingMovementChange()) {
             mInputsWhilePending = 0;
@@ -430,7 +420,7 @@ public:
         mAwaitingDimensionAck = awaiting;
     }
 
-    /** A world change inside one dimension sent an intermediate dimension; the real one follows the ack. */
+    // a world change inside one dimension sent an intermediate dimension; the real one follows the ack
     bool hasPendingDimensionHop() const { return mPendingDimensionHop; }
 
     void setPendingDimensionHop(bool pending) { mPendingDimensionHop = pending; }
@@ -475,7 +465,7 @@ public:
         return mSpawnPoint;
     }
 
-    /** The world that holds the spawn point, since a bed only counts in the world it was placed in. */
+    // a bed only counts in the world it was placed in
     const std::string &getSpawnWorld() const {
         return mSpawnWorld;
     }
@@ -556,7 +546,6 @@ public:
         awaitMovementChange();
     }
 
-    /** Whether the player changed skin less than the given number of seconds ago. */
     bool changedSkinWithin(int seconds) const {
         return mHasChangedSkin && std::chrono::steady_clock::now() - mLastSkinChange < std::chrono::seconds(seconds);
     }
@@ -566,7 +555,7 @@ public:
         mLastSkinChange = std::chrono::steady_clock::now();
     }
 
-    /** Whether the player was teleported less than a second ago, when their movement costs no food. */
+    // movement costs no food for a second after a teleport
     bool wasRecentlyTeleported() const {
         return std::chrono::steady_clock::now() - mLastTeleport < POST_TELEPORT_GRACE;
     }
@@ -641,7 +630,7 @@ public:
 
     std::unordered_set<uint64_t> &getVisibleActors() { return mVisibleActors; }
 
-    /** Runtime ids of the other players this player's client currently has spawned. */
+    // the other players this client has spawned
     std::unordered_set<uint64_t> &getVisiblePlayers() { return mVisiblePlayers; }
 
     bool hasMovedSinceBroadcast() const {
