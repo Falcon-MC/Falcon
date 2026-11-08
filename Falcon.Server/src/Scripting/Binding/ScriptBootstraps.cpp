@@ -308,17 +308,29 @@ namespace {
 
     class ActionFormData {
         #data = { type: "form", title: "", content: "", buttons: [] };
-        title(text) { this.#data.title = ft(text); return this; }
-        body(text) { this.#data.content = ft(text); return this; }
+        title(text) {
+            this.#data.title = ft(text);
+            return this;
+        }
+        body(text) {
+            this.#data.content = ft(text);
+            return this;
+        }
         button(text, icon) {
             const entry = { text: ft(text) };
             if (icon !== undefined) entry.image = { type: "path", data: String(icon) };
             this.#data.buttons.push(entry);
             return this;
         }
-        header(text) { return this; }
-        label(text) { return this; }
-        divider() { return this; }
+        header(text) {
+            return this;
+        }
+        label(text) {
+            return this;
+        }
+        divider() {
+            return this;
+        }
         async show(player) {
             const r = await native.showForm(player, JSON.stringify(this.#data));
             if (r.canceled || r.value === null) return { canceled: true, cancelationReason: "UserClosed" };
@@ -328,10 +340,22 @@ namespace {
 
     class MessageFormData {
         #data = { type: "modal", title: "", content: "", button1: "", button2: "" };
-        title(text) { this.#data.title = ft(text); return this; }
-        body(text) { this.#data.content = ft(text); return this; }
-        button1(text) { this.#data.button1 = ft(text); return this; }
-        button2(text) { this.#data.button2 = ft(text); return this; }
+        title(text) {
+            this.#data.title = ft(text);
+            return this;
+        }
+        body(text) {
+            this.#data.content = ft(text);
+            return this;
+        }
+        button1(text) {
+            this.#data.button1 = ft(text);
+            return this;
+        }
+        button2(text) {
+            this.#data.button2 = ft(text);
+            return this;
+        }
         async show(player) {
             const r = await native.showForm(player, JSON.stringify(this.#data));
             if (r.canceled || r.value === null) return { canceled: true, cancelationReason: "UserClosed" };
@@ -341,7 +365,10 @@ namespace {
 
     class ModalFormData {
         #data = { type: "custom_form", title: "", content: [] };
-        title(text) { this.#data.title = ft(text); return this; }
+        title(text) {
+            this.#data.title = ft(text);
+            return this;
+        }
         textField(label, placeholder, defaultValue) {
             this.#data.content.push({ type: "input", text: ft(label), placeholder: String(placeholder || ""), default: defaultValue === undefined ? "" : String(defaultValue) });
             return this;
@@ -377,7 +404,10 @@ namespace {
         label(text) { this.#data.content.push({ type: "label", text: ft(text) }); return this; }
         header(text) { this.#data.content.push({ type: "header", text: ft(text) }); return this; }
         divider() { this.#data.content.push({ type: "divider" }); return this; }
-        submitButton(text) { this.#data.submit = ft(text); return this; }
+        submitButton(text) {
+            this.#data.submit = ft(text);
+            return this;
+        }
         async show(player) {
             const r = await native.showForm(player, JSON.stringify(this.#data));
             if (r.canceled || r.value === null) return { canceled: true, cancelationReason: "UserClosed" };
