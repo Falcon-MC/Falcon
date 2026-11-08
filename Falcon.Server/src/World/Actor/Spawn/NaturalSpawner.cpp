@@ -311,8 +311,11 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
             continue;
 
         const std::string identifier = permute(condition, rule.mIdentifier, _nextInt(permutationWeight(condition)));
-        ServerActor *spawned = owner.spawnActor(level, identifier, position, [](ServerActor &actor) {
+        ServerActor *spawned = owner.spawnActor(level, identifier, position, [&condition](ServerActor &actor) {
             actor.setPersistent(false);
+            MobActor *mob = dynamic_cast<MobActor *>(&actor);
+            if (mob != nullptr && !condition.mSpawnEvent.empty())
+                mob->setSpawnEvent(condition.mSpawnEvent);
         });
         if (spawned == nullptr)
             continue;
