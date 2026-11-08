@@ -16,7 +16,8 @@ server: the protocol, storage, gameplay and networking are implemented in this o
 - **Build system:** CMake with Ninja, dependencies pulled with `FetchContent`.
 - **Platforms:** Windows (MSYS2 UCRT64, gcc), Linux (gcc) and macOS (clang), all built by CI.
 - **License:** LGPL-3.0.
-- **Branch:** `main`. Protocol upgrades are prepared on a branch named after the upcoming game version.
+- **Branches:** pull requests target `dev`; `main` holds released code. Protocol upgrades are prepared on a branch
+  named after the upcoming game version.
 
 ---
 
