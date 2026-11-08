@@ -17,7 +17,7 @@ namespace {
         explicit CallbackLogEndPoint(std::function<void(LogLevel, const std::string &)> callback)
                 : mCallback(std::move(callback)) {}
         void log(const LogDetails &details) override {
-            // Host callbacks must not unwind through the logger's worker.
+            // host callback exceptions swallowed: no unwinding through the logger's worker
             try { mCallback(details.mLevel, details.mMessage); } catch (...) {}
         }
     private:
@@ -258,7 +258,7 @@ void EmbeddedServer::_run(EmbeddedServerConfig config, std::shared_ptr<std::prom
         std::lock_guard<std::mutex> lock(mMutex);
         mState = State::Stopping;
         mProgress = Progress::Stopping;
-        mTasks.clear(); // Abandoned futures receive broken_promise.
+        mTasks.clear(); // abandoned futures get broken_promise
     }
     try { host.stop(); }
     catch (const std::exception &error) {

@@ -14,7 +14,7 @@
 #include <thread>
 
 namespace {
-    // a search that finds nothing is run once more from here (sub_14BEA2690, xmmword_14F1FBCD0)
+    // an empty search runs once more from here (sub_14BEA2690, xmmword_14F1FBCD0)
     const int32_t RETRY_OFFSET = 32;
 
     std::atomic<bool> gSearchRunning{false};
@@ -225,7 +225,7 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
     ServerNetworkHandler &handler = mHandler;
     Level &level = handler.getLevelFor(*player);
 
-    // shared so a world unloaded during the search does not take the generator with it
+    // shared: a world unloaded mid-search doesn't take the generator with it
     const std::shared_ptr<const ChunkGenerator> generator = level.shareGenerator();
 
     std::thread search([&handler, generator, requesterId, requestOrigin, biomeName, biomeId, teleport,
@@ -267,8 +267,8 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
             const int32_t deltaZ = found.z - originZ;
             const int32_t distance = (int32_t) std::sqrt((double) (deltaX * deltaX + deltaZ * deltaZ));
 
-            // The client rejects a TextPacket with more than four parameters and disconnects, so the
-            // five-parameter result goes out as command output, like the vanilla server sends it.
+            // the client disconnects on a TextPacket with more than four parameters: the five-parameter result
+            // goes out as command output, as the game sends it
             handler.sendCommandOutput(*target, requestOrigin, "commands.locate.biome.success",
                                       {biomeName, std::to_string(found.x), std::to_string(found.y),
                                        std::to_string(found.z), std::to_string(distance)});
@@ -276,8 +276,8 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
             if (!teleport)
                 return;
 
-            // the report keeps the game's read of loaded chunks only, but a teleport into unloaded rock would
-            // suffocate: load the area, look for the opening again and land on a standable block
+            // the report only reads loaded chunks, but landing in unloaded rock suffocates:
+            // load the area, find the opening again, land on a standable block
             Vector3i destination = found;
             if (result.mNeedsOpening) {
                 BiomeSearch::loadOpeningArea(level, result.mPosition);

@@ -35,8 +35,8 @@ static void requestShutdown(int signalNumber) {
 
 static const int CONSOLE_POLL_INTERVAL = 200;
 
-// Blocking on std::cin keeps the stdin lock held, which deadlocks the stream flush that runs while
-// the process exits. Waiting on the descriptor first leaves the lock free until a line is ready.
+// blocking on std::cin holds the stdin lock and deadlocks the exit-time flush;
+// waiting on the descriptor leaves the lock free until a line is ready
 static bool waitForConsoleInput(int timeoutMilliseconds) {
 #ifdef _WIN32
     (void) timeoutMilliseconds;
@@ -95,7 +95,7 @@ void startServer(const ServerSettings &settings) {
 
     ServerHostOptions options = settings.host;
 
-    // the environment variable stays available so a second instance can be started without editing the file
+    // kept as an env variable: a second instance starts without editing the file
     if (const char *portOverride = getenv("FALCON_PORT"))
         options.portOverride = (unsigned short) atoi(portOverride);
 
@@ -147,10 +147,8 @@ void startServer(const ServerSettings &settings) {
     host.shutdown();
     BedrockLog::shutdown();
 
-    // The worlds and player data are saved by now. On Windows the detached console thread may still be blocked
-    // inside std::getline holding the stdin lock (a pipe that never closes never returns), and a normal exit
-    // flushes every stream, stdin included, so it would wait on that lock forever. Leftover worker and plugin
-    // host threads can block destructors the same way, so the process ends here without running them.
+    // saved by now; on Windows the console thread can sit in std::getline holding the stdin lock, and a normal exit
+    // flushes stdin too: it hangs; worker and plugin host threads block destructors alike: _Exit skips them
     std::cout.flush();
     std::fflush(nullptr);
     std::_Exit(0);

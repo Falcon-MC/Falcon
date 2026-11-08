@@ -506,7 +506,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
             }
             next = index + 3;
         } else {
-            //TODO: the score condition needs a scoreboard, which does not exist yet
+            // TODO: score condition, needs a scoreboard
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
         }

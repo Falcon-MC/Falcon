@@ -95,7 +95,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             // Replays player movement server-side and corrects clients that diverge. Packet validity checks do not
             // depend on it. server-authoritative-movement-strict only tightens this simulation.
             {"movement-simulation", "false", PropertyKind::Bool, 0, 0, nullptr},
-            // Former name of movement-simulation, still read from existing files but no longer generated.
+            // former name of movement-simulation: still read, no longer generated
             {"simulation", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"server-authoritative-movement-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"server-authoritative-dismount-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
@@ -105,7 +105,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"server-authoritative-block-breaking-pick-range-scalar", "1.5", PropertyKind::Float, 0, 0, nullptr},
             {"server-build-radius-ratio", "Disabled", PropertyKind::String, 0, 0, nullptr},
             {"player-position-acceptance-threshold", "0.5", PropertyKind::Float, 0, 0, nullptr},
-            // BDS 1.26.10 movement settings (0x1437F5420) use -1 for both policy limits.
+            // 1.26.10 movement settings (0x1437F5420): -1 for both policy limits
             {"player-tick-throttled-input-batch-size", "-1", PropertyKind::Int, -1, UNBOUNDED, nullptr},
             {"player-tick-throttled-max-tick-credits", "-1", PropertyKind::Int, -1, UNBOUNDED, nullptr},
             {"player-movement-action-direction-threshold", "0.85", PropertyKind::Float, 0, 0, nullptr},
@@ -142,7 +142,7 @@ std::string PropertiesSettings::getDefaultContents() {
     std::string contents;
 
     for (const PropertyDefinition &definition: getDefinitions()) {
-        // Accept the BDS spelling and former names on input without generating two competing settings.
+        // BDS spelling and former names accepted on input, never generated alongside
         if (std::string(definition.mKey) == "server-authoritative-block-breaking-pick-range-scalar"
             || std::string(definition.mKey) == "simulation")
             continue;
@@ -239,8 +239,8 @@ void PropertiesSettings::_validate() {
 
 void PropertiesSettings::_resolveMovementSettings() {
     mServerAuthoritativeMovementStrict = getBool("server-authoritative-movement-strict");
-    // A file that predates movement-simulation keeps the behaviour it was written for: the former name when it has
-    // one, and otherwise strict mode, which asks for the simulation and used to get it by default.
+    // a file predating movement-simulation keeps its behaviour: the former name if set, else strict mode:
+    // it asks for the simulation, and used to get it by default
     if (hasProperty("movement-simulation"))
         mMovementSimulation = getBool("movement-simulation");
     else if (hasProperty("simulation"))
@@ -429,7 +429,7 @@ bool PropertiesSettings::getBool(const char *key) const {
 }
 
 float PropertiesSettings::getServerAuthoritativeBlockBreakingRangeScalar() const {
-    // Prefer Falcon's public spelling; retain the BDS pick-range spelling for existing files.
+    // Falcon's spelling first; the BDS pick-range spelling stays for existing files
     const char *key = hasProperty("server-authoritative-block-breaking-range-scalar")
                           ? "server-authoritative-block-breaking-range-scalar"
                           : "server-authoritative-block-breaking-pick-range-scalar";

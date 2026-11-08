@@ -39,8 +39,7 @@ struct PropertyDefinition {
     const char *mValues;
 };
 
-// Reads the BDS style server.properties file. Unknown keys are kept so that a rewrite does not
-// lose settings this build does not use yet.
+// BDS-style server.properties; unknown keys kept: a rewrite doesn't lose settings this build ignores
 class PropertiesSettings {
 public:
     static const std::vector<PropertyDefinition> &getDefinitions();
@@ -59,7 +58,6 @@ public:
 
     const std::string &getPath() const { return mPath; }
 
-    // raw access
     bool hasProperty(const std::string &key) const;
 
     std::string getString(const std::string &key, const std::string &defaultValue = std::string()) const;
@@ -80,7 +78,6 @@ public:
 
     const std::vector<std::string> &getInvalidProperties() const { return mInvalid; }
 
-    // typed access, named after the properties they map to
     std::string getServerName() const { return getString("server-name"); }
 
     std::string getLanguage() const {
@@ -125,16 +122,14 @@ public:
 
     std::string getLevelSeed() const { return getString("level-seed"); }
 
-    /** Extra worlds loaded at start-up, from the comma-separated `worlds-autoload` list. */
+    // comma-separated `worlds-autoload` list
     std::vector<std::string> getAutoloadWorlds() const;
 
     PlayerPermission getDefaultPlayerPermissionLevel() const;
 
     bool getTexturePackRequired() const { return getBool("texturepack-required"); }
 
-    /**
-     * Whether clients of every supported protocol version may join; otherwise only the newest version is accepted.
-     */
+    // false: only the newest protocol may join
     bool getAnyVersion() const { return getBool("any-version"); }
 
     bool getContentLogFileEnabled() const { return getBool("content-log-file-enabled"); }
@@ -161,7 +156,7 @@ public:
         return getBool("disable-client-vibrant-visuals");
     }
 
-    /** Minimum number of seconds between two skin changes of the same player. */
+    // seconds between two skin changes of one player
     int getSkinChangeCooldown() const { return getInt("skin-change-cooldown"); }
 
     int getSpawnProtection() const { return getInt("spawn-protection"); }
@@ -188,7 +183,7 @@ public:
         return getFloat("player-position-acceptance-threshold");
     }
 
-    // Both are read for every player input, so load resolves them once.
+    // read on every player input: resolved once at load
     bool getMovementSimulation() const {
         return mMovementSimulation;
     }
@@ -223,7 +218,7 @@ public:
 
     bool setProperty(const std::string &key, const std::string &value);
 
-    // Renders the properties this build does not know about, the way BDS reports them at startup.
+    // the way BDS reports them at startup
     std::string getUnknownContents() const;
 
 private:

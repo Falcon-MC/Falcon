@@ -324,7 +324,7 @@ bool WasmPlugin::runCommand(uint32_t handler, FalconCommandSender *sender, const
         return false;
 
     FuelScope scope(*this);
-    // the argument list goes through cabi_realloc, which already runs guest code
+    // the argument list goes through cabi_realloc: guest code already runs
     mDepth++;
     uint32_t list = 0;
     wasm_trap_t *trap = count > 0 ? allocate(4, count * 8, list) : nullptr;
@@ -675,7 +675,7 @@ bool WasmCall::lower(const void *data, size_t size, uint32_t alignment, uint32_t
     return size == 0 || write(address, data, (uint32_t) size);
 }
 
-// c api strings live in a small ring buffer: cabi_realloc is guest code that may reuse it, so copy before lowering
+// c api strings live in a small ring buffer; cabi_realloc is guest code and may reuse it: copy before lowering
 bool WasmCall::returnString(size_t index, const char *text) {
     const std::string value = text == nullptr ? std::string() : std::string(text);
     uint32_t address = 0;
