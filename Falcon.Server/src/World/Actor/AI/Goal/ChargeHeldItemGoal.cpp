@@ -52,5 +52,6 @@ void ChargeHeldItemGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         return;
 
     setFlag(owner, mob, ActorFlag::Charging, false);
+    CrossbowItem::loadHeld(owner, mob);
     setFlag(owner, mob, ActorFlag::Charged, true);
 }
