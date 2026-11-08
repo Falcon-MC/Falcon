@@ -823,7 +823,9 @@ bool OverworldTreePlacer::_acaciaTrunk(BlockManager &blocks, const Definition &t
                                        int32_t y, int32_t z, int32_t height, std::mt19937 &random) {
     // AcaciaTreeTrunk::place (sub_14A28D930) for a trunk that does not grow diagonally: the lean only decides which
     // layers are placed, the logs stay above the base, and branches hang under the canopy
-    if (acacia.mAllowDiagonalGrowth || !_canPlace(blocks, tree, x, y, z, height))
+    if (acacia.mAllowDiagonalGrowth)
+        return _diagonalAcaciaTrunk(blocks, tree, acacia, x, y, z, height, random);
+    if (!_canPlace(blocks, tree, x, y, z, height))
         return false;
 
     const int32_t width = acacia.mTrunkWidth;
@@ -913,6 +915,111 @@ bool OverworldTreePlacer::_acaciaTrunk(BlockManager &blocks, const Definition &t
     return true;
 }
 
+bool OverworldTreePlacer::_diagonalAcaciaTrunk(BlockManager &blocks, const Definition &tree, const Acacia &acacia,
+                                               int32_t x, int32_t y, int32_t z, int32_t height, std::mt19937 &random) {
+    // sub_14A28D930 with allow_diagonal_growth, for a trunk of width 1: the logs follow the lean, the canopy sits on
+    // the last log, then one branch from the base column the other way, unless it draws the lean's direction
+    if (!_canPlace(blocks, tree, x, y, z, height) || y >= LevelChunk::MAX_Y + 1 - height - 1)
+        return false;
+    if (!isBaseBlock(blocks.getBlockAt(x, y - 1, z)))
+        blocks.setBlockStateAt(x, y - 1, z, VanillaBlocks::DIRT().toBlockState());
+
+    // south, west, north, east (qword_14F0F3D80, xmmword_14F0F3D90)
+    static const int32_t LEAN_X[4] = {0, -1, 0, 1};
+    static const int32_t LEAN_Z[4] = {1, 0, -1, 0};
+    const int32_t direction = nextInt(random, 4);
+    const int32_t leanStart = height - drawRange(random, acacia.mLeanHeight);
+    int32_t leanSteps = drawRange(random, acacia.mLeanSteps);
+    const int32_t leanLength = drawRange(random, acacia.mLeanLength);
+
+    const BlockState log = tree.mLog().toBlockState();
+    static const bool SIDES[4] = {true, false, true, false};
+    int32_t leanX = x;
+    int32_t leanY = y;
+    int32_t leanZ = z;
+    bool topped = false;
+    int32_t topX = x;
+    int32_t topY = y;
+    int32_t topZ = z;
+    for (int32_t step = 0; step < height + leanLength; step++) {
+        if (step >= leanStart && leanSteps > 0) {
+            leanX += LEAN_X[direction];
+            leanZ += LEAN_Z[direction];
+            leanSteps--;
+        }
+        if (step < height)
+            leanY = y + step;
+        if (!logReplaces(tree, blocks.getBlockAt(leanX, leanY, leanZ)))
+            continue;
+
+        blocks.setBlockStateAt(leanX, leanY, leanZ, log);
+        // the width-1 trunk only decorates its -x and -z sides
+        _decorateLog(blocks, acacia.mVineNumerator, acacia.mVineDenominator, leanX, leanY, leanZ, SIDES, random);
+        if (step < acacia.mMinHeightForCanopy)
+            continue;
+        topped = true;
+        topX = leanX;
+        topY = leanY;
+        topZ = leanZ;
+    }
+    if (topped && tree.mCanopy == Canopy::Acacia)
+        _acaciaCanopy(blocks, tree, acacia.mCanopySize, false, topX, topY, topZ);
+
+    const int32_t branchDirection = nextInt(random, 4);
+    if (branchDirection == direction)
+        return true;
+    if (acacia.mBranchDenominator == 0
+        || (acacia.mBranchNumerator != acacia.mBranchDenominator
+            && random() % acacia.mBranchDenominator >= acacia.mBranchNumerator))
+        return true;
+
+    const int32_t position = drawRange(random, acacia.mBranchPosition);
+    int32_t length = drawRange(random, acacia.mBranchLength);
+    int32_t layer = leanStart - position;
+    if (layer >= height || length <= 0)
+        return true;
+
+    // each step moves the branch out one block, then up one layer once a log went in
+    int32_t branchX = x;
+    int32_t branchZ = z;
+    int32_t branchY = topY;
+    bool grown = false;
+    while (true) {
+        bool ended = false;
+        while (layer > 0) {
+            branchX += LEAN_X[branchDirection];
+            branchZ += LEAN_Z[branchDirection];
+            const int32_t atY = y + layer;
+            if (!logReplaces(tree, blocks.getBlockAt(branchX, atY, branchZ)))
+                break;
+
+            static const bool ALL_SIDES[4] = {true, true, true, true};
+            blocks.setBlockStateAt(branchX, atY, branchZ, log);
+            _decorateLog(blocks, acacia.mVineNumerator, acacia.mVineDenominator, branchX, atY, branchZ, ALL_SIDES,
+                         random);
+            branchY = atY;
+            if (layer + 1 < height) {
+                layer++;
+                grown = true;
+                if (length-- > 1)
+                    continue;
+            }
+            ended = true;
+            break;
+        }
+        if (ended) {
+            grown = true;
+            break;
+        }
+        if (++layer >= height || length-- <= 1)
+            break;
+    }
+    if (grown)
+        _acaciaCanopy(blocks, tree, acacia.mBranchCanopySize, acacia.mBranchCanopySimplified, branchX, branchY,
+                      branchZ);
+    return true;
+}
+
 void OverworldTreePlacer::_decorateLog(BlockManager &blocks, uint32_t numerator, uint32_t denominator, int32_t x,
                                        int32_t y, int32_t z, const bool sides[4], std::mt19937 &random) {
     // sub_1471CB880: each outer side draws its chance, then a vine goes into air (sub_1471CCB60)
@@ -995,21 +1102,32 @@ void OverworldTreePlacer::_roofedCanopy(BlockManager &blocks, const Definition &
 
 void OverworldTreePlacer::_acaciaCanopy(BlockManager &blocks, const Definition &tree, int32_t size, bool simplified,
                                         int32_t x, int32_t y, int32_t z) {
-    // AcaciaTreeCanopy::place (sub_14A28D2E0) with simplify_canopy: a square one above, then a disc without its
-    // corners, the leaves replacing may_replace only
+    // AcaciaTreeCanopy::place (sub_14A28D2E0): a top layer one above, then a disc without its corners, the leaves
+    // replacing may_replace only
     const BlockState leaves = tree.mLeaves().toBlockState();
     const auto leaf = [&](int32_t leafX, int32_t leafY, int32_t leafZ) {
         if (replaces(tree, blocks.getBlockAt(leafX, leafY, leafZ)))
             blocks.setBlockStateAt(leafX, leafY, leafZ, leaves);
     };
 
-    if (!simplified)
-        return;
-
-    const int32_t top = size >= 2 ? size : 1;
-    for (int32_t offsetX = 1 - top; offsetX < top; offsetX++) {
-        for (int32_t offsetZ = 1 - top; offsetZ < top; offsetZ++)
-            leaf(x + offsetX, y + 1, z + offsetZ);
+    if (simplified) {
+        const int32_t top = size >= 2 ? size : 1;
+        for (int32_t offsetX = 1 - top; offsetX < top; offsetX++) {
+            for (int32_t offsetZ = 1 - top; offsetZ < top; offsetZ++)
+                leaf(x + offsetX, y + 1, z + offsetZ);
+        }
+    } else {
+        // a square of size - 1 above, and the four blocks one past it along the axes
+        const int32_t reach = std::max(size, 2) - 1;
+        for (int32_t offsetX = 1 - reach; offsetX < reach; offsetX++) {
+            for (int32_t offsetZ = 1 - reach; offsetZ < reach; offsetZ++)
+                leaf(x + offsetX, y + 1, z + offsetZ);
+        }
+        const int32_t past = std::max(size, 1) - 1;
+        leaf(x + past, y + 1, z);
+        leaf(x - past, y + 1, z);
+        leaf(x, y + 1, z + past);
+        leaf(x, y + 1, z - past);
     }
     for (int32_t offsetX = -size; offsetX <= size; offsetX++) {
         for (int32_t offsetZ = -size; offsetZ <= size; offsetZ++) {

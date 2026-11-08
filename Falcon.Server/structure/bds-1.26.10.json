@@ -5741,30 +5741,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/SavannaMutatedTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/SavannaMutatedTreeFeature.h",
-      "sha256": "f299cd26657a181a8f1daee0b5726d2e6a853cfc9d101bcc4b3ac2f6ada16e56",
-      "classes": [
-        "SavannaMutatedTreeFeature"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/SavannaTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/SavannaTree.h",
-      "sha256": "c78e5eee94aa19f8597882532d9e95fd6acc1cb15f44caef4b9b9bc4c63c09b7",
-      "classes": [
-        "SavannaTree"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/SavannaTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/SavannaTreeFeature.h",
-      "sha256": "1d4c39cc8588f27dce53a7f7be50c6c9476b3b85dc5b0cea4a9729f97af742b5",
-      "classes": [
-        "SavannaTreeFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/SmallPaleOakTree.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/SmallPaleOakTree.h",
       "sha256": "60c4c67c443716a1a5de40245603d2f25312b58a3219d2063fc822a124ef8da2",
@@ -9685,21 +9661,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/RegisterTreeFeatures.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/RegisterTreeFeatures.cpp",
       "sha256": "9ad17ee37c053167f78e0cc3f2d0ef3bbe7dc1d03143f9f7fcb7bbe35be79841"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/SavannaMutatedTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/SavannaMutatedTreeFeature.cpp",
-      "sha256": "be531652a6d0a860261675e3cd90596f213a3921780cb94bb3a1a82f9ec702e8"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/SavannaTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/SavannaTree.cpp",
-      "sha256": "ef460665c58fd8048190fc38cac7860a0b553bbfe1442c52f1f85c150c941823"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/SavannaTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/SavannaTreeFeature.cpp",
-      "sha256": "22436495d2b8605fc10e196ce5bbe8dff7e00c32df75486c6a9b9e202c086bab"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/SmallPaleOakTree.cpp",

@@ -30,7 +30,8 @@ public:
         Pine,
         MegaPine,
         Mega,
-        Roofed
+        Roofed,
+        Acacia
     };
 
     // a range of the feature's JSON, its maximum excluded
@@ -154,6 +155,8 @@ public:
         int32_t mCanopyCoreWidth;
         int32_t mCanopyOuterRadius;
         int32_t mCanopyInnerRadius;
+        // acacia_canopy canopy_size of the diagonal trunk's top
+        int32_t mCanopySize = 0;
     };
 
     using Decorate = std::function<void(int32_t, int32_t, int32_t)>;
@@ -193,6 +196,9 @@ private:
 
     static bool _acaciaTrunk(BlockManager &blocks, const Definition &tree, const Acacia &acacia, int32_t x, int32_t y,
                              int32_t z, int32_t height, std::mt19937 &random);
+
+    static bool _diagonalAcaciaTrunk(BlockManager &blocks, const Definition &tree, const Acacia &acacia, int32_t x,
+                                     int32_t y, int32_t z, int32_t height, std::mt19937 &random);
 
     static void _decorateLog(BlockManager &blocks, uint32_t numerator, uint32_t denominator, int32_t x, int32_t y,
                              int32_t z, const bool sides[4], std::mt19937 &random);

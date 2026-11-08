@@ -804,7 +804,9 @@ struct OverworldRulePlacer::LegacyTreeDefinition {
         // nextInt(10) != 0 ? (nextInt(2) != 0 ? third : second) : first, sub_14D230630
         JungleEdge,
         // nextInt(20) != 0 ? (nextInt(20) > 2 ? (nextInt(10) > 6 ? fourth : third) : second) : first, sub_14D230180
-        BambooJungle
+        BambooJungle,
+        // nextInt(5) > 0 ? first : second, sub_14D230780
+        Savanna
     };
 
     const char *mIdentifier;
@@ -1352,6 +1354,15 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             "minecraft:scatter_tall_grass_around_tree_feature", "0",
             {{6, "-3", "3"}, {6, "-4", "4"}, {6, "-3", "3"}}, 5, single(0)};
 
+    // savanna_tree_feature: a diagonal acacia trunk of 5 plus up to 2 plus up to 2, its acacia_canopy of 3 and one
+    // branch with a simplified canopy of 2
+    static const Tree::Acacia SAVANNA = {1, 5, {3, 3}, 0, {1, 5}, {1, 4}, {0, 0}, true, {1, 4}, {1, 3}, 1, 1, 2, true,
+                                         0, 0, 0, 0, 0, 0, 3};
+    static const TreeDefinition SAVANNA_TREE = {
+            {"minecraft:savanna_tree_feature", Tree::Trunk::Acacia, &VanillaBlocks::ACACIA_LOG, {0, 0}, {0, 0},
+             Tree::Canopy::Acacia, &VanillaBlocks::ACACIA_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr, {},
+            nullptr, &SAVANNA};
+
     static const ScatterDefinition FIXUP_VINES = {
             "minecraft:fixup_vines_position_feature", "1", {{0, "8", ""}, ZERO, {0, "8", ""}}, 0, [] {
                 Placed placed;
@@ -1386,6 +1397,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              {tree(TREES[2]), tree(JUNGLE_BUSH), tree(MEGA_JUNGLE_TREE), aggregate(SELECT_JUNGLE)}},
             {"minecraft:legacy:jungle_edge_tree_feature", 2.0f, Pick::JungleEdge,
              {aggregate(FANCY_WITH_BEEHIVE), tree(JUNGLE_BUSH), aggregate(SELECT_JUNGLE)}},
+            // types 12 and 13
+            {"minecraft:legacy:savanna_tree_feature", 1.0f, Pick::Savanna, {tree(SAVANNA_TREE), aggregate(SELECT_OAK)}},
+            {"minecraft:legacy:savanna_mutated_tree_feature", 2.0f, Pick::Savanna,
+             {tree(SAVANNA_TREE), aggregate(SELECT_OAK)}},
             {"minecraft:legacy:bamboo_jungle_tree_feature", 30.0f, Pick::BambooJungle,
              {tree(TREES[2]), tree(JUNGLE_BUSH), tree(MEGA_JUNGLE_TREE), scatter(TALL_GRASS_AROUND_TREE)}}
     };
@@ -3778,6 +3793,8 @@ void OverworldRulePlacer::_placeLegacyTrees(BlockManager &blocks, const LegacyTr
             picked = nextInt(random, 10) != 0 ? (nextInt(random, 2) != 0 ? (nextInt(random, 3) != 0 ? 3 : 2) : 1) : 0;
         else if (trees.mPick == Pick::JungleEdge)
             picked = nextInt(random, 10) != 0 ? (nextInt(random, 2) != 0 ? 2 : 1) : 0;
+        else if (trees.mPick == Pick::Savanna)
+            picked = nextInt(random, 5) > 0 ? 0 : 1;
         else if (trees.mPick == Pick::BambooJungle)
             picked = nextInt(random, 20) != 0 ? (nextInt(random, 20) > 2 ? (nextInt(random, 10) > 6 ? 3 : 2) : 1) : 0;
 

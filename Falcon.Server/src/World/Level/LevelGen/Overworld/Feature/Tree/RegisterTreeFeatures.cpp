@@ -8,8 +8,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Tree/MesaTreeFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/MushroomIslandHugeMushroomFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Tree/PaleGardenTreeFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Tree/SavannaMutatedTreeFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Tree/SavannaTreeFeature.h"
 
 void registerTreeFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<CherryTreeFeature>());
@@ -21,6 +19,4 @@ void registerTreeFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<MesaTreeFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<MushroomIslandHugeMushroomFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<PaleGardenTreeFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<SavannaMutatedTreeFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<SavannaTreeFeature>());
 }

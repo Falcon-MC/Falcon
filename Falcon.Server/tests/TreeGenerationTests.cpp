@@ -50,6 +50,13 @@ namespace {
                                                &VanillaBlocks::JUNGLE_LOG, {0, 0}, {0, 0}, Tree::Canopy::Mega,
                                                &VanillaBlocks::JUNGLE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false};
 
+    // savanna_tree_feature of the 1.26.61 features
+    const Tree::Acacia SAVANNA = {1, 5, {3, 3}, 0, {1, 5}, {1, 4}, {0, 0}, true, {1, 4}, {1, 3}, 1, 1, 2, true,
+                                  0, 0, 0, 0, 0, 0, 3};
+    const Tree::Definition SAVANNA_TREE = {"minecraft:savanna_tree_feature", Tree::Trunk::Acacia,
+                                           &VanillaBlocks::ACACIA_LOG, {0, 0}, {0, 0}, Tree::Canopy::Acacia,
+                                           &VanillaBlocks::ACACIA_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false};
+
     // grass on dirt over the 3x3 chunks around the origin chunk
     std::unique_ptr<Level> flatLevel() {
         std::unique_ptr<Level> level(new Level("TreeGeneration", 1, 42, DimensionType::Overworld));
@@ -159,6 +166,32 @@ namespace {
         }
     }
 
+    void savannaTree() {
+        for (uint32_t seed = 1; seed <= 20; seed++) {
+            std::unique_ptr<Level> level = flatLevel();
+            BlockManager blocks(*level);
+            std::mt19937 random(seed);
+            require(Tree::place(blocks, SAVANNA_TREE, nullptr, nullptr, &SAVANNA, 8, GROUND + 1, 8, random, {}),
+                    "the savanna tree grows on grass");
+            require(is(blocks, 8, GROUND + 1, 8, &VanillaBlocks::ACACIA_LOG), "the trunk starts on its position");
+            require(is(blocks, 8, GROUND, 8, &VanillaBlocks::DIRT), "the grass under the trunk turns to dirt");
+
+            // the canopy of the highest log: a disc of 3 without corners holds at least 40 leaves, its top 9 more
+            int32_t logs = 0;
+            int32_t leaves = 0;
+            for (int32_t y = GROUND + 1; y <= GROUND + 14; y++) {
+                for (int32_t x = 0; x <= 16; x++) {
+                    for (int32_t z = 0; z <= 16; z++) {
+                        logs += is(blocks, x, y, z, &VanillaBlocks::ACACIA_LOG) ? 1 : 0;
+                        leaves += is(blocks, x, y, z, &VanillaBlocks::ACACIA_LEAVES) ? 1 : 0;
+                    }
+                }
+            }
+            require(logs >= 5 && logs <= 13, "the trunk is 5 plus up to 4 logs, the branch up to 3 more");
+            require(leaves >= 49, "the canopy and the branch's leaves are all there");
+        }
+    }
+
     void roofedTrunk() {
         for (uint32_t seed = 1; seed <= 40; seed++) {
             std::unique_ptr<Level> level = flatLevel();
@@ -264,6 +297,7 @@ int main() {
     check("jungle bush", jungleBush);
     check("jungle tree hands on its top", jungleTreeHandsOnTop);
     check("mega jungle tree", megaJungle);
+    check("savanna tree", savannaTree);
 
     BedrockLog::flush();
     return failures == 0 ? 0 : 1;
