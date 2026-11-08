@@ -59,6 +59,7 @@ private:
     struct LegacyFlowerDefinition;
     struct VegetationPatchDefinition;
     struct GrowingPlantDefinition;
+    struct DripstoneDefinition;
 
     // one of the game's features a rule or another feature places
     struct FossilDefinition;
@@ -82,9 +83,9 @@ private:
         const SnapDefinition *mSnap = nullptr;
         const BlobDefinition *mBlob = nullptr;
         const MultifaceDefinition *mMultiface = nullptr;
-        // the game's own dripstone_cluster_feature, pointed_dripstone_feature and large_dripstone_feature
-        bool mDripstoneCluster = false;
-        bool mPointedDripstone = false;
+        // the game's own dripstone and sulfur spike features, and large_dripstone_feature
+        const DripstoneDefinition *mDripstoneCluster = nullptr;
+        const DripstoneDefinition *mPointedDripstone = nullptr;
         bool mLargeDripstone = false;
         const LegacyFlowerDefinition *mLegacyFlower = nullptr;
         const VegetationPatchDefinition *mVegetationPatch = nullptr;
@@ -96,7 +97,8 @@ private:
             return mSeagrass != nullptr || mScatter != nullptr || mSingleBlock != nullptr || mWeighted != nullptr
                    || mAggregate != nullptr || mTree != nullptr || mLeafLitter || mMushroom != nullptr
                    || mBeehiveSearch || mHugeMushroom || mThreshold != nullptr || mSnap != nullptr || mBlob != nullptr
-                   || mMultiface != nullptr || mDripstoneCluster || mPointedDripstone || mLargeDripstone
+                   || mMultiface != nullptr || mDripstoneCluster != nullptr || mPointedDripstone != nullptr
+                   || mLargeDripstone
                    || mLegacyFlower != nullptr || mVegetationPatch != nullptr || mGrowingPlant != nullptr
                    || mFunction != nullptr;
         }
@@ -218,9 +220,11 @@ private:
     static bool _growMultiface(BlockManager &blocks, const MultifaceDefinition &multiface, int32_t x, int32_t y,
                                int32_t z, const std::vector<int32_t> &faces, std::mt19937 &random);
 
-    static bool _placeDripstoneCluster(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
+    static bool _placeDripstoneCluster(BlockManager &blocks, const DripstoneDefinition &cluster, int32_t x, int32_t y,
+                                       int32_t z, std::mt19937 &random);
 
-    static bool _placePointedDripstone(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
+    static bool _placePointedDripstone(BlockManager &blocks, const DripstoneDefinition &pointed, int32_t x, int32_t y,
+                                       int32_t z, std::mt19937 &random);
 
     static bool _placeLargeDripstone(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 
@@ -236,4 +240,9 @@ private:
                                    int32_t z, std::mt19937 &random);
 
     static bool _placeDripleaf(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
+
+    static bool _placeSulfurPool(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
+
+    static bool _placePotentSulfurSearch(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
+                                         std::mt19937 &random);
 };
