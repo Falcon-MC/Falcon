@@ -7,6 +7,7 @@
 #include "Core/Math/Vector3i.h"
 #include "World/Level/BlockUpdateScheduler.h"
 #include "World/Level/BlockUpdateType.h"
+#include "World/Level/ClientSideGeneration.h"
 #include "World/Level/Chunk/GeneratedBlockChange.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Chunk/ChunkWorker.h"
@@ -207,6 +208,24 @@ public:
     bool isChunkResident(int32_t chunkX, int32_t chunkZ) const;
 
     bool isChunkPopulated(int32_t chunkX, int32_t chunkZ) const;
+
+    /**
+     * Whether storage holds the chunk (DBChunkStorage::isChunkSaved, sub_1406CAF60). The answers are cached as the
+     * game does, until the cache fills or storage is reopened; a chunk queued for saving counts as saved.
+     */
+    bool isChunkSaved(int32_t chunkX, int32_t chunkZ);
+
+    /**
+     * Whether a start of one of the structures may reach the chunk. Client side generation keeps such chunks on the
+     * server when Falcon does not generate the structure exactly yet.
+     */
+    bool isNearStructure(const std::vector<const StructureFeature *> &features, int32_t chunkX, int32_t chunkZ);
+
+    /**
+     * Applies client pixels to a map saved in the world (sub_14228D8A0). The map stays in memory and is written by
+     * the next saveAll, as the game edits MapItemSavedData and only marks it dirty. Returns false for an unknown map.
+     */
+    bool applyMapPixels(int64_t mapId, const std::vector<MapPixel> &pixels);
 
     void registerChunkLoader(uint64_t loaderId, int32_t chunkX, int32_t chunkZ);
 
@@ -449,6 +468,15 @@ private:
     static constexpr size_t MAX_PARKED_CHANGES = PARKED_CHANGES_IN_MEMORY * 2;
 
     void _sweepOrphanChunks();
+
+    void _markChunkSaved(int64_t key);
+
+    void _saveLoadedMaps();
+
+    std::unordered_map<int64_t, bool> mSavedChunkCache;
+    // maps read for client pixels since the last save, with whether they changed
+    std::unordered_map<int64_t, std::pair<Tag, bool>> mLoadedMaps;
+    ClientSideGeneration::StructureGuard mStructureGuard;
 
     std::unordered_set<int64_t> mPendingChunks;
     std::unordered_set<int64_t> mActiveColumns;

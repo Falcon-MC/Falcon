@@ -40,6 +40,7 @@ namespace {
     const char *ACTOR_UNIQUE_ID_TAG = "UniqueID";
     const size_t ACTOR_STORAGE_ID_SIZE = 8;
     const std::string TICKING_AREA_PREFIX = "tickingarea_";
+    const std::string MAP_PREFIX = "map_";
 
     int64_t packBlockPosition(int32_t x, int32_t y, int32_t z) {
         return (((int64_t) (x + 30000000) & 0x3FFFFFFLL) << 37)
@@ -282,6 +283,20 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
     }
 
     return true;
+}
+
+bool LevelStorage::hasChunk(int32_t chunkX, int32_t chunkZ) const {
+    if (mDb == nullptr)
+        return false;
+
+    std::string value;
+    const LevelDbTag tags[] = {LevelDbTag::Version, LevelDbTag::LegacyVersion, LevelDbTag::LegacyTerrain};
+    for (const LevelDbTag tag: tags) {
+        if (mDb->Get(_readOptions(), _makeKey(chunkX, chunkZ, tag), &value).ok())
+            return true;
+    }
+
+    return false;
 }
 
 bool LevelStorage::loadChunk(LevelChunk &chunk) {
@@ -779,6 +794,45 @@ std::vector<std::pair<std::string, Tag>> LevelStorage::loadTickingAreas() {
     }
 
     return areas;
+}
+
+bool LevelStorage::loadMapData(int64_t mapId, Tag &out) const {
+    if (mDb == nullptr)
+        return false;
+
+    std::string data;
+    if (!mDb->Get(_readOptions(), MAP_PREFIX + std::to_string(mapId), &data).ok())
+        return false;
+
+    ReadOnlyBinaryStream stream(data);
+    stream.setEncodingSettings(_storageEncodingSettings());
+
+    try {
+        out = NbtIo::readTag(stream, NbtVariant::LittleEndian);
+    } catch (const std::exception &exception) {
+        LOG_WARN(LogAreaID::Server, "Malformed map data %lld: %s", (long long) mapId, exception.what());
+        return false;
+    }
+
+    return out.isCompound();
+}
+
+bool LevelStorage::saveMapData(int64_t mapId, const Tag &data) {
+    if (mDb == nullptr)
+        return false;
+
+    BinaryStream stream;
+    NbtIo::writeTag(stream, data, NbtVariant::LittleEndian);
+
+    const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), MAP_PREFIX + std::to_string(mapId),
+                                            stream.getBuffer());
+    if (!status.ok()) {
+        _recordWrite(false);
+        LOG_WARN(LogAreaID::Server, "Could not save map %lld: %s", (long long) mapId, status.ToString().c_str());
+        return false;
+    }
+
+    return true;
 }
 
 bool LevelStorage::saveGameRules(const Tag &rules) {

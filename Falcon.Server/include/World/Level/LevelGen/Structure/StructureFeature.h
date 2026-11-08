@@ -36,6 +36,11 @@ public:
 
     const std::string &getName() const;
 
+    // the side of the square regions, in chunks, each holding one candidate start
+    int32_t getSpacing() const {
+        return mSpacing;
+    }
+
     StructureChunkPos getCandidate(int64_t seed, int32_t regionX, int32_t regionZ) const;
 
     bool isStartChunk(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const;

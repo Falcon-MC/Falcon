@@ -104,6 +104,24 @@ public:
 
     void setBuildPlatform(int platform) { mBuildPlatform = platform; }
 
+    // CompatibleWithClientSideChunkGen from the login client data (sub_1422AA4E0, ServerPlayer+3576).
+    bool isClientSideGenerationCompatible() const {
+        return mClientSideGenerationCompatible;
+    }
+
+    void setClientSideGenerationCompatible(bool compatible) {
+        mClientSideGenerationCompatible = compatible;
+    }
+
+    // The share of its view the server builds for this player (ClientSideGeneration::computeServerBuildRatio).
+    float getServerBuildRatio() const {
+        return mServerBuildRatio;
+    }
+
+    void setServerBuildRatio(float ratio) {
+        mServerBuildRatio = ratio;
+    }
+
     const std::string &getLocale() const { return mLocale; }
 
     void setLocale(const std::string &locale) { mLocale = locale; }
@@ -703,6 +721,8 @@ private:
     std::string mXuid;
     std::string mPlayFabId;
     int mBuildPlatform = -1;
+    bool mClientSideGenerationCompatible = false;
+    float mServerBuildRatio = 1.0f;
     std::string mLocale;
     int64_t mItemUseStartTick = 0;
     int32_t mSpinAttackTicks = 0;

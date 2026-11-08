@@ -720,6 +720,8 @@ private:
 
     void handle(const NetworkIdentifier &id, const RequestChunkRadiusPacket &packet) override;
 
+    void handle(const NetworkIdentifier &id, const MapInfoRequestPacket &packet) override;
+
     void handle(const NetworkIdentifier &id, const SubChunkRequestPacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const RequestAbilityPacket &packet) override;

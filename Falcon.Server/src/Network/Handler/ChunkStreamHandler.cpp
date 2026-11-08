@@ -8,9 +8,14 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelChunkPacket.h"
 #include "Protocol/Packets/NetworkChunkPublisherUpdatePacket.h"
+#include "World/Level/LevelGen/Structure/StructureFeature.h"
+#include "World/Level/TickingAreaManager.h"
+#include "World/Level/World.h"
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
+#include <string>
 
 namespace {
     const double MIN_FOV_CHECK_DISTANCE = 4.0;
@@ -86,6 +91,111 @@ namespace {
         queue.pop_back();
         return hash;
     }
+
+    // Client side generation from server.properties; every player of a level follows it (Level+1016, sub_1402C0030).
+    bool isClientSideGeneration(const ServerNetworkHandler &owner) {
+        return owner.getProperties().getClientSideChunkGenerationEnabled();
+    }
+
+    // A chunk the server holds with all eight neighbours decorated, without loading anything. It is what the
+    // publisher view takes as it is (generate mode 0, sub_1430014E0) even when the player view leaves it to
+    // the client, because another player or a ticking area made the server build it.
+    bool isBuiltWithNeighbours(const Level &level, int32_t chunkX, int32_t chunkZ) {
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            for (int32_t dz = -1; dz <= 1; ++dz) {
+                if (!level.isChunkPopulated(chunkX + dx, chunkZ + dz))
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Inputs of ClientSideGeneration::isServerBuilt for one player and tick, built on first use: most ticks
+     * decide no chunk at all.
+     */
+    class BuildDecision {
+    public:
+        BuildDecision(ServerNetworkHandler &owner, ServerPlayer &player, Level &level, int32_t chunkRadius)
+                : mOwner(owner), mPlayer(player), mLevel(level), mChunkRadius(chunkRadius) {}
+
+        bool isServerBuilt(int32_t chunkX, int32_t chunkZ) {
+            if (!mReady)
+                _prepare();
+            return ClientSideGeneration::isServerBuilt(chunkX, chunkZ, mContext);
+        }
+
+    private:
+        void _prepare() {
+            mReady = true;
+            const PropertiesSettings &properties = mOwner.getProperties();
+            const int32_t tickRange = properties.getTickDistance();
+            const int32_t viewRadius = ClientSideGeneration::computeViewRadius(mChunkRadius, tickRange);
+            mContext.mBuildRadius = ClientSideGeneration::computeServerBuildRadius(mPlayer.getServerBuildRatio(),
+                                                                                  viewRadius, tickRange);
+
+            for (auto &entry: mOwner.getPlayers()) {
+                const ServerPlayer &other = entry.second;
+                if (other.getLoginState() < ServerPlayer::LoginState::StartGameSent || !other.isIn(mLevel))
+                    continue;
+
+                const Vector3f position = other.getPosition();
+                mContext.mPlayerChunks.emplace_back((int32_t) std::floor(position.x) >> 4,
+                                                    (int32_t) std::floor(position.z) >> 4);
+            }
+            mContext.mPlayerCount = std::max<size_t>(mContext.mPlayerChunks.size(), 1);
+
+            for (const TickingArea &area: mOwner.getWorldOf(mLevel).getTickingAreas().getAreas()) {
+                if (area.mDimension != mLevel.getDimensionType())
+                    continue;
+
+                ClientSideGeneration::TickingAreaBounds bounds;
+                bounds.mMinChunkX = area.mMinX >> 4;
+                bounds.mMinChunkZ = area.mMinZ >> 4;
+                bounds.mMaxChunkX = area.mMaxX >> 4;
+                bounds.mMaxChunkZ = area.mMaxZ >> 4;
+                mContext.mTickingAreas.push_back(bounds);
+            }
+
+            Level *level = &mLevel;
+            mContext.mIsSaved = [level](int32_t chunkX, int32_t chunkZ) {
+                return level->isChunkSaved(chunkX, chunkZ);
+            };
+
+            if (mLevel.getDimensionType() != DimensionType::Overworld)
+                return;
+
+            std::shared_ptr<std::vector<const StructureFeature *>> features =
+                    std::make_shared<std::vector<const StructureFeature *>>();
+            const std::string names = properties.getClientSideChunkGenerationServerStructures();
+            size_t start = 0;
+            while (start <= names.size()) {
+                size_t end = names.find(',', start);
+                if (end == std::string::npos)
+                    end = names.size();
+
+                std::string name = names.substr(start, end - start);
+                name.erase(0, name.find_first_not_of(' '));
+                name.erase(name.find_last_not_of(' ') + 1);
+                if (const StructureFeature *feature = StructureFeature::get(name))
+                    features->push_back(feature);
+                start = end + 1;
+            }
+            if (features->empty())
+                return;
+
+            mContext.mIsForced = [level, features](int32_t chunkX, int32_t chunkZ) {
+                return level->isNearStructure(*features, chunkX, chunkZ);
+            };
+        }
+
+        ServerNetworkHandler &mOwner;
+        ServerPlayer &mPlayer;
+        Level &mLevel;
+        int32_t mChunkRadius;
+        bool mReady = false;
+        ClientSideGeneration::BuildContext mContext;
+    };
 
     void updateInRadiusChunks(ChunkStreamState &state, int32_t viewDistance, int32_t centerX, int32_t centerZ) {
         state.mInRadius.clear();
@@ -176,6 +286,8 @@ namespace {
             return;
 
         Level &level = owner.getLevelFor(player);
+        const bool clientSideGeneration = isClientSideGeneration(owner);
+        BuildDecision decision(owner, player, level, streamRadius(state, level));
         std::vector<int64_t> requeue;
         int32_t tried = 0;
 
@@ -186,6 +298,16 @@ namespace {
 
             const int32_t chunkX = ChunkStreamHandler::unpackChunkX(hash);
             const int32_t chunkZ = ChunkStreamHandler::unpackChunkZ(hash);
+
+            // The view leaves the chunk to the client: nothing is loaded for it (sub_1430014E0, generate mode 1).
+            if (clientSideGeneration && !decision.isServerBuilt(chunkX, chunkZ)) {
+                state.mLoading.erase(hash);
+                if (isBuiltWithNeighbours(level, chunkX, chunkZ))
+                    pushQueue(state, state.mReadyToSend, hash);
+                else
+                    state.mClientBuilt.push_back(hash);
+                continue;
+            }
 
             if (level.isChunkPopulated(chunkX, chunkZ)) {
                 state.mLoading.erase(hash);
@@ -229,14 +351,18 @@ namespace {
             return;
 
         Level &level = owner.getLevelFor(player);
-        const Vector3f position = player.getPosition();
+        const bool clientSideGeneration = isClientSideGeneration(owner);
 
         // The client discards chunks outside the last publisher radius it received, so the
-        // publisher update has to go out before the chunks themselves.
-        NetworkChunkPublisherUpdatePacket publisher;
-        publisher.mPosition = Vector3i((int32_t) position.x, (int32_t) position.y, (int32_t) position.z);
-        publisher.mRadius = (uint32_t) (streamRadius(state, level) * 16);
-        owner.getNetworkHandler().send(id, publisher, owner.getCodecContext());
+        // publisher update has to go out before the chunks themselves. Under client side generation the
+        // update follows its own schedule, and the view only moves when it is sent.
+        if (!clientSideGeneration) {
+            const Vector3f position = player.getPosition();
+            NetworkChunkPublisherUpdatePacket publisher;
+            publisher.mPosition = Vector3i((int32_t) position.x, (int32_t) position.y, (int32_t) position.z);
+            publisher.mRadius = (uint32_t) (streamRadius(state, level) * 16);
+            owner.getNetworkHandler().send(id, publisher, owner.getCodecContext());
+        }
 
         std::unordered_set<int64_t> &sent = player.getSentChunks();
         unsigned added = 0;
@@ -278,10 +404,120 @@ namespace {
             sent.insert(hash);
             ++added;
             ++state.mSendsThisTick;
+
+            // sub_142561970: every chunk sent under client side generation is one the server built, and the
+            // client learns it from the next publisher update.
+            if (clientSideGeneration) {
+                state.mSavedChunks.add(chunkX, chunkZ);
+                state.mChunkSentSinceUpdate = true;
+                state.mLastChunkSent = std::chrono::steady_clock::now();
+            }
         }
 
         player.addSentChunkCount(added);
     }
+}
+
+namespace {
+    Vector3i publisherPosition(const ServerPlayer &player) {
+        const Vector3f position = player.getPosition();
+        return Vector3i((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
+                        (int32_t) std::floor(position.z));
+    }
+
+    // sub_14255F580: the update carries the chunks sent since the previous one, then the view follows it.
+    void publishClientSideGeneration(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player) {
+        Level &level = owner.getLevelFor(player);
+        const int32_t radius = streamRadius(state, level);
+        const Vector3i position = publisherPosition(player);
+        const uint32_t blockRadius = (uint32_t) (radius * 16);
+        if (!ChunkStreamHandler::isPublisherUpdateDue(state, position, blockRadius, std::chrono::steady_clock::now()))
+            return;
+
+        NetworkChunkPublisherUpdatePacket publisher;
+        publisher.mPosition = position;
+        publisher.mRadius = blockRadius;
+        publisher.mSavedChunks = state.mSavedChunks.drain();
+        owner.getNetworkHandler().send(player.getNetworkIdentifier(), publisher, owner.getCodecContext());
+
+        const bool radiusChanged = !state.mPublished || state.mPublisherRadius != blockRadius;
+        state.mPublished = true;
+        state.mForcePublisherMove = false;
+        state.mChunkSentSinceUpdate = false;
+        state.mPublisherPosition = position;
+        state.mPublisherRadius = blockRadius;
+
+        const int64_t centre = ChunkStreamHandler::packChunk(position.x >> 4, position.z >> 4);
+        if (centre == state.mLastLoaderChunk && !radiusChanged)
+            return;
+
+        state.mLastLoaderChunk = centre;
+        updateInRadiusChunks(state, radius, position.x >> 4, position.z >> 4);
+        removeOutOfRadiusChunks(state, owner, player);
+        pruneLoadingQueueOutOfRadius(state);
+        pruneQueueOutOfRadius(state, state.mReadyToSend, level, player.getRuntimeId());
+        // The chunks left to the client go back through the decision with the rest of the queue.
+        state.mClientBuilt.clear();
+        state.mClientBuiltCursor = 0;
+        updateChunkSendingQueue(state, player);
+    }
+
+    // Chunks left to the client are sent once the server holds them for another reason, like the publisher
+    // view picking up chunks another view loaded. A few are looked at each tick.
+    void recheckClientBuilt(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player) {
+        static const size_t CHECKS_PER_TICK = 64;
+        if (state.mClientBuilt.empty())
+            return;
+
+        const Level &level = owner.getLevelFor(player);
+        const std::unordered_set<int64_t> &sent = player.getSentChunks();
+        for (size_t checked = 0; checked < CHECKS_PER_TICK && !state.mClientBuilt.empty(); ++checked) {
+            if (state.mClientBuiltCursor >= state.mClientBuilt.size())
+                state.mClientBuiltCursor = 0;
+
+            const int64_t hash = state.mClientBuilt[state.mClientBuiltCursor];
+            const bool inRadius = state.mInRadius.find(hash) != state.mInRadius.end();
+            const bool built = inRadius && sent.find(hash) == sent.end()
+                               && isBuiltWithNeighbours(level, ChunkStreamHandler::unpackChunkX(hash),
+                                                        ChunkStreamHandler::unpackChunkZ(hash));
+            if (inRadius && !built) {
+                ++state.mClientBuiltCursor;
+                continue;
+            }
+
+            state.mClientBuilt[state.mClientBuiltCursor] = state.mClientBuilt.back();
+            state.mClientBuilt.pop_back();
+            if (built)
+                pushQueue(state, state.mReadyToSend, hash);
+        }
+    }
+}
+
+bool ChunkStreamHandler::isPublisherUpdateDue(const ChunkStreamState &state, const Vector3i &position,
+                                              uint32_t radius, std::chrono::steady_clock::time_point now) {
+    if (state.mChunkSentSinceUpdate) {
+        const int64_t elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(now - state.mLastChunkSent)
+                .count();
+        if (elapsed < ClientSideGeneration::PUBLISHER_DELAY_NANOSECONDS)
+            return false;
+    }
+
+    if (!state.mPublished || state.mPublisherRadius != radius || !state.mSavedChunks.empty())
+        return true;
+
+    const int64_t threshold = state.mForcePublisherMove ? 0 : ClientSideGeneration::PUBLISHER_MOVE_THRESHOLD;
+    const int64_t dx = (int64_t) position.x - state.mPublisherPosition.x;
+    const int64_t dy = (int64_t) position.y - state.mPublisherPosition.y;
+    const int64_t dz = (int64_t) position.z - state.mPublisherPosition.z;
+    return dx * dx + dy * dy + dz * dz >= threshold * threshold;
+}
+
+void ChunkStreamHandler::dropPendingChunks(ChunkStreamState &state) {
+    state.mSendQueue.clear();
+    state.mLoading.clear();
+    state.mReadyToSend.clear();
+    state.mClientBuilt.clear();
+    state.mClientBuiltCursor = 0;
 }
 
 int64_t ChunkStreamHandler::packChunk(int32_t chunkX, int32_t chunkZ) {
@@ -301,17 +537,25 @@ void ChunkStreamHandler::tick(ServerNetworkHandler &owner, ServerPlayer &player)
 
     refreshComparatorContext(state, player);
 
-    const int64_t loaderChunk = packChunk(state.mComparatorChunkX, state.mComparatorChunkZ);
-    if (loaderChunk != state.mLastLoaderChunk) {
-        state.mLastLoaderChunk = loaderChunk;
-        updateInRadiusChunks(state, streamRadius(state, owner.getLevelFor(player)), state.mComparatorChunkX,
-                             state.mComparatorChunkZ);
-        removeOutOfRadiusChunks(state, owner, player);
-        updateChunkSendingQueue(state, player);
+    const bool clientSideGeneration = isClientSideGeneration(owner);
+    if (clientSideGeneration) {
+        // ServerPlayer::tick moves the publisher before sending its queue (sub_14102EC10).
+        publishClientSideGeneration(state, owner, player);
+    } else {
+        const int64_t loaderChunk = packChunk(state.mComparatorChunkX, state.mComparatorChunkZ);
+        if (loaderChunk != state.mLastLoaderChunk) {
+            state.mLastLoaderChunk = loaderChunk;
+            updateInRadiusChunks(state, streamRadius(state, owner.getLevelFor(player)), state.mComparatorChunkX,
+                                 state.mComparatorChunkZ);
+            removeOutOfRadiusChunks(state, owner, player);
+            updateChunkSendingQueue(state, player);
+        }
     }
 
     loadQueuedChunks(state, owner, player, owner.getChunksPerTick());
     sendReadyChunks(state, owner, player);
+    if (clientSideGeneration)
+        recheckClientBuilt(state, owner, player);
 
     player.setLastChunkPosition(state.mComparatorChunkX, state.mComparatorChunkZ);
 }
@@ -320,6 +564,17 @@ void ChunkStreamHandler::handleTeleport(ServerNetworkHandler &owner, ServerPlaye
     ChunkStreamState &state = player.getChunkStreamState();
 
     refreshComparatorContext(state, player);
+
+    // The view moves with the next publisher update, which a teleport no longer makes wait for distance.
+    if (isClientSideGeneration(owner)) {
+        // the old view would keep sending and rearm the publisher delay; its chunks are never registered as loaded
+        dropPendingChunks(state);
+        state.mForcePublisherMove = true;
+        publishClientSideGeneration(state, owner, player);
+        loadQueuedChunks(state, owner, player, TELEPORT_LOAD_COUNT);
+        sendReadyChunks(state, owner, player);
+        return;
+    }
     state.mLastLoaderChunk = packChunk(state.mComparatorChunkX, state.mComparatorChunkZ);
 
     // Shrinking the radius to 1 first drops every chunk sent around the old position; the
@@ -354,6 +609,10 @@ void ChunkStreamHandler::handleViewDistanceChange(ServerNetworkHandler &owner, S
     ChunkStreamState &state = player.getChunkStreamState();
 
     refreshComparatorContext(state, player);
+
+    // The new radius reaches the view with the publisher update it makes due.
+    if (isClientSideGeneration(owner))
+        return;
     updateInRadiusChunks(state, streamRadius(state, owner.getLevelFor(player)), state.mComparatorChunkX,
                          state.mComparatorChunkZ);
     removeOutOfRadiusChunks(state, owner, player);

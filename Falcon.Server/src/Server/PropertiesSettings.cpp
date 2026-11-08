@@ -87,6 +87,10 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"chat-restriction", "None", PropertyKind::Enum, 0, 0, "None,Dropped,Disabled"},
             {"disable-player-interaction", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"client-side-chunk-generation-enabled", "false", PropertyKind::Bool, 0, 0, nullptr},
+            // Falcon only: structures whose chunks stay on the server under client side generation, because
+            // Falcon does not generate them exactly yet and the client's copy would differ from the server's.
+            {"client-side-chunk-generation-server-structures",
+             "village,temple,shipwreck,monument,ancient_city,trial_chambers", PropertyKind::String, 0, 0, nullptr},
             {"block-network-ids-are-hashes", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"disable-custom-skins", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"disable-client-vibrant-visuals", "true", PropertyKind::Bool, 0, 0, nullptr},
@@ -386,6 +390,19 @@ int PropertiesSettings::getInt(const std::string &key, int defaultValue) const {
         return defaultValue;
 
     return atoi(it->second.c_str());
+}
+
+float PropertiesSettings::getServerBuildRadiusRatio() const {
+    const std::string value = getString("server-build-radius-ratio");
+    if (value.empty() || value == "Disabled")
+        return -1.0f;
+
+    char *end = nullptr;
+    const float ratio = std::strtof(value.c_str(), &end);
+    if (end == value.c_str() || *end != '\0' || !(ratio >= 0.0f && ratio <= 1.0f))
+        return -1.0f;
+
+    return ratio;
 }
 
 float PropertiesSettings::getFloat(const std::string &key, float defaultValue) const {
