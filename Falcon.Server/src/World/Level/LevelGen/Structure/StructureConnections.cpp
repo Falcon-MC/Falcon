@@ -1,10 +1,17 @@
 #include "World/Level/LevelGen/Structure/StructureConnections.h"
 
+#include "World/Level/Block/BannerBlock.h"
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/Block/FenceBlock.h"
+#include "World/Level/Block/LanternBlock.h"
+#include "World/Level/Block/PressurePlateBlock.h"
+#include "World/Level/Block/SignBlock.h"
 #include "World/Level/Block/ThinFenceBlock.h"
+#include "World/Level/Block/TorchBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Block/WallBannerBlock.h"
+#include "World/Level/Block/WallSignBlock.h"
 
 #include <array>
 #include <string>
@@ -118,12 +125,15 @@ namespace {
         return isFullSolid(above) || (isWall(above) && aboveReaches) ? "tall" : "short";
     }
 
+    // torches, lanterns, signs, banners and pressure plates keep the post under them
     bool raisesPost(const BlockState &above) {
-        static const char *OVERRIDES[] = {"torch", "lantern", "sign", "banner", "pressure_plate"};
-        for (const char *override : OVERRIDES) {
-            if (above.mName.find(override) != std::string::npos)
-                return true;
-        }
+        const Block *block = VanillaBlocks::fromIdentifier(above.mName);
+        if (dynamic_cast<const TorchBlock *>(block) != nullptr || dynamic_cast<const LanternBlock *>(block) != nullptr
+            || dynamic_cast<const SignBlock *>(block) != nullptr || dynamic_cast<const WallSignBlock *>(block) != nullptr
+            || dynamic_cast<const BannerBlock *>(block) != nullptr
+            || dynamic_cast<const WallBannerBlock *>(block) != nullptr
+            || dynamic_cast<const PressurePlateBlock *>(block) != nullptr)
+            return true;
         return isWall(above) || isFullSolid(above);
     }
 
