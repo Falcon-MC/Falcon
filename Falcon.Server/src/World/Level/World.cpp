@@ -18,8 +18,7 @@ bool World::open(const std::string &worldsDirectory, size_t workerThreads,
     mOverworld->initializeWeather();
     mOverworld->initializeGameRules();
 
-    // An existing world may have a different seed in level.dat. Keep the generators already
-    // constructed for the requested seed unless the stored one differs.
+    // level.dat may hold another seed: rebuild the generators only when it differs
     const std::string &name = mOverworld->getName();
     const int viewDistance = mOverworld->getViewDistance();
     if (mNether->getSeed() != mOverworld->getSeed())

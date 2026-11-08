@@ -30,11 +30,7 @@ enum class LevelDbTag : unsigned char {
     LegacyVersion = 'v'
 };
 
-/**
- * LevelDB-backed world storage for one dimension: chunks, entities, block entities,
- * pending generated blocks and level-wide records. Called from both the main thread and
- * the chunk workers, relying on the database's own thread safety.
- */
+// one dimension; called from the main thread and the chunk workers, on LevelDB's own thread safety
 class LevelStorage {
 public:
     LevelStorage();
@@ -104,10 +100,8 @@ public:
 
     bool loadGameRules(Tag &rules);
 
-    /**
-     * Updates the fields the server tracks. The display name, the game mode, the difficulty and every option the
-     * game itself wrote are kept from the existing file, and only filled in from the arguments when missing.
-     */
+    // display name, game mode, difficulty and the game's own options are kept from the file;
+    // the arguments only fill them in when missing
     void writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ,
                        int32_t gameType, int32_t difficulty, int64_t seed, int64_t time, bool bonusChestEnabled,
                        bool bonusChestSpawned, int64_t worldStartCount) const;

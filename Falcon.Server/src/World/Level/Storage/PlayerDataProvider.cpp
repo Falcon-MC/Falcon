@@ -30,8 +30,8 @@ PlayerDataProvider::PlayerDataProvider(const std::string &directory) : mDirector
 }
 
 bool PlayerDataProvider::_isSafeName(const std::string &name) {
-    // the name comes from the client, so it must not be able to escape the directory or inject a path.
-    // a NUL would also truncate the path, so control bytes are rejected outright.
+    // client-supplied name: no escaping the directory, no path injection; control bytes rejected (a NUL
+    // truncates the path)
     if (name.empty() || name.size() > 64 || name == "." || name == "..")
         return false;
 

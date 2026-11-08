@@ -136,9 +136,7 @@ bool FallingBlockSystem::canFallInto(Level &level, const Vector3i &position) {
     return false;
 }
 
-/**
- * Every face except the bottom: powder resting on top of water stays powder.
- */
+// every face but the bottom: powder resting on water stays powder
 bool FallingBlockSystem::isTouchingWater(Level &level, const Vector3i &position) {
     static const Vector3i OFFSETS[] = {
             Vector3i(0, 1, 0),
@@ -214,8 +212,7 @@ void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &leve
     if (state.mName == "minecraft:icicle" && !state.mStates.getBool("hanging", false))
         return;
 
-    // Hanging dripstone and icicles are held up from above, by a solid block or the rest of the
-    // stalactite; they only fall once that support is gone.
+    // hanging dripstone and icicles hang from a solid block or the rest of the stalactite
     if ((state.mName == "minecraft:pointed_dripstone" || state.mName == "minecraft:icicle")
         && state.mStates.getBool("hanging", false)) {
         const BlockState above = level.getBlockState(position.x, position.y + 1, position.z);

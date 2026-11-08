@@ -42,7 +42,7 @@ void SpreadingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
                           position.y - 3 + RandomTickSystem::nextInt(5),
                           position.z - 1 + RandomTickSystem::nextInt(3));
 
-    // Spreading never loads chunks: a target in an unloaded chunk is skipped this tick.
+    // never loads chunks: a target in an unloaded chunk is skipped this tick
     const BlockState *targetState = level.peekBlockPtr(target.x, target.y, target.z);
     if (targetState == nullptr || targetState->mName != "minecraft:dirt")
         return;

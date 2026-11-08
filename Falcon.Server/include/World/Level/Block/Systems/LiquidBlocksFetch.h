@@ -10,9 +10,9 @@ struct LiquidContact {
     bool bubble = false;
     bool dragDown = false;
     bool eyeSubmerged = false;
-    /** Eyes in water for breathing: unlike eyeSubmerged, a bubble column does not count. */
+    // for breathing: unlike eyeSubmerged, a bubble column does not count
     bool eyeInWater = false;
-    /** Water at the feet, below its surface. */
+    // below the water surface
     bool feetInWater = false;
     bool swimProbeInWater = false;
     Vector3f flow;

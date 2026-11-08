@@ -13,8 +13,8 @@
 #include <vector>
 
 namespace {
-    // Most sampled blocks (stone, dirt, ores...) react to nothing, so they are dropped before the
-    // candidate copy. Copper weathering runs through CopperSystem, not the block class.
+    // most sampled blocks (stone, dirt, ores) react to nothing: dropped before the candidate copy;
+    // copper weathering runs through CopperSystem, not the block class
     bool ticksRandomly(const Block &block) {
         static std::unordered_map<const Block *, bool> cache;
         const auto found = cache.find(&block);
@@ -44,10 +44,7 @@ namespace {
         return random;
     }
 
-    /**
-     * Cheap shared LCG for picking random tick positions: one call yields x, y and z from
-     * separate byte lanes, which is far cheaper than a distribution draw per coordinate.
-     */
+    // one call yields x, y and z from separate byte lanes: no distribution draw per coordinate
     uint32_t nextUpdateLcg() {
         static uint32_t state = 0x3c6ef35f;
         state = state * 3 + 0x3c6ef35f;
@@ -98,8 +95,7 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
     if (speed <= 0)
         return;
 
-    // Every non-air pick of every active subchunk lands here, thousands per tick, so the buffer
-    // is reused and only the identifier is kept instead of a full state copy.
+    // thousands of picks per tick: reused buffer, block pointer instead of a state copy
     static std::vector<Candidate> candidates;
     candidates.clear();
 
@@ -116,8 +112,7 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
             if (subChunk.isEmpty())
                 continue;
 
-            // A section holding no randomly ticking state, most of the underground, still draws its picks so
-            // the other sections land on the same blocks.
+            // inert section (most of the underground): still draw its picks, other sections land on the same blocks
             if (!subChunk.paletteMatches(SubChunk::PaletteQuery::RandomTick, stateTicksRandomly)) {
                 for (int32_t attempt = 0; attempt < speed; attempt++)
                     nextUpdateLcg();
@@ -148,17 +143,15 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
         }
     }
 
-    // Candidates are collected first and ticked afterwards so block reactions cannot modify
-    // chunks while they are being iterated. Each one is re-read because an earlier tick in
-    // this batch may already have replaced it.
+    // collect then tick: reactions never modify chunks mid-iteration; re-read, an earlier tick may have
+    // replaced it
     for (const Candidate &candidate: candidates) {
         const Vector3i &position = candidate.mPosition;
         const BlockState *before = level.peekBlockPtr(position.x, position.y, position.z);
         if (before == nullptr || VanillaBlocks::fromState(*before) != candidate.mBlock)
             continue;
 
-        // Copies are passed on because a reaction may rewrite the chunk palette the peeked
-        // pointer refers to.
+        // copy: a reaction may rewrite the palette the peeked pointer points into
         const BlockState current = *before;
         candidate.mBlock->onRandomTick(owner, level, position, current);
 

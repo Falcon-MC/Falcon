@@ -5,10 +5,7 @@
 #include <string>
 #include <vector>
 
-/**
- * Raw bytes of in-memory chunk storage, for a chunk packed while nobody reads it. The bytes are read back by the
- * same process only: they hold host-endian integers and pointers to interned block states.
- */
+// read back by the same process only: host-endian integers and pointers to interned block states
 namespace RawPack {
     template<typename T>
     void put(std::string &out, const T &value) {

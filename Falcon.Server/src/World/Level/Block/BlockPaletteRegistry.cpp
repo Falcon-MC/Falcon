@@ -67,8 +67,7 @@ void BlockPaletteRegistry::initialize() {
                 throw NbtException("Invalid block palette list size");
             hasBlocks = true;
 
-            // Consume one entry at a time and move its states into the registry, rather than
-            // retaining the whole NBT tree and deep-copying every permutation out of it.
+            // one entry at a time, states moved out: no whole tree kept, no deep copy per permutation
             for (int32_t i = 0; i < count; ++i) {
                 Tag entry = NbtIo::readValue(stream, Tag::Type::Compound, NbtVariant::BigEndian,
                                              NbtIo::MAX_DEPTH - 2);

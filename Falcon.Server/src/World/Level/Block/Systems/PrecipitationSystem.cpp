@@ -136,7 +136,7 @@ bool PrecipitationSystem::shouldSnow(Level &level, const Vector3i &position) {
     if (support == nullptr || IceBlock::matches(support->mName) || support->mName == "minecraft:packed_ice")
         return false;
 
-    // Thin snow has collision but cannot support another layer a whole block above it.
+    // thin snow collides but cannot hold another layer a whole block above it
     const SnowLayerBlock *snow = VanillaBlocks::getAs<SnowLayerBlock>(support->mName);
     if (snow != nullptr && snow->canBeReplaced(*support))
         return false;

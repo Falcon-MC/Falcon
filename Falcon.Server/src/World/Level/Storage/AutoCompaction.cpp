@@ -27,11 +27,10 @@ namespace {
                                  []() { return !gRunning.load(); }))
                 return;
 
-            // The lock only guards the wait; it is released during compaction so stop() can
-            // still signal without blocking behind a long compaction.
+            // released while compacting: stop() can signal without blocking behind a long compaction
             lock.unlock();
             {
-                // Held for the whole pass so untrack() cannot return while a level it removes is compacting.
+                // whole pass: untrack() cannot return while the level it removes is compacting
                 std::lock_guard<std::mutex> levels(gLevelsMutex);
                 for (Level *level: gLevels) {
                     if (!level->isStorageOpen())
@@ -68,8 +67,8 @@ void AutoCompaction::stop() {
     if (!gRunning.exchange(false))
         return;
 
-    // Taking the mutex once after clearing gRunning guarantees the worker is either before
-    // its predicate check or already waiting, so the notification cannot be lost.
+    // lock once after clearing gRunning: the worker is before its predicate check or already waiting,
+    // the notification cannot be lost
     {
         std::lock_guard<std::mutex> lock(gMutex);
     }

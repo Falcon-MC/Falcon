@@ -18,7 +18,7 @@ public:
 
     static ItemStack toItemStack(ServerNetworkHandler &owner, const LootDrop &drop);
 
-    /** Spreads drops over free slots with the draws of the game: stacks split, then items and slots shuffle. */
+    // the game's draw order: stacks split, then items and slots shuffle
     static std::vector<PlacedDrop> distribute(std::vector<LootDrop> drops, std::vector<int32_t> freeSlots,
                                               std::mt19937 &random);
 

@@ -23,8 +23,8 @@ void BlockUpdateScheduler::schedule(const Vector3i &position, int64_t delay) {
     const Position key{position.x, position.y, position.z};
     const int64_t due = mTick + std::max<int64_t>(1, delay);
 
-    // One pending update per position: only an earlier due tick wins. The old bucket entry
-    // is left behind and skipped in tick() because its tick no longer matches mSchedule.
+    // one pending update per position, the earliest wins; the old bucket entry stays and tick() skips it
+    // once mSchedule no longer matches
     auto it = mSchedule.find(key);
     if (it != mSchedule.end() && due >= it->second)
         return;
@@ -107,8 +107,8 @@ void BlockUpdateScheduler::tick(const UpdateHandler &handler,
             handler(Vector3i(key.x, key.y, key.z));
             mLastProcessed++;
 
-            // Large fluid or redstone cascades are spread over several ticks instead of
-            // stalling one; the rest keep their original bucket tick so they run first next time.
+            // big fluid or redstone cascades span several ticks; the rest keep their bucket tick and run first
+            // next time
             if (mLastProcessed >= MAX_UPDATES_PER_TICK) {
                 _deferRemaining(positions, i + 1, bucketTick);
                 exhausted = true;

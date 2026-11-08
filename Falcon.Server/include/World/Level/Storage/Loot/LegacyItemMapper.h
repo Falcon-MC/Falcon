@@ -10,10 +10,7 @@ public:
 
     std::string resolve(const std::string &identifier, int32_t data) const;
 
-    /**
-     * Turns a saved identifier and meta into the current item. When the meta only picked a variant that
-     * is now an item of its own, it is reset to zero. Returns whether the identifier changed.
-     */
+    // meta reset to 0 when it only picked a variant now split into its own item; true: identifier changed
     bool upgrade(std::string &identifier, int32_t &data) const;
 
     std::string resolveWithData(const std::string &identifierAndData) const;

@@ -82,8 +82,7 @@ int RedstoneFace::opposite(int face)
     if (face < 0 || face >= RedstoneFace::COUNT)
         return RedstoneFace::NONE;
 
-    // Faces are numbered in opposite pairs (down/up, north/south, west/east), so flipping
-    // the low bit gives the opposite face.
+    // faces in opposite pairs (down/up, north/south, west/east)
     return face ^ 1;
 }
 
@@ -230,10 +229,7 @@ namespace {
         return level.isChunkResident(position.x >> 4, position.z >> 4);
     }
 
-    /**
-     * Unloaded positions read as air so redstone never forces a chunk load; a circuit on a
-     * chunk border simply sees no power from the missing side.
-     */
+    // unloaded reads as air: no forced chunk load; a border circuit sees no power from the missing side
     BlockState stateAt(Level &level, const Vector3i &position)
     {
         if (!isChunkReady(level, position))
@@ -270,10 +266,7 @@ namespace {
         return state.mStates.getString(key, fallback);
     }
 
-    /**
-     * torch_facing_direction names the direction the torch points, away from its support,
-     * so the attached face is the opposite one.
-     */
+    // torch_facing_direction points away from the support: attached face is the opposite
     int torchFacing(const BlockState &state)
     {
         const std::string attachment = stateString(state, "torch_facing_direction", "unknown");
@@ -337,7 +330,7 @@ namespace {
         if (isA<RedstoneComparatorBlock>(state))
             return COMPARATOR_DELAY;
 
-        // repeater_delay is 0-3 for 1-4 redstone ticks; one redstone tick is two game ticks.
+        // repeater_delay 0-3: 1-4 redstone ticks of two game ticks
         return (1 + stateInt(state, "repeater_delay", 0)) * 2;
     }
 
@@ -838,10 +831,7 @@ bool RedstoneSystem::isPowerSource(const BlockState &state)
     return block->isSignalSource();
 }
 
-/**
- * Power a block emits directly into the neighbour on `face`. Unlike strong power, weak
- * power does not travel through a solid block to the blocks beyond it.
- */
+// unlike strong power, never travels through a solid block
 int RedstoneSystem::getWeakPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face)
 {
     const BlockState state = stateAt(level, position);
@@ -909,8 +899,8 @@ int RedstoneSystem::getWeakPower(ServerNetworkHandler &owner, Level &level, cons
         }
     }
 
-    // A dust dot with no connections powers every side. Otherwise dust only powers a side it
-    // points straight into: a turn or a line passing by does not power the blocks beside it.
+    // an unconnected dot powers every side; else only a side it points straight into, not the blocks
+    // beside a turn or a passing line
     if (RedstoneFace::isHorizontal(face) && !anyConnected)
         return power;
 
@@ -926,11 +916,7 @@ int RedstoneSystem::getWeakPower(ServerNetworkHandler &owner, Level &level, cons
     return 0;
 }
 
-/**
- * Power that charges the solid block on `face`, which then powers its own neighbours. A
- * redstone block powers its neighbours but never charges a block, and a torch only charges
- * the block above it.
- */
+// a redstone block never charges a block; a torch only charges the block above
 int RedstoneSystem::getStrongPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face)
 {
     const BlockState state = stateAt(level, position);
@@ -1054,10 +1040,7 @@ void RedstoneSystem::updateAroundRedstone(ServerNetworkHandler &owner, Level &le
     }
 }
 
-/**
- * Updates the neighbours and the neighbours' neighbours, because a source that charges an
- * adjacent solid block also changes what that block feeds into.
- */
+// neighbours' neighbours too: a charged solid block changes what it feeds
 void RedstoneSystem::updateAllAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                              int ignoredFace)
 {
@@ -1095,8 +1078,7 @@ void RedstoneSystem::updateComparatorOutputLevel(ServerNetworkHandler &owner, Le
         if (!isNormalBlock(sideState))
             continue;
 
-        // Comparators can read a container through one solid block, so a diode one block
-        // further away also has to re-evaluate.
+        // comparators read a container through one solid block: the diode beyond re-evaluates too
         const Vector3i beyond = RedstoneFace::relative(side, face);
         if (isA<RedstoneDiodeBlock>(stateAt(level, beyond)))
             level.updateAt(beyond, BlockUpdateType::Redstone);

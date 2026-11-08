@@ -13,10 +13,7 @@
 #include <sched.h>
 
 namespace {
-    /**
-     * Drops the calling worker to the lower quarter of its scheduling range so chunk
-     * generation and storage never starve the main tick thread.
-     */
+    // lower quarter of the scheduling range: generation and storage never starve the tick thread
     void lowerCurrentThreadPriority() {
         sched_param parameters;
         int policy = 0;
@@ -93,11 +90,8 @@ void ChunkWorker::stop() {
     mCompleted.close();
 }
 
-/**
- * Every task for a given chunk lands on the same queue, so a save and a later load of that
- * chunk are processed in order by one thread and never race in storage. The position is fully
- * mixed so the chunks a player streams spread evenly over the workers.
- */
+// one queue per chunk: a save and a later load run in order on one thread, no storage race; fully
+// mixed: a player's streamed chunks spread over the workers
 size_t ChunkWorker::_queueIndexFor(int32_t chunkX, int32_t chunkZ) const {
     uint64_t key = ((uint64_t) (uint32_t) chunkX << 32) | (uint32_t) chunkZ;
     key ^= key >> 33;
@@ -255,9 +249,8 @@ void ChunkWorker::_processLoad(ChunkTask &task, size_t sourceIndex) {
     if (mStorage.isOpen() && mStorage.loadChunk(*chunk)) {
         mLoadedCount.fetch_add(1);
     } else {
-        // The terrain is often cached already, generated as the neighbour of a chunk populated
-        // earlier; a fresh one is cached for the neighbours populated next. Only the raw terrain is
-        // taken, never a neighbour another decoration already spilled into.
+        // often cached as the neighbour of an earlier populate; raw terrain only, never one a decoration
+        // already spilled into
         *chunk = mTerrainCache->terrain(task.mX, task.mZ);
         mGeneratedCount.fetch_add(1);
         generated = true;
@@ -298,8 +291,7 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
         }
     }
 
-    // Features populated in a neighbouring chunk may have spilled blocks into this one while
-    // it was not loaded; those were stored and are applied now.
+    // blocks spilled by neighbour features while absent: stored, applied now
     if (mStorage.isOpen()) {
         result.mSpilledChanges = mStorage.loadPendingBlockChanges(result.mX, result.mZ);
 
@@ -315,7 +307,7 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
         }
     }
 
-    // Spilled blocks still held in memory are newer than the stored ones, so they go last.
+    // in-memory spilled blocks are newer than the stored ones: last
     for (const GeneratedBlockChange &change: parked) {
         if (change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y)
             continue;
@@ -326,8 +318,8 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
                                   std::make_move_iterator(parked.end()));
 
     chunk->compactBiomes();
-    // Sky light is only read around players, where Level computes it on first use; most streamed chunks
-    // never need it and would otherwise each keep its arrays.
+    // no sky light: only read around players, computed by Level on first use; most streamed chunks never
+    // need its arrays
     if (Dimension::hasSkyLight(chunk->getDimension()))
         LightSystem::computeHeightmap(*chunk);
     LightSystem::computeBlockLight(*chunk);
@@ -359,8 +351,7 @@ void ChunkWorker::_processSave(ChunkTask &task) {
 }
 
 void ChunkWorker::_processPersistChanges(ChunkTask &task) {
-    // A task carries the changes of several chunks; each chunk is merged separately and only the
-    // chunks that fail to save are handed back.
+    // several chunks per task, merged one by one; only the failed ones are handed back
     std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> byChunk;
     for (GeneratedBlockChange &change: task.mChanges) {
         const int64_t key = ((int64_t) (change.mX >> 4) << 32) | (uint32_t) (change.mZ >> 4);
@@ -409,11 +400,10 @@ void ChunkWorker::_run(size_t queueIndex) {
             task.mBarrier.reset();
             continue;
         }
-        // Saves are never dropped, even when pending generation is discarded, or player
-        // changes would be lost.
+        // saves never dropped: player changes would be lost
         if (task.mKind != ChunkTask::Kind::Save && mDiscardGeneration.load()) {
-            // The parked blocks a dropped load carried exist nowhere else; they go back to the main
-            // thread, which keeps them for the final save. The result returns the generation credit.
+            // parked blocks of a dropped load exist nowhere else: back to the main thread for the final save;
+            // the result returns the generation credit
             if (task.mKind == ChunkTask::Kind::Load && !task.mChanges.empty()) {
                 ChunkLoadResult result;
                 result.mX = task.mX;

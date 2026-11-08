@@ -31,9 +31,8 @@ enum class BlockDropKind : uint8_t {
     Other = 2
 };
 
-// what rain and snow do at a block (sub_145C617E0); the game sets an interaction for about 190 blocks
-// (sub_14CE9AD30) and air (sub_1431FA960), every other block obstructs them, as ice, packed ice and grass path do
-// with their explicit obstruct_rain
+// sub_145C617E0; set for about 190 blocks (sub_14CE9AD30) and air (sub_1431FA960), every other block
+// obstructs, like the explicit obstruct_rain of ice, packed ice and grass path
 enum class BlockPrecipitationInteraction : uint8_t {
     ObstructRain,
     None,

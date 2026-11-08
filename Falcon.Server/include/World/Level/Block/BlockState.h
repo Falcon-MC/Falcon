@@ -63,10 +63,7 @@ public:
     Tag mStates;
 
 private:
-    /**
-     * Not carried over by copies: a copy may have its name changed in place, which would leave it pointing at the
-     * wrong block.
-     */
+    // not copied: a copy may get its name changed in place and would point at the wrong block
     struct ResolvedBlock {
         ResolvedBlock() = default;
 
