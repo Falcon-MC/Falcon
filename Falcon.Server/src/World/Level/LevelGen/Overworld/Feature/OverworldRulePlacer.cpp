@@ -677,6 +677,8 @@ struct OverworldRulePlacer::LegacyTreeDefinition {
         MegaTaiga,
         // nextInt(20) != 0 ? second : first, sub_14D230100
         Swamp,
+        // nextInt(3) != 0 ? (nextInt(3) != 0 ? third : second) : first, sub_14D230920
+        RedwoodMutated,
         // nextInt(5) != 0 && nextBoolean() ? second : first, sub_14D2302A0
         BirchMutated
     };
@@ -1161,6 +1163,9 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              {tree(TREES[9]), aggregate(SELECT_SPRUCE)}},
             {"minecraft:legacy:mega_taiga_tree_feature", 10.0f, Pick::MegaTaiga,
              {tree(MEGA_TREES[0]), tree(MEGA_TREES[1]), tree(TREES[9]), aggregate(SELECT_SPRUCE)}},
+            // type 16 of the constructor
+            {"minecraft:legacy:redwood_taiga_mutated_tree_feature", 10.0f, Pick::RedwoodMutated,
+             {tree(MEGA_TREES[0]), tree(TREES[9]), aggregate(SELECT_SPRUCE)}},
             // the swamp foliage feature (constructor sub_14D21E9F0, place sub_14D21F070) counts its trees like a
             // legacy tree feature of density 2
             {"minecraft:legacy:swamp_foliage_feature", 2.0f, Pick::Swamp, {HUGE_MUSHROOM, tree(SWAMP_TREE)},
@@ -3508,6 +3513,8 @@ void OverworldRulePlacer::_placeLegacyTrees(BlockManager &blocks, const LegacyTr
             picked = nextInt(random, 20) != 0 ? 1 : 0;
         else if (trees.mPick == Pick::BirchMutated)
             picked = nextInt(random, 5) != 0 && nextBoolean(random) ? 1 : 0;
+        else if (trees.mPick == Pick::RedwoodMutated)
+            picked = nextInt(random, 3) != 0 ? (nextInt(random, 3) != 0 ? 2 : 1) : 0;
         else if (trees.mPick == Pick::MegaTaiga)
             picked = nextInt(random, 3) != 0 ? (nextInt(random, 3) != 0 ? 3 : 2) : (nextInt(random, 13) != 0 ? 1 : 0);
 
