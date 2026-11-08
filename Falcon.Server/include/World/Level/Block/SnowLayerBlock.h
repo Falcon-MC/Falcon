@@ -14,6 +14,8 @@ public:
 
     bool canBeReplaced(const BlockState &state) const override;
 
+    bool getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const override;
+
     bool staysUnderPlacedActor() const override {
         return true;
     }
