@@ -198,7 +198,7 @@ void FallingBlockSystem::spawnFallingBlock(ServerNetworkHandler &owner, Level &l
 }
 
 void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                        const BlockState &state) {
+                                        const BlockState &state, const Vector3i *changed) {
     if (!isChunkReady(level, position))
         return;
 
@@ -208,6 +208,17 @@ void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &leve
             setBlockState(owner, level, position, concrete);
         return;
     }
+
+    // the fall waits for a queued tick: 1 when the block below changed, else 2 (sub_14A431360)
+    const bool below = changed != nullptr && changed->x == position.x && changed->z == position.z
+                       && changed->y < position.y;
+    level.scheduleUpdate(position, below ? 1 : 2);
+}
+
+void FallingBlockSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                           const BlockState &state) {
+    if (!isChunkReady(level, position))
+        return;
 
     if (state.mName == "minecraft:icicle" && !state.mStates.getBool("hanging", false))
         return;
@@ -227,7 +238,11 @@ void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &leve
     spawnFallingBlock(owner, level, position, state);
 }
 
+// BlockPlaceEvent queues the fall check 2 ticks later (sub_14A4300F0)
 void FallingBlockSystem::onBlockPlaced(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                        const BlockState &state) {
-    onNormalUpdate(owner, level, position, state);
+    (void) owner;
+    (void) state;
+    if (isChunkReady(level, position))
+        level.scheduleUpdate(position, 2);
 }

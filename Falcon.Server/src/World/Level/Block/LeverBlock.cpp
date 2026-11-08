@@ -22,7 +22,7 @@ bool LeverBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFac
     return BlockSupport::isAttachable(support, blockFace);
 }
 
-bool LeverBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const
+int LeverBlock::_attachedFace(const BlockState &state)
 {
     const std::string direction = state.mStates.getString("lever_direction", "down_east_west");
 
@@ -34,10 +34,33 @@ bool LeverBlock::canSurvive(Level &level, const Vector3i &position, const BlockS
     else
         facing = PlacementOrientation::faceFromName(direction);
 
-    if (facing < 0)
-        facing = PlacementOrientation::FACE_DOWN;
+    return facing < 0 ? PlacementOrientation::FACE_DOWN : facing;
+}
 
-    return canPlaceAt(level, position, facing);
+bool LeverBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const
+{
+    return canPlaceAt(level, position, _attachedFace(state));
+}
+
+// only the block it hangs on is watched: a lever set where nothing holds it stays (sub_149C39350)
+bool LeverBlock::watchesNeighbour(const Vector3i &position, const BlockState &state, const Vector3i *changed) const
+{
+    return changed != nullptr && *changed == BlockSupport::supportOf(position, _attachedFace(state));
+}
+
+// the survival check runs on a tick one later (sub_149C383D0)
+void LeverBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                    const BlockState &state) const
+{
+    (void) owner;
+    (void) state;
+    level.scheduleUpdate(position, 1);
+}
+
+void LeverBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                   const BlockState &state) const
+{
+    Block::onNeighbourChanged(owner, level, position, state);
 }
 
 bool LeverBlock::isSignalSource() const
