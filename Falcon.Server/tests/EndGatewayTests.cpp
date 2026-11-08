@@ -304,7 +304,7 @@ int main() {
         checkExitChecks();
         checkIsland();
     } catch (const std::exception &exception) {
-        std::cerr << "End gateway check failed: " << exception.what() << std::endl;
+        std::cout << "End gateway check failed: " << exception.what() << '\n';
         return 1;
     }
 
