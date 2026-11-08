@@ -181,6 +181,7 @@ namespace {
 
     // https on the port, plus 443 for 19132 only: sub_143A904D0; http after every https probe ends: sub_143A92EB0
     const unsigned short DEFAULT_GAME_PORT = 19132;
+    const unsigned short HTTPS_PORT = 443;
 
     // ACME validates on fixed ports whatever the game port: RFC 8737 on 443, RFC 8555 http-01 on 80
     void logAcmeNotice(const PropertiesSettings &properties, const ServerNetworkHandler &handler,
@@ -211,11 +212,12 @@ namespace {
                          (unsigned) port);
                 if (acmePending)
                     LOG_INFO(LogAreaID::Server, "HTTPS starts once the ACME certificate is issued.");
-                else if (port == DEFAULT_GAME_PORT)
+                // Falcon on 443 refuses TLS at once: no stalled probe left to warn about
+                else if (port == DEFAULT_GAME_PORT && handler.getExtraSignalingPort() != HTTPS_PORT)
                     LOG_INFO(LogAreaID::Server, "Players first try HTTPS here and on TCP 443 of this host: a firewall "
-                                                "that drops 443 delays every join by 3 s. Set signaling-acme-domain, "
-                                                "or signaling-certificate and signaling-private-key, to answer "
-                                                "over HTTPS.");
+                                                "that drops 443 delays every join by 3 s. Set signaling-extra-port=443,"
+                                                 " signaling-acme-domain, or signaling-certificate and "
+                                                "signaling-private-key to answer over HTTPS.");
             }
             if (handler.getExtraSignalingPort() != 0)
                 LOG_INFO(LogAreaID::Server, "NetherNet signaling also listens on TCP %u.",
