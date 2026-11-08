@@ -187,6 +187,14 @@ bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPositio
     return false;
 }
 
+bool MovementHandler::checkGroundState(Level &level, const Vector3f &previousFeet, const Vector3f &feetPosition) {
+    if (checkGroundState(level, feetPosition))
+        return true;
+    // Y resolves before X/Z (sub_147B42620): a move sliding off an edge lands on the column it left
+    return feetPosition.y <= previousFeet.y
+           && checkGroundState(level, Vector3f(previousFeet.x, feetPosition.y, previousFeet.z));
+}
+
 void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &feetPosition,
                                      const Vector3f &rotation) {
     if (player.isRiding()) {
@@ -209,7 +217,7 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
     Level &level = owner.getLevelFor(player);
     // keep the collision result: a proximity probe can report ground mid-jump or above shallow water
     const bool onGround = player.hasSimulatedGround() ? player.isSimulatedOnGround()
-                                                     : checkGroundState(level, feetPosition);
+                                                     : checkGroundState(level, previous, feetPosition);
     player.setOnGround(onGround);
 
     const LiquidContact water = liquidContact(level, player, feetPosition);
