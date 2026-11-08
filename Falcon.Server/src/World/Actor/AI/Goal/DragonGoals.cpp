@@ -599,21 +599,21 @@ bool DragonScanningGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor 
     const Vector3f position(std::floor(dragon.getPosition().x), std::floor(dragon.getPosition().y),
                             std::floor(dragon.getPosition().z));
 
-    ServerPlayer *near = EnderDragon::nearestPlayer(owner, level, position, SCAN_NEAR_RANGE);
-    if (near != nullptr) {
+    ServerPlayer *nearPlayer = EnderDragon::nearestPlayer(owner, level, position, SCAN_NEAR_RANGE);
+    if (nearPlayer != nullptr) {
         if (mScanTime <= SCAN_FLAME_TIME)
             return true;
 
-        dragon.setTarget(owner, near->getRuntimeId());
+        dragon.setTarget(owner, nearPlayer->getRuntimeId());
         return false;
     }
 
     if (mScanTime < SCAN_GIVE_UP_TIME)
         return true;
 
-    ServerPlayer *far = EnderDragon::nearestPlayer(owner, level, position, SCAN_FAR_RANGE);
-    if (canAttack(dragon, far))
-        dragon.setTarget(owner, far->getRuntimeId());
+    ServerPlayer *farPlayer = EnderDragon::nearestPlayer(owner, level, position, SCAN_FAR_RANGE);
+    if (canAttack(dragon, farPlayer))
+        dragon.setTarget(owner, farPlayer->getRuntimeId());
 
     dragon.fireTrigger(owner, ON_START_TAKEOFF);
     return false;

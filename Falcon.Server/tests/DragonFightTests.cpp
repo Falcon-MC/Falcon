@@ -360,7 +360,7 @@ int main() {
         checkDyingDragonRecord();
         checkRespawnCrystals();
     } catch (const std::exception &exception) {
-        std::cerr << "Dragon fight check failed: " << exception.what() << std::endl;
+        std::cout << "Dragon fight check failed: " << exception.what() << '\n';
         return 1;
     }
 
