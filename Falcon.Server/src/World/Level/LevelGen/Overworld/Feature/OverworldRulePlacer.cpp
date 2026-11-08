@@ -571,6 +571,40 @@ namespace {
     }
 }
 
+namespace {
+    // VinesFeature::place (vtable 0x14F2F6FC0, sub_14721B910): up the column from y 64, every air block gets a vine
+    // on the first of north, south, west and east whose support holds; a block in the way moves the column by two
+    // raw draws per axis from the origin; the game stops at the highest block of the chunks around, the top here
+    bool placeVines(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
+        (void) y;
+        // face, support offset and vine_direction_bits (1 << qword_14F0F3EF0[qword_14F0AE1E0[face]])
+        static const int32_t FACES[4][3] = {{0, 1, 1}, {0, -1, 4}, {1, 0, 8}, {-1, 0, 2}};
+        static const BlockState vine = VanillaBlocks::VINE().toBlockState();
+        int32_t columnX = x;
+        int32_t columnZ = z;
+        for (int32_t columnY = 64; columnY <= LevelChunk::MAX_Y; columnY++) {
+            if (!DecorationSupport::isAir(blocks.getBlockAt(columnX, columnY, columnZ))) {
+                const int32_t awayX = static_cast<int32_t>(random() & 3);
+                columnX = x + awayX - static_cast<int32_t>(random() & 3);
+                const int32_t awayZ = static_cast<int32_t>(random() & 3);
+                columnZ = z + awayZ - static_cast<int32_t>(random() & 3);
+                continue;
+            }
+
+            for (const int32_t *face: FACES) {
+                if (!BlockSupport::isSolid(blocks.getBlockAt(columnX + face[0], columnY, columnZ + face[1])))
+                    continue;
+
+                Tag states = vine.mStates;
+                states.putInt("vine_direction_bits", face[2]);
+                blocks.setBlockStateAt(columnX, columnY, columnZ, BlockState(vine.mName, states));
+                break;
+            }
+        }
+        return true;
+    }
+}
+
 // a minecraft:ore_feature of the behavior packs
 struct OverworldRulePlacer::OreDefinition {
     const char *mIdentifier;
@@ -1264,6 +1298,13 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             "minecraft:scatter_tall_grass_around_tree_feature", "0",
             {{6, "-3", "3"}, {6, "-4", "4"}, {6, "-3", "3"}}, 5, single(0)};
 
+    static const ScatterDefinition FIXUP_VINES = {
+            "minecraft:fixup_vines_position_feature", "1", {{0, "8", ""}, ZERO, {0, "8", ""}}, 0, [] {
+                Placed placed;
+                placed.mFunction = &placeVines;
+                return placed;
+            }()};
+
     using Pick = LegacyTreeDefinition::Pick;
     static const LegacyTreeDefinition LEGACY_TREES[] = {
             {"minecraft:legacy:forest_tree_feature", 10.0f, Pick::Forest,
@@ -1577,6 +1618,8 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
                 feature.mPlaced.mScatter = &patch;
         }
     }
+    if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == FIXUP_VINES.mIdentifier)
+        feature.mPlaced.mScatter = &FIXUP_VINES;
     if (entry.mPass == SURFACE_PASS || entry.mPass == AFTER_SURFACE_PASS) {
         for (const ScatterDefinition &scatter: SCATTERS) {
             if (entry.mFeature == scatter.mIdentifier)
