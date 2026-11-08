@@ -257,8 +257,21 @@ namespace {
         const int32_t blockZ = (int32_t) std::floor(next.z);
         const int32_t blockY = (int32_t) std::floor(next.y);
 
-        const bool solid = level.isSolidAt(blockX, blockY, blockZ);
-        const float landing = solid ? itemFloor(level, actor, blockX, blockY, blockZ) : 0.0f;
+        bool solid = level.isSolidAt(blockX, blockY, blockZ);
+        float landing = solid ? itemFloor(level, actor, blockX, blockY, blockZ) : 0.0f;
+        // a fall can cross a low floor such as a snow layer's look in one tick: land on the first one crossed
+        if (motion.y < 0.0f) {
+            for (int32_t y = (int32_t) std::floor(position.y); y > blockY; --y) {
+                if (!level.isSolidAt(blockX, y, blockZ))
+                    continue;
+                const float floor = itemFloor(level, actor, blockX, y, blockZ);
+                if (position.y >= floor && next.y < floor) {
+                    solid = true;
+                    landing = floor;
+                    break;
+                }
+            }
+        }
         if (motion.y < 0.0f && solid && next.y < landing) {
             next.y = landing;
             motion = Vector3f(0.0f, 0.0f, 0.0f);
