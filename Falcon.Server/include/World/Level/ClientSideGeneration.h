@@ -104,9 +104,13 @@ namespace ClientSideGeneration {
     public:
         void add(int32_t chunkX, int32_t chunkZ);
 
-        bool empty() const { return mChunks.empty(); }
+        bool empty() const {
+            return mChunks.empty();
+        }
 
-        size_t size() const { return mChunks.size(); }
+        size_t size() const {
+            return mChunks.size();
+        }
 
         std::vector<Vector2i> drain();
 
@@ -137,7 +141,9 @@ namespace ClientSideGeneration {
         bool isNearStart(const ChunkGenerator &generator, const std::vector<const StructureFeature *> &features,
                          int32_t chunkX, int32_t chunkZ);
 
-        void clear() { mStarts.clear(); }
+        void clear() {
+            mStarts.clear();
+        }
 
     private:
         struct Start {
