@@ -39,6 +39,9 @@ check it against its `.sha256` file and run it. On the first start, a setup wiza
 | Minecraft | Protocol |
 |-----------|----------|
 | 1.26.60   | 2225     |
+| 1.26.52   | 2193     |
+| 1.26.45   | 2169     |
+| 1.26.40   | 2168     |
 
 Only the newest version can join by default. Set `any-version=true` in `server.properties` to let every
 supported version join.
