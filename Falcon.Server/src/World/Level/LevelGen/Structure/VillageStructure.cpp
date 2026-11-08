@@ -56,20 +56,39 @@ namespace {
         return type >= 0 && type < 4 ? STYLES[type] : "plains";
     }
 
-    std::vector<std::string> processorNames(const JigsawElementData &element) {
-        std::vector<std::string> names;
+    struct ElementRules {
+        std::vector<std::string> mProcessors;
+        std::vector<const StructureProcessors::Rule *> mRules;
+    };
+
+    // read once per element: the pools are static
+    const ElementRules &rulesOf(const JigsawElementData &element) {
+        static std::mutex mutex;
+        static std::map<const JigsawElementData *, std::unique_ptr<const ElementRules>> cache;
+        const std::lock_guard<std::mutex> lock(mutex);
+        std::unique_ptr<const ElementRules> &cached = cache[&element];
+        if (cached != nullptr)
+            return *cached;
+
+        auto rules = std::make_unique<ElementRules>();
         std::string current;
         for (const char *c = element.mProcessors; c != nullptr && *c != '\0'; ++c) {
             if (*c != ',') {
                 current += *c;
                 continue;
             }
-            names.push_back(current);
+            rules->mProcessors.push_back(current);
             current.clear();
         }
         if (!current.empty())
-            names.push_back(current);
-        return names;
+            rules->mProcessors.push_back(current);
+
+        for (const std::string &name : rules->mProcessors) {
+            for (const StructureProcessors::Rule &rule : StructureProcessors::get(name))
+                rules->mRules.push_back(&rule);
+        }
+        cached = std::move(rules);
+        return *cached;
     }
 
     bool hasProcessor(const std::vector<std::string> &names, const char *name) {
@@ -80,13 +99,40 @@ namespace {
         return false;
     }
 
-    std::vector<const StructureProcessors::Rule *> rulesOf(const std::vector<std::string> &names) {
-        std::vector<const StructureProcessors::Rule *> rules;
-        for (const std::string &name : names) {
-            for (const StructureProcessors::Rule &rule : StructureProcessors::get(name))
-                rules.push_back(&rule);
+    // a palette entry as placed; false when the template leaves the position alone
+    struct TranslatedEntry {
+        bool mPlaced = false;
+        BlockState mBlock;
+    };
+
+    using TranslatedPalette = std::vector<TranslatedEntry>;
+
+    // templates stay loaded (StructureTemplate::load): their address keys the cache
+    std::shared_ptr<const TranslatedPalette> translatedPalette(const StructureTemplate &shape, int32_t quarterTurns) {
+        static std::mutex mutex;
+        static std::map<std::pair<const StructureTemplate *, int32_t>, std::shared_ptr<const TranslatedPalette>> cache;
+        const std::pair<const StructureTemplate *, int32_t> key(&shape, quarterTurns);
+        {
+            const std::lock_guard<std::mutex> lock(mutex);
+            const auto found = cache.find(key);
+            if (found != cache.end())
+                return found->second;
         }
-        return rules;
+
+        auto palette = std::make_shared<TranslatedPalette>();
+        for (const StructureTemplate::PaletteEntry &entry : shape.getPalette()) {
+            TranslatedEntry translated;
+            // jigsaws and structure blocks are read from their data, never translated
+            translated.mPlaced = entry.mName != "minecraft:jigsaw" && entry.mName != "minecraft:structure_block"
+                                 && entry.mName != "minecraft:structure_void"
+                                 && StructureBlockTable::translate(entry, quarterTurns, translated.mBlock);
+            // workers only copy the entry: its lazy hash is filled before it is shared
+            translated.mBlock.getHash();
+            palette->push_back(std::move(translated));
+        }
+
+        const std::lock_guard<std::mutex> lock(mutex);
+        return cache.emplace(key, std::move(palette)).first->second;
     }
 
     // name[key=value,...]
@@ -237,10 +283,8 @@ namespace {
                     uint32_t seed, std::mt19937 &chunkRandom, StructureTerrain &terrain,
                     VillageStructure::ChunkShare &share, const VillageStructure::Neighbours *neighbours)
             : mGenerator(generator), mPiece(piece), mChunkX(chunkX), mChunkZ(chunkZ), mSeed(seed),
-              mChunkRandom(chunkRandom), mTerrain(terrain), mShare(share), mNeighbours(neighbours) {
-            mProcessors = processorNames(*piece.mElement);
-            mRules = rulesOf(mProcessors);
-        }
+              mChunkRandom(chunkRandom), mTerrain(terrain), mShare(share), mNeighbours(neighbours),
+              mRules(rulesOf(*piece.mElement)) {}
 
         void place(const StructureTemplate &shape) {
             for (const StructureTemplate::BlockEntry &entry : shape.getBlocks()) {
@@ -248,9 +292,12 @@ namespace {
                     _placeJigsaw(entry);
             }
 
+            const std::shared_ptr<const TranslatedPalette> translated = translatedPalette(shape, mPiece.mQuarterTurns);
             std::mt19937 random(mSeed);
-            for (const StructureTemplate::BlockEntry &entry : shape.getBlocks())
-                _placeBlock(shape.getPalette()[(size_t) entry.mPaletteIndex], entry, random);
+            for (const StructureTemplate::BlockEntry &entry : shape.getBlocks()) {
+                const size_t index = (size_t) entry.mPaletteIndex;
+                _placeBlock(shape.getPalette()[index], (*translated)[index], entry, random);
+            }
             if (!mPiece.mElement->mTerrainMatching)
                 _foundation();
         }
@@ -330,11 +377,11 @@ namespace {
                 return;
 
             std::mt19937 random(mSeed);
-            mShare.mBlocks[position] = StructureProcessors::apply(mRules, block, _world(position), random);
+            mShare.mBlocks[position] = StructureProcessors::apply(mRules.mRules, block, _world(position), random);
         }
 
-        void _placeBlock(const StructureTemplate::PaletteEntry &palette, const StructureTemplate::BlockEntry &entry,
-                         std::mt19937 &random) {
+        void _placeBlock(const StructureTemplate::PaletteEntry &palette, const TranslatedEntry &translated,
+                         const StructureTemplate::BlockEntry &entry, std::mt19937 &random) {
             if (palette.mName == "minecraft:jigsaw")
                 return;
 
@@ -347,12 +394,11 @@ namespace {
                 return;
             }
 
-            BlockState block;
-            if (palette.mName == "minecraft:structure_void"
-                || !StructureBlockTable::translate(palette, mPiece.mQuarterTurns, block))
+            if (!translated.mPlaced)
                 return;
 
-            block = StructureProcessors::apply(mRules, block, _world(position), random);
+            const BlockState block = StructureProcessors::apply(mRules.mRules, translated.mBlock, _world(position),
+                                                                random);
             mShare.mBlocks[position] = block;
             if (block.mName == "minecraft:bed") {
                 const uint8_t color = DyeColor::fromIdentifier(palette.mName, "_bed");
@@ -384,10 +430,10 @@ namespace {
                 return;
 
             // abandoned_golems, abandoned_mobs (sub_14CD6B070)
-            if (mob == "minecraft:iron_golem" && hasProcessor(mProcessors, ABANDONED_GOLEMS))
+            if (mob == "minecraft:iron_golem" && hasProcessor(mRules.mProcessors, ABANDONED_GOLEMS))
                 return;
             // the metadata becomes minecraft:zombie_villager_v2:from_village
-            if (mob == "minecraft:villager_v2" && hasProcessor(mProcessors, ABANDONED_MOBS)) {
+            if (mob == "minecraft:villager_v2" && hasProcessor(mRules.mProcessors, ABANDONED_MOBS)) {
                 mob = "minecraft:zombie_villager_v2";
                 event = "from_village";
             }
@@ -404,8 +450,7 @@ namespace {
         StructureTerrain &mTerrain;
         VillageStructure::ChunkShare &mShare;
         const VillageStructure::Neighbours *mNeighbours;
-        std::vector<std::string> mProcessors;
-        std::vector<const StructureProcessors::Rule *> mRules;
+        const ElementRules &mRules;
     };
 }
 
