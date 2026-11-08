@@ -155,8 +155,7 @@ namespace {
             }
             return &view->mContents[(size_t) slot];
         }
-        // The client may refer to the created output as slot 0 or as slot 50; both map to
-        // the same per-request virtual slot.
+        // the client calls the created output slot 0 or 50: both map to the per-request virtual slot
         if (container == ContainerSlotType::CreatedOutput) {
             return (slot == 0 || slot == 50) ? &context.mCreatedOutput : nullptr;
         }
@@ -331,8 +330,8 @@ namespace {
         return context.mOpenContainer->canHold(item);
     }
 
-    // an armor slot only accepts the matching armor piece; the head slot also accepts a block worn on the head,
-    // as vanilla does. without this a client could drop four chestplates into the four slots for stacked protection.
+    // armor slots take only the matching piece, the head slot also head-worn blocks, as vanilla does;
+    // else four chestplates in four slots would stack protection
     bool acceptsInArmorSlot(const FullContainerName &name, int slot, const ItemStack &item) {
         if (name.mContainer != ContainerSlotType::Armor || item.isAir())
             return true;
@@ -587,8 +586,8 @@ namespace {
         return nullptr;
     }
 
-    // The anvil sends its typed name as a filter string and leaves the crafting to the server, which recomputes
-    // the result from the input and material slots.
+    // the anvil sends its typed name as a filter string and leaves crafting to the server: the result is
+    // recomputed from the input and material slots
     bool craftAnvil(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
         if (context.mCraftRecipeSeen || !context.mAnvilOpen || context.mRequest == nullptr)
             return false;
@@ -604,8 +603,8 @@ namespace {
         if (action.mFilteredStringIndex >= 0 && (size_t) action.mFilteredStringIndex < names.size())
             name = &names[(size_t) action.mFilteredStringIndex];
 
-        // An unnamed item shows its localized name in the text box, which never matches the server's own name
-        // for it: the client's predicted result tells whether the player actually typed a new one.
+        // an unnamed item shows its localized name in the text box, never the server's name for it: the client's
+        // predicted result tells whether a new name was typed
         const ItemStack *predicted = predictedResult(*context.mRequest);
         if (name != nullptr && !name->empty() && !AnvilRepair::hasCustomName(*input) && predicted != nullptr
             && !AnvilRepair::hasCustomName(*predicted))
@@ -675,8 +674,7 @@ namespace {
             return false;
         }
 
-        // The request does not say which grid it crafts from, so any item left in the 3x3
-        // table grid means the table is the one in use.
+        // the request doesn't say which grid: any item left in the 3x3 table grid means the table
         const int gridWidth = tableHasItems ? 3 : 2;
         const std::vector<ItemStack> &grid = tableHasItems
                                              ? inventory.getCraftingTableContents()
@@ -890,9 +888,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
 
-    // A request is all-or-nothing: every action runs against copies of the inventory, the
-    // open container and any bundle contents, and nothing is written back unless all of
-    // them succeed and the end-of-request checks below pass.
+    // all-or-nothing: actions run on copies of the inventory, open container and bundle contents; nothing is written
+    // back unless all succeed and the end-of-request checks pass
     PlayerInventory working = inventory;
     std::vector<TouchedSlot> touched;
     std::vector<ItemStack> localDroppedItems;
@@ -927,8 +924,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
         }
     }
 
-    // A craft is only valid if the client consumed exactly the matched recipe's ingredients
-    // and took the whole created output; anything left over means a forged or desynced request.
+    // a craft must consume exactly the matched recipe's ingredients and take the whole output;
+    // a leftover means a forged or desynced request
     if (context.mCraftingActive) {
         if (context.mCraftingRequired.size() != context.mCraftingConsumed.size()) {
             entry.mResult = RESULT_ERROR;

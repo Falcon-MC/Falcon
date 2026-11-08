@@ -42,9 +42,8 @@ namespace {
         const char *mEvent;
     };
 
-    // definitions/spawn_groups/raid_group_<wave>.json of the 1.26.61 dedicated server, one entry per condition. Each
-    // condition has a single permute type, the village_raid mob event, a 0 to 1024 distance filter, spawns on surface
-    // and an easy to hard difficulty filter.
+    // spawn_groups/raid_group_<wave>.json of 1.26.61, one entry per condition; each has a single permute type, the
+    // village_raid mob event, a 0-1024 distance filter, surface spawns and an easy-to-hard difficulty filter
     const std::vector<std::vector<RaidGroupMember>> RAID_GROUPS = {
             {{"minecraft:pillager", 4, 4, "minecraft:spawn_for_raid"}},
             {{"minecraft:pillager", 3, 3, "minecraft:spawn_for_raid"},
@@ -110,7 +109,7 @@ namespace {
             mob->fireEvent(owner, event);
     }
 
-    // vanilla reads air outside loaded chunks; a block that is not loaded here is never a place to stand
+    // vanilla reads air outside loaded chunks; an unloaded block here is never a place to stand
     bool canStandOn(Level &level, int32_t x, int32_t y, int32_t z) {
         const BlockState *ground = level.peekBlockPtr(x, y, z);
         const BlockState *body = level.peekBlockPtr(x, y + 1, z);
@@ -124,10 +123,7 @@ namespace {
                && !BlockShape::hasCollision(*body) && !BlockShape::hasCollision(*head);
     }
 
-    /**
-     * sub_1439CE4F0: a random column around the origin, then that column scanned down and up for a block to stand
-     * on. The result is the air block above the ground.
-     */
+    // sub_1439CE4F0: a random column around the origin, scanned down and up for ground; result: the air block above
     bool findStandingPosition(Level &level, const Vector3f &origin, int32_t attempts, int32_t horizontalRange,
                               int32_t verticalRange, Vector3f &result) {
         const int32_t originX = (int32_t) std::floor(origin.x);
@@ -175,11 +171,8 @@ namespace {
         return false;
     }
 
-    /**
-     * sub_1439D8D80: a random point on the edge of the village box, pushed along the direction from the centre. With
-     * fromEdge it starts on the edge and moves distance further out, otherwise it sits distance * scale from the
-     * floored centre.
-     */
+    // sub_1439D8D80: a random point on the village box edge, pushed along the direction from the centre; fromEdge:
+    // distance further out from the edge, else distance * scale from the floored centre
     bool findSpawnAroundVillage(ServerNetworkHandler &owner, Level &level, const Village &village, float distance,
                                 float scale, bool onHeightmap, bool fromEdge, Vector3f &result) {
         const AxisAlignedBB &bounds = village.getBounds();
@@ -251,10 +244,8 @@ namespace {
         return false;
     }
 
-    /**
-     * The second strategy of the spawn search (0x1439f44ae): the player inside the village box grown by 16 that is
-     * farthest from the centre, then a point 32 to 48 blocks from that player on the side away from the village.
-     */
+    // spawn search, second strategy (0x1439f44ae): the player in the village box grown by 16 farthest from the
+    // centre, then a point 32 to 48 blocks from them, away from the village
     bool findSpawnBeyondFarthestPlayer(ServerNetworkHandler &owner, Level &level, const Village &village,
                                        Vector3f &result) {
         const AxisAlignedBB area = village.getBounds().expand(FARTHEST_PLAYER_MARGIN, FARTHEST_PLAYER_MARGIN,
@@ -318,11 +309,8 @@ namespace {
             owner.playLevelSound(level, RAID_HORN_SOUND, position);
     }
 
-    /**
-     * Spawner::spawnMobGroup (BedrockSpawner vtable 0x14F1887F0 + 0x80, sub_1432C1140) for a raid group: every member
-     * spawns at the floored position one block up, or scattered around it when the area is loaded, and the herd event
-     * is fired once the whole condition has spawned.
-     */
+    // Spawner::spawnMobGroup (BedrockSpawner vtable 0x14F1887F0 + 0x80, sub_1432C1140) for a raid group: members
+    // spawn one block above the floored position, scattered when the area is loaded; herd event once all spawned
     std::vector<int64_t> spawnRaidGroup(ServerNetworkHandler &owner, Level &level, uint8_t wave,
                                         const Vector3f &position, bool scatter) {
         std::vector<int64_t> spawned;
@@ -450,7 +438,7 @@ void Raid::tick(ServerNetworkHandler &owner, Level &level, Village &village, int
                 _resetStateTimers();
             }
 
-            // checked even on the tick a wave is cleared, so a lost village overrides the victory
+            // checked even on the tick a wave is cleared: a lost village overrides the victory
             if (isVillageLost(village)) {
                 mState = State::Ended;
                 mResult = Result::Defeat;

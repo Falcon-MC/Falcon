@@ -66,8 +66,6 @@ public:
 
     static const std::vector<std::string> &getItemTags(const std::string &identifier);
 
-    /**
-     * Whether a client of this protocol has this recipe. Ingredient variants of one recipe share its answer.
-     */
+    // ingredient variants of one recipe share its answer
     static bool isKnownBy(const std::string &recipeId, int32_t protocol);
 };

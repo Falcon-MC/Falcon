@@ -179,7 +179,7 @@ private:
 
     static void _releaseFurnaceExperience(ServerNetworkHandler &owner, FurnaceBlockActor &furnace);
 
-    /** Block actors of the level the player is in, where any container they open lives. */
+    // the player's level: any container they open lives there
     BlockActorStore *_blockActors() const;
 
     ServerPlayer *mPlayer;

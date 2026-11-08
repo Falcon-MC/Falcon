@@ -15,7 +15,7 @@ class Level;
 class MobActor;
 class ServerNetworkHandler;
 
-/** What a dweller is to its village, in the order of the `dweller_role` names of `minecraft:dweller`. */
+// order of the dweller_role names of minecraft:dweller
 enum class DwellerRole : int32_t {
     Inhabitant = 0,
     Defender = 1,
@@ -24,10 +24,7 @@ enum class DwellerRole : int32_t {
     None = 4
 };
 
-/**
- * A village: the points of interest it owns, the dwellers registered with it and the box they span. Villages are
- * created and removed by the VillageManager of their level.
- */
+// created and removed by its level's VillageManager
 class Village : public std::enable_shared_from_this<Village> {
 public:
     static const size_t POI_TYPE_COUNT = 3;
@@ -41,13 +38,10 @@ public:
 
     Vector3f getCenter() const;
 
-    /** Whether position lies in the box grown by margin on every side, edges included. */
+    // box grown by margin on every side, edges included
     bool contains(float margin, const Vector3f &position) const;
 
-    /**
-     * Queues an unclaimed point of interest. Returns false when it is full or its type already holds 32. The village
-     * only keeps weak references: the VillageManager owns every point of interest.
-     */
+    // false when full or its type already holds 32; weak refs only: the VillageManager owns every poi
     bool addPoi(const std::shared_ptr<PoiInstance> &poi);
 
     void addDweller(ServerNetworkHandler &owner, DwellerRole role, int64_t id);
@@ -76,13 +70,10 @@ public:
         return !mUnclaimed[(size_t) PoiType::Bed].empty();
     }
 
-    /**
-     * Unclaimed beds plus the beds claimed by inhabitants. Like the game (sub_1439E5420), every queued bed counts,
-     * even one that has been broken since: only claimed points of interest are checked for validity.
-     */
+    // unclaimed beds plus beds claimed by inhabitants; like the game (sub_1439E5420), a queued bed counts even
+    // broken: only claimed pois are validated
     size_t countBeds() const;
 
-    /** Every point of interest the village holds, claimed or not. */
     std::vector<std::shared_ptr<PoiInstance>> getPois() const;
 
     void tick(ServerNetworkHandler &owner, Level &level, int64_t currentTick);
@@ -95,21 +86,18 @@ public:
         return mRaid.get();
     }
 
-    /** Whether the raid has been won or lost and only waits for its celebration to end. */
+    // won or lost, only waiting for the celebration to end
     bool isRaidFinished() const {
         return mRaid != nullptr && mRaid->getResult() != Raid::Result::None;
     }
 
-    /**
-     * Whether position lies in the raid bounds, edges included: the village box grown by 32 on every side when the
-     * raid started. Players inside it follow the raid.
-     */
+    // edges included: the village box grown by 32 when the raid started; players inside follow the raid
     bool isInRaidBounds(const Vector3f &position) const;
 
-    /** Starts a raid, unless one is running or the difficulty is peaceful. */
+    // no-op while a raid runs or on peaceful
     void tryStartRaid(ServerNetworkHandler &owner);
 
-    /** Expires the raid after a wave of 48001 ticks, drops it on peaceful, or advances it. */
+    // expires after a 48001-tick wave, dropped on peaceful, else advanced
     void tickRaid(ServerNetworkHandler &owner, Level &level, int64_t currentTick);
 
 private:

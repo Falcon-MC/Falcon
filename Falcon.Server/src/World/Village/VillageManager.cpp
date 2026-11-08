@@ -203,7 +203,7 @@ void VillageManager::_removeVillages() {
         const bool neverInhabited = !village.isInitialized()
                                     && village.getTickCount() >= UNINITIALIZED_REMOVAL_TICKS
                                     && village.getInhabitantCount() == 0;
-        // a village under raid is kept until the raid is over, so that it can be lost (0x1439e55a2)
+        // a village under raid is kept until the raid is over: it can still be lost (0x1439e55a2)
         const Raid *raid = village.getRaid();
         const bool abandoned = village.isInitialized() && (raid == nullptr || raid->getState() == Raid::State::Removed)
                                && (village.getInhabitantCount() == 0 || village.countBeds() == 0);
@@ -273,7 +273,7 @@ void VillageManager::_fileBed(const std::shared_ptr<PoiInstance> &poi) {
             return;
         }
 
-        // a bed the closest village could not take only founds a new village when it is far from that one
+        // a bed the closest village couldn't take founds a new village only when far from that one
         const float distance = distanceToCenter(*closest, toVector(poi->mPosition))
                                - villageRadius(closest->getBounds());
         if (distance <= NEW_VILLAGE_DISTANCE)

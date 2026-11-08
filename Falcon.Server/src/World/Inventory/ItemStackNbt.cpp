@@ -29,10 +29,8 @@ namespace {
         return list;
     }
 
-    /**
-     * Saved data can name an item the game has since renamed or split by meta. The current item is
-     * looked up first, and the saved one is kept when the upgrade leads nowhere the registry knows.
-     */
+    // saved data may name an item the game since renamed or split by meta: current item first, the saved one kept
+    // when the upgrade leads nowhere the registry knows
     std::shared_ptr<ItemDefinition> upgradeItem(const std::string &name, int32_t &damage,
                                                 const PacketCodecContext &context) {
         std::string upgraded = name;

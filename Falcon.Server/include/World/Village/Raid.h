@@ -9,11 +9,8 @@ class Level;
 class ServerNetworkHandler;
 class Village;
 
-/**
- * A village raid: waves of the `minecraft:raid_group_<wave>` spawn groups, until every wave is cleared (victory), the
- * village loses its beds or inhabitants (defeat), or the raid stops finding a place to spawn. Owned by its village and
- * ticked with it on the main thread.
- */
+// waves of minecraft:raid_group_<wave> spawn groups until all are cleared (victory), the village loses its beds or
+// inhabitants (defeat), or spawning keeps failing; owned and ticked by its village on the main thread
 class Raid {
 public:
     enum class State : int32_t {
@@ -56,18 +53,18 @@ public:
         return mRaiders.count(id) != 0;
     }
 
-    /** A recruit joins the current wave, which grows by its health truncated to an int (sub_14CE8F940). */
+    // sub_14CE8F940: the wave grows by the recruit's health truncated to int
     void addRecruit(int64_t id, float health);
 
-    /** A player who killed one of the village's hostile dwellers; rewarded if the raid is won. */
+    // killed one of the village's hostile dwellers; rewarded on victory
     void addHero(int64_t playerId) {
         mHeroes.insert(playerId);
     }
 
-    /** Fires `minecraft:raid_expired` on every loaded raider, so they lose their raid persistence. */
+    // raiders lose their raid persistence
     void expireRaiders(ServerNetworkHandler &owner) const;
 
-    /** The fill of the boss bar, from 0 to 1. */
+    // 0 to 1
     float getProgress(ServerNetworkHandler &owner) const;
 
 private:
