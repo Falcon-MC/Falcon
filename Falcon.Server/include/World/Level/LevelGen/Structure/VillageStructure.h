@@ -44,11 +44,11 @@ public:
         std::string mEvent;
     };
 
-    // a placed block the game gives a block actor; a banner keeps the dye of its template block
+    // a placed block the game gives a block actor; the template block keeps a banner's dye and a pot's plant
     struct BlockEntity {
         Position mPosition;
         std::string mBlock;
-        uint8_t mColor = 0;
+        std::string mTemplateBlock;
     };
 
     // one village's blocks in one chunk, before shaping

@@ -5,9 +5,13 @@
 #include "World/Level/Block/Actor/BedBlockActor.h"
 #include "World/Level/Block/Actor/BellBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
+#include "World/Level/Block/Actor/FlowerPotBlockActor.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
+#include "World/Level/Block/Actor/SignBlockActor.h"
+#include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/Inventory/FurnaceInventory.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -124,25 +128,43 @@ namespace {
         event = second == std::string::npos ? std::string() : metadata.substr(second + 1);
     }
 
+    bool isSign(const std::string &block) {
+        return block.size() > 5 && block.compare(block.size() - 5, 5, "_sign") == 0;
+    }
+
     // the blocks of the village templates the game gives a block actor as it places them
     bool hasBlockActor(const std::string &block) {
         static const char *BLOCKS[] = {"minecraft:bell", "minecraft:barrel", "minecraft:furnace", "minecraft:smoker",
                                        "minecraft:blast_furnace", "minecraft:lectern", "minecraft:campfire",
                                        "minecraft:soul_campfire", "minecraft:brewing_stand", "minecraft:wall_banner",
-                                       "minecraft:standing_banner"};
+                                       "minecraft:standing_banner", "minecraft:flower_pot", "minecraft:cauldron"};
         for (const char *candidate : BLOCKS) {
             if (block == candidate)
                 return true;
         }
-        return false;
+        return isSign(block);
     }
 
     // banners take their dye from the Java block name: Base counts from black
-    uint8_t bannerBase(const std::string &templateBlock) {
+    int32_t bannerBase(const std::string &templateBlock) {
         uint8_t color = DyeColor::fromIdentifier(templateBlock, "_wall_banner");
         if (color == DyeColor::INVALID)
             color = DyeColor::fromIdentifier(templateBlock, "_banner");
         return color == DyeColor::INVALID ? 0 : DyeColor::invert(color);
+    }
+
+    // minecraft:potted_<plant>, the plant under its Bedrock name with its default states
+    bool pottedPlant(const std::string &templateBlock, BlockState &out) {
+        static const std::string PREFIX = "minecraft:potted_";
+        if (templateBlock.rfind(PREFIX, 0) != 0)
+            return false;
+
+        std::string plant = "minecraft:" + templateBlock.substr(PREFIX.size());
+        if (plant == "minecraft:dead_bush")
+            plant = "minecraft:deadbush";
+        const Tag *defaults = BlockPaletteRegistry::getInstance().getDefaultStates(plant);
+        out = BlockState(plant, defaults != nullptr ? *defaults : Tag::ofCompound());
+        return true;
     }
 
     void createBlockActor(BlockActorStore &actors, const VillageStructure::BlockEntity &entity) {
@@ -164,8 +186,21 @@ namespace {
             actors.getOrCreate<CampfireBlockActor>(position);
         } else if (block == "minecraft:brewing_stand") {
             actors.getOrCreate<BrewingStandBlockActor>(position);
+        } else if (block == "minecraft:flower_pot") {
+            FlowerPotBlockActor &pot = actors.getOrCreate<FlowerPotBlockActor>(position);
+            BlockState plant;
+            if (pottedPlant(entity.mTemplateBlock, plant))
+                pot.setPlant(plant);
+        } else if (block == "minecraft:cauldron") {
+            actors.getOrCreate<CauldronBlockActor>(position);
+        } else if (isSign(block)) {
+            if (actors.find(position) == nullptr) {
+                auto sign = std::make_unique<SignBlockActor>(block.find("hanging") != std::string::npos);
+                sign->setPosition(position);
+                actors.insert(std::move(sign));
+            }
         } else {
-            actors.getOrCreate<BannerBlockActor>(position).setBase(entity.mColor);
+            actors.getOrCreate<BannerBlockActor>(position).setBase(bannerBase(entity.mTemplateBlock));
         }
     }
 
@@ -293,7 +328,7 @@ namespace {
             }
 
             if (hasBlockActor(block.mName))
-                mShare.mBlockEntities.push_back({position, block.mName, bannerBase(palette.mName)});
+                mShare.mBlockEntities.push_back({position, block.mName, palette.mName});
 
             if (entry.mData.getString("id", std::string()) != "minecraft:chest" || block.mName != "minecraft:chest")
                 return;

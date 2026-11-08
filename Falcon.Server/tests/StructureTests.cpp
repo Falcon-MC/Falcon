@@ -6,6 +6,7 @@
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
+#include "World/Level/LevelGen/Structure/StructureBlockTable.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 #include "World/Level/LevelGen/Structure/StructureProcessors.h"
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
@@ -127,6 +128,29 @@ namespace {
         }
     }
 
+    void checkConversions() {
+        StructureTemplate::PaletteEntry snow;
+        snow.mName = "minecraft:snow";
+        snow.mProperties["layers"] = "3";
+        BlockState out;
+        require(StructureBlockTable::translate(snow, 0, out) && out.mName == "minecraft:snow_layer"
+                        && out.mStates.getInt("height", -1) == 2,
+                "Snow layers lose their height");
+
+        // BDS 1.26.61: a north stonecutter turned twice faces south
+        StructureTemplate::PaletteEntry cutter;
+        cutter.mName = "minecraft:stonecutter";
+        cutter.mProperties["facing"] = "north";
+        require(StructureBlockTable::translate(cutter, 2, out) && out.mName == "minecraft:stonecutter_block"
+                        && out.mStates.getString("minecraft:cardinal_direction") == "south",
+                "The stonecutter turns wrong");
+
+        StructureTemplate::PaletteEntry pot;
+        pot.mName = "minecraft:potted_cactus";
+        require(StructureBlockTable::translate(pot, 0, out) && out.mName == "minecraft:flower_pot",
+                "A potted plant is no flower pot");
+    }
+
     void checkBlockActors() {
         std::unique_ptr<BlockActor> smoker = BlockActorClassRegistry::create(FurnaceBlockActor::SMOKER_ID);
         const auto *furnace = dynamic_cast<const FurnaceBlockActor *>(smoker.get());
@@ -149,6 +173,7 @@ int main() {
         checkStyles();
         checkVillage();
         checkBlockActors();
+        checkConversions();
     } catch (const std::exception &error) {
         std::clog << "Structure regression failed: " << error.what() << '\n';
         return 1;
