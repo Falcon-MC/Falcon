@@ -53,8 +53,7 @@ namespace {
         return element.mTemplate == nullptr ? nullptr : StructureTemplate::load(element.mTemplate);
     }
 
-    // the abandoned village lists send the streets, houses and decor of a style to their abandoned pools; the game
-    // rewrites the target pool of the jigsaw blocks as the template is read (sub_14CD6B070, sub_1469B3520)
+    // *_abandoned_targets: rewritten as the template is read (sub_14CD6B070, sub_1469B3520)
     std::string retargeted(const JigsawElementData &element, const std::string &pool) {
         static const char *STYLES[] = {"plains", "savanna", "snowy", "taiga", "desert"};
         static const char *KINDS[] = {"streets", "houses", "decor"};
@@ -242,6 +241,9 @@ bool JigsawAssembler::_tryPool(size_t pieceIndex, const Marker &marker, const Ji
 
             for (const Marker &candidate : candidates) {
                 if (candidate.mName != marker.mName || marker.mFacing != OPPOSITE[(size_t) candidate.mFacing])
+                    continue;
+                // vertical joints aligned (sub_143C7EB60): an up jigsaw tops north, a down one south
+                if (marker.mFacing < 2 && ((quarterTurns - parent.mQuarterTurns - 2) & 3) != 0)
                     continue;
 
                 const int32_t placeX = target[0] - candidate.x;
