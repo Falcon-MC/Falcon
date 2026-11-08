@@ -490,6 +490,9 @@ void LoginHandler::handleResourcePackChunkRequest(ServerNetworkHandler &owner, c
     chunk.mChunkIndex = packet.mChunkIndex;
     chunk.mProgress = (int64_t) offset;
     chunk.mData = pack->mData.substr(offset, length);
+    // packs are zips: deflate saves ~0.3% for ~30 ms per MiB on the main thread; the client asks for
+    // 100 chunks at once (sub_145AA6E40)
+    chunk.mCompressible = Packet::Compressibility::Incompressible;
     owner.getNetworkHandler().send(id, chunk, owner.getCodecContext());
 }
 
