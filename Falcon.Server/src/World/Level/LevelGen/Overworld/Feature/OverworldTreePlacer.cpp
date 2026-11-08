@@ -475,10 +475,13 @@ bool OverworldTreePlacer::_megaTrunk(BlockManager &blocks, const Definition &tre
     }
     placeLog(x, y + height - 1, z);
 
+    // a dirt base stands for the vanilla list, dirt then coarse dirt
     const BlockState base = mega.mBaseBlock().toBlockState();
+    const bool dirtBase = base.mName == VanillaBlocks::DIRT().getIdentifier();
     for (int32_t offsetX = 0; offsetX < width; offsetX++) {
         for (int32_t offsetZ = 0; offsetZ < width; offsetZ++) {
-            if (blocks.getBlockAt(x + offsetX, y - 1, z + offsetZ).mName != base.mName)
+            const BlockState &below = blocks.getBlockAt(x + offsetX, y - 1, z + offsetZ);
+            if (below.mName != base.mName && !(dirtBase && isBaseBlock(below)))
                 blocks.setBlockStateAt(x + offsetX, y - 1, z + offsetZ, base);
         }
     }
