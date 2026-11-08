@@ -66,6 +66,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mChunks = std::move(other.mChunks);
     mPendingChunks = std::move(other.mPendingChunks);
     mActiveColumns = std::move(other.mActiveColumns);
+    mActiveColumnOrder = std::move(other.mActiveColumnOrder);
     mCompletedChunks = std::move(other.mCompletedChunks);
     mDeferredSaves = std::move(other.mDeferredSaves);
     mIdleSaves = std::move(other.mIdleSaves);
@@ -81,7 +82,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mPendingBlockChanges = std::move(other.mPendingBlockChanges);
     mPendingBlockChangeCount = other.mPendingBlockChangeCount;
     other.mPendingBlockChangeCount = 0;
-    mBlockUpdateScheduler.moveStateFrom(std::move(other.mBlockUpdateScheduler));
+    mLiquidTick = other.mLiquidTick;
     mBlockUpdates.moveStateFrom(std::move(other.mBlockUpdates));
     mLiquidPhysics.moveStateFrom(std::move(other.mLiquidPhysics));
     mVillageManager = std::move(other.mVillageManager);
@@ -201,6 +202,7 @@ void Level::saveAll(bool wait) {
     }
 
     for (auto &entry: mChunks) {
+        _syncPendingTicks(entry.second);
         if (!entry.second.isDirty() && (mChunkWorker == nullptr ||
                 !mChunkWorker->hasFailedSave(entry.second.getX(), entry.second.getZ())))
             continue;
@@ -528,6 +530,7 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
     mPendingChunks.erase(key);
 
     auto result = mChunks.emplace(key, std::move(chunk));
+    mLiquidPhysics.loadPendingTicks(chunkX, chunkZ, result.first->second.getPendingTicks());
     _replayPendingChanges(key);
     _refreshChunkShapes(chunkX, chunkZ);
     return result.first->second;
@@ -551,8 +554,11 @@ LevelChunk &Level::insertChunk(LevelChunk chunk) {
     const int64_t key = _packChunk(chunk.getX(), chunk.getZ());
     chunk.setDimension(mDimension);
     auto result = mChunks.emplace(key, std::move(chunk));
-    if (result.second)
-        _refreshChunkShapes(result.first->second.getX(), result.first->second.getZ());
+    if (result.second) {
+        LevelChunk &inserted = result.first->second;
+        mLiquidPhysics.loadPendingTicks(inserted.getX(), inserted.getZ(), inserted.getPendingTicks());
+        _refreshChunkShapes(inserted.getX(), inserted.getZ());
+    }
     return result.first->second;
 }
 
@@ -586,6 +592,15 @@ void Level::_refreshChunkShapes(int32_t chunkX, int32_t chunkZ) {
     }
 }
 
+// ticks change without dirtying the blocks: a chunk is saved again when its record differs
+void Level::_syncPendingTicks(LevelChunk &chunk) {
+    std::string record = mLiquidPhysics.savePendingTicks(chunk.getX(), chunk.getZ());
+    if (record == chunk.getPendingTicks())
+        return;
+    chunk.setPendingTicks(std::move(record));
+    chunk.markDirty();
+}
+
 LevelChunk Level::extractChunk(int32_t chunkX, int32_t chunkZ) {
     const int64_t key = _packChunk(chunkX, chunkZ);
 
@@ -598,11 +613,13 @@ LevelChunk Level::extractChunk(int32_t chunkX, int32_t chunkZ) {
 
     LevelChunk chunk = std::move(it->second);
     mChunks.erase(it);
+    mLiquidPhysics.dropPendingTicks(chunkX, chunkZ);
     return chunk;
 }
 
 void Level::dropChunk(int32_t chunkX, int32_t chunkZ) {
     mChunks.erase(_packChunk(chunkX, chunkZ));
+    mLiquidPhysics.dropPendingTicks(chunkX, chunkZ);
 }
 
 void Level::_queueGeneratedChanges(std::vector<GeneratedBlockChange> changes) {
@@ -985,6 +1002,7 @@ void Level::processDeferredSaves() {
         auto chunk = mChunks.find(key);
         if (chunk == mChunks.end() || mChunkWorker == nullptr || !mChunkWorker->isRunning())
             continue;
+        _syncPendingTicks(chunk->second);
         if (!chunk->second.isDirty() && !mChunkWorker->hasFailedSave(chunk->second.getX(), chunk->second.getZ()))
             continue;
         // idle save waits for its spill into absent neighbours to reach storage: no crash with half its trees;
@@ -1070,6 +1088,7 @@ size_t Level::processChunkUnloads() {
             continue;
         }
 
+        _syncPendingTicks(chunk->second);
         // saved by a worker from a copy, the tick never waits on storage; resident until it lands
         if (chunk->second.isDirty() && mStorage.isOpen() && mChunkWorker != nullptr && mChunkWorker->isRunning()) {
             std::unique_ptr<LevelChunk> copy(new LevelChunk(chunk->second));
@@ -1092,6 +1111,7 @@ size_t Level::processChunkUnloads() {
         const int32_t chunkX = chunk->second.getX();
         const int32_t chunkZ = chunk->second.getZ();
         mChunks.erase(chunk);
+        mLiquidPhysics.dropPendingTicks(chunkX, chunkZ);
         mRepopulatedChunks.erase(key);
         mOrphanCandidates.erase(key);
         it = mUnloadQueue.erase(it);
@@ -1252,17 +1272,25 @@ bool Level::isColumnActive(int32_t chunkX, int32_t chunkZ) const {
 }
 
 void Level::setActiveColumns(std::vector<int64_t> columns) {
-    std::unordered_set<int64_t> next(columns.begin(), columns.end());
-
-    // updates due while inactive were parked: resume them
+    std::unordered_set<int64_t> previous;
+    previous.swap(mActiveColumns);
+    mActiveColumnOrder.clear();
     for (int64_t column: columns) {
-        if (mActiveColumns.find(column) != mActiveColumns.end())
+        if (!mActiveColumns.insert(column).second)
             continue;
-        mBlockUpdateScheduler.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
-        mBlockUpdates.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
+        mActiveColumnOrder.push_back(column);
+        // updates due while inactive were parked: resume them
+        if (previous.find(column) == previous.end())
+            mBlockUpdates.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
     }
-
-    mActiveColumns.swap(next);
+    // a view source walks its bounds in rows of x when it does not shuffle (sub_147BD96C0)
+    std::sort(mActiveColumnOrder.begin(), mActiveColumnOrder.end(), [](int64_t left, int64_t right) {
+        const int32_t leftZ = (int32_t) (left & 0xffffffff);
+        const int32_t rightZ = (int32_t) (right & 0xffffffff);
+        if (leftZ != rightZ)
+            return leftZ < rightZ;
+        return (int32_t) (left >> 32) < (int32_t) (right >> 32);
+    });
 }
 
 void Level::startWorkers(size_t threadCount) {
@@ -1357,10 +1385,12 @@ size_t Level::drainCompletedChunks() {
 
         if (result.mChunk != nullptr && (canInsert || canReplace)) {
             if (canInsert) {
-                mChunks.emplace(key, std::move(*result.mChunk));
+                const LevelChunk &inserted = mChunks.emplace(key, std::move(*result.mChunk)).first->second;
+                mLiquidPhysics.loadPendingTicks(result.mX, result.mZ, inserted.getPendingTicks());
                 _dispatchChunkEvent(FALCON_EVENT_CHUNK_LOAD, result.mX, result.mZ, result.mGenerated);
             } else {
                 resident->second = std::move(*result.mChunk);
+                mLiquidPhysics.loadPendingTicks(result.mX, result.mZ, resident->second.getPendingTicks());
                 mRepopulatedChunks.insert(key);
             }
 
@@ -1529,13 +1559,7 @@ void Level::scheduleFluidTick(const Vector3i &position, int64_t delay) {
 void Level::tick() {
     updateBlockLight();
 
-    mBlockUpdateScheduler.tick(
-            [this](const Vector3i &position) {
-                mLiquidPhysics.onScheduledUpdate(position);
-            },
-            [this](int32_t chunkX, int32_t chunkZ) {
-                return isColumnActive(chunkX, chunkZ);
-            });
+    mLiquidPhysics.tick(++mLiquidTick, mActiveColumnOrder);
 }
 
 void Level::scheduleBlockUpdate(const Vector3i &position, int64_t delay) {

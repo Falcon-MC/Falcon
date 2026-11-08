@@ -325,6 +325,10 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
     std::string finalized;
     _appendLInt(finalized, chunk.isPopulated() ? FINALIZED_STATE_DONE : FINALIZED_STATE_NEEDS_POPULATION);
     batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::FinalizedState), finalized);
+    if (chunk.getPendingTicks().empty())
+        batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::PendingTicks));
+    else
+        batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::PendingTicks), chunk.getPendingTicks());
 
     for (int i = 0; i < LevelChunk::SUB_CHUNK_COUNT; i++) {
         const SubChunk &subChunk = chunk.getSubChunk(i);
@@ -432,6 +436,11 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
                                          | ((unsigned char) finalized[3] << 24));
         chunk.setPopulated(state >= FINALIZED_STATE_DONE);
     }
+
+    std::string pendingTicks;
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::PendingTicks),
+                 &pendingTicks).ok())
+        chunk.setPendingTicks(std::move(pendingTicks));
 
     chunk.clearDirty();
     if (replacedUnknown)

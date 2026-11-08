@@ -368,17 +368,23 @@ public:
 
     void onBlockBroken(const Vector3i &position, const BlockState &previous);
 
-    BlockUpdateScheduler &getBlockUpdateScheduler() { return mBlockUpdateScheduler; }
-
     void setActiveColumns(std::vector<int64_t> columns);
 
     bool isColumnActive(int32_t chunkX, int32_t chunkZ) const;
 
     const std::unordered_set<int64_t> &getActiveColumns() const { return mActiveColumns; }
 
-    size_t getScheduledFluidCount() const { return mBlockUpdateScheduler.getScheduledCount(); }
+    size_t getScheduledFluidCount() const {
+        return mLiquidPhysics.getScheduledCount();
+    }
 
-    size_t getLastFluidProcessedCount() const { return mBlockUpdateScheduler.getLastProcessedCount(); }
+    size_t getLastFluidProcessedCount() const {
+        return mLiquidPhysics.getLastProcessedCount();
+    }
+
+    LiquidPhysicsSystem &getLiquidPhysics() {
+        return mLiquidPhysics;
+    }
 
     using FluidChange = LiquidChange;
 
@@ -407,6 +413,8 @@ public:
 
 private:
     void _refreshChunkShapes(int32_t chunkX, int32_t chunkZ);
+
+    void _syncPendingTicks(LevelChunk &chunk);
 
     static constexpr int MAX_UPDATE_DEPTH = 512;
 
@@ -462,8 +470,8 @@ private:
     uint32_t mWorldId = 0;
     std::shared_ptr<ChunkGenerator> mGenerator;
     LevelStorage mStorage;
-    BlockUpdateScheduler mBlockUpdateScheduler;
     LiquidPhysicsSystem mLiquidPhysics;
+    int64_t mLiquidTick = 0;
     VillageManager mVillageManager;
     std::unordered_map<int64_t, LevelChunk> mChunks;
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 32;
@@ -491,6 +499,8 @@ private:
 
     std::unordered_set<int64_t> mPendingChunks;
     std::unordered_set<int64_t> mActiveColumns;
+    // sorted by z, then x: block ticks run chunk by chunk in this order
+    std::vector<int64_t> mActiveColumnOrder;
     std::deque<ChunkLoadResult> mCompletedChunks;
     // Copying a chunk duplicates its whole palette, so queued saves are copied within a small time budget.
     static constexpr std::chrono::milliseconds DEFERRED_SAVE_BUDGET{3};

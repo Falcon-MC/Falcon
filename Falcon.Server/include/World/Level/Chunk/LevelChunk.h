@@ -182,6 +182,15 @@ public:
     // read or written since the last call: the packer leaves busy chunks alone
     bool consumeAccessed();
 
+    // the PendingTicks record (LevelDB tag '3') saved with the chunk; empty when no tick waits
+    const std::string &getPendingTicks() const {
+        return mPendingTicks;
+    }
+
+    void setPendingTicks(std::string record) {
+        mPendingTicks = std::move(record);
+    }
+
 private:
     void _ensureUnpacked() const {
         mAccessed = true;
@@ -199,6 +208,7 @@ private:
     int mNetworkSubChunkLimit = SUB_CHUNK_COUNT;
     bool mDirty;
     bool mPopulated = false;
+    std::string mPendingTicks;
     uint64_t mBaseSequence = 0;
     uint64_t mDecorationSequence = 0;
     // mutable: const reads unpack a packed chunk first

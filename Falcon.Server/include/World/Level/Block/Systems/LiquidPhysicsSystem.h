@@ -2,6 +2,7 @@
 
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
+#include "World/Level/BlockTickingQueue.h"
 #include "World/Level/Chunk/LevelChunk.h"
 
 #include <cstddef>
@@ -47,7 +48,28 @@ public:
 
     void schedule(const Vector3i &position, int64_t delay = 1);
 
-    void onScheduledUpdate(const Vector3i &position);
+    // columns sorted by z, then x
+    void tick(int64_t levelTick, const std::vector<int64_t> &columns);
+
+    size_t getScheduledCount() const {
+        return mTicks.getScheduledCount();
+    }
+
+    size_t getLastProcessedCount() const {
+        return mTicks.getLastProcessedCount();
+    }
+
+    // the chunk's PendingTicks record, empty when no tick waits (sub_14381D090, sub_14381C610)
+    std::string savePendingTicks(int32_t chunkX, int32_t chunkZ) const;
+    void loadPendingTicks(int32_t chunkX, int32_t chunkZ, const std::string &record);
+
+    bool hasPendingTicks(int32_t chunkX, int32_t chunkZ) const {
+        return mTicks.getColumnEntries(chunkX, chunkZ) != nullptr;
+    }
+
+    void dropPendingTicks(int32_t chunkX, int32_t chunkZ) {
+        mTicks.dropColumn(chunkX, chunkZ);
+    }
 
     static const BlockState &fluidStateAt(const LevelChunk &chunk, int32_t localX, int32_t y, int32_t localZ);
 
@@ -106,6 +128,7 @@ private:
     static constexpr int8_t FLOW_CAN_FLOW_DOWN = 1;
 
     Level &mLevel;
+    BlockTickingQueue mTicks;
     std::unordered_map<Position, int8_t, PositionHash> mFlowCostVisited;
     std::vector<LiquidChange> mChanges;
 };
