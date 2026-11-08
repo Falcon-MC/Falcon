@@ -74,8 +74,8 @@ public:
     // a block of a chunk already post-processed, null for a chunk the village has not reached yet
     using Neighbours = std::function<const BlockState *(int32_t x, int32_t y, int32_t z)>;
 
-    // without features, feature pieces are skipped and draw nothing; without neighbours, the parts of a piece in
-    // other chunks read the bare terrain, as when those chunks come later
+    // features: the world the pieces go into in order, templates included; without it feature pieces are skipped
+    // and draw nothing; without neighbours, the parts of a piece in other chunks read the bare terrain
     static ChunkShare placeInChunk(const ChunkGenerator &generator, const std::vector<JigsawPiece> &pieces,
                                    int32_t chunkX, int32_t chunkZ, StructureTerrain &terrain,
                                    BlockManager *features = nullptr, const Neighbours *neighbours = nullptr);
