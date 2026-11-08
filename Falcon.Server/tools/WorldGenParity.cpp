@@ -6,12 +6,13 @@
 //
 // usage:
 //   FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1 [--csv file] [--json file]
-//                        [--min-block-match pct] [--terrain-only] [--dimension 0|1|2]
+//                        [--min-block-match pct] [--terrain-only] [--dimension 0|1|2] [--blocks file]
 //   FalconWorldGenParity --db <path> --seed <int64> --column x,z [--terrain-only]
 //   FalconWorldGenParity --db <path> --seed <int64> --far [--min-block-match pct] [--terrain-only]
 //
 // --dimension: 0 overworld (default), 1 nether, 2 end; only its build range is compared
 // --terrain-only: chunks as the noise fills them, before population
+// --blocks: one "x y z expected generated" line per block that differs or is not plain terrain, for scripts
 // --far: 6x6 chunks at +-1000 and +-10000 on both axes, one report each: climate-only bugs hide near the origin
 // area corners: chunk coordinates, inclusive; column: a block position
 // exit codes: 0 success, 1 invalid input or unreadable world, 2 block match below --min-block-match
@@ -23,8 +24,8 @@
 //   - biomes: one sample per 4x4x4 cell at its lowest corner; above the highest non-empty BDS section, read from
 //     that section: the game saves it in place of the sections above
 //   - ore spills: an underground ore rule block against another such block or a host rock (stone, deepslate);
-//     stone vs deepslate stays a terrain mismatch; the game drops part of the blobs spilled into a still
-//     generating neighbour depending on thread scheduling: kept out of the "outside ore spills" match
+//     stone vs deepslate stays a terrain mismatch; reported apart, not excused: two BDS runs differ by only a
+//     few ore blocks (writes into a neighbour still generating are dropped), the rest comes from decoration order
 //   - category: the highest of the two blocks', in order base terrain (air, stone, deepslate, bedrock, water,
 //     lava), surface (surface builder blocks), features (everything else)
 //
@@ -140,6 +141,7 @@ namespace {
         ChunkArea mArea;
         std::string mCsv;
         std::string mJson;
+        std::string mBlocks;
         bool mHasColumn = false;
         bool mFar = false;
         int32_t mColumnX = 0;
@@ -216,7 +218,7 @@ namespace {
     void printUsage() {
         LOG_ERROR(LogAreaID::Level, "Usage: FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1");
         LOG_ERROR(LogAreaID::Level, "                            [--csv file] [--json file] [--min-block-match pct]");
-        LOG_ERROR(LogAreaID::Level, "                            [--terrain-only] [--dimension 0|1|2]");
+        LOG_ERROR(LogAreaID::Level, "                            [--terrain-only] [--dimension 0|1|2] [--blocks file]");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --column x,z");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --far");
     }
@@ -279,6 +281,8 @@ namespace {
                 options.mCsv = value;
             } else if (flag == "--json") {
                 options.mJson = value;
+            } else if (flag == "--blocks") {
+                options.mBlocks = value;
             } else if (flag == "--min-block-match") {
                 char *end = nullptr;
                 options.mMinBlockMatch = std::strtod(value.c_str(), &end);
@@ -989,10 +993,33 @@ namespace {
         return 0;
     }
 
+    // one line per block that differs or that is not plain terrain in either world: x y z expected generated
+    void writeBlocks(std::ofstream &out, const LevelChunk &expected, const LevelChunk &generated) {
+        static const std::unordered_set<std::string> TERRAIN = {
+                "minecraft:air", "minecraft:stone", "minecraft:deepslate", "minecraft:water", "minecraft:bedrock",
+                "minecraft:lava", "minecraft:dirt", "minecraft:grass_block"};
+        for (int32_t x = 0; x < 16; x++) {
+            for (int32_t z = 0; z < 16; z++) {
+                for (int32_t y = gMinY; y <= gMaxY; y++) {
+                    const BlockState &expectedBlock = expected.getBlock(x, y, z);
+                    const BlockState &generatedBlock = generated.getBlock(x, y, z);
+                    if (expectedBlock == generatedBlock && TERRAIN.count(expectedBlock.mName) != 0)
+                        continue;
+
+                    out << ((expected.getX() << 4) + x) << ' ' << y << ' ' << ((expected.getZ() << 4) + z) << ' '
+                        << expectedBlock.mName << ' ' << generatedBlock.mName << '\n';
+                }
+            }
+        }
+    }
+
     int compareArea(LevelStorage &storage, const Options &options, const ChunkArea &area,
                     const BlockClassifier &classifier, const BiomeNames &biomes) {
         ParityReport report(classifier, biomes);
         uint64_t skipped[3] = {0, 0, 0};
+        std::ofstream blocks;
+        if (!options.mBlocks.empty())
+            blocks.open(options.mBlocks);
 
         generateArea(options.mSeed, area, options.mTerrainOnly, [&](LevelChunk &generated) {
             LevelChunk expected(generated.getX(), generated.getZ());
@@ -1003,6 +1030,8 @@ namespace {
             }
 
             report.compare(expected, generated);
+            if (blocks.is_open())
+                writeBlocks(blocks, expected, generated);
         });
 
         if (report.getBlocks().mTotal == 0) {

@@ -661,6 +661,7 @@ struct OverworldRulePlacer::TreeDefinition {
     const OverworldTreePlacer::Fancy *mFancy;
     Placed mLogDecoration;
     const OverworldTreePlacer::Mega *mMega = nullptr;
+    const OverworldTreePlacer::Acacia *mAcacia = nullptr;
 };
 
 // one of the game's legacy tree features (LegacyTreeFeature, constructor sub_14D21F620, place sub_14D224440): a
@@ -676,6 +677,8 @@ struct OverworldRulePlacer::LegacyTreeDefinition {
         MegaTaiga,
         // nextInt(20) != 0 ? second : first, sub_14D230100
         Swamp,
+        // nextInt(3) != 0 ? (nextInt(3) != 0 ? third : second) : first, sub_14D230920
+        RedwoodMutated,
         // nextInt(5) != 0 && nextBoolean() ? second : first, sub_14D2302A0
         BirchMutated
     };
@@ -1160,6 +1163,9 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              {tree(TREES[9]), aggregate(SELECT_SPRUCE)}},
             {"minecraft:legacy:mega_taiga_tree_feature", 10.0f, Pick::MegaTaiga,
              {tree(MEGA_TREES[0]), tree(MEGA_TREES[1]), tree(TREES[9]), aggregate(SELECT_SPRUCE)}},
+            // type 16 of the constructor
+            {"minecraft:legacy:redwood_taiga_mutated_tree_feature", 10.0f, Pick::RedwoodMutated,
+             {tree(MEGA_TREES[0]), tree(TREES[9]), aggregate(SELECT_SPRUCE)}},
             // the swamp foliage feature (constructor sub_14D21E9F0, place sub_14D21F070) counts its trees like a
             // legacy tree feature of density 2
             {"minecraft:legacy:swamp_foliage_feature", 2.0f, Pick::Swamp, {HUGE_MUSHROOM, tree(SWAMP_TREE)},
@@ -1328,6 +1334,37 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     static const SnapDefinition SULFUR_POOL_SNAP = {
             "minecraft:sulfur_pool_with_potent_sulfur_snap_to_surface_feature",
             aggregate(SULFUR_POOL_WITH_POTENT_SULFUR), 32, 1, true, false, true, true, {"minecraft:sulfur"}};
+    // BDS 1.26.61 behavior packs and definitions/features: roofed_tree_feature, roofed_tree_with_vines_feature and
+    // the dark forest's random_roofed_forest_feature
+    static const Tree::Acacia ROOFED = {2, 6, {3, 2}, 3, {0, 4}, {0, 3}, {0, 0}, false, {2, 5}, {1, 1}, 1, 3, 2, true,
+                                        0, 0, 4, 2, 2, 3};
+    static const Tree::Acacia ROOFED_WITH_VINES = {2, 6, {3, 2}, 3, {0, 4}, {0, 3}, {0, 0}, false, {2, 5}, {1, 1}, 1,
+                                                   3, 2, true, 6, 7, 4, 2, 2, 3};
+    static const TreeDefinition ROOFED_TREES[] = {
+            {{"minecraft:roofed_tree_feature", Tree::Trunk::Acacia, &VanillaBlocks::DARK_OAK_LOG, {0, 0}, {0, 0},
+              Tree::Canopy::Roofed, &VanillaBlocks::DARK_OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr,
+             {}, nullptr, &ROOFED},
+            {{"minecraft:roofed_tree_with_vines_feature", Tree::Trunk::Acacia, &VanillaBlocks::DARK_OAK_LOG, {0, 0},
+              {0, 0}, Tree::Canopy::Roofed, &VanillaBlocks::DARK_OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false, 0,
+              1, 0, 0, 0, false, true}, nullptr, {}, nullptr, &ROOFED_WITH_VINES}
+    };
+    static const ScatterDefinition OPTIONAL_ROOFED_WITH_VINES =
+            optional("minecraft:optional_roofed_tree_with_vines_feature", tree(ROOFED_TREES[1]), 6);
+    static const AggregateDefinition SELECT_ROOFED = {
+            "minecraft:select_roofed_tree_feature", {scatter(OPTIONAL_ROOFED_WITH_VINES), tree(ROOFED_TREES[0])}, 2};
+    static const WeightedDefinition RANDOM_ROOFED = {
+            "minecraft:random_roofed_forest_feature",
+            {{HUGE_MUSHROOM, 75}, {aggregate(SELECT_ROOFED), 630}, {aggregate(SELECT_BIRCH), 70}, {tree(TREES[2]), 30},
+             {aggregate(SELECT_OAK), 195}}};
+    static const AggregateDefinition ROOFED_WITH_LEAF_LITTER = {
+            "minecraft:random_roofed_forest_feature_with_leaf_litter_feature",
+            {weightedOf(RANDOM_ROOFED), scatter(LEAF_LITTER_SCATTER)}, 1};
+    static const ScatterDefinition TALL_GRASS_AROUND_FOLIAGE = {
+            "minecraft:scatter_tall_grass_around_forest_foliage_feature", "20",
+            {{6, "-3", "3"}, {6, "-4", "4"}, {6, "-3", "3"}}, 5, single(0)};
+    static const AggregateDefinition ROOFED_FOREST = {
+            "minecraft:random_roofed_forest_feature_with_decoration_feature",
+            {aggregate(ROOFED_WITH_LEAF_LITTER), scatter(TALL_GRASS_AROUND_FOLIAGE)}, 0};
 
     struct NetherPlaced {
         const char *mIdentifier;
@@ -1398,6 +1435,8 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
                 feature.mPlaced.mFunction = nether.mFunction;
         }
         feature.mSprings = entry.mFeature == "minecraft:legacy:springs_feature";
+        if (entry.mFeature == ROOFED_FOREST.mIdentifier)
+            feature.mPlaced.mAggregate = &ROOFED_FOREST;
         for (const LegacyTreeDefinition &trees: LEGACY_TREES) {
             if (entry.mFeature == trees.mIdentifier)
                 feature.mLegacyTree = &trees;
@@ -3474,6 +3513,8 @@ void OverworldRulePlacer::_placeLegacyTrees(BlockManager &blocks, const LegacyTr
             picked = nextInt(random, 20) != 0 ? 1 : 0;
         else if (trees.mPick == Pick::BirchMutated)
             picked = nextInt(random, 5) != 0 && nextBoolean(random) ? 1 : 0;
+        else if (trees.mPick == Pick::RedwoodMutated)
+            picked = nextInt(random, 3) != 0 ? (nextInt(random, 3) != 0 ? 2 : 1) : 0;
         else if (trees.mPick == Pick::MegaTaiga)
             picked = nextInt(random, 3) != 0 ? (nextInt(random, 3) != 0 ? 3 : 2) : (nextInt(random, 13) != 0 ? 1 : 0);
 
@@ -3503,7 +3544,7 @@ bool OverworldRulePlacer::_placeAggregate(BlockManager &blocks, const AggregateD
 
 bool OverworldRulePlacer::_placeTree(BlockManager &blocks, const TreeDefinition &tree, int32_t x, int32_t y,
                                      int32_t z, std::mt19937 &random) {
-    return OverworldTreePlacer::place(blocks, tree.mTree, tree.mFancy, tree.mMega, x, y, z, random,
+    return OverworldTreePlacer::place(blocks, tree.mTree, tree.mFancy, tree.mMega, tree.mAcacia, x, y, z, random,
                                       [&](int32_t logX, int32_t logY, int32_t logZ) {
                                           _place(blocks, tree.mLogDecoration, logX, logY, logZ, random);
                                       });
