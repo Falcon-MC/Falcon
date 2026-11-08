@@ -105,6 +105,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(falcon_bedrock_data)
 
+# png decoding for image maps: one public domain header, built with only its png reader
+FetchContent_Declare(
+    stb_image
+    URL https://raw.githubusercontent.com/nothings/stb/4e9b368bfc071e97206ea5c6adba68dd0cbf8897/stb_image.h
+    URL_HASH SHA256=594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3
+    DOWNLOAD_NO_EXTRACT TRUE
+)
+FetchContent_MakeAvailable(stb_image)
+
 set(FALCON_PLUGIN_API_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     falcon_plugin_api
