@@ -11,7 +11,9 @@
 #include "World/Inventory/BundleInventory.h"
 #include "World/Inventory/ItemStackRequestHandler.h"
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Item/MapItem.h"
 #include "World/Level/Block/AnvilBlock.h"
+#include "World/Level/Block/CartographyTableBlock.h"
 #include "World/Level/Level.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "Protocol/Packets/PlayerEnchantOptionsPacket.h"
@@ -431,6 +433,28 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     Level &level = owner.getLevelFor(player);
     const Vector3i &anvilPosition = manager.getAnvilPosition();
 
+    Level &mapLevel = MapItem::getMapLevel(owner, player);
+    CartographyRecipes::Maps cartographyMaps;
+    cartographyMaps.mGetMap = [&mapLevel](int64_t mapId) {
+        return mapLevel.getMapData(mapId);
+    };
+    cartographyMaps.mExpand = [&mapLevel](int64_t mapId, bool scaled) {
+        return mapLevel.getMaps().expandMap(mapLevel.getMapStorage(), mapId, scaled);
+    };
+    // the client draws the copy id and sends it in MapCreateLockedCopyPacket; reusing it keeps its item in step
+    cartographyMaps.mAllocateLockId = [&mapLevel, &manager](int64_t mapId) {
+        const CartographyLock &requested = manager.getClientMapLock();
+        if (requested.mOriginalId == mapId && requested.mCopyId != MapItemSavedData::INVALID_ID
+            && mapLevel.getMapData(requested.mCopyId) == nullptr)
+            return requested.mCopyId;
+
+        // sub_142F64860 draws the id of the locked copy at random
+        int64_t copyId = (int64_t) (uint32_t) MapItem::random()();
+        while (copyId == MapItemSavedData::INVALID_ID || mapLevel.getMapData(copyId) != nullptr)
+            copyId = (int64_t) (uint32_t) MapItem::random()();
+        return copyId;
+    };
+
     for (const ItemStackRequest &request: packet.mRequests) {
         const bool anvilOpen = manager.isAnvilOpen()
                                && AnvilBlock::matches(level.getBlockState(anvilPosition.x, anvilPosition.y,
@@ -441,6 +465,10 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         int32_t enchantLevelsConsumed = 0;
         int32_t anvilLevelsConsumed = 0;
         bool anvilUsed = false;
+        CartographyLock cartographyLock;
+        const bool cartographyOpen = manager.isCartographyOpen()
+                                     && level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName
+                                        == CartographyTableBlock::IDENTIFIER;
 
         if (!allowRequest(owner, player, request)) {
             ItemStackResponseEntry rejected;
@@ -465,7 +493,16 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                                                                        &enchantLevelsConsumed,
                                                                        anvilOpen,
                                                                        &anvilLevelsConsumed,
-                                                                       &anvilUsed);
+                                                                       &anvilUsed,
+                                                                       cartographyOpen ? &cartographyMaps : nullptr,
+                                                                       &cartographyLock);
+
+        // the copy waits for the request to hold: a rejected one would leave an orphan map behind
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK
+            && cartographyLock.mCopyId != MapItemSavedData::INVALID_ID
+            && mapLevel.getMaps().copyAndLockMap(mapLevel.getMapStorage(), cartographyLock.mOriginalId,
+                                                 cartographyLock.mCopyId) != nullptr)
+            manager.setClientMapLock(CartographyLock());
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && enchantLevelsConsumed > 0) {
             player.getExperience().subtractXpLevels(enchantLevelsConsumed);
@@ -800,6 +837,12 @@ void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer 
         if (!inventory.getAnvilItem(slot).isAir())
             returned.push_back(inventory.getAnvilItem(slot));
         inventory.setAnvilItem(slot, ItemStack::air());
+    }
+
+    for (int slot = 0; slot < PlayerInventory::CARTOGRAPHY_SIZE; ++slot) {
+        if (!inventory.getCartographyItem(slot).isAir())
+            returned.push_back(inventory.getCartographyItem(slot));
+        inventory.setCartographyItem(slot, ItemStack::air());
     }
 
     if (!inventory.getCursor().isAir())

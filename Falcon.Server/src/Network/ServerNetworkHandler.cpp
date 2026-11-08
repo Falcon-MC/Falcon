@@ -53,6 +53,8 @@
 #include "Protocol/Packets/NetworkSettingsPacket.h"
 #include "Protocol/Packets/PlayStatusPacket.h"
 #include "Protocol/Packets/MapInfoRequestPacket.h"
+#include "Protocol/Packets/MapCreateLockedCopyPacket.h"
+#include "Network/Handler/MapHandler.h"
 #include "Protocol/Packets/RequestChunkRadiusPacket.h"
 #include "Protocol/Packets/RequestAbilityPacket.h"
 #include "Protocol/Packets/ChunkRadiusUpdatedPacket.h"
@@ -2084,36 +2086,20 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestChun
     _checkTerrainReady(*player);
 }
 
-namespace {
-    // sub_1483F1560: the map counts as the player's when a filled map with its id is in the inventory or offhand.
-    bool holdsMap(const ServerPlayer &player, int64_t mapId) {
-        const auto matches = [mapId](const ItemStack &item) {
-            return !item.isAir() && item.mDefinition->getIdentifier() == "minecraft:filled_map"
-                   && item.mTag.isCompound() && item.mTag.contains("map_uuid", Tag::Type::Long)
-                   && item.mTag.getLong("map_uuid") == mapId;
-        };
-
-        const PlayerInventory &inventory = player.getInventory();
-        for (int slot = 0; slot < inventory.getContainerSize(); ++slot) {
-            if (matches(inventory.getItem(slot)))
-                return true;
-        }
-        return matches(inventory.getOffhand());
-    }
-}
-
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const MapInfoRequestPacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr)
         return;
 
-    // sub_14228D8A0: a client running client side generation resamples the chunks it built and sends the
-    // pixels the server's map lacks. Falcon has no map data of its own, so only maps already saved in the
-    // world take them; the map data the game answers a plain request with is not sent.
-    if (packet.mPixels.empty() || !holdsMap(*player, packet.mUniqueMapId))
+    MapHandler::handleInfoRequest(*this, *player, packet);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const MapCreateLockedCopyPacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr)
         return;
 
-    getWorldFor(*player).getOverworld().applyMapPixels(packet.mUniqueMapId, packet.mPixels);
+    MapHandler::handleCreateLockedCopy(*this, *player, packet);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SubChunkRequestPacket &packet) {

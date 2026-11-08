@@ -12,6 +12,7 @@ FALCON_REGISTER_BLOCK(ItemFrameBlock, 60);
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
+#include "Network/Handler/MapHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
@@ -158,6 +159,7 @@ bool ItemFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
 
         ItemStack framed = held;
         framed.mCount = 1;
+        MapHandler::onFrameItemChanged(owner, level, position, ItemStack::air(), framed);
         frame->setItem(std::move(framed));
         frame->setRotation(0);
 
@@ -192,6 +194,7 @@ bool ItemFrameBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, 
     if (!creative)
         dropFramedItem(owner, level, position, *frame);
 
+    MapHandler::onFrameItemChanged(owner, level, position, frame->getItem(), ItemStack::air());
     frame->setItem(ItemStack::air());
     frame->setRotation(0);
     setStoringMap(owner, level, position, state, false);
@@ -231,6 +234,7 @@ void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, Level &level, const V
         return;
 
     dropFramedItem(owner, level, position, *frame);
+    MapHandler::onFrameItemChanged(owner, level, position, frame->getItem(), ItemStack::air());
     level.getBlockActors().remove(position);
 
     owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameBreak, centreOf(position), 0);

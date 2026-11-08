@@ -163,6 +163,9 @@ add_library(FalconCore OBJECT ${FALCON_CORE_SOURCES})
 file(GLOB_RECURSE FALCON_LEVELGEN_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/World/Level/LevelGen/*.cpp")
 set_source_files_properties(${FALCON_LEVELGEN_SOURCES} PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+# map shading compares quantised colours, so its float steps must round like the game's
+file(GLOB_RECURSE FALCON_MAP_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/World/Level/Map/*.cpp")
+set_source_files_properties(${FALCON_MAP_SOURCES} PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 
 include(cmake/FalconLegacyHeaders.cmake)
 
@@ -236,6 +239,13 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     set_tests_properties(gameplay-26.60 PROPERTIES TIMEOUT 60)
     add_test(NAME anvil-repair COMMAND FalconAnvilTests)
     set_tests_properties(anvil-repair PROPERTIES TIMEOUT 60)
+    add_executable(FalconMapTests tests/MapTests.cpp)
+    target_link_libraries(FalconMapTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconMapTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME maps COMMAND FalconMapTests)
+    set_tests_properties(maps PROPERTIES TIMEOUT 60)
     add_test(NAME dragon-fight COMMAND FalconDragonFightTests)
     set_tests_properties(dragon-fight PROPERTIES TIMEOUT 60)
     add_test(NAME sulfur-caves-generation COMMAND FalconSulfurCavesTests)

@@ -1,7 +1,5 @@
 #include "World/Level/ClientSideGeneration.h"
 
-#include "Core/NBT/Tag.h"
-
 #include "World/Level/LevelGen/ChunkGenerator.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 
@@ -171,42 +169,6 @@ std::vector<Vector2i> ClientSideGeneration::SavedChunkList::drain() {
 void ClientSideGeneration::SavedChunkList::clear() {
     mChunks.clear();
     mKeys.clear();
-}
-
-bool ClientSideGeneration::applyClientMapPixels(Tag &mapData, const std::vector<MapPixel> &pixels) {
-    if (!mapData.isCompound() || pixels.empty())
-        return false;
-
-    std::vector<int8_t> colors;
-    if (const Tag *stored = mapData.get("colors")) {
-        if (stored->getType() == Tag::Type::ByteArray)
-            colors = stored->asByteArray();
-    }
-    colors.resize((size_t) MAP_PIXEL_COUNT * 4, 0);
-
-    bool changed = false;
-    for (const MapPixel &pixel: pixels) {
-        if (pixel.mPixel == 0 || pixel.mIndex < 0 || pixel.mIndex >= MAP_PIXEL_COUNT)
-            continue;
-
-        // The game keeps each pixel as a 32-bit colour and saves the array as it lies in memory.
-        const uint32_t colour = (uint32_t) pixel.mPixel;
-        int8_t *bytes = &colors[(size_t) pixel.mIndex * 4];
-        uint32_t current = (uint32_t) (uint8_t) bytes[0] | ((uint32_t) (uint8_t) bytes[1] << 8)
-                           | ((uint32_t) (uint8_t) bytes[2] << 16) | ((uint32_t) (uint8_t) bytes[3] << 24);
-        if (current == colour)
-            continue;
-
-        bytes[0] = (int8_t) (colour & 0xff);
-        bytes[1] = (int8_t) ((colour >> 8) & 0xff);
-        bytes[2] = (int8_t) ((colour >> 16) & 0xff);
-        bytes[3] = (int8_t) ((colour >> 24) & 0xff);
-        changed = true;
-    }
-
-    if (changed)
-        mapData.put("colors", Tag::ofByteArray(std::move(colors)));
-    return changed;
 }
 
 const ClientSideGeneration::StructureGuard::Start &

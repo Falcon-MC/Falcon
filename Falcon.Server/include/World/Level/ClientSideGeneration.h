@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Core/Math/Vector3i.h"
-#include "Protocol/Types/MapPixel.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -13,7 +12,6 @@
 
 class ChunkGenerator;
 class StructureFeature;
-class Tag;
 
 /**
  * Client side generation as BDS 1.26.61 runs it, recovered from the Windows client 26.60 which hosts the same
@@ -120,17 +118,6 @@ namespace ClientSideGeneration {
         std::vector<Vector2i> mChunks;
         std::unordered_set<int64_t> mKeys;
     };
-
-    // A map is 128 x 128 pixels, saved as four bytes each in the "colors" array of its map_<id> record.
-    constexpr int32_t MAP_PIXEL_COUNT = 128 * 128;
-
-    /**
-     * Writes the pixels a client resampled from the chunks it generated into saved map data, as
-     * ServerNetworkHandler::handle(MapInfoRequestPacket) does (sub_14228D8A0): a pixel is only taken when it
-     * is not blank and differs from the stored one. Returns whether any pixel changed. The game indexes its
-     * array without a bound check; indices past the map are dropped here.
-     */
-    bool applyClientMapPixels(Tag &mapData, const std::vector<MapPixel> &pixels);
 
     /**
      * Remembers, per structure and region, whether the region's start chunk is a real start, so the parity guard

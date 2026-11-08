@@ -2,6 +2,7 @@
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/ClientSideGeneration.h"
+#include "World/Level/Map/MapItemSavedData.h"
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 #include "World/Level/Storage/LevelStorage.h"
@@ -172,8 +173,7 @@ namespace {
     }
 
     void mapPixels() {
-        Tag map = Tag::ofCompound();
-        map.putLong("mapId", 5);
+        MapItemSavedData map(5);
 
         std::vector<MapPixel> pixels(3);
         pixels[0].mPixel = (int32_t) 0xff336699;
@@ -181,17 +181,19 @@ namespace {
         pixels[1].mPixel = 0;
         pixels[1].mIndex = 2;
         pixels[2].mPixel = 7;
-        pixels[2].mIndex = ClientSideGeneration::MAP_PIXEL_COUNT;
+        pixels[2].mIndex = MapItemSavedData::PIXEL_COUNT;
 
-        require(ClientSideGeneration::applyClientMapPixels(map, pixels), "a new pixel changes the map");
-        const Tag *colors = map.get("colors");
+        require(map.applyClientPixels(pixels), "a new pixel changes the map");
+        Tag saved = Tag::ofCompound();
+        map.save(saved);
+        const Tag *colors = saved.get("colors");
         require(colors != nullptr && colors->asByteArray().size() == 65536, "the map keeps four bytes per pixel");
         const std::vector<int8_t> &bytes = colors->asByteArray();
         require((uint8_t) bytes[129 * 4] == 0x99 && (uint8_t) bytes[129 * 4 + 1] == 0x66
                 && (uint8_t) bytes[129 * 4 + 2] == 0x33 && (uint8_t) bytes[129 * 4 + 3] == 0xff,
                 "the colour is stored as the game lays it out");
         require(bytes[2 * 4] == 0, "a blank pixel is ignored");
-        require(!ClientSideGeneration::applyClientMapPixels(map, pixels), "the same pixels change nothing");
+        require(!map.applyClientPixels(pixels), "the same pixels change nothing");
     }
 
     void savedChunkPersistence(const std::filesystem::path &directory) {

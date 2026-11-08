@@ -75,7 +75,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mEntityEraseWrite = std::move(other.mEntityEraseWrite);
     mRepopulatedChunks = std::move(other.mRepopulatedChunks);
     mSavedChunkCache = std::move(other.mSavedChunkCache);
-    mLoadedMaps = std::move(other.mLoadedMaps);
+    mMaps = std::move(other.mMaps);
     mStructureGuard = std::move(other.mStructureGuard);
     mIncomingChanges = std::move(other.mIncomingChanges);
     mPendingBlockChanges = std::move(other.mPendingBlockChanges);
@@ -1136,26 +1136,17 @@ bool Level::isChunkSaved(int32_t chunkX, int32_t chunkZ) {
 }
 
 bool Level::applyMapPixels(int64_t mapId, const std::vector<MapPixel> &pixels) {
-    auto loaded = mLoadedMaps.find(mapId);
-    if (loaded == mLoadedMaps.end()) {
-        Tag data;
-        if (!mStorage.loadMapData(mapId, data))
-            return false;
+    MapItemSavedData *map = getMapData(mapId);
+    if (map == nullptr)
+        return false;
 
-        loaded = mLoadedMaps.emplace(mapId, std::make_pair(std::move(data), false)).first;
-    }
-
-    if (ClientSideGeneration::applyClientMapPixels(loaded->second.first, pixels))
-        loaded->second.second = true;
+    map->applyClientPixels(pixels);
     return true;
 }
 
 void Level::_saveLoadedMaps() {
-    for (const auto &entry: mLoadedMaps) {
-        if (entry.second.second)
-            mStorage.saveMapData(entry.first, entry.second.first);
-    }
-    mLoadedMaps.clear();
+    mMaps.saveDirty(mStorage);
+    mMaps.unloadUnused();
 }
 
 void Level::_markChunkSaved(int64_t key) {

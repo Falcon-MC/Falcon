@@ -3,6 +3,7 @@
 #include "Core/Debug/BedrockLog.h"
 #include "World/Inventory/AnvilRepair.h"
 #include "World/Inventory/BundleInventory.h"
+#include "World/Inventory/CartographyRecipes.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "World/Item/Components/ItemComponentTypes.h"
@@ -67,6 +68,13 @@ namespace {
         int32_t mAnvilMaterialRequired = 0;
         int32_t mAnvilInputConsumed = 0;
         int32_t mAnvilMaterialConsumed = 0;
+        const CartographyRecipes::Maps *mCartographyMaps = nullptr;
+        bool mCartographyActive = false;
+        int32_t mCartographyInputRequired = 0;
+        int32_t mCartographyAdditionalRequired = 0;
+        int32_t mCartographyInputConsumed = 0;
+        int32_t mCartographyAdditionalConsumed = 0;
+        CartographyLock mCartographyLock;
     };
 
     ItemStack *findBundleOwner(PlayerInventory &inventory, RequestContext &context, int32_t bundleId,
@@ -176,6 +184,10 @@ namespace {
         }
         if ((container == ContainerSlotType::AnvilInput || container == ContainerSlotType::AnvilMaterial)
             && !context.mAnvilOpen) {
+            return nullptr;
+        }
+        if ((container == ContainerSlotType::CartographyInput || container == ContainerSlotType::CartographyAdditional)
+            && context.mCartographyMaps == nullptr) {
             return nullptr;
         }
         if (container == ContainerSlotType::FurnaceIngredient || container == ContainerSlotType::BlastFurnaceIngredient
@@ -497,6 +509,14 @@ namespace {
                 context.mAnvilMaterialConsumed += action.mCount;
         }
 
+        if (context.mCartographyActive && action.mType == ItemStackRequestActionType::Consume) {
+            const ContainerSlotType container = action.mSource.mContainerName.mContainer;
+            if (container == ContainerSlotType::CartographyInput)
+                context.mCartographyInputConsumed += action.mCount;
+            else if (container == ContainerSlotType::CartographyAdditional)
+                context.mCartographyAdditionalConsumed += action.mCount;
+        }
+
         if (dropped && context.mDroppedItems != nullptr) {
             ItemStack drop = *source;
             drop.mCount = action.mCount;
@@ -628,6 +648,42 @@ namespace {
         context.mAnvilMaterialRequired = std::min(result.mMaterialCost, material->isAir() ? 0 : material->mCount);
         if (!context.mCreativeMode)
             context.mAnvilLevelsConsumed = result.mCost;
+        return true;
+    }
+
+    // the table sends the typed name like the anvil and leaves the result to the server
+    bool craftCartography(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+        if (context.mCraftRecipeSeen || context.mCartographyMaps == nullptr || context.mRequest == nullptr)
+            return false;
+        context.mCraftRecipeSeen = true;
+
+        const ItemStack *input = inventory.resolveSlot(ContainerSlotType::CartographyInput, 0);
+        const ItemStack *additional = inventory.resolveSlot(ContainerSlotType::CartographyAdditional, 0);
+        if (input == nullptr || additional == nullptr || input->isAir())
+            return false;
+
+        const std::vector<std::string> &names = context.mRequest->mFilterStrings;
+        const std::string *name = nullptr;
+        if (action.mType == ItemStackRequestActionType::CraftRecipeOptional && action.mFilteredStringIndex >= 0
+            && (size_t) action.mFilteredStringIndex < names.size())
+            name = &names[(size_t) action.mFilteredStringIndex];
+
+        const ItemStack *predicted = predictedResult(*context.mRequest);
+        if (name != nullptr && !name->empty() && !AnvilRepair::hasCustomName(*input) && predicted != nullptr
+            && !AnvilRepair::hasCustomName(*predicted))
+            name = nullptr;
+
+        CartographyResult result = CartographyRecipes::createResult(*input, *additional, name,
+                                                                    *context.mCartographyMaps);
+        if (result.mResult.isAir())
+            return false;
+
+        context.mCreatedOutput = std::move(result.mResult);
+        context.mCreatedOutputActive = true;
+        context.mCartographyActive = true;
+        context.mCartographyInputRequired = result.mInputCost;
+        context.mCartographyAdditionalRequired = result.mAdditionalCost;
+        context.mCartographyLock = result.mLock;
         return true;
     }
 
@@ -846,9 +902,13 @@ namespace {
 
             case ItemStackRequestActionType::CraftRecipe:
             case ItemStackRequestActionType::CraftRecipeAuto:
+                if (context.mCartographyMaps != nullptr)
+                    return craftCartography(inventory, context, action);
                 return craftRecipe(inventory, context, action, touched);
 
             case ItemStackRequestActionType::CraftRecipeOptional:
+                if (context.mCartographyMaps != nullptr)
+                    return craftCartography(inventory, context, action);
                 return craftAnvil(inventory, context, action);
 
             case ItemStackRequestActionType::Create:
@@ -883,7 +943,9 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
                                                        int32_t *outEnchantLevelsConsumed,
                                                        bool anvilOpen,
                                                        int32_t *outAnvilLevelsConsumed,
-                                                       bool *outAnvilUsed) {
+                                                       bool *outAnvilUsed,
+                                                       const CartographyRecipes::Maps *cartographyMaps,
+                                                       CartographyLock *outCartographyLock) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -908,6 +970,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
     context.mCreativeMode = creativeMode;
     context.mRequest = &request;
     context.mAnvilOpen = anvilOpen;
+    context.mCartographyMaps = cartographyMaps;
 
     if (openContainer != nullptr) {
         const int containerSize = openContainer->getContainerSize();
@@ -951,6 +1014,14 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
     if (context.mAnvilActive
         && (context.mAnvilInputConsumed != context.mAnvilInputRequired
             || context.mAnvilMaterialConsumed != context.mAnvilMaterialRequired)) {
+        entry.mResult = RESULT_ERROR;
+        entry.mContainers.clear();
+        return entry;
+    }
+
+    if (context.mCartographyActive
+        && (context.mCartographyInputConsumed != context.mCartographyInputRequired
+            || context.mCartographyAdditionalConsumed != context.mCartographyAdditionalRequired)) {
         entry.mResult = RESULT_ERROR;
         entry.mContainers.clear();
         return entry;
@@ -1003,6 +1074,9 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
 
     if (outAnvilUsed != nullptr)
         *outAnvilUsed = context.mAnvilActive;
+
+    if (outCartographyLock != nullptr)
+        *outCartographyLock = context.mCartographyLock;
 
     for (const TouchedSlot &slot: touched) {
         if (slot.mContainerName.mContainer == ContainerSlotType::CreatedOutput) {

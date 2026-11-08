@@ -8,6 +8,7 @@
 #include "World/Level/Level.h"
 #include "World/Actor/FreezingSystem.h"
 #include "Network/Handler/BlockActionHandler.h"
+#include "Network/Handler/MapHandler.h"
 #include "Network/Handler/MovementHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -148,6 +149,9 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
         _sendEntityData(player);
 
     _tickItemUse(player);
+
+    if (player.isSpawned())
+        MapHandler::tickPlayer(*this, player);
 
     if (player.isSpawned())
         FreezingSystem::tick(*this, player);
