@@ -171,7 +171,8 @@ namespace {
         arena.mOwner.hurtActor(struck, 1000.0f, "death.attack.generic");
         require(struck.isDead(), "the generic hit did not kill the villager");
         struck.tickDeath(arena.mOwner);
-        require(!struck.isExpired() && arena.count("minecraft:witch") == 0, "a dying villager became a witch");
+        require(arena.count("minecraft:witch") == 0, "a dying villager became a witch");
+        require(!struck.isExpired(), "a dying villager's body was removed without converting");
     }
 
     void targetSight(const std::filesystem::path &directory) {

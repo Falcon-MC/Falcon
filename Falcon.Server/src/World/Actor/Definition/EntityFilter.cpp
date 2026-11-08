@@ -388,16 +388,23 @@ bool EntityFilter::test(const json::Value &filter, ServerNetworkHandler &owner, 
             groups[5] = entry.second.get();
     }
 
+    // every group present must hold: villager_v2 become_zombie pairs all_of with any_of
+    bool grouped = false;
     for (size_t index = 0; index < GROUP_COUNT; ++index) {
         if (groups[index] == nullptr)
             continue;
+        grouped = true;
+        bool passed;
         if (index < 2)
-            return _testAll(*groups[index], owner, self, other);
-        if (index < 4)
-            return _testAny(*groups[index], owner, self, other);
-        return !_testAny(*groups[index], owner, self, other);
+            passed = _testAll(*groups[index], owner, self, other);
+        else if (index < 4)
+            passed = _testAny(*groups[index], owner, self, other);
+        else
+            passed = !_testAny(*groups[index], owner, self, other);
+        if (!passed)
+            return false;
     }
-    return _testSingle(filter, owner, self, other);
+    return grouped || _testSingle(filter, owner, self, other);
 }
 
 bool EntityFilter::_testAll(const json::Value &filters, ServerNetworkHandler &owner, const MobActor &self,
