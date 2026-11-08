@@ -1,5 +1,6 @@
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
 
+#include "World/Level/Block/BlockLightProperties.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/ChunkGenerator.h"
 
@@ -12,10 +13,15 @@ int32_t StructureTerrain::getSolidHeight(int32_t x, int32_t z) {
 }
 
 int32_t StructureTerrain::getTopHeight(int32_t x, int32_t z) {
+    // the chunk heightmap: a snow layer or a plant on top lets the street under it (sub_14775E430)
     const LevelChunk &chunk = *_chunkAt(x, z);
     int32_t y = LevelChunk::MAX_Y;
-    while (y >= LevelChunk::MIN_Y && chunk.getBlock(x & 15, y, z & 15).mName == "minecraft:air")
+    while (y >= LevelChunk::MIN_Y) {
+        const int32_t packed = BlockLightProperties::packed(chunk.getBlock(x & 15, y, z & 15));
+        if (BlockLightProperties::lightFilter(packed) > 1 || BlockLightProperties::diffusesSkyLight(packed))
+            break;
         y--;
+    }
 
     return y + 1;
 }
