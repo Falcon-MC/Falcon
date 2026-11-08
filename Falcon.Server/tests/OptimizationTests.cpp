@@ -205,6 +205,25 @@ namespace {
         std::deque<std::string> mIncoming;
     };
 
+    // Answers the first packet put on its wire at once, as a client on a fast link does.
+    class AnsweringPeer : public FakePeer {
+    public:
+        explicit AnsweringPeer(std::string reply) : mReply(std::move(reply)) {
+        }
+
+        void sendPacket(const std::string &data, Reliability reliability, Compressibility compressibility) override {
+            FakePeer::sendPacket(data, reliability, compressibility);
+            if (mReply.empty())
+                return;
+
+            deliver(mReply, true);
+            mReply.clear();
+        }
+
+    private:
+        std::string mReply;
+    };
+
     class FakeConnector : public Connector {
     public:
         bool host(const ConnectionDefinition &) override {
@@ -824,6 +843,26 @@ int main() {
             pumpUntil(network, [&]() { return network.getPendingOutboundBytes(client) == 0; },
                       "Queued bytes were never released");
             network.stopIoThread();
+        });
+        check("a reply is read in the state enabled right after the packet it answers", [&]() {
+            FakeConnector *connector = new FakeConnector();
+            NetworkHandler network{std::unique_ptr<Connector>(connector)};
+            RecordingListener listener;
+            network.addListener(&listener);
+            const NetworkIdentifier client("settings", 1);
+            std::shared_ptr<AnsweringPeer> peer = std::make_shared<AnsweringPeer>("pong");
+            connector->join(client, peer);
+            pumpUntil(network, [&]() { return !listener.mEvents.empty(); }, "Connection never opened");
+
+            // A packet filling the whole per-pass budget, queued before the shard threads start so one pass
+            // drains it together with the flush and the compression switch that follow it.
+            network.send(client, std::string(256 * 1024, 'x'));
+            network.flush(client);
+            network.enableCompression(client, CompressedNetworkPeer::CompressionAlgorithm::ZLib, 0);
+            network.startIoThread();
+            pumpUntil(network, [&]() { return listener.mEvents.size() >= 2; }, "Reply never read");
+            network.stopIoThread();
+            require(listener.mEvents.back() == "data:pong", "Reply was read before compression was enabled");
         });
         check("a server close is reported once and stops the connection's data", [&]() {
             FakeConnector *connector = new FakeConnector();

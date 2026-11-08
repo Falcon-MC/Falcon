@@ -432,7 +432,10 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
             std::chrono::steady_clock::now() + MAX_OUTBOUND_TIME_PER_PASS;
     size_t bytes = 0;
     while (!shard.mBacklog.empty()) {
-        if (bounded && (bytes >= MAX_OUTBOUND_BYTES_PER_PASS || std::chrono::steady_clock::now() >= deadline))
+        // Only data waits for the next pass. A flush and the compression or encryption switch behind it go
+        // out together, otherwise the reading half of the next pass decodes the client's answer in the old state.
+        if (bounded && shard.mBacklog.front().mKind == OutboundCommand::Kind::Data
+            && (bytes >= MAX_OUTBOUND_BYTES_PER_PASS || std::chrono::steady_clock::now() >= deadline))
             break;
 
         OutboundCommand command = std::move(shard.mBacklog.front());
