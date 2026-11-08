@@ -27,6 +27,8 @@
 #include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/LevelGen/Feature/Tree/BeeNestGenerator.h"
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/BlockPileFeature.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/CactusFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldTreePlacer.h"
@@ -44,6 +46,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -1742,6 +1745,31 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         feature.mPlaced.mFunction = &placeMelon;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == SINGLE_BLOCKS[12].mIdentifier)
         feature.mPlaced.mSingleBlock = &SINGLE_BLOCKS[12];
+    // jigsaw feature pieces (sub_1469B1230), drawn from the post process random of their chunk
+    if (entry.mPass.empty()) {
+        static const auto function = [](bool (*place)(BlockManager &, int32_t, int32_t, int32_t, std::mt19937 &)) {
+            Placed placed;
+            placed.mFunction = place;
+            return placed;
+        };
+        static const std::pair<const char *, Placed> JIGSAW_FEATURES[] = {
+                {"minecraft:select_oak_tree_feature", aggregate(SELECT_OAK)},
+                {"minecraft:select_spruce_tree_feature", aggregate(SELECT_SPRUCE)},
+                {"minecraft:pine_tree_feature", tree(TREES[9])},
+                {"minecraft:fern_feature", single(1)},
+                {"minecraft:savanna_tree_feature", tree(SAVANNA_TREE)},
+                {"minecraft:cactus_feature", function(&CactusFeature::placeCluster)},
+                {"minecraft:hay_pile_feature", function(&BlockPileFeature::placeHay)},
+                {"minecraft:melon_pile_feature", function(&BlockPileFeature::placeMelon)},
+                {"minecraft:pumpkin_pile_feature", function(&BlockPileFeature::placePumpkin)},
+                {"minecraft:snow_pile_feature", function(&BlockPileFeature::placeSnow)},
+                {"minecraft:ice_pile_feature", function(&BlockPileFeature::placeIce)}
+        };
+        for (const auto &jigsaw: JIGSAW_FEATURES) {
+            if (entry.mFeature == jigsaw.first)
+                feature.mPlaced = jigsaw.second;
+        }
+    }
     if (entry.mPass == SURFACE_PASS || entry.mPass == AFTER_SURFACE_PASS) {
         for (const ScatterDefinition &scatter: SCATTERS) {
             if (entry.mFeature == scatter.mIdentifier)
