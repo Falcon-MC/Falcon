@@ -3,6 +3,7 @@
 #include "Core/NBT/Tag.h"
 #include "Protocol/BlockStateHasher.h"
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 
@@ -30,6 +31,15 @@ public:
 
     void cacheLightProperties(int32_t properties) const {
         mLightProperties = properties;
+    }
+
+    // packed LiquidProperties, 0 until computed; generation threads read it too
+    uint32_t getCachedLiquidProperties() const {
+        return mLiquidProperties.mValue.load(std::memory_order_relaxed);
+    }
+
+    void cacheLiquidProperties(uint32_t properties) const {
+        mLiquidProperties.mValue.store(properties, std::memory_order_relaxed);
     }
 
     bool hasResolvedBlock(uint32_t generation) const {
@@ -81,6 +91,22 @@ private:
 
     mutable int32_t mHash = 0;
     mutable bool mHashValid = false;
+    // not copied, for the same reason as ResolvedBlock; a race only computes the same value twice
+    struct LiquidCache {
+        LiquidCache() = default;
+
+        LiquidCache(const LiquidCache &) {
+        }
+
+        LiquidCache &operator=(const LiquidCache &) {
+            mValue.store(0, std::memory_order_relaxed);
+            return *this;
+        }
+
+        std::atomic<uint32_t> mValue{0};
+    };
+
     mutable int32_t mLightProperties = -1;
     mutable ResolvedBlock mResolved;
+    mutable LiquidCache mLiquidProperties;
 };

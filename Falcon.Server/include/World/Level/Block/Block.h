@@ -116,6 +116,12 @@ public:
         return false;
     }
 
+    // faces liquid cannot cross, a bit per LiquidFace (BlockType +185, stops_liquid_flowing_from_direction)
+    virtual uint8_t getLiquidBlockedFaces(const BlockState &state) const {
+        (void) state;
+        return 0;
+    }
+
     virtual bool canBeReplaced(const BlockState &state) const {
         (void) state;
         return false;

@@ -1143,8 +1143,9 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     const BlockState targetOverlay = level.getBlockStateAtLayer(target.x, target.y, target.z, 1);
     const bool targetHasLiquid = LiquidView(targetState).isLiquid() || LiquidView(targetOverlay).isLiquid();
-    if (!merged && targetHasLiquid && placedData != nullptr && placedData->mWaterloggingLevel == 0
-        && !placedData->mSolid)
+    if (!merged && targetHasLiquid && placedData != nullptr && !placedData->mSolid
+        && LiquidPhysicsSystem::getWaterloggingLevel(BlockState(definition.getIdentifier(),
+                                                                definition.getState())) == 0)
         return false;
 
     BlockState placedState = merged ? mergedState : BlockPlacementComponent::apply(
@@ -1190,8 +1191,8 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         }
     }
 
-    const bool waterlogsTarget = LiquidView(targetState).isWater() && placedData != nullptr
-                                 && placedData->mWaterloggingLevel > 0;
+    const bool waterlogsTarget = LiquidView(targetState).isWater()
+                                 && LiquidPhysicsSystem::getWaterloggingLevel(placedState) > 0;
 
     const int32_t blockHash = BlockStateHasher::hash(placedState.mName, placedState.mStates);
     level.setBlockState(target.x, target.y, target.z, placedState);
