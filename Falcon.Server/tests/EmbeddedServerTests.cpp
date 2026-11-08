@@ -99,8 +99,8 @@ int main() {
         ClientConnectionSettings client;
         client.mHost = "127.0.0.1";
         client.mPort = server.getPort();
-        client.mProtocolVersion = 2225;
-        client.mGameVersion = "1.26.60";
+        client.mProtocolVersion = 2250;
+        client.mGameVersion = "1.26.70";
         client.mTransportLayer = TransportLayer::NetherNet;
         client.mNetherNet.mSignalingType = NetherNetSignalingType::Http;
         client.mIdentity.mDisplayName = "EmbeddedPlayer";

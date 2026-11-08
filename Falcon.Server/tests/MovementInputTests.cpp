@@ -364,7 +364,7 @@ namespace {
         PlayerAuthInputPacket packet;
         packet.mTick = 20;
         packet.mInputData = {(int32_t) PlayerAuthInputData::JumpCurrentRaw,
-                             (int32_t) PlayerAuthInputData::InternalUpdate};
+                             (int32_t) PlayerAuthInputData::SwapOffhand};
         Vector3f reported(135.5f, 252.0f, 5.5f);
         PlayerMovementSimulator::apply(owner, id, player, packet, reported, false);
         BedrockLog::flush();
