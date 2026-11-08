@@ -23,4 +23,5 @@ void ActorFlags::applyPlayerDefaults() {
     set(ActorFlag::Breathing, true);
     set(ActorFlag::HasCollision, true);
     set(ActorFlag::HasGravity, true);
+    set(ActorFlag::PushTowardsClosestSpace, true);
 }

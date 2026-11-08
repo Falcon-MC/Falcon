@@ -11,6 +11,7 @@
 #include "World/Actor/Movement/Systems/LavaTravelSystem.h"
 #include "World/Actor/Movement/Systems/MovementAbilitiesSystem.h"
 #include "World/Actor/Movement/Systems/MovementInputSystem.h"
+#include "World/Actor/Movement/Systems/MoveTowardsClosestSpaceSystem.h"
 #include "World/Actor/Movement/Systems/PlayerFlightDragSystem.h"
 #include "World/Actor/Movement/Systems/PlayerFlightSystem.h"
 #include "World/Actor/Movement/Systems/PlayerFrictionSystem.h"
@@ -53,6 +54,7 @@ PlayerMovementSystemRegistry makePlayerMovementSchedule() {
 
     schedule.registerSystem(Phase::PreTravel, "MovementAbilitiesSystem", execute<MovementAbilitiesSystem>);
     schedule.registerSystem(Phase::PreTravel, "PlayerMovementInitializationSystem", execute<PlayerMovementInitializationSystem>);
+    schedule.registerSystem(Phase::PreTravel, "MoveTowardsClosestSpaceSystem", execute<MoveTowardsClosestSpaceSystem>);
     schedule.registerSystem(Phase::PreTravel, "UpdateHorizontalPoseSystem", execute<UpdateHorizontalPoseSystem>);
     schedule.registerSystem(Phase::PreTravel, "PlayerLiquidContactSystem", execute<PlayerLiquidContactSystem>);
     schedule.registerSystem(Phase::PreTravel, "MovementInputSystem", execute<MovementInputSystem>);
