@@ -12,6 +12,7 @@
 #include "World/Item/StringToItemParser.h"
 #include "World/Level/Storage/AutoCompaction.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+#include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/TransportFactory.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -241,6 +242,9 @@ bool ServerHost::start(const ServerHostOptions &options) {
     // independent registries; joined before the handler exists: the game sees only complete definitions
     auto entityDefinitions = std::async(std::launch::async, EntityDefinitions::initialize);
     auto biomeData = std::async(std::launch::async, BiomeChunkGenDataRegistry::initialize);
+    // function-local statics built ahead of their first use: a reader blocks until the build finishes
+    auto languages = std::async(std::launch::async, Localization::getInstance);
+    auto biomeParameters = std::async(std::launch::async, OverworldBiomeParameters::shared);
     BlockPaletteRegistry::getInstance().initialize();
     SpawnRules::initialize();
     entityDefinitions.get();
@@ -258,6 +262,7 @@ bool ServerHost::start(const ServerHostOptions &options) {
     if (!WorldManager::isValidName(properties.getLevelName()))
         throw std::invalid_argument("Invalid world name");
 
+    languages.get();
     Localization::setServerLocale(properties.getLanguage());
     logStartupBanner(properties);
 
@@ -293,6 +298,7 @@ bool ServerHost::start(const ServerHostOptions &options) {
     const int maxPlayers = properties.isLoaded() ? properties.getMaxPlayers() : options.maxPlayers;
     const std::string serverName = properties.isLoaded() ? properties.getServerName() : options.serverName;
 
+    biomeParameters.get();
     mHandler.reset(new ServerNetworkHandler(serverName, options.subMotd, maxPlayers, transport));
     mHandler->setProtocolVersion(options.protocolVersion, options.gameVersion);
     mHandler->setPluginsEnabled(options.plugins);
