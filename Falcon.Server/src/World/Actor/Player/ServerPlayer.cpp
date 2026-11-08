@@ -1,4 +1,5 @@
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Actor/ActorClassRegistry.h"
@@ -162,6 +163,11 @@ namespace {
         inventory.setItem(slot, std::move(held));
         attacker.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
     }
+}
+
+bool ServerPlayer::canStandOnPowderSnow() const {
+    const ItemStack &boots = getInventory().getArmor(PlayerInventory::ARMOR_FEET);
+    return !boots.isAir() && boots.mDefinition->getIdentifier() == MovementPhysics::LEATHER_BOOTS;
 }
 
 ServerPlayer::ServerPlayer(const NetworkIdentifier &id, uint64_t runtimeId, PacketSender *sender)

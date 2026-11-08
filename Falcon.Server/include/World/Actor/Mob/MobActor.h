@@ -47,6 +47,8 @@ public:
 
     MobActor(uint64_t runtimeId, const std::string &identifier);
 
+    bool canStandOnPowderSnow() const override;
+
     virtual ActorCategory getCategory() const = 0;
 
     virtual bool preventsSleep() const {

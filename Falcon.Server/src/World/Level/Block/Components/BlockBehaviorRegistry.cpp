@@ -6,6 +6,7 @@
 #include "World/Level/Block/HayBlockBehavior.h"
 #include "World/Level/Block/HoneyBlockBehavior.h"
 #include "World/Level/Block/IceBlockBehavior.h"
+#include "World/Level/Block/PowderSnowBlockBehavior.h"
 #include "World/Level/Block/SlimeBlockBehavior.h"
 #include "World/Level/Block/SoulSpeedBlockBehavior.h"
 
@@ -58,6 +59,8 @@ namespace {
             BlockBehaviorRegistry::registerBehavior("minecraft:bed", bedBehavior());
             static const HayBlockBehavior hay;
             BlockBehaviorRegistry::registerBehavior("minecraft:hay_block", hay);
+            static const PowderSnowBlockBehavior powderSnow;
+            BlockBehaviorRegistry::registerBehavior("minecraft:powder_snow", powderSnow);
             BlockBehaviorRegistry::registerBehavior("minecraft:honey_block", honeyBehavior());
             BlockBehaviorRegistry::registerBehavior("minecraft:ice", iceBehavior());
             BlockBehaviorRegistry::registerBehavior("minecraft:packed_ice", iceBehavior());

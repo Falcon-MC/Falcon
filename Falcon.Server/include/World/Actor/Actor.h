@@ -31,6 +31,11 @@ public:
         return false;
     }
 
+    // sub_14A23ADA0: falling blocks and actors with can_stand_on_powder_snow or leather boots
+    virtual bool canStandOnPowderSnow() const {
+        return false;
+    }
+
     // sub_14B27C5D0: item entities and projectiles (ActorType bit 0x400000) meet a snow layer at its look
     virtual bool collidesAtSnowLayerLook() const {
         return false;

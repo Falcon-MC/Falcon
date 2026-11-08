@@ -2,11 +2,13 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Misc/FallingBlock.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/BlockState.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -116,11 +118,66 @@ namespace {
     }
 }
 
+namespace {
+    // powder snow at y 10: its top is 11
+    float powderTop(const Actor &actor) {
+        const AxisAlignedBB shape = BlockShape::getShapeAt(BlockState("minecraft:powder_snow"), 0, 10, 0, &actor);
+        return shape.isEmpty() ? -1.0f : shape.mMaxY;
+    }
+
+    void place(Actor &actor, float y, float fall) {
+        actor.setPosition(Vector3f(0.5f, y, 0.5f));
+        actor.setHighestPosition(y + fall);
+        actor.updateFallDistance();
+    }
+
+    void checkPowderSnow() {
+        ServerPlayer player(NetworkIdentifier{}, 100);
+        place(player, 11.0f, 0.0f);
+        require(powderTop(player) < 0.0f, "a player without leather boots stood on powder snow");
+
+        ItemStack boots;
+        boots.mDefinition = std::make_shared<ItemDefinition>("minecraft:leather_boots", 1, false, Tag::ofCompound());
+        boots.mCount = 1;
+        player.getInventory().setArmor(PlayerInventory::ARMOR_FEET, boots);
+        require(std::abs(powderTop(player) - 11.0f) < 0.0001f, "leather boots did not hold the player on powder snow");
+
+        player.getFlags().set(ActorFlag::Sneaking, true);
+        require(powderTop(player) < 0.0f, "sneaking did not let the player sink into powder snow");
+        player.getFlags().set(ActorFlag::Sneaking, false);
+
+        place(player, 10.5f, 0.0f);
+        require(powderTop(player) < 0.0f, "a player already inside powder snow was pushed out");
+
+        player.getInventory().setArmor(PlayerInventory::ARMOR_FEET, ItemStack::air());
+        place(player, 11.0f, 3.0f);
+        require(std::abs(powderTop(player) - 10.9f) < 0.0001f, "a long fall did not land on the 0.9 shape");
+        place(player, 11.0f, 2.5f);
+        require(powderTop(player) < 0.0f, "a 2.5 block fall already landed on powder snow");
+
+        FallingBlock falling(102, BlockState("minecraft:sand"));
+        place(falling, 11.0f, 0.0f);
+        require(std::abs(powderTop(falling) - 11.0f) < 0.0001f, "a falling block went through powder snow");
+
+        const std::unique_ptr<ServerActor> rabbit = create("minecraft:rabbit");
+        place(*rabbit, 11.0f, 0.0f);
+        require(rabbit->canStandOnPowderSnow() && std::abs(powderTop(*rabbit) - 11.0f) < 0.0001f,
+                "a rabbit sank into powder snow");
+        const std::unique_ptr<ServerActor> zombie = create("minecraft:zombie");
+        place(*zombie, 11.0f, 0.0f);
+        require(powderTop(*zombie) < 0.0f, "a zombie stood on powder snow");
+
+        const Block *block = VanillaBlocks::fromIdentifier("minecraft:powder_snow");
+        require(block != nullptr && block->getFallDistanceMultiplier() == 0.0f, "landing on powder snow still hurts");
+    }
+}
+
 int main() {
     try {
         EntityDefinitions::initialize();
         checkShapes();
         checkItemLanding();
+        checkPowderSnow();
     } catch (const std::exception &exception) {
         std::cout << "Snow layer collision check failed: " << exception.what() << '\n';
         return 1;

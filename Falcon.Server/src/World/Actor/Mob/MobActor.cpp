@@ -1,4 +1,5 @@
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include "World/Actor/AI/Goal/BehaviorGoals.h"
 #include "World/Actor/AI/Goal/BehaviorItems.h"
@@ -276,6 +277,13 @@ namespace {
         static std::mt19937 generator(std::random_device{}());
         return generator;
     }
+}
+
+bool MobActor::canStandOnPowderSnow() const {
+    if (getComponent("minecraft:can_stand_on_powder_snow") != nullptr)
+        return true;
+    const ItemStack &boots = getEquipment().getSlot(MobEquipment::FEET);
+    return !boots.isAir() && boots.mDefinition->getIdentifier() == MovementPhysics::LEATHER_BOOTS;
 }
 
 MobActor::MobActor(uint64_t runtimeId, const std::string &identifier) : ServerActor(runtimeId, identifier) {
