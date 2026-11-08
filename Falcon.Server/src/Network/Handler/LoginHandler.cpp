@@ -24,6 +24,7 @@
 #include "Network/ConnectionRequest.h"
 #include "Network/Crypto/EncryptionHandshake.h"
 #include "Network/Crypto/KeyPair.h"
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/LoginChainVerifier.h"
@@ -65,13 +66,13 @@
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
 #include <unordered_map>
 #include <vector>
 
 namespace {
     const int64_t RESOURCE_PACK_CHUNK_SIZE = 1024 * 1024;
     const float PLAYER_BASE_OFFSET = 1.62f;
-    const size_t SPAWN_CHUNK_THRESHOLD = 56;
     const char *const ENABLED_EXPERIMENTS[] = {"data_driven_vanilla_blocks_and_items"};
 
     std::vector<ExperimentData> enabledExperiments() {
@@ -106,6 +107,27 @@ namespace {
         result[2] = (char) (value >> 8);
         result[3] = (char) value;
         return result;
+    }
+
+    std::string encodePacket(const Packet &packet, const PacketCodecContext &context) {
+        if (!context.getCodec().supports(packet.getId()))
+            return std::string();
+
+        BinaryStream stream;
+        packet.writeWithHeader(stream, context);
+        return stream.getBuffer();
+    }
+
+    void sendSharedLoginPacket(ServerNetworkHandler &owner, const ServerPlayer &player,
+                               ServerNetworkHandler::SharedLoginPacket kind,
+                               const std::function<std::string(const PacketCodecContext &)> &encode) {
+        const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
+        std::shared_ptr<const SharedPacket> &cached =
+                owner.getSharedLoginPacket(kind, context.getCodec().getProtocolVersion());
+        if (cached == nullptr)
+            cached = std::make_shared<const SharedPacket>(encode(context));
+
+        owner.getNetworkHandler().sendShared(player.getNetworkIdentifier(), cached);
     }
 
     void sendPropertySchema(ServerNetworkHandler &owner, const ServerPlayer &player, const std::string &identifier,
@@ -359,6 +381,7 @@ void LoginHandler::handleClientToServerHandshake(ServerNetworkHandler &owner, co
 
 void LoginHandler::completeLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player) {
     player.setLoginState(ServerPlayer::LoginState::LoggedIn);
+    player.setLoggedInTick(owner.getCurrentTick());
 
     LOG_INFO(LogAreaID::Server, "Player %s logged in, uuid %s, xuid %s", player.getName().c_str(),
              player.getUuid().c_str(), player.getXuid().c_str());
@@ -527,14 +550,20 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
 
     startGame.mGamerules = world.getGameRules().toNetwork();
 
-    JigsawStructureDataPacket jigsawStructureData;
-    jigsawStructureData.mJigsawStructureData.put("processors", Tag::ofList(Tag::Type::Compound));
-    jigsawStructureData.mJigsawStructureData.put("template_pools", Tag::ofList(Tag::Type::Compound));
-    jigsawStructureData.mJigsawStructureData.put("jigsaws", Tag::ofList(Tag::Type::Compound));
-    jigsawStructureData.mJigsawStructureData.put("structure_sets", Tag::ofList(Tag::Type::Compound));
-    owner.getNetworkHandler().send(id, jigsawStructureData, owner.getCodecContext());
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::JigsawStructures,
+                          [](const PacketCodecContext &context) {
+        JigsawStructureDataPacket jigsawStructureData;
+        jigsawStructureData.mJigsawStructureData.put("processors", Tag::ofList(Tag::Type::Compound));
+        jigsawStructureData.mJigsawStructureData.put("template_pools", Tag::ofList(Tag::Type::Compound));
+        jigsawStructureData.mJigsawStructureData.put("jigsaws", Tag::ofList(Tag::Type::Compound));
+        jigsawStructureData.mJigsawStructureData.put("structure_sets", Tag::ofList(Tag::Type::Compound));
+        return encodePacket(jigsawStructureData, context);
+    });
 
-    owner.getNetworkHandler().send(id, VoxelShapeRegistry::getPacket(), owner.getCodecContext());
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::VoxelShapes,
+                          [](const PacketCodecContext &context) {
+        return encodePacket(VoxelShapeRegistry::getPacket(), context);
+    });
 
     owner.getNetworkHandler().send(id, startGame, owner.getCodecContext());
 
@@ -548,7 +577,10 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     sendItemComponents(owner, player);
     sendActorIdentifiers(owner, player);
     sendCameraPresets(owner, player);
-    owner.getNetworkHandler().send(id, ArmorTrims::getPacket(), owner.getCodecContext());
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::ArmorTrims,
+                          [](const PacketCodecContext &context) {
+        return encodePacket(ArmorTrims::getPacket(), context);
+    });
     sendBiomeDefinitions(owner, player);
     sendAttributes(owner, player);
     sendAbilities(owner, player);
@@ -643,25 +675,27 @@ Uuid LoginHandler::playerListUuid(const ServerPlayer &player) {
 }
 
 void LoginHandler::sendBiomeDefinitions(ServerNetworkHandler &owner, ServerPlayer &player) {
-    BiomeDefinitionListPacket biomes;
-    biomes.mBiomes = owner.getBiomes().getBiomes();
-    biomes.mStrings = owner.getBiomes().getStrings();
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), biomes, owner.getCodecContext());
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::BiomeDefinitions,
+                          [&owner](const PacketCodecContext &context) {
+        BiomeDefinitionListPacket biomes;
+        biomes.mBiomes = owner.getBiomes().getBiomes();
+        biomes.mStrings = owner.getBiomes().getStrings();
+        return encodePacket(biomes, context);
+    });
 }
 
 void LoginHandler::sendCameraPresets(ServerNetworkHandler &owner, ServerPlayer &player) {
-    CameraPresetsPacket presets;
-    presets.mPresets = standardCameraPresets();
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), presets, owner.getCodecContext());
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::CameraPresets,
+                          [](const PacketCodecContext &context) {
+        CameraPresetsPacket presets;
+        presets.mPresets = standardCameraPresets();
+        return encodePacket(presets, context);
+    });
 }
 
 void LoginHandler::sendItemComponents(ServerNetworkHandler &owner, ServerPlayer &player) {
-    const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
-    std::string &cached = owner.getItemComponentsBytes(context.getCodec().getProtocolVersion());
-
-    if (cached.empty()) {
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::ItemRegistry,
+                          [&owner](const PacketCodecContext &context) {
         ItemRegistryPacket components;
         const int protocol = context.getCodec().getProtocolVersion();
         const bool translated = ItemNetworkIdTable::getNetworkIds(protocol) != nullptr;
@@ -696,44 +730,44 @@ void LoginHandler::sendItemComponents(ServerNetworkHandler &owner, ServerPlayer 
 
         BinaryStream stream;
         components.writeWithHeader(stream, context);
-        cached = stream.getBuffer();
-    }
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), cached);
+        return stream.getBuffer();
+    });
 }
 
 void LoginHandler::sendActorIdentifiers(ServerNetworkHandler &owner, ServerPlayer &player) {
-    AvailableActorIdentifiersPacket identifiers;
-    identifiers.mIdentifiers = Tag::ofCompound();
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::ActorIdentifiers,
+                          [](const PacketCodecContext &context) {
+        AvailableActorIdentifiersPacket identifiers;
+        identifiers.mIdentifiers = Tag::ofCompound();
 
-    Tag idlist = Tag::ofList(Tag::Type::Compound);
-    int32_t rid = 1;
+        Tag idlist = Tag::ofList(Tag::Type::Compound);
+        int32_t rid = 1;
 
-    const char *const *vanillaIds = VanillaActorTable::getIdentifiers();
-    for (size_t index = 0; index < VanillaActorTable::getCount(); ++index) {
-        Tag entry = Tag::ofCompound();
-        entry.putString("bid", "");
-        entry.putByte("hasspawnegg", 0);
-        entry.putString("id", vanillaIds[index]);
-        entry.putInt("rid", rid++);
-        entry.putByte("summonable", 1);
-        entry.putByte("experimental", 0);
-        idlist.addToList(entry);
-    }
+        const char *const *vanillaIds = VanillaActorTable::getIdentifiers();
+        for (size_t index = 0; index < VanillaActorTable::getCount(); ++index) {
+            Tag entry = Tag::ofCompound();
+            entry.putString("bid", "");
+            entry.putByte("hasspawnegg", 0);
+            entry.putString("id", vanillaIds[index]);
+            entry.putInt("rid", rid++);
+            entry.putByte("summonable", 1);
+            entry.putByte("experimental", 0);
+            idlist.addToList(entry);
+        }
 
-    for (const CustomActorDefinition &actor: CustomContentRegistry::getInstance().getActors()) {
-        Tag entry = Tag::ofCompound();
-        entry.putString("bid", "");
-        entry.putByte("hasspawnegg", actor.mIsSpawnable ? 1 : 0);
-        entry.putString("id", actor.mIdentifier);
-        entry.putInt("rid", rid++);
-        entry.putByte("summonable", actor.mIsSummonable ? 1 : 0);
-        entry.putByte("experimental", actor.mIsExperimental ? 1 : 0);
-        idlist.addToList(entry);
-    }
-    identifiers.mIdentifiers.put("idlist", idlist);
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), identifiers, owner.getCodecContext());
+        for (const CustomActorDefinition &actor: CustomContentRegistry::getInstance().getActors()) {
+            Tag entry = Tag::ofCompound();
+            entry.putString("bid", "");
+            entry.putByte("hasspawnegg", actor.mIsSpawnable ? 1 : 0);
+            entry.putString("id", actor.mIdentifier);
+            entry.putInt("rid", rid++);
+            entry.putByte("summonable", actor.mIsSummonable ? 1 : 0);
+            entry.putByte("experimental", actor.mIsExperimental ? 1 : 0);
+            idlist.addToList(entry);
+        }
+        identifiers.mIdentifiers.put("idlist", idlist);
+        return encodePacket(identifiers, context);
+    });
 
     const CustomContentRegistry &custom = CustomContentRegistry::getInstance();
     for (const auto &entry: EntityDefinitions::getAllProperties()) {
@@ -933,10 +967,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
 }
 
 void LoginHandler::sendCraftingData(ServerNetworkHandler &owner, ServerPlayer &player) {
-    const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
-    std::string &cached = owner.getCraftingDataBytes(context.getCodec().getProtocolVersion());
-
-    if (cached.empty()) {
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::CraftingData,
+                          [&owner](const PacketCodecContext &context) {
         buildCraftingData(owner);
 
         const int protocol = context.getCodec().getProtocolVersion();
@@ -956,10 +988,8 @@ void LoginHandler::sendCraftingData(ServerNetworkHandler &owner, ServerPlayer &p
 
         BinaryStream stream;
         crafting.writeWithHeader(stream, context);
-        cached = stream.getBuffer();
-    }
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), cached);
+        return stream.getBuffer();
+    });
 }
 
 namespace {
@@ -1117,10 +1147,8 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
 }
 
 void LoginHandler::sendCreativeContent(ServerNetworkHandler &owner, ServerPlayer &player) {
-    const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
-    std::string &cached = owner.getCreativeContentBytes(context.getCodec().getProtocolVersion());
-
-    if (cached.empty()) {
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::CreativeContent,
+                          [&owner](const PacketCodecContext &context) {
         buildCreativeContent(owner);
 
         const int protocol = context.getCodec().getProtocolVersion();
@@ -1155,10 +1183,8 @@ void LoginHandler::sendCreativeContent(ServerNetworkHandler &owner, ServerPlayer
 
         BinaryStream stream;
         creative.writeWithHeader(stream, context);
-        cached = stream.getBuffer();
-    }
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), cached);
+        return stream.getBuffer();
+    });
 }
 
 void LoginHandler::sendAvailableCommands(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -1266,7 +1292,7 @@ void LoginHandler::checkTerrainReady(ServerNetworkHandler &owner, ServerPlayer &
     if (player.hasSpawnChunksReady())
         return;
 
-    if (player.getSentChunkCount() < SPAWN_CHUNK_THRESHOLD)
+    if (player.getSentChunkCount() < ChunkStreamHandler::SPAWN_CHUNK_COUNT)
         return;
 
     player.setSpawnChunksReady(true);

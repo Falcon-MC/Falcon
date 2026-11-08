@@ -5,6 +5,7 @@
 #include "Network/CompressedNetworkPeer.h"
 #include "Network/Connector.h"
 #include "Network/EncryptedNetworkPeer.h"
+#include "Network/SharedPacket.h"
 #include "Server/Profiler.h"
 
 #include <atomic>
@@ -114,6 +115,8 @@ public:
         DisconnectFailReason mReason = DisconnectFailReason::Unknown;
         uint16_t mMtuSize = 0;
         std::unique_ptr<Connection> mConnection;
+        // sent in place of mData: one encoding and one compression for every recipient
+        std::shared_ptr<const SharedPacket> mShared;
         // released once the shard has taken the data
         std::shared_ptr<std::atomic<size_t>> mPendingBytes;
     };
@@ -139,6 +142,9 @@ public:
 
     void runEvents();
 
+    // between ticks: handles the connections admit lets through now; the others wait for runEvents in order
+    void runEventsFor(const std::function<bool(const NetworkIdentifier &)> &admit);
+
     size_t getPendingOutboundCount() const;
 
     // not yet batched by the IO shard: lets bulk senders hold back; main thread only, like every send
@@ -154,6 +160,10 @@ public:
     void send(const NetworkIdentifier &id, const std::string &data,
               NetworkPeer::Reliability reliability = NetworkPeer::Reliability::ReliableOrdered,
               Compressibility compressibility = Compressibility::Compressible);
+
+    // the packet bytes as written with a header, already encoded for this session's codec
+    void sendShared(const NetworkIdentifier &id, const std::shared_ptr<const SharedPacket> &packet,
+                    NetworkPeer::Reliability reliability = NetworkPeer::Reliability::ReliableOrdered);
 
     void sendToAll(const std::string &data,
                    NetworkPeer::Reliability reliability = NetworkPeer::Reliability::ReliableOrdered,
@@ -213,6 +223,8 @@ private:
 
     void _trackPending(OutboundCommand &command);
 
+    static size_t _pendingSize(const OutboundCommand &command);
+
     void _ioLoop(size_t shardIndex);
 
     void _pumpIo();
@@ -226,6 +238,8 @@ private:
     // once per connection: the game drops it
     void _reportFailure(Connection &connection);
 
+    void _dispatch(InboundEvent &event);
+
     Profiler *mProfiler = nullptr;
     std::vector<std::unique_ptr<Connector>> mConnectors;
     std::vector<std::unique_ptr<Shard>> mShards;
@@ -238,6 +252,9 @@ private:
     ContextResolver mContextResolver;
 
     TaskQueue<InboundEvent> mInbound;
+    // held back by runEventsFor; a connection with one held keeps all its later events behind it
+    std::vector<InboundEvent> mDeferred;
+    std::unordered_set<NetworkIdentifier, NetworkIdentifier::Hasher> mDeferredIds;
     // main thread view: from the Opened event to the Closed one
     std::unordered_map<NetworkIdentifier, std::shared_ptr<std::atomic<size_t>>, NetworkIdentifier::Hasher> mPendingBytes;
 

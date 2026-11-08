@@ -6,7 +6,13 @@ static_assert(LightStorage::SECTION_COUNT == LevelChunk::SUB_CHUNK_COUNT && Ligh
 #include <zlib.h>
 
 #include <algorithm>
+#include <atomic>
 #include <stdexcept>
+
+uint64_t LevelChunkInstance::next() {
+    static std::atomic<uint64_t> counter(0);
+    return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+}
 
 LevelChunk::LevelChunk(int32_t x, int32_t z) : mX(x), mZ(z), mBiomeId(1), mDirty(false) {
     mSubChunks.reserve(SUB_CHUNK_COUNT);
@@ -153,6 +159,7 @@ void LevelChunk::compactLight() {
 
 void LevelChunk::compactBiomes() {
     _ensureUnpacked();
+    ++mNetworkRevision;
     for (SubChunk &subChunk: mSubChunks)
         subChunk.compactBiomes();
 }
@@ -179,6 +186,7 @@ const BlockState &LevelChunk::getBlock(int x, int32_t y, int z, int layer) const
 
 void LevelChunk::setBlock(int x, int32_t y, int z, const BlockState &state) {
     _ensureUnpacked();
+    ++mNetworkRevision;
     if (y < MIN_Y || y > MAX_Y)
         return;
 
@@ -195,6 +203,7 @@ void LevelChunk::setBlock(int x, int32_t y, int z, const BlockState &state) {
 
 void LevelChunk::setBlock(int x, int32_t y, int z, int layer, const BlockState &state) {
     _ensureUnpacked();
+    ++mNetworkRevision;
     if (y < MIN_Y || y > MAX_Y)
         return;
 
@@ -222,6 +231,7 @@ void LevelChunk::forEachBlock(const std::function<void(int32_t, int32_t, int32_t
 }
 
 void LevelChunk::setDimension(DimensionType dimension) {
+    ++mNetworkRevision;
     mDimension = dimension;
     mFirstNetworkSubChunk = Dimension::getLowestSubChunkIndex(dimension);
     mNetworkSubChunkLimit = Dimension::getSubChunkCount(dimension);
@@ -242,6 +252,7 @@ int LevelChunk::getNetworkSubChunkCount() const {
 
 void LevelChunk::setBiome(uint32_t biomeId) {
     _ensureUnpacked();
+    ++mNetworkRevision;
     mBiomeId = biomeId;
     mNetworkAnchorValid = false;
 
@@ -258,6 +269,7 @@ void LevelChunk::setBiome(uint32_t biomeId) {
 
 void LevelChunk::setBiomeAt(int x, int32_t y, int z, uint32_t biomeId) {
     _ensureUnpacked();
+    ++mNetworkRevision;
     if (y < MIN_Y || y > MAX_Y)
         return;
 
@@ -267,6 +279,7 @@ void LevelChunk::setBiomeAt(int x, int32_t y, int z, uint32_t biomeId) {
 
 void LevelChunk::fillSubChunkBiome(int index, uint32_t biomeId) {
     _ensureUnpacked();
+    ++mNetworkRevision;
     mSubChunks[index].fillBiome(biomeId);
     mNetworkAnchorValid = false;
 }
@@ -300,6 +313,7 @@ std::string LevelChunk::encodeBiomes(int sectionCount) const {
 
 bool LevelChunk::readBiomesPersistent(ReadOnlyBinaryStream &stream, int firstSection, int sectionCount) {
     _ensureUnpacked();
+    ++mNetworkRevision;
     const int end = std::min(firstSection + sectionCount, SUB_CHUNK_COUNT);
     for (int i = firstSection; i < end; i++) {
         if (!mSubChunks[i].readBiomes(stream, i > firstSection ? &mSubChunks[i - 1] : nullptr))

@@ -671,6 +671,9 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
             ++mPendingBlockChangeCount;
             continue;
         }
+        // decorated later, from a copy already holding it: its own blocks won there
+        if (decorationHolds(chunk->getBaseSequence(), chunk->getDecorationSequence(), change.mSequence))
+            continue;
 
         const int32_t localX = change.mX & 15;
         const int32_t localZ = change.mZ & 15;

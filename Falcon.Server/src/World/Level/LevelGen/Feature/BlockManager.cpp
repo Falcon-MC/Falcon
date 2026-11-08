@@ -114,9 +114,9 @@ void BlockManager::applySubChunkUpdate() {
             change.mLayer = layer;
             change.mState = entry.second;
             mOverflowSink->push_back(change);
-            continue;
         }
 
+        // a staged neighbour takes it too: the next decorations read it (sub_1432CE930 writes at once)
         LevelChunk *chunk = mLevel->peekChunkPtr(x >> 4, z >> 4);
         if (chunk == nullptr)
             continue;

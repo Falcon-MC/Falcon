@@ -2,11 +2,33 @@
 
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/ChunkGenerator.h"
+#include "World/Level/LightSystem.h"
 
+#include <cstdlib>
 #include <iterator>
 #include <utility>
 
 TerrainCache::TerrainCache(const ChunkGenerator &generator) : mGenerator(generator) {
+}
+
+TerrainCache::DecorationArea::DecorationArea(TerrainCache &cache, int32_t chunkX, int32_t chunkZ, uint64_t sequence)
+        : mCache(cache), mChunkX(chunkX), mChunkZ(chunkZ), mSequence(sequence) {
+}
+
+TerrainCache::DecorationArea::~DecorationArea() {
+    {
+        std::lock_guard<std::mutex> lock(mCache.mMutex);
+        for (int32_t offsetX = -1; offsetX <= 1; offsetX++) {
+            for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++)
+                mCache.mLocked.erase(_packChunk(mChunkX + offsetX, mChunkZ + offsetZ));
+        }
+    }
+    mCache.mReleased.notify_all();
+}
+
+int32_t TerrainCache::decorationClass(int32_t chunkX, int32_t chunkZ) {
+    static const int32_t CLASSES[2][2] = {{0, 1}, {3, 2}};
+    return CLASSES[chunkZ & 1][chunkX & 1];
 }
 
 TerrainCache::GenerationClaim::~GenerationClaim() {
@@ -22,14 +44,18 @@ int64_t TerrainCache::_packChunk(int32_t chunkX, int32_t chunkZ) {
 }
 
 LevelChunk TerrainCache::terrain(int32_t chunkX, int32_t chunkZ) {
-    return _get(chunkX, chunkZ, false);
+    return _get(chunkX, chunkZ, false, nullptr);
 }
 
 LevelChunk TerrainCache::neighbour(int32_t chunkX, int32_t chunkZ) {
-    return _get(chunkX, chunkZ, true);
+    return _get(chunkX, chunkZ, true, nullptr);
 }
 
-LevelChunk TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated) {
+LevelChunk TerrainCache::base(int32_t chunkX, int32_t chunkZ, uint64_t &created) {
+    return _get(chunkX, chunkZ, true, &created);
+}
+
+LevelChunk TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated, uint64_t *created) {
     const int64_t key = _packChunk(chunkX, chunkZ);
 
     std::shared_ptr<const LevelChunk> cached;
@@ -42,6 +68,8 @@ LevelChunk TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated) {
                 cached = decorated && entry.mDecorated != nullptr ? entry.mDecorated : entry.mTerrain;
                 if (cached != nullptr) {
                     mOrder.splice(mOrder.end(), mOrder, entry.mOrder);
+                    if (created != nullptr)
+                        *created = entry.mCreated;
                     break;
                 }
             }
@@ -66,7 +94,10 @@ LevelChunk TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated) {
     std::shared_ptr<const LevelChunk> shared = std::make_shared<const LevelChunk>(chunk);
     {
         std::lock_guard<std::mutex> lock(mMutex);
-        _entry(key).mTerrain = std::move(shared);
+        Entry &entry = _entry(key);
+        entry.mTerrain = std::move(shared);
+        if (created != nullptr)
+            *created = entry.mCreated;
     }
     return chunk;
 }
@@ -89,6 +120,7 @@ TerrainCache::Entry &TerrainCache::_entry(int64_t key) {
     mOrder.push_back(key);
     Entry &entry = mChunks[key];
     entry.mOrder = std::prev(mOrder.end());
+    entry.mCreated = mSequence;
 
     while (mOrder.size() > MAX_CACHED_CHUNKS) {
         mChunks.erase(mOrder.front());
@@ -97,34 +129,125 @@ TerrainCache::Entry &TerrainCache::_entry(int64_t key) {
     return entry;
 }
 
+bool TerrainCache::_isAreaFree(int32_t chunkX, int32_t chunkZ) const {
+    for (int32_t offsetX = -1; offsetX <= 1; offsetX++) {
+        for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++) {
+            if (mLocked.count(_packChunk(chunkX + offsetX, chunkZ + offsetZ)) != 0)
+                return false;
+        }
+    }
+    return true;
+}
+
+std::unique_ptr<TerrainCache::DecorationArea> TerrainCache::lockArea(int32_t chunkX, int32_t chunkZ) {
+    std::unique_lock<std::mutex> lock(mMutex);
+    mReleased.wait(lock, [&]() { return _isAreaFree(chunkX, chunkZ); });
+
+    for (int32_t offsetX = -1; offsetX <= 1; offsetX++) {
+        for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++)
+            mLocked.insert(_packChunk(chunkX + offsetX, chunkZ + offsetZ));
+    }
+    // taken under the lock: a neighbour decorated earlier has a smaller sequence and its blocks are in the cache
+    return std::unique_ptr<DecorationArea>(new DecorationArea(*this, chunkX, chunkZ, ++mSequence));
+}
+
+void TerrainCache::expectDecoration(int32_t chunkX, int32_t chunkZ) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mExpected[_packChunk(chunkX, chunkZ)]++;
+}
+
+void TerrainCache::finishDecoration(int32_t chunkX, int32_t chunkZ) {
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        const auto found = mExpected.find(_packChunk(chunkX, chunkZ));
+        if (found != mExpected.end() && --found->second <= 0)
+            mExpected.erase(found);
+    }
+    mReleased.notify_all();
+}
+
+bool TerrainCache::awaitsEarlierNeighbour(int32_t chunkX, int32_t chunkZ) {
+    const int32_t own = decorationClass(chunkX, chunkZ);
+    std::lock_guard<std::mutex> lock(mMutex);
+    for (int32_t offsetX = -1; offsetX <= 1; offsetX++) {
+        for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++) {
+            const int32_t neighbourX = chunkX + offsetX;
+            const int32_t neighbourZ = chunkZ + offsetZ;
+            if (decorationClass(neighbourX, neighbourZ) < own
+                && mExpected.count(_packChunk(neighbourX, neighbourZ)) != 0)
+                return true;
+        }
+    }
+    return false;
+}
+
+void TerrainCache::waitForDecoration(std::chrono::milliseconds timeout) {
+    std::unique_lock<std::mutex> lock(mMutex);
+    mReleased.wait_for(lock, timeout);
+}
+
 GeneratorChunkSource::GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache)
         : mScratch("generator", 1, seed, dimension), mCache(cache) {
 }
 
-void GeneratorChunkSource::_stageNeighbour(int32_t chunkX, int32_t chunkZ) {
-    mScratch.insertChunk(mCache.neighbour(chunkX, chunkZ));
+uint64_t GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow,
+                                        std::vector<Tag> &blockActors, std::vector<Tag> &entities) {
+    const std::unique_ptr<TerrainCache::DecorationArea> area = mCache.lockArea(chunk.getX(), chunk.getZ());
+    return _decorate(chunk, area->getSequence(), overflow, blockActors, entities);
 }
 
-// the 3x3 neighbourhood lets features cross chunk borders; blocks landing in a neighbour go to `overflow`;
-// neighbours return to the cache with this decoration's blocks: adjacent chunks are usually populated next
-void GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow,
-                                    std::vector<Tag> &blockActors, std::vector<Tag> &entities) {
+uint64_t GeneratorChunkSource::populateGenerated(LevelChunk &chunk, const std::vector<GeneratedBlockChange> &older,
+                                                 std::vector<GeneratedBlockChange> &overflow,
+                                                 std::vector<Tag> &blockActors, std::vector<Tag> &entities,
+                                                 uint64_t &base) {
+    const int32_t chunkX = chunk.getX();
+    const int32_t chunkZ = chunk.getZ();
+    const std::unique_ptr<TerrainCache::DecorationArea> area = mCache.lockArea(chunkX, chunkZ);
+
+    uint64_t created = 0;
+    chunk = mCache.base(chunkX, chunkZ, created);
+    // an entry appears under a lock holding its chunk: the decoration creating it writes into it too
+    base = created == 0 ? 0 : created - 1;
+    for (const GeneratedBlockChange &change: older) {
+        if (change.mSequence > base || change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y)
+            continue;
+
+        chunk.setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
+    }
+    if (!chunk.hasHeightmap())
+        LightSystem::computeHeightmap(chunk);
+
+    return _decorate(chunk, area->getSequence(), overflow, blockActors, entities);
+}
+
+// the 3x3 neighbourhood lets features cross chunk borders: the neighbours come from the cache as earlier
+// decorations left them, and go back with this one's blocks; the last decorated wins, as in the game
+uint64_t GeneratorChunkSource::_decorate(LevelChunk &chunk, uint64_t sequence,
+                                         std::vector<GeneratedBlockChange> &overflow, std::vector<Tag> &blockActors,
+                                         std::vector<Tag> &entities) {
     const int32_t chunkX = chunk.getX();
     const int32_t chunkZ = chunk.getZ();
 
     for (int32_t offsetX = -1; offsetX <= 1; offsetX++) {
         for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++) {
-            if (offsetX == 0 && offsetZ == 0)
-                continue;
-
-            _stageNeighbour(chunkX + offsetX, chunkZ + offsetZ);
+            if (offsetX != 0 || offsetZ != 0)
+                mScratch.insertChunk(mCache.neighbour(chunkX + offsetX, chunkZ + offsetZ));
         }
     }
 
+    const size_t first = overflow.size();
     LevelChunk &center = mScratch.insertChunk(std::move(chunk));
     mScratch.decorate(center, &overflow);
 
+    // beyond the 3x3: in no cached copy, left unordered
+    for (size_t index = first; index < overflow.size(); index++) {
+        GeneratedBlockChange &change = overflow[index];
+        const bool inArea = std::abs((change.mX >> 4) - chunkX) <= 1 && std::abs((change.mZ >> 4) - chunkZ) <= 1;
+        change.mSequence = inArea ? sequence : 0;
+    }
+
     chunk = mScratch.extractChunk(chunkX, chunkZ);
+    mCache.put(chunk);
 
     BlockActorStore &generatedActors = mScratch.getBlockActors();
     blockActors = generatedActors.saveChunk(chunkX, chunkZ);
@@ -139,4 +262,5 @@ void GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBloc
             mCache.put(mScratch.extractChunk(chunkX + offsetX, chunkZ + offsetZ));
         }
     }
+    return sequence;
 }

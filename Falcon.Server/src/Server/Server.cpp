@@ -140,7 +140,7 @@ void startServer(const ServerSettings &settings) {
         if (now - nextTick > catchupResetInterval)
             nextTick = now;
         else
-            std::this_thread::sleep_until(nextTick);
+            host.waitForNextTick(nextTick);
     }
 
     gRunning.store(false);

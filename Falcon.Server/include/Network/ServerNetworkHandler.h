@@ -6,6 +6,7 @@
 #include "World/Level/TickingAreaManager.h"
 #include "World/Level/World.h"
 #include "World/Level/WorldManager.h"
+#include "Network/ChunkPacketCache.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/RakPeerHelper.h"
 #include "Network/PacketRateLimiter.h"
@@ -42,6 +43,7 @@
 #include "Protocol/Packets/LoginPacket.h"
 
 #include <array>
+#include <map>
 #include <cmath>
 #include <functional>
 #include <memory>
@@ -97,6 +99,9 @@ public:
 
     void tick(bool paused = false);
 
+    // between ticks: packets of players still logging in, before their StartGame
+    void pumpLoginEvents();
+
     void setMotd(const std::string &serverName, const std::string &subName);
 
     void setProtocolVersion(int protocolVersion, const std::string &gameVersion);
@@ -108,6 +113,11 @@ public:
     int getActivePlayerCount() const { return (int) mNetworkHandler->getConnectionCount(); }
 
     int64_t getCurrentTick() const { return mCurrentTick; }
+
+    // a player is still waiting for its spawn chunks: the others' streaming makes way
+    bool isJoinBurst() const {
+        return mJoinBurst;
+    }
 
     uint64_t getChunkStreamTick() const {
         return mChunkStreamTick;
@@ -127,11 +137,26 @@ public:
 
     PluginManager &getPluginManager() { return *mPluginManager; }
 
-    std::string &getCraftingDataBytes(int protocol) { return mCraftingDataBytes[protocol]; }
+    // the same bytes for every player of a protocol: encoded and compressed once
+    enum class SharedLoginPacket : int {
+        ItemRegistry,
+        CraftingData,
+        CreativeContent,
+        BiomeDefinitions,
+        ActorIdentifiers,
+        CameraPresets,
+        VoxelShapes,
+        ArmorTrims,
+        JigsawStructures
+    };
 
-    std::string &getCreativeContentBytes(int protocol) { return mCreativeContentBytes[protocol]; }
+    std::shared_ptr<const SharedPacket> &getSharedLoginPacket(SharedLoginPacket kind, int protocol) {
+        return mSharedLoginPackets[std::make_pair((int) kind, protocol)];
+    }
 
-    std::string &getItemComponentsBytes(int protocol) { return mItemComponentsBytes[protocol]; }
+    ChunkPacketCache &getChunkPacketCache() {
+        return mChunkPacketCache;
+    }
 
     double getPeakMillisecondsPerTick() const;
 
@@ -812,6 +837,13 @@ private:
 
     void _updateServerAnnouncement();
 
+    void _updateJoinBurst();
+
+    // the first joins find the terrain under the world spawn built instead of waiting on generation
+    void _queueSpawnWarmup();
+
+    void _tickSpawnWarmup();
+
     std::unique_ptr<NetworkHandler> mNetworkHandler;
     NetherNetInstance *mNetherNetInstance = nullptr;
     BlockDefinitionRegistry mBlockDefinitions;
@@ -913,6 +945,9 @@ private:
     int64_t mCurrentTick = 0;
     int64_t mPlayerIdleTimeoutTicks = 0;
     uint64_t mChunkStreamTick = 0;
+    bool mJoinBurst = false;
+    static const int64_t JOIN_BURST_TICKS = 200;
+    static const uint64_t CHUNK_PACKET_EXPIRY_INTERVAL = 20;
     std::chrono::steady_clock::time_point mStartTime = std::chrono::steady_clock::now();
 
     Profiler mProfiler;
@@ -920,9 +955,11 @@ private:
     ScriptEngine mScriptEngine;
     BehaviorPackManager mBehaviorPacks;
 
-    std::unordered_map<int, std::string> mCraftingDataBytes;
-    std::unordered_map<int, std::string> mCreativeContentBytes;
-    std::unordered_map<int, std::string> mItemComponentsBytes;
+    std::map<std::pair<int, int>, std::shared_ptr<const SharedPacket>> mSharedLoginPackets;
+    ChunkPacketCache mChunkPacketCache;
+    std::vector<int64_t> mSpawnWarmup;
+    // the chunks a PlayerSpawn status waits for, plus the neighbours their decoration needs
+    static const int32_t SPAWN_WARMUP_RADIUS = 6;
 
     static const size_t TICK_SAMPLE_COUNT = 100;
     std::deque<std::chrono::steady_clock::time_point> mTickStartSamples;

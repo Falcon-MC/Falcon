@@ -124,6 +124,7 @@ bool ChunkWorker::requestLoad(int32_t chunkX, int32_t chunkZ, std::vector<Genera
     task.mZ = chunkZ;
     task.mChanges = std::move(parked);
     parked.clear();
+    mTerrainCache->expectDecoration(chunkX, chunkZ);
     mQueues[_queueIndexFor(chunkX, chunkZ)]->push(std::move(task));
     return true;
 }
@@ -190,6 +191,7 @@ bool ChunkWorker::requestPopulate(std::unique_ptr<LevelChunk> chunk) {
     task.mX = chunk->getX();
     task.mZ = chunk->getZ();
     task.mChunk = std::move(chunk);
+    mTerrainCache->expectDecoration(task.mX, task.mZ);
     mQueues[_queueIndexFor(task.mX, task.mZ)]->push(std::move(task));
     return true;
 }
@@ -241,22 +243,35 @@ size_t ChunkWorker::getPendingTaskCount() const {
     return total;
 }
 
-void ChunkWorker::_processLoad(ChunkTask &task, size_t sourceIndex) {
+bool ChunkWorker::_defer(ChunkTask &task) {
+    if (!mTerrainCache->awaitsEarlierNeighbour(task.mX, task.mZ))
+        return false;
+
+    const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+    if (!task.mDeferred) {
+        task.mDeferred = true;
+        task.mDeferredSince = now;
+    }
+    return now - task.mDeferredSince < MAX_DECORATION_DEFERRAL;
+}
+
+bool ChunkWorker::_processLoad(ChunkTask &task, size_t sourceIndex) {
     std::unique_ptr<LevelChunk> chunk(new LevelChunk(task.mX, task.mZ));
     chunk->setDimension(mGenerator.getDimensionType());
 
-    bool generated = false;
-    if (mStorage.isOpen() && mStorage.loadChunk(*chunk)) {
+    if (!task.mMissing && mStorage.isOpen() && mStorage.loadChunk(*chunk)) {
         mLoadedCount.fetch_add(1);
-    } else {
-        // often cached as the neighbour of an earlier populate; raw terrain only, never one a decoration
-        // already spilled into
-        *chunk = mTerrainCache->terrain(task.mX, task.mZ);
-        mGeneratedCount.fetch_add(1);
-        generated = true;
+        _finishChunk(std::move(chunk), sourceIndex, false, false, std::move(task.mChanges));
+        return true;
     }
 
-    _finishChunk(std::move(chunk), sourceIndex, false, generated, std::move(task.mChanges));
+    task.mMissing = true;
+    if (_defer(task))
+        return false;
+
+    mGeneratedCount.fetch_add(1);
+    _finishChunk(std::move(chunk), sourceIndex, false, true, std::move(task.mChanges));
+    return true;
 }
 
 void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident,
@@ -267,55 +282,66 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
     result.mReplacesResident = replacesResident;
     result.mGenerated = generated;
 
-    if (!chunk->isPopulated() && sourceIndex < mSources.size()) {
-        if (!chunk->hasHeightmap())
-            LightSystem::computeHeightmap(*chunk);
+    // blocks spilled by neighbour features while absent; in-memory ones are newer than the stored ones: last
+    std::vector<GeneratedBlockChange> spilled;
+    if (mStorage.isOpen())
+        spilled = mStorage.loadPendingBlockChanges(result.mX, result.mZ);
+    const bool stored = !spilled.empty();
+    spilled.insert(spilled.end(), std::make_move_iterator(parked.begin()), std::make_move_iterator(parked.end()));
 
+    const auto applySpilled = [&]() {
+        for (const GeneratedBlockChange &change: spilled) {
+            if (change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y)
+                continue;
+
+            chunk->setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
+        }
+    };
+
+    if (generated && sourceIndex >= mSources.size()) {
+        *chunk = mTerrainCache->terrain(result.mX, result.mZ);
+        applySpilled();
+    } else if (!chunk->isPopulated() && sourceIndex < mSources.size()) {
+        std::vector<GeneratedBlockChange> &overflow = result.mOverflowChanges;
         std::vector<Tag> blockActors;
         std::vector<Tag> entities;
-        mSources[sourceIndex]->populate(*chunk, result.mOverflowChanges, blockActors, entities);
+        // spills predate this decoration: under its features, as the game wrote them into the chunk before
+        if (generated) {
+            uint64_t base = 0;
+            const uint64_t own = mSources[sourceIndex]->populateGenerated(*chunk, spilled, overflow, blockActors,
+                                                                           entities, base);
+            chunk->setDecorationSequence(base, own);
+        } else {
+            applySpilled();
+            if (!chunk->hasHeightmap())
+                LightSystem::computeHeightmap(*chunk);
+            const uint64_t own = mSources[sourceIndex]->populate(*chunk, overflow, blockActors, entities);
+            // decorated from its own copy, not the cache's: holds no other decoration
+            chunk->setDecorationSequence(own - 1, own);
+        }
         chunk->setPopulated(true);
         chunk->markDirty();
         mPopulatedCount.fetch_add(1);
 
         if (!blockActors.empty() && mStorage.isOpen()) {
-            std::vector<Tag> stored = mStorage.loadBlockEntities(result.mX, result.mZ);
-            stored.insert(stored.end(), blockActors.begin(), blockActors.end());
-            mStorage.saveBlockEntities(result.mX, result.mZ, stored);
+            std::vector<Tag> saved = mStorage.loadBlockEntities(result.mX, result.mZ);
+            saved.insert(saved.end(), blockActors.begin(), blockActors.end());
+            mStorage.saveBlockEntities(result.mX, result.mZ, saved);
         }
 
         if (!entities.empty() && mStorage.isOpen()) {
-            std::vector<Tag> stored = mStorage.loadEntities(result.mX, result.mZ);
-            stored.insert(stored.end(), entities.begin(), entities.end());
-            mStorage.saveEntities(result.mX, result.mZ, stored);
+            std::vector<Tag> saved = mStorage.loadEntities(result.mX, result.mZ);
+            saved.insert(saved.end(), entities.begin(), entities.end());
+            mStorage.saveEntities(result.mX, result.mZ, saved);
         }
+    } else {
+        applySpilled();
     }
 
-    // blocks spilled by neighbour features while absent: stored, applied now
-    if (mStorage.isOpen()) {
-        result.mSpilledChanges = mStorage.loadPendingBlockChanges(result.mX, result.mZ);
-
-        if (!result.mSpilledChanges.empty()) {
-            for (const GeneratedBlockChange &change: result.mSpilledChanges) {
-                if (change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y)
-                    continue;
-
-                chunk->setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
-            }
-
-            mStorage.erasePendingBlockChanges(result.mX, result.mZ);
-        }
-    }
-
-    // in-memory spilled blocks are newer than the stored ones: last
-    for (const GeneratedBlockChange &change: parked) {
-        if (change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y)
-            continue;
-
-        chunk->setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
-    }
-    result.mSpilledChanges.insert(result.mSpilledChanges.end(), std::make_move_iterator(parked.begin()),
-                                  std::make_move_iterator(parked.end()));
+    if (stored)
+        mStorage.erasePendingBlockChanges(result.mX, result.mZ);
+    // applied by the worker; exist nowhere else: restored if the result is dropped
+    result.mSpilledChanges = std::move(spilled);
 
     chunk->compactBiomes();
     // no sky light: only read around players, computed by Level on first use; most streamed chunks never
@@ -376,11 +402,20 @@ void ChunkWorker::_processPersistChanges(ChunkTask &task) {
     task.mChangesResult.reset();
 }
 
+void ChunkWorker::_requeue(TaskQueue<ChunkTask> &queue, ChunkTask &task, size_t &deferredInRow) {
+    // every queued task deferred since the last one ran: wait for a decoration to end instead of spinning
+    if (++deferredInRow > queue.size())
+        mTerrainCache->waitForDecoration(DEFERRAL_POLL);
+    queue.push(std::move(task));
+    task = ChunkTask();
+}
+
 void ChunkWorker::_run(size_t queueIndex) {
     lowerCurrentThreadPriority();
 
     TaskQueue<ChunkTask> &queue = *mQueues[queueIndex];
     ChunkTask task;
+    size_t deferredInRow = 0;
 
     while (queue.waitPop(task)) {
         if (task.mKind == ChunkTask::Kind::Barrier) {
@@ -400,8 +435,11 @@ void ChunkWorker::_run(size_t queueIndex) {
             task.mBarrier.reset();
             continue;
         }
+        const bool decorates = task.mKind == ChunkTask::Kind::Load || task.mKind == ChunkTask::Kind::Populate;
         // saves never dropped: player changes would be lost
         if (task.mKind != ChunkTask::Kind::Save && mDiscardGeneration.load()) {
+            if (decorates)
+                mTerrainCache->finishDecoration(task.mX, task.mZ);
             // parked blocks of a dropped load exist nowhere else: back to the main thread for the final save;
             // the result returns the generation credit
             if (task.mKind == ChunkTask::Kind::Load && !task.mChanges.empty()) {
@@ -418,12 +456,24 @@ void ChunkWorker::_run(size_t queueIndex) {
             continue;
         }
 
-        if (task.mKind == ChunkTask::Kind::Load)
-            _processLoad(task, queueIndex);
-        else if (task.mKind == ChunkTask::Kind::Populate)
+        // the game decorates two chunks side by side in TerrainCache::decorationClass order: a later class waits,
+        // behind the other tasks of its queue
+        if (task.mKind == ChunkTask::Kind::Populate && _defer(task)) {
+            _requeue(queue, task, deferredInRow);
+            continue;
+        }
+        if (task.mKind == ChunkTask::Kind::Load && !_processLoad(task, queueIndex)) {
+            _requeue(queue, task, deferredInRow);
+            continue;
+        }
+        deferredInRow = 0;
+
+        if (task.mKind == ChunkTask::Kind::Populate)
             _finishChunk(std::move(task.mChunk), queueIndex, true, false, std::move(task.mChanges));
-        else
+        else if (task.mKind == ChunkTask::Kind::Save)
             _processSave(task);
+        if (decorates)
+            mTerrainCache->finishDecoration(task.mX, task.mZ);
 
         task.mChunk.reset();
         task.mChanges.clear();

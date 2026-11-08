@@ -159,7 +159,11 @@ void NetworkHandler::_trackPending(OutboundCommand &command) {
         return;
 
     command.mPendingBytes = it->second;
-    it->second->fetch_add(command.mData.size(), std::memory_order_relaxed);
+    it->second->fetch_add(_pendingSize(command), std::memory_order_relaxed);
+}
+
+size_t NetworkHandler::_pendingSize(const OutboundCommand &command) {
+    return command.mShared != nullptr ? command.mShared->getPacketSize() : command.mData.size();
 }
 
 void NetworkHandler::addListener(Listener *listener) {
@@ -307,6 +311,28 @@ void NetworkHandler::send(const NetworkIdentifier &id, const std::string &data, 
     _pushOutbound(std::move(command));
 }
 
+void NetworkHandler::sendShared(const NetworkIdentifier &id, const std::shared_ptr<const SharedPacket> &packet,
+                                NetworkPeer::Reliability reliability) {
+    if (packet == nullptr)
+        return;
+
+    // a filter may rewrite the bytes: that copy can't be shared
+    if (mOutboundFilter) {
+        std::string data = packet->getPacket();
+        if (mOutboundFilter(id, data))
+            send(id, data, reliability, Compressibility::Compressible);
+        return;
+    }
+
+    OutboundCommand command;
+    command.mKind = OutboundCommand::Kind::Data;
+    command.mId = id;
+    command.mShared = packet;
+    command.mReliability = reliability;
+    _trackPending(command);
+    _pushOutbound(std::move(command));
+}
+
 void NetworkHandler::sendToAll(const std::string &data, NetworkPeer::Reliability reliability,
                                Compressibility compressibility) {
     for (std::unique_ptr<Shard> &shard: mShards) {
@@ -330,7 +356,12 @@ void NetworkHandler::_applyOutbound(Shard &shard, OutboundCommand &command) {
         }
 
         auto it = shard.mConnections.find(command.mId);
-        if (it != shard.mConnections.end())
+        if (it == shard.mConnections.end())
+            return;
+
+        if (command.mShared != nullptr)
+            it->second->getBatchedPeer()->sendShared(*command.mShared, command.mReliability);
+        else
             it->second->getBatchedPeer()->sendPacket(command.mData, command.mReliability,
                                                      command.mCompressibility);
         return;
@@ -436,10 +467,10 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
         OutboundCommand command = std::move(shard.mBacklog.front());
         shard.mBacklog.pop_front();
         if (command.mCompressibility == Compressibility::Compressible)
-            bytes += command.mBroadcast ? command.mData.size() * shard.mConnections.size() : command.mData.size();
+            bytes += command.mBroadcast ? command.mData.size() * shard.mConnections.size() : _pendingSize(command);
 
         if (command.mPendingBytes != nullptr)
-            command.mPendingBytes->fetch_sub(command.mData.size(), std::memory_order_relaxed);
+            command.mPendingBytes->fetch_sub(_pendingSize(command), std::memory_order_relaxed);
 
         try {
             _applyOutbound(shard, command);
@@ -482,39 +513,63 @@ void NetworkHandler::runEvents() {
     std::vector<InboundEvent> events;
     {
         ProfilerScopedSection drainSection(*mProfiler, ProfilerSection::NetworkDrain, profiling);
-        events = mInbound.drain();
+        events.swap(mDeferred);
+        mDeferredIds.clear();
+        std::vector<InboundEvent> drained = mInbound.drain();
+        events.insert(events.end(), std::make_move_iterator(drained.begin()), std::make_move_iterator(drained.end()));
     }
 
+    for (InboundEvent &event: events)
+        _dispatch(event);
+}
+
+void NetworkHandler::runEventsFor(const std::function<bool(const NetworkIdentifier &)> &admit) {
+    if (!mIoRunning.load())
+        return;
+
+    std::vector<InboundEvent> events = mInbound.drain();
     for (InboundEvent &event: events) {
-        switch (event.mKind) {
-            case InboundEvent::Kind::Opened: {
-                ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
-                mPendingBytes[event.mId] = std::make_shared<std::atomic<size_t>>(0);
-                for (Listener *listener: mListeners)
-                    listener->onNewIncomingConnection(event.mId, event.mMtuSize);
-                break;
-            }
-
-            case InboundEvent::Kind::Closed: {
-                ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
-                for (Listener *listener: mListeners)
-                    listener->onConnectionClosed(event.mId, event.mReason, event.mData);
-                mPendingBytes.erase(event.mId);
-                break;
-            }
-
-            case InboundEvent::Kind::Failed: {
-                ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
-                for (Listener *listener: mListeners)
-                    listener->onConnectionFailed(event.mId);
-                break;
-            }
-
-            default:
-                for (Listener *listener: mListeners)
-                    listener->onDataReceived(event.mId, event.mData);
-                break;
+        if (mDeferredIds.count(event.mId) != 0 || !admit(event.mId)) {
+            mDeferredIds.insert(event.mId);
+            mDeferred.push_back(std::move(event));
+            continue;
         }
+
+        _dispatch(event);
+    }
+}
+
+void NetworkHandler::_dispatch(InboundEvent &event) {
+    const bool profiling = mProfiler != nullptr;
+
+    switch (event.mKind) {
+        case InboundEvent::Kind::Opened: {
+            ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
+            mPendingBytes[event.mId] = std::make_shared<std::atomic<size_t>>(0);
+            for (Listener *listener: mListeners)
+                listener->onNewIncomingConnection(event.mId, event.mMtuSize);
+            break;
+        }
+
+        case InboundEvent::Kind::Closed: {
+            ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
+            for (Listener *listener: mListeners)
+                listener->onConnectionClosed(event.mId, event.mReason, event.mData);
+            mPendingBytes.erase(event.mId);
+            break;
+        }
+
+        case InboundEvent::Kind::Failed: {
+            ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
+            for (Listener *listener: mListeners)
+                listener->onConnectionFailed(event.mId);
+            break;
+        }
+
+        default:
+            for (Listener *listener: mListeners)
+                listener->onDataReceived(event.mId, event.mData);
+            break;
     }
 }
 

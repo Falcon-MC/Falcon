@@ -10,6 +10,22 @@
 #include <unordered_map>
 #include <vector>
 
+// fresh on construction and on every copy: a copy can diverge from its source
+struct LevelChunkInstance {
+    LevelChunkInstance() : mId(next()) {}
+
+    LevelChunkInstance(const LevelChunkInstance &) : mId(next()) {}
+
+    LevelChunkInstance &operator=(const LevelChunkInstance &) {
+        mId = next();
+        return *this;
+    }
+
+    static uint64_t next();
+
+    uint64_t mId;
+};
+
 // main thread once resident; workers only see copies; network encodings cached per sub-chunk
 class LevelChunk {
 public:
@@ -34,6 +50,20 @@ public:
     bool isPopulated() const { return mPopulated; }
 
     void setPopulated(bool populated) { mPopulated = populated; }
+
+    // in memory only, this session's TerrainCache order: see decorationHolds
+    uint64_t getDecorationSequence() const {
+        return mDecorationSequence;
+    }
+
+    uint64_t getBaseSequence() const {
+        return mBaseSequence;
+    }
+
+    void setDecorationSequence(uint64_t base, uint64_t own) {
+        mBaseSequence = base;
+        mDecorationSequence = own;
+    }
 
     const BlockState &getBlock(int x, int32_t y, int z) const;
 
@@ -72,6 +102,15 @@ public:
 
     void invalidateNetworkCaches();
 
+    // instance and revision together name one network encoding: a shared packet stays valid while both match
+    uint64_t getNetworkInstance() const {
+        return mInstance.mId;
+    }
+
+    uint32_t getNetworkRevision() const {
+        return mNetworkRevision;
+    }
+
     std::string encodeBiomes(int sectionCount) const;
 
     std::string encodeBiomesPersistent(int firstSection, int sectionCount) const;
@@ -80,6 +119,7 @@ public:
 
     int getNetworkSubChunkCount() const;
 
+    // writes through it skip the network revision: only for chunks not resident yet, like a storage load
     SubChunk &getSubChunk(int index) {
         _ensureUnpacked();
         return mSubChunks[index];
@@ -159,6 +199,8 @@ private:
     int mNetworkSubChunkLimit = SUB_CHUNK_COUNT;
     bool mDirty;
     bool mPopulated = false;
+    uint64_t mBaseSequence = 0;
+    uint64_t mDecorationSequence = 0;
     // mutable: const reads unpack a packed chunk first
     mutable std::vector<SubChunk> mSubChunks;
     std::vector<int16_t> mHeightmap;
@@ -174,4 +216,6 @@ private:
     mutable std::string mNetworkAnchorCache;
     mutable bool mTopHeightsValid = false;
     mutable bool mNetworkAnchorValid = false;
+    LevelChunkInstance mInstance;
+    uint32_t mNetworkRevision = 0;
 };
