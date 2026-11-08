@@ -7,7 +7,12 @@ class FurnaceBlockActor final : public BlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "Furnace";
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    // the game's own ids for the other kinds
+    static constexpr const char *BLAST_FURNACE_ID = "BlastFurnace";
+
+    static constexpr const char *SMOKER_ID = "Smoker";
+
+    const char *getBlockActorId() const override;
 
     Tag saveNbt() const override;
 
