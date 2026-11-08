@@ -593,7 +593,8 @@ private:
     bool mTransformed = false;
     bool mConvertsOnDeath = false;
     // the transformation the last hit's damage sensor added, until the end of the tick
-    const json::Value *mHitTransformation = nullptr;
+    // the target, not a pointer: the component table is rebuilt when groups change
+    std::string mHitTransformation;
     struct SightCache {
         int64_t mTick = -1;
         uint64_t mTargetId = 0;

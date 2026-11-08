@@ -305,7 +305,7 @@ void MobActor::startDefinition(ServerNetworkHandler &owner) {
 }
 
 void MobActor::tick(ServerNetworkHandler &owner) {
-    mHitTransformation = nullptr;
+    mHitTransformation.clear();
     startDefinition(owner);
     spawnPendingRiders(owner);
 
@@ -697,13 +697,20 @@ void MobActor::causeFallDamage(ServerNetworkHandler &owner, float distance) {
                              getIdentifier());
 }
 
+namespace {
+    std::string transformationTarget(const json::Value *transformation) {
+        const json::Value *into = transformation == nullptr ? nullptr : transformation->get("into");
+        return into != nullptr && into->isString() ? into->mString : std::string();
+    }
+}
+
 bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
-    mHitTransformation = nullptr;
-    const json::Value *transformationBefore = getComponent(TRANSFORMATION_COMPONENT);
+    mHitTransformation.clear();
+    const std::string before = transformationTarget(getComponent(TRANSFORMATION_COMPONENT));
     const bool dealsDamage = _senseDamage(owner, amount, source);
-    const json::Value *transformationAfter = getComponent(TRANSFORMATION_COMPONENT);
-    if (transformationAfter != transformationBefore)
-        mHitTransformation = transformationAfter;
+    const std::string after = transformationTarget(getComponent(TRANSFORMATION_COMPONENT));
+    if (after != before)
+        mHitTransformation = after;
     return dealsDamage;
 }
 
@@ -2448,9 +2455,9 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
     // only the transformation the fatal hit's damage sensor added (villager_v2 become_zombie) carries on:
     // the game keeps ticking transformations of a dying actor until Actor::remove flags it (+649,
     // sub_140BA3460; checked in sub_14773B730 and sub_147C27700); one from another source dies with it
-    const json::Value *transformation = getComponent(TRANSFORMATION_COMPONENT);
-    mConvertsOnDeath = transformation != nullptr && transformation == mHitTransformation;
-    mHitTransformation = nullptr;
+    const std::string transformation = transformationTarget(getComponent(TRANSFORMATION_COMPONENT));
+    mConvertsOnDeath = !transformation.empty() && transformation == mHitTransformation;
+    mHitTransformation.clear();
 
     mDweller.onDeath(*this, source);
 

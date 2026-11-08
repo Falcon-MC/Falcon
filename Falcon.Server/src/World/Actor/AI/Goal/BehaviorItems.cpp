@@ -53,6 +53,26 @@ bool BehaviorItems::contains(const ItemStack &item) const {
     return false;
 }
 
+ServerPlayer *BehaviorItems::findNearestHolder(ServerNetworkHandler &owner, const MobActor &mob, float range) const {
+    ServerPlayer *nearest = nullptr;
+    float nearestDistance = range * range;
+
+    for (auto &entry: owner.getPlayers()) {
+        ServerPlayer &player = entry.second;
+        if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(mob)
+            || player.getGameType() == (int32_t) GameType::Spectator)
+            continue;
+
+        const float distance = mob.distanceSquaredTo(player);
+        if (distance > nearestDistance || !contains(player.getInventory().getItemInHand()))
+            continue;
+
+        nearest = &player;
+        nearestDistance = distance;
+    }
+    return nearest;
+}
+
 void BehaviorItems::_addTags(const std::string &expression) {
     // only a plain q.any_tag('a', 'b'): a negation or all_tags would need Molang, and matching it as any_tag lies
     const std::string::size_type open = expression.find('(');
