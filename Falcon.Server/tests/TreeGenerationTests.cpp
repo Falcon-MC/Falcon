@@ -57,6 +57,16 @@ namespace {
                                            &VanillaBlocks::ACACIA_LOG, {0, 0}, {0, 0}, Tree::Canopy::Acacia,
                                            &VanillaBlocks::ACACIA_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false};
 
+    // mangrove_tree_feature of the 1.26.61 features
+    const Tree::Mangrove MANGROVE = {8, 15, {1, 4}, 1, 2, 2, 1, 4, {0, 1}, {1, 4}, {2, 2}, {3, 3}, 70, 1, 4, 4, 1, 4};
+    const Tree::Definition MANGROVE_TREE = [] {
+        Tree::Definition tree = {"minecraft:mangrove_tree_feature", Tree::Trunk::Mangrove, &VanillaBlocks::MANGROVE_LOG,
+                                 {0, 0}, {0, 0}, Tree::Canopy::Mangrove, &VanillaBlocks::MANGROVE_LEAVES, {0, 0}, {0, 0},
+                                 {0, 0}, 0, 0.0f, false};
+        tree.mMangrove = &MANGROVE;
+        return tree;
+    }();
+
     // grass on dirt over the 3x3 chunks around the origin chunk
     std::unique_ptr<Level> flatLevel() {
         std::unique_ptr<Level> level(new Level("TreeGeneration", 1, 42, DimensionType::Overworld));
@@ -192,6 +202,43 @@ namespace {
         }
     }
 
+    void mangroveTree() {
+        for (uint32_t seed = 1; seed <= 20; seed++) {
+            std::unique_ptr<Level> level = flatLevel();
+            BlockManager blocks(*level);
+            // two layers of mud for the roots to sink into
+            for (int32_t x = -8; x <= 24; x++) {
+                for (int32_t z = -8; z <= 24; z++) {
+                    blocks.setBlockStateAt(x, GROUND, z, VanillaBlocks::MUD().toBlockState());
+                    blocks.setBlockStateAt(x, GROUND - 1, z, VanillaBlocks::MUD().toBlockState());
+                }
+            }
+            std::mt19937 random(seed);
+            if (!Tree::place(blocks, MANGROVE_TREE, nullptr, nullptr, nullptr, 8, GROUND + 1, 8, random, {}))
+                continue;
+
+            int32_t trunkY = GROUND + 1;
+            while (!is(blocks, 8, trunkY, 8, &VanillaBlocks::MANGROVE_LOG) && trunkY < GROUND + 5)
+                trunkY++;
+            require(trunkY >= GROUND + 2 && trunkY <= GROUND + 4, "the trunk stands 1 to 3 above the position");
+            require(is(blocks, 8, trunkY - 1, 8, &VanillaBlocks::MANGROVE_ROOTS), "a root holds the trunk");
+            int32_t muddy = 0;
+            int32_t leaves = 0;
+            for (int32_t x = -4; x <= 20; x++) {
+                for (int32_t z = -4; z <= 20; z++) {
+                    for (int32_t y = GROUND - 1; y <= GROUND + 16; y++) {
+                        muddy += is(blocks, x, y, z, &VanillaBlocks::MUDDY_MANGROVE_ROOTS) ? 1 : 0;
+                        leaves += is(blocks, x, y, z, &VanillaBlocks::MANGROVE_LEAVES) ? 1 : 0;
+                    }
+                }
+            }
+            require(muddy > 0, "the roots turn the mud they reach into muddy roots");
+            require(leaves >= 20, "the canopy spreads its leaves around the top");
+            return;
+        }
+        throw std::runtime_error("no mangrove grew in 20 seeds");
+    }
+
     void roofedTrunk() {
         for (uint32_t seed = 1; seed <= 40; seed++) {
             std::unique_ptr<Level> level = flatLevel();
@@ -298,6 +345,7 @@ int main() {
     check("jungle tree hands on its top", jungleTreeHandsOnTop);
     check("mega jungle tree", megaJungle);
     check("savanna tree", savannaTree);
+    check("mangrove tree", mangroveTree);
 
     BedrockLog::flush();
     return failures == 0 ? 0 : 1;

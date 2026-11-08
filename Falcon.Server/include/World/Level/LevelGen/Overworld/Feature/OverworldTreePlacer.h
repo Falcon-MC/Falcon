@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/Block.h"
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <random>
@@ -19,7 +20,8 @@ public:
         Fancy,
         Fallen,
         Mega,
-        Acacia
+        Acacia,
+        Mangrove
     };
 
     enum class Canopy {
@@ -31,7 +33,8 @@ public:
         MegaPine,
         Mega,
         Roofed,
-        Acacia
+        Acacia,
+        Mangrove
     };
 
     // a range of the feature's JSON, its maximum excluded
@@ -47,6 +50,30 @@ public:
         int32_t mMinWidth;
         float mSlope;
         std::vector<std::pair<uint32_t, uint32_t>> mVariation;
+    };
+
+    // mangrove_roots, mangrove_trunk and mangrove_canopy; the inclusive ranges keep their maximum
+    struct Mangrove {
+        int32_t mMaxRootWidth;
+        int32_t mMaxRootLength;
+        // y_offset, its maximum excluded
+        Range mRootOffset;
+        // above_root moss carpet chance
+        uint32_t mMossNumerator;
+        uint32_t mMossDenominator;
+        int32_t mBaseHeight;
+        int32_t mHeightRandA;
+        int32_t mHeightRandB;
+        Range mBranchLength;
+        Range mBranchSteps;
+        Range mCanopyHeight;
+        Range mCanopyRadius;
+        int32_t mLeafAttempts;
+        uint32_t mVineNumerator;
+        uint32_t mVineDenominator;
+        int32_t mVineSteps;
+        uint32_t mPropaguleNumerator;
+        uint32_t mPropaguleDenominator;
     };
 
     struct Definition {
@@ -80,6 +107,7 @@ public:
         bool mAirAndLeaves = false;
         // the vanilla canopy when null
         const SimpleCanopy *mSimpleCanopy = nullptr;
+        const Mangrove *mMangrove = nullptr;
     };
 
     // fancy_trunk and fancy_canopy of fancy_oak_tree_feature
@@ -196,6 +224,21 @@ private:
 
     static bool _acaciaTrunk(BlockManager &blocks, const Definition &tree, const Acacia &acacia, int32_t x, int32_t y,
                              int32_t z, int32_t height, std::mt19937 &random);
+
+    static bool _mangroveRoots(BlockManager &blocks, const Definition &tree, const Mangrove &mangrove, int32_t x,
+                               int32_t y, int32_t z, int32_t height, std::mt19937 &random, int32_t &trunkY);
+
+    static bool _rootPath(BlockManager &blocks, const Mangrove &mangrove, const std::array<int32_t, 3> &from,
+                          const std::array<int32_t, 3> &trunk, int32_t direction,
+                          std::vector<std::array<int32_t, 3>> &path, int32_t depth, std::mt19937 &random);
+
+    static void _mangroveTrunk(BlockManager &blocks, const Definition &tree, const Mangrove &mangrove, int32_t x,
+                               int32_t y, int32_t z, int32_t height, std::mt19937 &random);
+
+    static void _mangroveCanopy(BlockManager &blocks, const Definition &tree, const Mangrove &mangrove,
+                                const std::vector<std::array<int32_t, 3>> &attachments, std::mt19937 &random);
+
+    static void _hangVine(BlockManager &blocks, int32_t x, int32_t y, int32_t z, int32_t bits, int32_t steps);
 
     static bool _diagonalAcaciaTrunk(BlockManager &blocks, const Definition &tree, const Acacia &acacia, int32_t x,
                                      int32_t y, int32_t z, int32_t height, std::mt19937 &random);

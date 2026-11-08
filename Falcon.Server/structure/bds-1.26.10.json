@@ -5667,24 +5667,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/MangroveTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/MangroveTree.h",
-      "sha256": "85b03aaa2b6de129415ce556d754f00966d83c741c935b1ef9d3498193a19d68",
-      "classes": [
-        "MangroveTree",
-        "Coordinate",
-        "MangroveProperties"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/MangroveTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/MangroveTreeFeature.h",
-      "sha256": "48743c969c136c8228fda8b5f898b2e11b94a0b942b69b8b30f42ed07d7bfef3",
-      "classes": [
-        "MangroveTreeFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/MeadowTreeFeature.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/MeadowTreeFeature.h",
       "sha256": "76230c159dfefb65652228d622c08c9e449875c52aa50a921354f5b2c28c9866",
@@ -9611,16 +9593,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/LegacyTallGrass.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/LegacyTallGrass.cpp",
       "sha256": "c1dd3e37c29e2a57e2ababc0ad9bca273ebbb49c25db265702185df6bc5a01a4"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/MangroveTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/MangroveTree.cpp",
-      "sha256": "cbcfe74df8092f8f853d8e6974651f968115c599c5c0a01eec0e1bfefd0547ff"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/MangroveTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/MangroveTreeFeature.cpp",
-      "sha256": "5b21d8bc36333eec4d8f2137f8427428a267e3d0c72920fa43035ed36cb77058"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/MeadowTreeFeature.cpp",

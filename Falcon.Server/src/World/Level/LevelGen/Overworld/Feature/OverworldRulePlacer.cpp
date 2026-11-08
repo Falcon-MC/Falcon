@@ -1363,6 +1363,29 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              Tree::Canopy::Acacia, &VanillaBlocks::ACACIA_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr, {},
             nullptr, &SAVANNA};
 
+    // mangrove_tree_feature and tall_mangrove_tree_feature, their random pick and their beenest aggregates
+    static const Tree::Mangrove MANGROVES[] = {
+            {8, 15, {1, 4}, 1, 2, 2, 1, 4, {0, 1}, {1, 4}, {2, 2}, {3, 3}, 70, 1, 4, 4, 1, 4},
+            {8, 15, {5, 8}, 1, 2, 4, 1, 9, {0, 1}, {1, 6}, {2, 2}, {3, 3}, 70, 1, 4, 4, 1, 7}
+    };
+    static const auto mangrove = [](const char *identifier, const Tree::Mangrove &shape) {
+        TreeDefinition definition = {
+                {identifier, Tree::Trunk::Mangrove, &VanillaBlocks::MANGROVE_LOG, {0, 0}, {0, 0}, Tree::Canopy::Mangrove,
+                 &VanillaBlocks::MANGROVE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr, {}};
+        definition.mTree.mMangrove = &shape;
+        return definition;
+    };
+    static const TreeDefinition MANGROVE_TREES[] = {
+            mangrove("minecraft:mangrove_tree_feature", MANGROVES[0]),
+            mangrove("minecraft:tall_mangrove_tree_feature", MANGROVES[1])
+    };
+    static const WeightedDefinition RANDOM_MANGROVE = {
+            "minecraft:random_mangrove_tree_feature", {{tree(MANGROVE_TREES[1]), 85}, {tree(MANGROVE_TREES[0]), 15}}};
+    static const AggregateDefinition MANGROVES_WITH_BEENEST[] = {
+            {"minecraft:mangrove_tree_with_beenest_feature", {tree(MANGROVE_TREES[0]), BEEHIVE_SEARCH}, 1},
+            {"minecraft:tall_mangrove_tree_with_beenest_feature", {tree(MANGROVE_TREES[1]), BEEHIVE_SEARCH}, 1}
+    };
+
     static const ScatterDefinition FIXUP_VINES = {
             "minecraft:fixup_vines_position_feature", "1", {{0, "8", ""}, ZERO, {0, "8", ""}}, 0, [] {
                 Placed placed;
@@ -1670,6 +1693,12 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         feature.mSprings = entry.mFeature == "minecraft:legacy:springs_feature";
         if (entry.mFeature == ROOFED_FOREST.mIdentifier)
             feature.mPlaced.mAggregate = &ROOFED_FOREST;
+        if (entry.mFeature == RANDOM_MANGROVE.mIdentifier)
+            feature.mPlaced.mWeighted = &RANDOM_MANGROVE;
+        for (const AggregateDefinition &withBeenest: MANGROVES_WITH_BEENEST) {
+            if (entry.mFeature == withBeenest.mIdentifier)
+                feature.mPlaced.mAggregate = &withBeenest;
+        }
         for (const LegacyTreeDefinition &trees: LEGACY_TREES) {
             if (entry.mFeature == trees.mIdentifier)
                 feature.mLegacyTree = &trees;
