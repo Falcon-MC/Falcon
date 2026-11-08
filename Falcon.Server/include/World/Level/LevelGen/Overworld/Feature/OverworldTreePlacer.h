@@ -21,7 +21,8 @@ public:
         Fallen,
         Mega,
         Acacia,
-        Mangrove
+        Mangrove,
+        Cherry
     };
 
     enum class Canopy {
@@ -34,7 +35,8 @@ public:
         Mega,
         Roofed,
         Acacia,
-        Mangrove
+        Mangrove,
+        Cherry
     };
 
     // a range of the feature's JSON, its maximum excluded
@@ -76,6 +78,24 @@ public:
         uint32_t mPropaguleDenominator;
     };
 
+    // cherry_trunk and the cherry_canopy of its top and branches; the inclusive ranges keep their maximum
+    struct Cherry {
+        int32_t mBaseHeight;
+        // each interval adds nextInt(interval + 1)
+        std::vector<int32_t> mHeightIntervals;
+        // one_branch, two_branches and two_branches_and_trunk
+        int32_t mTypeWeights[3];
+        Range mBranchStart;
+        Range mBranchEnd;
+        Range mBranchLength;
+        Range mCanopyHeight;
+        Range mCanopyRadius;
+        float mWideBottomHoleChance;
+        float mCornerHoleChance;
+        float mHangingChance;
+        float mHangingExtensionChance;
+    };
+
     struct Definition {
         const char *mIdentifier;
         Trunk mTrunk;
@@ -108,6 +128,7 @@ public:
         // the vanilla canopy when null
         const SimpleCanopy *mSimpleCanopy = nullptr;
         const Mangrove *mMangrove = nullptr;
+        const Cherry *mCherry = nullptr;
     };
 
     // fancy_trunk and fancy_canopy of fancy_oak_tree_feature
@@ -237,6 +258,19 @@ private:
 
     static void _mangroveCanopy(BlockManager &blocks, const Definition &tree, const Mangrove &mangrove,
                                 const std::vector<std::array<int32_t, 3>> &attachments, std::mt19937 &random);
+
+    static void _cherryTrunk(BlockManager &blocks, const Definition &tree, const Cherry &cherry, int32_t x, int32_t y,
+                             int32_t z, int32_t height, std::mt19937 &random);
+
+    static std::array<int32_t, 3> _cherryBranch(BlockManager &blocks, const Definition &tree, const Cherry &cherry,
+                                                int32_t x, int32_t y, int32_t z, int32_t height, int32_t stepX,
+                                                int32_t stepZ, int32_t start, bool extend, std::mt19937 &random);
+
+    static void _cherryCanopy(BlockManager &blocks, const Definition &tree, const Cherry &cherry, int32_t x, int32_t y,
+                              int32_t z, std::mt19937 &random);
+
+    static void _cherryRow(BlockManager &blocks, const Definition &tree, const Cherry &cherry, int32_t x, int32_t y,
+                           int32_t z, int32_t offsetY, int32_t radius, bool hanging, std::mt19937 &random);
 
     static void _hangVine(BlockManager &blocks, int32_t x, int32_t y, int32_t z, int32_t bits, int32_t steps);
 

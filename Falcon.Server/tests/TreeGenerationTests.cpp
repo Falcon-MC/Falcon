@@ -67,6 +67,17 @@ namespace {
         return tree;
     }();
 
+    // cherry_tree_feature of the 1.26.61 features
+    const Tree::Cherry CHERRY = {
+            7, {1}, {10, 10, 10}, {-4, -3}, {-1, 0}, {2, 4}, {5, 5}, {4, 4}, 25.0f, 50.0f, 16.6666f, 33.3333f};
+    const Tree::Definition CHERRY_TREE = [] {
+        Tree::Definition tree = {"minecraft:cherry_tree_feature", Tree::Trunk::Cherry, &VanillaBlocks::CHERRY_LOG,
+                                 {0, 0}, {0, 0}, Tree::Canopy::Cherry, &VanillaBlocks::CHERRY_LEAVES, {0, 0}, {0, 0},
+                                 {0, 0}, 0, 0.0f, false};
+        tree.mCherry = &CHERRY;
+        return tree;
+    }();
+
     // grass on dirt over the 3x3 chunks around the origin chunk
     std::unique_ptr<Level> flatLevel() {
         std::unique_ptr<Level> level(new Level("TreeGeneration", 1, 42, DimensionType::Overworld));
@@ -239,6 +250,39 @@ namespace {
         throw std::runtime_error("no mangrove grew in 20 seeds");
     }
 
+    void cherryTree() {
+        int32_t grown = 0;
+        for (uint32_t seed = 1; seed <= 20; seed++) {
+            std::unique_ptr<Level> level = flatLevel();
+            BlockManager blocks(*level);
+            std::mt19937 random(seed);
+            if (!Tree::place(blocks, CHERRY_TREE, nullptr, nullptr, nullptr, 8, GROUND + 1, 8, random, {}))
+                continue;
+            grown++;
+
+            require(is(blocks, 8, GROUND + 1, 8, &VanillaBlocks::CHERRY_LOG), "the trunk starts at the position");
+            int32_t sideways = 0;
+            int32_t leaves = 0;
+            int32_t top = 0;
+            for (int32_t x = -4; x <= 20; x++) {
+                for (int32_t z = -4; z <= 20; z++) {
+                    for (int32_t y = GROUND + 1; y <= GROUND + 20; y++) {
+                        const BlockState &state = blocks.getBlockAt(x, y, z);
+                        if (is(blocks, x, y, z, &VanillaBlocks::CHERRY_LOG)) {
+                            top = std::max(top, y - GROUND - 1);
+                            sideways += state.mStates.getString("pillar_axis", std::string()) != "y" ? 1 : 0;
+                        }
+                        leaves += is(blocks, x, y, z, &VanillaBlocks::CHERRY_LEAVES) ? 1 : 0;
+                    }
+                }
+            }
+            require(top <= 7, "no log rises past the top of an 8 high trunk");
+            require(sideways >= 2, "each branch leaves the trunk lying along its direction");
+            require(leaves >= 60, "every canopy spreads its rows of leaves");
+        }
+        require(grown >= 15, "a cherry grows on flat grass");
+    }
+
     void roofedTrunk() {
         for (uint32_t seed = 1; seed <= 40; seed++) {
             std::unique_ptr<Level> level = flatLevel();
@@ -346,6 +390,7 @@ int main() {
     check("mega jungle tree", megaJungle);
     check("savanna tree", savannaTree);
     check("mangrove tree", mangroveTree);
+    check("cherry tree", cherryTree);
 
     BedrockLog::flush();
     return failures == 0 ? 0 : 1;

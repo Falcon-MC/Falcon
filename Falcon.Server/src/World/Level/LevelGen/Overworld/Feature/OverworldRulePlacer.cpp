@@ -1386,6 +1386,22 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:tall_mangrove_tree_with_beenest_feature", {tree(MANGROVE_TREES[1]), BEEHIVE_SEARCH}, 1}
     };
 
+    // cherry_tree_feature, alone 19 times in 20 and otherwise with its beehive search
+    static const Tree::Cherry CHERRY = {
+            7, {1}, {10, 10, 10}, {-4, -3}, {-1, 0}, {2, 4}, {5, 5}, {4, 4}, 25.0f, 50.0f, 16.6666f, 33.3333f};
+    static const TreeDefinition CHERRY_TREE = [] {
+        TreeDefinition definition = {
+                {"minecraft:cherry_tree_feature", Tree::Trunk::Cherry, &VanillaBlocks::CHERRY_LOG, {0, 0}, {0, 0},
+                 Tree::Canopy::Cherry, &VanillaBlocks::CHERRY_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false},
+                nullptr, {}};
+        definition.mTree.mCherry = &CHERRY;
+        return definition;
+    }();
+    static const AggregateDefinition CHERRY_WITH_BEEHIVE = {
+            "minecraft:cherry_tree_with_beehive_feature", {tree(CHERRY_TREE), BEEHIVE_SEARCH}, 1};
+    static const WeightedDefinition RANDOM_CHERRY = {
+            "minecraft:random_cherry_tree_feature", {{tree(CHERRY_TREE), 19}, {aggregate(CHERRY_WITH_BEEHIVE), 1}}};
+
     static const ScatterDefinition FIXUP_VINES = {
             "minecraft:fixup_vines_position_feature", "1", {{0, "8", ""}, ZERO, {0, "8", ""}}, 0, [] {
                 Placed placed;
@@ -1716,6 +1732,8 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
                 feature.mPlaced.mScatter = &patch;
         }
     }
+    if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == RANDOM_CHERRY.mIdentifier)
+        feature.mPlaced.mWeighted = &RANDOM_CHERRY;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == FIXUP_VINES.mIdentifier)
         feature.mPlaced.mScatter = &FIXUP_VINES;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == "minecraft:bamboo_feature")

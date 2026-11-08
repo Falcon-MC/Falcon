@@ -5536,22 +5536,6 @@
       ]
     },
     {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/CherryTree.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/CherryTree.h",
-      "sha256": "79d7b94d54396f58c9bbd43f16621a808c0a08af6d45050fbe1ec8836e31f3f4",
-      "classes": [
-        "CherryTree"
-      ]
-    },
-    {
-      "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/CherryTreeFeature.h",
-      "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/CherryTreeFeature.h",
-      "sha256": "d2ef73eada2ca4aa3100c0af25ce8a2cb1c945c5a9b4c585090c64d8101eaa21",
-      "classes": [
-        "CherryTreeFeature"
-      ]
-    },
-    {
       "old": "Falcon.Server/include/Level/Generator/Overworld/Feature/Tree/FallenTree.h",
       "path": "Falcon.Server/include/World/Level/LevelGen/Overworld/Feature/Tree/FallenTree.h",
       "sha256": "48102e84bae5ba63536407be5a2ab2bc32e27b537a8b76ce75ae1eb497479353",
@@ -9513,16 +9497,6 @@
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/AzaleaTree.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/AzaleaTree.cpp",
       "sha256": "3ac0b48b2a90a8306e4fed3c126854aea37e43cd35b8bd7601e4a680d965f07d"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/CherryTree.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/CherryTree.cpp",
-      "sha256": "3b8aebaa5ed35ee98706469f388cac81b230b2b0c8144a4772e2b4d655af7840"
-    },
-    {
-      "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/CherryTreeFeature.cpp",
-      "path": "Falcon.Server/src/World/Level/LevelGen/Overworld/Feature/Tree/CherryTreeFeature.cpp",
-      "sha256": "aae3103fa150c15e32b408dde4d6a950d8fa32755d6520872ccbf112a2cb0949"
     },
     {
       "old": "Falcon.Server/src/Level/Generator/Overworld/Feature/Tree/FallenTree.cpp",

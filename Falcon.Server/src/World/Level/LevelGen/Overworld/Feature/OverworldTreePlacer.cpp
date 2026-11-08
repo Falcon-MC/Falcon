@@ -183,6 +183,16 @@ bool OverworldTreePlacer::place(BlockManager &blocks, const Definition &tree, co
         return _acaciaTrunk(blocks, tree, *acacia, x, y, z, height, random);
     }
 
+    if (tree.mTrunk == Trunk::Cherry) {
+        // sub_14A290190: the base plus nextInt(interval + 1) per interval
+        int32_t height = tree.mCherry->mBaseHeight;
+        for (int32_t interval: tree.mCherry->mHeightIntervals)
+            height += nextInt(random, interval + 1);
+        if (!_canPlace(blocks, tree, x, y, z, height) || y >= LevelChunk::MAX_Y + 1 - height - 1)
+            return false;
+        _cherryTrunk(blocks, tree, *tree.mCherry, x, y, z, height, random);
+        return true;
+    }
     if (tree.mTrunk == Trunk::Mangrove) {
         // the trunk height first (sub_1471C67E0), then the roots, the trunk standing on them
         const Mangrove &mangrove = *tree.mMangrove;
@@ -1195,6 +1205,182 @@ void OverworldTreePlacer::_mangroveCanopy(BlockManager &blocks, const Definition
             }
         }
         blocks.setBlockStateAt(below[0], below[1], below[2], propagule);
+    }
+}
+
+void OverworldTreePlacer::_cherryTrunk(BlockManager &blocks, const Definition &tree, const Cherry &cherry, int32_t x,
+                                       int32_t y, int32_t z, int32_t height, std::mt19937 &random) {
+    // CherryTreeTrunk::place (sub_14A28F530): a tree type by weight, two branch starts under the top, a direction;
+    // the trunk stops over the highest start unless it keeps a canopy of its own, then one branch or two opposite
+    if (!isBaseBlock(blocks.getBlockAt(x, y - 1, z)))
+        blocks.setBlockStateAt(x, y - 1, z, VanillaBlocks::DIRT().toBlockState());
+
+    const int32_t total = cherry.mTypeWeights[0] + cherry.mTypeWeights[1] + cherry.mTypeWeights[2];
+    int32_t roll = nextInt(random, total);
+    int32_t type = -1;
+    for (int32_t index = 0; index < 3; index++) {
+        roll -= cherry.mTypeWeights[index];
+        if (roll < 0) {
+            type = index;
+            break;
+        }
+    }
+
+    const Range &start = cherry.mBranchStart;
+    const int32_t first = std::max(height - 1 + (start.mMax > start.mMin
+                                                         ? start.mMin + nextInt(random, start.mMax - start.mMin + 1)
+                                                         : start.mMin), 0);
+    // the second start draws with its maximum excluded
+    int32_t second = std::max(height - 1 + drawRange(random, start), 0);
+    second += first <= second ? 1 : 0;
+    // south, west, north, east (qword_14F0F3D80, xmmword_14F0F3D90)
+    static const int32_t LEAN_X[4] = {0, -1, 0, 1};
+    static const int32_t LEAN_Z[4] = {1, 0, -1, 0};
+    const int32_t direction = nextInt(random, 4);
+
+    const int32_t trunk = type == 2 ? height : (type <= 0 ? first : std::max(first, second)) + 1;
+    const BlockState log = tree.mLog().toBlockState();
+    for (int32_t step = 0; step < trunk; step++) {
+        if (logReplaces(tree, blocks.getBlockAt(x, y + step, z)))
+            blocks.setBlockStateAt(x, y + step, z, log);
+    }
+
+    std::vector<std::array<int32_t, 3>> canopies;
+    if (type == 2)
+        canopies.push_back({x, y + trunk, z});
+    canopies.push_back(_cherryBranch(blocks, tree, cherry, x, y, z, height, LEAN_X[direction], LEAN_Z[direction], first,
+                                     first < trunk - 1, random));
+    if (type > 0)
+        canopies.push_back(_cherryBranch(blocks, tree, cherry, x, y, z, height, -LEAN_X[direction], -LEAN_Z[direction],
+                                         second, second < trunk - 1, random));
+    if (tree.mCanopy != Canopy::Cherry)
+        return;
+    for (const std::array<int32_t, 3> &at: canopies)
+        _cherryCanopy(blocks, tree, cherry, at[0], at[1], at[2], random);
+}
+
+std::array<int32_t, 3> OverworldTreePlacer::_cherryBranch(BlockManager &blocks, const Definition &tree,
+                                                          const Cherry &cherry, int32_t x, int32_t y, int32_t z,
+                                                          int32_t height, int32_t stepX, int32_t stepZ, int32_t start,
+                                                          bool extend, std::mt19937 &random) {
+    // sub_14A28FE00: a log out of the trunk at the start, a second one further when asked or when the branch ends
+    // lower, then towards its end, up or down as often as its remaining rise weighs against its distance
+    const auto inclusive = [&](const Range &range) {
+        return range.mMax > range.mMin ? range.mMin + nextInt(random, range.mMax - range.mMin + 1) : range.mMin;
+    };
+    const int32_t end = inclusive(cherry.mBranchEnd) + height - 1;
+    const int32_t length = inclusive(cherry.mBranchLength);
+    extend = extend || end < start;
+
+    BlockState sideways = tree.mLog().toBlockState();
+    sideways = withAxis(sideways, stepZ != 0 ? "z" : "x");
+    const BlockState log = tree.mLog().toBlockState();
+    int32_t atX = x + stepX;
+    int32_t atY = y + start;
+    int32_t atZ = z + stepZ;
+    const auto put = [&](const BlockState &state) {
+        if (logReplaces(tree, blocks.getBlockAt(atX, atY, atZ)))
+            blocks.setBlockStateAt(atX, atY, atZ, state);
+    };
+    put(sideways);
+    if (extend) {
+        atX += stepX;
+        atZ += stepZ;
+        put(sideways);
+    }
+
+    const int32_t reach = length + (extend ? 1 : 0);
+    const int32_t endX = x + reach * stepX;
+    const int32_t endY = y + end;
+    const int32_t endZ = z + reach * stepZ;
+    const int32_t rise = endY > atY ? 1 : -1;
+    while (atX != endX || atY != endY || atZ != endZ) {
+        const float left = static_cast<float>(std::abs(endY - atY));
+        const auto distance = static_cast<float>(std::abs(endX - atX) + std::abs(endY - atY) + std::abs(endZ - atZ));
+        if (left / distance <= nextFloat(random)) {
+            atX += stepX;
+            atZ += stepZ;
+            put(sideways);
+        } else {
+            atY += rise;
+            put(log);
+        }
+    }
+    return {endX, endY + 1, endZ};
+}
+
+void OverworldTreePlacer::_cherryCanopy(BlockManager &blocks, const Definition &tree, const Cherry &cherry, int32_t x,
+                                        int32_t y, int32_t z, std::mt19937 &random) {
+    // CherryTreeCanopy::place (sub_14A28EA10): rows of radius r - 3, r - 2, then r - 1 down to the position, and
+    // two rows with hanging leaves under it
+    const auto inclusive = [&](const Range &range) {
+        return range.mMax > range.mMin ? range.mMin + nextInt(random, range.mMax - range.mMin + 1) : range.mMin;
+    };
+    const int32_t radius = inclusive(cherry.mCanopyRadius);
+    const int32_t height = inclusive(cherry.mCanopyHeight);
+    _cherryRow(blocks, tree, cherry, x, y, z, height - 3, radius - 3, false, random);
+    _cherryRow(blocks, tree, cherry, x, y, z, height - 4, radius - 2, false, random);
+    for (int32_t offsetY = height - 5; offsetY >= 0; offsetY--)
+        _cherryRow(blocks, tree, cherry, x, y, z, offsetY, radius - 1, false, random);
+    _cherryRow(blocks, tree, cherry, x, y, z, -1, radius - 1, true, random);
+    _cherryRow(blocks, tree, cherry, x, y, z, -2, radius - 2, true, random);
+}
+
+void OverworldTreePlacer::_cherryRow(BlockManager &blocks, const Definition &tree, const Cherry &cherry, int32_t x,
+                                     int32_t y, int32_t z, int32_t offsetY, int32_t radius, bool hanging,
+                                     std::mt19937 &random) {
+    // sub_14A28EBF0: the bottom row loses its edge at the wide hole chance; a corner always goes from radius 3,
+    // the cells past the diagonal at the corner hole chance; below radius 3 only the corners risk it
+    const auto chance = [&](float percent) {
+        return percent >= 100.0f || (percent > 0.0f && percent > nextFloat(random) * 100.0f);
+    };
+    const BlockState leaves = tree.mLeaves().toBlockState();
+    for (int32_t offsetX = -radius; offsetX <= radius; offsetX++) {
+        const int32_t alongX = std::abs(offsetX);
+        for (int32_t offsetZ = -radius; offsetZ <= radius; offsetZ++) {
+            const int32_t alongZ = std::abs(offsetZ);
+            if (offsetY == -1 && (alongX == radius || alongZ == radius) && chance(cherry.mWideBottomHoleChance))
+                continue;
+            const bool corner = alongX == radius && alongZ == radius;
+            if (radius >= 3) {
+                if (corner)
+                    continue;
+                if (alongX + alongZ > radius * 2 - 2 && chance(cherry.mCornerHoleChance))
+                    continue;
+            } else if (corner && chance(cherry.mCornerHoleChance)) {
+                continue;
+            }
+
+            const int32_t leafX = x + offsetX;
+            const int32_t leafY = y + offsetY;
+            const int32_t leafZ = z + offsetZ;
+            if (replaces(tree, blocks.getBlockAt(leafX, leafY, leafZ)))
+                blocks.setBlockStateAt(leafX, leafY, leafZ, leaves);
+        }
+    }
+    if (!hanging)
+        return;
+
+    // sub_14A28F010: along the four edges, under a leaf of the row, a hanging leaf and at times one more
+    static const int32_t DX[4] = {0, -1, 0, 1};
+    static const int32_t DZ[4] = {1, 0, -1, 0};
+    static const int32_t PERPENDICULAR[4] = {3, 0, 1, 2};
+    for (int32_t side = 0; side < 4; side++) {
+        const int32_t across = PERPENDICULAR[side];
+        const int32_t baseX = x + DX[across] * radius;
+        const int32_t baseZ = z + DZ[across] * radius;
+        for (int32_t along = -radius; along < radius; along++) {
+            const int32_t leafX = baseX + DX[side] * along;
+            const int32_t leafZ = baseZ + DZ[side] * along;
+            const int32_t leafY = y + offsetY - 1;
+            if (blocks.getBlockAt(leafX, leafY + 1, leafZ).mName != leaves.mName || !chance(cherry.mHangingChance))
+                continue;
+            if (!replaces(tree, blocks.getBlockAt(leafX, leafY, leafZ)))
+                continue;
+            blocks.setBlockStateAt(leafX, leafY, leafZ, leaves);
+            if (chance(cherry.mHangingExtensionChance) && replaces(tree, blocks.getBlockAt(leafX, leafY - 1, leafZ)))
+                blocks.setBlockStateAt(leafX, leafY - 1, leafZ, leaves);
+        }
     }
 }
 
