@@ -42,11 +42,11 @@ void Level::setBlock(const Vector3i &position, const BlockState &state, bool upd
 
 void Level::updateAround(const Vector3i &position) {
     for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-        updateAt(RedstoneFace::relative(position, face), BlockUpdateType::Normal);
+        updateAt(RedstoneFace::relative(position, face), BlockUpdateType::Normal, &position);
     }
 }
 
-void Level::updateAt(const Vector3i &position, BlockUpdateType type) {
+void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vector3i *changed) {
     if (mOwner == nullptr || !isChunkReady(*this, position))
         return;
 
@@ -78,7 +78,9 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type) {
             FireSystem::onNormalUpdate(owner, *this, position, state);
     } else if (FallingBlockSystem::matches(identifier)) {
         if (type == BlockUpdateType::Normal)
-            FallingBlockSystem::onNormalUpdate(owner, *this, position, state);
+            FallingBlockSystem::onNormalUpdate(owner, *this, position, state, changed);
+        else if (type == BlockUpdateType::Scheduled)
+            FallingBlockSystem::onScheduledUpdate(owner, *this, position, state);
     } else if (CommandBlock::matches(identifier)) {
         if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
             CommandBlockSystem::setPowered(owner, *this, position,
@@ -90,8 +92,10 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type) {
     if (type == BlockUpdateType::Normal || type == BlockUpdateType::Scheduled) {
         const BlockState current = getBlockState(position.x, position.y, position.z);
         const Block *block = VanillaBlocks::fromIdentifier(current.mName);
-        if (block != nullptr && type == BlockUpdateType::Normal)
-            block->onNeighbourChanged(owner, *this, position, current);
+        if (block != nullptr && type == BlockUpdateType::Normal) {
+            if (block->watchesNeighbour(position, current, changed))
+                block->onNeighbourChanged(owner, *this, position, current);
+        }
         else if (block != nullptr)
             block->onScheduledUpdate(owner, *this, position, current);
         else if (type == BlockUpdateType::Scheduled && CustomContentRegistry::getInstance().isCustomBlock(current.mName))

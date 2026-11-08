@@ -329,6 +329,14 @@ public:
     virtual void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                     const BlockState &state) const;
 
+    // whether a normal update from `changed` reaches onNeighbourChanged; null `changed` is the block itself
+    virtual bool watchesNeighbour(const Vector3i &position, const BlockState &state, const Vector3i *changed) const {
+        (void) position;
+        (void) state;
+        (void) changed;
+        return true;
+    }
+
     virtual bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state, ServerActor &projectile) const {
         (void) owner;

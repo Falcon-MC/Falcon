@@ -352,7 +352,8 @@ public:
 
     void updateAround(const Vector3i &position);
 
-    void updateAt(const Vector3i &position, BlockUpdateType type);
+    // `changed`: the neighbour whose change caused a normal update, null for the block itself
+    void updateAt(const Vector3i &position, BlockUpdateType type, const Vector3i *changed = nullptr);
 
     void scheduleUpdate(const Vector3i &position, int64_t delay);
 
