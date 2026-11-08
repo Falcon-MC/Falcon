@@ -26,6 +26,7 @@ enum class LevelDbTag : unsigned char {
     SubChunkPrefix = '/',
     LegacyTerrain = '0',
     BlockEntities = '1',
+    PendingTicks = '3',
     LegacyEntities = '2',
     FinalizedState = '6',
     LegacyVersion = 'v'

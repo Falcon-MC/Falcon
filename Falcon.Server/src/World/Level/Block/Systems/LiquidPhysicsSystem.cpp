@@ -1,8 +1,12 @@
 #include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 
+#include "Core/NBT/NbtIo.h"
+#include "Core/Utility/BinaryStream.h"
+#include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 
 #include <algorithm>
@@ -13,6 +17,7 @@
 void LiquidPhysicsSystem::moveStateFrom(LiquidPhysicsSystem &&other) {
     if (this == &other)
         return;
+    mTicks.moveStateFrom(std::move(other.mTicks));
     mChanges = std::move(other.mChanges);
 }
 
@@ -147,11 +152,80 @@ Vector3f LiquidPhysicsSystem::getFlowVector(const Vector3i &position) {
 }
 
 void LiquidPhysicsSystem::schedule(const Vector3i &position, int64_t delay) {
-    mLevel.getBlockUpdateScheduler().schedule(position, delay);
+    const BlockState &state = _fluidAt(position.x, position.y, position.z);
+    if (!isFluidState(state))
+        return;
+    const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+    const int32_t wait = (int32_t) std::max<int64_t>(1, delay);
+    if (block != nullptr && !mTicks.isPending(position, block, wait))
+        mTicks.add(position, block, wait);
 }
 
-void LiquidPhysicsSystem::onScheduledUpdate(const Vector3i &position) {
-    process(position);
+// no early out when nothing is queued: every ticked chunk's clock advances each tick (sub_14381B7E0)
+void LiquidPhysicsSystem::tick(int64_t levelTick, const std::vector<int64_t> &columns) {
+    mTicks.beginTick(levelTick);
+    for (int64_t column: columns) {
+        mTicks.tickColumn(levelTick, column, [this](const Vector3i &position, const Block *) {
+            process(position);
+        }, [this](int32_t chunkX, int32_t chunkZ) {
+            return mLevel.isChunkResident(chunkX, chunkZ);
+        });
+    }
+    mTicks.endTick();
+}
+
+std::string LiquidPhysicsSystem::savePendingTicks(int32_t chunkX, int32_t chunkZ) const {
+    const std::vector<BlockTickingQueue::Entry> *entries = mTicks.getColumnEntries(chunkX, chunkZ);
+    if (entries == nullptr)
+        return std::string();
+
+    std::vector<Tag> list;
+    for (const BlockTickingQueue::Entry &entry: *entries) {
+        Tag tick = Tag::ofCompound();
+        tick.putInt("x", entry.x);
+        tick.putInt("y", entry.y);
+        tick.putInt("z", entry.z);
+        tick.put("blockState", entry.block->toBlockState().toNbt());
+        tick.putLong("time", entry.due);
+        list.push_back(tick);
+    }
+
+    Tag record = Tag::ofCompound();
+    record.put("tickList", Tag::ofList(Tag::Type::Compound, list));
+    record.putInt("currentTick", (int32_t) mTicks.getColumnTick(chunkX, chunkZ));
+    BinaryStream stream;
+    NbtIo::writeTag(stream, record, NbtVariant::LittleEndian);
+    return stream.getBuffer();
+}
+
+void LiquidPhysicsSystem::loadPendingTicks(int32_t chunkX, int32_t chunkZ, const std::string &record) {
+    if (record.empty())
+        return;
+
+    Tag root;
+    try {
+        ReadOnlyBinaryStream stream(record);
+        root = NbtIo::readTag(stream, NbtVariant::LittleEndian);
+    } catch (const std::exception &) {
+        return;
+    }
+
+    const Tag *list = root.get("tickList");
+    if (list == nullptr || list->getType() != Tag::Type::List)
+        return;
+
+    std::vector<BlockTickingQueue::Entry> entries;
+    for (const Tag &tick: list->getList()) {
+        const Tag *state = tick.get("blockState");
+        if (state == nullptr)
+            continue;
+        const Block *block = VanillaBlocks::fromIdentifier(state->getString("name"));
+        if (block == nullptr)
+            continue;
+        entries.push_back(BlockTickingQueue::Entry{tick.getInt("x"), tick.getInt("y"), tick.getInt("z"), 0,
+                                                   tick.getLong("time"), block});
+    }
+    mTicks.loadColumn(chunkX, chunkZ, root.getInt("currentTick"), entries);
 }
 
 std::vector<LiquidChange> LiquidPhysicsSystem::consumeChanges() {
