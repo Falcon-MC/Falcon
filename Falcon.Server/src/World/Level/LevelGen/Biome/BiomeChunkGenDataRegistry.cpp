@@ -181,6 +181,16 @@ bool BiomeChunkGenDataRegistry::hasTag(int32_t biomeId, const std::string &tag) 
     return found != _tagsByBiome().end() && found->second.count(tag) != 0;
 }
 
+std::unordered_map<int32_t, int32_t> &BiomeChunkGenDataRegistry::_villageTypes() {
+    static std::unordered_map<int32_t, int32_t> map;
+    return map;
+}
+
+int32_t BiomeChunkGenDataRegistry::getVillageType(int32_t biomeId) {
+    const auto found = _villageTypes().find(biomeId);
+    return found != _villageTypes().end() ? found->second : 4;
+}
+
 int32_t BiomeChunkGenDataRegistry::getBiomeId(const std::string &biomeName) {
     const std::unordered_map<std::string, int32_t> &map = biomeNameToId();
     const std::unordered_map<std::string, int32_t>::const_iterator found = map.find(stripNamespace(biomeName));
@@ -279,6 +289,10 @@ void BiomeChunkGenDataRegistry::initialize() {
         const Tag *chunkGenDataTag = dataTag->get("chunkGenData");
         if (chunkGenDataTag == nullptr)
             continue;
+
+        const Tag *villageTypeTag = chunkGenDataTag->get("villageType");
+        if (villageTypeTag != nullptr)
+            _villageTypes()[biomeId] = villageTypeTag->asInt();
 
         const Tag *consolidatedTag = chunkGenDataTag->get("consolidatedFeatures");
         if (consolidatedTag == nullptr)

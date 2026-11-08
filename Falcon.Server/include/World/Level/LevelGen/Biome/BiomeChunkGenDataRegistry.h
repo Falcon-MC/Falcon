@@ -43,6 +43,9 @@ public:
 
     static bool hasTag(int32_t biomeId, const std::string &tag);
 
+    // chunkGenData.villageType: 0 desert, 1 snowy, 2 savanna, 3 taiga; plains when absent (sub_14699DDC0)
+    static int32_t getVillageType(int32_t biomeId);
+
     // every biome as the game sends it to clients; names and tags index getDefinitionStrings()
     static const std::vector<BiomeDefinitionData> &getDefinitions();
 
@@ -52,6 +55,8 @@ private:
     static std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>> &_featuresByBiome();
 
     static std::unordered_map<int32_t, std::unordered_set<std::string>> &_tagsByBiome();
+
+    static std::unordered_map<int32_t, int32_t> &_villageTypes();
 
     static std::vector<BiomeDefinitionData> &_definitions();
 
