@@ -106,6 +106,18 @@ public:
 
     unsigned short getServerPortV6() const { return (unsigned short) getInt("server-portv6"); }
 
+    std::string getSignalingCertificate() const {
+        return getString("signaling-certificate");
+    }
+
+    std::string getSignalingPrivateKey() const {
+        return getString("signaling-private-key");
+    }
+
+    unsigned short getSignalingExtraPort() const {
+        return (unsigned short) getInt("signaling-extra-port");
+    }
+
     bool getEnableLanVisibility() const { return getBool("enable-lan-visibility"); }
 
     int getViewDistance() const { return getInt("view-distance"); }
