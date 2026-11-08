@@ -161,10 +161,8 @@ void LiquidPhysicsSystem::schedule(const Vector3i &position, int64_t delay) {
         mTicks.add(position, block, wait);
 }
 
+// no early out when nothing is queued: every ticked chunk's clock advances each tick (sub_14381B7E0)
 void LiquidPhysicsSystem::tick(int64_t levelTick, const std::vector<int64_t> &columns) {
-    if (mTicks.getScheduledCount() == 0)
-        return;
-
     mTicks.beginTick(levelTick);
     for (int64_t column: columns) {
         mTicks.tickColumn(levelTick, column, [this](const Vector3i &position, const Block *) {
