@@ -91,6 +91,8 @@ public:
 
     void tick(ServerNetworkHandler &owner) override;
 
+    void tickDeath(ServerNetworkHandler &owner) override;
+
     MoveControl &getMoveControl() {
         return mMoveControl;
     }
@@ -523,6 +525,7 @@ private:
     const json::Value *mTransformationComponent = nullptr;
     int32_t mTransformationTicks = 0;
     bool mTransformed = false;
+    bool mConvertsOnDeath = false;
     uint64_t mParentRuntimeId = 0;
     Vector3f mHomePosition;
     bool mHasHome = false;

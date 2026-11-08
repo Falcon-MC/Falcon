@@ -318,6 +318,11 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     RideSystem::syncPassengerPositions(owner, *this);
 }
 
+void MobActor::tickDeath(ServerNetworkHandler &owner) {
+    if (mConvertsOnDeath && !mTransformed)
+        _tickTransformation(owner);
+}
+
 void MobActor::_registerGoals(ServerNetworkHandler &owner) {
     mGoalsDirty = false;
     const bool sameGroups = mGoalGroups.size() == mComponentGroups.size()
@@ -2251,6 +2256,11 @@ int MobActor::randomRange(int minimum, int maximum) {
 void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t lootingLevel) {
     if (isDead())
         return;
+
+    // the fatal hit's damage sensor added a transformation (villager_v2 become_zombie): the body converts
+    // instead of finishing its death; one already running before the hit dies with it
+    const json::Value *transformation = getComponent(TRANSFORMATION_COMPONENT);
+    mConvertsOnDeath = transformation != nullptr && transformation != mTransformationComponent;
 
     mDweller.onDeath(*this, source);
 
