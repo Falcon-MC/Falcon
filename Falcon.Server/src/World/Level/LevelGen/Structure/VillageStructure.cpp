@@ -14,13 +14,16 @@
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/Inventory/FurnaceInventory.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/ChunkGenerator.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
+#include "World/Level/LevelGen/Overworld/Surface/SurfaceMaterialAttributes.h"
 #include "World/Level/LevelGen/Overworld/Terrain/TerrainBeard.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
 #include "World/Level/LevelGen/Structure/StructureConnections.h"
@@ -238,10 +241,11 @@ namespace {
     // post process random itself, after the feature pieces before it
     class PiecePlacer {
     public:
-        PiecePlacer(const JigsawPiece &piece, int32_t chunkX, int32_t chunkZ, uint32_t seed, std::mt19937 &chunkRandom,
-                    StructureTerrain &terrain, VillageStructure::ChunkShare &share)
-            : mPiece(piece), mChunkX(chunkX), mChunkZ(chunkZ), mSeed(seed), mChunkRandom(chunkRandom),
-              mTerrain(terrain), mShare(share) {
+        PiecePlacer(const ChunkGenerator &generator, const JigsawPiece &piece, int32_t chunkX, int32_t chunkZ,
+                    uint32_t seed, std::mt19937 &chunkRandom, StructureTerrain &terrain,
+                    VillageStructure::ChunkShare &share, const VillageStructure::Neighbours *neighbours)
+            : mGenerator(generator), mPiece(piece), mChunkX(chunkX), mChunkZ(chunkZ), mSeed(seed),
+              mChunkRandom(chunkRandom), mTerrain(terrain), mShare(share), mNeighbours(neighbours) {
             mProcessors = processorNames(*piece.mElement);
             mRules = rulesOf(mProcessors);
         }
@@ -255,9 +259,46 @@ namespace {
             std::mt19937 random(mSeed);
             for (const StructureTemplate::BlockEntry &entry : shape.getBlocks())
                 _placeBlock(shape.getPalette()[(size_t) entry.mPaletteIndex], entry, random);
+            if (!mPiece.mElement->mTerrainMatching)
+                _foundation();
         }
 
     private:
+        // sub_147761B80: each column of the box with a block on the bottom layer draws nextInt(3), wherever it is;
+        // the columns of this chunk then fill down through air and water with the foundation block
+        // sub_14699EA50: the biome's top material, dirt instead of grass or without one
+        static BlockState foundationBlock(int32_t biome) {
+            static const BlockState DIRT = VanillaBlocks::DIRT().toBlockState();
+            const SurfaceBuilderComponent *surface = SurfaceBuilderComponent::getForBiome(biome);
+            const BlockState *top = surface != nullptr ? surface->mSurfaceMaterial.mTopBlock : nullptr;
+            return top == nullptr || top->mName == "minecraft:grass_block" ? DIRT : *top;
+        }
+
+        void _foundation() {
+            const JigsawBox &box = mPiece.mBox;
+            for (int32_t x = box.mMinX; x <= box.mMaxX; ++x) {
+                for (int32_t z = box.mMinZ; z <= box.mMaxZ; ++z) {
+                    const bool inside = insideChunk(x, z, mChunkX, mChunkZ);
+                    const BlockState *done =
+                            inside || mNeighbours == nullptr ? nullptr : (*mNeighbours)(x, box.mMinY, z);
+                    const BlockState bottom = done != nullptr ? *done : _world({x, box.mMinY, z});
+                    if (DecorationSupport::isAir(bottom))
+                        continue;
+
+                    const int32_t depth = FeatureRandom::nextInt(mChunkRandom, 3);
+                    if (!inside)
+                        continue;
+
+                    for (int32_t y = box.mMinY - 1; y > box.mMinY - depth - 3; --y) {
+                        const BlockState below = _world({x, y, z});
+                        if (!DecorationSupport::isAir(below) && below.mName != "minecraft:water")
+                            break;
+                        mShare.mBlocks[{x, y, z}] = foundationBlock(mGenerator.pickBiome(x, box.mMinY, z));
+                    }
+                }
+            }
+        }
+
         bool _position(const StructureTemplate::BlockEntry &entry, VillageStructure::Position &out) {
             int32_t x = entry.x;
             int32_t z = entry.z;
@@ -362,6 +403,7 @@ namespace {
             mShare.mMobs.push_back({position, mob, event});
         }
 
+        const ChunkGenerator &mGenerator;
         const JigsawPiece &mPiece;
         int32_t mChunkX;
         int32_t mChunkZ;
@@ -369,6 +411,7 @@ namespace {
         std::mt19937 &mChunkRandom;
         StructureTerrain &mTerrain;
         VillageStructure::ChunkShare &mShare;
+        const VillageStructure::Neighbours *mNeighbours;
         std::vector<std::string> mProcessors;
         std::vector<const StructureProcessors::Rule *> mRules;
     };
@@ -438,7 +481,7 @@ std::shared_ptr<const std::vector<JigsawPiece>> VillageStructure::cachedPlan(con
 VillageStructure::ChunkShare VillageStructure::placeInChunk(const ChunkGenerator &generator,
                                                             const std::vector<JigsawPiece> &pieces, int32_t chunkX,
                                                             int32_t chunkZ, StructureTerrain &terrain,
-                                                            BlockManager *features) {
+                                                            BlockManager *features, const Neighbours *neighbours) {
     ChunkShare share;
     const uint32_t seed = StructureFeature::getPostProcessSeed(generator.getSeed(), chunkX, chunkZ);
     std::mt19937 chunkRandom(seed);
@@ -458,7 +501,7 @@ VillageStructure::ChunkShare VillageStructure::placeInChunk(const ChunkGenerator
         if (shape == nullptr)
             continue;
 
-        PiecePlacer(piece, chunkX, chunkZ, seed, chunkRandom, terrain, share).place(*shape);
+        PiecePlacer(generator, piece, chunkX, chunkZ, seed, chunkRandom, terrain, share, neighbours).place(*shape);
     }
     return share;
 }
@@ -502,7 +545,13 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
             StructureTerrain terrain(generator);
             BlockManager features(level);
             features.setOverflowSink(chunk.getX(), chunk.getZ(), overflow);
-            const ChunkShare own = placeInChunk(generator, *pieces, chunk.getX(), chunk.getZ(), terrain, &features);
+            // the parts in chunks post-processed earlier read their blocks, the others the terrain
+            const Neighbours neighbours = [&level](int32_t x, int32_t y, int32_t z) -> const BlockState * {
+                LevelChunk *other = level.peekChunkPtr(x >> 4, z >> 4);
+                return other != nullptr && other->isPopulated() ? &other->getBlock(x & 15, y, z & 15) : nullptr;
+            };
+            const ChunkShare own = placeInChunk(generator, *pieces, chunk.getX(), chunk.getZ(), terrain, &features,
+                                                &neighbours);
 
             // shapes connect across chunk borders
             std::map<Position, BlockState> around = own.mBlocks;

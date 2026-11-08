@@ -5,6 +5,7 @@
 #include "World/Level/LevelGen/Structure/JigsawAssembler.h"
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -66,10 +67,14 @@ public:
     static std::shared_ptr<const std::vector<JigsawPiece>> cachedPlan(const ChunkGenerator &generator,
                                                                       int32_t startX, int32_t startZ);
 
-    // without features, feature pieces are skipped and draw nothing
+    // a block of a chunk already post-processed, null for a chunk the village has not reached yet
+    using Neighbours = std::function<const BlockState *(int32_t x, int32_t y, int32_t z)>;
+
+    // without features, feature pieces are skipped and draw nothing; without neighbours, the parts of a piece in
+    // other chunks read the bare terrain, as when those chunks come later
     static ChunkShare placeInChunk(const ChunkGenerator &generator, const std::vector<JigsawPiece> &pieces,
                                    int32_t chunkX, int32_t chunkZ, StructureTerrain &terrain,
-                                   BlockManager *features = nullptr);
+                                   BlockManager *features = nullptr, const Neighbours *neighbours = nullptr);
 
     static void addBeard(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ, TerrainBeard &beard);
 
