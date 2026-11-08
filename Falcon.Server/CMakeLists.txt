@@ -327,7 +327,7 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     add_test(NAME fluid-parity COMMAND FalconFluidParityTests
             platform drain stairs twosrc twosrcair hole hole2 holefar waterfall ledge still placeflow
             lavaplat lavawater basalt drops waterlog waterlogout waterlogslab sourceabove netherlava
-            ~sponge@41 concrete)
+            ~sponge@41 concrete lavafall waterfalllava)
     set_tests_properties(fluid-parity PROPERTIES TIMEOUT 300)
     add_executable(FalconFastJoinTests tests/FastJoinTests.cpp)
     target_link_libraries(FalconFastJoinTests PRIVATE FalconCore)

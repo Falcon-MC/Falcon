@@ -63,7 +63,7 @@ bool SetBlockCommand::resolveBlock(const std::string &name, BlockState &out) {
 }
 
 bool SetBlockCommand::placeBlock(ServerNetworkHandler &handler, Level &level, const Vector3i &position,
-                                 const BlockState &state, const std::string &mode) {
+                                 const BlockState &state, const std::string &mode, bool updateNeighbours) {
     if (position.y < level.getMinY() || position.y > level.getMaxY())
         return false;
 
@@ -83,7 +83,8 @@ bool SetBlockCommand::placeBlock(ServerNetworkHandler &handler, Level &level, co
 
     level.setBlock(position, state, false);
     level.onBlockPlaced(position, state);
-    level.updateAround(position);
+    if (updateNeighbours)
+        level.updateAround(position);
     return true;
 }
 
