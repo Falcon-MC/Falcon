@@ -119,6 +119,40 @@ jobs:
           cmake --build build --parallel 4
           ccache --show-stats
 
+  tests:
+    name: Tests linux-x64
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache zlib1g-dev libssl-dev
+
+      - name: Cache compiler objects
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ci-ccache-tests-${{ github.sha }}
+          restore-keys: |
+            ci-ccache-tests-
+            ci-ccache-linux-x64-
+
+      # the embedded checks are off by default: without this job no test ever runs in ci
+      - name: Build and run the embedded tests
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DFALCON_BUILD_EMBEDDED_TESTS=ON
+          cmake --build build --parallel
+          ctest --test-dir build/Falcon.Server --output-on-failure --parallel 2
+
   internal-plugins:
     name: Internal plugins linux-x64
     runs-on: ubuntu-22.04
