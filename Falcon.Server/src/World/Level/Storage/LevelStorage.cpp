@@ -329,6 +329,10 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
         batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::PendingTicks));
     else
         batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::PendingTicks), chunk.getPendingTicks());
+    if (chunk.getRandomTicks().empty())
+        batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks));
+    else
+        batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks), chunk.getRandomTicks());
 
     for (int i = 0; i < LevelChunk::SUB_CHUNK_COUNT; i++) {
         const SubChunk &subChunk = chunk.getSubChunk(i);
@@ -441,6 +445,21 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
     if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::PendingTicks),
                  &pendingTicks).ok())
         chunk.setPendingTicks(std::move(pendingTicks));
+
+    std::string randomTicks;
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks),
+                 &randomTicks).ok())
+        chunk.setRandomTicks(std::move(randomTicks));
+
+    // no version: written by the game, never migrated
+    std::string dataVersion;
+    if (mDb->Get(_readOptions(), _makeDataVersionKey(chunk.getX(), chunk.getZ()), &dataVersion).ok()
+        && dataVersion.size() >= 8) {
+        uint64_t value = 0;
+        for (int i = 7; i >= 0; --i)
+            value = value << 8 | (unsigned char) dataVersion[(size_t) i];
+        chunk.setNeedsLiquidMigration((int64_t) value < FalconDataVersion::STILL_LIQUIDS);
+    }
 
     chunk.clearDirty();
     if (replacedUnknown)

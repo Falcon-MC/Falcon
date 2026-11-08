@@ -18,6 +18,7 @@ void BlockTickingQueue::moveStateFrom(BlockTickingQueue &&other) {
 
     mQueues = std::move(other.mQueues);
     mPending = std::move(other.mPending);
+    mRandomClock = other.mRandomClock;
     mTick = other.mTick;
     mScheduled = other.mScheduled;
     mLastProcessed = other.mLastProcessed;
@@ -39,7 +40,8 @@ BlockTickingQueue::Queue &BlockTickingQueue::_queueAt(int32_t x, int32_t z) {
 
     // a chunk still waiting for its turn this tick lags one tick behind, as its queue would in the game
     Queue &queue = mQueues[key];
-    queue.tick = mTicking && _isBefore(mCurrentColumn, key) ? mTick - 1 : mTick;
+    queue.lastTicked = mTicking && _isBefore(mCurrentColumn, key) ? mTick - 1 : mTick;
+    queue.tick = mRandomClock ? 0 : queue.lastTicked;
     return queue;
 }
 
@@ -101,8 +103,9 @@ BlockTickingQueue::Entry BlockTickingQueue::_popHeap(std::vector<Entry> &heap) {
     return top;
 }
 
-void BlockTickingQueue::beginTick(int64_t levelTick) {
+void BlockTickingQueue::beginTick(int64_t levelTick, int32_t randomTickSpeed) {
     mTick = levelTick;
+    mAdvance = randomTickSpeed;
     mLastProcessed = 0;
     mTicking = true;
 }
@@ -130,9 +133,22 @@ bool BlockTickingQueue::isPending(const Vector3i &position, const Block *block, 
     return mPending.find(key) != mPending.end();
 }
 
+bool BlockTickingQueue::hasTickAt(const Vector3i &position) const {
+    auto found = mQueues.find(column(position.x >> 4, position.z >> 4));
+    if (found == mQueues.end())
+        return false;
+    for (const Entry &entry: found->second.heap) {
+        if (entry.x == position.x && entry.y == position.y && entry.z == position.z)
+            return true;
+    }
+    return false;
+}
+
 int64_t BlockTickingQueue::getColumnTick(int32_t chunkX, int32_t chunkZ) const {
     auto found = mQueues.find(column(chunkX, chunkZ));
-    return found == mQueues.end() ? mTick : found->second.tick;
+    if (found != mQueues.end())
+        return found->second.tick;
+    return mRandomClock ? 0 : mTick;
 }
 
 const std::vector<BlockTickingQueue::Entry> *BlockTickingQueue::getColumnEntries(int32_t chunkX,
@@ -147,9 +163,9 @@ void BlockTickingQueue::loadColumn(int32_t chunkX, int32_t chunkZ, int64_t saved
     for (const Entry &saved: entries) {
         if (saved.x >> 4 != chunkX || saved.z >> 4 != chunkZ)
             continue;
+        Queue &queue = _queueAt(saved.x, saved.z);
         Entry entry = saved;
-        entry.due = saved.due - savedTick + mTick;
-        Queue &queue = _queueAt(entry.x, entry.z);
+        entry.due = saved.due - savedTick + queue.tick;
         _pushHeap(queue.heap, entry);
         _track(entry);
     }

@@ -302,6 +302,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
             sendArmSwing(owner, player, clickedPosition);
             const BlockState water = makeLiquidState(content);
             level.setBlockStateAtLayer(waterlogged.x, waterlogged.y, waterlogged.z, 1, water);
+            level.scheduleFluidTick(waterlogged, level.getLiquidPhysics().getTickDelay(LiquidMaterial::Water));
             sendBlockUpdate(owner, level, waterlogged, water, 1);
             sendSound(owner, level, waterlogged, WaterBlock(water).getBucketEmptySound());
             applyResult(owner, player, heldItem, "minecraft:bucket");
@@ -348,7 +349,8 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
                                        : makeLiquidState(content);
         level.setBlockState(target.x, target.y, target.z, placedState);
         if (content == Content::Water || content == Content::Lava)
-            level.scheduleFluidTick(target, LiquidBlock(placedState).getTickRate());
+            level.scheduleFluidTick(target, level.getLiquidPhysics().getTickDelay(
+                    content == Content::Lava ? LiquidMaterial::Lava : LiquidMaterial::Water));
         sendBlockUpdate(owner, level, target, placedState);
     }
 

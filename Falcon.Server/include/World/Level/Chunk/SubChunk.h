@@ -44,7 +44,8 @@ public:
     // cached palette questions; each always comes with the same test
     enum class PaletteQuery : uint8_t {
         RandomTick = 0,
-        Water = 1
+        Water = 1,
+        DynamicLiquid = 2
     };
 
     // cached until a palette changes; a palette may keep unused states: true only means worth scanning
@@ -108,11 +109,12 @@ private:
     void _forgetPaletteQueries() const {
         mPaletteQueries[0] = -1;
         mPaletteQueries[1] = -1;
+        mPaletteQueries[2] = -1;
         mEmptyCache = -1;
     }
 
     // per PaletteQuery: -1 until asked, then whether a palette state matched
-    mutable int8_t mPaletteQueries[2] = {-1, -1};
+    mutable int8_t mPaletteQueries[3] = {-1, -1, -1};
     // -1 until isEmpty() runs, then its answer; it only changes with a palette or the second layer's blocks
     mutable int8_t mEmptyCache = -1;
 };

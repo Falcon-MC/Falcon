@@ -17,4 +17,8 @@ public:
     bool hasRandomTick() const override {
         return true;
     }
+
+    bool isIceMaterial() const override {
+        return true;
+    }
 };

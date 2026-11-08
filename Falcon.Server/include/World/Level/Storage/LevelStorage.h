@@ -29,6 +29,7 @@ enum class LevelDbTag : unsigned char {
     PendingTicks = '3',
     LegacyEntities = '2',
     FinalizedState = '6',
+    RandomTicks = ':',
     LegacyVersion = 'v'
 };
 

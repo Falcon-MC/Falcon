@@ -28,16 +28,12 @@ bool LiquidBlock::isLiquid() const {
 }
 
 bool LiquidBlock::isSource() const {
-    return isLiquid() && getIdentifier() != "minecraft:flowing_water" && getIdentifier() != "minecraft:flowing_lava"
-           && getDecay() == 0;
+    return isLiquid() && getStates().getInt("liquid_depth", 0) == 0;
 }
 
+// falling liquid has bit 3 of liquid_depth set
 bool LiquidBlock::isFalling() const {
-    return isLiquid() && getIdentifier() != "minecraft:water" && getIdentifier() != "minecraft:lava" && getDecay() == 0;
-}
-
-bool LiquidBlock::isStill() const {
-    return getIdentifier() == "minecraft:water" || getIdentifier() == "minecraft:lava";
+    return isLiquid() && getStates().getInt("liquid_depth", 0) >= 8;
 }
 
 bool LiquidBlock::isBubbleColumn() const {
@@ -49,19 +45,13 @@ bool LiquidBlock::isDragDown() const {
 }
 
 int LiquidBlock::getDecay() const {
-    return getStates().getInt("liquid_depth", 0);
+    const int depth = getStates().getInt("liquid_depth", 0);
+    return depth >= 8 ? 0 : depth;
 }
 
-int LiquidBlock::getFlowDecayPerBlock() const {
-    return isLava() ? 2 : 1;
-}
-
-int LiquidBlock::getTickRate() const {
-    return isLava() ? 30 : 5;
-}
-
-int LiquidBlock::getMinAdjacentSourcesToFormSource() const {
-    return isWater() ? 2 : 0;
+int32_t LiquidBlock::getTickDelay(DimensionType dimension) const {
+    (void) dimension;
+    return 5;
 }
 
 const char *LiquidBlock::getBucketFillSound() const {
@@ -78,10 +68,9 @@ float LiquidBlock::getFluidHeightPercent() const {
     return (float) (isFalling() ? 0 : getDecay() + 1) / 9.0f;
 }
 
+// the game keeps every placed liquid as the still block
 BlockState LiquidBlock::makeState(int decay, bool falling) const {
-    const std::string flowing = isLava() ? "minecraft:flowing_lava" : "minecraft:flowing_water";
-    const std::string still = isLava() ? "minecraft:lava" : "minecraft:water";
     Tag states = Tag::ofCompound();
-    states.putInt("liquid_depth", std::max(0, std::min(7, decay)));
-    return BlockState(falling || decay > 0 ? flowing : still, states);
+    states.putInt("liquid_depth", std::max(0, std::min(7, decay)) + (falling ? 8 : 0));
+    return BlockState(isLava() ? "minecraft:lava" : "minecraft:water", states);
 }

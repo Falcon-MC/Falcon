@@ -191,6 +191,24 @@ public:
         mPendingTicks = std::move(record);
     }
 
+    // the RandomTicks record (tag ':') of the second queue
+    const std::string &getRandomTicks() const {
+        return mRandomTicks;
+    }
+
+    void setRandomTicks(std::string record) {
+        mRandomTicks = std::move(record);
+    }
+
+    // saved by Falcon before data version 2: its flowing blocks are rewritten on load
+    bool needsLiquidMigration() const {
+        return mNeedsLiquidMigration;
+    }
+
+    void setNeedsLiquidMigration(bool needed) {
+        mNeedsLiquidMigration = needed;
+    }
+
 private:
     void _ensureUnpacked() const {
         mAccessed = true;
@@ -209,6 +227,8 @@ private:
     bool mDirty;
     bool mPopulated = false;
     std::string mPendingTicks;
+    std::string mRandomTicks;
+    bool mNeedsLiquidMigration = false;
     uint64_t mBaseSequence = 0;
     uint64_t mDecorationSequence = 0;
     // mutable: const reads unpack a packed chunk first

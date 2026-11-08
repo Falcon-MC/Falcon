@@ -530,7 +530,7 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
     mPendingChunks.erase(key);
 
     auto result = mChunks.emplace(key, std::move(chunk));
-    mLiquidPhysics.loadPendingTicks(chunkX, chunkZ, result.first->second.getPendingTicks());
+    mLiquidPhysics.loadPendingTicks(result.first->second);
     _replayPendingChanges(key);
     _refreshChunkShapes(chunkX, chunkZ);
     return result.first->second;
@@ -556,7 +556,7 @@ LevelChunk &Level::insertChunk(LevelChunk chunk) {
     auto result = mChunks.emplace(key, std::move(chunk));
     if (result.second) {
         LevelChunk &inserted = result.first->second;
-        mLiquidPhysics.loadPendingTicks(inserted.getX(), inserted.getZ(), inserted.getPendingTicks());
+        mLiquidPhysics.loadPendingTicks(inserted);
         _refreshChunkShapes(inserted.getX(), inserted.getZ());
     }
     return result.first->second;
@@ -594,11 +594,8 @@ void Level::_refreshChunkShapes(int32_t chunkX, int32_t chunkZ) {
 
 // ticks change without dirtying the blocks: a chunk is saved again when its record differs
 void Level::_syncPendingTicks(LevelChunk &chunk) {
-    std::string record = mLiquidPhysics.savePendingTicks(chunk.getX(), chunk.getZ());
-    if (record == chunk.getPendingTicks())
-        return;
-    chunk.setPendingTicks(std::move(record));
-    chunk.markDirty();
+    if (mLiquidPhysics.savePendingTicks(chunk))
+        chunk.markDirty();
 }
 
 LevelChunk Level::extractChunk(int32_t chunkX, int32_t chunkZ) {
@@ -1385,12 +1382,12 @@ size_t Level::drainCompletedChunks() {
 
         if (result.mChunk != nullptr && (canInsert || canReplace)) {
             if (canInsert) {
-                const LevelChunk &inserted = mChunks.emplace(key, std::move(*result.mChunk)).first->second;
-                mLiquidPhysics.loadPendingTicks(result.mX, result.mZ, inserted.getPendingTicks());
+                LevelChunk &inserted = mChunks.emplace(key, std::move(*result.mChunk)).first->second;
+                mLiquidPhysics.loadPendingTicks(inserted);
                 _dispatchChunkEvent(FALCON_EVENT_CHUNK_LOAD, result.mX, result.mZ, result.mGenerated);
             } else {
                 resident->second = std::move(*result.mChunk);
-                mLiquidPhysics.loadPendingTicks(result.mX, result.mZ, resident->second.getPendingTicks());
+                mLiquidPhysics.loadPendingTicks(resident->second);
                 mRepopulatedChunks.insert(key);
             }
 
@@ -1501,13 +1498,17 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
     if (chunk.getBlock(x & 15, y, z & 15) == state)
         return;
 
+    // interned: still the old block once the chunk holds the new one
+    const BlockState &previous = chunk.getBlock(x & 15, y, z & 15);
     chunk.setBlock(x & 15, y, z & 15, state);
-    LightSystem::onBlockChanged(*this, x, y, z);
+    if (mBatchLight) {
+        mBatchedLightColumns.insert(((int64_t) x << 32) | (uint32_t) z);
+        addBlockLightUpdate(x, y, z);
+    } else {
+        LightSystem::onBlockChanged(*this, x, y, z);
+    }
 
-    if (chunk.getBlock(x & 15, y, z & 15, 1).mName != "minecraft:air")
-        mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
-
-    mLiquidPhysics.onBlockChanged(x, y, z);
+    mLiquidPhysics.onBlockChanged(Vector3i(x, y, z), 0, previous);
 }
 
 BlockState Level::getBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer) {
@@ -1530,9 +1531,9 @@ void Level::setBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer, con
     if (chunk.getBlock(x & 15, y, z & 15, layer) == state)
         return;
 
+    const BlockState &previous = chunk.getBlock(x & 15, y, z & 15, layer);
     chunk.setBlock(x & 15, y, z & 15, layer, state);
-    mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
-    mLiquidPhysics.onBlockChanged(x, y, z);
+    mLiquidPhysics.onBlockChanged(Vector3i(x, y, z), layer, previous);
 }
 
 void Level::setBlock(int32_t x, int32_t y, int32_t z, int32_t blockHash) {
@@ -1559,7 +1560,20 @@ void Level::scheduleFluidTick(const Vector3i &position, int64_t delay) {
 void Level::tick() {
     updateBlockLight();
 
+    mBatchLight = true;
     mLiquidPhysics.tick(++mLiquidTick, mActiveColumnOrder);
+    mBatchLight = false;
+    _flushLightBatch();
+}
+
+void Level::_flushLightBatch() {
+    for (const int64_t column: mBatchedLightColumns) {
+        const int32_t x = (int32_t) (column >> 32);
+        const int32_t z = (int32_t) (column & 0xffffffff);
+        if (LevelChunk *chunk = peekChunkPtr(x >> 4, z >> 4))
+            LightSystem::relightColumn(*chunk, x & 15, z & 15);
+    }
+    mBatchedLightColumns.clear();
 }
 
 void Level::scheduleBlockUpdate(const Vector3i &position, int64_t delay) {

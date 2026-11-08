@@ -16,6 +16,7 @@ class Actor;
 class BlockBehavior;
 class ItemStack;
 class Level;
+class LiquidPhysicsSystem;
 class MobActor;
 class ServerActor;
 class ServerNetworkHandler;
@@ -120,6 +121,38 @@ public:
     virtual uint8_t getLiquidBlockedFaces(const BlockState &state) const {
         (void) state;
         return 0;
+    }
+
+    // Material type 18: liquid falling onto it turns it to stone (sub_149C3E1F0)
+    virtual bool isIceMaterial() const {
+        return false;
+    }
+
+    // true for blocks reacting to the hooks below: other blocks never reach them
+    virtual bool usesBlockTicks() const {
+        return false;
+    }
+
+    // BlockPlaceEvent, neighborChanged (slot 75) and BlockQueuedTickEvent as the tick queues run them;
+    // `ticks` reads and writes the world and queues ticks
+    virtual void onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
+        (void) ticks;
+        (void) position;
+        (void) state;
+    }
+
+    virtual void onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position,
+                                        const BlockState &state, const Vector3i &changed) const {
+        (void) ticks;
+        (void) position;
+        (void) state;
+        (void) changed;
+    }
+
+    virtual void onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
+        (void) ticks;
+        (void) position;
+        (void) state;
     }
 
     virtual bool canBeReplaced(const BlockState &state) const {

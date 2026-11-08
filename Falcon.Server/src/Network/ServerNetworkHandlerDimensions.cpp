@@ -130,7 +130,7 @@ void ServerNetworkHandler::_broadcastFluidChanges(Level &level) {
     for (const Level::FluidChange &change: level.consumeFluidChanges()) {
         UpdateBlockPacket update;
         update.mBlockPosition = change.position;
-        update.mRuntimeId = (uint32_t) BlockStateHasher::hash(change.state.mName, change.state.mStates);
+        update.mRuntimeId = change.runtimeId;
         update.mFlags = UpdateBlockPacket::Flag::All;
         update.mDataLayer = (uint32_t) change.layer;
         BlockActionHandler::broadcastToViewers(*this, level,
