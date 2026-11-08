@@ -155,6 +155,9 @@ int64_t ServerNetworkHandler::randomSeed() {
 }
 
 namespace {
+    // a Falcon choice, not a game value: the key fetch usually ends well under it
+    const std::chrono::seconds LOGIN_KEY_WAIT(5);
+
     // the game's WebRTC never aborts SCTP over retransmissions (ICE consent checks, timers capped at 3 s);
     // libdatachannel aborts after 5 retransmits (~6 s locally): drops a client stalled under load
     void configureNetherNetSctp() {
@@ -676,6 +679,7 @@ void ServerNetworkHandler::tick(bool paused) {
     if (!mIsListening)
         return;
 
+    _retryLoginsAwaitingKeys();
     ++mChunkStreamTick;
     for (World *world: mWorlds.getWorlds())
         world->getTickingAreas().retryPendingLoads(*world);
@@ -1306,7 +1310,44 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const LoginPacket
         return;
     }
 
+    // the server listens before the first auth keys arrive: checked now, a signed login would read as unsigned
+    if (AuthKeyProvider::getInstance().isFetchingFirstKeys()) {
+        for (LoginAwaitingKeys &waiting: mLoginsAwaitingKeys) {
+            if (waiting.mId == id) {
+                waiting.mPacket = packet;
+                return;
+            }
+        }
+        mLoginsAwaitingKeys.push_back(LoginAwaitingKeys{id, packet, std::chrono::steady_clock::now()});
+        return;
+    }
+
     LoginHandler::handleLogin(*this, id, *player, packet);
+}
+
+void ServerNetworkHandler::_retryLoginsAwaitingKeys() {
+    if (mLoginsAwaitingKeys.empty())
+        return;
+
+    // a fetch with no network can take its full HTTP timeouts: past the wait, checked without the keys
+    const bool fetching = AuthKeyProvider::getInstance().isFetchingFirstKeys();
+    const std::chrono::steady_clock::time_point expired = std::chrono::steady_clock::now() - LOGIN_KEY_WAIT;
+    std::vector<LoginAwaitingKeys> ready;
+    for (auto it = mLoginsAwaitingKeys.begin(); it != mLoginsAwaitingKeys.end();) {
+        if (fetching && it->mReceived > expired) {
+            ++it;
+            continue;
+        }
+        ready.push_back(std::move(*it));
+        it = mLoginsAwaitingKeys.erase(it);
+    }
+
+    for (const LoginAwaitingKeys &login: ready) {
+        // disconnected while waiting: nobody to log in
+        ServerPlayer *player = _getPlayer(login.mId);
+        if (player != nullptr)
+            LoginHandler::handleLogin(*this, login.mId, *player, login.mPacket);
+    }
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ClientToServerHandshakePacket &packet) {

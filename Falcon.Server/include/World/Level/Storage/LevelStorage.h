@@ -48,6 +48,12 @@ public:
 
     bool open(const std::string &worldsDirectory, const std::string &levelName, int dimensionId = 0);
 
+    // opens a level's database on another thread; the next open() of that level adopts it
+    static void preopen(const std::string &worldsDirectory, const std::string &levelName);
+
+    // closes a database preopen() left unclaimed: it holds the level's lock
+    static void discardPreopened();
+
     bool attach(const LevelStorage &source, int dimensionId);
 
     void close();

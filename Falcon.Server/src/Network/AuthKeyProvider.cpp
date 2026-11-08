@@ -394,6 +394,11 @@ void AuthKeyProvider::stop() {
         mWorker.join();
 }
 
+bool AuthKeyProvider::isFetchingFirstKeys() {
+    std::lock_guard<std::mutex> guard(mMutex);
+    return mRunning && mLastFetch == 0 && mLastFailure == 0;
+}
+
 EVP_PKEY *AuthKeyProvider::acquireKey(const std::string &keyId, std::string &issuer) {
     std::lock_guard<std::mutex> guard(mMutex);
 

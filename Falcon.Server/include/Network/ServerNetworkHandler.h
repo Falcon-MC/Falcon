@@ -39,6 +39,7 @@
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/CraftingDataPacket.h"
 #include "Protocol/Packets/CreativeContentPacket.h"
+#include "Protocol/Packets/LoginPacket.h"
 
 #include <array>
 #include <cmath>
@@ -764,6 +765,8 @@ private:
 
     ServerPlayer *_getPlayer(const NetworkIdentifier &id);
 
+    void _retryLoginsAwaitingKeys();
+
     // custom items keep their ids; one colliding with a vanilla id gets the first id the client leaves free
     std::shared_ptr<const ItemNetworkIdMap> _itemNetworkIdsFor(int protocol) const;
 
@@ -930,6 +933,13 @@ private:
 
     std::mutex mMainThreadTaskMutex;
     std::vector<std::function<void()>> mMainThreadTasks;
+
+    struct LoginAwaitingKeys {
+        NetworkIdentifier mId;
+        LoginPacket mPacket;
+        std::chrono::steady_clock::time_point mReceived;
+    };
+    std::vector<LoginAwaitingKeys> mLoginsAwaitingKeys;
 
     std::unique_ptr<PluginManager> mPluginManager;
 };
