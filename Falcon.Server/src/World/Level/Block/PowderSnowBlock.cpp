@@ -4,6 +4,7 @@
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "World/Actor/Actor.h"
+#include "World/Actor/ActorFlags.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/BlockClassRegistry.h"
@@ -48,6 +49,17 @@ namespace {
             }
         }
     }
+
+    const AxisAlignedBB NO_SHAPE(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    const AxisAlignedBB FULL_SHAPE(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f);
+    // xmmword_15296B4EC: a long fall lands on a 0.9 high shape
+    const AxisAlignedBB FALLING_SHAPE(0.0f, 0.0f, 0.0f, 1.0f, 0.9f, 1.0f);
+    const float FALLING_SHAPE_DISTANCE = 2.5f;
+    const float ABOVE_EPSILON = 0.00000011920929f;
+
+    bool descends(const Actor &actor) {
+        return actor.getFlags().get(ActorFlag::Sneaking);
+    }
 }
 
 bool PowderSnowBlock::matches(const std::string &identifier) {
@@ -88,5 +100,29 @@ void PowderSnowBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, c
 bool PowderSnowBlock::getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const {
     (void) actor;
     multiplier = STUCK_MULTIPLIER;
+    return true;
+}
+
+// sub_14A23ADA0: solid only under an actor above the block that does not descend
+bool PowderSnowBlock::getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                                          AxisAlignedBB &shape) const {
+    (void) state;
+    shape = NO_SHAPE;
+    if (actor == nullptr || descends(*actor))
+        return true;
+    if ((float) position.y + 1.0f - ABOVE_EPSILON > actor->getPosition().y)
+        return true;
+
+    if (actor->getFallDistance() > FALLING_SHAPE_DISTANCE)
+        shape = FALLING_SHAPE;
+    else if (actor->canStandOnPowderSnow())
+        shape = FULL_SHAPE;
+    return true;
+}
+
+// without a position: callers asking whether the block blocks this actor at all
+bool PowderSnowBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
+    (void) state;
+    shape = actor != nullptr && !descends(*actor) && actor->canStandOnPowderSnow() ? FULL_SHAPE : NO_SHAPE;
     return true;
 }

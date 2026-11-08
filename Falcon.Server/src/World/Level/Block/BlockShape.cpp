@@ -179,6 +179,14 @@ AxisAlignedBB BlockShape::getRelativeShape(const BlockState &state, const Actor 
 }
 
 AxisAlignedBB BlockShape::getShapeAt(const BlockState &state, int32_t x, int32_t y, int32_t z, const Actor *actor) {
+    const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+    AxisAlignedBB placed = FULL_CUBE;
+    if (block != nullptr && block->getCollisionShapeAt(state, Vector3i(x, y, z), actor, placed)) {
+        if (placed.mMaxY <= placed.mMinY)
+            return EMPTY_SHAPE;
+        return placed.offset((float) x, (float) y, (float) z);
+    }
+
     const AxisAlignedBB shape = getRelativeShape(state, actor);
     if (shape.isEmpty())
         return shape;

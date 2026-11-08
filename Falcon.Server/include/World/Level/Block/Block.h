@@ -312,6 +312,13 @@ public:
     }
 
     // actor null outside a move: placement, explosions, block rays
+    // shapes that depend on where the actor stands against the block
+    virtual bool getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                                     AxisAlignedBB &shape) const {
+        (void) position;
+        return getCollisionShape(state, actor, shape);
+    }
+
     virtual bool getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
         (void) state;
         (void) actor;
