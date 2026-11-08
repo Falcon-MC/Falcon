@@ -240,10 +240,9 @@ bool JigsawAssembler::_tryPool(size_t pieceIndex, const Marker &marker, const Ji
             _shuffle(candidates);
 
             for (const Marker &candidate : candidates) {
+                // no joint in the village files: rollable, so a vertical pair never compares tops
+                // sub_143C7EB60, sub_145C262B0
                 if (candidate.mName != marker.mName || marker.mFacing != OPPOSITE[(size_t) candidate.mFacing])
-                    continue;
-                // vertical joints aligned (sub_143C7EB60): an up jigsaw tops north, a down one south
-                if (marker.mFacing < 2 && ((quarterTurns - parent.mQuarterTurns - 2) & 3) != 0)
                     continue;
 
                 const int32_t placeX = target[0] - candidate.x;
