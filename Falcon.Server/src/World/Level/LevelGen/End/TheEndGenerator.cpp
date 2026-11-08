@@ -72,10 +72,9 @@ float TheEndGenerator::getIslandHeight(int32_t chunkX, int32_t chunkZ, int32_t x
     return height;
 }
 
-void TheEndGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap) const {
+template<typename Visitor>
+void TheEndGenerator::_forEachTerrainBlock(int32_t chunkX, int32_t chunkZ, Visitor &&visit) const {
     const TheEndTerrainNoises &noises = mNoiseHolder->getTerrainNoises();
-    const int32_t chunkX = chunk.getX();
-    const int32_t chunkZ = chunk.getZ();
     const int32_t xzCount = TheEndGeneratorConstants::DENSITY_XZ_COUNT;
     const int32_t yCount = TheEndGeneratorConstants::DENSITY_Y_COUNT;
     const int32_t total = xzCount * xzCount * yCount;
@@ -143,17 +142,30 @@ void TheEndGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap) co
                             if ((float) localY * 0.25f * slope + low <= 0.0f)
                                 continue;
 
-                            const int32_t x = (i << 3) + localX;
-                            const int32_t z = (j << 3) + localZ;
-                            const int32_t y = (k << 2) + localY;
-                            chunk.setBlock(x, y, z, endStoneState());
-                            heightMap[(x << 4) | z] = std::max(heightMap[(x << 4) | z], y);
+                            visit((i << 3) + localX, (k << 2) + localY, (j << 3) + localZ);
                         }
                     }
                 }
             }
         }
     }
+}
+
+void TheEndGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap) const {
+    _forEachTerrainBlock(chunk.getX(), chunk.getZ(), [&chunk, heightMap](int32_t x, int32_t y, int32_t z) {
+        chunk.setBlock(x, y, z, endStoneState());
+        heightMap[(x << 4) | z] = std::max(heightMap[(x << 4) | z], y);
+    });
+}
+
+int32_t TheEndGenerator::getTerrainTop(int32_t chunkX, int32_t chunkZ) const {
+    int32_t top = 0;
+    _forEachTerrainBlock(chunkX, chunkZ, [&top](int32_t x, int32_t y, int32_t z) {
+        (void) x;
+        (void) z;
+        top = std::max(top, y);
+    });
+    return top;
 }
 
 void TheEndGenerator::generate(LevelChunk &chunk) const {

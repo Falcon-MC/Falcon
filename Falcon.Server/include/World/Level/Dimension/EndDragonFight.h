@@ -4,11 +4,13 @@
 #include "Core/NBT/Tag.h"
 
 #include <cstdint>
+#include <deque>
 #include <optional>
 #include <vector>
 
 class Actor;
 class EndCrystalActor;
+class EndGatewayBlockActor;
 class EnderDragon;
 class Level;
 class ServerNetworkHandler;
@@ -84,6 +86,25 @@ public:
     /** The end of the dragon's death: exit portal, next gateway and, the first time, the egg (sub_14717D450). */
     void onDragonKilled(ServerNetworkHandler &owner, Level &level, const EnderDragon &dragon);
 
+    /**
+     * Gives the gateway at position an exit and a gateway back from it once both ends are loaded, placing the gateway
+     * itself too when placeGateway (sub_14714F240). The game aims the exit right away from the terrain generator.
+     */
+    void requestGatewayExit(const Level &level, const Vector3i &gateway, bool placeGateway);
+
+    /**
+     * Loads both ends of a gateway that already has an exit and moves an exit that would leave an entity in a block
+     * or over the void, at either end (sub_14716A610, sub_14716AEC0).
+     */
+    void requestGatewayCheck(const Vector3i &gateway, const Vector3i &exit);
+
+    /** The rough exit of a gateway, from the End's terrain generator alone (sub_14714F400). */
+    static Vector3i findRoughExit(const Level &level, const Vector3i &gateway);
+
+    size_t getGatewayRequestCount() const {
+        return mGatewayRequests.size();
+    }
+
     bool isDragonKilled() const {
         return mDragonKilled;
     }
@@ -113,6 +134,28 @@ public:
     }
 
 private:
+    struct GatewayRequest {
+        bool mCheckOnly;
+        Vector3i mGateway;
+        Vector3i mExit;
+        bool mPlaceGateway;
+    };
+
+    void _tickGatewayRequests(ServerNetworkHandler &owner, Level &level);
+
+    bool _loadGatewayEnds(Level &level, const GatewayRequest &request, bool registerLoaders);
+
+    void _releaseGatewayEnds(Level &level, const GatewayRequest &request);
+
+    void _findGatewayExit(ServerNetworkHandler &owner, Level &level, const GatewayRequest &request);
+
+    void _checkGatewayExit(ServerNetworkHandler &owner, Level &level, const Vector3i &from, const Vector3i &to,
+                           bool fromNearestGateway);
+
+    EndGatewayBlockActor &_placeGateway(Level &level, const Vector3i &position);
+
+    void _raiseIsland(Level &level, const Vector3i &position);
+
     void _initializeDragon(ServerNetworkHandler &owner, Level &level);
 
     void _attachDragon(EnderDragon &dragon);
@@ -127,9 +170,7 @@ private:
 
     bool _findExitPortalLocation(Level &level);
 
-    void _spawnNewGateway(ServerNetworkHandler &owner, Level &level);
-
-    void _placePendingGateways(Level &level);
+    void _spawnNewGateway(Level &level);
 
     void _updateCrystalCount(ServerNetworkHandler &owner, Level &level);
 
@@ -158,7 +199,9 @@ private:
     int64_t mDragonUniqueId = -1;
     std::optional<Vector3i> mExitPortalLocation;
     std::vector<int32_t> mGateways;
-    std::vector<int32_t> mPendingGateways;
+    // the front request is the one whose ends are loading
+    std::deque<GatewayRequest> mGatewayRequests;
+    bool mGatewayEndsRequested = false;
     RespawnStage mRespawnStage = RespawnStage::None;
     int32_t mRespawnTicks = 0;
     std::vector<int64_t> mRespawnCrystals;

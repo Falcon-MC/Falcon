@@ -1138,12 +1138,13 @@ void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::stri
         target->hurt(*this, amount, ActorDamageSource::environment(deathMessageKey, target->getName()));
 }
 
-void ServerNetworkHandler::broadcastActorMove(ServerActor &actor) {
+void ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleported) {
     MoveActorAbsolutePacket move;
     move.mRuntimeActorId = (int64_t) actor.getRuntimeId();
     move.mPosition = actor.getPosition();
     move.mPosition.y += actor.getBaseOffset();
     move.mRotation = actor.getRotation();
+    move.mTeleported = teleported;
 
     _sendToViewers(actor, move);
 }

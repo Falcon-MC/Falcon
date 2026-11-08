@@ -315,7 +315,7 @@ public:
 
     bool canPlayerSeeActor(ServerPlayer &player, const Actor &actor) const;
 
-    void broadcastActorMove(ServerActor &actor);
+    void broadcastActorMove(ServerActor &actor, bool teleported = false);
 
     void syncActorProperties(ServerActor &actor);
 
