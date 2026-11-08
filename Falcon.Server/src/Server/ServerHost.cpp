@@ -181,6 +181,7 @@ namespace {
 
     // https on the port, plus 443 for 19132 only: sub_143A904D0; http after every https probe ends: sub_143A92EB0
     const unsigned short DEFAULT_GAME_PORT = 19132;
+    const unsigned short HTTPS_PORT = 443;
 
     void logTransportNotice(TransportLayer transport, const ServerNetworkHandler &handler, unsigned short port) {
         LOG_INFO(LogAreaID::Server, "==================== TRANSPORT =======================");
@@ -192,10 +193,12 @@ namespace {
             } else {
                 LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over plain HTTP on TCP %u.",
                          (unsigned) port);
-                if (port == DEFAULT_GAME_PORT)
+                // Falcon on 443 refuses TLS at once: no stalled probe left to warn about
+                if (port == DEFAULT_GAME_PORT && handler.getExtraSignalingPort() != HTTPS_PORT)
                     LOG_INFO(LogAreaID::Server, "Players first try HTTPS here and on TCP 443 of this host: a firewall "
-                                                "that drops 443 delays every join by 3 s. Set signaling-certificate "
-                                                "and signaling-private-key to answer over HTTPS.");
+                                                "that drops 443 delays every join by 3 s. Set signaling-extra-port=443 "
+                                                "or signaling-certificate and signaling-private-key to answer over "
+                                                "HTTPS.");
             }
             if (handler.getExtraSignalingPort() != 0)
                 LOG_INFO(LogAreaID::Server, "NetherNet signaling also listens on TCP %u.",
