@@ -247,6 +247,8 @@ uint64_t GeneratorChunkSource::_decorate(LevelChunk &chunk, uint64_t sequence,
     }
 
     chunk = mScratch.extractChunk(chunkX, chunkZ);
+    // later neighbours tell it from a raw one: structure pieces read its blocks (sub_147761B80)
+    chunk.setPopulated(true);
     mCache.put(chunk);
 
     BlockActorStore &generatedActors = mScratch.getBlockActors();
