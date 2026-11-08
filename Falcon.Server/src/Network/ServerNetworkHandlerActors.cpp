@@ -799,9 +799,14 @@ bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &
     if (!ChunkStreamHandler::isInActorRange(player.getPosition(), position))
         return false;
 
+    const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+    const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+    // an actor goes out with its chunk: one in a chunk this client has not received floats in the void
+    if (player.getSentChunks().count(((int64_t) chunkX << 32) | (uint32_t) chunkZ) == 0)
+        return false;
+
     // only chunks the server holds fully loaded hand out their actors (sub_14294B4A0)
-    return getLevelFor(actor).isChunkPopulated((int32_t) std::floor(position.x) >> 4,
-                                               (int32_t) std::floor(position.z) >> 4);
+    return getLevelFor(actor).isChunkPopulated(chunkX, chunkZ);
 }
 
 void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &actor) {
