@@ -25,4 +25,6 @@ public:
     static void fillContent(FalconServerApi &api);
 
     static void fillServices(FalconServerApi &api);
+
+    static void fillMaps(FalconServerApi &api);
 };
