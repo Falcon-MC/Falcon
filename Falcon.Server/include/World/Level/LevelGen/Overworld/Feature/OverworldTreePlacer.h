@@ -17,7 +17,8 @@ public:
         Simple,
         Fancy,
         Fallen,
-        Mega
+        Mega,
+        Acacia
     };
 
     enum class Canopy {
@@ -26,7 +27,8 @@ public:
         Fancy,
         Spruce,
         Pine,
-        MegaPine
+        MegaPine,
+        Roofed
     };
 
     // a range of the feature's JSON, its maximum excluded
@@ -62,6 +64,8 @@ public:
         int32_t mCanopyVineSteps = 0;
         // water among may_replace, and no may_grow_through
         bool mInWater = false;
+        // may_replace holds only air and the leaves tag
+        bool mAirAndLeaves = false;
     };
 
     // fancy_trunk and fancy_canopy of fancy_oak_tree_feature
@@ -93,10 +97,40 @@ public:
         int32_t mClusterRadius;
     };
 
+    // acacia_trunk with its branches and their acacia_canopy, and the roofed_canopy it carries
+    struct Acacia {
+        int32_t mTrunkWidth;
+        int32_t mBaseHeight;
+        std::vector<int32_t> mHeightIntervals;
+        int32_t mMinHeightForCanopy;
+        Range mLeanHeight;
+        Range mLeanSteps;
+        Range mLeanLength;
+        bool mAllowDiagonalGrowth;
+        Range mBranchLength;
+        Range mBranchPosition;
+        uint32_t mBranchNumerator;
+        uint32_t mBranchDenominator;
+        int32_t mBranchCanopySize;
+        bool mBranchCanopySimplified;
+        // trunk_decoration vines, numerator in denominator on each outer side of every log; 0 for none
+        uint32_t mVineNumerator;
+        uint32_t mVineDenominator;
+        // roofed_canopy: canopy_height, core_width, outer_radius and inner_radius
+        int32_t mCanopyHeight;
+        int32_t mCanopyCoreWidth;
+        int32_t mCanopyOuterRadius;
+        int32_t mCanopyInnerRadius;
+    };
+
     using Decorate = std::function<void(int32_t, int32_t, int32_t)>;
 
-    static bool place(BlockManager &blocks, const Definition &tree, const Fancy *fancy, const Mega *mega, int32_t x,
-                      int32_t y, int32_t z, std::mt19937 &random, const Decorate &decorate);
+    static bool place(BlockManager &blocks, const Definition &tree, const Fancy *fancy, const Mega *mega,
+                      const Acacia *acacia, int32_t x, int32_t y, int32_t z, std::mt19937 &random,
+                      const Decorate &decorate);
+
+    // the blocks a trunk's log may replace besides may_replace (sub_1471C66B0)
+    static bool logReplaces(const Definition &tree, const BlockState &state);
 
 private:
     static bool _canPlace(BlockManager &blocks, const Definition &tree, int32_t x, int32_t y, int32_t z,
@@ -115,6 +149,18 @@ private:
                            int32_t z, int32_t height, std::mt19937 &random);
 
     static void _baseCluster(BlockManager &blocks, const Mega &mega, int32_t x, int32_t y, int32_t z);
+
+    static bool _acaciaTrunk(BlockManager &blocks, const Definition &tree, const Acacia &acacia, int32_t x, int32_t y,
+                             int32_t z, int32_t height, std::mt19937 &random);
+
+    static void _decorateLog(BlockManager &blocks, const Acacia &acacia, int32_t x, int32_t y, int32_t z,
+                             const bool sides[4], std::mt19937 &random);
+
+    static void _roofedCanopy(BlockManager &blocks, const Definition &tree, const Acacia &acacia, int32_t x,
+                              int32_t y, int32_t z, std::mt19937 &random);
+
+    static void _acaciaCanopy(BlockManager &blocks, const Definition &tree, int32_t size, bool simplified, int32_t x,
+                              int32_t y, int32_t z);
 
     static bool _megaPineCanopy(BlockManager &blocks, const Definition &tree, const Mega &mega, int32_t x, int32_t y,
                                 int32_t z, std::mt19937 &random);
