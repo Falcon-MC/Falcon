@@ -11,9 +11,12 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
+#include <system_error>
 #include <unordered_map>
 #include <utility>
 
@@ -58,6 +61,56 @@ namespace {
         }();
 
         return settings;
+    }
+
+    struct OpenedDatabase {
+        leveldb::Status mStatus;
+        std::shared_ptr<const leveldb::FilterPolicy> mFilterPolicy;
+        std::shared_ptr<leveldb::Cache> mBlockCache;
+        // last: released before the cache and filter it reads
+        std::shared_ptr<leveldb::DB> mDb;
+    };
+
+    std::filesystem::path levelRoot(const std::string &worldsDirectory, const std::string &levelName) {
+        return std::filesystem::path(worldsDirectory) / levelName;
+    }
+
+    OpenedDatabase openDatabase(const std::filesystem::path &root) {
+        std::error_code error;
+        std::filesystem::create_directories(root / "db", error);
+
+        leveldb::Options options;
+        options.create_if_missing = true;
+        // raw zlib: the game's block compression, worlds stay interchangeable
+        options.compression = leveldb::kZlibRawCompression;
+        options.block_size = 163840;
+        // chunk keys span the whole key space: every flushed table overlaps all of level 1 and rewrites it;
+        // a 4 MB memtable (0.5 MB compressed) let compaction fall behind and stalled auto-saves for seconds
+        options.write_buffer_size = 32 * 1024 * 1024;
+
+        OpenedDatabase opened;
+        opened.mFilterPolicy.reset(leveldb::NewBloomFilterPolicy(10));
+        opened.mBlockCache.reset(leveldb::NewLRUCache(8 * 1024 * 1024));
+        options.filter_policy = opened.mFilterPolicy.get();
+        options.block_cache = opened.mBlockCache.get();
+
+        leveldb::DB *db = nullptr;
+        opened.mStatus = leveldb::DB::Open(options, (root / "db").string(), &db);
+        opened.mDb.reset(db);
+        return opened;
+    }
+
+    // a database opens with log recovery and synced writes: started while the registries load
+    std::mutex preopenedMutex;
+    std::string preopenedPath;
+    std::future<OpenedDatabase> preopened;
+
+    std::future<OpenedDatabase> takePreopened(const std::string &path) {
+        std::lock_guard<std::mutex> lock(preopenedMutex);
+        if (!preopened.valid() || preopenedPath != path)
+            return std::future<OpenedDatabase>();
+        preopenedPath.clear();
+        return std::move(preopened);
     }
 }
 
@@ -164,44 +217,56 @@ std::string LevelStorage::_makeSubChunkKey(int32_t chunkX, int32_t chunkZ, int8_
     return key;
 }
 
+void LevelStorage::preopen(const std::string &worldsDirectory, const std::string &levelName) {
+    discardPreopened();
+
+    const std::filesystem::path root = levelRoot(worldsDirectory, levelName);
+    std::lock_guard<std::mutex> lock(preopenedMutex);
+    try {
+        preopened = std::async(std::launch::async, openDatabase, root);
+        preopenedPath = (root / "db").string();
+    } catch (const std::system_error &) {
+        // no thread to spare: open() opens it itself
+        preopenedPath.clear();
+    }
+}
+
+void LevelStorage::discardPreopened() {
+    std::future<OpenedDatabase> unclaimed;
+    {
+        std::lock_guard<std::mutex> lock(preopenedMutex);
+        unclaimed = std::move(preopened);
+        preopenedPath.clear();
+    }
+    if (unclaimed.valid())
+        unclaimed.get();
+}
+
 bool LevelStorage::open(const std::string &worldsDirectory, const std::string &levelName, int dimensionId) {
     close();
 
     mDimensionId = dimensionId;
 
     std::error_code error;
-    const std::filesystem::path root = std::filesystem::path(worldsDirectory) / levelName;
+    const std::filesystem::path root = levelRoot(worldsDirectory, levelName);
     std::filesystem::create_directories(root / "db", error);
 
     mPath = (root / "db").string();
 
     LOG_INFO(LogAreaID::Server, "Opening level '%s'", mPath.c_str());
 
-    leveldb::Options options;
-    options.create_if_missing = true;
-    // raw zlib: the game's block compression, worlds stay interchangeable
-    options.compression = leveldb::kZlibRawCompression;
-    options.block_size = 163840;
-    // chunk keys span the whole key space: every flushed table overlaps all of level 1 and rewrites it;
-    // a 4 MB memtable (0.5 MB compressed) let compaction fall behind and stalled auto-saves for seconds
-    options.write_buffer_size = 32 * 1024 * 1024;
-    mFilterPolicy.reset(leveldb::NewBloomFilterPolicy(10));
-    mBlockCache.reset(leveldb::NewLRUCache(8 * 1024 * 1024));
-    options.filter_policy = mFilterPolicy.get();
-    options.block_cache = mBlockCache.get();
+    std::future<OpenedDatabase> early = takePreopened(mPath);
+    const OpenedDatabase opened = early.valid() ? early.get() : openDatabase(root);
 
-    leveldb::DB *db = nullptr;
-    const leveldb::Status status = leveldb::DB::Open(options, mPath, &db);
-
-    if (!status.ok()) {
+    if (!opened.mStatus.ok()) {
         LOG_ERROR(LogAreaID::Server, "Could not open level database %s: %s", mPath.c_str(),
-                  status.ToString().c_str());
-        mBlockCache.reset();
-        mFilterPolicy.reset();
+                  opened.mStatus.ToString().c_str());
         return false;
     }
 
-    mDb.reset(db);
+    mFilterPolicy = opened.mFilterPolicy;
+    mBlockCache = opened.mBlockCache;
+    mDb = opened.mDb;
     mDecompressAllocator = std::make_shared<leveldb::DecompressAllocator>();
 
     const std::filesystem::path nameFile = root / "levelname.txt";

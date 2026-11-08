@@ -11,6 +11,7 @@
 #include "Core/Utility/UUID.h"
 #include "World/Item/StringToItemParser.h"
 #include "World/Level/Storage/AutoCompaction.h"
+#include "World/Level/Storage/LevelStorage.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h"
 #include "Network/ServerNetworkHandler.h"
@@ -204,6 +205,31 @@ namespace {
         LOG_WARN(LogAreaID::Server, "=======================================================");
     }
 
+    std::exception_ptr loadProperties(PropertiesSettings &properties, const std::string &path,
+                                      const ServerHostOptions &options) {
+        try {
+            for (const auto &entry: options.properties)
+                if (!properties.setProperty(entry.first, entry.second))
+                    throw std::runtime_error("Could not write server property: " + entry.first);
+            if (!properties.load(path))
+                throw std::runtime_error("Could not read server.properties");
+            if (!options.properties.empty() && !properties.getInvalidProperties().empty())
+                throw std::invalid_argument("Invalid server property: " + properties.getInvalidProperties().front());
+            if (!WorldManager::isValidName(properties.getLevelName()))
+                throw std::invalid_argument("Invalid world name");
+        } catch (...) {
+            return std::current_exception();
+        }
+        return nullptr;
+    }
+
+    // start() adopts the database when it opens the world; on any earlier exit it must not keep the lock
+    struct PreopenedLevelGuard {
+        ~PreopenedLevelGuard() {
+            LevelStorage::discardPreopened();
+        }
+    };
+
     // process-wide registries outlive a server; an embedder opens world after world:
     // none may see the previous one's players or packs
     void resetProcessState() {
@@ -239,6 +265,14 @@ bool ServerHost::start(const ServerHostOptions &options) {
     if (mHandler != nullptr || !acquire())
         return false;
 
+    // read first: the level database opens while the registries load; a bad file still throws after them
+    const std::string propertiesPath = ServerPaths::file(PROPERTIES_FILE);
+    PropertiesSettings properties(propertiesPath);
+    const std::exception_ptr propertiesError = loadProperties(properties, propertiesPath, options);
+    PreopenedLevelGuard preopenedLevel;
+    if (propertiesError == nullptr)
+        LevelStorage::preopen(WorldManager::getWorldsDirectory(), properties.getLevelName());
+
     // independent registries; joined before the handler exists: the game sees only complete definitions
     auto entityDefinitions = std::async(std::launch::async, EntityDefinitions::initialize);
     auto biomeData = std::async(std::launch::async, BiomeChunkGenDataRegistry::initialize);
@@ -249,18 +283,8 @@ bool ServerHost::start(const ServerHostOptions &options) {
     SpawnRules::initialize();
     entityDefinitions.get();
     biomeData.get();
-
-    const std::string propertiesPath = ServerPaths::file(PROPERTIES_FILE);
-    PropertiesSettings properties(propertiesPath);
-    for (const auto &entry: options.properties)
-        if (!properties.setProperty(entry.first, entry.second))
-            throw std::runtime_error("Could not write server property: " + entry.first);
-    if (!properties.load(propertiesPath))
-        throw std::runtime_error("Could not read server.properties");
-    if (!options.properties.empty() && !properties.getInvalidProperties().empty())
-        throw std::invalid_argument("Invalid server property: " + properties.getInvalidProperties().front());
-    if (!WorldManager::isValidName(properties.getLevelName()))
-        throw std::invalid_argument("Invalid world name");
+    if (propertiesError != nullptr)
+        std::rethrow_exception(propertiesError);
 
     languages.get();
     Localization::setServerLocale(properties.getLanguage());

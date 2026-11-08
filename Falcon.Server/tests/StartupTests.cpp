@@ -68,6 +68,29 @@ namespace {
             require(registry.getPermutations(entry.first)->size() == entry.second, "Extra block permutations");
     }
 
+    void checkPreopenedStorage(const std::filesystem::path &directory) {
+        Tag saved = Tag::ofCompound();
+        saved.put("value", Tag::ofInt(42));
+        LevelStorage::preopen(directory.string(), "Preopened");
+        {
+            LevelStorage adopted;
+            require(adopted.open(directory.string(), "Preopened"), "Could not adopt the preopened database");
+            require(adopted.saveSavedData("check", saved), "Preopened database is not writable");
+        }
+
+        // another level leaves the preopened one alone; discarding it releases the lock
+        LevelStorage::preopen(directory.string(), "Preopened");
+        {
+            LevelStorage other;
+            require(other.open(directory.string(), "Other"), "Preopening blocked another level");
+        }
+        LevelStorage::discardPreopened();
+        LevelStorage reopened;
+        require(reopened.open(directory.string(), "Preopened"), "Discarded database kept its lock");
+        Tag loaded;
+        require(reopened.loadSavedData("check", loaded) && loaded == saved, "Preopened database lost its data");
+    }
+
     void checkDimensions(const std::filesystem::path &directory, int64_t seed) {
         World world(7, "World", 4, seed);
         require(world.open(directory.string(), 1, Level::PacketBroadcaster(), nullptr), "Could not open world");
@@ -123,6 +146,7 @@ int main() {
         }
         checkDimensions(directory, 12345);
         checkDimensions(directory, 67890);
+        checkPreopenedStorage(directory);
         {
             LevelStorage legacy;
             require(legacy.open(directory.string(), "Legacy"), "Could not create legacy world");
