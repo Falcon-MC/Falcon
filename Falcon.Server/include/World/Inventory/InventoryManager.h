@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Math/Vector3i.h"
+#include "World/Inventory/CartographyRecipes.h"
 #include "World/Inventory/Container.h"
 #include "Protocol/Types/ContainerType.h"
 #include "Protocol/Types/ItemStack.h"
@@ -76,6 +77,15 @@ public:
     bool onClientOpenCartography(const Vector3i &position);
 
     bool isCartographyOpen() const;
+
+    // the copy id a MapCreateLockedCopyPacket asked for, kept until the table locks a map
+    void setClientMapLock(const CartographyLock &lock) {
+        mClientMapLock = lock;
+    }
+
+    const CartographyLock &getClientMapLock() const {
+        return mClientMapLock;
+    }
 
     const Vector3i &getAnvilPosition() const;
 
@@ -199,6 +209,7 @@ private:
     int mAnvilWindowId = CONTAINER_ID_NONE;
     ContainerType mAnvilWindowType = ContainerType::Anvil;
     Vector3i mAnvilPosition;
+    CartographyLock mClientMapLock;
     int mContainerWindowId = CONTAINER_ID_NONE;
     Vector3i mContainerPosition;
     std::string mEnchantInputId;

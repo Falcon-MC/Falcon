@@ -11,7 +11,7 @@
 
 class LevelStorage;
 
-// MapDataManager: map_<id> records read on first use, kept in memory until the world saves; main thread only
+// MapDataManager: map_<id> records read on first use and unloaded once saved and left unused; main thread only
 class MapDataManager {
 public:
     using IdAllocator = std::function<int64_t()>;
@@ -45,14 +45,22 @@ public:
 
     void saveDirty(LevelStorage &storage);
 
+    // drops saved maps no lookup touched since the last call and no frame shows; storage reloads them on demand
+    void unloadUnused();
+
     template <typename Function>
     void forEachLoaded(Function &&function) {
         for (auto &entry: mMaps)
-            function(*entry.second);
+            function(*entry.second.mData);
     }
 
 private:
-    std::unordered_map<int64_t, std::unique_ptr<MapItemSavedData>> mMaps;
+    struct Entry {
+        std::unique_ptr<MapItemSavedData> mData;
+        bool mUsed = true;
+    };
+
+    std::unordered_map<int64_t, Entry> mMaps;
     // ids storage lacks, so requests for unknown maps read the database once
     std::unordered_set<int64_t> mMissing;
 };

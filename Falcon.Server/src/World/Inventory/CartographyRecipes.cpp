@@ -38,21 +38,24 @@ namespace {
     }
 
     // sub_142F644E0 and sub_142F64860
-    bool lock(const ItemStack &input, const CartographyRecipes::Maps &maps, ItemStack &result) {
-        const MapItemSavedData *data = maps.mGetMap(MapItem::getMapId(input));
+    bool lock(const ItemStack &input, const CartographyRecipes::Maps &maps, CartographyResult &result) {
+        const int64_t mapId = MapItem::getMapId(input);
+        const MapItemSavedData *data = maps.mGetMap(mapId);
         if (data == nullptr || data->isLocked())
             return false;
 
-        MapItemSavedData *copy = maps.mLockCopy(MapItem::getMapId(input));
-        if (copy == nullptr)
+        const int64_t copyId = maps.mAllocateLockId(mapId);
+        if (copyId == MapItemSavedData::INVALID_ID)
             return false;
 
-        result = input;
-        result.mCount = 1;
-        ensureTag(result);
-        result.mTag.putLong(MapItem::TAG_MAP_ID, copy->getMapId());
-        result.mTag.putByte(MapItem::TAG_IS_INIT, 1);
-        result.mDamage = (int32_t) MapItemType::Locked;
+        result.mResult = input;
+        result.mResult.mCount = 1;
+        ensureTag(result.mResult);
+        result.mResult.mTag.putLong(MapItem::TAG_MAP_ID, copyId);
+        result.mResult.mTag.putByte(MapItem::TAG_IS_INIT, 1);
+        result.mResult.mDamage = (int32_t) MapItemType::Locked;
+        result.mLock.mOriginalId = mapId;
+        result.mLock.mCopyId = copyId;
         return true;
     }
 
@@ -120,7 +123,7 @@ CartographyResult CartographyRecipes::createResult(const ItemStack &input, const
             result.mResult.mCount = 2;
             crafted = true;
         } else if (filledMap && is(additional, GLASS_PANE))
-            crafted = lock(input, maps, result.mResult);
+            crafted = lock(input, maps, result);
         else if (is(additional, COMPASS))
             crafted = upgrade(input, result.mResult);
 
@@ -145,4 +148,10 @@ CartographyResult CartographyRecipes::createResult(const ItemStack &input, const
     if (renaming)
         rename(result.mResult, *name);
     return result;
+}
+
+bool CartographyRecipes::isLocking(const ItemStack &input, const ItemStack &additional, int64_t originalId) {
+    return originalId != MapItemSavedData::INVALID_ID && MapItem::isFilledMap(input)
+           && MapItem::getMapId(input) == originalId && input.mDamage != (int32_t) MapItemType::Locked
+           && is(additional, GLASS_PANE);
 }

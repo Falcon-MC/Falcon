@@ -208,6 +208,26 @@ public:
     // sub_1483F21F0
     void removeTracked(const MapItemTrackedActorKey &key);
 
+    // update returns false when the tracked thing is gone: a frame only hides its marker, an actor drops its
+    // tracking, since player ids change every session
+    template <typename Update>
+    void refreshTracked(Update &&update) {
+        for (size_t index = 0; index < mTracked.size();) {
+            if (update(mTracked[index])) {
+                ++index;
+                continue;
+            }
+
+            const MapItemTrackedActorKey key = mTracked[index].mKey;
+            if (key.mType == MapItemTrackedActorKey::Type::Block) {
+                removeDecoration(key);
+                ++index;
+                continue;
+            }
+            removeTracked(key);
+        }
+    }
+
     // sub_1483F2F20: every pixel and decoration
     ClientboundMapItemDataPacket buildFullPacket() const;
 

@@ -42,5 +42,5 @@ public:
                                           int32_t *outAnvilLevelsConsumed = nullptr,
                                           bool *outAnvilUsed = nullptr,
                                           const CartographyRecipes::Maps *cartographyMaps = nullptr,
-                                          bool *outCartographyUsed = nullptr);
+                                          CartographyLock *outCartographyLock = nullptr);
 };

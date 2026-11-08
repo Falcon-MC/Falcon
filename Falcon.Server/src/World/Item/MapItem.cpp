@@ -263,10 +263,9 @@ bool MapItem::updateTrackedDecoration(ServerNetworkHandler &owner, World &world,
 }
 
 void MapItem::updateTrackedDecorations(ServerNetworkHandler &owner, World &world, MapItemSavedData &data) {
-    for (MapItemTrackingInfo &tracking: data.getTracked()) {
-        if (!updateTrackedDecoration(owner, world, data, tracking))
-            data.removeDecoration(tracking.mKey);
-    }
+    data.refreshTracked([&owner, &world, &data](MapItemTrackingInfo &tracking) {
+        return updateTrackedDecoration(owner, world, data, tracking);
+    });
 }
 
 void MapItem::tickCarriedBy(ServerNetworkHandler &owner, World &world, MapItemSavedData &data,

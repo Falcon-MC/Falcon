@@ -441,12 +441,18 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     cartographyMaps.mExpand = [&mapLevel](int64_t mapId, bool scaled) {
         return mapLevel.getMaps().expandMap(mapLevel.getMapStorage(), mapId, scaled);
     };
-    // sub_142F64860 draws the id of the locked copy at random
-    cartographyMaps.mLockCopy = [&mapLevel](int64_t mapId) -> MapItemSavedData * {
+    // the client draws the copy id and sends it in MapCreateLockedCopyPacket; reusing it keeps its item in step
+    cartographyMaps.mAllocateLockId = [&mapLevel, &manager](int64_t mapId) {
+        const CartographyLock &requested = manager.getClientMapLock();
+        if (requested.mOriginalId == mapId && requested.mCopyId != MapItemSavedData::INVALID_ID
+            && mapLevel.getMapData(requested.mCopyId) == nullptr)
+            return requested.mCopyId;
+
+        // sub_142F64860 draws the id of the locked copy at random
         int64_t copyId = (int64_t) (uint32_t) MapItem::random()();
         while (copyId == MapItemSavedData::INVALID_ID || mapLevel.getMapData(copyId) != nullptr)
             copyId = (int64_t) (uint32_t) MapItem::random()();
-        return mapLevel.getMaps().copyAndLockMap(mapLevel.getMapStorage(), mapId, copyId);
+        return copyId;
     };
 
     for (const ItemStackRequest &request: packet.mRequests) {
@@ -459,6 +465,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         int32_t enchantLevelsConsumed = 0;
         int32_t anvilLevelsConsumed = 0;
         bool anvilUsed = false;
+        CartographyLock cartographyLock;
         const bool cartographyOpen = manager.isCartographyOpen()
                                      && level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName
                                         == CartographyTableBlock::IDENTIFIER;
@@ -487,7 +494,15 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                                                                        anvilOpen,
                                                                        &anvilLevelsConsumed,
                                                                        &anvilUsed,
-                                                                       cartographyOpen ? &cartographyMaps : nullptr);
+                                                                       cartographyOpen ? &cartographyMaps : nullptr,
+                                                                       &cartographyLock);
+
+        // the copy waits for the request to hold: a rejected one would leave an orphan map behind
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK
+            && cartographyLock.mCopyId != MapItemSavedData::INVALID_ID
+            && mapLevel.getMaps().copyAndLockMap(mapLevel.getMapStorage(), cartographyLock.mOriginalId,
+                                                 cartographyLock.mCopyId) != nullptr)
+            manager.setClientMapLock(CartographyLock());
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && enchantLevelsConsumed > 0) {
             player.getExperience().subtractXpLevels(enchantLevelsConsumed);

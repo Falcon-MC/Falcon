@@ -8,10 +8,17 @@
 
 class MapItemSavedData;
 
+// the locked copy a glass pane makes, created only once the request holds
+struct CartographyLock {
+    int64_t mOriginalId = -1;
+    int64_t mCopyId = -1;
+};
+
 struct CartographyResult {
     ItemStack mResult = ItemStack::air();
     int32_t mInputCost = 0;
     int32_t mAdditionalCost = 0;
+    CartographyLock mLock;
 };
 
 // the cartography recipes of sub_1436438D0: cloning, extending, locking, upgrading, plus renaming
@@ -27,11 +34,14 @@ public:
         std::function<MapItemSavedData *(int64_t)> mGetMap;
         // MapDataManager::expandMapByID (sub_141ECFD30)
         std::function<int64_t(int64_t, bool)> mExpand;
-        // a locked copy under a fresh id (sub_142F64860)
-        std::function<MapItemSavedData *(int64_t)> mLockCopy;
+        // a free id for the locked copy of a map (sub_142F64860); the copy itself is not made here
+        std::function<int64_t(int64_t)> mAllocateLockId;
     };
 
     // name is the text typed in the table, nullptr when the request leaves the name alone
     static CartographyResult createResult(const ItemStack &input, const ItemStack &additional,
                                           const std::string *name, const Maps &maps);
+
+    // the table slots a MapCreateLockedCopyPacket can stand for: the original map with a glass pane
+    static bool isLocking(const ItemStack &input, const ItemStack &additional, int64_t originalId);
 };

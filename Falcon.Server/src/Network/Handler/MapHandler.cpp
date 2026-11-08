@@ -1,7 +1,9 @@
 #include "Network/Handler/MapHandler.h"
 
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Inventory/CartographyRecipes.h"
 #include "World/Item/MapItem.h"
+#include "World/Level/Block/CartographyTableBlock.h"
 #include "World/Level/Block/Actor/ItemFrameBlockActor.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -94,6 +96,11 @@ void MapHandler::tickPlayer(ServerNetworkHandler &owner, ServerPlayer &player) {
         if (data != nullptr)
             sendUpdate(owner, player, *data);
     }
+
+    for (const int64_t mapId: player.getMapRequests().takeDue()) {
+        if (MapItemSavedData *data = mapLevel.getMapData(mapId))
+            sendMap(owner, player, *data);
+    }
 }
 
 void MapHandler::tickFrames(ServerNetworkHandler &owner, World &world) {
@@ -163,32 +170,39 @@ void MapHandler::onFrameItemChanged(ServerNetworkHandler &owner, Level &level, c
 
 void MapHandler::handleInfoRequest(ServerNetworkHandler &owner, ServerPlayer &player,
                                    const MapInfoRequestPacket &packet) {
-    Level &mapLevel = MapItem::getMapLevel(owner, player);
-    MapItemSavedData *data = mapLevel.getMapData(packet.mUniqueMapId);
-    if (data == nullptr)
-        return;
-
     // a client running client side generation resamples the chunks it built and sends what the map lacks
     if (!packet.mPixels.empty() && MapItem::isHoldingMap(player, packet.mUniqueMapId)) {
-        data->applyClientPixels(packet.mPixels);
+        Level &mapLevel = MapItem::getMapLevel(owner, player);
+        if (MapItemSavedData *data = mapLevel.getMapData(packet.mUniqueMapId))
+            data->applyClientPixels(packet.mPixels);
         return;
     }
 
-    sendMap(owner, player, *data);
+    // the game answers at once; queued here: a flood of ids costs a few reads and sends per tick at most
+    player.getMapRequests().push(packet.mUniqueMapId);
 }
 
 void MapHandler::handleCreateLockedCopy(ServerNetworkHandler &owner, ServerPlayer &player,
                                         const MapCreateLockedCopyPacket &packet) {
-    if (!MapItem::isHoldingMap(player, packet.mOriginalMapId))
+    // the game copies for any holder; here only the id is kept for the lock the open table is about to craft:
+    // the item stack request makes the copy, never this packet alone
+    InventoryManager &manager = player.getInventoryManager();
+    if (!manager.isCartographyOpen() || packet.mNewMapId == MapItemSavedData::INVALID_ID)
         return;
 
-    Level &mapLevel = MapItem::getMapLevel(owner, player);
-    MapDataManager &maps = mapLevel.getMaps();
-    // the client picks the new id; one already in use would overwrite another player's map
-    if (packet.mNewMapId == MapItemSavedData::INVALID_ID || maps.getMap(mapLevel.getMapStorage(), packet.mNewMapId))
+    const Vector3i &position = manager.getAnvilPosition();
+    if (owner.getLevelFor(player).getBlockState(position.x, position.y, position.z).mName
+        != CartographyTableBlock::IDENTIFIER)
         return;
 
-    MapItemSavedData *copy = maps.copyAndLockMap(mapLevel.getMapStorage(), packet.mOriginalMapId, packet.mNewMapId);
-    if (copy != nullptr)
-        sendMap(owner, player, *copy);
+    const PlayerInventory &inventory = player.getInventory();
+    if (!CartographyRecipes::isLocking(inventory.getCartographyItem(PlayerInventory::CARTOGRAPHY_INPUT),
+                                       inventory.getCartographyItem(PlayerInventory::CARTOGRAPHY_ADDITIONAL),
+                                       packet.mOriginalMapId))
+        return;
+
+    CartographyLock lock;
+    lock.mOriginalId = packet.mOriginalMapId;
+    lock.mCopyId = packet.mNewMapId;
+    manager.setClientMapLock(lock);
 }

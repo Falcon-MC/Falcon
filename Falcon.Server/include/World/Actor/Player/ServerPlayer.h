@@ -9,6 +9,7 @@
 #include "Core/NBT/Tag.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Level/Dimension/Dimension.h"
+#include "World/Level/Map/MapRequestQueue.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/NetworkIdentifier.h"
@@ -125,6 +126,10 @@ public:
     // Player+0xBC0, which EmptyMapItem::use numbers its maps with (sub_147B9F900)
     int32_t takeMapNameIndex() {
         return mMapNameIndex++;
+    }
+
+    MapRequestQueue &getMapRequests() {
+        return mMapRequests;
     }
 
     const std::string &getLocale() const { return mLocale; }
@@ -729,6 +734,7 @@ private:
     bool mClientSideGenerationCompatible = false;
     float mServerBuildRatio = 1.0f;
     int32_t mMapNameIndex = 0;
+    MapRequestQueue mMapRequests;
     std::string mLocale;
     int64_t mItemUseStartTick = 0;
     int32_t mSpinAttackTicks = 0;

@@ -7,6 +7,7 @@
 #include "World/Level/Map/MapDataManager.h"
 #include "World/Level/Map/MapItemSavedData.h"
 #include "World/Level/Map/MapRenderer.h"
+#include "World/Level/Map/MapRequestQueue.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -36,7 +37,7 @@ namespace {
         return item;
     }
 
-    bool near(uint32_t color, int red, int green, int blue) {
+    bool closeTo(uint32_t color, int red, int green, int blue) {
         return std::abs((int) ((color >> 16) & 0xff) - red) <= 1 && std::abs((int) ((color >> 8) & 0xff) - green) <= 1
                && std::abs((int) (color & 0xff) - blue) <= 1;
     }
@@ -184,8 +185,8 @@ namespace {
     }
 
     void colours() {
-        require(near(MapColors::grassColor(0.8f, 0.4f), 145, 189, 89), "plains grass");
-        require(near(MapColors::foliageColor(0.8f, 0.4f), 119, 171, 47), "plains foliage");
+        require(closeTo(MapColors::grassColor(0.8f, 0.4f), 145, 189, 89), "plains grass");
+        require(closeTo(MapColors::foliageColor(0.8f, 0.4f), 119, 171, 47), "plains foliage");
         require(MapColors::find("minecraft:stone") != nullptr && MapColors::find("minecraft:stone")->mColor[0] == 112,
                 "stone is grey");
         require(MapColors::find("minecraft:glass")->mColor[3] == 0, "glass has no colour");
@@ -314,8 +315,9 @@ namespace {
         access.mExpand = [&maps](int64_t mapId, bool scaled) {
             return maps.expandMap(nullptr, mapId, scaled);
         };
-        access.mLockCopy = [&maps](int64_t mapId) {
-            return maps.copyAndLockMap(nullptr, mapId, 900);
+        access.mAllocateLockId = [](int64_t mapId) {
+            (void) mapId;
+            return (int64_t) 900;
         };
 
         const ItemStack map = filledMap(50);
@@ -335,6 +337,16 @@ namespace {
                                                                     access);
         require(MapItem::getMapId(locked.mResult) == 900 && locked.mResult.mDamage == (int) MapItemType::Locked,
                 "a glass pane locks a copy");
+        require(locked.mLock.mOriginalId == 50 && locked.mLock.mCopyId == 900, "the result names the copy to make");
+        require(maps.findLoaded(900) == nullptr, "a result alone makes no map: the request may still fail");
+        maps.copyAndLockMap(nullptr, locked.mLock.mOriginalId, locked.mLock.mCopyId);
+        require(clone.mLock.mCopyId == MapItemSavedData::INVALID_ID, "cloning makes no copy");
+        require(CartographyRecipes::isLocking(map, stack("minecraft:glass_pane"), 50),
+                "the client lock packet matches a map and a glass pane");
+        require(!CartographyRecipes::isLocking(map, stack("minecraft:paper"), 50)
+                && !CartographyRecipes::isLocking(map, stack("minecraft:glass_pane"), 51)
+                && !CartographyRecipes::isLocking(filledMap(900, 6), stack("minecraft:glass_pane"), 900),
+                "the client lock packet needs the table about to lock that map");
         require(CartographyRecipes::createResult(filledMap(900, 6), stack("minecraft:glass_pane"), nullptr, access)
                         .mResult.isAir(), "a locked map cannot lock again");
         require(CartographyRecipes::createResult(filledMap(900, 6), stack("minecraft:paper"), nullptr, access)
@@ -356,6 +368,60 @@ namespace {
         require(CartographyRecipes::createResult(stack("minecraft:stone"), stack("minecraft:paper"), nullptr, access)
                         .mResult.isAir(), "only maps go in the table");
     }
+
+    void requestQueue() {
+        MapRequestQueue queue;
+        require(queue.push(1) && !queue.push(1), "a waiting id is not queued twice");
+        for (int64_t id = 2; queue.push(id); ++id) {
+        }
+        require(queue.size() == MapRequestQueue::CAPACITY, "the queue stops at its capacity");
+
+        const std::vector<int64_t> due = queue.takeDue();
+        require(due.size() == MapRequestQueue::PER_TICK && due[0] == 1 && due[1] == 2, "a tick answers the oldest few");
+        require(queue.size() == MapRequestQueue::CAPACITY - MapRequestQueue::PER_TICK, "answered ids leave the queue");
+        require(queue.push(1), "an answered id can be asked again");
+    }
+
+    void unloading() {
+        MapDataManager maps;
+        maps.createMap(1).clearDirtyForSave();
+        maps.createMap(2).clearDirtyForSave();
+        maps.createMap(3);
+        maps.createMap(4).clearDirtyForSave();
+        maps.findLoaded(4)->addTracked(MapItemTrackedActorKey::block(Vector3i(1, 2, 3)), 0,
+                                       MapDecorationType::MarkerGreen);
+
+        maps.unloadUnused();
+        require(maps.findLoaded(1) != nullptr, "a map used since the last save stays");
+        maps.unloadUnused();
+        require(maps.findLoaded(1) != nullptr, "a lookup counts as a use");
+        maps.unloadUnused();
+        maps.unloadUnused();
+        require(maps.findLoaded(2) == nullptr, "a saved map left alone unloads");
+        require(maps.findLoaded(3) != nullptr, "an unsaved map stays");
+        require(maps.findLoaded(4) != nullptr, "a framed map stays");
+    }
+
+    void staleTracking() {
+        MapItemSavedData map(1);
+        map.setOrigin(Vector3f(0.0f, 0.0f, 0.0f), 0, 0);
+        const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        const MapItemTrackedActorKey gone = MapItemTrackedActorKey::entity(5);
+        const MapItemTrackedActorKey frame = MapItemTrackedActorKey::block(Vector3i(2, 0, 2));
+        map.addTracked(gone, 0, MapDecorationType::MarkerWhite);
+        map.addTracked(MapItemTrackedActorKey::entity(6), 0, MapDecorationType::MarkerWhite);
+        map.addTracked(frame, 0, MapDecorationType::MarkerGreen);
+        map.addDecoration(MapDecorationType::MarkerWhite, gone, Vector3f(1.0f, 0.0f, 1.0f), "", white, 0);
+        map.addDecoration(MapDecorationType::MarkerGreen, frame, Vector3f(2.0f, 0.0f, 2.0f), "", white, 0);
+
+        map.refreshTracked([](MapItemTrackingInfo &tracking) {
+            return tracking.mKey == MapItemTrackedActorKey::entity(6);
+        });
+        require(map.findTracked(gone) == nullptr && map.findTracked(MapItemTrackedActorKey::entity(6)) != nullptr,
+                "an actor gone from the world stops being tracked");
+        require(map.findTracked(frame) != nullptr, "a frame stays tracked");
+        require(map.getDecorations().empty(), "both lose their marker");
+    }
 }
 
 int main() {
@@ -368,6 +434,9 @@ int main() {
         decorations();
         updatePackets();
         cartography();
+        requestQueue();
+        unloading();
+        staleTracking();
         std::cout << "map data, rendering, decorations and cartography checks passed\n";
         return 0;
     } catch (const std::exception &error) {

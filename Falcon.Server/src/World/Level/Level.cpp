@@ -1146,6 +1146,7 @@ bool Level::applyMapPixels(int64_t mapId, const std::vector<MapPixel> &pixels) {
 
 void Level::_saveLoadedMaps() {
     mMaps.saveDirty(mStorage);
+    mMaps.unloadUnused();
 }
 
 void Level::_markChunkSaved(int64_t key) {

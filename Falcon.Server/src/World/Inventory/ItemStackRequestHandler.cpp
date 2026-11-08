@@ -74,6 +74,7 @@ namespace {
         int32_t mCartographyAdditionalRequired = 0;
         int32_t mCartographyInputConsumed = 0;
         int32_t mCartographyAdditionalConsumed = 0;
+        CartographyLock mCartographyLock;
     };
 
     ItemStack *findBundleOwner(PlayerInventory &inventory, RequestContext &context, int32_t bundleId,
@@ -682,6 +683,7 @@ namespace {
         context.mCartographyActive = true;
         context.mCartographyInputRequired = result.mInputCost;
         context.mCartographyAdditionalRequired = result.mAdditionalCost;
+        context.mCartographyLock = result.mLock;
         return true;
     }
 
@@ -943,7 +945,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
                                                        int32_t *outAnvilLevelsConsumed,
                                                        bool *outAnvilUsed,
                                                        const CartographyRecipes::Maps *cartographyMaps,
-                                                       bool *outCartographyUsed) {
+                                                       CartographyLock *outCartographyLock) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -1073,8 +1075,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
     if (outAnvilUsed != nullptr)
         *outAnvilUsed = context.mAnvilActive;
 
-    if (outCartographyUsed != nullptr)
-        *outCartographyUsed = context.mCartographyActive;
+    if (outCartographyLock != nullptr)
+        *outCartographyLock = context.mCartographyLock;
 
     for (const TouchedSlot &slot: touched) {
         if (slot.mContainerName.mContainer == ContainerSlotType::CreatedOutput) {

@@ -1008,6 +1008,7 @@ void InventoryManager::_closeAnvil() {
     if (mPlayer == nullptr || mOwner == nullptr)
         return;
 
+    mClientMapLock = CartographyLock();
     PlayerInventory &inventory = mPlayer->getInventory();
     const bool cartography = mAnvilWindowType == ContainerType::Cartography;
     const int size = cartography ? PlayerInventory::CARTOGRAPHY_SIZE : PlayerInventory::ANVIL_SIZE;

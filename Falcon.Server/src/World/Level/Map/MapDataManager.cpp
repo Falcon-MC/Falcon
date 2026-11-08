@@ -12,7 +12,11 @@ namespace {
 
 MapItemSavedData *MapDataManager::findLoaded(int64_t mapId) {
     const auto it = mMaps.find(mapId);
-    return it == mMaps.end() ? nullptr : it->second.get();
+    if (it == mMaps.end())
+        return nullptr;
+
+    it->second.mUsed = true;
+    return it->second.mData.get();
 }
 
 MapItemSavedData *MapDataManager::getMap(LevelStorage *storage, int64_t mapId) {
@@ -33,7 +37,7 @@ MapItemSavedData *MapDataManager::getMap(LevelStorage *storage, int64_t mapId) {
     std::unique_ptr<MapItemSavedData> map(new MapItemSavedData(mapId));
     map->load(data);
     MapItemSavedData *result = map.get();
-    mMaps[mapId] = std::move(map);
+    mMaps[mapId].mData = std::move(map);
     return result;
 }
 
@@ -42,7 +46,9 @@ MapItemSavedData &MapDataManager::createMap(int64_t mapId) {
     std::unique_ptr<MapItemSavedData> map(new MapItemSavedData(mapId));
     map->markDirty();
     MapItemSavedData &result = *map;
-    mMaps[mapId] = std::move(map);
+    Entry &entry = mMaps[mapId];
+    entry.mData = std::move(map);
+    entry.mUsed = true;
     return result;
 }
 
@@ -108,7 +114,7 @@ std::vector<int64_t> MapDataManager::getMapChain(LevelStorage *storage, MapItemS
 
 void MapDataManager::saveDirty(LevelStorage &storage) {
     for (auto &entry: mMaps) {
-        MapItemSavedData &map = *entry.second;
+        MapItemSavedData &map = *entry.second.mData;
         if (!map.isDirtyForSave())
             continue;
 
@@ -116,5 +122,22 @@ void MapDataManager::saveDirty(LevelStorage &storage) {
         map.save(data);
         if (storage.saveMapData(map.getMapId(), data))
             map.clearDirtyForSave();
+    }
+}
+
+void MapDataManager::unloadUnused() {
+    for (auto it = mMaps.begin(); it != mMaps.end();) {
+        Entry &entry = it->second;
+        const std::vector<MapItemTrackingInfo> &tracked = entry.mData->getTracked();
+        const bool framed = std::any_of(tracked.begin(), tracked.end(), [](const MapItemTrackingInfo &tracking) {
+            return tracking.mKey.mType == MapItemTrackedActorKey::Type::Block;
+        });
+        // frame markers live only in memory: unloading a framed map would lose them
+        if (entry.mUsed || framed || entry.mData->isDirtyForSave()) {
+            entry.mUsed = false;
+            ++it;
+            continue;
+        }
+        it = mMaps.erase(it);
     }
 }
