@@ -37,14 +37,6 @@ namespace {
         return CLOCKWISE[(size_t) ((index + quarterTurns) & 3)];
     }
 
-    void rotate(int32_t quarterTurns, int32_t &x, int32_t &z) {
-        for (int32_t i = 0; i < quarterTurns; ++i) {
-            const int32_t oldX = x;
-            x = -z;
-            z = oldX;
-        }
-    }
-
     bool overlapsFlat(const JigsawBox &a, const JigsawBox &b) {
         return a.mMaxX >= b.mMinX && a.mMinX <= b.mMaxX && a.mMaxZ >= b.mMinZ && a.mMinZ <= b.mMaxZ;
     }
@@ -119,7 +111,7 @@ std::vector<JigsawAssembler::Marker> JigsawAssembler::_markers(const JigsawEleme
 
         int32_t offsetX = block.x;
         int32_t offsetZ = block.z;
-        rotate(quarterTurns, offsetX, offsetZ);
+        StructureTemplate::rotate(quarterTurns, offsetX, offsetZ);
 
         Marker marker;
         marker.x = x + offsetX;

@@ -28,6 +28,9 @@ public:
     // the template stored at a path of the embedded archive such as "igloo/igloo_bottom.nbt", or null
     static std::shared_ptr<const StructureTemplate> load(const std::string &path);
 
+    // quarter turns clockwise seen from above, about the template origin
+    static void rotate(int32_t quarterTurns, int32_t &x, int32_t &z);
+
     int32_t getSizeX() const;
 
     int32_t getSizeY() const;

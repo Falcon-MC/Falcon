@@ -50,14 +50,6 @@ namespace {
     const char *ABANDONED_MOBS = "minecraft:abandoned_mobs";
     const char *ABANDONED_GOLEMS = "minecraft:abandoned_golems";
 
-    void rotate(int32_t quarterTurns, int32_t &x, int32_t &z) {
-        for (int32_t i = 0; i < quarterTurns; ++i) {
-            const int32_t oldX = x;
-            x = -z;
-            z = oldX;
-        }
-    }
-
     const char *styleOf(int32_t biomeId) {
         static const char *STYLES[] = {"desert", "snowy", "savanna", "taiga"};
         const int32_t type = BiomeChunkGenDataRegistry::getVillageType(biomeId);
@@ -302,7 +294,7 @@ namespace {
         bool _position(const StructureTemplate::BlockEntry &entry, VillageStructure::Position &out) {
             int32_t x = entry.x;
             int32_t z = entry.z;
-            rotate(mPiece.mQuarterTurns, x, z);
+            StructureTemplate::rotate(mPiece.mQuarterTurns, x, z);
             x += mPiece.x;
             z += mPiece.z;
             if (!insideChunk(x, z, mChunkX, mChunkZ))
