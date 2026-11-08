@@ -25,7 +25,7 @@ namespace {
     namespace fs = std::filesystem;
 
     const char *const PACKAGE_PREFIX = "falcon:plugin/";
-    const char *const PACKAGE_SUFFIX = "@1.3.3";
+    const char *const PACKAGE_SUFFIX = "@1.0.5";
 
     wasm_valkind_t kindOf(char letter) {
         switch (letter) {

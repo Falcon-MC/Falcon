@@ -13,7 +13,7 @@ namespace {
     const char *const MEMORY_EXPORT = "memory";
     const char *const REALLOC_EXPORT = "cabi_realloc";
     const char *const INITIALIZE_EXPORT = "_initialize";
-    const char *const SERVICE_POST_RETURN_EXPORT = "cabi_post_falcon:plugin/plugin@1.3.3#on-service";
+    const char *const SERVICE_POST_RETURN_EXPORT = "cabi_post_falcon:plugin/plugin@1.0.5#on-service";
 
     // bounds the host memory a plugin can pin by never dropping its handles
     constexpr size_t MAX_HANDLES = 65536;
@@ -24,19 +24,19 @@ namespace {
     };
 
     const ExportDefinition EXPORTS[(size_t) WasmPlugin::Export::Count] = {
-            {"falcon:plugin/plugin@1.3.3#on-load", ":"},
-            {"falcon:plugin/plugin@1.3.3#on-enable", ":i"},
-            {"falcon:plugin/plugin@1.3.3#on-disable", ":"},
-            {"falcon:plugin/plugin@1.3.3#on-event", "I:"},
-            {"falcon:plugin/plugin@1.3.3#on-command", "iii:i"},
-            {"falcon:plugin/plugin@1.3.3#on-task", "I:"},
-            {"falcon:plugin/plugin@1.3.3#on-service", "iiii:i"},
-            {"falcon:plugin/plugin@1.3.3#on-item-use", "iIi:i"},
-            {"falcon:plugin/plugin@1.3.3#on-item-use-on-block", "iIiiiii:i"},
-            {"falcon:plugin/plugin@1.3.3#on-block-interact", "iIiiii:i"},
-            {"falcon:plugin/plugin@1.3.3#on-block-break", "iIiii:"},
-            {"falcon:plugin/plugin@1.3.3#on-entity-tick", "iI:"},
-            {"falcon:plugin/plugin@1.3.3#on-entity-interact", "iII:i"},
+            {"falcon:plugin/plugin@1.0.5#on-load", ":"},
+            {"falcon:plugin/plugin@1.0.5#on-enable", ":i"},
+            {"falcon:plugin/plugin@1.0.5#on-disable", ":"},
+            {"falcon:plugin/plugin@1.0.5#on-event", "I:"},
+            {"falcon:plugin/plugin@1.0.5#on-command", "iii:i"},
+            {"falcon:plugin/plugin@1.0.5#on-task", "I:"},
+            {"falcon:plugin/plugin@1.0.5#on-service", "iiii:i"},
+            {"falcon:plugin/plugin@1.0.5#on-item-use", "iIi:i"},
+            {"falcon:plugin/plugin@1.0.5#on-item-use-on-block", "iIiiiii:i"},
+            {"falcon:plugin/plugin@1.0.5#on-block-interact", "iIiiii:i"},
+            {"falcon:plugin/plugin@1.0.5#on-block-break", "iIiii:"},
+            {"falcon:plugin/plugin@1.0.5#on-entity-tick", "iI:"},
+            {"falcon:plugin/plugin@1.0.5#on-entity-interact", "iII:i"},
     };
 
     char typeLetter(const wasm_valtype_t *type) {
