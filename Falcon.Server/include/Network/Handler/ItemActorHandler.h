@@ -29,6 +29,9 @@ public:
 
     static void refresh(ServerNetworkHandler &owner, const ItemActor &item);
 
+    /** Moves an item, saving it away when nothing loads its new column for actors. The item may be destroyed. */
+    static void teleport(ServerNetworkHandler &owner, Level &level, ItemActor &item, const Vector3f &position);
+
     static void sendItemActorsTo(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void tickItemActors(ServerNetworkHandler &owner);

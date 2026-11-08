@@ -1,8 +1,10 @@
 #include "World/Level/Block/Actor/EndGatewayBlockActor.h"
 
 #include "Network/Handler/BlockActionHandler.h"
+#include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/BlockEventPacket.h"
+#include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
@@ -13,6 +15,7 @@
 #include "World/Level/World.h"
 
 #include <cstdlib>
+#include <memory>
 #include <vector>
 
 namespace {
@@ -24,6 +27,9 @@ namespace {
 
     // how far from the gateway an entity can stand and still touch its block
     const float ENTITY_SEARCH_RADIUS = 2.0f;
+
+    // the collision box of a dropped item
+    const float ITEM_SIZE = 0.25f;
 
     int32_t listInt(const std::vector<Tag> &values, size_t index) {
         if (index >= values.size() || values[index].getType() != Tag::Type::Int)
@@ -217,6 +223,13 @@ void EndGatewayBlockActor::_teleportEntities(ServerNetworkHandler &owner, Level 
             inside.push_back(&actor);
     });
 
+    // the game's fetch takes every entity type, dropped items included (sub_14714E830)
+    for (const std::unique_ptr<ItemActor> &item: owner.getItemEntities()) {
+        if (!item->isRemoved() && item->isIn(level)
+            && boxAt(item->getPosition(), ITEM_SIZE, ITEM_SIZE).intersectsWith(block))
+            inside.push_back(item.get());
+    }
+
     for (Actor *actor: inside) {
         if (mCooldown > 0)
             return;
@@ -233,7 +246,13 @@ void EndGatewayBlockActor::_teleport(ServerNetworkHandler &owner, Level &level, 
         player->teleport(owner, target);
     } else if (ServerActor *entity = dynamic_cast<ServerActor *>(&actor)) {
         entity->teleport(target);
-        owner.broadcastActorMove(*entity, true);
+        // the far end is usually unloaded once its exit is found: the entity waits there in its saved column
+        if (owner.detachActorIfUnloaded(*entity, level))
+            owner.broadcastActorRemove(*entity);
+        else
+            owner.broadcastActorMove(*entity, true);
+    } else if (ItemActor *item = dynamic_cast<ItemActor *>(&actor)) {
+        ItemActorHandler::teleport(owner, level, *item, target);
     } else {
         return;
     }

@@ -1,21 +1,29 @@
+#include "Network/ServerNetworkHandler.h"
 #include "Protocol/PacketCodecContext.h"
 #include "Protocol/Types/BlockDefinitionRegistry.h"
 #include "Protocol/Types/ItemDefinitionRegistry.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Level/Block/Actor/EndGatewayBlockActor.h"
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Dimension/EndDragonFight.h"
 #include "World/Level/Dimension/EndGatewayExit.h"
+#include "World/Level/Level.h"
 #include "World/Level/LevelGen/End/Feature/TheEndDecorationFeature.h"
 #include "World/Level/LevelGen/End/TheEndGenerator.h"
+#include "World/Level/World.h"
 
+#include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <map>
 #include <random>
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <vector>
 
 namespace {
     const int32_t MIN_Y = 0;
@@ -292,10 +300,213 @@ namespace {
                                                            MIN_Y, MAX_Y);
         require(same(landing, Vector3i(1000, 75, -20)), "A raised island gives the exit its landing");
     }
+
+    std::filesystem::path storageDirectory(const std::string &name) {
+        return std::filesystem::temp_directory_path()
+                / ("falcon-" + name + "-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    }
+
+    // an End saved to disk with no player in it, so no column is loaded for actors
+    struct EndFixture {
+        ServerNetworkHandler mOwner{"End gateway", "", 1};
+        World &mWorld = mOwner.getWorlds().getDefault();
+        Level &mEnd = mWorld.getLevel(DimensionType::TheEnd);
+        EndDragonFight &mFight = mWorld.getDragonFight();
+        std::filesystem::path mDirectory;
+
+        explicit EndFixture(const std::string &name) : mDirectory(storageDirectory(name)) {
+            require(mEnd.openStorage(mDirectory.string()), "Could not open the End storage");
+        }
+
+        ~EndFixture() {
+            mEnd.closeStorage();
+            std::error_code error;
+            std::filesystem::remove_all(mDirectory, error);
+        }
+
+        void loadAround(const Vector3i &center, int32_t reach) {
+            for (int32_t chunkX = (center.x - reach) >> 4; chunkX <= (center.x + reach) >> 4; chunkX++) {
+                for (int32_t chunkZ = (center.z - reach) >> 4; chunkZ <= (center.z + reach) >> 4; chunkZ++) {
+                    if (!mEnd.isChunkPopulated(chunkX, chunkZ))
+                        mEnd.insertChunk(LevelChunk(chunkX, chunkZ)).setPopulated(true);
+                }
+            }
+        }
+
+        // end stone under the gateway east of the island, where the gateway back lands
+        void placeLanding() {
+            for (int32_t x = 88; x <= 104; x++) {
+                for (int32_t z = -8; z <= 8; z++)
+                    mEnd.setBlock(Vector3i(x, 60, z), endStone(), false);
+            }
+        }
+
+        EndGatewayBlockActor &placeGateway(const Vector3i &position, const Vector3i &exit) {
+            mEnd.setBlock(position, VanillaBlocks::END_GATEWAY().toBlockState(), false);
+            EndGatewayBlockActor &gateway = mEnd.getBlockActors().getOrCreate<EndGatewayBlockActor>(position);
+            gateway.setExit(exit);
+            return gateway;
+        }
+
+        std::vector<Tag> storedGateways(const Vector3i &center, int32_t reach) {
+            std::vector<Tag> found;
+            for (int32_t chunkX = (center.x - reach) >> 4; chunkX <= (center.x + reach) >> 4; chunkX++) {
+                for (int32_t chunkZ = (center.z - reach) >> 4; chunkZ <= (center.z + reach) >> 4; chunkZ++) {
+                    for (const Tag &blockActor: mEnd.loadBlockEntities(chunkX, chunkZ)) {
+                        if (blockActor.getString("id", std::string()) == EndGatewayBlockActor::BLOCK_ACTOR_ID)
+                            found.push_back(blockActor);
+                    }
+                }
+            }
+            return found;
+        }
+
+        bool isStoredEntity(const Vector3f &position, const std::string &identifier, int64_t uniqueId) {
+            const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+            const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+            for (const Tag &entity: mEnd.loadEntities(chunkX, chunkZ)) {
+                if (entity.getString("identifier", std::string()) == identifier
+                    && entity.getLong("UniqueID", 0) == uniqueId)
+                    return true;
+            }
+            return false;
+        }
+    };
+
+    Vector3i storedPosition(const Tag &blockActor) {
+        return Vector3i(blockActor.getInt("x", 0), blockActor.getInt("y", 0), blockActor.getInt("z", 0));
+    }
+
+    Vector3i storedExit(const Tag &blockActor) {
+        const Tag *exit = blockActor.get("ExitPortal");
+        if (exit == nullptr || !exit->isList() || exit->size() != 3)
+            return Vector3i(0, 0, 0);
+
+        const std::vector<Tag> &values = exit->getList();
+        return Vector3i(values[0].asInt(), values[1].asInt(), values[2].asInt());
+    }
+
+    bool onLanding(const Vector3i &position) {
+        return position.x >= 88 && position.x <= 104 && position.z >= -8 && position.z <= 8;
+    }
+
+    void checkGatewaysSaved() {
+        EndFixture end("end-gateway-save");
+        const Vector3i gateway(96, 75, 0);
+        const Vector3i rough = EndDragonFight::findRoughExit(end.mEnd, gateway);
+        end.loadAround(gateway, 80);
+        end.loadAround(rough, 80);
+        end.placeLanding();
+
+        Tag chest = Tag::ofCompound();
+        chest.putString("id", "Chest");
+        chest.putInt("x", rough.x);
+        chest.putInt("y", 10);
+        chest.putInt("z", rough.z);
+        end.mEnd.saveBlockEntities(rough.x >> 4, rough.z >> 4, {chest});
+
+        end.mFight.requestGatewayExit(end.mEnd, gateway, true);
+        end.mFight.tick(end.mOwner, end.mEnd);
+        require(end.mFight.getGatewayRequestCount() == 0, "A gateway whose ends are loaded gets its exit at once");
+
+        const std::vector<Tag> placed = end.storedGateways(gateway, 0);
+        require(placed.size() == 1 && !EndGatewayExit::isZero(storedExit(placed.front())),
+                "A new gateway no player stands by is saved with its exit");
+
+        const std::vector<Tag> back = end.storedGateways(rough, 80);
+        require(back.size() == 1 && onLanding(storedExit(back.front())),
+                "The gateway back is saved and leads home");
+        require(end.mEnd.getBlockActors().find<EndGatewayBlockActor>(gateway) == nullptr
+                && end.mEnd.getBlockActors().find<EndGatewayBlockActor>(storedPosition(back.front())) == nullptr,
+                "Gateways in columns without a player are left on disk");
+
+        bool chestKept = false;
+        for (const Tag &blockActor: end.mEnd.loadBlockEntities(rough.x >> 4, rough.z >> 4))
+            chestKept = chestKept || blockActor.getString("id", std::string()) == "Chest";
+        require(chestKept, "Writing the far end back keeps the block actors already saved there");
+    }
+
+    void checkReturnGatewayFromDisk() {
+        EndFixture end("end-gateway-return");
+        const Vector3i gateway(96, 75, 0);
+        const Vector3i exit(1000, 61, 0);
+        const Vector3i returnGateway(1000, 71, 0);
+        const Vector3i offLanding(100, 61, 14);
+        end.loadAround(gateway, 80);
+        end.loadAround(exit, 80);
+        end.placeLanding();
+        end.placeGateway(gateway, exit);
+
+        EndGatewayBlockActor saved;
+        saved.setPosition(returnGateway);
+        saved.setExit(offLanding);
+        end.mEnd.saveBlockEntities(returnGateway.x >> 4, returnGateway.z >> 4, {saved.saveWithPosition()});
+
+        end.mFight.requestGatewayCheck(gateway, exit);
+        end.mFight.tick(end.mOwner, end.mEnd);
+        require(end.mFight.getGatewayRequestCount() == 0, "A check whose ends are loaded is done at once");
+
+        const std::vector<Tag> back = end.storedGateways(returnGateway, 0);
+        require(back.size() == 1 && onLanding(storedExit(back.front())),
+                "The check finds the gateway back on disk and moves its exit onto land");
+    }
+
+    void checkEntityThroughUnloadedEnd() {
+        EndFixture end("end-gateway-entity");
+        const Vector3i gateway(96, 75, 0);
+        end.loadAround(gateway, 16);
+        EndGatewayBlockActor &portal = end.placeGateway(gateway, Vector3i(1000, 60, 0));
+
+        ServerActor *cow = end.mOwner.spawnActor(end.mEnd, "minecraft:cow", Vector3f(96.5f, 75.0f, 0.5f));
+        require(cow != nullptr, "Could not spawn the cow");
+        const int64_t uniqueId = cow->getUniqueId();
+
+        portal.tick(end.mOwner);
+        require(portal.getCooldown() > 0, "The cow goes through the gateway");
+        require(end.isStoredEntity(EndGatewayBlockActor::getTeleportTarget(portal.getExit()), "minecraft:cow", uniqueId),
+                "An entity sent to a column nothing loads waits in that column's saved entities");
+    }
+
+    void checkItemThroughGateway() {
+        EndFixture end("end-gateway-item");
+        const Vector3i gateway(96, 75, 0);
+        const Vector3i exit(1000, 60, 0);
+        end.loadAround(gateway, 16);
+        EndGatewayBlockActor &portal = end.placeGateway(gateway, exit);
+        const Vector3f target = EndGatewayBlockActor::getTeleportTarget(exit);
+        end.mWorld.getActorLoadedChunks(DimensionType::TheEnd)
+                .insert(((int64_t) ((int32_t) std::floor(target.x) >> 4) << 32)
+                        | (uint32_t) ((int32_t) std::floor(target.z) >> 4));
+
+        const ItemStack diamond = end.mOwner.createItemStack("minecraft:diamond", 1);
+        ItemActor *item = end.mOwner.dropItem(end.mEnd, Vector3f(96.5f, 75.1f, 0.5f), diamond, Vector3f(0.0f, 0.0f, 0.0f), 0);
+        require(item != nullptr, "Could not drop the item");
+
+        portal.tick(end.mOwner);
+        require(portal.getCooldown() > 0 && item->getPosition().x == target.x && item->getPosition().y == target.y
+                && item->getPosition().z == target.z, "A dropped item goes through the gateway");
+
+        while (portal.getCooldown() > 0)
+            portal.tick(end.mOwner);
+        const Vector3i unloaded(2000, 60, 0);
+        portal.setExit(unloaded);
+        ItemActor *second = end.mOwner.dropItem(end.mEnd, Vector3f(96.5f, 75.1f, 0.5f), diamond,
+                                                Vector3f(0.0f, 0.0f, 0.0f), 0);
+        require(second != nullptr, "Could not drop the second item");
+        const int64_t uniqueId = second->getUniqueId();
+
+        portal.tick(end.mOwner);
+        bool kept = false;
+        for (const std::unique_ptr<ItemActor> &entry: end.mOwner.getItemEntities())
+            kept = kept || entry->getUniqueId() == uniqueId;
+        require(!kept && end.isStoredEntity(EndGatewayBlockActor::getTeleportTarget(unloaded), "minecraft:item", uniqueId),
+                "An item sent to a column nothing loads waits in that column's saved entities");
+    }
 }
 
 int main() {
     try {
+        EntityDefinitions::initialize();
         checkNbt();
         checkCooldown();
         checkRoughExit();
@@ -303,6 +514,10 @@ int main() {
         checkTallestBlock();
         checkExitChecks();
         checkIsland();
+        checkGatewaysSaved();
+        checkReturnGatewayFromDisk();
+        checkEntityThroughUnloadedEnd();
+        checkItemThroughGateway();
     } catch (const std::exception &exception) {
         std::cout << "End gateway check failed: " << exception.what() << '\n';
         return 1;

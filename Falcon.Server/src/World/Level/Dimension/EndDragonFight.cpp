@@ -486,7 +486,44 @@ bool EndDragonFight::_loadGatewayEnds(Level &level, const GatewayRequest &reques
     return loaded;
 }
 
-void EndDragonFight::_releaseGatewayEnds(Level &level, const GatewayRequest &request) {
+std::vector<std::pair<int32_t, int32_t>> EndDragonFight::_loadGatewayBlockActors(ServerNetworkHandler &owner,
+                                                                                  Level &level,
+                                                                                  const GatewayRequest &request) {
+    std::vector<std::pair<int32_t, int32_t>> loaded;
+    if (!level.isStorageOpen())
+        return loaded;
+
+    // the game reads the block actors of both ends through its chunk views (sub_14716AEC0): columns without a
+    // player keep theirs on disk, so they are read here and written back once the request is done
+    BlockActorStore &blockActors = level.getBlockActors();
+    for (const Vector3i &center: {request.mGateway, request.mExit}) {
+        for (int32_t chunkX = (center.x - GATEWAY_END_REACH) >> 4; chunkX <= (center.x + GATEWAY_END_REACH) >> 4;
+             chunkX++) {
+            for (int32_t chunkZ = (center.z - GATEWAY_END_REACH) >> 4; chunkZ <= (center.z + GATEWAY_END_REACH) >> 4;
+                 chunkZ++) {
+                if (blockActors.isChunkLoaded(chunkX, chunkZ))
+                    continue;
+
+                owner.loadBlockActorsForChunk(level, chunkX, chunkZ);
+                loaded.emplace_back(chunkX, chunkZ);
+            }
+        }
+    }
+
+    return loaded;
+}
+
+void EndDragonFight::_releaseGatewayEnds(ServerNetworkHandler &owner, Level &level, const GatewayRequest &request,
+                                         const std::vector<std::pair<int32_t, int32_t>> &blockActorChunks) {
+    BlockActorStore &blockActors = level.getBlockActors();
+    for (const std::pair<int32_t, int32_t> &chunk: blockActorChunks) {
+        // a column read without block actors gained none, so there is nothing to write back
+        if (blockActors.saveChunk(chunk.first, chunk.second).empty())
+            blockActors.unloadChunk(chunk.first, chunk.second);
+        else
+            owner.saveBlockActorsForChunk(level, chunk.first, chunk.second, true);
+    }
+
     for (const Vector3i &center: {request.mGateway, request.mExit}) {
         for (int32_t chunkX = (center.x - GATEWAY_END_REACH) >> 4; chunkX <= (center.x + GATEWAY_END_REACH) >> 4;
              chunkX++) {
@@ -508,6 +545,7 @@ void EndDragonFight::_tickGatewayRequests(ServerNetworkHandler &owner, Level &le
     if (!_loadGatewayEnds(level, request, registerLoaders))
         return;
 
+    const std::vector<std::pair<int32_t, int32_t>> blockActorChunks = _loadGatewayBlockActors(owner, level, request);
     if (request.mCheckOnly) {
         _checkGatewayExit(owner, level, request.mGateway, request.mExit, false);
         _checkGatewayExit(owner, level, request.mExit, request.mGateway, true);
@@ -515,7 +553,7 @@ void EndDragonFight::_tickGatewayRequests(ServerNetworkHandler &owner, Level &le
         _findGatewayExit(owner, level, request);
     }
 
-    _releaseGatewayEnds(level, request);
+    _releaseGatewayEnds(owner, level, request, blockActorChunks);
     mGatewayRequests.pop_front();
     mGatewayEndsRequested = false;
 }

@@ -933,21 +933,26 @@ void ServerNetworkHandler::changeActorLevel(Actor &actor, Level &destination, co
     traveller->setPosition(position);
     traveller->setMotion(Vector3f(0.0f, 0.0f, 0.0f));
     traveller->resetFallDistance();
+    detachActorIfUnloaded(*traveller, destination);
+}
 
+bool ServerNetworkHandler::detachActorIfUnloaded(ServerActor &actor, Level &level) {
+    const Vector3f &position = actor.getPosition();
     const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
     const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
     const int64_t column = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
-    if (getWorldOf(destination).getActorLoadedChunks(destination.getDimensionType()).count(column) != 0)
-        return;
+    if (getWorldOf(level).getActorLoadedChunks(level.getDimensionType()).count(column) != 0)
+        return false;
 
-    if (traveller->shouldSave() && destination.isStorageOpen()) {
-        std::vector<Tag> entities = destination.loadEntities(chunkX, chunkZ);
-        entities.push_back(traveller->saveNbt());
-        destination.saveEntities(chunkX, chunkZ, entities);
+    if (actor.shouldSave() && level.isStorageOpen()) {
+        std::vector<Tag> entities = level.loadEntities(chunkX, chunkZ);
+        entities.push_back(actor.saveNbt());
+        level.saveEntities(chunkX, chunkZ, entities);
     }
 
-    mDetachedActors.push_back(traveller->getUniqueId());
-    destination.releaseChunkIfUnused(chunkX, chunkZ);
+    mDetachedActors.push_back(actor.getUniqueId());
+    level.releaseChunkIfUnused(chunkX, chunkZ);
+    return true;
 }
 
 void ServerNetworkHandler::syncActorAttributes(ServerActor &actor) {

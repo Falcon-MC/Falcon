@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <deque>
 #include <optional>
+#include <utility>
 #include <vector>
 
 class Actor;
@@ -145,7 +146,11 @@ private:
 
     bool _loadGatewayEnds(Level &level, const GatewayRequest &request, bool registerLoaders);
 
-    void _releaseGatewayEnds(Level &level, const GatewayRequest &request);
+    std::vector<std::pair<int32_t, int32_t>> _loadGatewayBlockActors(ServerNetworkHandler &owner, Level &level,
+                                                                     const GatewayRequest &request);
+
+    void _releaseGatewayEnds(ServerNetworkHandler &owner, Level &level, const GatewayRequest &request,
+                             const std::vector<std::pair<int32_t, int32_t>> &blockActorChunks);
 
     void _findGatewayExit(ServerNetworkHandler &owner, Level &level, const GatewayRequest &request);
 
