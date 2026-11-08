@@ -1,6 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Definition/EntityFilter.h"
+#include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Movement/ActorMovementSystem.h"
 #include "World/Actor/Movement/BuoyancySystem.h"
@@ -130,8 +131,10 @@ namespace {
         require(blocks == 337, "the 12 archetype tags hold 337 blocks");
     }
 
-    // the IDA formulas, written out again: ComputeRestitution sub_1484C9200, ApplyGravityWithBounceCorrection
-    // sub_143368B50, MobMovementFriction sub_1433563E0 / sub_1433307F0
+    // a regression check, not a vanilla measurement: the IDA formulas written out again in the same order
+    // (ComputeRestitution sub_1484C9200, ApplyGravityWithBounceCorrection sub_143368B50, MobMovementFriction
+    // sub_1433563E0 / sub_1433307F0) so a change to the movement pipeline shows up here
+
     struct Expected {
         float mX;
         float mY;
@@ -180,7 +183,7 @@ namespace {
         state.mVelocityY = std::fabs(vy) <= 0.00000011920929f ? 0.0f : vy * factor;
     }
 
-    void near(float actual, float expected, const std::string &message) {
+    void approx(float actual, float expected, const std::string &message) {
         require(std::isfinite(actual) && std::fabs(actual - expected) < 0.0005f,
                 message + ": " + std::to_string(actual) + " instead of " + std::to_string(expected));
     }
@@ -208,7 +211,7 @@ namespace {
             require(archetypeOf(mob) == test.mArchetype, std::string(test.mBlock) + " archetype for the physics case");
             const PhysicsComponent physics = mob.getPhysics();
             require(physics.mDefinitionFriction && physics.mUniformAirDrag, "the cube moves by its attributes");
-            near(physics.mBounciness, test.mBounciness, "bounciness from the group");
+            approx(physics.mBounciness, test.mBounciness, "bounciness from the group");
 
             mob.setPosition(Vector3f(0.5f, 66.0f, 0.5f));
             mob.setMotion(Vector3f(0.3f, 0.0f, 0.0f));
@@ -221,10 +224,10 @@ namespace {
                 step(expected, test.mBounciness, test.mFrictionModifier, test.mAirDragModifier);
                 bounced = bounced || (before < -0.08f && expected.mVelocityY > 0.0f);
                 const std::string at = std::string(test.mArchetype) + " tick " + std::to_string(tick);
-                near(mob.getPosition().y, expected.mY, at + " height");
-                near(mob.getPosition().x, expected.mX, at + " distance");
-                near(mob.getMotion().y, expected.mVelocityY, at + " vertical speed");
-                near(mob.getMotion().x, expected.mVelocityX, at + " horizontal speed");
+                approx(mob.getPosition().y, expected.mY, at + " height");
+                approx(mob.getPosition().x, expected.mX, at + " distance");
+                approx(mob.getMotion().y, expected.mVelocityY, at + " vertical speed");
+                approx(mob.getMotion().x, expected.mVelocityX, at + " horizontal speed");
             }
             require(bounced == (test.mBounciness > 0.0f), std::string(test.mArchetype) + " bounces as its bounciness");
         }
@@ -252,6 +255,61 @@ namespace {
         for (int32_t tick = 0; tick < 6 * 20 + 2 && !explosive.isExpired(); tick++)
             explosive.tick(fixture.mOwner);
         require(explosive.isExpired(), "the primed cube explodes after its fuse");
+    }
+
+    ServerPlayer &playerHolding(Fixture &fixture, const std::string &item, int64_t id) {
+        const NetworkIdentifier network("sulfur-cube-test", (unsigned long long) id);
+        ServerPlayer &player = fixture.mOwner.getPlayers().try_emplace(network, network, id).first->second;
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.setPosition(Vector3f(0.5f, 64.0f, 2.0f));
+        player.getInventory().setItem(player.getInventory().getSelectedSlot(), stackOf(item));
+        return player;
+    }
+
+    size_t droppedCount(Fixture &fixture, const std::string &item) {
+        size_t count = 0;
+        for (const std::unique_ptr<ItemActor> &dropped: fixture.mOwner.getItemEntities()) {
+            if (!dropped->isRemoved() && !dropped->getItem().isAir()
+                && dropped->getItem().mDefinition->getIdentifier() == item)
+                count++;
+        }
+        return count;
+    }
+
+    // the interactions of the definition: shears give the block back, a held block swaps with the absorbed one
+    void checkInteractions() {
+        Fixture fixture;
+        MobActor &mob = fixture.cube(Vector3f(0.5f, 64.0f, 0.5f));
+        fixture.feed(mob, "minecraft:oak_log");
+        require(archetypeOf(mob) == "bouncy", "the cube holds its log");
+
+        ServerPlayer &giver = playerHolding(fixture, "minecraft:dirt", 9101);
+        require(mob.onInteract(fixture.mOwner, giver), "a held archetype block is given");
+        mob.tick(fixture.mOwner);
+        require(archetypeOf(mob) == "regular", "the given dirt replaces the log");
+        require(giver.getInventory().getItemInHand().isAir(), "the given block leaves the hand");
+        require(droppedCount(fixture, "minecraft:oak_log") == 1, "the swapped log drops");
+
+        ServerPlayer &shearer = playerHolding(fixture, "minecraft:shears", 9102);
+        require(mob.onInteract(fixture.mOwner, shearer), "shears take the block");
+        mob.tick(fixture.mOwner);
+        require(archetypeOf(mob) == "none", "the sheared cube has no archetype");
+        require(mob.getEquipment().getSlot(MobEquipment::MAINHAND).isAir(), "the sheared cube holds nothing");
+        require(droppedCount(fixture, "minecraft:dirt") == 1, "the sheared block drops");
+        require(mob.hasComponentGroup("minecraft:sulfur_cube_medium_without_block_pickup_timeout"),
+                "the ejected block starts the pickup timeout");
+    }
+
+    // pickup_items with the archetype tags as shareables: the cube swallows a block lying next to it
+    void checkPickup() {
+        Fixture fixture;
+        MobActor &mob = fixture.cube(Vector3f(0.5f, 64.0f, 0.5f));
+        ItemActor *dropped = fixture.mOwner.dropItem(fixture.mLevel, Vector3f(0.5f, 64.0f, 1.0f),
+                                                     stackOf("minecraft:magma"), Vector3f(0.0f, 0.0f, 0.0f), 0);
+        require(dropped != nullptr, "the magma block lies on the floor");
+        for (int32_t tick = 0; tick < 200 && archetypeOf(mob) != "hot"; tick++)
+            mob.tick(fixture.mOwner);
+        require(archetypeOf(mob) == "hot", "the cube picks the magma block up and turns hot");
     }
 
     void checkFrostWalker() {
@@ -282,15 +340,15 @@ namespace {
             "max_kick_speed":0.5,"vertical_kick_multiplier":0.3,"play_sound":true,"play_sound_impulse_threshold":0.1,
             "play_sound_cooldown_in_seconds":0.7})");
         const PushableByEntityPreset settings = PushableByEntityPreset::read(*preset);
-        require(settings.mBall && settings.mSoundCooldownTicks == 14, "the ball preset parses");
+        require(settings.mMode == PushMode::Ball && settings.mSoundCooldownTicks == 14, "the ball preset parses");
 
         const Vector3f grounded = PushableByEntity::kick(settings, 1.0f, 0.0f, 0.5f, true);
-        near(grounded.x, -2.0f * 0.15f, "kicked away from the pusher");
-        near(grounded.y, 2.0f * 0.3f * 0.15f, "a grounded cube is lifted");
-        near(grounded.z, 0.0f, "no sideways kick");
+        approx(grounded.x, -2.0f * 0.15f, "kicked away from the pusher");
+        approx(grounded.y, 2.0f * 0.3f * 0.15f, "a grounded cube is lifted");
+        approx(grounded.z, 0.0f, "no sideways kick");
         const Vector3f airborne = PushableByEntity::kick(settings, 0.0f, -2.0f, 10.0f, false);
-        near(airborne.z, 2.0f * 0.5f, "the kick speed is capped");
-        near(airborne.y, 0.0f, "an airborne cube is not lifted");
+        approx(airborne.z, 2.0f * 0.5f, "the kick speed is capped");
+        approx(airborne.y, 0.0f, "an airborne cube is not lifted");
         require(PushableByEntity::inReach(settings, 1.2f, 0.0f, 0.6f), "reach counts half the pusher width");
         require(!PushableByEntity::inReach(settings, 1.4f, 0.0f, 0.6f), "too far for the preset");
     }
@@ -304,12 +362,23 @@ namespace {
                 && settings.mMovement == BuoyancyMovement::Bobbing, "the buoyant component parses");
 
         std::mt19937 random(1);
-        near((float) BuoyancySystem::advanceTimer(4.0, settings, Vector3f(1.0f, 0.0f, 0.0f), random), 5.0f,
-             "bobbing advances one per tick");
+        approx((float) BuoyancySystem::advanceTimer(4.0, settings, Vector3f(1.0f, 0.0f, 0.0f), random), 5.0f,
+               "bobbing advances one per tick");
+        BuoyancyContact surface;
+        surface.mSurface = true;
         const float buoyancy = std::min(1.0f, (1.0f - 0.25f) * 0.9f + 0.1f);
         const float wave = ((float) std::sin(5.0 * 0.3141592741012573) + 1.2f) * 0.5f;
-        near(BuoyancySystem::floatVelocity(-0.2f, 62.25f, 5.0, settings),
-             std::min((buoyancy - wave - 0.1f) * 0.15f, -0.2f * 0.7f + 0.05f), "the float lift");
+        approx(BuoyancySystem::floatVelocity(-0.2f, 62.25f, 5.0, settings, surface, false),
+               std::min((buoyancy - wave - 0.1f) * 0.15f, -0.2f * 0.7f + 0.05f), "the lift at the surface");
+
+        BuoyancyContact submerged;
+        submerged.mSubmerged = true;
+        approx(BuoyancySystem::floatVelocity(-0.2f, 62.25f, 5.0, settings, submerged, false),
+               std::min((1.0f - 0.1f) * 0.15f, -0.2f * 0.7f + 0.05f), "under the surface the lift is full");
+        approx(BuoyancySystem::floatVelocity(0.5f, 62.25f, 5.0, settings, submerged, true),
+               std::max((1.0f - 0.1f) * 0.15f, 0.5f * 0.7f * 0.05f), "a leashed actor keeps its rise");
+        approx(BuoyancySystem::floatVelocity(-0.2f, 62.25f, 5.0, settings, BuoyancyContact(), false), -0.2f,
+               "out of its liquids nothing floats");
     }
 
     void checkSpawnRule() {
@@ -347,6 +416,8 @@ int main() {
         checkArchetypes();
         checkPhysics();
         checkHotPrimesExplosive();
+        checkInteractions();
+        checkPickup();
         checkFrostWalker();
     } catch (const std::exception &exception) {
         std::cout << "Sulfur cube check failed: " << exception.what() << '\n';
