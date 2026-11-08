@@ -180,8 +180,6 @@ public:
 
     void tickFire(ServerNetworkHandler &owner);
 
-    void tickSunlightBurn(ServerNetworkHandler &owner);
-
     virtual PhysicsComponent getPhysics() const;
 
     virtual bool hasGravity() const {
@@ -205,8 +203,7 @@ public:
         return false;
     }
 
-    virtual bool shieldFromSunlight(ServerNetworkHandler &owner) {
-        (void) owner;
+    virtual bool shieldFromSunlight() const {
         return false;
     }
 

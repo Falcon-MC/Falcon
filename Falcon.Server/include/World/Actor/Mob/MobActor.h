@@ -152,7 +152,7 @@ public:
 
     bool burnsInDaylight() const override;
 
-    bool shieldFromSunlight(ServerNetworkHandler &owner) override;
+    bool shieldFromSunlight() const override;
 
     virtual float getAttackDamage(Difficulty difficulty) const;
 
