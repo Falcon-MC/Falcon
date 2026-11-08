@@ -179,11 +179,28 @@ namespace {
         return endPoint;
     }
 
-    void logTransportNotice(TransportLayer transport) {
+    // https on the port, plus 443 for 19132 only: sub_143A904D0; http after every https probe ends: sub_143A92EB0
+    const unsigned short DEFAULT_GAME_PORT = 19132;
+
+    void logTransportNotice(TransportLayer transport, const ServerNetworkHandler &handler, unsigned short port) {
         LOG_INFO(LogAreaID::Server, "==================== TRANSPORT =======================");
         LOG_INFO(LogAreaID::Server, "Connection type: %s", toString(transport));
-        if (transport == TransportLayer::NetherNet)
-            LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over plain HTTP.");
+        if (transport == TransportLayer::NetherNet) {
+            if (handler.isSignalingSecure()) {
+                LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over HTTPS and HTTP on TCP %u.",
+                         (unsigned) port);
+            } else {
+                LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over plain HTTP on TCP %u.",
+                         (unsigned) port);
+                if (port == DEFAULT_GAME_PORT)
+                    LOG_INFO(LogAreaID::Server, "Players first try HTTPS here and on TCP 443 of this host: a firewall "
+                                                "that drops 443 delays every join by 3 s. Set signaling-certificate "
+                                                "and signaling-private-key to answer over HTTPS.");
+            }
+            if (handler.getExtraSignalingPort() != 0)
+                LOG_INFO(LogAreaID::Server, "NetherNet signaling also listens on TCP %u.",
+                         (unsigned) handler.getExtraSignalingPort());
+        }
         LOG_INFO(LogAreaID::Server, "======================================================");
     }
 
@@ -357,7 +374,7 @@ bool ServerHost::start(const ServerHostOptions &options) {
     mPort = mHandler->getBoundPort() != 0 ? mHandler->getBoundPort() : port;
 
     LOG_INFO(LogAreaID::Server, "Server started.");
-    logTransportNotice(transport);
+    logTransportNotice(transport, *mHandler, mPort);
     BedrockLog::flush();
 
     AutoCompaction::start(properties.getAutoCompactionInterval());

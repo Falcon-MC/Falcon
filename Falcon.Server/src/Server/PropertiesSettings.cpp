@@ -127,7 +127,12 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"max-chat-message-length", "512", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"wasm-plugin-memory-mb", "64", PropertyKind::Int, 1, 4096, nullptr},
             {"wasm-plugin-fuel", "10000000", PropertyKind::Int, 1, UNBOUNDED, nullptr},
-            {"transport", "nethernet", PropertyKind::Enum, 0, 0, "nethernet"}
+            {"transport", "nethernet", PropertyKind::Enum, 0, 0, "nethernet"},
+            // Falcon only: PEM chain and key for https on the signaling port; the game tries https before http
+            {"signaling-certificate", "", PropertyKind::String, 0, 0, nullptr},
+            {"signaling-private-key", "", PropertyKind::String, 0, 0, nullptr},
+            // Falcon only: second signaling listener, 0 for none; the game probes 443 and 80 beside port 19132 only
+            {"signaling-extra-port", "0", PropertyKind::Int, 0, 65535, nullptr}
     };
 
     return definitions;

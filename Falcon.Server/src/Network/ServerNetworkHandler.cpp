@@ -422,6 +422,14 @@ unsigned short ServerNetworkHandler::getBoundPort() const {
     return mNetherNetInstance != nullptr ? mNetherNetInstance->getBoundPort() : 0;
 }
 
+bool ServerNetworkHandler::isSignalingSecure() const {
+    return mNetherNetInstance != nullptr && mNetherNetInstance->isSignalingSecure();
+}
+
+unsigned short ServerNetworkHandler::getExtraSignalingPort() const {
+    return mNetherNetInstance != nullptr ? mNetherNetInstance->getExtraSignalingPort() : 0;
+}
+
 int ServerNetworkHandler::_getServerViewDistance() const {
     int distance = mProperties.getViewDistance();
 
@@ -494,6 +502,17 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
             data.mAcceptsSelfSignedAuth = !mProperties.getOnlineMode();
             return data;
         });
+
+        const std::string certificate = mProperties.getSignalingCertificate();
+        const std::string privateKey = mProperties.getSignalingPrivateKey();
+        if (certificate.empty() != privateKey.empty())
+            LOG_WARN(LogAreaID::Server, "signaling-certificate and signaling-private-key go together, serving "
+                                        "plain HTTP");
+        if (!certificate.empty() && !privateKey.empty())
+            mNetherNetInstance->setTlsCertificate(ServerPaths::file(certificate), ServerPaths::file(privateKey));
+        else
+            mNetherNetInstance->setTlsCertificate(std::string(), std::string());
+        mNetherNetInstance->setExtraSignalingPort(mProperties.getSignalingExtraPort());
     }
 
     const int64_t levelSeed = properties.getLevelSeed().empty()
