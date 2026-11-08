@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/AirBlock.h"
 #include "World/Level/Block/BlockState.h"
+#include "World/Level/Block/BubbleColumnBlock.h"
 #include "World/Level/Block/LavaBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/WaterBlock.h"
@@ -852,7 +853,7 @@ namespace {
             return result;
         }
 
-        if (name == "minecraft:bubble_column") {
+        if (BubbleColumnBlock::matches(name)) {
             // not of water material: sponges clear it by name, liquids never feed from it (sub_148F9A380); its
             // water sits on layer 1
             result.bubbleColumn = true;
