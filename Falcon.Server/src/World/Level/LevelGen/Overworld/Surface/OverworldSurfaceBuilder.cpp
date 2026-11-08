@@ -4,6 +4,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/BlockStateSet.h"
+#include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
 #include "World/Level/LevelGen/Overworld/Biome/ClimateAttributes.h"
 #include "World/Level/LevelGen/Overworld/OverworldBlockLists.h"
@@ -107,7 +108,8 @@ namespace {
 
 OverworldSurfaceBuilder::OverworldSurfaceBuilder(const XoroshiroPositionalFactory &noiseFactory,
                                                  const OverworldClimate &climate, int64_t levelSeed)
-        : mClimate(climate), mIcebergFactory(icebergFactory(levelSeed)) {
+        : mClimate(climate), mIcebergFactory(icebergFactory(levelSeed)),
+          mSulfurCaves(NoiseGradientSurfaceBuilder::sulfurCaves(levelSeed)) {
     XoroshiroRandom random = noiseFactory.hashOf("minecraft:surface");
     mSurfaceNoise.reserve(SURFACE_NOISE_OCTAVES);
     for (int32_t i = 0; i < SURFACE_NOISE_OCTAVES; i++)
@@ -164,8 +166,16 @@ void OverworldSurfaceBuilder::apply(LevelChunk &chunk, std::mt19937 &random) con
                 top--;
 
             const int32_t height = std::max(0, top + 1);
-            const SurfaceBuilderComponent *component = SurfaceBuilderComponent::getForBiome(
-                    (int32_t) chunk.getBiomeAt(x, std::min(height, LevelChunk::MAX_Y), z));
+            const int32_t biome = (int32_t) chunk.getBiomeAt(x, std::min(height, LevelChunk::MAX_Y), z);
+            // the volume is 320 blocks tall and the builder leaves its top layer
+            const NoiseGradientSurfaceBuilder *gradient = _noiseGradientFor(biome);
+            if (gradient != nullptr) {
+                gradient->build(chunk, x, z, _lowestSurfaceY((chunk.getX() << 4) + x, (chunk.getZ() << 4) + z),
+                                LevelChunk::MIN_Y + 319);
+                continue;
+            }
+
+            const SurfaceBuilderComponent *component = SurfaceBuilderComponent::getForBiome(biome);
             if (component == nullptr)
                 continue;
 
@@ -180,6 +190,40 @@ void OverworldSurfaceBuilder::apply(LevelChunk &chunk, std::mt19937 &random) con
                 _buildOverworldColumn(chunk, x, z, height, *component, noise[x + 16 * z], random);
             else
                 _buildLegacyColumn(chunk, x, z, *component);
+        }
+    }
+
+    _buildSubsurface(chunk);
+}
+
+const NoiseGradientSurfaceBuilder *OverworldSurfaceBuilder::_noiseGradientFor(int32_t biome) const {
+    return biome == BiomeIds::SULFUR_CAVES ? &mSulfurCaves : nullptr;
+}
+
+// sub_14CDD16A0: runs of one biome up to the lowest surface block; a run's top block and a last lone block are left
+void OverworldSurfaceBuilder::_buildSubsurface(LevelChunk &chunk) const {
+    for (int32_t x = 0; x < 16; x++) {
+        for (int32_t z = 0; z < 16; z++) {
+            const int32_t highest = _lowestSurfaceY((chunk.getX() << 4) + x, (chunk.getZ() << 4) + z);
+            int32_t runBiome = (int32_t) chunk.getBiomeAt(x, LevelChunk::MIN_Y, z);
+            int32_t runStart = LevelChunk::MIN_Y;
+            int32_t runEnd = LevelChunk::MIN_Y;
+            for (int32_t y = LevelChunk::MIN_Y; y <= highest; y++) {
+                const int32_t biome = (int32_t) chunk.getBiomeAt(x, y, z);
+                if (biome == runBiome) {
+                    runEnd = y;
+                    if (y != highest)
+                        continue;
+                }
+
+                const NoiseGradientSurfaceBuilder *gradient = _noiseGradientFor(runBiome);
+                if (gradient != nullptr)
+                    gradient->build(chunk, x, z, runStart, runEnd);
+
+                runBiome = biome;
+                runStart = y;
+                runEnd = y;
+            }
         }
     }
 }
