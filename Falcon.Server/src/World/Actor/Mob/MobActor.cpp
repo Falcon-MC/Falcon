@@ -2261,6 +2261,8 @@ Tag MobActor::saveNbt() const {
 void MobActor::loadNbt(const Tag &data) {
     ServerActor::loadNbt(data);
 
+    mSpawnEvent = data.getString(TAG_SPAWN_EVENT, mSpawnEvent);
+
     mAgeTicks = data.getInt(TAG_AGE, 0);
     mBreedCooldown = data.getInt(TAG_BREED_COOLDOWN, 0);
     mOwnerId = data.getLong(TAG_OWNER, NO_OWNER);

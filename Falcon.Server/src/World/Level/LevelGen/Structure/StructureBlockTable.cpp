@@ -361,7 +361,8 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
         return true;
     }
 
-    if (name == "minecraft:furnace" || name == "minecraft:chest") {
+    if (name == "minecraft:furnace" || name == "minecraft:smoker" || name == "minecraft:blast_furnace"
+        || name == "minecraft:chest") {
         states.putString("minecraft:cardinal_direction", rotatedFacing(entry, quarterTurns));
         out = BlockState(name, states);
         return true;
@@ -378,6 +379,13 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
     if (name == "minecraft:ladder" || name == "minecraft:wall_sign") {
         states.putInt("facing_direction", facingDirection(rotatedFacing(entry, quarterTurns)));
         out = BlockState(name, states);
+        return true;
+    }
+
+    // the dye goes to the block actor (Base)
+    if (name.size() > 12 && name.compare(name.size() - 12, 12, "_wall_banner") == 0) {
+        states.putInt("facing_direction", facingDirection(rotatedFacing(entry, quarterTurns)));
+        out = BlockState("minecraft:wall_banner", states);
         return true;
     }
 

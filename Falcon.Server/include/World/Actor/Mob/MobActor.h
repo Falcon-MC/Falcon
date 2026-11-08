@@ -44,6 +44,8 @@ public:
     bool canFreeze() const override {
         return true;
     }
+    // generated mobs only: the event their first tick fires, like villager_v2's minecraft:spawn_from_village
+    static constexpr const char *TAG_SPAWN_EVENT = "SpawnEvent";
 
     MobActor(uint64_t runtimeId, const std::string &identifier);
 

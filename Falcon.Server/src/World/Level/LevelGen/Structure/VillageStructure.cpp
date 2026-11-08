@@ -1,10 +1,15 @@
 #include "World/Level/LevelGen/Structure/VillageStructure.h"
 
 #include "Core/Color/DyeColor.h"
+#include "World/Level/Block/Actor/BannerBlockActor.h"
 #include "World/Level/Block/Actor/BedBlockActor.h"
+#include "World/Level/Block/Actor/BellBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
+#include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
+#include "World/Level/Block/Inventory/FurnaceInventory.h"
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
@@ -112,12 +117,56 @@ namespace {
     }
 
     // "identifier" or "identifier:event"
-    std::string mobOf(const std::string &metadata) {
+    void mobOf(const std::string &metadata, std::string &identifier, std::string &event) {
         const size_t first = metadata.find(':');
-        if (first == std::string::npos)
-            return metadata;
+        const size_t second = first == std::string::npos ? std::string::npos : metadata.find(':', first + 1);
+        identifier = metadata.substr(0, second);
+        event = second == std::string::npos ? std::string() : metadata.substr(second + 1);
+    }
 
-        return metadata.substr(0, metadata.find(':', first + 1));
+    // the blocks of the village templates the game gives a block actor as it places them
+    bool hasBlockActor(const std::string &block) {
+        static const char *BLOCKS[] = {"minecraft:bell", "minecraft:barrel", "minecraft:furnace", "minecraft:smoker",
+                                       "minecraft:blast_furnace", "minecraft:lectern", "minecraft:campfire",
+                                       "minecraft:soul_campfire", "minecraft:brewing_stand", "minecraft:wall_banner",
+                                       "minecraft:standing_banner"};
+        for (const char *candidate : BLOCKS) {
+            if (block == candidate)
+                return true;
+        }
+        return false;
+    }
+
+    // banners take their dye from the Java block name: Base counts from black
+    uint8_t bannerBase(const std::string &templateBlock) {
+        uint8_t color = DyeColor::fromIdentifier(templateBlock, "_wall_banner");
+        if (color == DyeColor::INVALID)
+            color = DyeColor::fromIdentifier(templateBlock, "_banner");
+        return color == DyeColor::INVALID ? 0 : DyeColor::invert(color);
+    }
+
+    void createBlockActor(BlockActorStore &actors, const VillageStructure::BlockEntity &entity) {
+        const Vector3i position(std::get<0>(entity.mPosition), std::get<1>(entity.mPosition),
+                                std::get<2>(entity.mPosition));
+        const std::string &block = entity.mBlock;
+        if (block == "minecraft:bell") {
+            actors.getOrCreate<BellBlockActor>(position);
+        } else if (block == "minecraft:barrel") {
+            actors.getOrCreate<BarrelBlockActor>(position);
+        } else if (block == "minecraft:furnace" || block == "minecraft:smoker" || block == "minecraft:blast_furnace") {
+            FurnaceBlockActor &furnace = actors.getOrCreate<FurnaceBlockActor>(position);
+            furnace.mKind = block == "minecraft:smoker"          ? FurnaceKind::Smoker
+                            : block == "minecraft:blast_furnace" ? FurnaceKind::BlastFurnace
+                                                                 : FurnaceKind::Furnace;
+        } else if (block == "minecraft:lectern") {
+            actors.getOrCreate<LecternBlockActor>(position);
+        } else if (block == "minecraft:campfire" || block == "minecraft:soul_campfire") {
+            actors.getOrCreate<CampfireBlockActor>(position);
+        } else if (block == "minecraft:brewing_stand") {
+            actors.getOrCreate<BrewingStandBlockActor>(position);
+        } else {
+            actors.getOrCreate<BannerBlockActor>(position).setBase(entity.mColor);
+        }
     }
 
     bool insideChunk(int32_t x, int32_t z, int32_t chunkX, int32_t chunkZ) {
@@ -129,15 +178,18 @@ namespace {
                && box.mMinZ <= chunkZ * 16 + 15;
     }
 
-    Tag generatedMob(const std::string &identifier, const VillageStructure::Position &position) {
+    Tag generatedMob(const VillageStructure::Mob &generated) {
+        const VillageStructure::Position &position = generated.mPosition;
         Tag location = Tag::ofList(Tag::Type::Float);
         location.addToList(Tag::ofFloat((float) std::get<0>(position) + 0.5f));
         location.addToList(Tag::ofFloat((float) std::get<1>(position)));
         location.addToList(Tag::ofFloat((float) std::get<2>(position) + 0.5f));
 
         Tag mob = Tag::ofCompound();
-        mob.putString("identifier", identifier);
+        mob.putString("identifier", generated.mIdentifier);
         mob.put("Pos", location);
+        if (!generated.mEvent.empty())
+            mob.putString(MobActor::TAG_SPAWN_EVENT, generated.mEvent);
         return mob;
     }
 
@@ -240,8 +292,8 @@ namespace {
                     mShare.mBeds.push_back({position, color});
             }
 
-            if (block.mName == "minecraft:furnace")
-                mShare.mFurnaces.push_back(position);
+            if (hasBlockActor(block.mName))
+                mShare.mBlockEntities.push_back({position, block.mName, bannerBase(palette.mName)});
 
             if (entry.mData.getString("id", std::string()) != "minecraft:chest" || block.mName != "minecraft:chest")
                 return;
@@ -257,17 +309,22 @@ namespace {
         }
 
         void _spawn(const std::string &metadata, const VillageStructure::Position &position) {
-            std::string mob = mobOf(metadata);
+            std::string mob;
+            std::string event;
+            mobOf(metadata, mob, event);
             if (mob.empty())
                 return;
 
             // abandoned_golems, abandoned_mobs (sub_14CD6B070)
             if (mob == "minecraft:iron_golem" && hasProcessor(mProcessors, ABANDONED_GOLEMS))
                 return;
-            if (mob == "minecraft:villager_v2" && hasProcessor(mProcessors, ABANDONED_MOBS))
+            // the metadata becomes minecraft:zombie_villager_v2:from_village
+            if (mob == "minecraft:villager_v2" && hasProcessor(mProcessors, ABANDONED_MOBS)) {
                 mob = "minecraft:zombie_villager_v2";
+                event = "from_village";
+            }
 
-            mShare.mMobs.push_back({position, mob});
+            mShare.mMobs.push_back({position, mob, event});
         }
 
         const JigsawPiece &mPiece;
@@ -462,13 +519,11 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
                         .setColor((int8_t) bed.mColor);
             }
 
-            for (const Position &furnace : own.mFurnaces) {
-                level.getBlockActors().getOrCreate<FurnaceBlockActor>(
-                        Vector3i(std::get<0>(furnace), std::get<1>(furnace), std::get<2>(furnace)));
-            }
+            for (const BlockEntity &entity : own.mBlockEntities)
+                createBlockActor(level.getBlockActors(), entity);
 
             for (const Mob &mob : own.mMobs)
-                level.addGeneratedEntity(generatedMob(mob.mIdentifier, mob.mPosition));
+                level.addGeneratedEntity(generatedMob(mob));
         }
     }
 }

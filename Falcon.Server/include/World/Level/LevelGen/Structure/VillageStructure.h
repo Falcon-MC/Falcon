@@ -40,6 +40,15 @@ public:
     struct Mob {
         Position mPosition;
         std::string mIdentifier;
+        // fired instead of minecraft:entity_spawned
+        std::string mEvent;
+    };
+
+    // a placed block the game gives a block actor; a banner keeps the dye of its template block
+    struct BlockEntity {
+        Position mPosition;
+        std::string mBlock;
+        uint8_t mColor = 0;
     };
 
     // one village's blocks in one chunk, before shaping
@@ -47,7 +56,7 @@ public:
         std::map<Position, BlockState> mBlocks;
         std::vector<Chest> mChests;
         std::vector<Bed> mBeds;
-        std::vector<Position> mFurnaces;
+        std::vector<BlockEntity> mBlockEntities;
         std::vector<Mob> mMobs;
     };
 

@@ -1,3 +1,6 @@
+#include "World/Level/Block/Actor/BannerBlockActor.h"
+#include "World/Level/Block/Actor/BlockActorClassRegistry.h"
+#include "World/Level/Block/Actor/FurnaceBlockActor.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
@@ -111,6 +114,30 @@ namespace {
             require(std::get<0>(entry.first) >> 4 == -92 && std::get<2>(entry.first) >> 4 == -27,
                     "A block left its chunk");
         }
+
+        // BDS 1.26.61 saves the meeting point's bell there
+        bool bell = false;
+        const VillageStructure::Position bellPosition(-1467, 64, -422);
+        for (const auto &entity : a.mBlockEntities)
+            bell = bell || (entity.mBlock == "minecraft:bell" && entity.mPosition == bellPosition);
+        require(bell, "The meeting point bell has no block actor");
+        for (const auto &mob : a.mMobs) {
+            if (mob.mIdentifier == "minecraft:villager_v2")
+                require(mob.mEvent == "minecraft:spawn_from_village", "A village villager lost its spawn event");
+        }
+    }
+
+    void checkBlockActors() {
+        std::unique_ptr<BlockActor> smoker = BlockActorClassRegistry::create(FurnaceBlockActor::SMOKER_ID);
+        const auto *furnace = dynamic_cast<const FurnaceBlockActor *>(smoker.get());
+        require(furnace != nullptr && furnace->mKind == FurnaceKind::Smoker, "A smoker loads as another furnace");
+        require(std::string(furnace->getBlockActorId()) == FurnaceBlockActor::SMOKER_ID, "A smoker saves as a furnace");
+
+        BannerBlockActor banner;
+        banner.setBase(3);
+        const Tag saved = banner.saveNbt();
+        require(saved.getInt("Base", -1) == 3 && saved.getInt("Type", -1) == 0, "The banner colour is lost");
+        require(!saved.contains("Patterns"), "An empty pattern list is saved");
     }
 }
 
@@ -121,6 +148,7 @@ int main() {
         checkProcessors();
         checkStyles();
         checkVillage();
+        checkBlockActors();
     } catch (const std::exception &error) {
         std::clog << "Structure regression failed: " << error.what() << '\n';
         return 1;
