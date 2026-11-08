@@ -173,6 +173,12 @@ public:
 
     void changeActorLevel(Actor &actor, Level &destination, const Vector3f &position);
 
+    /**
+     * Saves an actor into its column and drops it once nothing loads that column for actors, as the game keeps an
+     * actor sent into an unloaded chunk until the chunk loads. True when the actor was detached.
+     */
+    bool detachActorIfUnloaded(ServerActor &actor, Level &level);
+
     void onPlayerDimensionChangeAck(ServerPlayer &player);
 
     std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> &getPlayers() { return mPlayers; }
@@ -302,7 +308,7 @@ public:
 
     bool canPlayerSeeActor(ServerPlayer &player, const Actor &actor) const;
 
-    void broadcastActorMove(ServerActor &actor);
+    void broadcastActorMove(ServerActor &actor, bool teleported = false);
 
     void syncActorProperties(ServerActor &actor);
 

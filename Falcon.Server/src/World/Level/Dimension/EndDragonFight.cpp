@@ -1,19 +1,24 @@
 #include "World/Level/Dimension/EndDragonFight.h"
 
+#include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/Misc/EndCrystalActor.h"
 #include "World/Actor/Mob/Hostile/EnderDragon.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
+#include "World/Level/Block/Actor/EndGatewayBlockActor.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Dimension/EndGatewayExit.h"
 #include "World/Level/Explosion.h"
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/End/Feature/EndSpikes.h"
 #include "World/Level/LevelGen/End/Feature/TheEndDecorationFeature.h"
 #include "World/Level/LevelGen/End/Object/EndPodiumObject.h"
+#include "World/Level/LevelGen/End/TheEndGenerator.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Random/XoroshiroRandom.h"
 
 #include <cmath>
+#include <limits>
 #include <random>
 #include <utility>
 
@@ -50,6 +55,12 @@ namespace {
     const int32_t PODIUM_BEDROCK_COLUMN = 5;
 
     const char *const SUMMON_SOUND = "mad";
+
+    // the blocks around each end of a gateway its searches read, island and return search included
+    const int32_t GATEWAY_END_REACH = 80;
+
+    // keeps both ends of a gateway loaded while its exit is found; players use their runtime id, ticking areas bit 63
+    const uint64_t GATEWAY_LOADER_ID = (1ULL << 62) | 0x47415445ULL;
 
     bool isAir(const BlockState *state) {
         return state == nullptr || state->mName == "minecraft:air";
@@ -89,6 +100,12 @@ namespace {
         }
 
         return level.getMinY() - 1;
+    }
+
+    EndGatewayExit::BlockReader levelReader(Level &level) {
+        return [&level](int32_t x, int32_t y, int32_t z) {
+            return level.peekBlockPtr(x, y, z);
+        };
     }
 
     Vector3f centerOf(const Vector3i &position) {
@@ -293,8 +310,7 @@ bool EndDragonFight::_isArenaLoaded(Level &level) const {
 }
 
 void EndDragonFight::tick(ServerNetworkHandler &owner, Level &level) {
-    if (!mPendingGateways.empty())
-        _placePendingGateways(level);
+    _tickGatewayRequests(owner, level);
 
     if (!_isArenaLoaded(level))
         return;
@@ -430,35 +446,219 @@ void EndDragonFight::_spawnExitPortal(ServerNetworkHandler &owner, Level &level,
     podium.generate(manager, random, mExitPortalLocation->x, mExitPortalLocation->y, mExitPortalLocation->z);
 }
 
-void EndDragonFight::_spawnNewGateway(ServerNetworkHandler &owner, Level &level) {
-    (void) owner;
+void EndDragonFight::_spawnNewGateway(Level &level) {
     std::vector<int32_t> &gateways = _gatewayOrder();
-    mPendingGateways.push_back(gateways.back());
+    const Vector3i position = getGatewayPosition(gateways.back());
     gateways.pop_back();
-    _placePendingGateways(level);
+    requestGatewayExit(level, position, true);
 }
 
-void EndDragonFight::_placePendingGateways(Level &level) {
-    // the game loads the area of a new gateway before placing it (sub_14714F240, sub_14716A060)
-    for (auto it = mPendingGateways.begin(); it != mPendingGateways.end();) {
-        const Vector3i position = getGatewayPosition(*it);
-        bool loaded = true;
-        for (int32_t chunkX = (position.x - 1) >> 4; chunkX <= (position.x + 1) >> 4; chunkX++) {
-            for (int32_t chunkZ = (position.z - 1) >> 4; chunkZ <= (position.z + 1) >> 4; chunkZ++)
+Vector3i EndDragonFight::findRoughExit(const Level &level, const Vector3i &gateway) {
+    const TheEndGenerator *generator = dynamic_cast<const TheEndGenerator *>(&level.getGenerator());
+    return EndGatewayExit::findRoughExit(gateway, [generator](int32_t chunkX, int32_t chunkZ) {
+        return generator != nullptr && generator->getTerrainTop(chunkX, chunkZ) != 0;
+    });
+}
+
+void EndDragonFight::requestGatewayExit(const Level &level, const Vector3i &gateway, bool placeGateway) {
+    mGatewayRequests.push_back(GatewayRequest{false, gateway, findRoughExit(level, gateway), placeGateway});
+}
+
+void EndDragonFight::requestGatewayCheck(const Vector3i &gateway, const Vector3i &exit) {
+    mGatewayRequests.push_back(GatewayRequest{true, gateway, exit, false});
+}
+
+bool EndDragonFight::_loadGatewayEnds(Level &level, const GatewayRequest &request, bool registerLoaders) {
+    bool loaded = true;
+    for (const Vector3i &center: {request.mGateway, request.mExit}) {
+        for (int32_t chunkX = (center.x - GATEWAY_END_REACH) >> 4; chunkX <= (center.x + GATEWAY_END_REACH) >> 4;
+             chunkX++) {
+            for (int32_t chunkZ = (center.z - GATEWAY_END_REACH) >> 4; chunkZ <= (center.z + GATEWAY_END_REACH) >> 4;
+                 chunkZ++) {
+                if (registerLoaders)
+                    level.registerChunkLoader(GATEWAY_LOADER_ID, chunkX, chunkZ);
+
                 loaded = level.requestChunkAsync(chunkX, chunkZ) && loaded;
+            }
         }
-
-        if (!loaded) {
-            ++it;
-            continue;
-        }
-
-        TheEndDecorationFeature::placeGateway(position.x, position.y, position.z,
-                                              [&level](int32_t x, int32_t y, int32_t z, const BlockState &state) {
-                                                  setIfChanged(level, x, y, z, state);
-                                              });
-        it = mPendingGateways.erase(it);
     }
+
+    return loaded;
+}
+
+std::vector<std::pair<int32_t, int32_t>> EndDragonFight::_loadGatewayBlockActors(ServerNetworkHandler &owner,
+                                                                                  Level &level,
+                                                                                  const GatewayRequest &request) {
+    std::vector<std::pair<int32_t, int32_t>> loaded;
+    if (!level.isStorageOpen())
+        return loaded;
+
+    // the game reads the block actors of both ends through its chunk views (sub_14716AEC0): columns without a
+    // player keep theirs on disk, so they are read here and written back once the request is done
+    BlockActorStore &blockActors = level.getBlockActors();
+    for (const Vector3i &center: {request.mGateway, request.mExit}) {
+        for (int32_t chunkX = (center.x - GATEWAY_END_REACH) >> 4; chunkX <= (center.x + GATEWAY_END_REACH) >> 4;
+             chunkX++) {
+            for (int32_t chunkZ = (center.z - GATEWAY_END_REACH) >> 4; chunkZ <= (center.z + GATEWAY_END_REACH) >> 4;
+                 chunkZ++) {
+                if (blockActors.isChunkLoaded(chunkX, chunkZ))
+                    continue;
+
+                owner.loadBlockActorsForChunk(level, chunkX, chunkZ);
+                loaded.emplace_back(chunkX, chunkZ);
+            }
+        }
+    }
+
+    return loaded;
+}
+
+void EndDragonFight::_releaseGatewayEnds(ServerNetworkHandler &owner, Level &level, const GatewayRequest &request,
+                                         const std::vector<std::pair<int32_t, int32_t>> &blockActorChunks) {
+    BlockActorStore &blockActors = level.getBlockActors();
+    for (const std::pair<int32_t, int32_t> &chunk: blockActorChunks) {
+        // a column read without block actors gained none, so there is nothing to write back
+        if (blockActors.saveChunk(chunk.first, chunk.second).empty())
+            blockActors.unloadChunk(chunk.first, chunk.second);
+        else
+            owner.saveBlockActorsForChunk(level, chunk.first, chunk.second, true);
+    }
+
+    for (const Vector3i &center: {request.mGateway, request.mExit}) {
+        for (int32_t chunkX = (center.x - GATEWAY_END_REACH) >> 4; chunkX <= (center.x + GATEWAY_END_REACH) >> 4;
+             chunkX++) {
+            for (int32_t chunkZ = (center.z - GATEWAY_END_REACH) >> 4; chunkZ <= (center.z + GATEWAY_END_REACH) >> 4;
+                 chunkZ++)
+                level.unregisterChunkLoader(GATEWAY_LOADER_ID, chunkX, chunkZ);
+        }
+    }
+}
+
+void EndDragonFight::_tickGatewayRequests(ServerNetworkHandler &owner, Level &level) {
+    if (mGatewayRequests.empty())
+        return;
+
+    // one request at a time, as the game keeps a single pair of chunk views for them (sub_14716C8B0)
+    const GatewayRequest request = mGatewayRequests.front();
+    const bool registerLoaders = !mGatewayEndsRequested;
+    mGatewayEndsRequested = true;
+    if (!_loadGatewayEnds(level, request, registerLoaders))
+        return;
+
+    const std::vector<std::pair<int32_t, int32_t>> blockActorChunks = _loadGatewayBlockActors(owner, level, request);
+    if (request.mCheckOnly) {
+        _checkGatewayExit(owner, level, request.mGateway, request.mExit, false);
+        _checkGatewayExit(owner, level, request.mExit, request.mGateway, true);
+    } else {
+        _findGatewayExit(owner, level, request);
+    }
+
+    _releaseGatewayEnds(owner, level, request, blockActorChunks);
+    mGatewayRequests.pop_front();
+    mGatewayEndsRequested = false;
+}
+
+EndGatewayBlockActor &EndDragonFight::_placeGateway(Level &level, const Vector3i &position) {
+    TheEndDecorationFeature::placeGateway(position.x, position.y, position.z,
+                                          [&level](int32_t x, int32_t y, int32_t z, const BlockState &state) {
+                                              setIfChanged(level, x, y, z, state);
+                                          });
+    return level.getBlockActors().getOrCreate<EndGatewayBlockActor>(position);
+}
+
+void EndDragonFight::_raiseIsland(Level &level, const Vector3i &position) {
+    // the island's random is seeded with the hash of its position (sub_14716ACB0)
+    std::mt19937 random(EndGatewayExit::islandSeed(position));
+    TheEndDecorationFeature::placeIsland(random, position.x, position.y, position.z,
+                                         [&level](int32_t x, int32_t y, int32_t z, const BlockState &state) {
+                                             setIfChanged(level, x, y, z, state);
+                                         });
+}
+
+void EndDragonFight::_findGatewayExit(ServerNetworkHandler &owner, Level &level, const GatewayRequest &request) {
+    const EndGatewayExit::BlockReader reader = levelReader(level);
+    const int32_t minY = level.getMinY();
+    const int32_t maxY = level.getMaxY();
+
+    Vector3i landing = EndGatewayExit::findSpawn(reader, request.mExit, true, 1, false, minY, maxY);
+    if (EndGatewayExit::isZero(landing)) {
+        landing = Vector3i(request.mExit.x, EndGatewayExit::ISLAND_Y, request.mExit.z);
+        _raiseIsland(level, landing);
+    }
+
+    Vector3i tallest = EndGatewayExit::findTallestBlock(reader, landing, EndGatewayExit::TALLEST_RADIUS, true, false,
+                                                        maxY + 1);
+    if (EndGatewayExit::isZero(tallest))
+        tallest = landing;
+    const Vector3i exit(tallest.x, tallest.y + EndGatewayExit::EXIT_GATEWAY_HEIGHT, tallest.z);
+
+    if (request.mPlaceGateway)
+        _placeGateway(level, request.mGateway);
+    EndGatewayBlockActor &back = _placeGateway(level, exit);
+
+    EndGatewayBlockActor *origin = level.getBlockActors().find<EndGatewayBlockActor>(request.mGateway);
+    if (origin != nullptr) {
+        // the entity lands on the tallest block next to the exit gateway, not on its bedrock
+        const Vector3i spawn = EndGatewayExit::findSpawn(reader, exit, false, 1, false, minY, maxY);
+        Vector3i top = EndGatewayExit::findTallestBlock(reader, spawn, EndGatewayExit::LANDING_RADIUS, false, true,
+                                                        maxY + 1);
+        if (EndGatewayExit::isZero(top))
+            top = spawn;
+        origin->setExit(Vector3i(top.x, top.y + 1, top.z));
+        BlockActionHandler::broadcastBlockActorData(owner, level, *origin);
+    }
+
+    back.setExit(EndGatewayExit::findSpawn(reader, request.mGateway, false, EndGatewayExit::RETURN_SEARCH_CHUNKS,
+                                           false, minY, maxY));
+    BlockActionHandler::broadcastBlockActorData(owner, level, back);
+}
+
+void EndDragonFight::_checkGatewayExit(ServerNetworkHandler &owner, Level &level, const Vector3i &from,
+                                       const Vector3i &to, bool fromNearestGateway) {
+    const EndGatewayExit::BlockReader reader = levelReader(level);
+    if (!EndGatewayExit::isExitBlocked(reader, to))
+        return;
+
+    EndGatewayBlockActor *gateway = nullptr;
+    Vector3i around = to;
+    if (fromNearestGateway) {
+        // the gateway leading back is the one closest to the exit, within 32 blocks
+        const float range = (float) EndGatewayExit::RETURN_GATEWAY_RANGE;
+        float closest = std::numeric_limits<float>::max();
+        for (EndGatewayBlockActor *candidate: level.getBlockActors().findAll<EndGatewayBlockActor>()) {
+            const Vector3i &position = candidate->getPosition();
+            const float dx = (float) from.x + 0.5f - (float) position.x;
+            const float dy = (float) from.y + 0.5f - (float) position.y;
+            const float dz = (float) from.z + 0.5f - (float) position.z;
+            if (std::fabs(dx) > range || std::fabs(dy) > range || std::fabs(dz) > range)
+                continue;
+
+            const float distance = dz * dz + (dy * dy + dx * dx);
+            if (closest > distance) {
+                closest = distance;
+                gateway = candidate;
+            }
+        }
+
+        if (gateway != nullptr)
+            around = gateway->getExit();
+    } else {
+        gateway = level.getBlockActors().find<EndGatewayBlockActor>(from);
+    }
+
+    if (gateway == nullptr)
+        return;
+
+    const int32_t minY = level.getMinY();
+    const int32_t maxY = level.getMaxY();
+    Vector3i landing = EndGatewayExit::findSpawn(reader, around, true, 1, false, minY, maxY);
+    if (EndGatewayExit::isZero(landing)) {
+        _raiseIsland(level, around);
+        landing = EndGatewayExit::findSpawn(reader, around, true, 1, true, minY, maxY);
+    }
+
+    gateway->setExit(landing);
+    BlockActionHandler::broadcastBlockActorData(owner, level, *gateway);
 }
 
 void EndDragonFight::onDragonKilled(ServerNetworkHandler &owner, Level &level, const EnderDragon &dragon) {
@@ -466,7 +666,7 @@ void EndDragonFight::onDragonKilled(ServerNetworkHandler &owner, Level &level, c
         return;
 
     _spawnExitPortal(owner, level, true);
-    _spawnNewGateway(owner, level);
+    _spawnNewGateway(level);
 
     if (!mPreviouslyKilled) {
         const int32_t top = topOfColumn(level, 0, 0);

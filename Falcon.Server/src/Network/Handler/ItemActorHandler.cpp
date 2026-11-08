@@ -12,6 +12,7 @@
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/ItemData.h"
 #include "World/Level/Level.h"
+#include "World/Level/World.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
@@ -21,6 +22,7 @@
 #include "Protocol/Packets/TakeItemActorPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
+#include <algorithm>
 #include <cmath>
 #include <random>
 #include <string>
@@ -142,13 +144,13 @@ namespace {
         }
     }
 
-    void broadcastItemActorMove(ServerNetworkHandler &owner, const ItemActor &actor) {
+    void broadcastItemActorMove(ServerNetworkHandler &owner, const ItemActor &actor, bool teleported = false) {
         MoveActorAbsolutePacket move;
     move.mRuntimeActorId = (int64_t) actor.getRuntimeId();
         move.mPosition = actor.getPosition();
         move.mRotation = actor.getRotation();
         move.mOnGround = actor.isOnGround();
-        move.mTeleported = false;
+        move.mTeleported = teleported;
         move.mForceMove = false;
 
         for (auto &entry: owner.getPlayers()) {
@@ -336,6 +338,32 @@ void ItemActorHandler::collect(ServerNetworkHandler &owner, ItemActor &item, con
 void ItemActorHandler::refresh(ServerNetworkHandler &owner, const ItemActor &item) {
     broadcastItemActorRemove(owner, item);
     broadcastItemActorSpawn(owner, item);
+}
+
+void ItemActorHandler::teleport(ServerNetworkHandler &owner, Level &level, ItemActor &item, const Vector3f &position) {
+    item.teleport(position);
+
+    const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+    const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+    const int64_t column = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
+    if (owner.getWorldOf(level).getActorLoadedChunks(level.getDimensionType()).count(column) != 0) {
+        broadcastItemActorMove(owner, item, true);
+        return;
+    }
+
+    // kept in the saved entities of its column until the column loads, as other actors are
+    if (level.isStorageOpen()) {
+        std::vector<Tag> entities = level.loadEntities(chunkX, chunkZ);
+        entities.push_back(item.saveNbt());
+        level.saveEntities(chunkX, chunkZ, entities);
+    }
+
+    broadcastItemActorRemove(owner, item);
+    std::vector<std::unique_ptr<ItemActor>> &actors = owner.getItemEntities();
+    actors.erase(std::remove_if(actors.begin(), actors.end(), [&item](const std::unique_ptr<ItemActor> &entry) {
+        return entry.get() == &item;
+    }), actors.end());
+    level.releaseChunkIfUnused(chunkX, chunkZ);
 }
 
 void ItemActorHandler::sendItemActorsTo(ServerNetworkHandler &owner, ServerPlayer &player) {

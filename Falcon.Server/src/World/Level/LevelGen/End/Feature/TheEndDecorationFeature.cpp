@@ -110,6 +110,13 @@ void TheEndDecorationFeature::_placeSpike(ChunkGenerateContext &context, const E
 }
 
 void TheEndDecorationFeature::_placeIsland(std::mt19937 &random, int32_t x, int32_t y, int32_t z) {
+    placeIsland(random, x, y, z, [this](int32_t blockX, int32_t blockY, int32_t blockZ, const BlockState &state) {
+        mRoot->setBlockStateAt(blockX, blockY, blockZ, state);
+    });
+}
+
+void TheEndDecorationFeature::placeIsland(std::mt19937 &random, int32_t x, int32_t y, int32_t z,
+                                          const EndSpikes::BlockSink &sink) {
     float radius = (float) nextInt(random, 3) + 4.0f;
 
     for (int32_t offsetY = 0; radius > 0.5f; offsetY--) {
@@ -120,7 +127,7 @@ void TheEndDecorationFeature::_placeIsland(std::mt19937 &random, int32_t x, int3
         for (int32_t offsetX = low; offsetX <= high; offsetX++) {
             for (int32_t offsetZ = low; offsetZ <= high; offsetZ++) {
                 if (limit >= (float) (offsetX * offsetX + offsetZ * offsetZ))
-                    mRoot->setBlockStateAt(x + offsetX, y + offsetY, z + offsetZ, endStoneState());
+                    sink(x + offsetX, y + offsetY, z + offsetZ, endStoneState());
             }
         }
 

@@ -6,6 +6,7 @@
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/CopperGolemStatueBlockActor.h"
 #include "World/Level/Block/Actor/BedBlockActor.h"
+#include "World/Level/Block/Actor/EndGatewayBlockActor.h"
 #include "World/Level/Block/Actor/EnderChestBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorClassRegistry.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
@@ -217,6 +218,7 @@ FALCON_REGISTER_BLOCK_ACTOR(ShelfBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(ItemFrameBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(GlowItemFrameBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BeehiveBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(EndGatewayBlockActor);
 
 std::unique_ptr<BlockActor> BlockActorStore::create(const std::string &blockActorId) {
     return BlockActorClassRegistry::create(blockActorId);
