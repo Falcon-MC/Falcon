@@ -2,7 +2,7 @@
 //
 // the BDS "db" (and its level.dat) is copied to a temp dir removed on exit: LevelDB writes to any database it
 // opens; read with LevelStorage; chunks are generated like the chunk workers do: terrain, heightmap, population
-// in a GeneratorChunkSource, then the blocks neighbours spilled in
+// in a GeneratorChunkSource on the shared TerrainCache
 //
 // usage:
 //   FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1 [--csv file] [--json file]
@@ -537,51 +537,54 @@ namespace {
         return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
     }
 
-    // hands a chunk over once all neighbours are populated: their spills are in;
-    // row by row, about two rows in memory
+    // decorated as the workers do, with a ring: the game decorates a loaded area's neighbours too; even rows, then
+    // the odd row between: TerrainCache::decorationClass order; a row goes out once both around it are decorated
     void generateArea(int64_t seed, const ChunkArea &area, bool terrainOnly,
                       const std::function<void(LevelChunk &)> &visit) {
         const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(gDimension,
                                                                                          seed);
         TerrainCache terrainCache(*generator);
         GeneratorChunkSource source(seed, gDimension, terrainCache);
-        std::unordered_map<int64_t, LevelChunk> waiting;
+        // features reaching past the 3x3: in no cached copy
         std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> spilled;
 
-        for (int32_t chunkZ = area.mZ0 - 1; chunkZ <= area.mZ1 + 1; chunkZ++) {
-            for (int32_t chunkX = area.mX0 - 1; chunkX <= area.mX1 + 1; chunkX++) {
-                LevelChunk chunk(chunkX, chunkZ);
-                chunk.setDimension(gDimension);
-                generator->generate(chunk);
-                if (!chunk.hasHeightmap())
-                    LightSystem::computeHeightmap(chunk);
-
-                std::vector<GeneratedBlockChange> overflow;
-                std::vector<Tag> blockActors;
-                std::vector<Tag> entities;
-                if (!terrainOnly)
-                    source.populate(chunk, overflow, blockActors, entities);
-                chunk.setPopulated(true);
-
-                for (GeneratedBlockChange &change: overflow) {
-                    if (change.mY < gMinY || change.mY > gMaxY
-                        || !area.contains(change.mX >> 4, change.mZ >> 4))
+        const int32_t firstRow = area.mZ0 - 1;
+        const int32_t lastRow = area.mZ1 + 1;
+        const auto decorateRow = [&](int32_t chunkZ) {
+            for (const int32_t pass: {0, 1}) {
+                for (int32_t chunkX = area.mX0 - 1; chunkX <= area.mX1 + 1; chunkX++) {
+                    if ((TerrainCache::decorationClass(chunkX, chunkZ) & 1) != pass)
                         continue;
 
-                    spilled[packChunk(change.mX >> 4, change.mZ >> 4)].push_back(std::move(change));
+                    LevelChunk chunk(chunkX, chunkZ);
+                    chunk.setDimension(gDimension);
+                    std::vector<GeneratedBlockChange> overflow;
+                    std::vector<Tag> blockActors;
+                    std::vector<Tag> entities;
+                    uint64_t base = 0;
+                    if (terrainOnly)
+                        continue;
+
+                    source.populateGenerated(chunk, {}, overflow, blockActors, entities, base);
+
+                    for (GeneratedBlockChange &change: overflow) {
+                        if (change.mSequence != 0 || change.mY < gMinY || change.mY > gMaxY
+                            || !area.contains(change.mX >> 4, change.mZ >> 4))
+                            continue;
+
+                        spilled[packChunk(change.mX >> 4, change.mZ >> 4)].push_back(std::move(change));
+                    }
                 }
+            }
+        };
+        std::unordered_set<int32_t> handed;
+        const auto handOver = [&](int32_t chunkZ) {
+            if (chunkZ < area.mZ0 || chunkZ > area.mZ1 || !handed.insert(chunkZ).second)
+                return;
 
-                if (area.contains(chunkX, chunkZ))
-                    waiting.emplace(packChunk(chunkX, chunkZ), std::move(chunk));
-
-                // the chunk diagonally behind just got its last neighbour populated
-                if (!area.contains(chunkX - 1, chunkZ - 1))
-                    continue;
-
-                const int64_t key = packChunk(chunkX - 1, chunkZ - 1);
-                LevelChunk &finished = waiting.at(key);
-                const std::unordered_map<int64_t, std::vector<GeneratedBlockChange>>::iterator changes =
-                        spilled.find(key);
+            for (int32_t chunkX = area.mX0; chunkX <= area.mX1; chunkX++) {
+                LevelChunk finished = terrainCache.neighbour(chunkX, chunkZ);
+                const auto changes = spilled.find(packChunk(chunkX, chunkZ));
                 if (changes != spilled.end()) {
                     for (const GeneratedBlockChange &change: changes->second)
                         finished.setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
@@ -589,9 +592,24 @@ namespace {
                 }
 
                 visit(finished);
-                waiting.erase(key);
+            }
+        };
+
+        // the decorated rows: once one is, the rows below it are final
+        for (int32_t chunkZ = firstRow; chunkZ <= lastRow; chunkZ++) {
+            if ((chunkZ & 1) == 0) {
+                decorateRow(chunkZ);
+                if (chunkZ - 1 >= firstRow) {
+                    decorateRow(chunkZ - 1);
+                    handOver(chunkZ - 2);
+                    handOver(chunkZ - 1);
+                }
+            } else if (chunkZ == lastRow) {
+                decorateRow(chunkZ);
             }
         }
+        handOver(lastRow - 1);
+        handOver(lastRow);
     }
 
     enum class LoadResult {

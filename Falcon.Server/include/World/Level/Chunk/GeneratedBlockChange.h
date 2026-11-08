@@ -12,4 +12,11 @@ struct GeneratedBlockChange {
     int32_t mLayer = 0;
     // interned (SubChunk::intern): a change is cheap to keep and copy
     const BlockState *mState = nullptr;
+    // sequence of the decoration placing it, TerrainCache order; 0 unknown: from storage or beyond the 3x3
+    uint64_t mSequence = 0;
 };
+
+// a chunk decorated as `own` from a copy holding every decoration after `base` already has the block
+inline bool decorationHolds(uint64_t base, uint64_t own, uint64_t change) {
+    return own != 0 && change > base && change < own;
+}
