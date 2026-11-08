@@ -148,6 +148,17 @@ public:
 
     bool getClientSideChunkGenerationEnabled() const { return getBool("client-side-chunk-generation-enabled"); }
 
+    // Comma-separated structure names, as StructureFeature registers them.
+    std::string getClientSideChunkGenerationServerStructures() const {
+        return getString("client-side-chunk-generation-server-structures");
+    }
+
+    /**
+     * server-build-radius-ratio: the share of the view the server builds for client side generation clients, or a
+     * negative value when it is "Disabled" and the ratio follows each client's hardware.
+     */
+    float getServerBuildRadiusRatio() const;
+
     bool getBlockNetworkIdsAreHashes() const { return getBool("block-network-ids-are-hashes"); }
 
     bool getDisableCustomSkins() const { return getBool("disable-custom-skins"); }

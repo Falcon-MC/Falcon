@@ -24,6 +24,7 @@ enum class LevelDbTag : unsigned char {
     Version = ',',
     Data2D = '-',
     SubChunkPrefix = '/',
+    LegacyTerrain = '0',
     BlockEntities = '1',
     LegacyEntities = '2',
     FinalizedState = '6',
@@ -63,6 +64,12 @@ public:
 
     bool loadChunk(LevelChunk &chunk);
 
+    /**
+     * Whether a chunk of any format is stored, from the same version and legacy terrain records the game checks
+     * (DBChunkStorage, sub_1406CA2F0). It reads storage, so callers cache the answer.
+     */
+    bool hasChunk(int32_t chunkX, int32_t chunkZ) const;
+
     bool mergePendingBlockChanges(int32_t chunkX, int32_t chunkZ, const std::vector<GeneratedBlockChange> &changes);
 
     std::vector<GeneratedBlockChange> loadPendingBlockChanges(int32_t chunkX, int32_t chunkZ);
@@ -90,6 +97,11 @@ public:
     bool eraseTickingArea(const std::string &id);
 
     std::vector<std::pair<std::string, Tag>> loadTickingAreas();
+
+    // The saved data of a map, stored level-wide under map_<id> like the game does.
+    bool loadMapData(int64_t mapId, Tag &out) const;
+
+    bool saveMapData(int64_t mapId, const Tag &data);
 
     bool saveGameRules(const Tag &rules);
 

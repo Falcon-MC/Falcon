@@ -314,6 +314,9 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
 
     player.setSkin(request.getSkin());
     player.setBuildPlatform(request.getBuildPlatform());
+    // sub_1404B9270 reads the flag as a JSON bool that defaults to true when the client leaves it out.
+    player.setClientSideGenerationCompatible(
+            ConnectionRequest::findJsonBool(request.getClientData(), "CompatibleWithClientSideChunkGen", true));
     player.setLocale(request.getLanguageCode());
 
     if (owner.getProperties().getNetworkEncryption()) {
@@ -498,7 +501,9 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mDefaultPlayerPermission = owner.getProperties().getDefaultPlayerPermissionLevel();
     startGame.mChatRestrictionLevel = owner.getProperties().getChatRestrictionLevel();
     startGame.mDisablingPlayerInteractions = owner.getProperties().getDisablePlayerInteraction();
-    startGame.mClientSideGenerationEnabled = owner.getProperties().getClientSideChunkGenerationEnabled();
+    // sub_1422AA6C0: only a client able to generate chunks is told the server leaves some to it.
+    startGame.mClientSideGenerationEnabled = owner.getProperties().getClientSideChunkGenerationEnabled()
+                                             && player.isClientSideGenerationCompatible();
     startGame.mDisablingCustomSkins = owner.getProperties().getDisableCustomSkins();
     startGame.mServerAuthoritativeBlockBreaking = owner.getProperties().getServerAuthoritativeBlockBreaking();
     startGame.mServerChunkTickRange = owner.getProperties().getTickDistance();

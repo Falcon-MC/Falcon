@@ -1,5 +1,9 @@
 #pragma once
 
+#include "Core/Math/Vector3i.h"
+#include "World/Level/ClientSideGeneration.h"
+
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <unordered_set>
@@ -23,6 +27,20 @@ struct ChunkStreamState {
     // Radius granted to the client in ChunkRadiusUpdated, 0 until it asks. The client drops chunks beyond it,
     // so streaming further marks chunks as sent that the client never keeps.
     int32_t mRadius = 0;
+
+    // Client side generation only (NetworkChunkPublisher, sub_14255F580 and sub_1425606A0).
+    ClientSideGeneration::SavedChunkList mSavedChunks;
+    // Chunks in the radius the server leaves to the client. They are sent anyway once something else on the
+    // server builds them, and decided again whenever the view moves.
+    std::vector<int64_t> mClientBuilt;
+    size_t mClientBuiltCursor = 0;
+    bool mPublished = false;
+    // A teleport moves the view without waiting for the player to travel PUBLISHER_MOVE_THRESHOLD blocks.
+    bool mForcePublisherMove = false;
+    bool mChunkSentSinceUpdate = false;
+    std::chrono::steady_clock::time_point mLastChunkSent;
+    Vector3i mPublisherPosition;
+    uint32_t mPublisherRadius = 0;
 };
 
 /**
@@ -44,6 +62,14 @@ public:
     static void handleViewDistanceChange(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void invalidateChunk(ServerPlayer &player, int64_t hash);
+
+    /**
+     * Whether a NetworkChunkPublisherUpdatePacket is due under client side generation (sub_14255F580): never within
+     * PUBLISHER_DELAY_NANOSECONDS of the last chunk sent since the previous update, and then when the player moved
+     * far enough, the radius changed or chunks wait to be listed.
+     */
+    static bool isPublisherUpdateDue(const ChunkStreamState &state, const Vector3i &position, uint32_t radius,
+                                     std::chrono::steady_clock::time_point now);
 
     static int64_t packChunk(int32_t chunkX, int32_t chunkZ);
 
