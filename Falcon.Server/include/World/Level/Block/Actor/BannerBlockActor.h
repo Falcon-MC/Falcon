@@ -23,10 +23,6 @@ public:
         mBase = base;
     }
 
-    int32_t getBase() const {
-        return mBase;
-    }
-
 private:
     void _putFields(Tag &data) const;
 

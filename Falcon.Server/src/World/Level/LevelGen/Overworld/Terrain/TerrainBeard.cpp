@@ -60,18 +60,6 @@ namespace {
         return (double) (float) value;
     }
 
-    // max(0, 1 - |(x, y, z)| / 6) in halves of a block (sub_145C33490)
-    double bury(int32_t halfX, int32_t halfY, int32_t halfZ) {
-        const double x = (double) halfX * 0.5;
-        const double y = (double) halfY * 0.5;
-        const double z = (double) halfZ * 0.5;
-        double sum = x * x + y * y;
-        sum = sum + z * z;
-        double distance = std::sqrt(sum);
-        distance = distance * 0.16666666666666666;
-        return (double) (float) (distance <= 1.0 ? 1.0 - distance : 0.0);
-    }
-
     int32_t outside(int32_t value, int32_t min, int32_t max) {
         return std::max(min - value, value - max);
     }
@@ -84,23 +72,9 @@ void TerrainBeard::addPiece(int32_t chunkX, int32_t chunkZ, const Piece &piece) 
         return;
 
     mPieces.push_back(piece);
-    if (piece.mAdaptation == Adaptation::None || (uint8_t) piece.mAdaptation > 4)
-        return;
-
     const int32_t ground = piece.mMinY + piece.mGroundLevelDelta;
     mMinY = std::min(mMinY, std::min(piece.mMinY, ground) - 12);
     mMaxY = std::max(mMaxY, std::max(piece.mMaxY, ground) + 11);
-}
-
-void TerrainBeard::addJunction(int32_t chunkX, int32_t chunkZ, const Junction &junction) {
-    const int32_t minX = chunkX * 16;
-    const int32_t minZ = chunkZ * 16;
-    if (junction.mX < minX || junction.mX > minX + 27 || junction.mZ < minZ || junction.mZ > minZ + 27)
-        return;
-
-    mJunctions.push_back(junction);
-    mMinY = std::min(mMinY, junction.mY - 12);
-    mMaxY = std::max(mMaxY, junction.mY + 11);
 }
 
 double TerrainBeard::compute(int32_t x, int32_t y, int32_t z) const {
@@ -108,53 +82,13 @@ double TerrainBeard::compute(int32_t x, int32_t y, int32_t z) const {
     for (const Piece &piece: mPieces) {
         const int32_t outX = outside(x, piece.mMinX, piece.mMaxX);
         const int32_t outZ = outside(z, piece.mMinZ, piece.mMaxZ);
-        const int32_t dx = std::max(outX, 0);
-        const int32_t dz = std::max(outZ, 0);
-        const int32_t ground = piece.mMinY + piece.mGroundLevelDelta;
-        const int32_t toGround = y - ground;
+        const int32_t toGround = y - (piece.mMinY + piece.mGroundLevelDelta);
 
-        double contribution;
-        switch (piece.mAdaptation) {
-            case Adaptation::Bury:
-                contribution = 0.0;
-                if (outX <= 5 && (uint32_t) (toGround + 12) <= 23u && outZ <= 5)
-                    contribution = bury(2 * dx, toGround, 2 * dz);
-                break;
-            case Adaptation::BeardThin:
-                contribution = 0.0;
-                if (outX <= 11 && (uint32_t) (toGround + 12) <= 23u && outZ <= 11)
-                    contribution = beard(dx, dz, toGround, toGround) * 0.8;
-                break;
-            case Adaptation::BeardBox: {
-                const int32_t outY = std::max(ground - y, y - piece.mMaxY);
-                contribution = 0.0;
-                if (outX <= 11 && outY <= 11 && outZ <= 11)
-                    contribution = beard(dx, dz, std::max(outY, 0), toGround) * 0.8;
-                break;
-            }
-            case Adaptation::Encapsulate: {
-                const int32_t outY = std::max(piece.mMinY - y, y - piece.mMaxY);
-                contribution = 0.0;
-                if (outX <= 11 && outY <= 11 && outZ <= 11)
-                    contribution = bury(dx, std::max(outY, 0), dz) * 0.8;
-                break;
-            }
-            default:
-                continue;
-        }
+        double contribution = 0.0;
+        if (outX <= 11 && (uint32_t) (toGround + 12) <= 23u && outZ <= 11)
+            contribution = beard(std::max(outX, 0), std::max(outZ, 0), toGround, toGround) * 0.8;
         total = total + contribution;
     }
 
-    double junctions = 0.0;
-    for (const Junction &junction: mJunctions) {
-        const int32_t dx = x - junction.mX;
-        const int32_t dy = y - junction.mY;
-        const int32_t dz = z - junction.mZ;
-        double contribution = 0.0;
-        if ((uint32_t) (dx + 12) < 24u && (uint32_t) (dy + 12) < 24u && (uint32_t) (dz + 12) < 24u)
-            contribution = beard(dx, dz, dy, dy) * 0.4;
-        junctions = junctions + contribution;
-    }
-
-    return total + junctions;
+    return total;
 }
