@@ -346,6 +346,10 @@ bool MapItem::inventoryTick(ServerNetworkHandler &owner, ServerPlayer &player, I
         changed = true;
     }
 
+    // a picture has nothing to track or draw: the holder only asks for its pixels
+    if (data->isImage())
+        return changed;
+
     tickCarriedBy(owner, owner.getWorldFor(player), *data, &item);
     if (!selected || Dimension::toId(player.getDimension()) != data->getDimension())
         return changed;
