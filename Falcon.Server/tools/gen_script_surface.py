@@ -1,0 +1,242 @@
+#!/usr/bin/env python3
+"""Generate src/Scripting/Binding/ScriptSurface.inc from the official @minecraft npm definitions.
+
+usage: gen_script_surface.py <dir of extracted packages> <output .inc>
+
+The directory holds one folder per package version, named like `npm pack` names the archive
+(minecraft-server-2.11.0/package/index.d.ts). Every stable version and the beta of the targeted game
+version must be present: the table records, for each name, the first and last version declaring it.
+"""
+
+import os
+import re
+import sys
+
+MODULES = {
+    'server': ('minecraft-server-', 'server'),
+    'server-ui': ('minecraft-server-ui-', 'ui'),
+    'common': ('minecraft-common-', 'common'),
+}
+
+# classes, enums and constants the scripting layer binds; anything else stays out of the table
+BOUND = {
+    'server': {
+        'world', 'system', 'World', 'System', 'WorldAfterEvents', 'WorldBeforeEvents', 'SystemAfterEvents',
+        'SystemBeforeEvents', 'Entity', 'Player', 'Block', 'Dimension', 'ItemStack', 'BlockPermutation',
+        'BlockType', 'BlockTypes', 'BlockStates', 'BlockStateType', 'ItemType', 'ItemTypes', 'Container',
+        'ContainerSlot', 'Component', 'EntityComponent', 'EntityInventoryComponent', 'EntityEquippableComponent',
+        'EntityAttributeComponent', 'EntityHealthComponent', 'EntityTypeFamilyComponent',
+        'EntityProjectileComponent', 'ItemComponent', 'ItemDurabilityComponent', 'ItemEnchantableComponent',
+        'ItemCooldownComponent', 'ScreenDisplay', 'Camera', 'PlayerInputPermissions', 'LocatorBar', 'Scoreboard',
+        'ScoreboardObjective', 'TickingAreaManager', 'StartupEvent', 'ShutdownEvent', 'BlockComponentRegistry',
+        'ItemComponentRegistry', 'CommandResult', 'BlockVolume', 'EntityWaypoint', 'EquipmentSlot', 'GameMode',
+        'InputPermissionCategory', 'Direction', 'PlayerInventoryType', 'EntityComponentTypes',
+        'ItemComponentTypes', 'BlockComponentTypes', 'BlockEvent',
+    },
+    'server-ui': {
+        'ActionFormData', 'MessageFormData', 'ModalFormData',
+    },
+    'common': None,
+}
+
+SIGNAL_OWNERS = ('WorldAfterEvents', 'WorldBeforeEvents', 'SystemAfterEvents', 'SystemBeforeEvents')
+
+# signals the scripting layer fires; their signal and event classes join the bound set
+BOUND_SIGNALS = {
+    'WorldAfterEvents': {
+        'playerBreakBlock', 'playerPlaceBlock', 'playerSpawn', 'playerJoin', 'playerLeave', 'chatSend', 'entityHurt',
+        'entityDie', 'itemUse', 'projectileHitBlock', 'projectileHitEntity', 'entityHitBlock', 'entityHitEntity',
+        'entityItemDrop', 'playerHotbarSelectedSlotChange', 'playerInventoryItemChange', 'playerInteractWithBlock',
+        'entitySpawn', 'entityRemove', 'entityLoad', 'worldLoad', 'worldInitialize',
+    },
+    'WorldBeforeEvents': {
+        'playerBreakBlock', 'chatSend', 'playerInteractWithBlock', 'entityHurt', 'effectAdd',
+        'playerInteractWithEntity', 'itemUse', 'itemUseOn', 'worldInitialize',
+    },
+    'SystemAfterEvents': set(),
+    'SystemBeforeEvents': {'startup', 'shutdown'},
+}
+
+
+def version_key(text):
+    match = re.match(r'(\d+)\.(\d+)\.(\d+)(.*)', text)
+    return int(match.group(1)), int(match.group(2)), int(match.group(3)), match.group(4)
+
+
+def strip_comments(source):
+    return re.sub(r'/\*.*?\*/', '', source, flags=re.S)
+
+
+def parse(path):
+    raw = open(path, encoding='utf-8').read()
+    exports = {}
+    for match in re.finditer(r'\nexport (?:declare )?(class|enum|const|function) (\w+)', strip_comments(raw)):
+        exports[match.group(2)] = match.group(1)
+
+    classes = {}
+    for match in re.finditer(r'\nexport class (\w+)(?: extends ([\w.]+))? \{(.*?)\n\}', raw, re.S):
+        members = {}
+        for member in re.finditer(r'(/\*\*(?:(?!\*/).)*\*/)?\s*\n {4}((?:readonly |static |private )*)'
+                                  r'(\w+)\??(\(|:|<| =)([^;]*)', match.group(3), re.S):
+            doc = member.group(1) or ''
+            modifiers = member.group(2)
+            if 'private' in modifiers:
+                continue
+            name = member.group(3)
+            kind = 'method' if member.group(4) in '(<' else ('readonly' if 'readonly' in modifiers else 'prop')
+            tags = set(re.findall(r'@privilege ([a-z-]+)', doc))
+            if kind == 'method':
+                early = 'early-execution-allowed' in tags or 'can be called in early-execution' in doc
+                blocked = 'no-restricted-execution' in tags or "can't be called in read-only mode" in doc
+            else:
+                early = 'early-execution-readable' in tags
+                blocked = 'restricted-execution-read-only' in tags
+            if 'static ' in modifiers:
+                name = 'static ' + name
+            signature = member.group(5)
+            previous = members.get(name)
+            members[name] = (kind, early or (previous is not None and previous[1]),
+                             blocked or (previous is not None and previous[2]), signature)
+        classes[match.group(1)] = (match.group(2), members)
+
+    enums = {}
+    for match in re.finditer(r'\nexport enum (\w+) \{(.*?)\}', strip_comments(raw), re.S):
+        values = []
+        for line in match.group(2).split('\n'):
+            line = line.strip().rstrip(',')
+            if '=' in line:
+                key, value = [part.strip() for part in line.split('=', 1)]
+                values.append((key, value.strip("'")))
+        enums[match.group(1)] = values
+    return exports, classes, enums
+
+
+def collect(root, prefix):
+    versions = []
+    for entry in os.listdir(root):
+        if not entry.startswith(prefix):
+            continue
+        version = entry[len(prefix):]
+        if not re.match(r'\d+\.\d+\.\d+', version):
+            continue
+        path = os.path.join(root, entry, 'package', 'index.d.ts')
+        if os.path.exists(path):
+            versions.append((version, path))
+    versions.sort(key=lambda item: version_key(item[0]))
+    return versions
+
+
+class Range:
+    def __init__(self):
+        self.first = {}
+        self.last = {}
+        self.beta = False
+        self.early = False
+        self.blocked = False
+
+    def add(self, version):
+        major, minor, _, suffix = version_key(version)
+        if suffix:
+            self.beta = True
+            return
+        self.first.setdefault(major, minor)
+        self.last[major] = minor
+
+
+def main():
+    root, output = sys.argv[1], sys.argv[2]
+    entries = {}
+    signals = {}
+    parents = {}
+
+    def entry(key):
+        if key not in entries:
+            entries[key] = Range()
+        return entries[key]
+
+    bound_events = set()
+    for version, path in collect(root, MODULES['server'][0]):
+        _, classes, _ = parse(path)
+        for owner in SIGNAL_OWNERS:
+            if owner not in classes:
+                continue
+            for member, (_, _, _, signature) in classes[owner][1].items():
+                if member not in BOUND_SIGNALS[owner]:
+                    continue
+                signal = signature.strip().rstrip(';').split('.')[-1]
+                bound_events.add(signal)
+                subscribe = classes.get(signal, (None, {}))[1].get('subscribe')
+                match = re.search(r'arg0: (\w+)\)\s*=>', subscribe[3]) if subscribe else None
+                if match:
+                    bound_events.add(match.group(1))
+
+    for module, (prefix, short) in MODULES.items():
+        bound = BOUND[module]
+        for version, path in collect(root, prefix):
+            exports, classes, enums = parse(path)
+            beta = bool(version_key(version)[3])
+            for name, kind in exports.items():
+                is_error = kind == 'class' and name.endswith('Error')
+                payload = name in bound_events
+                if bound is not None and name not in bound and not is_error and not payload:
+                    continue
+                entry('%s:%s' % (short, name)).add(version)
+                if kind == 'class' and name in classes:
+                    parent, members = classes[name]
+                    if parent is not None and (beta or name not in parents):
+                        parents[name] = parent.split('.')[-1]
+                    for member, (member_kind, early, blocked, signature) in members.items():
+                        item = entry('%s:%s.%s' % (short, name, member))
+                        item.add(version)
+                        # the newest declaration wins: versions arrive in ascending order
+                        item.early = early
+                        item.blocked = blocked
+                        if name in SIGNAL_OWNERS and member in BOUND_SIGNALS[name]:
+                            signal = signature.strip().rstrip(';').split('.')[-1]
+                            signals['%s.%s' % (name, member)] = signal
+                if kind == 'enum':
+                    for key, value in enums.get(name, []):
+                        entry('%s:%s.%s=%s' % (short, name, key, value)).add(version)
+
+    payloads = {}
+    for module, (prefix, short) in MODULES.items():
+        if short != 'server':
+            continue
+        for version, path in collect(root, prefix):
+            _, classes, _ = parse(path)
+            for name, (_, members) in classes.items():
+                subscribe = members.get('subscribe')
+                if name.endswith('Signal') and subscribe is not None:
+                    match = re.search(r'arg0: (\w+)\)\s*=>', subscribe[3])
+                    if match:
+                        payloads[name] = match.group(1)
+
+    def bound_minor(range_, major, which):
+        table = range_.first if which == 'first' else range_.last
+        return table.get(major, 0xff)
+
+    with open(output, 'w', encoding='utf-8') as out:
+        out.write('// generated by tools/gen_script_surface.py from the @minecraft npm definitions; do not edit\n')
+        out.write('// name, first/last 1.x minor, first/last 2.x minor (255: absent), beta, early, restricted-blocked\n')
+        out.write('static const ScriptSurfaceEntry SCRIPT_SURFACE[] = {\n')
+        for key in sorted(entries):
+            item = entries[key]
+            out.write('        {"%s", %d, %d, %d, %d, %s, %s, %s},\n' % (
+                key.replace('\\', '\\\\').replace('"', '\\"'), bound_minor(item, 1, 'first'),
+                bound_minor(item, 1, 'last'), bound_minor(item, 2, 'first'), bound_minor(item, 2, 'last'),
+                'true' if item.beta else 'false', 'true' if item.early else 'false',
+                'true' if item.blocked else 'false'))
+        out.write('};\n\n')
+        out.write('// signal property, its signal class and the class of the event it fires\n')
+        out.write('static const ScriptSignalEntry SCRIPT_SIGNALS[] = {\n')
+        for key in sorted(signals):
+            out.write('        {"%s", "%s", "%s"},\n' % (key, signals[key], payloads.get(signals[key], '')))
+        out.write('};\n\n')
+        out.write('static const ScriptParentEntry SCRIPT_PARENTS[] = {\n')
+        for name in sorted(parents):
+            out.write('        {"%s", "%s"},\n' % (name, parents[name]))
+        out.write('};\n')
+
+
+if __name__ == '__main__':
+    main()
