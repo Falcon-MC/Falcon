@@ -76,10 +76,16 @@ StructureChunkPos StructureFeature::getCandidate(int64_t seed, int32_t regionX, 
         return {regionX * mSpacing + offsetX, regionZ * mSpacing + offsetZ};
     }
 
+    std::mt19937 random;
+    return _drawMersenneCandidate(seed, regionX, regionZ, random);
+}
+
+StructureChunkPos StructureFeature::_drawMersenneCandidate(int64_t seed, int32_t regionX, int32_t regionZ,
+                                                           std::mt19937 &random) const {
     // the game seeds a plain 32-bit mersenne twister with the low half of the mixed region seed
     const uint64_t mixed = (uint64_t) regionX * (uint64_t) REGION_X_MULTIPLIER
                            + (uint64_t) regionZ * (uint64_t) REGION_Z_MULTIPLIER + (uint64_t) seed + (uint64_t) mSalt;
-    std::mt19937 random((uint32_t) mixed);
+    random.seed((uint32_t) mixed);
 
     const uint32_t range = (uint32_t) (mSpacing - mSeparation);
     int32_t offsetX = 0;
@@ -95,10 +101,34 @@ StructureChunkPos StructureFeature::getCandidate(int64_t seed, int32_t regionX, 
     return {regionX * mSpacing + offsetX, regionZ * mSpacing + offsetZ};
 }
 
+std::mt19937 StructureFeature::createStartRandom(int64_t seed, int32_t chunkX, int32_t chunkZ) const {
+    std::mt19937 random;
+    _drawMersenneCandidate(seed, floorDiv(chunkX, mSpacing), floorDiv(chunkZ, mSpacing), random);
+    return random;
+}
+
 bool StructureFeature::isStartChunk(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const {
     const StructureChunkPos candidate = getCandidate(generator.getSeed(), floorDiv(chunkX, mSpacing),
                                                      floorDiv(chunkZ, mSpacing));
     return candidate.x == chunkX && candidate.z == chunkZ && _isValidStart(generator, chunkX, chunkZ);
+}
+
+std::vector<StructureChunkPos> StructureFeature::getCandidatesIn(int64_t seed, int32_t minChunkX, int32_t minChunkZ,
+                                                                int32_t maxChunkX, int32_t maxChunkZ) const {
+    std::vector<StructureChunkPos> candidates;
+    for (int32_t regionX = floorDiv(minChunkX, mSpacing); regionX <= floorDiv(maxChunkX, mSpacing); ++regionX) {
+        for (int32_t regionZ = floorDiv(minChunkZ, mSpacing); regionZ <= floorDiv(maxChunkZ, mSpacing); ++regionZ) {
+            const StructureChunkPos candidate = getCandidate(seed, regionX, regionZ);
+            if (candidate.x >= minChunkX && candidate.x <= maxChunkX && candidate.z >= minChunkZ
+                && candidate.z <= maxChunkZ)
+                candidates.push_back(candidate);
+        }
+    }
+
+    std::sort(candidates.begin(), candidates.end(), [](const StructureChunkPos &a, const StructureChunkPos &b) {
+        return a.x != b.x ? a.x < b.x : a.z < b.z;
+    });
+    return candidates;
 }
 
 bool StructureFeature::findNearest(const ChunkGenerator &generator, int32_t blockX, int32_t blockZ,
@@ -144,10 +174,14 @@ bool StructureFeature::_hasOnlyBiomes(const ChunkGenerator &generator, int32_t b
 }
 
 std::mt19937 StructureFeature::createPostProcessRandom(int64_t seed, int32_t chunkX, int32_t chunkZ) {
+    return std::mt19937(getPostProcessSeed(seed, chunkX, chunkZ));
+}
+
+uint32_t StructureFeature::getPostProcessSeed(int64_t seed, int32_t chunkX, int32_t chunkZ) {
     std::mt19937 level((uint32_t) seed);
     const uint32_t multiplierX = (level() >> 1) | 1U;
     const uint32_t multiplierZ = (level() >> 1) | 1U;
-    return std::mt19937((multiplierX * (uint32_t) chunkX + multiplierZ * (uint32_t) chunkZ) ^ (uint32_t) seed);
+    return (multiplierX * (uint32_t) chunkX + multiplierZ * (uint32_t) chunkZ) ^ (uint32_t) seed;
 }
 
 const std::vector<const StructureFeature *> &StructureFeature::getAll() {

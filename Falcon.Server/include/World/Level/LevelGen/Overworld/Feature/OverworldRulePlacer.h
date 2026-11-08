@@ -18,6 +18,10 @@ public:
     // true when apply places this rule: the feature builder skips it
     static bool handles(const BiomeFeatureEntry &entry);
 
+    // jigsaw feature pieces; false when unported: nothing drawn
+    static bool placeFeature(BlockManager &blocks, const std::string &feature, int32_t x, int32_t y, int32_t z,
+                             std::mt19937 &random);
+
     // pass by pass, biomes in the order the game visits them; with more than one, each rule only places in its own
     // biome
     static void apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate &climate,

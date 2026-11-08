@@ -4,7 +4,9 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
+#include "World/Level/LevelGen/Overworld/Terrain/TerrainBeard.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -369,7 +371,8 @@ OverworldAquifer OverworldTerrainFiller::createAquifer() const {
     return OverworldAquifer(mAquiferNoises, mClimate, SEA_LEVEL);
 }
 
-void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, OverworldAquifer &aquifer) const {
+void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, OverworldAquifer &aquifer,
+                                  const TerrainBeard *beard) const {
     const int32_t chunkX = chunk.getX();
     const int32_t chunkZ = chunk.getZ();
     const int32_t baseX = chunkX << 4;
@@ -398,12 +401,24 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
     // cells above the preliminary surface and sea level stop at the first one with a solid bottom corner
     const int32_t seaLevelCell = (uint8_t) (SEA_LEVEL - MIN_Y) >> 3;
 
+    // a beard keeps every cell up to its highest reach and is sampled only in the cells it spans
+    const bool bearded = beard != nullptr && !beard->empty();
+    int32_t beardCell = 0;
+    if (bearded) {
+        int32_t top = std::max(beard->getMaxY(), MIN_Y);
+        if (beard->getMaxY() > MIN_Y + CELL_COUNT_Y * 8)
+            top = MIN_Y + CELL_COUNT_Y * 8;
+        beardCell = std::min(std::max((top - MIN_Y) / 8, 0), CELL_COUNT_Y);
+    }
+
     for (int32_t cellX = 0; cellX < 4; cellX++) {
         for (int32_t cellZ = 0; cellZ < 4; cellZ++) {
             const int32_t surface = mClimate.preliminarySurfaceLevel(chunkX * 4 + cellX, chunkZ * 4 + cellZ);
             uint8_t lowestTop = (uint8_t) ((surface - MIN_Y) / 8);
             if ((uint8_t) seaLevelCell > lowestTop)
                 lowestTop = (uint8_t) seaLevelCell;
+            if (lowestTop <= (uint8_t) beardCell)
+                lowestTop = (uint8_t) beardCell;
 
             int32_t topCell = CELL_COUNT_Y;
             if (lowestTop <= 38) {
@@ -420,6 +435,9 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
             }
 
             for (int32_t cellY = 0; cellY < topCell; cellY++) {
+                const int32_t cellBottom = MIN_Y + cellY * 8;
+                const bool beardCellY = bearded && cellBottom + 7 >= beard->getMinY()
+                                        && cellBottom <= beard->getMaxY();
                 for (size_t i = 0; i < 8; i++)
                     interpolators[i]->load(*sources[i], cellX, cellZ, cellY);
 
@@ -456,6 +474,9 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
                                 const float ridgeB = std::fabs(noodleRidgeB.value() * 1.5f) - width;
                                 value = std::fmin(std::fmax(ridgeB, ridgeA), value);
                             }
+
+                            if (beardCellY)
+                                value = (float) (beard->compute(worldX, y, worldZ) + (double) value);
 
                             OverworldAquifer::Substance substance;
                             if (value <= 0.0f) {

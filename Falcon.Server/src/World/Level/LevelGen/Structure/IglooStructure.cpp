@@ -66,14 +66,6 @@ namespace {
         return states;
     }
 
-    void rotate(int32_t quarterTurns, int32_t &x, int32_t &z) {
-        for (int32_t i = 0; i < quarterTurns; ++i) {
-            const int32_t oldX = x;
-            x = -z;
-            z = oldX;
-        }
-    }
-
     void addPiece(std::vector<IglooStructure::PlacedBlock> &blocks, const std::string &path, int32_t offsetX,
                   int32_t offsetY, int32_t offsetZ, int32_t quarterTurns) {
         const std::shared_ptr<const StructureTemplate> piece = StructureTemplate::load(path);
@@ -91,7 +83,7 @@ namespace {
             block.z = entry.z + offsetZ;
             block.mMarker = entry.mData.getString("metadata", std::string());
             block.mBlockActor = entry.mData.getString("id", std::string());
-            rotate(quarterTurns, block.x, block.z);
+            StructureTemplate::rotate(quarterTurns, block.x, block.z);
             blocks.push_back(block);
         }
     }

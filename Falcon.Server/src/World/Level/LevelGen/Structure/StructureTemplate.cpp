@@ -107,6 +107,14 @@ std::shared_ptr<const StructureTemplate> StructureTemplate::load(const std::stri
     return result;
 }
 
+void StructureTemplate::rotate(int32_t quarterTurns, int32_t &x, int32_t &z) {
+    for (int32_t i = 0; i < quarterTurns; ++i) {
+        const int32_t oldX = x;
+        x = -z;
+        z = oldX;
+    }
+}
+
 int32_t StructureTemplate::getSizeX() const {
     return mSizeX;
 }

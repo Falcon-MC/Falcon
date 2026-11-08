@@ -49,14 +49,6 @@ namespace {
         return BlockState("minecraft:water", states);
     }
 
-    void rotate(int32_t quarterTurns, int32_t &x, int32_t &z) {
-        for (int32_t i = 0; i < quarterTurns; ++i) {
-            const int32_t oldX = x;
-            x = -z;
-            z = oldX;
-        }
-    }
-
     // the mean height of the middle half of the wreck
     int32_t meanHeight(StructureTerrain &terrain, int32_t startX, int32_t startZ, int32_t turns, int32_t sizeX,
                        int32_t sizeZ) {
@@ -229,7 +221,7 @@ std::vector<ShipwreckStructure::PlacedBlock> ShipwreckStructure::build(const Chu
     for (const StructureTemplate::BlockEntry &entry : shape->getBlocks()) {
         int32_t x = entry.x;
         int32_t z = entry.z;
-        rotate(turns, x, z);
+        StructureTemplate::rotate(turns, x, z);
         x += originX;
         z += originZ;
 

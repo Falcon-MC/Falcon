@@ -6,12 +6,14 @@
 #include "World/Level/LevelGen/Overworld/Feature/OverworldFeatureBuilder.h"
 #include "World/Level/LevelGen/Structure/IglooStructure.h"
 #include "World/Level/LevelGen/Structure/ShipwreckStructure.h"
+#include "World/Level/LevelGen/Structure/VillageStructure.h"
 #include "World/Level/LevelGen/Feature/FeatureNoiseHolder.h"
 #include "World/Level/LevelGen/Overworld/Surface/OverworldSurfaceBuilder.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldAquifer.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldCarvers.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldTerrainFiller.h"
+#include "World/Level/LevelGen/Overworld/Terrain/TerrainBeard.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceOverwriteBuilder.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
@@ -87,6 +89,20 @@ int32_t OverworldGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
     return topOfColumn(chunk, x & 15, z & 15, mAirHash);
 }
 
+std::array<int32_t, 256> OverworldGenerator::getPreliminaryHeights(int32_t chunkX, int32_t chunkZ) const {
+    int32_t heightMap[256] = {};
+    LevelChunk chunk(chunkX, chunkZ);
+    OverworldAquifer aquifer = mTerrainFiller->createAquifer();
+    mTerrainFiller->fill(chunk, heightMap, aquifer);
+
+    std::array<int32_t, 256> heights{};
+    for (int32_t z = 0; z < 16; ++z) {
+        for (int32_t x = 0; x < 16; ++x)
+            heights[(size_t) ((z << 4) | x)] = topOfColumn(chunk, x, z, mAirHash);
+    }
+    return heights;
+}
+
 int32_t OverworldGenerator::getPreliminaryLowestHeight(int32_t chunkX, int32_t chunkZ) const {
     int32_t heightMap[256] = {};
     LevelChunk chunk(chunkX, chunkZ);
@@ -111,6 +127,7 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk,
     // structures go first: the game post processes them before any feature runs
     IglooStructure::place(*this, level, chunk);
     ShipwreckStructure::place(*this, level, chunk);
+    VillageStructure::place(*this, level, chunk, overflow);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }
 
@@ -134,7 +151,10 @@ int64_t OverworldGenerator::parseSeed(const std::string &value) {
 void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random,
                                           OverworldAquifer &aquifer) const {
     const int32_t minY = OverworldGeneratorConstants::MIN_Y;
-    mTerrainFiller->fill(chunk, heightMap, aquifer);
+    // jigsaw pieces near the chunk; the preliminary heights leave it out (sub_145C33980)
+    TerrainBeard beard;
+    VillageStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
+    mTerrainFiller->fill(chunk, heightMap, aquifer, &beard);
 
     // the first draws of the chunk's random lay 2 to 5 bedrock layers over whatever the noise placed
     // (sub_14A22D380)

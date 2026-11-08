@@ -10,7 +10,6 @@ FALCON_REGISTER_BLOCK(WallAttachedBlock, 190);
 
 bool WallAttachedBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:ladder"
-           || identifier == "minecraft:wall_banner"
            || BlockIdentifier::endsWithAny(identifier, {"_coral_fan", "_coral_wall_fan"})
            || identifier == "minecraft:coral_fan";
 }

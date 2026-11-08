@@ -44,18 +44,22 @@ int64_t TerrainCache::_packChunk(int32_t chunkX, int32_t chunkZ) {
 }
 
 LevelChunk TerrainCache::terrain(int32_t chunkX, int32_t chunkZ) {
+    return *_get(chunkX, chunkZ, false, nullptr);
+}
+
+std::shared_ptr<const LevelChunk> TerrainCache::sharedTerrain(int32_t chunkX, int32_t chunkZ) {
     return _get(chunkX, chunkZ, false, nullptr);
 }
 
 LevelChunk TerrainCache::neighbour(int32_t chunkX, int32_t chunkZ) {
-    return _get(chunkX, chunkZ, true, nullptr);
+    return *_get(chunkX, chunkZ, true, nullptr);
 }
 
 LevelChunk TerrainCache::base(int32_t chunkX, int32_t chunkZ, uint64_t &created) {
-    return _get(chunkX, chunkZ, true, &created);
+    return *_get(chunkX, chunkZ, true, &created);
 }
 
-LevelChunk TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated, uint64_t *created) {
+std::shared_ptr<const LevelChunk> TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated, uint64_t *created) {
     const int64_t key = _packChunk(chunkX, chunkZ);
 
     std::shared_ptr<const LevelChunk> cached;
@@ -84,22 +88,22 @@ LevelChunk TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated, ui
     }
 
     if (cached != nullptr)
-        return *cached;
+        return cached;
 
     const GenerationClaim claim{*this, key};
     LevelChunk chunk(chunkX, chunkZ);
     chunk.setDimension(mGenerator.getDimensionType());
     mGenerator.generate(chunk);
 
-    std::shared_ptr<const LevelChunk> shared = std::make_shared<const LevelChunk>(chunk);
+    std::shared_ptr<const LevelChunk> shared = std::make_shared<const LevelChunk>(std::move(chunk));
     {
         std::lock_guard<std::mutex> lock(mMutex);
         Entry &entry = _entry(key);
-        entry.mTerrain = std::move(shared);
+        entry.mTerrain = shared;
         if (created != nullptr)
             *created = entry.mCreated;
     }
-    return chunk;
+    return shared;
 }
 
 void TerrainCache::put(LevelChunk chunk) {
@@ -188,6 +192,7 @@ void TerrainCache::waitForDecoration(std::chrono::milliseconds timeout) {
 
 GeneratorChunkSource::GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache)
         : mScratch("generator", 1, seed, dimension), mCache(cache) {
+    mScratch.setTerrainCache(&cache);
 }
 
 uint64_t GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow,
@@ -247,6 +252,8 @@ uint64_t GeneratorChunkSource::_decorate(LevelChunk &chunk, uint64_t sequence,
     }
 
     chunk = mScratch.extractChunk(chunkX, chunkZ);
+    // later neighbours tell it from a raw one: structure pieces read its blocks (sub_147761B80)
+    chunk.setPopulated(true);
     mCache.put(chunk);
 
     BlockActorStore &generatedActors = mScratch.getBlockActors();
