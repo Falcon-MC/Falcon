@@ -3,6 +3,7 @@
 #include "Core/Json/Json.h"
 
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 
 class Actor;
@@ -15,7 +16,21 @@ public:
     void tick(ServerNetworkHandler &owner, MobActor &mob);
 
 private:
-    void _attack(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component, Actor &target);
+    struct Settings {
+        float mRange = 0.2f;
+        float mDamage = 2.0f;
+        int64_t mCooldownTicks = 0;
+        std::string mCause;
+        std::string mDeathMessageKey;
+        bool mSelfAsSource = false;
+        const json::Value *mFilter = nullptr;
+    };
 
+    void _read(const json::Value &component);
+
+    void _attack(ServerNetworkHandler &owner, MobActor &mob, Actor &target);
+
+    const json::Value *mComponent = nullptr;
+    Settings mSettings;
     std::unordered_map<int64_t, int64_t> mCooldowns;
 };

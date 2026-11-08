@@ -1,6 +1,6 @@
 #pragma once
 
-#include "World/Actor/Movement/BuoyancySystem.h"
+#include "World/Actor/Movement/BuoyancySettings.h"
 
 struct PhysicsComponent {
     static constexpr float DEFAULT_GRAVITY = 0.08f;

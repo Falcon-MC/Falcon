@@ -20,6 +20,7 @@
 #include "World/Actor/Mob/Component/MobDweller.h"
 #include "World/Actor/Mob/MobEntitySpawner.h"
 #include "World/Actor/Mob/MobEquipment.h"
+#include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/Movement/RideControlSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/BlockState.h"
@@ -62,6 +63,20 @@ public:
     virtual float getDefaultMaxHealth() const = 0;
 
     virtual int getExperienceDrop() const { return 0; }
+
+    // a class with its own contact attack, explosion or rolled health keeps it over the definition component
+    virtual bool hasOwnAreaAttack() const {
+        return false;
+    }
+
+    virtual bool hasOwnExplosion() const {
+        return false;
+    }
+
+    // minecraft:health of the active groups sets the maximum: off by default, the classes roll their health
+    virtual bool followsDefinitionHealth() const {
+        return false;
+    }
 
     virtual bool shouldRemoveInPeaceful() const {
         return getComponent("minecraft:remove_in_peaceful") != nullptr;
@@ -142,6 +157,9 @@ public:
     const json::Value *getComponent(const char *name) const;
 
     const std::unordered_map<std::string, const json::Value *> &getComponents() const;
+
+    // minecraft:pushable_by_entity presets, parsed once per component change
+    const PushableByEntityPresets &getPushPresets() const;
 
     std::vector<std::string> getFamilies() const;
 
@@ -343,10 +361,6 @@ public:
         return mAnger;
     }
 
-    const MobExplode &getExplode() const {
-        return mExplode;
-    }
-
     int getInventoryCapacity() const;
 
     std::vector<ItemStack> rollLoot(ServerNetworkHandler &owner, const std::string &path);
@@ -407,6 +421,24 @@ private:
         const json::Value *mHurtOnCondition = nullptr;
         const json::Value *mTargetNearbySensor = nullptr;
     };
+
+    // read by getPhysics() every tick: resolved once per component change
+    struct DefinitionPhysics {
+        bool mSwims = false;
+        bool mClimbsLadders = false;
+        bool mClimbsWalls = false;
+        bool mDefinitionFriction = false;
+        float mBounciness = 0.0f;
+        float mFrictionModifier = 1.0f;
+        float mAirDragModifier = 1.0f;
+        bool mUniformAirDrag = false;
+        bool mHasAutoStep = false;
+        float mAutoStep = 0.0f;
+        float mControlledAutoStep = 0.0f;
+        BuoyancySettings mBuoyancy;
+    };
+
+    const DefinitionPhysics &_getDefinitionPhysics() const;
 
     void _rebuildComponents() const;
 
@@ -595,6 +627,7 @@ private:
     bool mTargetOutsideRange = false;
     bool mTargetSeenInsideRange = false;
     const json::Value *mCelebrationComponent = nullptr;
-    mutable const json::Value *mBuoyantComponent = nullptr;
-    mutable BuoyancySettings mBuoyancy;
+    mutable DefinitionPhysics mDefinitionPhysics;
+    mutable bool mDefinitionPhysicsStale = true;
+    mutable PushableByEntityPresets mPushPresets;
 };

@@ -13,12 +13,8 @@ public:
     // false once the actor exploded
     bool tick(ServerNetworkHandler &owner, MobActor &mob);
 
-    int32_t getFuseTicks() const {
-        return mFuseTicks;
-    }
-
 private:
-    void _start(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component);
+    void _setIgnited(ServerNetworkHandler &owner, MobActor &mob, bool ignited);
 
     void _explode(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component);
 

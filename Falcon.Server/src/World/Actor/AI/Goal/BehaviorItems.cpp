@@ -54,8 +54,13 @@ bool BehaviorItems::contains(const ItemStack &item) const {
 }
 
 void BehaviorItems::_addTags(const std::string &expression) {
-    // q.any_tag('a', 'b'): the quoted names; any_tag is the only query item descriptors use here
-    size_t start = expression.find('\'');
+    // only a plain q.any_tag('a', 'b'): a negation or all_tags would need Molang, and matching it as any_tag lies
+    const std::string::size_type open = expression.find('(');
+    const std::string query = expression.substr(0, open);
+    if (open == std::string::npos || (query != "q.any_tag" && query != "query.any_tag"))
+        return;
+
+    size_t start = expression.find('\'', open);
     while (start != std::string::npos) {
         const size_t end = expression.find('\'', start + 1);
         if (end == std::string::npos)
@@ -64,24 +69,4 @@ void BehaviorItems::_addTags(const std::string &expression) {
         mTags.push_back(expression.substr(start + 1, end - start - 1));
         start = expression.find('\'', end + 1);
     }
-}
-
-ServerPlayer *BehaviorItems::findNearestHolder(ServerNetworkHandler &owner, const MobActor &mob, float range) const {
-    ServerPlayer *nearest = nullptr;
-    float nearestDistance = range * range;
-
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(mob)
-            || player.getGameType() == (int32_t) GameType::Spectator)
-            continue;
-
-        const float distance = mob.distanceSquaredTo(player);
-        if (distance > nearestDistance || !contains(player.getInventory().getItemInHand()))
-            continue;
-
-        nearest = &player;
-        nearestDistance = distance;
-    }
-    return nearest;
 }

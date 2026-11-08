@@ -7,6 +7,7 @@
 #include "World/Actor/Definition/EntityEvents.h"
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Definition/Molang.h"
+#include "World/Actor/Movement/BuoyancySystem.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Block.h"
@@ -117,6 +118,7 @@ namespace {
     const char *const AUTO_STEP_COMPONENT = "minecraft:variable_max_auto_step";
     const char *const HEALTH_COMPONENT = "minecraft:health";
     const char *const COLLISION_BOX_COMPONENT = "minecraft:collision_box";
+    const char *const PUSHABLE_BY_ENTITY_COMPONENT = "minecraft:pushable_by_entity";
 
     struct MovementAttribute {
         const char *mComponent;
@@ -314,8 +316,9 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     _tickLifecycle(owner);
     _tickSensors(owner);
     mEquipmentChanged.tick(owner, *this);
-    mAreaAttack.tick(owner, *this);
-    if (!mExplode.tick(owner, *this))
+    if (!hasOwnAreaAttack())
+        mAreaAttack.tick(owner, *this);
+    if (!hasOwnExplosion() && !mExplode.tick(owner, *this))
         return;
     _tickSpellEffects();
     _tickTimer(owner);
@@ -947,29 +950,59 @@ bool MobActor::canSwim() const {
 
 PhysicsComponent MobActor::getPhysics() const {
     PhysicsComponent physics = ServerActor::getPhysics();
-    physics.mSwims = canSwim();
+    const DefinitionPhysics &definition = _getDefinitionPhysics();
+    physics.mSwims = definition.mSwims;
     physics.mFloatsInLiquid = mGoalSelector.keepsAfloat();
-    physics.mClimbsLadders = getComponent(CAN_CLIMB_COMPONENT) != nullptr;
-    physics.mClimbsWalls = getComponent(CLIMB_NAVIGATION_COMPONENT) != nullptr;
+    physics.mClimbsLadders = definition.mClimbsLadders;
+    physics.mClimbsWalls = definition.mClimbsWalls;
     physics.mGravityAfterMove = true;
+    physics.mDefinitionFriction = definition.mDefinitionFriction;
+    physics.mBounciness = definition.mBounciness;
+    physics.mFrictionModifier = definition.mFrictionModifier;
+    physics.mAirDragModifier = definition.mAirDragModifier;
+    physics.mUniformAirDrag = definition.mUniformAirDrag;
+    if (definition.mHasAutoStep)
+        physics.mStepHeight = getPassengers().empty() ? definition.mAutoStep : definition.mControlledAutoStep;
+    physics.mBuoyancy = definition.mBuoyancy;
+    return physics;
+}
+
+const MobActor::DefinitionPhysics &MobActor::_getDefinitionPhysics() const {
+    if (mComponentsDirty)
+        _rebuildComponents();
+    if (!mDefinitionPhysicsStale)
+        return mDefinitionPhysics;
+
+    DefinitionPhysics &definition = mDefinitionPhysics;
+    definition = DefinitionPhysics();
+    definition.mSwims = canSwim();
+    definition.mClimbsLadders = getComponent(CAN_CLIMB_COMPONENT) != nullptr;
+    definition.mClimbsWalls = getComponent(CLIMB_NAVIGATION_COMPONENT) != nullptr;
 
     const json::Value *bounciness = getComponent(BOUNCINESS_COMPONENT);
     const json::Value *friction = getComponent(FRICTION_MODIFIER_COMPONENT);
     const json::Value *airDrag = getComponent(AIR_DRAG_MODIFIER_COMPONENT);
-    physics.mDefinitionFriction = bounciness != nullptr || friction != nullptr || airDrag != nullptr;
-    physics.mBounciness = numberIn(bounciness, "value", physics.mBounciness);
-    physics.mFrictionModifier = numberIn(friction, "value", physics.mFrictionModifier);
-    physics.mAirDragModifier = numberIn(airDrag, "value", physics.mAirDragModifier);
-    physics.mUniformAirDrag = getComponent(UNIFORM_AIR_DRAG_COMPONENT) != nullptr;
-    physics.mStepHeight = numberIn(getComponent(AUTO_STEP_COMPONENT), "base_value", physics.mStepHeight);
+    definition.mDefinitionFriction = bounciness != nullptr || friction != nullptr || airDrag != nullptr;
+    definition.mBounciness = numberIn(bounciness, "value", definition.mBounciness);
+    definition.mFrictionModifier = numberIn(friction, "value", definition.mFrictionModifier);
+    definition.mAirDragModifier = numberIn(airDrag, "value", definition.mAirDragModifier);
+    definition.mUniformAirDrag = getComponent(UNIFORM_AIR_DRAG_COMPONENT) != nullptr;
 
-    const json::Value *buoyant = getComponent(BUOYANT_COMPONENT);
-    if (buoyant != mBuoyantComponent) {
-        mBuoyantComponent = buoyant;
-        mBuoyancy = BuoyancySystem::read(buoyant);
+    // jump_prevented_value is not read: nothing here prevents a mob's jump
+    if (const json::Value *step = getComponent(AUTO_STEP_COMPONENT)) {
+        definition.mHasAutoStep = true;
+        definition.mAutoStep = numberIn(step, "base_value", PhysicsComponent::LIVING_STEP_HEIGHT);
+        definition.mControlledAutoStep = numberIn(step, "controlled_value", definition.mAutoStep);
     }
-    physics.mBuoyancy = mBuoyancy;
-    return physics;
+
+    definition.mBuoyancy = BuoyancySystem::read(getComponent(BUOYANT_COMPONENT));
+    mDefinitionPhysicsStale = false;
+    return definition;
+}
+
+const PushableByEntityPresets &MobActor::getPushPresets() const {
+    mPushPresets.refresh(getComponent(PUSHABLE_BY_ENTITY_COMPONENT));
+    return mPushPresets;
 }
 
 int MobActor::getInventoryCapacity() const {
@@ -1407,6 +1440,7 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         const json::Value *dropSlot = interaction->get("drop_item_slot");
         // dropping into the slot being filled is a swap: the old item leaves first
         const bool swaps = equipSlot != nullptr && dropSlot != nullptr && dropSlot->string() == equipSlot->string()
+                           && MobEquipment::slotIndexOf(equipSlot->string()) >= 0
                            && !player.getInventory().getItemInHand().isAir();
         if (swaps)
             _dropEquipmentSlot(owner, dropSlot->string(), numberIn(interaction, "drop_item_y_offset", 0.0f));
@@ -1781,7 +1815,8 @@ void MobActor::_syncBody(ServerNetworkHandler &owner) {
     RideControlSystem::syncFlags(owner, *this);
     getAttributes().setClamped(KNOCKBACK_RESISTANCE_ATTRIBUTE,
                                numberIn(getComponent(KNOCKBACK_RESISTANCE_COMPONENT), "value", 0.0f));
-    if (_syncMovementAttributes() | _syncHealthComponent())
+    const bool healthChanged = followsDefinitionHealth() && _syncHealthComponent();
+    if (_syncMovementAttributes() || healthChanged)
         owner.syncActorAttributes(*this);
 
     const float scale = numberIn(getComponent("minecraft:scale"), "value", 1.0f);
@@ -1935,6 +1970,7 @@ void MobActor::_rebuildComponents() const {
     mComponents.clear();
     mComponentsDirty = false;
     mSensorComponentsStale = true;
+    mDefinitionPhysicsStale = true;
 
     const json::Value *definition = getDefinition();
     if (definition == nullptr)

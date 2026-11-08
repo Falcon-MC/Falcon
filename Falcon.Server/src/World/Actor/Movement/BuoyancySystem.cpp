@@ -1,6 +1,8 @@
 #include "World/Actor/Movement/BuoyancySystem.h"
 
-#include "World/Level/Block/Systems/LiquidBlocksFetch.h"
+#include "World/Level/Block/BlockState.h"
+#include "World/Level/Block/LiquidView.h"
+#include "World/Level/Level.h"
 
 #include <algorithm>
 #include <cmath>
@@ -11,6 +13,7 @@ namespace {
     const float VERTICAL_DRAG = 0.7f;
     const float LIFT = 0.15f;
     const float MAX_RISE_PER_TICK = 0.05f;
+    const float LEASHED_KEPT_SPEED = 0.05f;
     const float WAVE_AMPLITUDE = 0.035f;
     const float BOBBING_AMPLITUDE = 0.5f;
     const float BOBBING_OFFSET = 1.2f;
@@ -61,8 +64,28 @@ BuoyancySettings BuoyancySystem::read(const json::Value *component) {
     return settings;
 }
 
-bool BuoyancySystem::floats(const BuoyancySettings &settings, const LiquidContact &feet) {
-    return settings.mEnabled && ((settings.mWater && feet.water) || (settings.mLava && feet.lava));
+BuoyancyContact BuoyancySystem::contact(Level &level, const Vector3f &position, const BuoyancySettings &settings) {
+    BuoyancyContact result;
+    if (!settings.mEnabled)
+        return result;
+
+    const int32_t x = (int32_t) std::floor(position.x);
+    const int32_t y = (int32_t) std::floor(position.y);
+    const int32_t z = (int32_t) std::floor(position.z);
+    const BlockState *feet = level.peekBlockPtr(x, y, z);
+    if (feet == nullptr || !_isFloatLiquid(settings, *feet))
+        return result;
+
+    const BlockState *above = level.peekBlockPtr(x, y + 1, z);
+    const bool liquidAbove = above != nullptr && _isFloatLiquid(settings, *above);
+    result.mSubmerged = liquidAbove;
+    result.mSurface = !liquidAbove && position.y < (float) y + 1.0f - LiquidView(*feet).getFluidHeightPercent();
+    return result;
+}
+
+bool BuoyancySystem::_isFloatLiquid(const BuoyancySettings &settings, const BlockState &state) {
+    const LiquidView liquid(state);
+    return (settings.mWater && liquid.isWater()) || (settings.mLava && liquid.isLava());
 }
 
 double BuoyancySystem::advanceTimer(double timer, const BuoyancySettings &settings, const Vector3f &velocity,
@@ -77,21 +100,27 @@ double BuoyancySystem::advanceTimer(double timer, const BuoyancySettings &settin
     return timer + speed * TICK_SECONDS;
 }
 
-float BuoyancySystem::floatVelocity(float velocityY, float positionY, double timer, const BuoyancySettings &settings) {
-    // sub_146959470
-    const float submerged = positionY - std::floor(positionY);
-    const float buoyancy = std::clamp((settings.mBaseBuoyancy - submerged) * BUOYANCY_SCALE + SUBMERGED_SHIFT, 0.0f,
-                                      1.0f);
+float BuoyancySystem::floatVelocity(float velocityY, float positionY, double timer, const BuoyancySettings &settings,
+                                    const BuoyancyContact &contact, bool leashed) {
+    // sub_146959470: under the surface the lift is full and the waves do not count
+    float buoyancy = 1.0f;
+    float wave = 0.0f;
+    if (contact.mSurface) {
+        const float submerged = positionY - std::floor(positionY);
+        buoyancy = std::clamp((settings.mBaseBuoyancy - submerged) * BUOYANCY_SCALE + SUBMERGED_SHIFT, 0.0f, 1.0f);
+        if (settings.mMovement == BuoyancyMovement::Waves)
+            wave = ((float) std::sin(timer) + 1.0f) * WAVE_AMPLITUDE;
+        else if (settings.mMovement == BuoyancyMovement::Bobbing)
+            wave = ((float) std::sin(timer * BOBBING_PHASE) + BOBBING_OFFSET) * BOBBING_AMPLITUDE;
+    } else if (!contact.mSubmerged) {
+        return velocityY;
+    }
     if (buoyancy == 0.0f)
         return velocityY;
 
-    float wave = 0.0f;
-    if (settings.mMovement == BuoyancyMovement::Waves)
-        wave = ((float) std::sin(timer) + 1.0f) * WAVE_AMPLITUDE;
-    else if (settings.mMovement == BuoyancyMovement::Bobbing)
-        wave = ((float) std::sin(timer * BOBBING_PHASE) + BOBBING_OFFSET) * BOBBING_AMPLITUDE;
-
     const float dragged = velocityY * VERTICAL_DRAG;
     const float target = (buoyancy - wave - SUBMERGED_SHIFT) * LIFT;
+    if (leashed && dragged > 0.0f)
+        return std::max(target, dragged * LEASHED_KEPT_SPEED);
     return std::min(target, dragged + MAX_RISE_PER_TICK);
 }

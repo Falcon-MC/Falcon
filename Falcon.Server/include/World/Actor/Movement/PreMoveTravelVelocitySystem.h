@@ -33,7 +33,7 @@ public:
                                        float gravity);
 
     static Vector3f apply(ServerNetworkHandler &owner, ServerActor &actor, const PhysicsComponent &physics,
-                          const LiquidContact &feet, bool eyesInWater);
+                          const LiquidContact &feet, bool eyesInWater, bool buoyant);
 
 private:
     static void _applyGravity(Vector3f &motion, const PhysicsComponent &physics, const LiquidContact &feet);

@@ -1,6 +1,7 @@
 #include "World/Actor/Movement/ActorMovementSystem.h"
 
 #include "World/Actor/Movement/ActorCollisionSystem.h"
+#include "World/Actor/ActorFlags.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
 #include "World/Actor/Movement/BuoyancySystem.h"
 #include "World/Actor/Movement/MobMovementFrictionSystem.h"
@@ -27,7 +28,7 @@ namespace {
     const float SPEED_PROBE_DEPTH = 0.5f;
     const float GROUND_PROBE_DEPTH = 1.0f;
     // MobMovementFriction::Air runs with the friction of no block
-    const float AIR_FRICTION = 1.0f;
+    const float NO_BLOCK_FRICTION = 1.0f;
     const float DEFAULT_BLOCK_FRICTION = 0.6f;
 }
 
@@ -41,7 +42,8 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
     // only floating reads the eye probe, and only with feet in water: skip the scan otherwise
     const bool eyesInWater = feet.water && LiquidBlocksFetch::at(level, eyes).water;
 
-    Vector3f motion = PreMoveTravelVelocitySystem::apply(owner, actor, physics, feet, eyesInWater);
+    const BuoyancyContact buoyancy = BuoyancySystem::contact(level, position, physics.mBuoyancy);
+    Vector3f motion = PreMoveTravelVelocitySystem::apply(owner, actor, physics, feet, eyesInWater, buoyancy.floats());
 
     const bool climbing = _isClimbing(level, actor, physics);
     if (climbing) {
@@ -81,11 +83,12 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
 
     if (physics.mGravityAfterMove && !isStuck) {
         Vector3f after = actor.getMotion();
-        if (BuoyancySystem::floats(physics.mBuoyancy, feet)) {
+        if (buoyancy.floats()) {
             if (physics.mBuoyancy.mApplyGravity)
                 after.y -= physics.mGravity;
             after.y = BuoyancySystem::floatVelocity(after.y, actor.getPosition().y, actor.getBuoyancyTimer(),
-                                                    physics.mBuoyancy);
+                                                    physics.mBuoyancy, buoyancy,
+                                                    actor.getFlags().get(ActorFlag::Leashed));
         } else {
             PreMoveTravelVelocitySystem::applyVerticalAfterMove(after, physics, feet, gravity);
         }
@@ -135,14 +138,16 @@ float ActorMovementSystem::_applyRestitution(Level &level, ServerActor &actor, c
     // ApplyRestitutionSystem adds onto the velocity the collision zeroed
     const Vector3f current = actor.getMotion();
     actor.setMotion(Vector3f(current.x + restitution.x, current.y + restitution.y, current.z + restitution.z));
-    if (std::fabs(restitution.y) <= RestitutionSystem::EPSILON)
+    // RequestGravityCorrectionSystem sub_1484CD7B0: only a vertical bounce after a real move is corrected
+    if (std::fabs(restitution.y) <= RestitutionSystem::EPSILON
+        || std::fabs(result.mMoved.y) <= RestitutionSystem::EPSILON)
         return physics.mGravity;
 
     return -RestitutionSystem::correctedGravity(physics.mGravity, velocity.y, result.mMoved.y);
 }
 
 void ActorMovementSystem::_applyMovementFriction(Level &level, ServerActor &actor, const PhysicsComponent &physics) {
-    float friction = AIR_FRICTION;
+    float friction = NO_BLOCK_FRICTION;
     if (actor.isOnGround()) {
         const Vector3f position = actor.getPosition();
         const Block *below = _blockAt(level, Vector3f(position.x, position.y - GROUND_PROBE_DEPTH, position.z));

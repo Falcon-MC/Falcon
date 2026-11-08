@@ -11,6 +11,11 @@ public:
 
     using HostileActor::HostileActor;
 
+    // the swell counter drives the fuse and the explosion
+    bool hasOwnExplosion() const override {
+        return true;
+    }
+
     ActorSize getSize() const override { return ActorSize{0.6f, 1.8f}; }
 
     float getDefaultMaxHealth() const override { return 20.0f; }

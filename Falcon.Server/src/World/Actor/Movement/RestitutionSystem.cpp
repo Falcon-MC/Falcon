@@ -33,11 +33,12 @@ void RestitutionSystem::applyBlock(Vector3f &restitution, const Vector3f &veloci
 }
 
 float RestitutionSystem::correctedGravity(float gravity, float startVelocityY, float movedY) {
-    // sub_143368B50: the move reached the floor after a fraction of the tick, gravity only acts on the rest
+    // sub_143368B50: the move reached the floor after a fraction of the tick, gravity only acts on the rest;
+    // without a distance or a gravity the game adds nothing
     const float distance = std::fabs(movedY);
     const float strength = std::fabs(gravity);
     if (distance <= EPSILON || strength <= EPSILON)
-        return -gravity;
+        return 0.0f;
 
     const float sign = startVelocityY > 0.0f ? 1.0f : startVelocityY < 0.0f ? -1.0f : 0.0f;
     const float reached = std::fabs(

@@ -2,6 +2,7 @@
 
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Level/Explosion.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
@@ -11,7 +12,8 @@
 namespace {
     const char *const EXPLODE_COMPONENT = "minecraft:explode";
     const float TICKS_PER_SECOND = 20.0f;
-    const float DEFAULT_FUSE_SECONDS = 3.0f;
+    // the documented defaults: fuse_length [0, 0], power 3
+    const float DEFAULT_FUSE_SECONDS = 0.0f;
     const float DEFAULT_POWER = 3.0f;
 
     bool flagIn(const json::Value &component, const char *key, bool fallback) {
@@ -46,8 +48,10 @@ bool MobExplode::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (component != mComponent) {
         mComponent = component;
         mFuseTicks = -1;
-        if (component != nullptr && flagIn(*component, "fuse_lit", false))
-            _start(owner, mob, *component);
+        const bool lit = component != nullptr && flagIn(*component, "fuse_lit", false);
+        if (lit)
+            mFuseTicks = (int32_t) (fuseSeconds(component->get("fuse_length")) * TICKS_PER_SECOND);
+        _setIgnited(owner, mob, lit);
     }
     if (component == nullptr || mFuseTicks < 0)
         return true;
@@ -61,10 +65,12 @@ bool MobExplode::tick(ServerNetworkHandler &owner, MobActor &mob) {
     return false;
 }
 
-void MobExplode::_start(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component) {
-    mFuseTicks = (int32_t) (fuseSeconds(component.get("fuse_length")) * TICKS_PER_SECOND);
+void MobExplode::_setIgnited(ServerNetworkHandler &owner, MobActor &mob, bool ignited) {
     // the client draws the swelling fuse from the ignited flag
-    mob.getFlags().set(ActorFlag::Ignited, true);
+    if (mob.getFlags().get(ActorFlag::Ignited) == ignited)
+        return;
+
+    mob.getFlags().set(ActorFlag::Ignited, ignited);
     owner.syncActorFlags(mob);
 }
 
@@ -78,7 +84,10 @@ void MobExplode::_explode(ServerNetworkHandler &owner, MobActor &mob, const json
 
     const bool griefing = !flagIn(component, "destroy_affected_by_griefing", false)
                           || level.getGameRules().getBool("mobgriefing");
-    if (flagIn(component, "breaks_blocks", true) && griefing)
+    // allow_underwater off: under water the blast leaves the blocks
+    const bool underwater = LiquidBlocksFetch::at(level, mob.getPosition()).water;
+    if (flagIn(component, "breaks_blocks", true) && griefing
+        && (!underwater || flagIn(component, "allow_underwater", false)))
         explosion.explode();
     else
         explosion.explodeWithoutBlocks();

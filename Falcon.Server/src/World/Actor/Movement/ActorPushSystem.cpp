@@ -17,7 +17,6 @@ namespace {
     // wide enough for the widest box (ender dragon) to reach the pushed actor
     const float PUSH_SEARCH_RADIUS = 16.0f;
     const float UNSET = -std::numeric_limits<float>::infinity();
-    const char *const PUSHABLE_COMPONENT = "minecraft:pushable_by_entity";
 
     AxisAlignedBB boxAround(const Vector3f &position, float width, float height) {
         const float half = width * 0.5f;
@@ -41,7 +40,10 @@ AxisAlignedBB ActorPushSystem::boundingBoxOf(const Actor &actor) {
 Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &actor, const Vector3f &motion) {
     const AxisAlignedBB self = boundingBoxOf(actor).offset(motion.x, motion.y, motion.z);
     const MobActor *mob = dynamic_cast<const MobActor *>(&actor);
-    const bool hasPresets = mob != nullptr && mob->getComponent(PUSHABLE_COMPONENT) != nullptr;
+    const PushableByEntityPresets *presets = mob == nullptr ? nullptr : &mob->getPushPresets();
+    if (presets != nullptr && presets->mPresets.empty())
+        presets = nullptr;
+    const float reach = presets == nullptr ? 0.0f : presets->mReach;
 
     float positiveX = UNSET;
     float negativeX = UNSET;
@@ -50,25 +52,39 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
     bool touched = false;
     Vector3f kick(0.0f, 0.0f, 0.0f);
 
+    // the box or the ball reach first: the presets' filters only run for a pusher in contact
+    const auto inContact = [&](const Actor &pusher, const AxisAlignedBB &box, float width) {
+        if (box.intersectsWith(self))
+            return true;
+        if (reach <= 0.0f)
+            return false;
+        const float dx = pusher.getPosition().x - actor.getPosition().x;
+        const float dz = pusher.getPosition().z - actor.getPosition().z;
+        const float limit = reach + width * 0.5f;
+        return dx * dx + dz * dz <= limit * limit;
+    };
+
     const auto pushBy = [&](const Actor &pusher, const AxisAlignedBB &box, float width, const Vector3f &velocity) {
         const bool overlaps = box.intersectsWith(self);
-        const json::Value *preset = hasPresets ? PushableByEntity::findPreset(owner, *mob, pusher) : nullptr;
-        if (preset != nullptr) {
-            const PushableByEntityPreset settings = PushableByEntityPreset::read(*preset);
-            if (settings.mBall) {
-                const Vector3f offset(pusher.getPosition().x - actor.getPosition().x, 0.0f,
-                                      pusher.getPosition().z - actor.getPosition().z);
-                if ((settings.mRequireCollisionOverlap && !overlaps)
-                    || !PushableByEntity::inReach(settings, offset.x, offset.z, width))
-                    return;
+        const PushableByEntityPreset *preset = presets == nullptr ? nullptr
+                                               : PushableByEntity::findPreset(owner, *mob, *presets, pusher);
+        // sub_143A0AF90: push_mode none leaves without pushing
+        if (preset != nullptr && preset->mMode == PushMode::None)
+            return;
 
-                const float speed = std::sqrt(velocity.x * velocity.x + velocity.y * velocity.y
-                                              + velocity.z * velocity.z);
-                const Vector3f added = PushableByEntity::kick(settings, offset.x, offset.z, speed, actor.isOnGround());
-                kick = Vector3f(kick.x + added.x, kick.y + added.y, kick.z + added.z);
-                _playKickSound(owner, actor, settings, added);
+        if (preset != nullptr && preset->mMode == PushMode::Ball) {
+            const float offsetX = pusher.getPosition().x - actor.getPosition().x;
+            const float offsetZ = pusher.getPosition().z - actor.getPosition().z;
+            if ((preset->mRequireCollisionOverlap && !overlaps)
+                || !PushableByEntity::inReach(*preset, offsetX, offsetZ, width))
                 return;
-            }
+
+            const float speed = std::sqrt(velocity.x * velocity.x + velocity.y * velocity.y
+                                          + velocity.z * velocity.z);
+            const Vector3f added = PushableByEntity::kick(*preset, offsetX, offsetZ, speed, actor.isOnGround());
+            kick = Vector3f(kick.x + added.x, kick.y + added.y, kick.z + added.z);
+            _playKickSound(owner, actor, *preset, added);
+            return;
         }
 
         if (!overlaps)
@@ -85,10 +101,11 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
             return;
 
         const AxisAlignedBB box = boundingBoxOf(other);
-        if ((!hasPresets && !box.intersectsWith(self)) || !other.isAlive() || !other.isPushable())
+        const float width = other.getSize().mWidth;
+        if (!inContact(other, box, width) || !other.isAlive() || !other.isPushable())
             return;
 
-        pushBy(other, box, other.getSize().mWidth, other.getMotion());
+        pushBy(other, box, width, other.getMotion());
     });
 
     for (auto &entry: owner.getPlayers()) {
@@ -98,7 +115,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
             continue;
 
         const AxisAlignedBB box = boxAround(player.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
-        if (!hasPresets && !box.intersectsWith(self))
+        if (!inContact(player, box, PLAYER_WIDTH))
             continue;
 
         pushBy(player, box, PLAYER_WIDTH, player.getMotion());

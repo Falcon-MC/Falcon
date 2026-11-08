@@ -7,7 +7,6 @@
 #include <cmath>
 
 namespace {
-    const char *const PUSHABLE_COMPONENT = "minecraft:pushable_by_entity";
     const float MIN_DIRECTION_LENGTH = 0.0001f;
     const float TICKS_PER_SECOND = 20.0f;
 
@@ -25,7 +24,10 @@ namespace {
 PushableByEntityPreset PushableByEntityPreset::read(const json::Value &preset) {
     PushableByEntityPreset result;
     const json::Value *mode = preset.get("push_mode");
-    result.mBall = mode != nullptr && mode->isString() && mode->mString == "ball";
+    if (mode != nullptr && mode->isString() && mode->mString == "ball")
+        result.mMode = PushMode::Ball;
+    else if (mode != nullptr && mode->isString() && mode->mString == "none")
+        result.mMode = PushMode::None;
     result.mMinDistance = numberIn(preset, "min_distance", result.mMinDistance);
     result.mMaxDistance = numberIn(preset, "max_distance", result.mMaxDistance);
     result.mRequireCollisionOverlap = flagIn(preset, "require_collision_overlap", result.mRequireCollisionOverlap);
@@ -38,20 +40,36 @@ PushableByEntityPreset PushableByEntityPreset::read(const json::Value &preset) {
     result.mSoundImpulseThreshold = numberIn(preset, "play_sound_impulse_threshold", result.mSoundImpulseThreshold);
     result.mSoundCooldownTicks = (int32_t) (numberIn(preset, "play_sound_cooldown_in_seconds", 0.0f)
                                             * TICKS_PER_SECOND);
+    result.mFilters = preset.get("filters");
     return result;
 }
 
-const json::Value *PushableByEntity::findPreset(ServerNetworkHandler &owner, const MobActor &self, const Actor &pusher) {
-    // sub_143A0B900
-    const json::Value *component = self.getComponent(PUSHABLE_COMPONENT);
+void PushableByEntityPresets::refresh(const json::Value *component) {
+    if (component == mComponent)
+        return;
+
+    mComponent = component;
+    mPresets.clear();
+    mReach = 0.0f;
     const json::Value *presets = component == nullptr ? nullptr : component->get("presets");
     if (presets == nullptr || !presets->isArray())
-        return nullptr;
+        return;
 
     for (const std::unique_ptr<json::Value> &preset: presets->mArray) {
-        const json::Value *filters = preset->get("filters");
-        if (filters == nullptr || EntityFilter::test(*filters, owner, self, &pusher))
-            return preset.get();
+        mPresets.push_back(PushableByEntityPreset::read(*preset));
+        const PushableByEntityPreset &added = mPresets.back();
+        if (added.mMode == PushMode::Ball && !added.mRequireCollisionOverlap)
+            mReach = std::max(mReach, added.mMaxDistance);
+    }
+}
+
+const PushableByEntityPreset *PushableByEntity::findPreset(ServerNetworkHandler &owner, const MobActor &self,
+                                                           const PushableByEntityPresets &presets,
+                                                           const Actor &pusher) {
+    // sub_143A0B900
+    for (const PushableByEntityPreset &preset: presets.mPresets) {
+        if (preset.mFilters == nullptr || EntityFilter::test(*preset.mFilters, owner, self, &pusher))
+            return &preset;
     }
     return nullptr;
 }

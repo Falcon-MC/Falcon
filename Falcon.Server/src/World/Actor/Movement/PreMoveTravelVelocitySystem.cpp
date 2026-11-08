@@ -1,7 +1,6 @@
 #include "World/Actor/Movement/PreMoveTravelVelocitySystem.h"
 
 #include "World/Actor/Movement/ActorPushSystem.h"
-#include "World/Actor/Movement/BuoyancySystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
@@ -20,7 +19,7 @@ namespace {
 
 Vector3f PreMoveTravelVelocitySystem::apply(ServerNetworkHandler &owner, ServerActor &actor,
                                             const PhysicsComponent &physics, const LiquidContact &feet,
-                                            bool eyesInWater) {
+                                            bool eyesInWater, bool buoyant) {
     Vector3f motion = actor.getMotion();
 
     if (!physics.mGravityAfterMove)
@@ -33,7 +32,7 @@ Vector3f PreMoveTravelVelocitySystem::apply(ServerNetworkHandler &owner, ServerA
     }
 
     // a buoyant actor floats by its own lift; an actor with the friction attributes drags after the move
-    if (!BuoyancySystem::floats(physics.mBuoyancy, feet))
+    if (!buoyant)
         _applyFloating(motion, physics, feet, eyesInWater);
     _applyCurrent(motion, feet);
     if (!physics.mDefinitionFriction)
