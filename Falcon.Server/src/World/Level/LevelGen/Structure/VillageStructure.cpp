@@ -533,6 +533,8 @@ void VillageStructure::addBeard(const ChunkGenerator &generator, int32_t chunkX,
 
 void VillageStructure::place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk,
                              std::vector<GeneratedBlockChange> *overflow) {
+    // shared by the villages: they overlap and read the same columns
+    StructureTerrain terrain(generator, level.getTerrainCache());
     for (const std::shared_ptr<const std::vector<JigsawPiece>> &pieces :
          plansNear(generator, chunk.getX(), chunk.getZ())) {
         bool reaches = false;
@@ -541,7 +543,6 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
         if (!reaches)
             continue;
 
-        StructureTerrain terrain(generator);
         BlockManager features(level);
         features.setOverflowSink(chunk.getX(), chunk.getZ(), overflow);
         // the parts in chunks post-processed earlier read their blocks, the others the terrain

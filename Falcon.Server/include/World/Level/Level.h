@@ -34,6 +34,7 @@ class Actor;
 class Packet;
 class Particle;
 class ServerNetworkHandler;
+class TerrainCache;
 
 // one dimension; main thread only: loading and generation go to a ChunkWorker, back via drainCompletedChunks()
 class Level {
@@ -406,6 +407,15 @@ public:
         return mGenerator;
     }
 
+    // the raw terrain shared by the generation workers, null outside a worker's scratch level
+    TerrainCache *getTerrainCache() const {
+        return mTerrainCache;
+    }
+
+    void setTerrainCache(TerrainCache *cache) {
+        mTerrainCache = cache;
+    }
+
     size_t processGeneratedChanges();
 
     std::vector<int64_t> consumeRepopulatedChunks();
@@ -473,6 +483,7 @@ private:
     DimensionType mDimension;
     uint32_t mWorldId = 0;
     std::shared_ptr<ChunkGenerator> mGenerator;
+    TerrainCache *mTerrainCache = nullptr;
     LevelStorage mStorage;
     LiquidPhysicsSystem mLiquidPhysics;
     int64_t mLiquidTick = 0;

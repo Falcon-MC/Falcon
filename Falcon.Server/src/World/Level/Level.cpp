@@ -62,6 +62,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mSpawnPosition = other.mSpawnPosition;
     mHasSpawnPosition = other.mHasSpawnPosition;
     mGenerator = std::move(other.mGenerator);
+    mTerrainCache = other.mTerrainCache;
     mStorage = std::move(other.mStorage);
     mChunks = std::move(other.mChunks);
     mPendingChunks = std::move(other.mPendingChunks);

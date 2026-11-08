@@ -57,6 +57,9 @@ public:
     // waits when another worker is generating the same chunk
     LevelChunk terrain(int32_t chunkX, int32_t chunkZ);
 
+    // as terrain(), without the copy
+    std::shared_ptr<const LevelChunk> sharedTerrain(int32_t chunkX, int32_t chunkZ);
+
     // the chunk as the decorations left it, else its raw terrain
     LevelChunk neighbour(int32_t chunkX, int32_t chunkZ);
 
@@ -96,7 +99,7 @@ private:
 
     static int64_t _packChunk(int32_t chunkX, int32_t chunkZ);
 
-    LevelChunk _get(int32_t chunkX, int32_t chunkZ, bool decorated, uint64_t *created);
+    std::shared_ptr<const LevelChunk> _get(int32_t chunkX, int32_t chunkZ, bool decorated, uint64_t *created);
 
     Entry &_entry(int64_t key);
 
