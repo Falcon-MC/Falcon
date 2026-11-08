@@ -5,6 +5,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <future>
 #include <memory>
@@ -38,6 +39,10 @@ struct ChunkTask {
     std::vector<GeneratedBlockChange> mChanges;
     std::shared_ptr<std::promise<std::vector<GeneratedBlockChange>>> mChangesResult;
     std::vector<int64_t> mEntityIds;
+    // a load storage missed, back in the queue until its earlier neighbours are decorated
+    bool mMissing = false;
+    bool mDeferred = false;
+    std::chrono::steady_clock::time_point mDeferredSince;
 };
 
 struct ChunkLoadResult {
@@ -59,6 +64,9 @@ public:
     // credits held until the main thread drains the result: no unbounded result queue; generation takes
     // hundreds of ms: several chunks in flight per worker
     static constexpr size_t MAX_OUTSTANDING_GENERATION = 64;
+    // an earlier neighbour stuck behind a slow queue: decorated out of order rather than later
+    static constexpr std::chrono::milliseconds MAX_DECORATION_DEFERRAL{500};
+    static constexpr std::chrono::milliseconds DEFERRAL_POLL{2};
 
     ChunkWorker(const ChunkGenerator &generator, LevelStorage &storage);
 
@@ -119,7 +127,12 @@ public:
 private:
     void _run(size_t queueIndex);
 
-    void _processLoad(ChunkTask &task, size_t sourceIndex);
+    // false: put back in the queue, an earlier neighbour still to decorate
+    bool _processLoad(ChunkTask &task, size_t sourceIndex);
+
+    bool _defer(ChunkTask &task);
+
+    void _requeue(TaskQueue<ChunkTask> &queue, ChunkTask &task, size_t &deferredInRow);
 
     void _processSave(ChunkTask &task);
 

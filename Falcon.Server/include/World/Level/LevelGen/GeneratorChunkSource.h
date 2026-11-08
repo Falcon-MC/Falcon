@@ -3,6 +3,7 @@
 #include "World/Level/Chunk/GeneratedBlockChange.h"
 #include "World/Level/Level.h"
 
+#include <chrono>
 #include <cstdint>
 #include <condition_variable>
 #include <list>
@@ -15,12 +16,33 @@
 class ChunkGenerator;
 class LevelChunk;
 
-// shared by every worker: a chunk's eight neighbours usually land on other workers; entries handed out as copies
-// two versions per chunk, raw terrain and the neighbour a decoration left behind: a loaded chunk starts from the raw
-// one, or its content would depend on which neighbours were decorated first
+// shared by every worker: chunks as the decorations left them, handed out as copies; the game decorates its live
+// chunks: reads what neighbours placed, writes into them at once (sub_1432CD550, sub_1432CE930)
 class TerrainCache {
 public:
     static constexpr size_t MAX_CACHED_CHUNKS = 1024;
+
+    // holds the 3x3 around a decorated chunk; released on destruction
+    class DecorationArea {
+    public:
+        DecorationArea(TerrainCache &cache, int32_t chunkX, int32_t chunkZ, uint64_t sequence);
+
+        DecorationArea(const DecorationArea &) = delete;
+
+        DecorationArea &operator=(const DecorationArea &) = delete;
+
+        ~DecorationArea();
+
+        uint64_t getSequence() const {
+            return mSequence;
+        }
+
+    private:
+        TerrainCache &mCache;
+        int32_t mChunkX;
+        int32_t mChunkZ;
+        uint64_t mSequence;
+    };
 
     explicit TerrainCache(const ChunkGenerator &generator);
 
@@ -28,14 +50,32 @@ public:
 
     TerrainCache &operator=(const TerrainCache &) = delete;
 
+    // in the order (z even, x even), (z even, x odd), (z odd, x odd), (z odd, x even): two chunks decorated
+    // together by the game always resolve their overlap this way, whatever the load order
+    static int32_t decorationClass(int32_t chunkX, int32_t chunkZ);
+
     // waits when another worker is generating the same chunk
     LevelChunk terrain(int32_t chunkX, int32_t chunkZ);
 
-    // the chunk as the last neighbour decoration left it, else its raw terrain
+    // the chunk as the decorations left it, else its raw terrain
     LevelChunk neighbour(int32_t chunkX, int32_t chunkZ);
 
-    // the neighbour as a decoration left it: context for the next one
+    // as neighbour(); `created`: the sequence when the entry appeared: decorations from it on are in it
+    LevelChunk base(int32_t chunkX, int32_t chunkZ, uint64_t &created);
+
     void put(LevelChunk chunk);
+
+    // sub_145CEA040 locks the 3x3 too: two neighbours never decorate at once; waits instead of retrying later
+    std::unique_ptr<DecorationArea> lockArea(int32_t chunkX, int32_t chunkZ);
+
+    // a decoration of this chunk is queued: neighbours of a later class wait for it
+    void expectDecoration(int32_t chunkX, int32_t chunkZ);
+
+    void finishDecoration(int32_t chunkX, int32_t chunkZ);
+
+    bool awaitsEarlierNeighbour(int32_t chunkX, int32_t chunkZ);
+
+    void waitForDecoration(std::chrono::milliseconds timeout);
 
 private:
     struct Entry {
@@ -43,6 +83,7 @@ private:
         std::shared_ptr<const LevelChunk> mTerrain;
         std::shared_ptr<const LevelChunk> mDecorated;
         std::list<int64_t>::iterator mOrder;
+        uint64_t mCreated = 0;
     };
 
     // releases the claim even when generation throws: waiting workers carry on
@@ -55,9 +96,11 @@ private:
 
     static int64_t _packChunk(int32_t chunkX, int32_t chunkZ);
 
-    LevelChunk _get(int32_t chunkX, int32_t chunkZ, bool decorated);
+    LevelChunk _get(int32_t chunkX, int32_t chunkZ, bool decorated, uint64_t *created);
 
     Entry &_entry(int64_t key);
+
+    bool _isAreaFree(int32_t chunkX, int32_t chunkZ) const;
 
     const ChunkGenerator &mGenerator;
     std::mutex mMutex;
@@ -65,6 +108,11 @@ private:
     std::unordered_set<int64_t> mGenerating;
     std::unordered_map<int64_t, Entry> mChunks;
     std::list<int64_t> mOrder;
+
+    std::unordered_set<int64_t> mLocked;
+    std::condition_variable mReleased;
+    std::unordered_map<int64_t, int32_t> mExpected;
+    uint64_t mSequence = 0;
 };
 
 // per worker: a private scratch level holding a chunk and its neighbours, from the shared TerrainCache, while decorated
@@ -76,11 +124,20 @@ public:
 
     GeneratorChunkSource &operator=(const GeneratorChunkSource &) = delete;
 
-    void populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow, std::vector<Tag> &blockActors,
-                  std::vector<Tag> &entities);
+    // `chunk`: the base to decorate; neighbours written in the cache at once, and in `overflow` for the
+    // resident ones; returns the decoration's sequence
+    uint64_t populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow, std::vector<Tag> &blockActors,
+                      std::vector<Tag> &entities);
+
+    // a chunk generated now: decorated from the cache's copy, holding what its neighbours spilled; `older`:
+    // spills recorded elsewhere, applied first unless the copy already holds them; `base`: see LevelChunk
+    uint64_t populateGenerated(LevelChunk &chunk, const std::vector<GeneratedBlockChange> &older,
+                               std::vector<GeneratedBlockChange> &overflow, std::vector<Tag> &blockActors,
+                               std::vector<Tag> &entities, uint64_t &base);
 
 private:
-    void _stageNeighbour(int32_t chunkX, int32_t chunkZ);
+    uint64_t _decorate(LevelChunk &chunk, uint64_t sequence, std::vector<GeneratedBlockChange> &overflow,
+                       std::vector<Tag> &blockActors, std::vector<Tag> &entities);
 
     Level mScratch;
     TerrainCache &mCache;

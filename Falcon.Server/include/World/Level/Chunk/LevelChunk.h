@@ -35,6 +35,20 @@ public:
 
     void setPopulated(bool populated) { mPopulated = populated; }
 
+    // in memory only, this session's TerrainCache order: see decorationHolds
+    uint64_t getDecorationSequence() const {
+        return mDecorationSequence;
+    }
+
+    uint64_t getBaseSequence() const {
+        return mBaseSequence;
+    }
+
+    void setDecorationSequence(uint64_t base, uint64_t own) {
+        mBaseSequence = base;
+        mDecorationSequence = own;
+    }
+
     const BlockState &getBlock(int x, int32_t y, int z) const;
 
     const BlockState &getBlock(int x, int32_t y, int z, int layer) const;
@@ -159,6 +173,8 @@ private:
     int mNetworkSubChunkLimit = SUB_CHUNK_COUNT;
     bool mDirty;
     bool mPopulated = false;
+    uint64_t mBaseSequence = 0;
+    uint64_t mDecorationSequence = 0;
     // mutable: const reads unpack a packed chunk first
     mutable std::vector<SubChunk> mSubChunks;
     std::vector<int16_t> mHeightmap;
