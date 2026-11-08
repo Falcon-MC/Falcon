@@ -449,6 +449,10 @@ private:
 
     void _tickTransformation(ServerNetworkHandler &owner);
 
+    bool _senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source);
+
+    bool _traceSight(ServerNetworkHandler &owner, const Actor &other) const;
+
     bool _tickInstantDespawn(ServerNetworkHandler &owner);
 
     int32_t _transformationAssist(ServerNetworkHandler &owner, const json::Value &delay);
@@ -528,6 +532,16 @@ private:
     int32_t mTransformationTicks = 0;
     bool mTransformed = false;
     bool mConvertsOnDeath = false;
+    // the transformation the last hit's damage sensor added, until the end of the tick
+    const json::Value *mHitTransformation = nullptr;
+    struct SightCache {
+        int64_t mTick = -1;
+        uint64_t mTargetId = 0;
+        bool mVisible = false;
+    };
+    mutable SightCache mSightCache;
+    mutable const json::Value *mSlowdownImmunityComponent = nullptr;
+    mutable std::vector<std::string> mSlowdownImmuneBlocks;
     uint64_t mParentRuntimeId = 0;
     Vector3f mHomePosition;
     bool mHasHome = false;

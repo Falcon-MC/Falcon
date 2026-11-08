@@ -274,6 +274,7 @@ void MobActor::startDefinition(ServerNetworkHandler &owner) {
 }
 
 void MobActor::tick(ServerNetworkHandler &owner) {
+    mHitTransformation = nullptr;
     startDefinition(owner);
     spawnPendingRiders(owner);
 
@@ -609,6 +610,18 @@ float MobActor::getJumpPower() const {
 }
 
 bool MobActor::canSee(ServerNetworkHandler &owner, const Actor &other) const {
+    // the ray marches every 0.25 block: target goals ask about the same pair several times a tick
+    const int64_t tick = owner.getCurrentTick();
+    if (mSightCache.mTick == tick && mSightCache.mTargetId == other.getRuntimeId())
+        return mSightCache.mVisible;
+
+    mSightCache.mTick = tick;
+    mSightCache.mTargetId = other.getRuntimeId();
+    mSightCache.mVisible = _traceSight(owner, other);
+    return mSightCache.mVisible;
+}
+
+bool MobActor::_traceSight(ServerNetworkHandler &owner, const Actor &other) const {
     const Vector3f from = getPosition();
     const Vector3f to = other.getPosition();
     const ServerActor *otherActor = dynamic_cast<const ServerActor *>(&other);
@@ -648,6 +661,16 @@ void MobActor::causeFallDamage(ServerNetworkHandler &owner, float distance) {
 }
 
 bool MobActor::senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
+    mHitTransformation = nullptr;
+    const json::Value *transformationBefore = getComponent(TRANSFORMATION_COMPONENT);
+    const bool dealsDamage = _senseDamage(owner, amount, source);
+    const json::Value *transformationAfter = getComponent(TRANSFORMATION_COMPONENT);
+    if (transformationAfter != transformationBefore)
+        mHitTransformation = transformationAfter;
+    return dealsDamage;
+}
+
+bool MobActor::_senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
     const json::Value *sensor = getComponent(DAMAGE_SENSOR_COMPONENT);
     const json::Value *triggers = sensor == nullptr ? nullptr : sensor->get("triggers");
     if (triggers == nullptr)
@@ -1905,15 +1928,18 @@ const json::Value *MobActor::getComponent(const char *name) const {
 
 bool MobActor::ignoresMovementSlowdown(const std::string &blockName) const {
     const json::Value *immunity = getComponent(SLOWDOWN_IMMUNITY_COMPONENT);
-    const json::Value *blocks = immunity == nullptr ? nullptr : immunity->get("blocks");
-    if (blocks == nullptr || !blocks->isArray())
-        return false;
-
-    for (const std::unique_ptr<json::Value> &block: blocks->mArray) {
-        if (BlockStateUpgrades::currentName(block->string()) == blockName)
-            return true;
+    if (immunity != mSlowdownImmunityComponent) {
+        mSlowdownImmunityComponent = immunity;
+        mSlowdownImmuneBlocks.clear();
+        const json::Value *blocks = immunity == nullptr ? nullptr : immunity->get("blocks");
+        if (blocks != nullptr && blocks->isArray()) {
+            for (const std::unique_ptr<json::Value> &block: blocks->mArray)
+                mSlowdownImmuneBlocks.push_back(BlockStateUpgrades::currentName(block->string()));
+        }
     }
-    return false;
+
+    return std::find(mSlowdownImmuneBlocks.begin(), mSlowdownImmuneBlocks.end(), blockName)
+           != mSlowdownImmuneBlocks.end();
 }
 
 bool MobActor::burnsInDaylight() const {
@@ -2272,10 +2298,12 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
     if (isDead())
         return;
 
-    // the fatal hit's damage sensor added a transformation (villager_v2 become_zombie): the body converts
-    // instead of finishing its death; one already running before the hit dies with it
+    // only the transformation the fatal hit's damage sensor added (villager_v2 become_zombie) carries on:
+    // the game keeps ticking transformations of a dying actor until Actor::remove flags it (+649,
+    // sub_140BA3460; checked in sub_14773B730 and sub_147C27700); one from another source dies with it
     const json::Value *transformation = getComponent(TRANSFORMATION_COMPONENT);
-    mConvertsOnDeath = transformation != nullptr && transformation != mTransformationComponent;
+    mConvertsOnDeath = transformation != nullptr && transformation == mHitTransformation;
+    mHitTransformation = nullptr;
 
     mDweller.onDeath(*this, source);
 
