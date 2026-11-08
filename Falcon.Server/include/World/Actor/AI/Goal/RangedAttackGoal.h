@@ -2,6 +2,7 @@
 
 #include "World/Actor/AI/Goal/Goal.h"
 
+#include "Core/Json/Json.h"
 #include "Core/Math/Vector3f.h"
 
 #include <cstdint>
@@ -26,6 +27,8 @@ public:
         bool mFollowTarget = false;
         bool mSetPersistent = false;
         bool mSwing = false;
+        // not a definition field: the goal needs a minecraft:navigation.* component
+        bool mHasNavigation = true;
     };
 
     explicit RangedAttackGoal(Settings settings);
@@ -41,6 +44,8 @@ public:
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
+    bool _hasShooter(const MobActor &mob);
+
     void _move(MobActor &mob, const Actor &target, float distanceSquared);
 
     void _follow(MobActor &mob, const Vector3f &targetPosition);
@@ -54,6 +59,8 @@ private:
     bool _inFieldOfView(const MobActor &mob, const Actor &target) const;
 
     Settings mSettings;
+    const json::Value *mShooter = nullptr;
+    bool mShooterUsable = false;
     bool mHeldCharged = false;
     int32_t mAttackTime = 0;
     int32_t mSeeTime = 0;

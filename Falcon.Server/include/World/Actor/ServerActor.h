@@ -26,6 +26,8 @@ class ServerPlayer;
 struct ProjectileData {
     int32_t mPotionId = -1;
     float mBaseDamage = 0.0f;
+    // impact_damage.damage rolled at launch; unset (-1) scales mBaseDamage by speed instead
+    int32_t mImpactDamage = -1;
     bool mCritical = false;
     int32_t mPunchLevel = 0;
     int32_t mFlameTicks = 0;

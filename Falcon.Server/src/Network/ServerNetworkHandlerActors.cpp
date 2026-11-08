@@ -599,7 +599,7 @@ float ServerNetworkHandler::computeProjectileDamage(ServerActor &projectile) {
     const Vector3f motion = projectile.getMotion();
     const float speed = std::sqrt(motion.x * motion.x + motion.y * motion.y + motion.z * motion.z);
 
-    int32_t damage = (int32_t) std::ceil(speed * data.mBaseDamage);
+    int32_t damage = data.mImpactDamage >= 0 ? data.mImpactDamage : (int32_t) std::ceil(speed * data.mBaseDamage);
     if (data.mCritical && damage > 0) {
         static std::mt19937 generator{std::random_device{}()};
         std::uniform_int_distribution<int32_t> bonus(0, damage / 2 + 1);

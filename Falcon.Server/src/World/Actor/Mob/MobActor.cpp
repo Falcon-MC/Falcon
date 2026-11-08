@@ -341,6 +341,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     }
 
     mGoalSelector.tick(owner, *this);
+    _syncTarget(owner);
     if (_tickInstantDespawn(owner))
         return;
 
@@ -2332,6 +2333,21 @@ bool MobActor::setTarget(ServerNetworkHandler &owner, uint64_t runtimeId) {
         mTargetAcquired = true;
     mTargetRuntimeId = runtimeId;
     return true;
+}
+
+void MobActor::_syncTarget(ServerNetworkHandler &owner) {
+    if (mTargetRuntimeId == mSyncedTargetRuntimeId || !syncsTargetData())
+        return;
+
+    mSyncedTargetRuntimeId = mTargetRuntimeId;
+    const Actor *target = mTargetRuntimeId == 0 ? nullptr : findActor(owner, mTargetRuntimeId);
+    EntityDataEntry entry;
+    entry.mId = ActorFlags::TARGET_DATA_ID;
+    entry.mFormat = EntityDataFormat::Long;
+    entry.mLongValue = target == nullptr ? 0 : target->getUniqueId();
+    EntityDataMap metadata;
+    metadata.mEntries.push_back(entry);
+    owner.sendActorMetadata(*this, metadata);
 }
 
 void MobActor::clearTarget() {

@@ -315,6 +315,11 @@ public:
 
     void clearTarget();
 
+    // viewers pose the mob from its target data (the skeleton's drawn bow); off where the data means something else
+    virtual bool syncsTargetData() const {
+        return true;
+    }
+
     Actor *getTarget(ServerNetworkHandler &owner) const;
 
     bool canTarget(const Actor &actor) const;
@@ -455,6 +460,8 @@ private:
     void _registerGoals(ServerNetworkHandler &owner);
 
     void _syncBody(ServerNetworkHandler &owner);
+
+    void _syncTarget(ServerNetworkHandler &owner);
 
     void _markComponentsChanged();
 
@@ -617,6 +624,7 @@ private:
     uint64_t mLastHurtBy = 0;
     uint32_t mHurtCount = 0;
     uint64_t mTargetRuntimeId = 0;
+    uint64_t mSyncedTargetRuntimeId = 0;
     PathNavigation mNavigation;
     MoveControl mMoveControl;
     LookControl mLookControl;

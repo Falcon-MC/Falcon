@@ -323,9 +323,19 @@ namespace {
         return std::max(0, (int32_t) (seconds * TICKS_PER_SECOND));
     }
 
-    RangedAttackGoal::Settings rangedSettings(const json::Value &component, float speed) {
+    bool hasNavigation(const MobActor &mob) {
+        const std::string prefix = "minecraft:navigation.";
+        for (const auto &entry: mob.getComponents()) {
+            if (entry.first.compare(0, prefix.size(), prefix) == 0)
+                return true;
+        }
+        return false;
+    }
+
+    RangedAttackGoal::Settings rangedSettings(const MobActor &mob, const json::Value &component, float speed) {
         RangedAttackGoal::Settings settings;
         settings.mSpeed = speed;
+        settings.mHasNavigation = hasNavigation(mob);
 
         if (component.get("attack_range") != nullptr) {
             settings.mAttackRadiusMin = rangeValue(component, "attack_range", "min", 0.0f);
@@ -953,7 +963,7 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         return std::make_unique<MoveTowardsHomeRestrictionGoal>(speed, homeRadius(mob));
 
     if (behavior == "ranged_attack")
-        return std::make_unique<RangedAttackGoal>(rangedSettings(component, speed));
+        return std::make_unique<RangedAttackGoal>(rangedSettings(mob, component, speed));
 
     const int32_t timerFlag = timerFlagIndex(behavior);
     if (timerFlag >= 0) {

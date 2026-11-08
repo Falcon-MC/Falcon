@@ -2,10 +2,12 @@
 
 #include "World/Actor/AI/Control/LookControl.h"
 #include "World/Actor/AI/Goal/ChargeHeldItemGoal.h"
+#include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Mob/Component/MobShooter.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Item/CrossbowItem.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,6 +18,9 @@ namespace {
     const float DEGREES_TO_RADIANS = 0.017453292f;
     const float BACK_AWAY_MARGIN = 0.5f;
     const float EYE_HEIGHT_RATIO = 0.85f;
+    const char *const SHOOTER_COMPONENT = "minecraft:shooter";
+    // level sound event 44, played as the charge reaches charge_charged_trigger
+    const char *const CHARGED_SOUND = "warn";
 
     void setFlag(ServerNetworkHandler &owner, MobActor &mob, ActorFlag flag, bool value) {
         if (mob.getFlags().get(flag) == value)
@@ -34,9 +39,9 @@ RangedAttackGoal::RangedAttackGoal(Settings settings) : mSettings(std::move(sett
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move | (uint8_t) GoalControlFlag::Look);
 }
 
-// an empty crossbow waits for charge_held_item: sub_14D4297E0
+// needs a navigation component; an empty crossbow waits for charge_held_item: sub_14D4297E0
 bool RangedAttackGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
-    if (!MobShooter::canShoot(mob) || holdsUnchargedCrossbow(mob))
+    if (!mSettings.mHasNavigation || !_hasShooter(mob) || holdsUnchargedCrossbow(mob))
         return false;
 
     const Actor *target = mob.getTarget(owner);
@@ -48,8 +53,22 @@ bool RangedAttackGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     return true;
 }
 
+// a path still being walked keeps the goal: sub_14D429A50
 bool RangedAttackGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
-    return canUse(owner, mob);
+    return !mob.getNavigation().isDone() || canUse(owner, mob);
+}
+
+// the definition only changes with component groups: resolve the projectile once per shooter component
+bool RangedAttackGoal::_hasShooter(const MobActor &mob) {
+    const json::Value *shooter = mob.getComponent(SHOOTER_COMPONENT);
+    if (shooter == mShooter)
+        return mShooterUsable;
+
+    mShooter = shooter;
+    const json::Value *identifier = shooter == nullptr ? nullptr : shooter->get("def");
+    mShooterUsable = identifier != nullptr && identifier->isString()
+                     && ActorClassRegistry::getPrototype(identifier->mString) != nullptr;
+    return mShooterUsable;
 }
 
 void RangedAttackGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
@@ -113,11 +132,11 @@ void RangedAttackGoal::_move(MobActor &mob, const Actor &target, float distanceS
     const Vector3f targetPosition = target.getPosition();
 
     if (distanceSquared < radiusMin * radiusMin) {
-        // back away to radius_min + 0.5 along the line from the target
+        // radius_min + 0.5 away; the game feeds atan2(dz, dx) to sin for x and cos for z, axes swapped as it does
         const float distance = (radiusMin - std::sqrt(distanceSquared)) + BACK_AWAY_MARGIN;
         const float angle = std::atan2(position.z - targetPosition.z, position.x - targetPosition.x);
-        navigation.moveTo(Vector3f(position.x + std::cos(angle) * distance, position.y,
-                                   position.z + std::sin(angle) * distance), mSettings.mSpeed);
+        navigation.moveTo(Vector3f(position.x + std::sin(angle) * distance, position.y,
+                                   position.z + std::cos(angle) * distance), mSettings.mSpeed);
         mHasPathTarget = false;
         return;
     }
@@ -157,7 +176,7 @@ void RangedAttackGoal::_follow(MobActor &mob, const Vector3f &targetPosition) {
     mHasPathTarget = true;
 }
 
-// crossbow-style charge counted on the goal itself: charge_charged_trigger raises the charged flag
+// charge_shoot_trigger mode (ghast, llama): the goal counts the charge, charge_charged_trigger raises the flag
 void RangedAttackGoal::_tickCharge(ServerNetworkHandler &owner, MobActor &mob, bool canSee) {
     if (canSee) {
         ++mChargeTime;
@@ -171,6 +190,8 @@ void RangedAttackGoal::_tickCharge(ServerNetworkHandler &owner, MobActor &mob, b
     }
 
     setFlag(owner, mob, ActorFlag::Charged, mChargeTime > mSettings.mChargeChargedTriggerTicks);
+    if (mChargeTime == mSettings.mChargeChargedTriggerTicks)
+        owner.playLevelSound(owner.getLevelFor(mob), CHARGED_SOUND, mob.getPosition(), mob.getIdentifier());
 }
 
 void RangedAttackGoal::_tickBurst(ServerNetworkHandler &owner, MobActor &mob, Actor &target, float distanceSquared,
