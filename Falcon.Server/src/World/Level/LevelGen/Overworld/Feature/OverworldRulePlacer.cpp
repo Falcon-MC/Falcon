@@ -603,6 +603,53 @@ namespace {
         }
         return true;
     }
+
+    // MelonFeature::place (vtable 0x14F2F6F90, sub_14D224EF0): 64 tries around the position, z, y then x each the
+    // difference of two raw draws, a melon where it may stand on the dirt material
+    bool placeMelon(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
+        static const BlockState melon = VanillaBlocks::MELON_BLOCK().toBlockState();
+        for (int32_t attempt = 0; attempt < 64; attempt++) {
+            const auto awayZ = static_cast<int32_t>(random() & 7);
+            const int32_t melonZ = z + awayZ - static_cast<int32_t>(random() & 7);
+            const auto awayY = static_cast<int32_t>(random() & 3);
+            const int32_t melonY = y + awayY - static_cast<int32_t>(random() & 3);
+            const auto awayX = static_cast<int32_t>(random() & 7);
+            const int32_t melonX = x + awayX - static_cast<int32_t>(random() & 7);
+            if (BlockSupport::isReplaceable(blocks.getBlockAt(melonX, melonY, melonZ))
+                && IFeature::isSupportDirt(blocks.getBlockAt(melonX, melonY - 1, melonZ)))
+                blocks.setBlockStateAt(melonX, melonY, melonZ, melon);
+        }
+        return true;
+    }
+
+    // BambooFeature::place (vtable 0x14F2F70E0, sub_147171FC0): thick stalks up from an air block over dirt, sand or
+    // gravel, 5 plus nextInt of 8 to 12 by a hash of the column; from 3 tall one more block on top, large leaves on
+    // the two highest and small ones under them
+    bool placeBamboo(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
+        static const BlockStateSet GROUND = BlockStateSet::ofBlocks([](const Block &block) {
+            const std::string &name = block.getIdentifier();
+            return IFeature::isSupportDirt(block.toBlockState()) || name == VanillaBlocks::SAND().getIdentifier()
+                   || name == VanillaBlocks::RED_SAND().getIdentifier() || name == VanillaBlocks::GRAVEL().getIdentifier();
+        });
+        if (!DecorationSupport::isAir(blocks.getBlockAt(x, y, z)) || !GROUND.contains(blocks.getBlockAt(x, y - 1, z)))
+            return false;
+
+        const BlockState stalk = withState(VanillaBlocks::BAMBOO().toBlockState(), "bamboo_stalk_thickness", "thick");
+        const uint32_t mixed = (3129871u * static_cast<uint32_t>(x)) ^ (116129781u * static_cast<uint32_t>(z));
+        const uint32_t hash = (mixed * (42317861u * mixed + 11u)) >> 24;
+        const int32_t extra = nextInt(random, static_cast<int32_t>((hash % 5u) | 8u));
+        int32_t top = y;
+        for (int32_t count = extra + 5; count > 0 && DecorationSupport::isAir(blocks.getBlockAt(x, top, z)); count--)
+            blocks.setBlockStateAt(x, top++, z, stalk);
+        if (top - y < 3)
+            return true;
+
+        const BlockState large = withState(stalk, "bamboo_leaf_size", "large_leaves");
+        blocks.setBlockStateAt(x, top, z, large);
+        blocks.setBlockStateAt(x, top - 1, z, large);
+        blocks.setBlockStateAt(x, top - 2, z, withState(stalk, "bamboo_leaf_size", "small_leaves"));
+        return true;
+    }
 }
 
 // a minecraft:ore_feature of the behavior packs
@@ -702,6 +749,8 @@ struct OverworldRulePlacer::SingleBlockDefinition {
     // without may_replace the block goes over anything
     Block (*mAttachesTo)() = nullptr;
     int32_t mAge = 0;
+    // may_not_attach_to bottom podzol, tested before the weight is drawn
+    bool mNotOnPodzol = false;
 };
 
 // a minecraft:sequence_feature: each feature at the position the one before hands on
@@ -987,7 +1036,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:warped_fungus_feature", &VanillaBlocks::WARPED_FUNGUS, true, false, -1, false, true},
             {"minecraft:crimson_roots_feature", &VanillaBlocks::CRIMSON_ROOTS, true, false, -1, false, true},
             {"minecraft:warped_roots_feature", &VanillaBlocks::WARPED_ROOTS, true, false, -1, false, true},
-            {"minecraft:nether_sprouts_feature", &VanillaBlocks::NETHER_SPROUTS, true, false, -1, false, true}
+            {"minecraft:nether_sprouts_feature", &VanillaBlocks::NETHER_SPROUTS, true, false, -1, false, true},
+            {"minecraft:jungle_tall_grass_feature", &VanillaBlocks::SHORT_GRASS, true, false, -1, false, false, nullptr,
+             0, true},
+            {"minecraft:jungle_fern_feature", &VanillaBlocks::FERN, true, false, -1, false, false, nullptr, 0, true}
     };
 
     static const auto single = [](size_t index) {
@@ -1003,7 +1055,8 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
 
     // BDS 1.26.61 behavior packs, features/select_taiga_plant_feature.json
     static const WeightedDefinition WEIGHTED[] = {
-            {"minecraft:select_taiga_plant_feature", {{single(1), 4}, {single(0), 1}}}
+            {"minecraft:select_taiga_plant_feature", {{single(1), 4}, {single(0), 1}}},
+            {"minecraft:select_jungle_plant_feature", {{single(13), 1}, {single(12), 3}}}
     };
 
     static const auto weighted = [](size_t index) {
@@ -1020,6 +1073,7 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
 
     // BDS 1.26.61 behavior packs, features/scatter_*.json; eval order 4 is zxy, 5 zyx
     static const ScatterDefinition SCATTERS[] = {
+            {"minecraft:scatter_jungle_plant_feature", "32", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, weighted(1)},
             {"minecraft:crimson_fungus_scatter_feature", "24", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(7)},
             {"minecraft:warped_fungus_scatter_feature", "24", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(8)},
             {"minecraft:crimson_roots_scatter_feature", "64", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(9)},
@@ -1620,6 +1674,12 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     }
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == FIXUP_VINES.mIdentifier)
         feature.mPlaced.mScatter = &FIXUP_VINES;
+    if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == "minecraft:bamboo_feature")
+        feature.mPlaced.mFunction = &placeBamboo;
+    if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == "minecraft:melon_feature")
+        feature.mPlaced.mFunction = &placeMelon;
+    if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == SINGLE_BLOCKS[12].mIdentifier)
+        feature.mPlaced.mSingleBlock = &SINGLE_BLOCKS[12];
     if (entry.mPass == SURFACE_PASS || entry.mPass == AFTER_SURFACE_PASS) {
         for (const ScatterDefinition &scatter: SCATTERS) {
             if (entry.mFeature == scatter.mIdentifier)
@@ -3285,6 +3345,8 @@ bool OverworldRulePlacer::_placeSingleBlock(BlockManager &blocks, const SingleBl
                                             int32_t y, int32_t z, std::mt19937 &random) {
     // SingleBlockFeature::place (sub_14A267E10): the block is drawn by weight even when it is the only one, then its
     // survival is enforced and only air is replaced; a short grass or fern survives on the blocks of PlantSupport::Dirt
+    if (single.mNotOnPodzol && blocks.getBlockAt(x, y - 1, z).mName == VanillaBlocks::PODZOL().getIdentifier())
+        return false;
     nextInt(random, 1);
     if (single.mAttachesTo != nullptr)
         return _placeAttached(blocks, single, x, y, z);
