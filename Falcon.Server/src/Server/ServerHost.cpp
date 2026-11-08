@@ -179,11 +179,55 @@ namespace {
         return endPoint;
     }
 
-    void logTransportNotice(TransportLayer transport) {
+    // https on the port, plus 443 for 19132 only: sub_143A904D0; http after every https probe ends: sub_143A92EB0
+    const unsigned short DEFAULT_GAME_PORT = 19132;
+    const unsigned short HTTPS_PORT = 443;
+
+    // a half-set pair is ignored: only both paths take precedence over ACME
+    bool hasCertificatePair(const PropertiesSettings &properties) {
+        return !properties.getSignalingCertificate().empty() && !properties.getSignalingPrivateKey().empty();
+    }
+
+    // ACME validates on fixed ports whatever the game port: RFC 8737 on 443, RFC 8555 http-01 on 80
+    void logAcmeNotice(const PropertiesSettings &properties, const ServerNetworkHandler &handler,
+                       unsigned short port) {
+        const std::string domain = properties.getSignalingAcmeDomain();
+        if (domain.empty() || hasCertificatePair(properties))
+            return;
+
+        const bool tlsAlpn = properties.getSignalingAcmeChallenge() != "http-01";
+        const unsigned short needed = tlsAlpn ? 443 : 80;
+        if (port != needed && handler.getExtraSignalingPort() != needed)
+            LOG_INFO(LogAreaID::Server, "ACME for %s validates on TCP %u: set signaling-extra-port=%u or forward "
+                                        "TCP %u to TCP %u of this server.", domain.c_str(), (unsigned) needed,
+                     (unsigned) needed, (unsigned) needed, (unsigned) port);
+        LOG_INFO(LogAreaID::Server, "%s must resolve to this server's public address.", domain.c_str());
+    }
+
+    void logTransportNotice(TransportLayer transport, const ServerNetworkHandler &handler, unsigned short port,
+                            bool acmePending) {
         LOG_INFO(LogAreaID::Server, "==================== TRANSPORT =======================");
         LOG_INFO(LogAreaID::Server, "Connection type: %s", toString(transport));
-        if (transport == TransportLayer::NetherNet)
-            LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over plain HTTP.");
+        if (transport == TransportLayer::NetherNet) {
+            if (handler.isSignalingSecure()) {
+                LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over HTTPS and HTTP on TCP %u.",
+                         (unsigned) port);
+            } else {
+                LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over plain HTTP on TCP %u.",
+                         (unsigned) port);
+                if (acmePending)
+                    LOG_INFO(LogAreaID::Server, "HTTPS starts once the ACME certificate is issued.");
+                // Falcon on 443 refuses TLS at once: no stalled probe left to warn about
+                else if (port == DEFAULT_GAME_PORT && handler.getExtraSignalingPort() != HTTPS_PORT)
+                    LOG_INFO(LogAreaID::Server, "Players first try HTTPS here and on TCP 443 of this host: a firewall "
+                                                "that drops 443 delays every join by 3 s. Set signaling-extra-port=443,"
+                                                " signaling-acme-domain, or signaling-certificate and "
+                                                "signaling-private-key to answer over HTTPS.");
+            }
+            if (handler.getExtraSignalingPort() != 0)
+                LOG_INFO(LogAreaID::Server, "NetherNet signaling also listens on TCP %u.",
+                         (unsigned) handler.getExtraSignalingPort());
+        }
         LOG_INFO(LogAreaID::Server, "======================================================");
     }
 
@@ -357,7 +401,9 @@ bool ServerHost::start(const ServerHostOptions &options) {
     mPort = mHandler->getBoundPort() != 0 ? mHandler->getBoundPort() : port;
 
     LOG_INFO(LogAreaID::Server, "Server started.");
-    logTransportNotice(transport);
+    logTransportNotice(transport, *mHandler, mPort,
+                       !properties.getSignalingAcmeDomain().empty() && !hasCertificatePair(properties));
+    logAcmeNotice(properties, *mHandler, mPort);
     BedrockLog::flush();
 
     AutoCompaction::start(properties.getAutoCompactionInterval());

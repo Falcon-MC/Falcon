@@ -508,6 +508,10 @@ public:
 
     unsigned short getBoundPort() const;
 
+    bool isSignalingSecure() const;
+
+    unsigned short getExtraSignalingPort() const;
+
     bool isStopRequested() const { return mStopRequested; }
 
     void requestStop() { mStopRequested = true; }

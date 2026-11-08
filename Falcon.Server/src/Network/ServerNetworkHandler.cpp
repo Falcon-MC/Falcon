@@ -422,6 +422,14 @@ unsigned short ServerNetworkHandler::getBoundPort() const {
     return mNetherNetInstance != nullptr ? mNetherNetInstance->getBoundPort() : 0;
 }
 
+bool ServerNetworkHandler::isSignalingSecure() const {
+    return mNetherNetInstance != nullptr && mNetherNetInstance->isSignalingSecure();
+}
+
+unsigned short ServerNetworkHandler::getExtraSignalingPort() const {
+    return mNetherNetInstance != nullptr ? mNetherNetInstance->getExtraSignalingPort() : 0;
+}
+
 int ServerNetworkHandler::_getServerViewDistance() const {
     int distance = mProperties.getViewDistance();
 
@@ -494,6 +502,41 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
             data.mAcceptsSelfSignedAuth = !mProperties.getOnlineMode();
             return data;
         });
+
+        const std::string certificate = mProperties.getSignalingCertificate();
+        const std::string privateKey = mProperties.getSignalingPrivateKey();
+        const bool certificatePair = !certificate.empty() && !privateKey.empty();
+        if (certificate.empty() != privateKey.empty())
+            LOG_WARN(LogAreaID::Server, "signaling-certificate and signaling-private-key go together, both are "
+                                        "ignored");
+        if (certificatePair)
+            mNetherNetInstance->setTlsCertificate(ServerPaths::file(certificate), ServerPaths::file(privateKey));
+        else
+            mNetherNetInstance->setTlsCertificate(std::string(), std::string());
+        mNetherNetInstance->setExtraSignalingPort(mProperties.getSignalingExtraPort());
+
+        const std::string acmeDomain = acme::normalizeDomain(mProperties.getSignalingAcmeDomain());
+        const std::string acmeDirectory = mProperties.getSignalingAcmeDirectory();
+        acme::ChallengeType challenge = acme::ChallengeType::TlsAlpn01;
+        acme::parseChallengeType(mProperties.getSignalingAcmeChallenge(), challenge);
+        mNetherNetInstance->disableAcme();
+        if (acmeDomain.empty() || certificatePair) {
+            if (!acmeDomain.empty())
+                LOG_WARN(LogAreaID::Server, "signaling-certificate is set, signaling-acme-domain is ignored");
+        } else if (!acme::isDomain(acmeDomain)) {
+            LOG_WARN(LogAreaID::Server, "signaling-acme-domain must be a public domain name such as "
+                                        "play.example.org, ACME is off");
+        } else if (acmeDirectory.rfind("https://", 0) != 0) {
+            LOG_WARN(LogAreaID::Server, "signaling-acme-directory must be an https:// URL, ACME is off");
+        } else {
+            acme::ManagerSettings acmeSettings;
+            acmeSettings.mClient.mDirectoryUrl = acmeDirectory;
+            acmeSettings.mClient.mDomain = acmeDomain;
+            acmeSettings.mClient.mEmail = mProperties.getSignalingAcmeEmail();
+            acmeSettings.mClient.mChallenge = challenge;
+            acmeSettings.mStorageDirectory = ServerPaths::file("certificates");
+            mNetherNetInstance->enableAcme(acmeSettings);
+        }
     }
 
     const int64_t levelSeed = properties.getLevelSeed().empty()
