@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Scripting/ScriptModules.h"
+
 #include <string>
 #include <vector>
 
@@ -8,7 +10,8 @@ struct BehaviorPack {
     std::string mUuid;
     std::string mPath;
     std::string mScriptEntry;
-    std::string mApiVersion;
+    std::string mScriptModuleUuid;
+    std::vector<ScriptModuleDependency> mScriptModules;
     std::vector<std::string> mDependencyUuids;
 
     bool hasScript() const { return !mScriptEntry.empty(); }

@@ -324,8 +324,8 @@ void ServerNetworkHandler::_throwItem(ServerPlayer &player, const ItemStack &ite
                           -std::sin(pitch) * THROW_SPEED + 0.1f,
                           std::cos(yaw) * std::cos(pitch) * THROW_SPEED);
 
-    dropItem(getLevelFor(player), dropPosition, item, motion, THROW_PICKUP_DELAY);
-    mScriptEngine.onEntityItemDrop(player, item);
+    ItemActor *dropped = dropItem(getLevelFor(player), dropPosition, item, motion, THROW_PICKUP_DELAY);
+    mScriptEngine.onEntityItemDrop(player, dropped);
 }
 
 void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
