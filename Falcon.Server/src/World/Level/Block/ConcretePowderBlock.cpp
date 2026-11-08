@@ -1,18 +1,14 @@
 #include "World/Level/Block/ConcretePowderBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/LiquidProperties.h"
 #include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 
 FALCON_REGISTER_BLOCK(ConcretePowderBlock, 358);
 
-namespace {
-    const std::string SUFFIX = "_concrete_powder";
-}
-
 bool ConcretePowderBlock::matches(const std::string &identifier) {
-    return identifier.size() > SUFFIX.size()
-           && identifier.compare(identifier.size() - SUFFIX.size(), SUFFIX.size(), SUFFIX) == 0;
+    return BlockIdentifier::endsWith(identifier, "_concrete_powder");
 }
 
 void ConcretePowderBlock::onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i &position,
