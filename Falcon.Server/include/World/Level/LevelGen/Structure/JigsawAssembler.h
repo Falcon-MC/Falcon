@@ -30,6 +30,8 @@ struct JigsawPiece {
     int32_t mQuarterTurns = 0;
     int32_t mDepth = 0;
     JigsawBox mBox;
+    // height of the ground over the box bottom, which the terrain beard meets
+    int32_t mGroundLevelDelta = 1;
 };
 
 /**

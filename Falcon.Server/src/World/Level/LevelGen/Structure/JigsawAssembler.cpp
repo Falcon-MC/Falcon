@@ -52,6 +52,24 @@ namespace {
     std::shared_ptr<const StructureTemplate> templateOf(const JigsawElementData &element) {
         return element.mTemplate == nullptr ? nullptr : StructureTemplate::load(element.mTemplate);
     }
+
+    // the abandoned village lists send the streets, houses and decor of a style to their abandoned pools; the game
+    // rewrites the target pool of the jigsaw blocks as the template is read (sub_14CD6B070, sub_1469B3520)
+    std::string retargeted(const JigsawElementData &element, const std::string &pool) {
+        static const char *STYLES[] = {"plains", "savanna", "snowy", "taiga", "desert"};
+        static const char *KINDS[] = {"streets", "houses", "decor"};
+        const std::string processors = element.mProcessors == nullptr ? std::string() : element.mProcessors;
+        for (const char *style : STYLES) {
+            if (processors.find(std::string("minecraft:") + style + "_abandoned_targets") == std::string::npos)
+                continue;
+
+            for (const char *kind : KINDS) {
+                if (pool == std::string("minecraft:village/") + style + "/" + kind)
+                    return std::string("minecraft:village/abandoned/") + style + "/" + kind;
+            }
+        }
+        return pool;
+    }
 }
 
 JigsawAssembler::JigsawAssembler(const ChunkGenerator &generator, std::mt19937 &random, int32_t maxDepth, int32_t seaLevel)
@@ -112,7 +130,7 @@ std::vector<JigsawAssembler::Marker> JigsawAssembler::_markers(const JigsawEleme
         marker.mFacing = rotateFacing(facing == entry.mProperties.end() ? 0 : facingOf(facing->second), quarterTurns);
         // the shipped files spell it this way and use it as both the name and the target of the jigsaw
         marker.mName = block.mData.getString("attachement_type", "");
-        marker.mPool = block.mData.getString("target_pool", "");
+        marker.mPool = retargeted(element, block.mData.getString("target_pool", ""));
         markers.push_back(std::move(marker));
     }
 
@@ -260,6 +278,9 @@ bool JigsawAssembler::_tryPool(size_t pieceIndex, const Marker &marker, const Ji
                 piece.mQuarterTurns = quarterTurns;
                 piece.mDepth = parent.mDepth + 1;
                 piece.mBox = box;
+                // a rigid child keeps its parent's ground, a terrain matching one sits on it
+                if (!element->mTerrainMatching)
+                    piece.mGroundLevelDelta = parent.mGroundLevelDelta - (marker.y - parentBox.mMinY - candidate.y + step);
                 mPieces.push_back(piece);
                 _expand(mPieces.size() - 1);
                 return true;

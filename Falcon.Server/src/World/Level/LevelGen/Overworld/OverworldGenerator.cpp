@@ -53,6 +53,10 @@ OverworldGenerator::OverworldGenerator(int64_t seed)
     mSurfaceBuilder = std::make_unique<OverworldSurfaceBuilder>(mNoiseHolder->getNoiseFactory(), *mClimate, seed);
     mBiomeParameters = &OverworldBiomeParameters::shared();
     mCarvers = std::make_unique<OverworldCarvers>(seed);
+
+    mBeardSource = [this](int32_t chunkX, int32_t chunkZ, TerrainBeard &beard) {
+        VillageStructure::addBeard(*this, chunkX, chunkZ, beard);
+    };
 }
 
 OverworldGenerator::~OverworldGenerator() = default;

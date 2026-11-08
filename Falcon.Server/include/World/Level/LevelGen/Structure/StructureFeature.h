@@ -51,6 +51,9 @@ public:
     // the random a chunk post processes one structure type with, seeded anew for every type
     static std::mt19937 createPostProcessRandom(int64_t seed, int32_t chunkX, int32_t chunkZ);
 
+    // the seed of that random, which the pieces placed in the chunk seed their own randoms with
+    static uint32_t getPostProcessSeed(int64_t seed, int32_t chunkX, int32_t chunkZ);
+
     // the region random as the candidate draws left it, which the start of the structure goes on drawing from
     std::mt19937 createStartRandom(int64_t seed, int32_t chunkX, int32_t chunkZ) const;
 

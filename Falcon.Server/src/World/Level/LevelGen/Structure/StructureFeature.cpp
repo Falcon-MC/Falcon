@@ -156,10 +156,14 @@ bool StructureFeature::_hasOnlyBiomes(const ChunkGenerator &generator, int32_t b
 }
 
 std::mt19937 StructureFeature::createPostProcessRandom(int64_t seed, int32_t chunkX, int32_t chunkZ) {
+    return std::mt19937(getPostProcessSeed(seed, chunkX, chunkZ));
+}
+
+uint32_t StructureFeature::getPostProcessSeed(int64_t seed, int32_t chunkX, int32_t chunkZ) {
     std::mt19937 level((uint32_t) seed);
     const uint32_t multiplierX = (level() >> 1) | 1U;
     const uint32_t multiplierZ = (level() >> 1) | 1U;
-    return std::mt19937((multiplierX * (uint32_t) chunkX + multiplierZ * (uint32_t) chunkZ) ^ (uint32_t) seed);
+    return (multiplierX * (uint32_t) chunkX + multiplierZ * (uint32_t) chunkZ) ^ (uint32_t) seed;
 }
 
 const std::vector<const StructureFeature *> &StructureFeature::getAll() {
