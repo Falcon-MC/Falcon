@@ -20,6 +20,16 @@ public:
         return true;
     }
 
+    bool hasRandomTick() const override {
+        return true;
+    }
+
+    void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                      const BlockState &state) const override;
+
+    // sub_149C3F400: ten tries for a flammable block in the 3x3x3 cube, fire on its first air neighbour
+    static void spreadFire(LiquidPhysicsSystem &ticks, const Vector3i &position);
+
     // ultrawarm dimensions run lava three times faster
     int32_t getTickDelay(DimensionType dimension) const override;
 

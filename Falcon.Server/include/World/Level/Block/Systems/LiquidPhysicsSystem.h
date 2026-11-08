@@ -3,6 +3,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "World/Level/Block/LiquidProperties.h"
+#include "World/Level/Block/Systems/BlockChangeSystem.h"
 #include "World/Level/BlockTickingQueue.h"
 #include "World/Level/Chunk/LevelChunk.h"
 
@@ -113,6 +114,10 @@ public:
         _write(position, layer, state, notify);
     }
 
+    // plugins may veto; they run arbitrary code, so no chunk pointer survives the call
+    bool allows(const Vector3i &position, const BlockState &state, BlockChangeCause cause,
+                const Vector3i *source = nullptr);
+
     // BlockSource::addToTickingQueue (+0x130) and addToRandomTickingQueue (+0x138), sub_14381A930
     void queueTick(const Vector3i &position, const Block *block, int32_t delay);
     void queueRandomTick(const Vector3i &position, const Block *block, int32_t delay);
@@ -207,7 +212,6 @@ private:
     void _solidifyAround(const Vector3i &position, const Block *self);
     void _solidify(const Vector3i &position, const Vector3i &neighbor, const Block *self);
     void _fizz(const Vector3i &position);
-    bool _allows(const Vector3i &position, const BlockState &state);
 
     void _onTick(const Vector3i &position, const Block *block);
     void _tickLiquid(const Vector3i &position, LiquidMaterial self);

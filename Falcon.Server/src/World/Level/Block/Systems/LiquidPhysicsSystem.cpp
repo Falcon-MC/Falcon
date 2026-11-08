@@ -6,6 +6,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/LavaBlock.h"
 #include "World/Level/Block/LiquidBlock.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
@@ -192,8 +193,9 @@ void LiquidPhysicsSystem::_write(const Vector3i &position, int layer, const Bloc
     mNotify = previous;
 }
 
-bool LiquidPhysicsSystem::_allows(const Vector3i &position, const BlockState &state) {
-    const bool allowed = BlockChangeSystem::allows(mLevel, position, state, BlockChangeCause::Form);
+bool LiquidPhysicsSystem::allows(const Vector3i &position, const BlockState &state, BlockChangeCause cause,
+                                 const Vector3i *source) {
+    const bool allowed = BlockChangeSystem::allows(mLevel, position, state, cause, source);
     _forgetChunks();
     return allowed;
 }
@@ -313,7 +315,7 @@ void LiquidPhysicsSystem::_solidify(const Vector3i &position, const Vector3i &ne
                      && _blockOf(_stateAt(offset(next.position, 0, -1, 0))) == soulSoil)
                 result = &basalt;
 
-            if (result != nullptr && _allows(next.position, *result)) {
+            if (result != nullptr && allows(next.position, *result, BlockChangeCause::Form)) {
                 _write(next.position, 0, *result, true);
                 _fizz(next.position);
             }
@@ -510,6 +512,9 @@ void LiquidPhysicsSystem::_tickLiquid(const Vector3i &position, LiquidMaterial s
     const Vector3i below = offset(position, 0, -1, 0);
     const Vector3i above = offset(position, 0, 1, 0);
 
+    if (lava)
+        LavaBlock::spreadFire(*this, position);
+
     int depth = _depth(position, self);
     if (depth < 0)
         return;
@@ -570,7 +575,8 @@ void LiquidPhysicsSystem::_tickLiquid(const Vector3i &position, LiquidMaterial s
         const Liquid current = _liquidAt(position);
         if (current.properties.material == LiquidMaterial::Lava && !current.properties.dynamic
             && current.properties.depth == 0
-            && LiquidProperties::of(_stateAt(above)).material == LiquidMaterial::Water && _allows(position, obsidian))
+            && LiquidProperties::of(_stateAt(above)).material == LiquidMaterial::Water
+            && allows(position, obsidian, BlockChangeCause::Form))
             _write(position, 0, obsidian, false);
     }
 
@@ -581,7 +587,7 @@ void LiquidPhysicsSystem::_tickLiquid(const Vector3i &position, LiquidMaterial s
             // lava onto water, or anything onto a block of material 18, makes stone
             const Block *floor = _blockOf(_stateAt(below));
             if ((lava && underneath == LiquidMaterial::Water) || (floor != nullptr && floor->isIceMaterial())) {
-                if (_allows(below, stone)) {
+                if (allows(below, stone, BlockChangeCause::Form)) {
                     _write(below, 0, stone, true);
                     _fizz(below);
                 }
