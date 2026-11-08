@@ -53,10 +53,6 @@ OverworldGenerator::OverworldGenerator(int64_t seed)
     mSurfaceBuilder = std::make_unique<OverworldSurfaceBuilder>(mNoiseHolder->getNoiseFactory(), *mClimate, seed);
     mBiomeParameters = &OverworldBiomeParameters::shared();
     mCarvers = std::make_unique<OverworldCarvers>(seed);
-
-    mBeardSource = [this](int32_t chunkX, int32_t chunkZ, TerrainBeard &beard) {
-        VillageStructure::addBeard(*this, chunkX, chunkZ, beard);
-    };
 }
 
 OverworldGenerator::~OverworldGenerator() = default;
@@ -155,9 +151,9 @@ int64_t OverworldGenerator::parseSeed(const std::string &value) {
 void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random,
                                           OverworldAquifer &aquifer) const {
     const int32_t minY = OverworldGeneratorConstants::MIN_Y;
+    // jigsaw pieces near the chunk; the preliminary heights leave it out (sub_145C33980)
     TerrainBeard beard;
-    if (mBeardSource)
-        mBeardSource(chunk.getX(), chunk.getZ(), beard);
+    VillageStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     mTerrainFiller->fill(chunk, heightMap, aquifer, &beard);
 
     // the first draws of the chunk's random lay 2 to 5 bedrock layers over whatever the noise placed
