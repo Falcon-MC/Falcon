@@ -423,6 +423,9 @@ int main() {
         });
         check("chunk send budget shared across triggers", [&]() {
             auto &state = player.getChunkStreamState();
+            // a player waiting for its spawn chunks gets them all in one tick; the tick drops the join burst
+            player.setSpawnChunksReady(true);
+            host.tick(true);
             player.setPosition(Vector3f(0, 140, 0));
             state.mLastLoaderChunk = ChunkStreamHandler::packChunk(0, 0);
             for (int32_t x = 0; x < 17; ++x) {
@@ -440,6 +443,24 @@ int main() {
             const size_t after = player.getSentChunkCount() - before;
             require(after > 16, "Paused network tick did not renew send budget");
             require(after <= 32, "Paused network tick exceeded send budget after terrain invalidation");
+            state = ChunkStreamState();
+            level.unregisterAllChunkLoaders(player.getRuntimeId());
+            player.resetChunkStreaming();
+        });
+        check("spawn chunks sent in one tick", [&]() {
+            auto &state = player.getChunkStreamState();
+            player.setPosition(Vector3f(0, 140, 0));
+            state.mLastLoaderChunk = ChunkStreamHandler::packChunk(0, 0);
+            for (int32_t x = 0; x < 17; ++x) {
+                level.getChunk(x, 0);
+                const int64_t hash = ChunkStreamHandler::packChunk(x, 0);
+                state.mInRadius.insert(hash);
+                player.getSentChunks().insert(hash);
+                ChunkStreamHandler::invalidateChunk(player, hash);
+            }
+            const size_t before = player.getSentChunkCount();
+            ChunkStreamHandler::tick(handler, player);
+            require(player.getSentChunkCount() - before == 17, "Spawn chunks waited for the steady budget");
             state = ChunkStreamState();
             level.unregisterAllChunkLoaders(player.getRuntimeId());
             player.resetChunkStreaming();

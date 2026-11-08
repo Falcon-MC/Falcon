@@ -573,6 +573,7 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
     mIsListening = true;
 
     _updateServerAnnouncement();
+    _queueSpawnWarmup();
     mNetworkHandler->startIoThread();
     _loadScripts();
     return true;
@@ -681,6 +682,9 @@ void ServerNetworkHandler::tick(bool paused) {
 
     _retryLoginsAwaitingKeys();
     ++mChunkStreamTick;
+    if (mChunkStreamTick % CHUNK_PACKET_EXPIRY_INTERVAL == 0)
+        mChunkPacketCache.expire(mChunkStreamTick);
+    _updateJoinBurst();
     for (World *world: mWorlds.getWorlds())
         world->getTickingAreas().retryPendingLoads(*world);
     if (paused) {
@@ -790,6 +794,7 @@ void ServerNetworkHandler::tick(bool paused) {
 
     for (World *world: mWorlds.getWorlds())
         _tickOverworld(*world);
+    _tickSpawnWarmup();
 
     mProfiler.beginSection(ProfilerSection::Players);
     for (auto &entry: mPlayers)
@@ -882,6 +887,68 @@ void ServerNetworkHandler::tick(bool paused) {
     mTickDurationSamples.push_back(elapsedMs);
     if (mTickDurationSamples.size() > TICK_SAMPLE_COUNT)
         mTickDurationSamples.pop_front();
+}
+
+void ServerNetworkHandler::_updateJoinBurst() {
+    // bounded in time: a client stalling before its spawn must not slow the others for good
+    mJoinBurst = false;
+    for (const auto &entry: mPlayers) {
+        const ServerPlayer &player = entry.second;
+        if (player.getLoginState() >= ServerPlayer::LoginState::LoggedIn && !player.hasSpawnChunksReady()
+            && mCurrentTick - player.getLoggedInTick() < JOIN_BURST_TICKS) {
+            mJoinBurst = true;
+            return;
+        }
+    }
+}
+
+void ServerNetworkHandler::_queueSpawnWarmup() {
+    const Vector3i spawn = mWorlds.getDefault().getOverworld().getSpawnPosition();
+    const int32_t centerX = spawn.x >> 4;
+    const int32_t centerZ = spawn.z >> 4;
+
+    std::vector<std::pair<int32_t, int64_t>> chunks;
+    for (int32_t dx = -SPAWN_WARMUP_RADIUS; dx <= SPAWN_WARMUP_RADIUS; ++dx) {
+        for (int32_t dz = -SPAWN_WARMUP_RADIUS; dz <= SPAWN_WARMUP_RADIUS; ++dz) {
+            const int32_t distance = dx * dx + dz * dz;
+            if (distance <= SPAWN_WARMUP_RADIUS * SPAWN_WARMUP_RADIUS)
+                chunks.emplace_back(distance, ChunkStreamHandler::packChunk(centerX + dx, centerZ + dz));
+        }
+    }
+
+    // nearest first: generation backpressure admits a few per tick
+    std::sort(chunks.begin(), chunks.end());
+    mSpawnWarmup.clear();
+    for (const auto &chunk: chunks)
+        mSpawnWarmup.push_back(chunk.second);
+}
+
+void ServerNetworkHandler::_tickSpawnWarmup() {
+    if (mSpawnWarmup.empty())
+        return;
+
+    Level &level = mWorlds.getDefault().getOverworld();
+    std::vector<int64_t> pending;
+    for (const int64_t hash: mSpawnWarmup) {
+        const int32_t chunkX = ChunkStreamHandler::unpackChunkX(hash);
+        const int32_t chunkZ = ChunkStreamHandler::unpackChunkZ(hash);
+        if (level.isChunkPopulated(chunkX, chunkZ))
+            continue;
+
+        level.requestChunkAsync(chunkX, chunkZ);
+        pending.push_back(hash);
+    }
+    mSpawnWarmup.swap(pending);
+}
+
+void ServerNetworkHandler::pumpLoginEvents() {
+    if (!mIsListening || mNetworkHandler == nullptr)
+        return;
+
+    mNetworkHandler->runEventsFor([this](const NetworkIdentifier &id) {
+        const ServerPlayer *player = _getPlayer(id);
+        return player == nullptr || player->getLoginState() < ServerPlayer::LoginState::StartGameSent;
+    });
 }
 
 void ServerNetworkHandler::_updateServerAnnouncement() {

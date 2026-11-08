@@ -54,6 +54,9 @@ public:
     static constexpr unsigned MAX_SENDS_PER_TICK = 16;
     // pending outbound bytes before more chunks are encoded for this player
     static constexpr size_t MAX_QUEUED_CHUNK_BYTES = 256 * 1024;
+    // sent chunks the PlayStatus PlayerSpawn waits for
+    static constexpr size_t SPAWN_CHUNK_COUNT = 56;
+    static constexpr unsigned JOIN_BURST_SENDS_PER_TICK = 2;
 
     static void tick(ServerNetworkHandler &owner, ServerPlayer &player);
 
