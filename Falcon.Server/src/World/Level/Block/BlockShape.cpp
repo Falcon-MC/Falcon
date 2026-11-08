@@ -36,8 +36,9 @@ namespace {
 bool BlockShape::hasCollision(const BlockState &state) {
     const Block *block = VanillaBlocks::fromIdentifier(state.mName);
     AxisAlignedBB shape = FULL_CUBE;
+    // a class shape with no height lets actors through
     if (block != nullptr && block->getCollisionShape(state, shape))
-        return true;
+        return shape.mMaxY > shape.mMinY;
 
     const BlockData *data = BlockDataTable::find(state.mName.c_str());
     if (data == nullptr)
@@ -141,15 +142,6 @@ AxisAlignedBB BlockShape::getRelativeShape(const BlockState &state) {
     if (name == "minecraft:cake") {
         const int32_t bites = state.mStates.getInt("bite_counter", 0);
         return AxisAlignedBB((1.0f + (float) bites * 2.0f) / 16.0f, 0.0f, 0.0625f, 0.9375f, 0.5f, 0.9375f);
-    }
-
-    // collides one layer below its look: a single layer is walked through
-    if (name == "minecraft:snow_layer") {
-        const int32_t height = std::min(7, state.mStates.getInt("height", 0));
-        if (height <= 0)
-            return EMPTY_SHAPE;
-
-        return AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, (float) (height * 2) / 16.0f, 1.0f);
     }
 
     if (name == "minecraft:scaffolding")

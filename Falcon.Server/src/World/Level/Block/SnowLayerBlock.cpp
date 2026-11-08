@@ -9,6 +9,8 @@ FALCON_REGISTER_BLOCK(SnowLayerBlock, 340);
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/Level.h"
 
+#include <algorithm>
+
 using namespace PlacementHelpers;
 
 namespace {
@@ -23,6 +25,14 @@ bool SnowLayerBlock::matches(const std::string &identifier) {
 
 bool SnowLayerBlock::canBeReplaced(const BlockState &state) const {
     return state.mStates.getInt(SNOW_LAYER_HEIGHT, 0) < SNOW_LAYER_MAX_HEIGHT;
+}
+
+// sub_14B27C5D0: one layer below its look, a single layer is walked through
+bool SnowLayerBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+    const int height = std::min(SNOW_LAYER_MAX_HEIGHT, std::max(0, state.mStates.getInt(SNOW_LAYER_HEIGHT, 0)));
+
+    shape = AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, (float) (height * 2) / 16.0f, 1.0f);
+    return true;
 }
 
 PlacementMergeResult SnowLayerBlock::mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
