@@ -3,6 +3,9 @@
 #include "World/Level/Block/Actor/BannerBlockActor.h"
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 #include "World/Level/Block/Actor/BellBlockActor.h"
+#include "World/Level/Block/Actor/CauldronBlockActor.h"
+#include "World/Level/Block/Actor/FlowerPotBlockActor.h"
+#include "World/Level/Block/Actor/SignBlockActor.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/CommandBlockActor.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
@@ -237,6 +240,18 @@ FALCON_REGISTER_BLOCK_ACTOR(BeehiveBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(EndGatewayBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BellBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BannerBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(FlowerPotBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(CauldronBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(SignBlockActor);
+
+namespace {
+    std::unique_ptr<BlockActor> createHangingSign() {
+        return std::make_unique<SignBlockActor>(true);
+    }
+
+    const BlockActorClassRegistry::Registration HANGING_SIGN_REGISTRATION(SignBlockActor::HANGING_ID,
+                                                                          &createHangingSign);
+}
 
 std::unique_ptr<BlockActor> BlockActorStore::create(const std::string &blockActorId) {
     return BlockActorClassRegistry::create(blockActorId);
