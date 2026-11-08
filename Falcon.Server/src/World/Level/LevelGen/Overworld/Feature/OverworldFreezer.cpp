@@ -62,7 +62,7 @@ void OverworldFreezer::apply(LevelChunk &chunk) {
 
 int32_t OverworldFreezer::_topRainBlock(const LevelChunk &chunk, int32_t x, int32_t z) {
     // LevelChunk::getTopRainBlockPos (sub_143868920): down from the highest non-empty section to the first block
-    // that stops rain, in either layer
+    // stopping rain, in either layer
     int32_t top = LevelChunk::MIN_Y - 1;
     for (int32_t index = LevelChunk::SUB_CHUNK_COUNT - 1; index >= 0; index--) {
         if (!chunk.getSubChunk(index).isEmpty()) {

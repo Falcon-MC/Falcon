@@ -238,7 +238,7 @@ void LayeredNetherSurface::build(const NetherSurfaceColumn &column) const {
             continue;
         }
 
-        // bedrock takes the layers like stone: measured against BDS, the roof keeps netherrack in most columns
+        // bedrock takes the layers like stone: measured against the game, the roof keeps netherrack in most columns
         const bool bedrock = sameBlock(state, bedrockState());
         if (!bedrock && !sameBlock(state, netherrackState()))
             continue;

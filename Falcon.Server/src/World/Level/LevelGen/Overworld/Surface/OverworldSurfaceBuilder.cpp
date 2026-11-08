@@ -366,7 +366,7 @@ void OverworldSurfaceBuilder::_buildOverworldColumn(LevelChunk &chunk, int32_t x
         if (--remaining != 0)
             continue;
 
-        // a mid material that turns to sandstone where its layer ends
+        // a mid material turning to sandstone where its layer ends
         if (OverworldBlockLists::sand().contains(*layerMid)) {
             const int32_t extra = static_cast<int32_t>(random() % 4u);
             remaining = static_cast<int32_t>(std::max<int64_t>(0, (int64_t) y - seaLevel)) + extra;
@@ -399,7 +399,7 @@ void OverworldSurfaceBuilder::_digSwampPuddle(LevelChunk &chunk, int32_t x, int3
     if (value <= 0.0f || height > SWAMP_SEA_LEVEL || lowest >= height)
         return;
 
-    // the highest block that is not water yet, down to the puddle's depth
+    // the highest block not water yet, down to the puddle's depth
     for (int32_t y = height - 1; y >= lowest; y--) {
         if (!isWaterState(chunk.getBlock(x, y, z))) {
             chunk.setBlock(x, y, z, waterState());

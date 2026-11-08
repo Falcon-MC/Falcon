@@ -12,8 +12,8 @@
 #include <climits>
 #include <cmath>
 
-// Port of the 26.60 large speleothem feature (the class behind large_dripstone_feature) with the
-// parameters registered for minecraft:large_icicle_feature. The cones are made of packed ice.
+// the 26.60 large speleothem feature (behind large_dripstone_feature) with the parameters of
+// minecraft:large_icicle_feature; packed ice cones
 namespace {
     const int32_t MIN_ATTEMPTS = 48;
     const int32_t EXTRA_ATTEMPTS = 16;
@@ -117,8 +117,7 @@ namespace {
         return true;
     }
 
-    // Moves the root into the rock it hangs from, halving the radius until a ring of that size is
-    // mostly buried.
+    // moves the root into its rock, halving the radius until a ring of that size is mostly buried
     bool settleRoot(BlockManager &manager, Speleothem &speleothem, const Wind &wind) {
         while (speleothem.mRadius >= 2) {
             const int32_t height = (int32_t) coneHeight(0.0f, speleothem.mRadius, speleothem.mScale,

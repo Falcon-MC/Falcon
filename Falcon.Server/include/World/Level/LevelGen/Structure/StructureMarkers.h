@@ -4,10 +4,8 @@
 #include <string>
 #include <vector>
 
-/**
- * The data blocks of a structure piece. The game keeps them in a hash map keyed on their world position and draws
- * its random while walking that map, so their order decides what each marker gets.
- */
+// the game keeps data blocks in a hash map keyed on world position and draws its random while walking it: the
+// order decides what each marker gets
 class StructureMarkers {
 public:
     struct Marker {
@@ -17,7 +15,7 @@ public:
         std::string mText;
     };
 
-    // the markers of a piece as the game walks them, from the order of the file; at most eight, the size up to which
-    // the map keeps its first buckets
+    // the markers in the game's walk order, from the file's order; at most eight: up to that size the map keeps
+    // its first buckets
     static std::vector<Marker> inGameOrder(const std::vector<Marker> &markers);
 };

@@ -9,7 +9,7 @@
 
 class DimensionFactory {
 public:
-    /** Values of the level.dat Generator key. */
+    // values of the level.dat Generator key
     enum class GeneratorType : int32_t {
         Overworld = 1,
         Flat = 2

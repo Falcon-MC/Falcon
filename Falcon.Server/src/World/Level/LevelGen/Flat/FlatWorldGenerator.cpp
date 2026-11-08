@@ -12,11 +12,11 @@ namespace {
     const char *const AIR = "minecraft:air";
     const char *const POST_1_18 = "version.post_1_18";
 
-    // Falcon worlds always span the post-1.18 height, so legacy layer stacks get the 64 air layers BDS
-    // inserts to keep their bedrock at y=0.
+    // worlds here always span the post-1.18 height: legacy stacks get the 64 air layers the game inserts to keep
+    // their bedrock at y=0
     const int32_t LEGACY_AIR_LAYERS = 64;
 
-    // The layers BDS writes for a post-1.18 world when FlatWorldLayers is missing or cannot be read.
+    // what the game writes for a post-1.18 world when FlatWorldLayers is missing or unreadable
     const char *const DEFAULT_LAYERS = R"({
         "biome_id" : 1,
         "world_version" : "version.post_1_18",
@@ -37,7 +37,7 @@ namespace {
         return states == nullptr ? BlockState(name) : BlockState(name, *states);
     }
 
-    // BDS resolves an unknown block name to info_update rather than rejecting the layer.
+    // the game resolves an unknown block name to info_update instead of rejecting the layer
     BlockState layerBlock(const json::Value &layer) {
         BlockPaletteRegistry &registry = BlockPaletteRegistry::getInstance();
         registry.initialize();
@@ -88,7 +88,7 @@ bool FlatWorldGenerator::_parse(const std::string &source) {
     const json::Value *biome = settings.get("biome_id");
     mBiomeId = biome == nullptr ? 0 : (uint16_t) biome->integer(0);
 
-    // Encodings 0 to 3 store numeric legacy block ids, which Falcon has no table for.
+    // encodings 0 to 3 store numeric legacy block ids: no table for them here
     if (version <= 3)
         return false;
 
@@ -126,7 +126,7 @@ bool FlatWorldGenerator::_parse(const std::string &source) {
 
         if (!hasLayerFields(*layer)) {
             mLayers.clear();
-            // An encoding 6 stack with a broken layer is kept as an empty stack instead of the default.
+            // a broken layer in an encoding 6 stack: empty stack, not the default
             return version == 6;
         }
 
@@ -157,7 +157,7 @@ void FlatWorldGenerator::generate(LevelChunk &chunk) const {
         }
     }
 
-    // The column is the same everywhere, so its top is known without scanning the chunk.
+    // same column everywhere: its top is known without scanning
     const int32_t height = mLayers.empty() ? LevelChunk::MIN_Y : mSpawnY - 1;
     for (int32_t x = 0; x < 16; ++x) {
         for (int32_t z = 0; z < 16; ++z)
@@ -169,8 +169,7 @@ void FlatWorldGenerator::generate(LevelChunk &chunk) const {
 }
 
 void FlatWorldGenerator::_generateEmpty(LevelChunk &chunk) const {
-    // With no layers BDS builds a 33x33 stone platform at the bottom of the world around the origin,
-    // with cobblestone at 0,0.
+    // no layers: the game builds a 33x33 stone platform at the world bottom around the origin, cobblestone at 0,0
     const int32_t chunkX = chunk.getX();
     const int32_t chunkZ = chunk.getZ();
     if (chunkX < -1 || chunkX > 1 || chunkZ < -1 || chunkZ > 1)

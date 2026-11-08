@@ -19,7 +19,7 @@ namespace {
             {0.0f, 1.0f}, {0.0f, -1.0f}, {0.0f, 1.0f}, {0.0f, -1.0f}
     };
 
-    // the game subtracts one from every value that is not above zero, integers included
+    // the game subtracts one from every value not above zero, integers included
     int32_t gameFloor(float value) {
         return NoiseMath::truncateToInt(value) - (value > 0.0f ? 0 : 1);
     }

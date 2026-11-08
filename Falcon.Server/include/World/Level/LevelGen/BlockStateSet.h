@@ -10,10 +10,7 @@
 
 class Block;
 
-/**
- * Every state of a fixed group of blocks, matched by state hash: the generation loops test a block with one integer
- * lookup instead of comparing names. Build the sets once, they are read-only afterwards and safe across threads.
- */
+// matched by state hash: one integer lookup in the generation loops instead of names; read-only once built
 class BlockStateSet {
 public:
     BlockStateSet(std::initializer_list<std::string> identifiers);

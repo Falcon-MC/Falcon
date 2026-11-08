@@ -129,10 +129,10 @@ void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, const Overw
     };
 
     place(true);
-    // the ores read the chunk itself, so the first features must be in it before they run
+    // the ores read the chunk itself: the first features must be in it before they run
     root.applySubChunkUpdate();
 
-    // applied at once so the features placed after them see the rules' blocks
+    // applied at once: the features placed after them see the rules' blocks
     BlockManager rules(level);
     rules.setOverflowSink(chunk.getX(), chunk.getZ(), overflow);
     OverworldRulePlacer::apply(rules, chunk, climate, (uint32_t) level.getSeed(), biomesInSectionOrder(chunk));

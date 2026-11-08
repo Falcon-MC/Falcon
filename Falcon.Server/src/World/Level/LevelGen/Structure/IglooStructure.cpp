@@ -50,7 +50,7 @@ namespace {
             return choice;
 
         choice.mShaftPieces = FeatureRandom::nextInt(random, SHAFT_PIECE_RANGE) + SHAFT_MIN_PIECES;
-        // placing a chest draws a loot seed of its own (sub_14775E430), which the marker of the piece then replaces
+        // placing a chest draws a loot seed of its own (sub_14775E430); the piece's marker then replaces it
         random();
         choice.mLootSeed = FeatureRandom::nextInt(random);
         return choice;
@@ -142,7 +142,7 @@ namespace {
         } else if (block.mBlockActor == "minecraft:bed") {
             actors.getOrCreate<BedBlockActor>(position).setColor(RED_BED_COLOR);
         } else if (block.mMarker == "Villager") {
-            // the game spawns the old villager, which turns into this one on its first tick
+            // the game spawns the old villager: it turns into this one on its first tick
             level.addGeneratedEntity(generatedMob(VillagerV2Actor::IDENTIFIER, position));
         } else if (block.mMarker == "Zombie Villager") {
             level.addGeneratedEntity(generatedMob(ZombieVillagerV2Actor::IDENTIFIER, position));

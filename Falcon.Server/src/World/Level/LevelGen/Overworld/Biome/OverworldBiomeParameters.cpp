@@ -263,10 +263,8 @@ namespace {
         }
     }
 
-    /**
-     * The game's port of the overworld biome builder (sub_14CDF2910 with the slices sub_14CDB9F30, sub_14CDC0FC0,
-     * sub_14CDC6D90 and sub_14CDCBF50), for a new world with every vanilla biome.
-     */
+    // sub_14CDF2910 with the slices sub_14CDB9F30, sub_14CDC0FC0, sub_14CDC6D90 and sub_14CDCBF50, for a new world
+    // with every vanilla biome
     class Builder {
     public:
         explicit Builder(std::function<void(const Space &, int32_t)> add) : mAdd(std::move(add)) {}

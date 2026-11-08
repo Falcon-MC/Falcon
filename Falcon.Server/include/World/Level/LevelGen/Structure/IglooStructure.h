@@ -11,10 +11,8 @@ class Level;
 class LevelChunk;
 class StructureTerrain;
 
-/**
- * Igloos: the temple starts of the snowy biomes. The pieces turn around the north west corner of the start chunk
- * and may reach into the neighbouring chunks, so every chunk writes its own share of the starts around it.
- */
+// the temple starts of the snowy biomes; pieces turn around the start chunk's north west corner and may reach the
+// neighbouring chunks: every chunk writes its share of the starts around it
 class IglooStructure {
 public:
     struct PlacedBlock {

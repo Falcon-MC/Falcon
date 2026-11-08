@@ -191,7 +191,7 @@ void TheEndDecorationFeature::_placeChorus(std::mt19937 &random, int32_t x, int3
 
     for (const Vector3i &plant: plants) {
         const BlockState state = mRoot->getBlockAt(plant.x, plant.y, plant.z);
-        // measured against BDS: a generated plant does not connect down to the end stone it grows on
+        // measured against the game: a generated plant does not connect down to the end stone it grows on
         mRoot->setBlockStateAt(plant.x, plant.y, plant.z, ChorusPlantBlock::connectedState(state, [&](int face) {
             const Vector3i other = PlacementOrientation::relativePosition(plant, face);
             const BlockState &neighbour = mRoot->getBlockAt(other.x, other.y, other.z);

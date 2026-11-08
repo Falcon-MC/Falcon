@@ -5,10 +5,8 @@
 #include <string>
 #include <vector>
 
-// the Molang subset the overworld feature rules and scatter features write their scatter with: numbers, the
-// variables and queries below, query.has_biome_tag, math.ceil, math.max, math.random and math.random_integer,
-// arithmetic, comparisons, && and || and the ternary;
-// evaluated in floats like the game
+// the Molang subset of the feature rules' scatter: numbers, the variables and queries below, query.has_biome_tag,
+// math.ceil, math.max, math.random, math.random_integer, arithmetic, comparisons, &&, || and ?:; floats like the game
 class FeatureExpression {
 public:
     class Context {

@@ -117,7 +117,7 @@ namespace {
 
 bool OverworldTreePlacer::place(BlockManager &blocks, const Definition &tree, const Fancy *fancy, const Mega *mega,
                                 int32_t x, int32_t y, int32_t z, std::mt19937 &random, const Decorate &decorate) {
-    // VanillaTreeFeature::place (sub_14A2C9A20): the trunk height first, then the trunk, which places the canopy
+    // VanillaTreeFeature::place (sub_14A2C9A20): the trunk height first, then the trunk; the trunk places the canopy
     if (tree.mTrunk == Trunk::Fancy) {
         // sub_14A291F30
         const int32_t height = fancy->mBase + nextInt(random, fancy->mVariance);
@@ -199,8 +199,7 @@ bool OverworldTreePlacer::_simpleTrunk(BlockManager &blocks, const Definition &t
 
 bool OverworldTreePlacer::_fancyTrunk(BlockManager &blocks, const Definition &tree, const Fancy &fancy, int32_t x,
                                       int32_t y, int32_t z, int32_t height, std::mt19937 &random) {
-    // FancyTreeTrunk::place (sub_14A290E90); the line checks against the list the vanilla trees leave empty always
-    // pass
+    // FancyTreeTrunk::place (sub_14A290E90); its line checks always pass: the vanilla trees leave their list empty
     if (!mayGrowOn(blocks.getBlockAt(x, y - 1, z)))
         return false;
 
@@ -474,8 +473,8 @@ void OverworldTreePlacer::_baseCluster(BlockManager &blocks, const Mega &mega, i
 
 bool OverworldTreePlacer::_megaPineCanopy(BlockManager &blocks, const Definition &tree, const Mega &mega, int32_t x,
                                           int32_t y, int32_t z, std::mt19937 &random) {
-    // MegaPineCanopy::place (sub_1471C6830): from the bottom up to the trunk's top, a disc around the core whose
-    // radius grows with the depth below the top, widened by one on even layers that keep the previous radius
+    // MegaPineCanopy::place (sub_1471C6830): bottom up to the trunk's top, a disc around the core, its radius
+    // growing with the depth below the top, widened by one on even layers keeping the previous radius
     const int32_t height = drawRange(random, mega.mCanopyHeight);
     const int32_t core = mega.mCoreWidth;
     const BlockState leaves = tree.mLeaves().toBlockState();
@@ -564,9 +563,8 @@ bool OverworldTreePlacer::_simpleCanopy(BlockManager &blocks, const Definition &
 void OverworldTreePlacer::_hangCanopyVines(BlockManager &blocks, const Definition &tree, int32_t x, int32_t y,
                                            int32_t z, int32_t minOffset, int32_t maxOffset, float slope,
                                            std::mt19937 &random) {
-    // the canopy's second pass in sub_1471CB0F0: every leaf of the full squares, corners included, decorated on
-    // x - 1, x + 1, z - 1 then z + 1 (sub_1471CB880); a vine goes into air and hangs on down while there is air
-    // (sub_1471CCB60)
+    // second pass of sub_1471CB0F0: every leaf of the full squares, corners included, decorated on x - 1, x + 1,
+    // z - 1 then z + 1 (sub_1471CB880); a vine goes into air and hangs down through air (sub_1471CCB60)
     static const int32_t SIDES[4][3] = {{-1, 0, 8}, {1, 0, 2}, {0, -1, 1}, {0, 1, 4}};
     static const BlockState vine = VanillaBlocks::VINE().toBlockState();
     const std::string leaves = tree.mLeaves().getIdentifier();
@@ -604,8 +602,8 @@ void OverworldTreePlacer::_hangCanopyVines(BlockManager &blocks, const Definitio
 
 bool OverworldTreePlacer::_spruceCanopy(BlockManager &blocks, const Definition &tree, int32_t x, int32_t y, int32_t z,
                                         std::mt19937 &random) {
-    // SpruceTreeCanopy::place (sub_1471CC3E0): from the ground under the trunk, layers widening by one and falling
-    // back to 0 or 1 each time they reach a threshold that grows up to the radius
+    // SpruceTreeCanopy::place (sub_1471CC3E0): from the ground under the trunk, layers widening by one, back to 0
+    // or 1 at each threshold; the threshold grows up to the radius
     int32_t ground = y;
     while (!mayGrowOn(blocks.getBlockAt(x, ground - 1, z))) {
         if (ground <= LevelChunk::MIN_Y)
@@ -684,8 +682,7 @@ bool OverworldTreePlacer::_pineCanopy(BlockManager &blocks, const Definition &tr
 
 void OverworldTreePlacer::_vines(BlockManager &blocks, const Definition &tree, int32_t x, int32_t y, int32_t z,
                                  std::mt19937 &random) {
-    // sub_1471CB880 on the four sides, x - 1, x + 1, z - 1 then z + 1; a chance at or above 100 draws nothing,
-    // and so does none
+    // sub_1471CB880 on the four sides, x - 1, x + 1, z - 1 then z + 1; no draw at a chance of 0 or of 100 and more
     if (tree.mVineChance <= 0.0f)
         return;
 

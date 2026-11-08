@@ -143,8 +143,8 @@ namespace {
         return noise.getValue(x, z);
     }
 
-    // query.heightmap (sub_145E2C6D0) reads the chunk's heightmap, which the game computes once the terrain is
-    // carved and does not update while features are placed; the generator keeps the highest non-air block there
+    // query.heightmap (sub_145E2C6D0): the game computes it once the terrain is carved, never while features
+    // are placed; the generator keeps the highest non-air block there
     int32_t heightmapAt(Level &level, int32_t x, int32_t z) {
         LevelChunk *chunk = level.peekChunkPtr(x >> 4, z >> 4);
         if (chunk == nullptr)
@@ -200,13 +200,12 @@ namespace {
         return LevelChunk::MIN_Y;
     }
 
-    // what the game hands every rule and the features it places besides their position and random: the chunk's
-    // decoration random of sub_14CDD4880 in the render params, which math.random draws its nextFloat from
-    // (sub_1437FBE80, sub_140AE3310), and the generator's preliminary surface levels (sub_145C321F0)
+    // the render params of sub_14CDD4880: the chunk's decoration random, math.random's nextFloat source
+    // (sub_1437FBE80, sub_140AE3310), and the preliminary surface levels (sub_145C321F0)
     struct PlacementContext {
         std::mt19937 *mDecoration = nullptr;
         const OverworldClimate *mClimate = nullptr;
-        // the second value of Random::nextGaussian, which the Random keeps for its next call
+        // the second value of Random::nextGaussian, kept for its next call
         const std::mt19937 *mGaussianOwner = nullptr;
         float mGaussian = 0.0f;
     };
@@ -648,8 +647,8 @@ struct OverworldRulePlacer::WeightedDefinition {
     std::vector<std::pair<Placed, int32_t>> mFeatures;
 };
 
-// a minecraft:aggregate_feature (place sub_14A2DDCA0): every feature at the same position, early_out 1 stopping
-// while none has been placed and 2 at the first that is
+// a minecraft:aggregate_feature (place sub_14A2DDCA0): every feature at the same position; early_out 1 stops
+// while none has been placed, 2 at the first placed
 struct OverworldRulePlacer::AggregateDefinition {
     const char *mIdentifier;
     std::vector<Placed> mFeatures;
@@ -782,14 +781,14 @@ struct OverworldRulePlacer::VegetationPatchDefinition {
     int32_t mRadiusMax;
     // floor grows the disk downward, ceiling upward
     bool mFloor;
-    // the vegetation feature placed on a share of the ground: a weighted set of blocks, drawn even when empty so
-    // the shared placement random stays in step across the rule's iterations
+    // the vegetation on a share of the ground: weighted blocks, drawn even when empty to keep the shared
+    // placement random in step across the rule's iterations
     std::vector<std::pair<Block (*)(), int32_t>> mVegetation;
     // a feature placed instead of the weighted blocks: the moss ceiling's cave vines, the clay's dripleaves
     Placed mVegetationFeature;
     float mVegetationChance;
-    // the ground's surface turns to water where it is closed on its four sides and below, the vegetation then
-    // placed in that water rather than above it
+    // the surface turns to water where closed on its four sides and below; the vegetation goes in that water,
+    // not above it
     bool mWaterlogged;
 };
 
@@ -1547,8 +1546,8 @@ void OverworldRulePlacer::drawBiomeRules(BlockManager &blocks, const LevelChunk 
 
 void OverworldRulePlacer::_drawUnported(BlockManager &blocks, const LevelChunk &chunk, const BiomeFeatureEntry &entry,
                                         uint32_t decorationSeed) {
-    // a rule the placer does not port still draws its math.random from the decoration random the ported rules
-    // after it share, for its chance, its iterations and, when they draw, its coordinates
+    // an unported rule still draws math.random from the decoration random shared with the ported rules after it:
+    // its chance, its iterations and, when they draw, its coordinates
     // runs for every unported rule of every chunk: searched in place, without a lowercased copy
     const auto draws = [](const std::string &text) {
         static const std::string RANDOM = "math.random";
@@ -1659,8 +1658,7 @@ bool OverworldRulePlacer::placeOreVein(BlockManager &blocks, int32_t count, Bloc
 
 bool OverworldRulePlacer::_placeFossil(BlockManager &blocks, const FossilDefinition &fossil, int32_t x, int32_t y,
                                        int32_t z, std::mt19937 &random, uint32_t integritySeed) {
-    // FossilFeature::place (sub_14D209B60); the game first gives up inside the bounds of a structure, which the
-    // generator does not track yet
+    // FossilFeature::place (sub_14D209B60); the game first gives up inside a structure's bounds, not tracked yet
     static const char *const TEMPLATES[] = {
             "fossils/fossil_spine_01.nbt", "fossils/fossil_spine_02.nbt", "fossils/fossil_spine_03.nbt",
             "fossils/fossil_spine_04.nbt", "fossils/fossil_skull_01.nbt", "fossils/fossil_skull_02.nbt",
@@ -1689,7 +1687,7 @@ bool OverworldRulePlacer::_placeFossil(BlockManager &blocks, const FossilDefinit
     const int32_t startY = std::max(lowest - nextInt(random, 10) - 15, LevelChunk::MIN_Y + 10);
     const int32_t startZ = z + offsetZ;
 
-    // the pieces turn around their first block, so the far corner depends on the rotation
+    // the pieces turn around their first block: the far corner depends on the rotation
     const int32_t lastX = piece->getSizeX() - 1;
     const int32_t lastZ = piece->getSizeZ() - 1;
     const int32_t farX[] = {startX + lastX, startX - lastZ, startX - lastX, startX + lastZ};
@@ -1709,8 +1707,8 @@ bool OverworldRulePlacer::_placeFossil(BlockManager &blocks, const FossilDefinit
     if (emptyCorners > fossil.mMaxEmptyCorners)
         return false;
 
-    // the game places the piece twice with one integrity seed: the second pass draws the same numbers, so it only
-    // turns a tenth of the blocks of the first into ore, and its match at chance 1 draws nothing
+    // the game places the piece twice with one integrity seed: the second pass draws the same numbers, only
+    // turns a tenth of the first's blocks into ore, and its match at chance 1 draws nothing
     std::mt19937 integrity(integritySeed);
     const BlockState ore(fossil.mOre);
     for (const StructureTemplate::BlockEntry &entry: piece->getBlocks()) {
@@ -2393,9 +2391,8 @@ bool OverworldRulePlacer::_placePotentSulfurSearch(BlockManager &blocks, int32_t
 
 bool OverworldRulePlacer::_placeLargeDripstone(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
                                                std::mt19937 &random) {
-    // the game's large dripstone (sub_14D21B810, vtable 0x14F4A1470): radius 3 to 18 at most a third of the cave,
-    // stalactite bluntness 0.3 to 0.9, stalagmite bluntness 0.4 to 1, height scale 0.4 to 2, a wind of 0 to 0.3
-    // from radius 4 and bluntness 0.6
+    // the game's large dripstone (sub_14D21B810, vtable 0x14F4A1470): radius 3 to 18, at most a third of the cave;
+    // bluntness 0.3..0.9 up, 0.4..1 down; height scale 0.4..2; wind 0..0.3 from radius 4 and bluntness 0.6
     struct LargeDripstone {
         int32_t mX;
         int32_t mY;
@@ -2580,8 +2577,8 @@ bool OverworldRulePlacer::_placeLargeDripstone(BlockManager &blocks, int32_t x, 
 
 bool OverworldRulePlacer::_placeMultiface(BlockManager &blocks, const MultifaceDefinition &multiface, int32_t x,
                                           int32_t y, int32_t z, std::mt19937 &random) {
-    // the game shuffles the faces with a thread local random seeded from the system (sub_140391AB0), so which face
-    // it tries first, and where it spreads, cannot be reproduced: the faces are tried in their listed order
+    // the game shuffles the faces with a system-seeded thread local random (sub_140391AB0): the first face and
+    // the spread can't be reproduced, the faces are tried in their listed order
     const BlockState &start = blocks.getBlockAt(x, y, z);
     if (!DecorationSupport::isAir(start) && !isWater(start))
         return false;
@@ -2597,7 +2594,7 @@ bool OverworldRulePlacer::_placeMultiface(BlockManager &blocks, const MultifaceD
                 others.push_back(other);
         }
 
-        // every step of the search range offsets the start once, so they all try the same block
+        // every step of the search range offsets the start once: they all try the same block
         const int32_t nextX = x + FACE_STEPS[face][0];
         const int32_t nextY = y + FACE_STEPS[face][1];
         const int32_t nextZ = z + FACE_STEPS[face][2];
@@ -2788,9 +2785,8 @@ bool OverworldRulePlacer::_placeVegetationPatch(BlockManager &blocks, const Vege
             if (!DecorationSupport::isAir(blocks.getBlockAt(columnX, columnY, columnZ)))
                 continue;
 
-            // the surface must hold the vegetation: a full block stands in for the game's sturdy face test
-            // (sub_147A83F50) on the face toward the air; whether it may be replaced is only known after the depth
-            // is drawn
+            // a full block stands in for the game's sturdy face test (sub_147A83F50) toward the air; whether the
+            // surface may be replaced is only known once the depth is drawn
             const int32_t top = columnY + step;
             if (!DecorationSupport::isFullBlock(blocks.getBlockAt(columnX, top, columnZ)))
                 continue;
@@ -2826,9 +2822,8 @@ bool OverworldRulePlacer::_placeVegetationPatch(BlockManager &blocks, const Vege
     }
 
     if (patch.mWaterlogged) {
-        // a full block stands in for the game's sturdy face test (sub_147A83F50) on the south face of the block
-        // north of the surface, the west face east of it, the north face south of it, the east face west of it and
-        // the top of the block below
+        // a full block stands in for the game's sturdy face test (sub_147A83F50) on each neighbour's face toward
+        // the surface: the four sides and the top of the block below
         std::vector<int32_t> closed;
         for (size_t i = 0; i + 2 < columns.size(); i += 3) {
             const int32_t cx = columns[i];
@@ -3246,7 +3241,7 @@ bool OverworldRulePlacer::_placeKelp(BlockManager &blocks, int32_t x, int32_t y,
 
 bool OverworldRulePlacer::_placeGeode(BlockManager &blocks, const GeodeDefinition &geode, int32_t x, int32_t y,
                                       int32_t z, std::mt19937 &random) {
-    // GeodeFeature::place (sub_14D20B390); the structure overlap test that comes first has no counterpart here
+    // GeodeFeature::place (sub_14D20B390); its leading structure overlap test has no counterpart here
     const int32_t pointCount = between(random, geode.mMinDistributionPoints, geode.mMaxDistributionPoints);
     const NormalNoise noise(random, -4, {1.0f});
 
@@ -3274,7 +3269,7 @@ bool OverworldRulePlacer::_placeGeode(BlockManager &blocks, const GeodeDefinitio
         const int32_t pointY = y + between(random, geode.mMinOuterWallDistance, geode.mMaxOuterWallDistance);
         const int32_t pointZ = z + between(random, geode.mMinOuterWallDistance, geode.mMaxOuterWallDistance);
 
-        // the block and its liquid, which is the block itself when the second layer is empty
+        // the block and its liquid: the block itself when the second layer is empty
         const BlockState &extra = blocks.getExtraBlockAt(pointX, pointY, pointZ);
         if (refusesGeodePoint(blocks.getBlockAt(pointX, pointY, pointZ))
             || (!DecorationSupport::isAir(extra) && refusesGeodePoint(extra))) {
@@ -3443,9 +3438,8 @@ bool OverworldRulePlacer::_placeGeode(BlockManager &blocks, const GeodeDefinitio
 
 void OverworldRulePlacer::_placeLegacyTrees(BlockManager &blocks, const LegacyTreeDefinition &trees, int32_t x,
                                             int32_t y, int32_t z, std::mt19937 &random) {
-    // LegacyTreeFeature::place (sub_14D224440): nine times in ten the density plus up to 2 more, or for a density
-    // below 1 one tree with that chance; otherwise the density scaled by a float; only the swamp's seagrass reads the
-    // rule's y
+    // LegacyTreeFeature::place (sub_14D224440): 9 in 10 the density plus up to 2, or one tree at that chance below
+    // 1; else the density scaled by a float; only the swamp's seagrass reads the rule's y
     const float density = trees.mDensity;
     int32_t count = 0;
     if (nextInt(random, 10) != 0) {
@@ -3542,7 +3536,7 @@ bool OverworldRulePlacer::_placeMushroom(BlockManager &blocks, Block (*mushroom)
 bool OverworldRulePlacer::_placeBeehiveSearch(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
                                               std::mt19937 &random) {
     // beehive_search_feature: up to 12 blocks up the trunk, select_beehive_feature picking one of three side orders,
-    // each side a beehive_feature that draws its block before checking where it attaches
+    // each side a beehive_feature drawing its block before checking where it attaches
     static const int32_t EAST[2] = {1, 0};
     static const int32_t SOUTH[2] = {0, 1};
     static const int32_t WEST[2] = {-1, 0};
@@ -3583,9 +3577,8 @@ bool OverworldRulePlacer::_placeBeehiveSearch(BlockManager &blocks, int32_t x, i
 }
 
 void OverworldRulePlacer::_placeSprings(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random) {
-    // LegacySpringsFeature::place (sub_14D21E680) for worlds of the 1.18 terrain: 25 water springs anywhere from
-    // the bottom of the world up to 192, then 20 lava springs biased towards the bottom, kept out of the deep dark;
-    // z, then y, then x
+    // LegacySpringsFeature::place (sub_14D21E680), 1.18 terrain: 25 water springs from the bottom up to 192, then
+    // 20 lava springs biased low, out of the deep dark; z, then y, then x
     static const BlockState water = VanillaBlocks::WATER().toBlockState();
     static const BlockState lava = VanillaBlocks::LAVA().toBlockState();
     for (int32_t spring = 0; spring < 25; spring++) {
@@ -3656,9 +3649,8 @@ void OverworldRulePlacer::_placeLegacyIce(BlockManager &blocks, int32_t x, int32
 }
 
 void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random) {
-    // the game's iceberg feature (sub_14D215C00, vtable 0x14F4A0F30) at sea level: a round iceberg, or one in five an
-    // elliptic one, its part under the sea, then smoothed, and most of the time a cut through it (sub_14D217330);
-    // in floats, with the game's own draws
+    // the game's iceberg feature (sub_14D215C00, vtable 0x14F4A0F30) at sea level, in floats: round or 1 in 5
+    // elliptic, its underwater part, smoothing, then most of the time a cut through it (sub_14D217330)
     static const BlockState air = VanillaBlocks::AIR().toBlockState();
     static const BlockState water = VanillaBlocks::WATER().toBlockState();
     static const BlockState snow = VanillaBlocks::SNOW().toBlockState();
@@ -3940,7 +3932,7 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
 bool OverworldRulePlacer::_placeBlueIce(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
                                         std::mt19937 &random) {
     // the game's blue ice feature (sub_147174460): under the sea, in or over water and next to packed ice, then 200
-    // tries around it that keep one to four blue ice neighbours
+    // tries around it keeping one to four blue ice neighbours
     static const BlockState blueIce = VanillaBlocks::BLUE_ICE().toBlockState();
     if (y >= 63)
         return false;
@@ -3989,9 +3981,8 @@ bool OverworldRulePlacer::_placeBlueIce(BlockManager &blocks, int32_t x, int32_t
 }
 
 void OverworldRulePlacer::_placeForestFoliage(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random) {
-    // LegacyForestFoliageFeature::place (vtable 0x14F4A14C0, sub_14D21D0B0) with the forest's type 1: nextInt(5) - 3
-    // groups of one double plant, each tried five times at a column of the chunk and a height below its heightmap
-    // plus 32
+    // LegacyForestFoliageFeature::place (vtable 0x14F4A14C0, sub_14D21D0B0), forest type 1: nextInt(5) - 3 groups
+    // of one double plant, each tried 5 times at a chunk column, below its heightmap plus 32
     static Block (*const PLANTS[3])() = {&VanillaBlocks::LILAC, &VanillaBlocks::ROSE_BUSH, &VanillaBlocks::PEONY};
     for (int32_t group = nextInt(random, 5) - 3; group > 0; group--) {
         Block (*const plant)() = PLANTS[nextInt(random, 3)];
@@ -4008,8 +3999,8 @@ void OverworldRulePlacer::_placeForestFoliage(BlockManager &blocks, int32_t x, i
 }
 
 void OverworldRulePlacer::_placeForestRocks(BlockManager &blocks, int32_t x, int32_t z, std::mt19937 &random) {
-    // the legacy forest rock feature (vtable 0x14F4A14F0, place sub_14D21D7B0): nextInt(3) rocks, each at a column of the
-    // chunk, z drawn first, from its heightmap; the rule's y is not read
+    // the legacy forest rock feature (vtable 0x14F4A14F0, place sub_14D21D7B0): nextInt(3) rocks, each at a chunk
+    // column, z drawn first, from its heightmap; the rule's y is not read
     for (int32_t rock = nextInt(random, 3); rock > 0; rock--) {
         const int32_t rockZ = z + nextInt(random, 16);
         const int32_t rockX = x + nextInt(random, 16);

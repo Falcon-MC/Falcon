@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 
-// float spline that keeps going along the end derivatives past its points, like the game (sub_1471C1360)
+// float spline extrapolating along the end derivatives past its points, like the game (sub_1471C1360)
 class TerrainSpline {
 public:
     enum class Coordinate : uint8_t {

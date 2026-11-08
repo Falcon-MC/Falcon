@@ -25,10 +25,8 @@ struct EndSpike {
     Vector3f getCrystalPosition() const;
 };
 
-/**
- * The ten obsidian spikes around the End island. The world generator, the dragon fight and the dragon all read the
- * same list, rebuilt from the level seed each time (sub_147169970).
- */
+// the world generator, the dragon fight and the dragon all read this list, rebuilt from the level seed each time
+// (sub_147169970)
 class EndSpikes {
 public:
     using BlockSink = std::function<void(int32_t x, int32_t y, int32_t z, const BlockState &state)>;
@@ -39,10 +37,8 @@ public:
 
     static std::vector<EndSpike> create(uint32_t seed);
 
-    /**
-     * The blocks of one spike without its crystal (sub_1471E8880). clearAbove also empties the column above y 66,
-     * which the world generator and the respawn sequence do but the first dragon spawn does not.
-     */
+    // sub_1471E8880, without the crystal; clearAbove empties the column above y 66: the world generator and the
+    // respawn do it, the first dragon spawn does not
     static void place(const EndSpike &spike, bool clearAbove, const BlockSink &sink);
 
     static const BlockState &getCrystalBaseState();

@@ -8,10 +8,7 @@
 #include <string>
 #include <vector>
 
-/**
- * A structure piece as the game ships it. Palette entries keep the block names and properties of the file, which
- * are not the names and states the server uses.
- */
+// a piece as the game ships it: palette entries keep the file's block names and properties, not the server's
 class StructureTemplate {
 public:
     struct PaletteEntry {

@@ -10,9 +10,7 @@ class ChunkGenerator;
 class Level;
 class LevelChunk;
 
-/**
- * Shipwrecks. The whole wreck is decided in its start chunk, then every chunk it reaches writes its share.
- */
+// the whole wreck is decided in its start chunk, then every chunk it reaches writes its share
 class ShipwreckStructure {
 public:
     struct PlacedBlock {

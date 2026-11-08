@@ -9,11 +9,7 @@ namespace {
 constexpr int64_t GOLDEN_RATIO_64 = static_cast<int64_t>(0x9E3779B97F4A7C15ULL);
 constexpr int64_t SILVER_RATIO_64 = static_cast<int64_t>(0x6A09E667F3BCC909ULL);
 
-/**
- * The generator's random streams are defined on signed 64-bit arithmetic with logical
- * shifts; every operation goes through uint64_t so overflow stays well-defined in C++ and
- * the sequence matches bit for bit.
- */
+// signed 64-bit arithmetic with logical shifts: everything goes through uint64_t, overflow stays defined
 int64_t unsignedShiftRight(int64_t value, int32_t bits) {
     return static_cast<int64_t>(static_cast<uint64_t>(value) >> bits);
 }

@@ -7,11 +7,8 @@
 class ChunkGenerator;
 class Level;
 
-/**
- * The game's nearest-biome search, as /locate biome runs it. findNearest only reads the
- * generator's biome source and noise terrain, so it can run off the main thread; findOpening
- * reads loaded chunks and belongs to the main thread.
- */
+// /locate biome; findNearest reads only the biome source and noise terrain (any thread), findOpening reads
+// loaded chunks (main thread)
 class BiomeSearch {
 public:
     struct Result {
