@@ -180,7 +180,6 @@ public:
 
     void tickFire(ServerNetworkHandler &owner);
 
-
     virtual PhysicsComponent getPhysics() const;
 
     virtual bool hasGravity() const {

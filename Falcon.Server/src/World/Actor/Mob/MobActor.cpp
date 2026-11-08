@@ -2077,7 +2077,10 @@ bool MobActor::burnsInDaylight() const {
 
 // anything in protection_slot (the head by default) blocks the fire and is not worn: sub_14CE80670
 bool MobActor::shieldFromSunlight() const {
-    return !mEquipment.getSlot(MobEquipment::HEAD).isAir();
+    const json::Value *component = getComponent(BURNS_IN_DAYLIGHT_COMPONENT);
+    const json::Value *slotName = component == nullptr ? nullptr : component->get("protection_slot");
+    const int slot = slotName == nullptr ? MobEquipment::HEAD : MobEquipment::slotIndexOf(slotName->string());
+    return !mEquipment.getSlot(slot < 0 ? MobEquipment::HEAD : slot).isAir();
 }
 
 std::vector<std::string> MobActor::getFamilies() const {
