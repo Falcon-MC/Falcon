@@ -76,7 +76,7 @@ namespace {
         return state.mStates.contains("minecraft:connection_east");
     }
 
-    // a fence also takes a gate whose bar runs across the side, which a pane does not
+    // fences take a gate across the side; panes do not
     bool gateConnects(const BlockState &post, const BlockState &neighbour, int32_t sideX, int32_t sideZ) {
         if (VanillaBlocks::getAs<FenceBlock>(post.mName) == nullptr || !neighbour.mStates.contains("in_wall_bit"))
             return false;

@@ -1755,6 +1755,22 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     return feature;
 }
 
+bool OverworldRulePlacer::placeFeature(BlockManager &blocks, const std::string &feature, int32_t x, int32_t y,
+                                       int32_t z, std::mt19937 &random) {
+    BiomeFeatureEntry entry;
+    entry.mFeature = feature;
+    const Feature found = _find(entry);
+    if (found.mLegacyTree != nullptr) {
+        _placeLegacyTrees(blocks, *found.mLegacyTree, x, y, z, random);
+        return true;
+    }
+    if (!found.mPlaced.isSet())
+        return false;
+
+    _place(blocks, found.mPlaced, x, y, z, random);
+    return true;
+}
+
 bool OverworldRulePlacer::handles(const BiomeFeatureEntry &entry) {
     if (!_find(entry).isPorted() || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
         return false;

@@ -9,8 +9,7 @@ namespace {
     using Test = StructureProcessors::Test;
     using Rule = StructureProcessors::Rule;
 
-    // the village lists of sub_14CCD0800 in the order the game registers them; the farm outputs are the crops
-    // fully grown and the campfire is put out
+    // sub_14CCD0800, in registration order
     const std::unordered_map<std::string, std::vector<Rule>> &lists() {
         static const std::unordered_map<std::string, std::vector<Rule>> LISTS = {
             {"minecraft:cobblestone_building_low_decay",
@@ -215,7 +214,7 @@ namespace {
         return LISTS;
     }
 
-    // Random::chance (sub_1402FF250): never below zero, always from one, else one draw
+    // sub_1402FF250: no draw at or past the bounds
     bool chance(std::mt19937 &random, float probability) {
         if (probability <= 0.0f)
             return false;
@@ -232,7 +231,7 @@ namespace {
             case Test::BlockMatch:
                 return block.mName == name;
             case Test::RandomBlockMatch:
-                // the name is compared first, so a block of another name draws nothing
+                // name first: another block draws nothing
                 return block.mName == name && chance(random, probability);
         }
         return false;
@@ -259,7 +258,6 @@ const std::vector<StructureProcessors::Rule> &StructureProcessors::get(const std
 
 BlockState StructureProcessors::apply(const std::vector<const Rule *> &rules, const BlockState &block,
                                       const BlockState &world, std::mt19937 &random) {
-    // sub_14775E430: the input test sees the block as the earlier rules left it, the location test the world
     BlockState current = block;
     for (const Rule *rule : rules) {
         if (!passes(rule->mInput, rule->mInputBlock, rule->mProbability, current, random))

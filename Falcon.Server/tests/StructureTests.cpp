@@ -1,5 +1,6 @@
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+#include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
@@ -25,7 +26,6 @@ namespace {
         return out;
     }
 
-    // a seed whose first draw, as Random::nextFloat reads it, is below or above the probability
     uint32_t seedDrawing(float probability, bool below) {
         for (uint32_t seed = 1;; ++seed) {
             std::mt19937 random(seed);
@@ -42,7 +42,6 @@ namespace {
         const BlockState air("minecraft:air");
         const auto mossy = rules("minecraft:cobblestone_building_low_decay");
 
-        // a block of another name never reaches the random
         std::mt19937 untouched(7);
         const BlockState dirt = StructureProcessors::apply(mossy, BlockState("minecraft:dirt"), air, untouched);
         std::mt19937 fresh(7);
@@ -57,7 +56,6 @@ namespace {
                         == "minecraft:cobblestone",
                 "A draw over the probability replaced the cobblestone");
 
-        // every rule runs on what the earlier ones left: a pane that stays glass is then browned
         const auto decay = rules("minecraft:abandoned_plains_decay");
         std::mt19937 web(seedDrawing(0.5f, true));
         require(StructureProcessors::apply(decay, BlockState("minecraft:glass_pane"), air, web).mName
@@ -68,8 +66,7 @@ namespace {
                         == "minecraft:brown_stained_glass_pane",
                 "The pane kept its colour");
 
-        // the location test reads the world: a street over water becomes a bridge, which the later water rule no
-        // longer matches
+        // bridge over water: the later water rule no longer matches
         std::mt19937 any(1);
         require(StructureProcessors::apply(rules("minecraft:plains_path_decay"), BlockState("minecraft:grass_block"),
                                            BlockState("minecraft:water"), any)
@@ -84,13 +81,20 @@ namespace {
                 "The farm crop is not fully grown beetroot");
     }
 
+    void checkStyles() {
+        require(BiomeChunkGenDataRegistry::getVillageType(BiomeIds::DESERT) == 0, "Desert is no desert village");
+        require(BiomeChunkGenDataRegistry::getVillageType(BiomeIds::ICE_PLAINS) == 1, "Ice plains are not snowy");
+        require(BiomeChunkGenDataRegistry::getVillageType(BiomeIds::COLD_TAIGA) == 3, "Cold taiga is not taiga");
+        require(BiomeChunkGenDataRegistry::getVillageType(BiomeIds::FOREST) == 4, "A forest village is not plains");
+    }
+
     void checkVillage() {
         const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
         const std::mt19937 stream = StructureFeature::createPostProcessRandom(42, -92, -27);
         require(stream == std::mt19937(StructureFeature::getPostProcessSeed(42, -92, -27)),
                 "The post process seed does not seed the post process random");
 
-        // seed 42 has a plains village at chunk -92, -27, whose centre BDS 1.26.61 places as meeting point 2
+        // BDS 1.26.61: meeting point 2 at -92, -27
         const auto first = VillageStructure::cachedPlan(*generator, -92, -27);
         require(first != nullptr && !first->empty(), "No village at -92, -27");
         require(std::string(first->front().mElement->mName) == "minecraft:plains_meeting_point_2",
@@ -115,6 +119,7 @@ int main() {
         BlockPaletteRegistry::getInstance().initialize();
         BiomeChunkGenDataRegistry::initialize();
         checkProcessors();
+        checkStyles();
         checkVillage();
     } catch (const std::exception &error) {
         std::clog << "Structure regression failed: " << error.what() << '\n';

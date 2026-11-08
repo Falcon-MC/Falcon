@@ -131,7 +131,7 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk,
     // structures go first: the game post processes them before any feature runs
     IglooStructure::place(*this, level, chunk);
     ShipwreckStructure::place(*this, level, chunk);
-    VillageStructure::place(*this, level, chunk);
+    VillageStructure::place(*this, level, chunk, overflow);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }
 

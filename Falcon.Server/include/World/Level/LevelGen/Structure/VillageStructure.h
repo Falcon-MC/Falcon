@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Level/Block/BlockState.h"
+#include "World/Level/Chunk/GeneratedBlockChange.h"
 #include "World/Level/LevelGen/Structure/JigsawAssembler.h"
 
 #include <cstdint>
@@ -10,6 +11,7 @@
 #include <tuple>
 #include <vector>
 
+class BlockManager;
 class ChunkGenerator;
 class Level;
 class LevelChunk;
@@ -40,28 +42,28 @@ public:
         std::string mIdentifier;
     };
 
-    // what the pieces of one village leave in one chunk, before fences, panes and stairs are shaped
+    // one village's blocks in one chunk, before shaping
     struct ChunkShare {
         std::map<Position, BlockState> mBlocks;
         std::vector<Chest> mChests;
         std::vector<Bed> mBeds;
+        std::vector<Position> mFurnaces;
         std::vector<Mob> mMobs;
     };
 
     static std::vector<JigsawPiece> plan(const ChunkGenerator &generator, int32_t startX, int32_t startZ);
 
-    // the plan of a start, kept for the chunks the village reaches; null when the chunk is no village start
+    // null when the chunk is no village start
     static std::shared_ptr<const std::vector<JigsawPiece>> cachedPlan(const ChunkGenerator &generator,
                                                                       int32_t startX, int32_t startZ);
 
-    // the blocks, chests and mobs the pieces put in a chunk, each piece as the chunk's post process places it
+    // without features, feature pieces are skipped and draw nothing
     static ChunkShare placeInChunk(const ChunkGenerator &generator, const std::vector<JigsawPiece> &pieces,
-                                   int32_t chunkX, int32_t chunkZ, StructureTerrain &terrain);
+                                   int32_t chunkX, int32_t chunkZ, StructureTerrain &terrain,
+                                   BlockManager *features = nullptr);
 
-    // adds the rigid pieces of every village near this chunk to the terrain beard
     static void addBeard(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ, TerrainBeard &beard);
 
-    // writes the share of every village reaching this chunk: its blocks shaped against their neighbours, its chests
-    // and its mobs
-    static void place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk);
+    static void place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk,
+                      std::vector<GeneratedBlockChange> *overflow);
 };

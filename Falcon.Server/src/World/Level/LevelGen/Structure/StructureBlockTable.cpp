@@ -382,8 +382,7 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
     }
 
     if (name == "minecraft:torch") {
-        // the game names a torch standing (sub_1469994B0); a facing in the file names the side the flame leans to,
-        // the state the side of the wall behind it
+        // standing by name (sub_1469994B0); a file facing is the flame side, the state the wall side
         states.putString("torch_facing_direction", entry.mProperties.count("facing") == 0
                                                            ? std::string("top")
                                                            : rotatedFacing(entry, quarterTurns + 2));
@@ -455,22 +454,22 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
         return true;
     }
 
-    // what follows was measured on the villages BDS 1.26.61 saves (seed 42, every style)
+    // measured on BDS 1.26.61 villages
     const Tag *defaults = BlockPaletteRegistry::getInstance().getDefaultStates(name);
     if (defaults != nullptr && defaults->contains("minecraft:connection_east")) {
-        // fences and panes are shaped from their neighbours once the piece is down
+        // shaped from neighbours once placed
         out = BlockState(name, *defaults);
         return true;
     }
 
     if (name.size() > 5 && name.compare(name.size() - 5, 5, "_door") == 0) {
-        // the lower half carries the direction, the upper half the hinge; each keeps the other's default
+        // lower half: direction; upper half: hinge
         const bool upper = property(entry, "half") == "upper";
         const std::string doorName = name == "minecraft:oak_door" ? "minecraft:wooden_door" : name;
         const Tag *doorDefaults = BlockPaletteRegistry::getInstance().getDefaultStates(doorName);
         if (doorDefaults == nullptr)
             return false;
-        // the default states keep the order the palette knows the block by
+        // defaults first: palette key order
         states = *doorDefaults;
         states.putString("minecraft:cardinal_direction",
                          upper ? "south" : CARDINALS[(size_t) ((cardinalIndex(property(entry, "facing")) + quarterTurns + 1) & 3)]);
