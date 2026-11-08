@@ -34,6 +34,22 @@ namespace {
                                                 &VanillaBlocks::DARK_OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f,
                                                 false, 0, 1, 0, 0, 0, false, true};
 
+    // jungle_bush_feature, jungle_tree_feature and mega_jungle_tree_feature of the 1.26.61 features
+    const Tree::SimpleCanopy BUSH_CANOPY = {-1, 1, 0, 1.0f, {{1, 2}, {1, 2}, {1, 2}}};
+    const Tree::Definition JUNGLE_BUSH = {"minecraft:jungle_bush_feature", Tree::Trunk::Simple,
+                                          &VanillaBlocks::JUNGLE_LOG, {1, 1}, {0, 0}, Tree::Canopy::Simple,
+                                          &VanillaBlocks::OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false, 0, 0,
+                                          0, 0, 0, false, false, &BUSH_CANOPY};
+    const Tree::Definition JUNGLE_TREE = {"minecraft:jungle_tree_feature", Tree::Trunk::Simple,
+                                          &VanillaBlocks::JUNGLE_LOG, {4, 11}, {0, 0}, Tree::Canopy::Simple,
+                                          &VanillaBlocks::JUNGLE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 33.33f, false, 0,
+                                          1, 1, 4, 4};
+    const Tree::Mega MEGA_JUNGLE = {2, 10, {3, 20}, {0, 0}, 0, 0.0f, 0, &VanillaBlocks::DIRT, 0, 0,
+                                    {{3, 3}, 2, 2, false}, 5, 0.5f, {2, 6}, 0.5f, 1.0f, {{2, 4}, 1, 0, true}, 1, 3};
+    const Tree::Definition MEGA_JUNGLE_TREE = {"minecraft:mega_jungle_tree_feature", Tree::Trunk::Mega,
+                                               &VanillaBlocks::JUNGLE_LOG, {0, 0}, {0, 0}, Tree::Canopy::Mega,
+                                               &VanillaBlocks::JUNGLE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false};
+
     // grass on dirt over the 3x3 chunks around the origin chunk
     std::unique_ptr<Level> flatLevel() {
         std::unique_ptr<Level> level(new Level("TreeGeneration", 1, 42, DimensionType::Overworld));
@@ -64,6 +80,83 @@ namespace {
         while (is(blocks, x, GROUND + 1 + height, z, &VanillaBlocks::DARK_OAK_LOG))
             height++;
         return height;
+    }
+
+    int32_t logHeight(BlockManager &blocks, int32_t x, int32_t z, Block (*log)()) {
+        int32_t height = 0;
+        while (is(blocks, x, GROUND + 1 + height, z, log))
+            height++;
+        return height;
+    }
+
+    void jungleBush() {
+        for (uint32_t seed = 1; seed <= 20; seed++) {
+            std::unique_ptr<Level> level = flatLevel();
+            BlockManager blocks(*level);
+            std::mt19937 random(seed);
+            require(Tree::place(blocks, JUNGLE_BUSH, nullptr, nullptr, nullptr, 4, GROUND + 1, 4, random, {}),
+                    "the bush grows on grass");
+            require(logHeight(blocks, 4, 4, &VanillaBlocks::JUNGLE_LOG) == 1, "the bush is a single log");
+            require(is(blocks, 4, GROUND, 4, &VanillaBlocks::DIRT), "the grass under the log turns to dirt");
+
+            // oak leaves of radius 2 around the log, 1 above it and 0 on top, a corner kept one time in two
+            const auto leaf = [&](int32_t x, int32_t y, int32_t z) {
+                return is(blocks, 4 + x, GROUND + 1 + y, 4 + z, &VanillaBlocks::OAK_LEAVES);
+            };
+            require(leaf(2, 0, 0) && leaf(-2, 0, 1) && leaf(0, 0, -2) && leaf(1, 1, 0) && leaf(0, 1, -1),
+                    "the layers reach 2 then 1 without their corners");
+            require(!leaf(3, 0, 0) && !leaf(2, 1, 0) && !leaf(1, 2, 0) && !leaf(0, 3, 0),
+                    "nothing past each layer's radius or above the top");
+        }
+    }
+
+    void jungleTreeHandsOnTop() {
+        for (uint32_t seed = 1; seed <= 20; seed++) {
+            std::unique_ptr<Level> level = flatLevel();
+            BlockManager blocks(*level);
+            std::mt19937 random(seed);
+            int32_t placedAt[3] = {0, 0, 0};
+            require(Tree::place(blocks, JUNGLE_TREE, nullptr, nullptr, nullptr, 4, GROUND + 1, 4, random, {},
+                                placedAt), "the jungle tree grows on grass");
+
+            const int32_t height = logHeight(blocks, 4, 4, &VanillaBlocks::JUNGLE_LOG);
+            require(height >= 4 && height <= 10, "the trunk is 4 plus up to 6 tall");
+            require(placedAt[0] == 4 && placedAt[2] == 4 && placedAt[1] == GROUND + 1 + height,
+                    "the cocoa scatter starts one above the last log");
+        }
+    }
+
+    void megaJungle() {
+        for (uint32_t seed = 1; seed <= 20; seed++) {
+            std::unique_ptr<Level> level = flatLevel();
+            BlockManager blocks(*level);
+            std::mt19937 random(seed);
+            require(Tree::place(blocks, MEGA_JUNGLE_TREE, nullptr, &MEGA_JUNGLE, nullptr, 4, GROUND + 1, 4, random,
+                                {}), "the mega jungle tree grows on grass");
+
+            // a 2x2 trunk up to two below the top, then one log on the first corner
+            const int32_t height = logHeight(blocks, 4, 4, &VanillaBlocks::JUNGLE_LOG);
+            require(height >= 10 && height <= 31, "the trunk is 10 plus up to 2 plus up to 19 tall");
+            for (int32_t offsetX = 0; offsetX < 2; offsetX++) {
+                for (int32_t offsetZ = 0; offsetZ < 2; offsetZ++) {
+                    require(is(blocks, 4 + offsetX, GROUND, 4 + offsetZ, &VanillaBlocks::DIRT),
+                            "the grass under the trunk turns to dirt");
+                    require(is(blocks, 4 + offsetX, GROUND + height - 1, 4 + offsetZ, &VanillaBlocks::JUNGLE_LOG),
+                            "the trunk is full up to two below the top");
+                }
+            }
+            require(!is(blocks, 5, GROUND + height, 5, &VanillaBlocks::JUNGLE_LOG), "only one corner tops the trunk");
+
+            // the top layer of the canopy spans the core plus 3 on each side, the one under it plus 4
+            const int32_t top = GROUND + 1 + height;
+            const auto leaf = [&](int32_t x, int32_t y, int32_t z) {
+                return is(blocks, 4 + x, y, 4 + z, &VanillaBlocks::JUNGLE_LEAVES);
+            };
+            require(leaf(-3, top, 0) && leaf(4, top, 1) && !leaf(-4, top, 0) && !leaf(5, top, 0),
+                    "the top layer has a radius of 3 around the 2x2 core");
+            require(leaf(-4, top - 1, 0) && leaf(5, top - 1, 1) && !leaf(-5, top - 1, 0),
+                    "the layer under it has a radius of 4");
+        }
     }
 
     void roofedTrunk() {
@@ -168,6 +261,9 @@ int main() {
     check("roofed tree trunk", roofedTrunk);
     check("roofed tree canopy", roofedCanopy);
     check("roofed tree with vines needs room", vinesNeedRoom);
+    check("jungle bush", jungleBush);
+    check("jungle tree hands on its top", jungleTreeHandsOnTop);
+    check("mega jungle tree", megaJungle);
 
     BedrockLog::flush();
     return failures == 0 ? 0 : 1;

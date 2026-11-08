@@ -57,6 +57,7 @@ private:
     struct VegetationPatchDefinition;
     struct GrowingPlantDefinition;
     struct DripstoneDefinition;
+    struct SequenceDefinition;
 
     struct FossilDefinition;
 
@@ -87,6 +88,7 @@ private:
         const LegacyFlowerDefinition *mLegacyFlower = nullptr;
         const VegetationPatchDefinition *mVegetationPatch = nullptr;
         const GrowingPlantDefinition *mGrowingPlant = nullptr;
+        const SequenceDefinition *mSequence = nullptr;
         // a feature ported on its own, placed at the position with the rule's random
         bool (*mFunction)(BlockManager &, int32_t, int32_t, int32_t, std::mt19937 &) = nullptr;
 
@@ -97,7 +99,7 @@ private:
                    || mMultiface != nullptr || mDripstoneCluster != nullptr || mPointedDripstone != nullptr
                    || mLargeDripstone
                    || mLegacyFlower != nullptr || mVegetationPatch != nullptr || mGrowingPlant != nullptr
-                   || mFunction != nullptr;
+                   || mSequence != nullptr || mFunction != nullptr;
         }
     };
 
@@ -174,7 +176,10 @@ private:
                                 int32_t z, std::mt19937 &random);
 
     static bool _placeTree(BlockManager &blocks, const TreeDefinition &tree, int32_t x, int32_t y, int32_t z,
-                           std::mt19937 &random);
+                           std::mt19937 &random, int32_t *placedAt = nullptr);
+
+    static bool _placeSequence(BlockManager &blocks, const SequenceDefinition &sequence, int32_t x, int32_t y,
+                               int32_t z, std::mt19937 &random);
 
     static bool _placeLeafLitter(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 
@@ -195,6 +200,9 @@ private:
 
     static bool _placeSingleBlock(BlockManager &blocks, const SingleBlockDefinition &single, int32_t x, int32_t y,
                                   int32_t z, std::mt19937 &random);
+
+    static bool _placeAttached(BlockManager &blocks, const SingleBlockDefinition &single, int32_t x, int32_t y,
+                               int32_t z);
 
     static bool _placeWeighted(BlockManager &blocks, const WeightedDefinition &weighted, int32_t x, int32_t y,
                                int32_t z, std::mt19937 &random);

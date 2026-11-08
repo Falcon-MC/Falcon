@@ -91,7 +91,12 @@ namespace {
         ExpressionPtr mMin;
         ExpressionPtr mMax;
         bool mReadsWorld = false;
+        // step_size and grid_offset of a fixed_grid
+        int32_t mStep = 0;
+        int32_t mGridOffset = 0;
     };
+
+    const int32_t FIXED_GRID = 4;
 
     bool readsWorld(const std::string &text) {
         return text.find("worldx") != std::string::npos || text.find("worldz") != std::string::npos;
@@ -335,14 +340,24 @@ namespace {
         float mWorld[3];
     };
 
-    // sub_143815010
-    int32_t sampleAxis(const Axis &axis, const ScatterVariables &variables, std::mt19937 &random) {
+    // sub_143815010; a fixed_grid reads the iteration's grid index and leaves the rest for the next axis
+    // (case 4 of sub_1437FD570): a signed remainder over the extent, not offset by its minimum
+    int32_t sampleAxis(const Axis &axis, const ScatterVariables &variables, std::mt19937 &random, uint32_t *grid) {
         const auto min = static_cast<int32_t>(std::round(axis.mMin->evaluate(variables)));
         if (axis.mDistribution == 0)
             return min;
 
         const auto max = static_cast<int32_t>(std::round(axis.mMax->evaluate(variables)));
-        return max > min ? distribute(axis.mDistribution, min, max, random) : min;
+        if (max <= min)
+            return min;
+        if (axis.mDistribution != FIXED_GRID || grid == nullptr)
+            return distribute(axis.mDistribution, min, max, random);
+
+        const int32_t span = max - min + 1;
+        const int32_t stepped = axis.mStep * static_cast<int32_t>(*grid);
+        const int32_t value = (stepped + axis.mGridOffset + min) % span;
+        *grid = static_cast<uint32_t>(axis.mGridOffset + stepped) / static_cast<uint32_t>(span);
+        return value;
     }
 
     // the scatter's chance, then its iteration count (sub_1437FC150)
@@ -363,9 +378,9 @@ namespace {
 
     // each axis in the scatter's order, from the origin (sub_1437FD990)
     void scatterPosition(const Axis axes[3], int32_t evalOrder, const int32_t origin[3], ScatterVariables &variables,
-                         std::mt19937 &random, int32_t position[3]) {
+                         std::mt19937 &random, int32_t position[3], uint32_t *grid = nullptr) {
         for (int32_t axis: EVAL_ORDERS[evalOrder]) {
-            position[axis] = origin[axis] + sampleAxis(axes[axis], variables, random);
+            position[axis] = origin[axis] + sampleAxis(axes[axis], variables, random, grid);
             variables.setWorld((size_t) axis, position[axis]);
         }
     }
@@ -600,6 +615,8 @@ struct OverworldRulePlacer::ScatterDefinition {
         int32_t mDistribution;
         const char *mMin;
         const char *mMax;
+        int32_t mStep = 0;
+        int32_t mGridOffset = 0;
     };
 
     const char *mIdentifier;
@@ -619,8 +636,16 @@ struct OverworldRulePlacer::ScatterDefinition {
 
     static std::array<Axis, 3> _parseAxes(const AxisText (&texts)[3]) {
         std::array<Axis, 3> axes;
-        for (size_t axis = 0; axis < 3; axis++)
-            parseAxis(texts[axis].mDistribution, texts[axis].mMin, texts[axis].mMax, axes[axis]);
+        for (size_t axis = 0; axis < 3; axis++) {
+            // the rules never use fixed_grid: only the scatter features parse it
+            const bool grid = texts[axis].mDistribution == FIXED_GRID;
+            parseAxis(grid ? 1 : texts[axis].mDistribution, texts[axis].mMin, texts[axis].mMax, axes[axis]);
+            if (!grid)
+                continue;
+            axes[axis].mDistribution = FIXED_GRID;
+            axes[axis].mStep = texts[axis].mStep;
+            axes[axis].mGridOffset = texts[axis].mGridOffset;
+        }
         return axes;
     }
 };
@@ -639,6 +664,16 @@ struct OverworldRulePlacer::SingleBlockDefinition {
     bool mReplacesShortGrass = false;
     // survives on nylium and soul soil besides the blocks of PlantSupport::Dirt
     bool mNetherPlant = false;
+    // may_attach_to with a side of this block among the four around, auto_rotate turning it to face that side;
+    // without may_replace the block goes over anything
+    Block (*mAttachesTo)() = nullptr;
+    int32_t mAge = 0;
+};
+
+// a minecraft:sequence_feature: each feature at the position the one before hands on
+struct OverworldRulePlacer::SequenceDefinition {
+    const char *mIdentifier;
+    std::vector<Placed> mFeatures;
 };
 
 // a minecraft:weighted_random_feature
@@ -680,7 +715,13 @@ struct OverworldRulePlacer::LegacyTreeDefinition {
         // nextInt(3) != 0 ? (nextInt(3) != 0 ? third : second) : first, sub_14D230920
         RedwoodMutated,
         // nextInt(5) != 0 && nextBoolean() ? second : first, sub_14D2302A0
-        BirchMutated
+        BirchMutated,
+        // nextInt(10) != 0 ? (nextInt(2) != 0 ? (nextInt(3) != 0 ? fourth : third) : second) : first, sub_14D230560
+        Jungle,
+        // nextInt(10) != 0 ? (nextInt(2) != 0 ? third : second) : first, sub_14D230630
+        JungleEdge,
+        // nextInt(20) != 0 ? (nextInt(20) > 2 ? (nextInt(10) > 6 ? fourth : third) : second) : first, sub_14D230180
+        BambooJungle
     };
 
     const char *mIdentifier;
@@ -1148,6 +1189,81 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              {aggregate(SELECT_OAK), scatter(LEAF_LITTER_SCATTER)}, 1}
     };
 
+    // the 1.26.61 features the game loads: the jungle trees, their cocoa and the jungle bush
+    static const TreeDefinition JUNGLE_TREES[] = {
+            {{"minecraft:jungle_tree_feature", Tree::Trunk::Simple, &VanillaBlocks::JUNGLE_LOG, {4, 11}, {0, 0},
+              Tree::Canopy::Simple, &VanillaBlocks::JUNGLE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 33.33f, false, 0, 1, 1, 4,
+              4}, nullptr, {}},
+            {{"minecraft:fallen_jungle_tree_feature", Tree::Trunk::Fallen, &VanillaBlocks::JUNGLE_LOG, {4, 11}, {0, 0},
+              Tree::Canopy::None, nullptr, {0, 0}, {0, 0}, {0, 0}, 0, 75.0f, true}, nullptr, scatter(LOG_MUSHROOMS)}
+    };
+    // the bush's leaves are oak leaves; a single variation_chance stands for every layer
+    static const Tree::SimpleCanopy BUSH_CANOPY = {-1, 1, 0, 1.0f, {{1, 2}, {1, 2}, {1, 2}}};
+    static const TreeDefinition JUNGLE_BUSH = {
+            {"minecraft:jungle_bush_feature", Tree::Trunk::Simple, &VanillaBlocks::JUNGLE_LOG, {1, 1}, {0, 0},
+             Tree::Canopy::Simple, &VanillaBlocks::OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false, 0, 0, 0, 0, 0,
+             false, false, &BUSH_CANOPY}, nullptr, {}};
+    static const Tree::Mega MEGA_JUNGLE = {2, 10, {3, 20}, {0, 0}, 0, 0.0f, 0, &VanillaBlocks::DIRT, 0, 0,
+                                           {{3, 3}, 2, 2, false}, 5, 0.5f, {2, 6}, 0.5f, 1.0f, {{2, 4}, 1, 0, true}, 1, 3};
+    static const TreeDefinition MEGA_JUNGLE_TREE = {
+            {"minecraft:mega_jungle_tree_feature", Tree::Trunk::Mega, &VanillaBlocks::JUNGLE_LOG, {0, 0}, {0, 0},
+             Tree::Canopy::Mega, &VanillaBlocks::JUNGLE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr, {},
+            &MEGA_JUNGLE};
+    static const SingleBlockDefinition COCOA[] = {
+            {"minecraft:cocoa_age_0_feature", &VanillaBlocks::COCOA, false, false, -1, false, false,
+             &VanillaBlocks::JUNGLE_LOG, 0},
+            {"minecraft:cocoa_age_1_feature", &VanillaBlocks::COCOA, false, false, -1, false, false,
+             &VanillaBlocks::JUNGLE_LOG, 1},
+            {"minecraft:cocoa_age_2_feature", &VanillaBlocks::COCOA, false, false, -1, false, false,
+             &VanillaBlocks::JUNGLE_LOG, 2}
+    };
+    static const WeightedDefinition SELECT_COCOA = {"minecraft:select_cocoa_feature", [] {
+        std::vector<std::pair<Placed, int32_t>> features;
+        for (const SingleBlockDefinition &cocoa: COCOA) {
+            Placed placed;
+            placed.mSingleBlock = &cocoa;
+            features.emplace_back(placed, 1);
+        }
+        return features;
+    }()};
+    static const Placed COCOA_PICK = [] {
+        Placed placed;
+        placed.mWeighted = &SELECT_COCOA;
+        return placed;
+    }();
+    static const ScatterDefinition OPTIONAL_COCOA[] = {
+            optional("minecraft:optional_lower_cocoa_feature", COCOA_PICK, 4),
+            optional("minecraft:optional_upper_cocoa_feature", COCOA_PICK, 3)
+    };
+    // the grid walks x over 0, 1, 2, 0 and z over 1, 0, 0, -1 from the position the tree hands on
+    static const ScatterDefinition::AxisText COCOA_X = {FIXED_GRID, "-1", "1", 2, 1};
+    static const ScatterDefinition::AxisText COCOA_Z = {FIXED_GRID, "-1", "1", 1, 0};
+    static const ScatterDefinition COCOA_SCATTERS[] = {
+            {"minecraft:scatter_jungle_tree_lower_cocoa_feature", "4", {COCOA_X, {0, "-5", ""}, COCOA_Z}, 0,
+             scatter(OPTIONAL_COCOA[0]), 0, 0, "100.0"},
+            {"minecraft:scatter_jungle_tree_upper_cocoa_feature", "4", {COCOA_X, {0, "-4", ""}, COCOA_Z}, 0,
+             scatter(OPTIONAL_COCOA[1]), 0, 0, "100.0"}
+    };
+    static const AggregateDefinition SCATTER_COCOA = {
+            "minecraft:scatter_jungle_tree_cocoa_feature", {scatter(COCOA_SCATTERS[0]), scatter(COCOA_SCATTERS[1])}, 0};
+    static const ScatterDefinition OPTIONAL_JUNGLE[] = {
+            optional("minecraft:optional_fallen_jungle_tree_feature", tree(JUNGLE_TREES[1]), 80),
+            optional("minecraft:optional_jungle_tree_cocoa_feature", aggregate(SCATTER_COCOA), 5)
+    };
+    static const SequenceDefinition JUNGLE_WITH_COCOA = {
+            "minecraft:jungle_tree_with_cocoa_feature", {tree(JUNGLE_TREES[0]), scatter(OPTIONAL_JUNGLE[1])}};
+    // its third feature, noop_undecorated_jungle_tree_feature, has 0 iterations and draws nothing
+    static const AggregateDefinition SELECT_JUNGLE = {
+            "minecraft:select_jungle_tree_feature", {scatter(OPTIONAL_JUNGLE[0]), [] {
+                Placed placed;
+                placed.mSequence = &JUNGLE_WITH_COCOA;
+                return placed;
+            }()}, 2};
+    // 0 iterations in the features the game loads
+    static const ScatterDefinition TALL_GRASS_AROUND_TREE = {
+            "minecraft:scatter_tall_grass_around_tree_feature", "0",
+            {{6, "-3", "3"}, {6, "-4", "4"}, {6, "-3", "3"}}, 5, single(0)};
+
     using Pick = LegacyTreeDefinition::Pick;
     static const LegacyTreeDefinition LEGACY_TREES[] = {
             {"minecraft:legacy:forest_tree_feature", 10.0f, Pick::Forest,
@@ -1169,7 +1285,14 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             // the swamp foliage feature (constructor sub_14D21E9F0, place sub_14D21F070) counts its trees like a
             // legacy tree feature of density 2
             {"minecraft:legacy:swamp_foliage_feature", 2.0f, Pick::Swamp, {HUGE_MUSHROOM, tree(SWAMP_TREE)},
-             &SEAGRASS[3]}
+             &SEAGRASS[3]},
+            // types 8, 9 and 0 of the constructor
+            {"minecraft:legacy:jungle_tree_feature", 50.0f, Pick::Jungle,
+             {tree(TREES[2]), tree(JUNGLE_BUSH), tree(MEGA_JUNGLE_TREE), aggregate(SELECT_JUNGLE)}},
+            {"minecraft:legacy:jungle_edge_tree_feature", 2.0f, Pick::JungleEdge,
+             {aggregate(FANCY_WITH_BEEHIVE), tree(JUNGLE_BUSH), aggregate(SELECT_JUNGLE)}},
+            {"minecraft:legacy:bamboo_jungle_tree_feature", 30.0f, Pick::BambooJungle,
+             {tree(TREES[2]), tree(JUNGLE_BUSH), tree(MEGA_JUNGLE_TREE), scatter(TALL_GRASS_AROUND_TREE)}}
     };
 
     // the double plant patches: a lower half, then the upper one placed one block above it
@@ -1980,6 +2103,8 @@ bool OverworldRulePlacer::_place(BlockManager &blocks, const Placed &placed, int
         return _placeVegetationPatch(blocks, *placed.mVegetationPatch, x, y, z, random);
     if (placed.mGrowingPlant != nullptr)
         return _placeGrowingPlant(blocks, *placed.mGrowingPlant, x, y, z, random);
+    if (placed.mSequence != nullptr)
+        return _placeSequence(blocks, *placed.mSequence, x, y, z, random);
     if (placed.mSnap != nullptr)
         return _placeSnap(blocks, *placed.mSnap, x, y, z, random);
     if (placed.mBlob != nullptr)
@@ -3105,7 +3230,9 @@ bool OverworldRulePlacer::_placeScatter(BlockManager &blocks, const ScatterDefin
     bool placed = false;
     for (int32_t iteration = 0; iteration < iterations; iteration++) {
         int32_t position[3] = {0, 0, 0};
-        scatterPosition(scatter.mParsedAxes.data(), scatter.mEvalOrder, origin, variables, random, position);
+        // the grid counts the iterations left, measured on the jungle trees' cocoa
+        auto grid = static_cast<uint32_t>(iterations - 1 - iteration);
+        scatterPosition(scatter.mParsedAxes.data(), scatter.mEvalOrder, origin, variables, random, position, &grid);
         placed = _place(blocks, scatter.mPlaces, position[0], position[1], position[2], random) || placed;
     }
     return placed;
@@ -3116,6 +3243,9 @@ bool OverworldRulePlacer::_placeSingleBlock(BlockManager &blocks, const SingleBl
     // SingleBlockFeature::place (sub_14A267E10): the block is drawn by weight even when it is the only one, then its
     // survival is enforced and only air is replaced; a short grass or fern survives on the blocks of PlantSupport::Dirt
     nextInt(random, 1);
+    if (single.mAttachesTo != nullptr)
+        return _placeAttached(blocks, single, x, y, z);
+
     const BlockState &support = blocks.getBlockAt(x, y - 1, z);
     const bool supported = IFeature::isSupportDirt(support)
                            || (single.mNetherPlant && (support.mName == "minecraft:crimson_nylium"
@@ -3139,6 +3269,28 @@ bool OverworldRulePlacer::_placeSingleBlock(BlockManager &blocks, const SingleBl
 
     Tag states = state.mStates;
     states.putByte("upper_block_bit", static_cast<int8_t>(single.mUpperBlockBit));
+    blocks.setBlockStateAt(x, y, z, BlockState(state.mName, states));
+    return true;
+}
+
+bool OverworldRulePlacer::_placeAttached(BlockManager &blocks, const SingleBlockDefinition &single, int32_t x,
+                                         int32_t y, int32_t z) {
+    // the may_attach_to sides of sub_14A267E10 (sub_14A269500 on north, east, south then west), the last side
+    // found rotating the block (sub_145E96810): the cocoa's direction points at it, 0 south, 1 west, 2 north, 3 east
+    static const int32_t SIDES[4][3] = {{0, -1, 2}, {1, 0, 3}, {0, 1, 0}, {-1, 0, 1}};
+    const std::string attachesTo = single.mAttachesTo().getIdentifier();
+    int32_t direction = -1;
+    for (const int32_t *side: SIDES) {
+        if (blocks.getBlockAt(x + side[0], y, z + side[1]).mName == attachesTo)
+            direction = side[2];
+    }
+    if (direction < 0)
+        return false;
+
+    const BlockState state = single.mBlock().toBlockState();
+    Tag states = state.mStates;
+    states.putInt("age", single.mAge);
+    states.putInt("direction", direction);
     blocks.setBlockStateAt(x, y, z, BlockState(state.mName, states));
     return true;
 }
@@ -3517,6 +3669,12 @@ void OverworldRulePlacer::_placeLegacyTrees(BlockManager &blocks, const LegacyTr
             picked = nextInt(random, 3) != 0 ? (nextInt(random, 3) != 0 ? 2 : 1) : 0;
         else if (trees.mPick == Pick::MegaTaiga)
             picked = nextInt(random, 3) != 0 ? (nextInt(random, 3) != 0 ? 3 : 2) : (nextInt(random, 13) != 0 ? 1 : 0);
+        else if (trees.mPick == Pick::Jungle)
+            picked = nextInt(random, 10) != 0 ? (nextInt(random, 2) != 0 ? (nextInt(random, 3) != 0 ? 3 : 2) : 1) : 0;
+        else if (trees.mPick == Pick::JungleEdge)
+            picked = nextInt(random, 10) != 0 ? (nextInt(random, 2) != 0 ? 2 : 1) : 0;
+        else if (trees.mPick == Pick::BambooJungle)
+            picked = nextInt(random, 20) != 0 ? (nextInt(random, 20) > 2 ? (nextInt(random, 10) > 6 ? 3 : 2) : 1) : 0;
 
         const int32_t treeZ = z + nextInt(random, 14) + 1;
         const int32_t treeX = x + nextInt(random, 14) + 1;
@@ -3543,11 +3701,30 @@ bool OverworldRulePlacer::_placeAggregate(BlockManager &blocks, const AggregateD
 }
 
 bool OverworldRulePlacer::_placeTree(BlockManager &blocks, const TreeDefinition &tree, int32_t x, int32_t y,
-                                     int32_t z, std::mt19937 &random) {
+                                     int32_t z, std::mt19937 &random, int32_t *placedAt) {
     return OverworldTreePlacer::place(blocks, tree.mTree, tree.mFancy, tree.mMega, tree.mAcacia, x, y, z, random,
                                       [&](int32_t logX, int32_t logY, int32_t logZ) {
                                           _place(blocks, tree.mLogDecoration, logX, logY, logZ, random);
-                                      });
+                                      }, placedAt);
+}
+
+bool OverworldRulePlacer::_placeSequence(BlockManager &blocks, const SequenceDefinition &sequence, int32_t x,
+                                         int32_t y, int32_t z, std::mt19937 &random) {
+    // SequenceFeature: each feature from the position the one before handed on, stopping at the first that places
+    // nothing, measured on the jungle trees: a failed tree draws no cocoa chance; only the trees move the position
+    int32_t position[3] = {x, y, z};
+    for (const Placed &feature: sequence.mFeatures) {
+        if (feature.mTree == nullptr) {
+            if (!_place(blocks, feature, position[0], position[1], position[2], random))
+                return false;
+            continue;
+        }
+        int32_t next[3] = {position[0], position[1], position[2]};
+        if (!_placeTree(blocks, *feature.mTree, position[0], position[1], position[2], random, next))
+            return false;
+        std::copy(next, next + 3, position);
+    }
+    return true;
 }
 
 bool OverworldRulePlacer::_placeLeafLitter(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
