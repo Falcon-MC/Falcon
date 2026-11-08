@@ -409,6 +409,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     // wire positions are at eye height; the server works in feet positions
     Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
                           packet.mPosition.z);
+    if (player.isAwaitingTeleport())
+        feetPosition = player.getPosition();
     // the client places and breaks before it moves on the same tick: it already collides with a block it just put
     // down, and walks into the gap of one it just broke, so the replay must see the world after them
     // in packet order: a block broken in one hit sends its StartBreak and its destroy on the same input
