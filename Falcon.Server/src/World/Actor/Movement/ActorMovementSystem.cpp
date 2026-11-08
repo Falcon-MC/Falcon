@@ -1,11 +1,16 @@
 #include "World/Actor/Movement/ActorMovementSystem.h"
 
 #include "World/Actor/Movement/ActorCollisionSystem.h"
+#include "World/Actor/ActorFlags.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
+#include "World/Actor/Movement/BuoyancySystem.h"
+#include "World/Actor/Movement/MobMovementFrictionSystem.h"
 #include "World/Actor/Movement/PostMoveTravelVelocitySystem.h"
 #include "World/Actor/Movement/PreMoveTravelVelocitySystem.h"
+#include "World/Actor/Movement/RestitutionSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Block.h"
+#include "World/Level/Block/Components/BlockBehavior.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Systems/BlockContactSystem.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
@@ -21,6 +26,10 @@ namespace {
     const float CLIMB_MAX_FALL = 0.15f;
     const float CLIMB_SPEED = 0.2f;
     const float SPEED_PROBE_DEPTH = 0.5f;
+    const float GROUND_PROBE_DEPTH = 1.0f;
+    // MobMovementFriction::Air runs with the friction of no block
+    const float NO_BLOCK_FRICTION = 1.0f;
+    const float DEFAULT_BLOCK_FRICTION = 0.6f;
 }
 
 void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) {
@@ -33,7 +42,8 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
     // only floating reads the eye probe, and only with feet in water: skip the scan otherwise
     const bool eyesInWater = feet.water && LiquidBlocksFetch::at(level, eyes).water;
 
-    Vector3f motion = PreMoveTravelVelocitySystem::apply(owner, actor, physics, feet, eyesInWater);
+    const BuoyancyContact buoyancy = BuoyancySystem::contact(level, position, physics.mBuoyancy);
+    Vector3f motion = PreMoveTravelVelocitySystem::apply(owner, actor, physics, feet, eyesInWater, buoyancy.floats());
 
     const bool climbing = _isClimbing(level, actor, physics);
     if (climbing) {
@@ -67,11 +77,30 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
     PostMoveTravelVelocitySystem::apply(actor, physics, box, motion, result, feet, landingFallDistance);
     actor.setHorizontalCollision(result.mCollidedX || result.mCollidedZ);
 
+    float gravity = physics.mGravity;
+    if (physics.mDefinitionFriction && !isStuck)
+        gravity = _applyRestitution(level, actor, physics, motion, result);
+
     if (physics.mGravityAfterMove && !isStuck) {
         Vector3f after = actor.getMotion();
-        PreMoveTravelVelocitySystem::applyVerticalAfterMove(after, physics, feet);
+        if (buoyancy.floats()) {
+            if (physics.mBuoyancy.mApplyGravity)
+                after.y -= physics.mGravity;
+            after.y = BuoyancySystem::floatVelocity(after.y, actor.getPosition().y, actor.getBuoyancyTimer(),
+                                                    physics.mBuoyancy, buoyancy,
+                                                    actor.getFlags().get(ActorFlag::Leashed));
+        } else {
+            PreMoveTravelVelocitySystem::applyVerticalAfterMove(after, physics, feet, gravity);
+        }
         actor.setMotion(after);
     }
+
+    if (physics.mDefinitionFriction && !isStuck && !feet.water && !feet.lava)
+        _applyMovementFriction(level, actor, physics);
+
+    if (physics.mBuoyancy.mEnabled)
+        actor.setBuoyancyTimer(BuoyancySystem::advanceTimer(actor.getBuoyancyTimer(), physics.mBuoyancy,
+                                                            actor.getMotion(), _random()));
 
     if (isStuck) {
         actor.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
@@ -91,6 +120,51 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
 
     if (landingFallDistance > 0.0f)
         actor.causeFallDamage(owner, landingFallDistance);
+}
+
+float ActorMovementSystem::_applyRestitution(Level &level, ServerActor &actor, const PhysicsComponent &physics,
+                                             const Vector3f &velocity, const ActorMoveResult &result) {
+    Vector3f restitution = RestitutionSystem::compute(velocity, result, physics.mBounciness);
+    if (result.mCollidedY && velocity.y < 0.0f) {
+        const Vector3f position = actor.getPosition();
+        const Block *below = _blockAt(level, Vector3f(position.x, position.y - GROUND_PROBE_DEPTH, position.z));
+        if (below != nullptr)
+            RestitutionSystem::applyBlock(restitution, velocity, below->getBehavior().getLandingBounce());
+    }
+
+    if (restitution.x == 0.0f && restitution.y == 0.0f && restitution.z == 0.0f)
+        return physics.mGravity;
+
+    // ApplyRestitutionSystem adds onto the velocity the collision zeroed
+    const Vector3f current = actor.getMotion();
+    actor.setMotion(Vector3f(current.x + restitution.x, current.y + restitution.y, current.z + restitution.z));
+    // RequestGravityCorrectionSystem sub_1484CD7B0: only a vertical bounce after a real move is corrected
+    if (std::fabs(restitution.y) <= RestitutionSystem::EPSILON
+        || std::fabs(result.mMoved.y) <= RestitutionSystem::EPSILON)
+        return physics.mGravity;
+
+    return -RestitutionSystem::correctedGravity(physics.mGravity, velocity.y, result.mMoved.y);
+}
+
+void ActorMovementSystem::_applyMovementFriction(Level &level, ServerActor &actor, const PhysicsComponent &physics) {
+    float friction = NO_BLOCK_FRICTION;
+    if (actor.isOnGround()) {
+        const Vector3f position = actor.getPosition();
+        const Block *below = _blockAt(level, Vector3f(position.x, position.y - GROUND_PROBE_DEPTH, position.z));
+        friction = below == nullptr ? DEFAULT_BLOCK_FRICTION : below->getFrictionFactor();
+    }
+
+    Vector3f velocity = actor.getMotion();
+    MobMovementFrictionSystem::apply(velocity,
+                                     MobMovementFrictionSystem::factor(friction, physics.mFrictionModifier,
+                                                                       physics.mAirDragModifier),
+                                     physics.mUniformAirDrag);
+    actor.setMotion(velocity);
+}
+
+std::mt19937 &ActorMovementSystem::_random() {
+    static std::mt19937 generator(std::random_device{}());
+    return generator;
 }
 
 const Block *ActorMovementSystem::_blockAt(Level &level, const Vector3f &position) {

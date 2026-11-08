@@ -12,11 +12,15 @@
 #include "World/Actor/Definition/LookedAtSensor.h"
 #include "World/Actor/Mob/Component/MobAddRider.h"
 #include "World/Actor/Mob/Component/MobAdmiration.h"
+#include "World/Actor/Mob/Component/MobAreaAttack.h"
+#include "World/Actor/Mob/Component/MobEquipmentChanged.h"
+#include "World/Actor/Mob/Component/MobExplode.h"
 #include "World/Actor/Mob/Component/MobLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
 #include "World/Actor/Mob/Component/MobDweller.h"
 #include "World/Actor/Mob/MobEntitySpawner.h"
 #include "World/Actor/Mob/MobEquipment.h"
+#include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/Movement/RideControlSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/BlockState.h"
@@ -51,6 +55,9 @@ public:
 
     ActorSize getSize() const override = 0;
 
+    // minecraft:collision_box of the active groups
+    ActorSize definitionSize(const ActorSize &fallback) const;
+
     PhysicsComponent getPhysics() const override;
 
     bool canSwim() const;
@@ -60,6 +67,20 @@ public:
     virtual float getDefaultMaxHealth() const = 0;
 
     virtual int getExperienceDrop() const { return 0; }
+
+    // a class with its own contact attack, explosion or rolled health keeps it over the definition component
+    virtual bool hasOwnAreaAttack() const {
+        return false;
+    }
+
+    virtual bool hasOwnExplosion() const {
+        return false;
+    }
+
+    // minecraft:health of the active groups sets the maximum: off by default, the classes roll their health
+    virtual bool followsDefinitionHealth() const {
+        return false;
+    }
 
     virtual bool shouldRemoveInPeaceful() const {
         return getComponent("minecraft:remove_in_peaceful") != nullptr;
@@ -144,6 +165,9 @@ public:
     const json::Value *getComponent(const char *name) const;
 
     const std::unordered_map<std::string, const json::Value *> &getComponents() const;
+
+    // minecraft:pushable_by_entity presets, parsed once per component change
+    const PushableByEntityPresets &getPushPresets() const;
 
     std::vector<std::string> getFamilies() const;
 
@@ -406,6 +430,24 @@ private:
         const json::Value *mTargetNearbySensor = nullptr;
     };
 
+    // read by getPhysics() every tick: resolved once per component change
+    struct DefinitionPhysics {
+        bool mSwims = false;
+        bool mClimbsLadders = false;
+        bool mClimbsWalls = false;
+        bool mDefinitionFriction = false;
+        float mBounciness = 0.0f;
+        float mFrictionModifier = 1.0f;
+        float mAirDragModifier = 1.0f;
+        bool mUniformAirDrag = false;
+        bool mHasAutoStep = false;
+        float mAutoStep = 0.0f;
+        float mControlledAutoStep = 0.0f;
+        BuoyancySettings mBuoyancy;
+    };
+
+    const DefinitionPhysics &_getDefinitionPhysics() const;
+
     void _rebuildComponents() const;
 
     const SensorComponents &_getSensorComponents() const;
@@ -506,6 +548,11 @@ private:
     void _emitInteractParticle(ServerNetworkHandler &owner, const ServerPlayer &player, const json::Value &particle,
                                const std::string &type);
 
+    // true when an attribute the client must hear about changed
+    bool _syncMovementAttributes();
+
+    bool _syncHealthComponent();
+
     void _appendDefinitionData(EntityDataMap &metadata) const;
 
     void _syncOwner(ServerNetworkHandler &owner);
@@ -587,6 +634,9 @@ private:
     MobAddRider mAddRider;
     MobAdmiration mAdmiration;
     MobLeash mLeash;
+    MobAreaAttack mAreaAttack;
+    MobExplode mExplode;
+    MobEquipmentChanged mEquipmentChanged;
     const json::Value *mAttackCooldownComponent = nullptr;
     int32_t mAttackCooldownTicks = 0;
     int32_t mCelebrationTicks = 0;
@@ -600,4 +650,7 @@ private:
     bool mTargetOutsideRange = false;
     bool mTargetSeenInsideRange = false;
     const json::Value *mCelebrationComponent = nullptr;
+    mutable DefinitionPhysics mDefinitionPhysics;
+    mutable bool mDefinitionPhysicsStale = true;
+    mutable PushableByEntityPresets mPushPresets;
 };

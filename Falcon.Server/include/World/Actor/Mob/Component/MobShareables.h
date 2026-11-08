@@ -25,7 +25,7 @@ public:
     static void equipFromInventory(ServerNetworkHandler &owner, MobActor &mob, int inventorySlot);
 
 private:
-    static int _equipmentSlotFor(const ItemStack &item);
+    static int _equipmentSlotFor(const MobActor &mob, const ItemStack &item);
 
     static int32_t _priorityOf(const MobActor &mob, const ItemStack &item);
 

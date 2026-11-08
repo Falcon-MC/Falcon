@@ -14,6 +14,11 @@ public:
 
     using HostileActor::HostileActor;
 
+    // the slime attack hurts on contact with the slime as attacker
+    bool hasOwnAreaAttack() const override {
+        return true;
+    }
+
     bool preventsSleep() const override {
         return false;
     }

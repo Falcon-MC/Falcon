@@ -3,6 +3,11 @@
 #include <algorithm>
 #include <limits>
 
+namespace {
+    // negative resistance scales knockback up: 1 - resistance, the same range as the client's attribute
+    const float KNOCKBACK_RESISTANCE_MINIMUM = -2.0f;
+}
+
 ActorAttributes::ActorAttributes() = default;
 
 void ActorAttributes::_add(const std::string &name, float minimum, float maximum, float value) {
@@ -30,7 +35,7 @@ ActorAttributes ActorAttributes::createPlayerDefaults() {
     attributes._add("minecraft:movement", 0.0f, unbounded, 0.1f);
     attributes._add("minecraft:underwater_movement", 0.0f, unbounded, 0.02f);
     attributes._add("minecraft:lava_movement", 0.0f, unbounded, 0.02f);
-    attributes._add("minecraft:knockback_resistance", 0.0f, 1.0f, 0.0f);
+    attributes._add("minecraft:knockback_resistance", KNOCKBACK_RESISTANCE_MINIMUM, 1.0f, 0.0f);
     attributes._add("minecraft:absorption", 0.0f, unbounded, 0.0f);
     return attributes;
 }
@@ -41,9 +46,19 @@ ActorAttributes ActorAttributes::createActorDefaults() {
     ActorAttributes attributes;
     attributes._add("minecraft:health", 0.0f, 20.0f, 20.0f);
     attributes._add("minecraft:movement", 0.0f, unbounded, 0.1f);
-    attributes._add("minecraft:knockback_resistance", 0.0f, 1.0f, 0.0f);
+    attributes._add("minecraft:knockback_resistance", KNOCKBACK_RESISTANCE_MINIMUM, 1.0f, 0.0f);
     attributes._add("minecraft:absorption", 0.0f, unbounded, 0.0f);
     return attributes;
+}
+
+bool ActorAttributes::ensure(const std::string &name, float minimum, float maximum, float value) {
+    for (const AttributeData &attribute: mAttributes) {
+        if (attribute.mName == name)
+            return false;
+    }
+
+    _add(name, minimum, maximum, value);
+    return true;
 }
 
 void ActorAttributes::set(const std::string &name, float value) {
