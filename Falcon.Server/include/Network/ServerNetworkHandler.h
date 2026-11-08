@@ -322,8 +322,8 @@ public:
 
     void updateActorVisibility();
 
-    // same dimension and chunk already sent
-    bool canPlayerSeePlayer(ServerPlayer &viewer, const ServerPlayer &target) const;
+    // same dimension and within the actor range of the viewer, whatever the chunks sent
+    bool canPlayerSeePlayer(ServerPlayer &viewer, const ServerPlayer &target);
 
     void updatePlayerVisibility();
 
@@ -332,7 +332,7 @@ public:
     /** Despawns the player for every client that has them spawned, as they leave the server. */
     void despawnPlayerForViewers(ServerPlayer &player);
 
-    bool canPlayerSeeActor(ServerPlayer &player, const Actor &actor) const;
+    bool canPlayerSeeActor(ServerPlayer &player, const Actor &actor);
 
     void broadcastActorMove(ServerActor &actor, bool teleported = false);
 

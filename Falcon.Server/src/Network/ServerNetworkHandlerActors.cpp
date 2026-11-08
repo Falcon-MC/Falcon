@@ -776,15 +776,17 @@ void ServerNetworkHandler::removeActor(int64_t uniqueId) {
     _unregisterActor(uniqueId);
 }
 
-bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &actor) const {
+bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &actor) {
     if (!player.isSpawned() || !player.sharesLevelWith(actor))
         return false;
 
     const Vector3f position = actor.getPosition();
-    const int64_t hash = ChunkStreamHandler::packChunk((int32_t) std::floor(position.x) >> 4,
-                                                       (int32_t) std::floor(position.z) >> 4);
+    if (!ChunkStreamHandler::isInActorRange(player.getPosition(), position))
+        return false;
 
-    return player.getSentChunks().find(hash) != player.getSentChunks().end();
+    // only chunks the server holds fully loaded hand out their actors (sub_14294B4A0)
+    return getLevelFor(actor).isChunkPopulated((int32_t) std::floor(position.x) >> 4,
+                                               (int32_t) std::floor(position.z) >> 4);
 }
 
 void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &actor) {
@@ -871,7 +873,10 @@ void ServerNetworkHandler::updateActorVisibility() {
         for (auto &actorEntry: mActors) {
             ServerActor &actor = *actorEntry.second;
             const bool seen = visible.find(actor.getRuntimeId()) != visible.end();
-            const bool shouldSee = (actor.isAlive() || (actor.isDead() && seen)) && canPlayerSeeActor(player, actor);
+            // an autonomous actor stays known once sent, wherever it goes (sub_14102EF40)
+            const bool kept = seen && actor.isAutonomous() && player.sharesLevelWith(actor);
+            const bool shouldSee = (actor.isAlive() || (actor.isDead() && seen))
+                                   && (kept || canPlayerSeeActor(player, actor));
 
             if (shouldSee == seen)
                 continue;

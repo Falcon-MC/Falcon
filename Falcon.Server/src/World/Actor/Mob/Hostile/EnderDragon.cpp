@@ -784,8 +784,9 @@ void EnderDragon::_tickBossBar(ServerNetworkHandler &owner) {
         const float dx = other.x - position.x;
         const float dy = other.y - position.y;
         const float dz = other.z - position.z;
-        const bool inRange = owner.canPlayerSeeActor(player, *this) && dx * dx + dy * dy + dz * dz <= hudRange
-                                                                                                    * hudRange;
+        // the bar follows the dragon the client knows of, kept past the actor range
+        const bool known = player.getVisibleActors().count(getRuntimeId()) != 0;
+        const bool inRange = known && dx * dx + dy * dy + dz * dz <= hudRange * hudRange;
         const bool shown = mBossViewers.count(player.getUniqueId()) != 0;
 
         if (inRange && !shown) {

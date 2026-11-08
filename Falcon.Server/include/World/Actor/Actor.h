@@ -31,6 +31,11 @@ public:
         return false;
     }
 
+    // AutonomousActorComponent: a player keeps it once sent, out of the actor range too
+    virtual bool isAutonomous() const {
+        return false;
+    }
+
     bool catchFireFrom(const Actor &attacker, Difficulty difficulty);
 
     uint64_t getRuntimeId() const { return mRuntimeId; }

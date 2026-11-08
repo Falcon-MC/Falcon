@@ -84,6 +84,11 @@ public:
         return false;
     }
 
+    // the fight tracks it outside chunk storage (sub_1432BA7E0 marks it, sub_140BC76E0)
+    bool isAutonomous() const override {
+        return true;
+    }
+
     // the dragon's experience falls during its death (sub_144AE8C40), not when it dies
     int getExperienceDrop() const override {
         return 0;
