@@ -178,7 +178,8 @@ namespace {
 
         seconds /= (double) speedMultiplier;
 
-        if (player.getTicksSinceInAir() < 5 && !player.isFlying())
+        // the client's rate this tick: no grace after landing
+        if (player.isRiding() || (!player.isOnGround() && !player.isFlying()))
             seconds *= 5.0;
 
         const bool inWater = player.getFlags().get(ActorFlag::Swimming);

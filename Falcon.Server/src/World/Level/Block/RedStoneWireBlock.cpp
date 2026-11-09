@@ -1,6 +1,7 @@
 #include "World/Level/Block/RedStoneWireBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockSupportRules.h"
 
 FALCON_REGISTER_BLOCK(RedStoneWireBlock, 400);
 
@@ -25,7 +26,9 @@ bool RedStoneWireBlock::canPlaceAt(Level &level, const Vector3i &position, int b
 }
 
 bool RedStoneWireBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
-    (void) state;
+    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
+        return *measured;
+
     return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
 }
 

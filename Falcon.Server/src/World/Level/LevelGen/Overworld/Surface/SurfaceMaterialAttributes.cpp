@@ -229,6 +229,10 @@ namespace {
             result.at(BiomeIds::MANGROVE_SWAMP).mMaxPuddleDepth = 2;
             addComponent(result, BiomeIds::CHERRY_GROVE, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::PALE_GARDEN, grassBlockState(), dirtState(), gravelState(), 7);
+            // vanilla_1.26.50 dappled_forest.biome.json
+            addComponent(result, BiomeIds::DAPPLED_FOREST, grassBlockState(), dirtState(), gravelState(), 7);
+            addAdjustment(result, BiomeIds::DAPPLED_FOREST, 0.2199999988079071f, 0.30000001192092896f, 1.0f,
+                          &coarseDirtState(), nullptr, nullptr);
 
             return result;
         }();

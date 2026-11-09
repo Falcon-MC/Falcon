@@ -165,7 +165,8 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &travel = context.travel;
 
-    travel.box = boxAt(state.start, context.pose.mHeight);
+    if (!context.player.findSimulatedBox(state.start, context.pose.mHeight, travel.box))
+        travel.box = boxAt(state.start, context.pose.mHeight);
     Vector3f stuck;
     // spectators and creative flight ignore cobweb, powder snow and berry bush slowdown
     const bool slowdownImmune = abilities.spectator || (abilities.flying && abilities.gameType == (int32_t) GameType::Creative);
@@ -187,6 +188,7 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
                                                   &context.player);
     }
     state.simulated = Vector3f(travel.box.mMinX + PLAYER_WIDTH * 0.5f, travel.box.mMinY, travel.box.mMinZ + PLAYER_WIDTH * 0.5f);
+    context.player.setSimulatedBox(travel.box, state.simulated);
     const bool wasOnGround = state.onGround;
     state.onGround = travel.moved.mOnGround;
     ClientAcceptanceSystem::tick(context);

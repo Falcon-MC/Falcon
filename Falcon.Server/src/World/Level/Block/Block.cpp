@@ -1,4 +1,5 @@
 #include "World/Level/Block/Block.h"
+#include "World/Level/Block/BlockSupportRules.h"
 
 #include "World/Level/Block/Components/BlockBehavior.h"
 #include "World/Level/Block/Components/BlockBehaviorRegistry.h"
@@ -168,10 +169,7 @@ std::vector<BlockDrop> Block::grassDrops(const std::string &shearedItem, int32_t
 }
 
 bool Block::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
-    (void) level;
-    (void) position;
-    (void) state;
-    return true;
+    return BlockSupportRules::survivesAt(level, position, state).value_or(true);
 }
 
 void Block::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

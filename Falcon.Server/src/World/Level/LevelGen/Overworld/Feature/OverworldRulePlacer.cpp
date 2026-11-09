@@ -4,6 +4,7 @@
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 
 #include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/DoublePlantBlock.h"
 #include "World/Level/Block/FenceBlock.h"
 #include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
@@ -625,6 +626,38 @@ namespace {
         return true;
     }
 
+    // HorizontalTreeDecorationFeature::place (sub_14D2136C0, vtable 0x14F2F67C0) of shelf_mushroom_feature:
+    // bark_side_only, allow_adjacent false; a side of the log by a draw, the growth by a second once it fits
+    bool placeShelfMushroom(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
+        static const int32_t SIDES[4][3] = {{0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+        static const char *const CARDINALS[4] = {"north", "south", "west", "east"};
+        const std::string shelf = VanillaBlocks::SHELF_MUSHROOM().getIdentifier();
+        const int32_t side = nextInt(random, 4);
+        const int32_t toX = x + SIDES[side][0];
+        const int32_t toZ = z + SIDES[side][2];
+        if (!DecorationSupport::isAir(blocks.getBlockAt(toX, y, toZ)))
+            return false;
+
+        const auto isShelf = [&](int32_t atX, int32_t atY, int32_t atZ) {
+            return blocks.getBlockAt(atX, atY, atZ).mName == shelf;
+        };
+        if (isShelf(x, y, z - 1) || isShelf(x + 1, y, z) || isShelf(x, y, z + 1) || isShelf(x - 1, y, z)
+            || isShelf(toX, y + 1, toZ) || isShelf(toX, y - 1, toZ) || isShelf(toX, y, toZ - 1)
+            || isShelf(toX, y, toZ + 1) || isShelf(toX - 1, y, toZ) || isShelf(toX + 1, y, toZ))
+            return false;
+
+        // never on the ends of a lying log
+        const std::string axis = blocks.getBlockAt(x, y, z).mStates.getString("pillar_axis", "y");
+        if ((side >= 2 && axis == "x") || (side < 2 && axis == "z"))
+            return false;
+
+        Tag states = VanillaBlocks::SHELF_MUSHROOM().toBlockState().mStates;
+        states.putInt("growth", nextInt(random, 2));
+        states.putString("minecraft:cardinal_direction", CARDINALS[side]);
+        blocks.setBlockStateAt(toX, y, toZ, BlockState(shelf, states));
+        return true;
+    }
+
     // BambooFeature::place (vtable 0x14F2F70E0, sub_147171FC0): thick stalks up from an air block over dirt, sand or
     // gravel, 5 plus nextInt of 8 to 12 by a hash of the column; from 3 tall one more block on top, large leaves on
     // the two highest and small ones under them
@@ -754,6 +787,8 @@ struct OverworldRulePlacer::SingleBlockDefinition {
     int32_t mAge = 0;
     // may_not_attach_to bottom podzol, tested before the weight is drawn
     bool mNotOnPodzol = false;
+    // survives on sand and hardened clay besides the blocks of PlantSupport::Dirt
+    bool mSandAndClay = false;
 };
 
 // a minecraft:sequence_feature: each feature at the position the one before hands on
@@ -1044,7 +1079,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:nether_sprouts_feature", &VanillaBlocks::NETHER_SPROUTS, true, false, -1, false, true},
             {"minecraft:jungle_tall_grass_feature", &VanillaBlocks::SHORT_GRASS, true, false, -1, false, false, nullptr,
              0, true},
-            {"minecraft:jungle_fern_feature", &VanillaBlocks::FERN, true, false, -1, false, false, nullptr, 0, true}
+            {"minecraft:jungle_fern_feature", &VanillaBlocks::FERN, true, false, -1, false, false, nullptr, 0, true},
+            // vanilla_1.26.50 features/red_shrub_single_block_feature.json
+            {"minecraft:red_shrub_single_block_feature", &VanillaBlocks::RED_SHRUB, true, false, -1, false, false,
+             nullptr, 0, false, true}
     };
 
     static const auto single = [](size_t index) {
@@ -1641,6 +1679,49 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             "minecraft:random_roofed_forest_feature_with_decoration_feature",
             {aggregate(ROOFED_WITH_LEAF_LITTER), scatter(TALL_GRASS_AROUND_FOLIAGE)}, 0};
 
+    // vanilla_1.26.50 features: the dappled forest's poplars, their shelf mushrooms and the forest's picks
+    static const ScatterDefinition OPTIONAL_SHELF_MUSHROOM = {
+            "minecraft:optional_shelf_mushroom_feature", "1", {ZERO, ZERO, ZERO}, 0, function(&placeShelfMushroom),
+            1, 4};
+    static const WeightedDefinition DAPPLED_FALLEN_DECORATION = {
+            "minecraft:select_dappled_forest_fallen_tree_decoration",
+            {{scatter(OPTIONAL_SHELF_MUSHROOM), 1}, {scatter(LOG_BROWN_MUSHROOM), 1}}};
+    static const Tree::Poplar POPLAR = {{4, 4}, {1, 4}, {{5, 5}, {6, 5}, {7, 1}, {8, 1}}, {5, 6}, 0.15f};
+    static const auto poplar = [](const char *identifier, Block (*leaves)()) {
+        Tree::Definition definition = {identifier, Tree::Trunk::Poplar, &VanillaBlocks::POPLAR_LOG, {7, 11}, {0, 0},
+                                       Tree::Canopy::None, leaves, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, true};
+        definition.mPoplar = &POPLAR;
+        return TreeDefinition{definition, nullptr, scatter(OPTIONAL_SHELF_MUSHROOM)};
+    };
+    static const TreeDefinition POPLAR_TREES[] = {
+            poplar("minecraft:red_poplar_tree_feature", &VanillaBlocks::RED_POPLAR_LEAVES),
+            poplar("minecraft:orange_poplar_tree_feature", &VanillaBlocks::ORANGE_POPLAR_LEAVES),
+            poplar("minecraft:yellow_poplar_tree_feature", &VanillaBlocks::YELLOW_POPLAR_LEAVES),
+            {{"minecraft:fallen_poplar_tree_feature", Tree::Trunk::Fallen, &VanillaBlocks::POPLAR_LOG, {4, 7}, {0, 0},
+              Tree::Canopy::None, nullptr, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, true}, nullptr,
+             weightedOf(DAPPLED_FALLEN_DECORATION)}
+    };
+    static const AggregateDefinition POPLARS_WITH_LEAF_LITTER[] = {
+            {"minecraft:red_poplar_tree_with_leaf_litter_feature",
+             {tree(POPLAR_TREES[0]), scatter(LEAF_LITTER_SCATTER)}, 1},
+            {"minecraft:orange_poplar_tree_with_leaf_litter_feature",
+             {tree(POPLAR_TREES[1]), scatter(LEAF_LITTER_SCATTER)}, 1},
+            {"minecraft:yellow_poplar_tree_with_leaf_litter_feature",
+             {tree(POPLAR_TREES[2]), scatter(LEAF_LITTER_SCATTER)}, 1}
+    };
+    static const WeightedDefinition DAPPLED_FOREST_TREES = {
+            "minecraft:select_tree_dappled_forest_feature",
+            {{aggregate(POPLARS_WITH_LEAF_LITTER[0]), 200}, {aggregate(POPLARS_WITH_LEAF_LITTER[1]), 240},
+             {aggregate(POPLARS_WITH_LEAF_LITTER[2]), 90}, {aggregate(STANDING_SPRUCE), 27},
+             {tree(POPLAR_TREES[3]), 120}}};
+    // no coordinate_eval_order: xzy
+    static const ScatterDefinition RED_SHRUBS = {
+            "minecraft:scatter_red_shrub_bush_feature", "8", {{6, "-7", "7"}, {6, "-3", "3"}, {6, "-7", "7"}}, 1,
+            single(14)};
+    static const ScatterDefinition BROWN_MUSHROOMS = {
+            "minecraft:scatter_brown_mushroom_feature", "96", {{6, "-7", "7"}, {6, "-3", "3"}, {6, "-7", "7"}}, 5,
+            mushroom(&VanillaBlocks::BROWN_MUSHROOM)};
+
     struct NetherPlaced {
         const char *mIdentifier;
         bool (*mFunction)(BlockManager &, int32_t, int32_t, int32_t, std::mt19937 &);
@@ -1712,6 +1793,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         feature.mSprings = entry.mFeature == "minecraft:legacy:springs_feature";
         if (entry.mFeature == ROOFED_FOREST.mIdentifier)
             feature.mPlaced.mAggregate = &ROOFED_FOREST;
+        if (entry.mFeature == DAPPLED_FOREST_TREES.mIdentifier)
+            feature.mPlaced.mWeighted = &DAPPLED_FOREST_TREES;
+        if (entry.mFeature == RED_SHRUBS.mIdentifier)
+            feature.mPlaced.mScatter = &RED_SHRUBS;
         if (entry.mFeature == RANDOM_MANGROVE.mIdentifier)
             feature.mPlaced.mWeighted = &RANDOM_MANGROVE;
         for (const AggregateDefinition &withBeenest: MANGROVES_WITH_BEENEST) {
@@ -1739,6 +1824,8 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         feature.mPlaced.mWeighted = &RANDOM_CHERRY;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == FIXUP_VINES.mIdentifier)
         feature.mPlaced.mScatter = &FIXUP_VINES;
+    if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == BROWN_MUSHROOMS.mIdentifier)
+        feature.mPlaced.mScatter = &BROWN_MUSHROOMS;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == "minecraft:bamboo_feature")
         feature.mPlaced.mFunction = &placeBamboo;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == "minecraft:melon_feature")
@@ -3458,7 +3545,11 @@ bool OverworldRulePlacer::_placeSingleBlock(BlockManager &blocks, const SingleBl
         return _placeAttached(blocks, single, x, y, z);
 
     const BlockState &support = blocks.getBlockAt(x, y - 1, z);
+    const bool hardenedClay = support.mName == "minecraft:hardened_clay"
+                              || (BlockIdentifier::endsWith(support.mName, "_terracotta")
+                                  && !BlockIdentifier::endsWith(support.mName, "_glazed_terracotta"));
     const bool supported = IFeature::isSupportDirt(support)
+                           || (single.mSandAndClay && (DecorationSupport::isSand(support) || hardenedClay))
                            || (single.mNetherPlant && (support.mName == "minecraft:crimson_nylium"
                                                        || support.mName == "minecraft:warped_nylium"
                                                        || support.mName == "minecraft:soul_soil"));

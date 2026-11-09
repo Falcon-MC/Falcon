@@ -76,9 +76,6 @@
 namespace {
     const char *const BEHAVIOR_PREFIX = "minecraft:behavior.";
 
-    const int32_t PANIC_RANGE = 12;
-    const int32_t PANIC_INTERVAL = 40;
-    const int32_t PANIC_DURATION = 100;
     const int32_t WATER_RETRIES = 10;
 
     const float STROLL_DEFAULT_RANGE = 10.0f;
@@ -573,8 +570,29 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "float")
         return std::make_unique<FloatGoal>();
 
-    if (behavior == "panic")
-        return std::make_unique<PanicGoal>(speed, PANIC_RANGE, PANIC_INTERVAL, PANIC_DURATION, true, WATER_RETRIES);
+    if (behavior == "panic") {
+        PanicGoal::Settings settings;
+        settings.mSpeed = speed;
+        const auto flag = [&component](const char *key) {
+            const json::Value *value = component.get(key);
+            return value != nullptr && value->boolean(false);
+        };
+        settings.mIgnoreMobDamage = flag("ignore_mob_damage");
+        settings.mForce = flag("force");
+        settings.mPreferWater = flag("prefer_water");
+        if (const json::Value *sources = component.get("damage_sources")) {
+            settings.mDamageSources.clear();
+            if (sources->isString())
+                settings.mDamageSources.push_back(sources->mString);
+            else if (sources->isArray()) {
+                for (const auto &source: sources->mArray) {
+                    if (source != nullptr && source->isString())
+                        settings.mDamageSources.push_back(source->mString);
+                }
+            }
+        }
+        return std::make_unique<PanicGoal>(std::move(settings));
+    }
 
     if (behavior == "random_stroll") {
         const int32_t range = (int32_t) numberOf(component, "xz_dist", STROLL_DEFAULT_RANGE);

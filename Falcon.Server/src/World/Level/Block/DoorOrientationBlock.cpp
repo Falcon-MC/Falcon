@@ -2,6 +2,7 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockSupportRules.h"
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/DoorBlock.h"
 #include "World/Level/Block/DoubleBlock.h"
@@ -33,6 +34,9 @@ bool DoorOrientationBlock::canSurvive(Level &level, const Vector3i &position, co
 
     if (DoubleBlock::isUpperHalf(state))
         return true;
+
+    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
+        return *measured;
 
     const BlockState below = level.getBlockState(position.x, position.y - 1, position.z);
     return BlockSupport::isSolidOrCauldron(below);
@@ -98,4 +102,50 @@ BlockState DoorOrientationBlock::applyPlacementOrientation(const BlockState &sta
     }
 
     return BlockState(result.mName, states);
+}
+
+namespace {
+    // south, west, north, east
+    int32_t doorDirection(const BlockState &state) {
+        const std::string cardinal = state.mStates.getString("minecraft:cardinal_direction", "");
+        if (cardinal == "south") return 0;
+        if (cardinal == "west") return 1;
+        if (cardinal == "north") return 2;
+        if (cardinal == "east") return 3;
+        return state.mStates.getInt("direction", 0) & 3;
+    }
+}
+
+bool DoorOrientationBlock::getCollisionShapesAt(
+        const BlockState &state, const Vector3i &position, const Actor *actor,
+        const std::function<const BlockState *(int32_t, int32_t, int32_t)> &neighbours,
+        std::vector<AxisAlignedBB> &shapes) const {
+    (void) actor;
+    // the client resolves the plane from both halves: direction and open bit below, hinge above; a half alone
+    // stands as a closed south door
+    const bool upper = state.mStates.getByte("upper_block_bit") != 0;
+    const BlockState *other = neighbours(position.x, position.y + (upper ? -1 : 1), position.z);
+    int32_t direction = 0;
+    bool open = false;
+    bool hingeRight = false;
+    if (other != nullptr && other->mName == state.mName) {
+        const BlockState &lower = upper ? *other : state;
+        const BlockState &top = upper ? state : *other;
+        direction = doorDirection(lower);
+        open = lower.mStates.getByte("open_bit") != 0;
+        hingeRight = top.mStates.getByte("door_hinge_bit") != 0;
+    }
+    const int32_t plane = open ? (direction + (hingeRight ? 2 : 0)) & 3 : (direction + 3) & 3;
+    const float thickness = 0.1825f;
+    AxisAlignedBB box(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f);
+    if (plane == 0)
+        box.mMaxZ = thickness;
+    else if (plane == 1)
+        box.mMinX = 1.0f - thickness;
+    else if (plane == 2)
+        box.mMinZ = 1.0f - thickness;
+    else
+        box.mMaxX = thickness;
+    shapes.push_back(box);
+    return true;
 }

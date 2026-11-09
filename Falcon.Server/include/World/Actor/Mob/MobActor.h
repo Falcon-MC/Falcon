@@ -1,5 +1,7 @@
 #pragma once
 
+#include "World/Actor/ActorDamageSource.h"
+
 #include "World/Actor/AI/Control/BodyControl.h"
 #include "World/Actor/AI/Control/JumpControl.h"
 #include "World/Actor/AI/Control/LookControl.h"
@@ -306,6 +308,17 @@ public:
 
     int64_t getLastHurtTick() const {
         return mLastHurtTick;
+    }
+
+    // the death message key and cause of the last hurt, no actors kept
+    const ActorDamageSource &getLastHurtSource() const {
+        return mLastHurtSource;
+    }
+
+    void setLastHurtSource(const ActorDamageSource &source) {
+        mLastHurtSource = ActorDamageSource();
+        mLastHurtSource.mDeathMessageKey = source.mDeathMessageKey;
+        mLastHurtSource.mCause = source.mCause;
     }
 
     uint64_t getLastHurtBy() const {
@@ -628,6 +641,7 @@ private:
     mutable bool mSensorComponentsStale = true;
     int64_t mLastHurtTick = INT64_MIN / 2;
     uint64_t mLastHurtBy = 0;
+    ActorDamageSource mLastHurtSource;
     uint32_t mHurtCount = 0;
     uint64_t mTargetRuntimeId = 0;
     uint64_t mSyncedTargetRuntimeId = 0;

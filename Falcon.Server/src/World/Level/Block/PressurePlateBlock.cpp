@@ -1,6 +1,7 @@
 #include "World/Level/Block/PressurePlateBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockSupportRules.h"
 
 FALCON_REGISTER_BLOCK(PressurePlateBlock, 390);
 
@@ -38,7 +39,9 @@ bool PressurePlateBlock::canPlaceAt(Level &level, const Vector3i &position, int 
 }
 
 bool PressurePlateBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
-    (void) state;
+    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
+        return *measured;
+
     return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
 }
 

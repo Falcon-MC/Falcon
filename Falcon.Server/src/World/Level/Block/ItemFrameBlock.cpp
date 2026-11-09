@@ -1,6 +1,7 @@
 #include "World/Level/Block/ItemFrameBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockSupportRules.h"
 
 FALCON_REGISTER_BLOCK(ItemFrameBlock, 60);
 
@@ -128,6 +129,9 @@ bool ItemFrameBlock::canPlaceAt(Level &level, const Vector3i &position, int bloc
 }
 
 bool ItemFrameBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
+        return *measured;
+
     int facing = state.mStates.getInt("facing_direction", -1);
     if (facing < 0) {
         const std::string name = state.mStates.getString("minecraft:facing_direction", std::string());

@@ -100,6 +100,14 @@ bool CustomContentRegistry::isCustomBlock(const std::string &identifier) const {
     return false;
 }
 
+const CustomBlockDefinition *CustomContentRegistry::findBlock(const std::string &identifier) const {
+    for (const CustomBlockDefinition &block: mBlocks) {
+        if (block.mIdentifier == identifier)
+            return &block;
+    }
+    return nullptr;
+}
+
 const ActorPropertyDescription *CustomActorDefinition::findProperty(const std::string &name) const {
     return ActorPropertySchema::find(mProperties, name);
 }

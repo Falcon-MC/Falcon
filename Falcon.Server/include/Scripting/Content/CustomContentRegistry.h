@@ -130,6 +130,8 @@ public:
 
     bool isCustomBlock(const std::string &identifier) const;
 
+    const CustomBlockDefinition *findBlock(const std::string &identifier) const;
+
     bool hasIdentifier(const std::string &identifier) const;
 
     const CustomItemDefinition *registerItem(const CustomItemDefinition &item, ItemDefinitionRegistry &items);

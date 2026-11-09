@@ -12,7 +12,12 @@ falcon_bedrock_data_file(item_tags.json FALCON_ITEM_TAGS_JSON)
 falcon_bedrock_data_file(biome_definitions.nbt FALCON_BIOME_DEFINITIONS_NBT)
 falcon_bedrock_data_file(block_palette.nbt FALCON_BLOCK_PALETTE_NBT)
 falcon_bedrock_data_file(voxel_shapes.json FALCON_VOXEL_SHAPES_JSON)
+falcon_bedrock_data_file(block_collision_shapes.json FALCON_BLOCK_COLLISION_SHAPES_JSON)
 falcon_bedrock_data_file(creative_items.json FALCON_CREATIVE_ITEMS_JSON)
+falcon_bedrock_data_embed_text(FILE block_support_rules.json NAMESPACE FalconBlockSupportData SYMBOL kBlockSupportRulesJson
+        DELIMITER falconsupport OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockSupportRulesJson.h")
+falcon_bedrock_data_embed_text(FILE command_hidden_items.json NAMESPACE FalconCommandData SYMBOL kCommandHiddenItemsJson
+        DELIMITER falconitems OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/CommandHiddenItemsJson.h")
 falcon_bedrock_data_embed_text(FILE loot_tables.json NAMESPACE FalconLootData SYMBOL kLootTablesJson
         DELIMITER falconloot OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/LootTablesJson.h")
 falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE FalconItemData SYMBOL kItemPaletteJson
@@ -75,6 +80,9 @@ configure_file(cmake/CraftingRecipeJson.h.in "${FALCON_GENERATED_DIR}/CraftingRe
 
 file(READ "${FALCON_VOXEL_SHAPES_JSON}" FALCON_VOXEL_SHAPES_JSON_CONTENT)
 configure_file(cmake/VoxelShapesJson.h.in "${FALCON_GENERATED_DIR}/VoxelShapesJson.h" @ONLY)
+
+file(READ "${FALCON_BLOCK_COLLISION_SHAPES_JSON}" FALCON_BLOCK_COLLISION_SHAPES_JSON_CONTENT)
+configure_file(cmake/BlockCollisionShapesJson.h.in "${FALCON_GENERATED_DIR}/BlockCollisionShapesJson.h" @ONLY)
 
 file(READ "${FALCON_CREATIVE_ITEMS_JSON}" FALCON_CREATIVE_ITEMS_JSON_CONTENT)
 configure_file(cmake/CreativeItemsJson.h.in "${FALCON_GENERATED_DIR}/CreativeItemsJson.h" @ONLY)

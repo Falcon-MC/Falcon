@@ -414,11 +414,29 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     // the client places and breaks before it moves on the same tick: it already collides with a block it just put
     // down, and walks into the gap of one it just broke, so the replay must see the world after them
     // in packet order: a block broken in one hit sends its StartBreak and its destroy on the same input
+    // a one-hit block goes in the item use transaction, but the client lists its abort and the next block's start
+    // among the actions of the same input: validate the destroy while its break is still the current one
+    bool transactionBreakPending = packet.mHasItemUseTransaction && packet.mItemUseTransaction.mActionType == 2;
+    const Vector3i transactionBreakPosition = packet.mItemUseTransaction.mBlockPosition;
+    const auto completeTransactionBreak = [&]() {
+        if (!transactionBreakPending || !player.isBreakingBlock()
+            || player.getBreakingBlockPosition() != transactionBreakPosition)
+            return;
+        transactionBreakPending = false;
+        BlockActionHandler::completeBreakingBlock(owner, player, transactionBreakPosition);
+    };
     for (const PlayerBlockActionData &action: packet.mPlayerActions) {
+        if (action.mAction == PlayerActionType::AbortBreak
+            || ((action.mAction == PlayerActionType::StartBreak
+                 || action.mAction == PlayerActionType::BlockContinueDestroy)
+                && action.mBlockPosition != transactionBreakPosition))
+            completeTransactionBreak();
         if (action.mAction == PlayerActionType::StartBreak
             || action.mAction == PlayerActionType::BlockContinueDestroy) {
-            // the client keeps reporting the hit block; restarting on each repeat resets the progress
-            if (player.hasLastBlockAttacked() && player.getLastBlockAttacked() == action.mBlockPosition)
+            // the client keeps reporting the hit block; restarting on each repeat resets the progress. only a break
+            // in progress on it counts: a ContinueBreak onto a new block marks it without starting a break there
+            if (player.hasLastBlockAttacked() && player.getLastBlockAttacked() == action.mBlockPosition
+                && player.isBreakingBlock() && player.getBreakingBlockPosition() == action.mBlockPosition)
                 continue;
 
             BlockActionHandler::startBreakingBlock(owner, player, action.mBlockPosition, action.mFace);
@@ -443,8 +461,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (packet.mHasItemUseTransaction) {
         if (packet.mItemUseTransaction.mActionType == 0)
             BlockActionHandler::placeBlock(owner, player, packet.mItemUseTransaction);
-        else if (packet.mItemUseTransaction.mActionType == 2)
-            BlockActionHandler::completeBreakingBlock(owner, player, packet.mItemUseTransaction.mBlockPosition);
+        else if (transactionBreakPending)
+            BlockActionHandler::completeBreakingBlock(owner, player, transactionBreakPosition);
     }
 
     PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition, sprinting);

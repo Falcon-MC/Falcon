@@ -1,6 +1,7 @@
 #include "World/Level/Block/ShelfMushroomBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockSupportRules.h"
 
 FALCON_REGISTER_BLOCK(ShelfMushroomBlock, 186);
 
@@ -22,6 +23,9 @@ bool ShelfMushroomBlock::canPlaceAt(Level &level, const Vector3i &position, int 
 }
 
 bool ShelfMushroomBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
+        return *measured;
+
     const int facing = PlacementOrientation::faceFromName(
             state.mStates.getString("minecraft:cardinal_direction", ""));
     if (facing < PlacementOrientation::FACE_NORTH)

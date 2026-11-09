@@ -1,6 +1,7 @@
 #include "World/Level/Block/LadderBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockSupportRules.h"
 
 FALCON_REGISTER_BLOCK(LadderBlock, 180);
 
@@ -57,6 +58,9 @@ bool LadderBlock::getCollisionShape(const BlockState &state, const Actor *actor,
 }
 
 bool LadderBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
+        return *measured;
+
     if (!state.mStates.contains("facing_direction"))
         return true;
 

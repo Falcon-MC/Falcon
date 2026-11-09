@@ -1,4 +1,5 @@
 #include "World/Level/Block/RedstoneDiodeBlock.h"
+#include "World/Level/Block/BlockSupportRules.h"
 
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
@@ -14,7 +15,8 @@ bool RedstoneDiodeBlock::canPlaceAt(Level &level, const Vector3i &position, int 
 
 bool RedstoneDiodeBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const
 {
-    (void) state;
+    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
+        return *measured;
 
     return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
 }

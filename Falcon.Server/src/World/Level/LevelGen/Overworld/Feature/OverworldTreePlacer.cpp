@@ -70,6 +70,12 @@ namespace {
     }
 
     bool replaces(const OverworldTreePlacer::Definition &tree, const BlockState &state) {
+        static const BlockStateSet POPLAR_COVER = {
+                VanillaBlocks::BROWN_MUSHROOM().getIdentifier(), VanillaBlocks::RED_SHRUB().getIdentifier(),
+                VanillaBlocks::SHELF_MUSHROOM().getIdentifier()
+        };
+        if (tree.mPoplar != nullptr && POPLAR_COVER.contains(state))
+            return true;
         if (tree.mAirAndLeaves)
             return isAir(state) || isLeaves(state);
         if (tree.mMangrove != nullptr && isMangroveCover(state))
@@ -206,6 +212,8 @@ bool OverworldTreePlacer::place(BlockManager &blocks, const Definition &tree, co
     }
 
     const int32_t height = drawRange(random, tree.mHeight);
+    if (tree.mTrunk == Trunk::Poplar)
+        return _poplarTrunk(blocks, tree, *tree.mPoplar, x, y, z, height, random, decorate);
     if (tree.mTrunk == Trunk::Fallen)
         return _fallenTrunk(blocks, tree, x, y, z, height, random, decorate);
     return _simpleTrunk(blocks, tree, x, y, z, height, random, placedAt);
@@ -1613,6 +1621,131 @@ void OverworldTreePlacer::_acaciaCanopy(BlockManager &blocks, const Definition &
         for (int32_t offsetZ = -size; offsetZ <= size; offsetZ++) {
             if (std::abs(offsetX) != size || std::abs(offsetZ) != size)
                 leaf(x + offsetX, y, z + offsetZ);
+        }
+    }
+}
+
+namespace {
+    // the poplar's ranges draw their maximum too, only when they hold more than one value
+    int32_t drawInclusive(std::mt19937 &random, const OverworldTreePlacer::Range &range) {
+        return range.mMax > range.mMin ? range.mMin + nextInt(random, range.mMax - range.mMin + 1) : range.mMin;
+    }
+}
+
+bool OverworldTreePlacer::_poplarTrunk(BlockManager &blocks, const Definition &tree, const Poplar &poplar, int32_t x,
+                                       int32_t y, int32_t z, int32_t height, std::mt19937 &random,
+                                       const Decorate &decorate) {
+    // PoplarTreeTrunk::place (sub_1471C9990, vtable 0x14F2F5D20)
+    if (!_canPlace(blocks, tree, x, y, z, height) || y >= LevelChunk::MAX_Y + 1 - height - 1)
+        return false;
+
+    if (!isBaseBlock(blocks.getBlockAt(x, y - 1, z)))
+        blocks.setBlockStateAt(x, y - 1, z, VanillaBlocks::DIRT().toBlockState());
+
+    const int32_t remaining = drawInclusive(random, poplar.mRemainingHeight);
+    const BlockState log = tree.mLog().toBlockState();
+    for (int32_t step = 0; step < height; step++) {
+        if (replaces(tree, blocks.getBlockAt(x, y + step, z)))
+            blocks.setBlockStateAt(x, y + step, z, log);
+        // the log decoration runs on every step, placed or not
+        if (tree.mLogDecoration)
+            decorate(x, y + step, z);
+    }
+
+    // the branch directions, 2 north, 3 south, 4 west, 5 east, shuffled by three raw draws
+    uint8_t directions[4] = {2, 5, 3, 4};
+    if ((random() & 1u) == 0) {
+        directions[0] = 5;
+        directions[1] = 2;
+    }
+    const uint32_t third = random() % 3u;
+    if (third != 2) {
+        directions[2] = directions[third];
+        directions[third] = 3;
+    }
+    const uint32_t fourth = random() & 3u;
+    if (fourth != 3) {
+        directions[3] = directions[fourth];
+        directions[fourth] = 4;
+    }
+
+    const int32_t branches = std::min(drawInclusive(random, poplar.mSupportBranches), 4);
+    const int32_t canopyY = y + height - remaining;
+    for (int32_t branch = 0; branch < branches; branch++) {
+        const uint8_t direction = directions[branch];
+        const int32_t branchX = x + (direction == 4 ? -1 : direction == 5 ? 1 : 0);
+        const int32_t branchZ = z + (direction == 2 ? -1 : direction == 3 ? 1 : 0);
+        if (!replaces(tree, blocks.getBlockAt(branchX, canopyY - 1, branchZ)))
+            continue;
+        blocks.setBlockStateAt(branchX, canopyY - 1, branchZ, withAxis(log, direction <= 3 ? "z" : "x"));
+    }
+
+    _poplarCanopy(blocks, tree, poplar, x, canopyY, z, random);
+    return true;
+}
+
+void OverworldTreePlacer::_poplarCanopy(BlockManager &blocks, const Definition &tree, const Poplar &poplar, int32_t x,
+                                        int32_t y, int32_t z, std::mt19937 &random) {
+    // PoplarTreeCanopy::place (sub_1471C8BD0): the radius by weight, the height, then which diagonal quadrants
+    // reach one further
+    int32_t total = 0;
+    for (const std::pair<int32_t, int32_t> &entry: poplar.mRadius)
+        total += entry.second;
+    size_t picked = 0;
+    if (total != 0) {
+        int32_t draw = nextInt(random, total) - poplar.mRadius[0].second;
+        while (draw >= 0 && picked + 1 < poplar.mRadius.size())
+            draw -= poplar.mRadius[++picked].second;
+    }
+    const int32_t radius = poplar.mRadius.empty() ? 0 : poplar.mRadius[picked].first - 1;
+    const int32_t height = drawInclusive(random, poplar.mCanopyHeight);
+    const bool flip = nextBoolean(random);
+
+    _poplarLayer(blocks, tree, poplar, x, y, z, height, radius - 2, height - 1, flip, random);
+    _poplarLayer(blocks, tree, poplar, x, y, z, height, radius - 1, height - 2, flip, random);
+    _poplarLayer(blocks, tree, poplar, x, y, z, height, radius - 1, height - 3, flip, random);
+    for (int32_t offsetY = height - 4; offsetY >= 1; offsetY--)
+        _poplarLayer(blocks, tree, poplar, x, y, z, height, radius, offsetY, flip, random);
+
+    // the support branches crossing under the top, along x and z where the canopy reaches 4 further
+    const BlockState branch = tree.mLog().toBlockState();
+    for (int32_t offsetX = -radius; offsetX <= radius; offsetX++) {
+        for (int32_t offsetZ = -radius; offsetZ <= radius; offsetZ++) {
+            if ((radius - std::abs(offsetZ) < 4 || offsetX != 0) && (radius - std::abs(offsetX) < 4 || offsetZ != 0))
+                continue;
+            const int32_t branchY = y + height - 4;
+            if (!replaces(tree, blocks.getBlockAt(x + offsetX, branchY, z + offsetZ)))
+                continue;
+            blocks.setBlockStateAt(x + offsetX, branchY, z + offsetZ, withAxis(branch, offsetZ == 0 ? "x" : "z"));
+        }
+    }
+
+    _poplarLayer(blocks, tree, poplar, x, y, z, height, radius - 1, 0, flip, random);
+    const int32_t bottom = radius >= 5 ? 2 : (radius >= 3 ? radius - 2 : 1);
+    _poplarLayer(blocks, tree, poplar, x, y, z, height, bottom, -1, flip, random);
+}
+
+void OverworldTreePlacer::_poplarLayer(BlockManager &blocks, const Definition &tree, const Poplar &poplar, int32_t x,
+                                       int32_t y, int32_t z, int32_t height, int32_t radius, int32_t offsetY,
+                                       bool flip, std::mt19937 &random) {
+    // sub_1471C9450: a diamond, the two top layers without their edge rows and one smaller; a cell reaches one
+    // further past the side hole chance and in its two quadrants
+    const BlockState leaves = tree.mLeaves().toBlockState();
+    const bool top = offsetY == height - 1 || offsetY == height - 2;
+    for (int32_t offsetX = -radius; offsetX <= radius; offsetX++) {
+        for (int32_t offsetZ = -radius; offsetZ <= radius; offsetZ++) {
+            if (top && (std::abs(offsetZ) == radius || std::abs(offsetX) == radius))
+                continue;
+
+            const bool reaches = flip ? (offsetX < 0 && offsetZ < 0) || (offsetX > 0 && offsetZ > 0)
+                                      : (offsetX < 0 && offsetZ > 0) || (offsetX > 0 && offsetZ < 0);
+            const int32_t bonus = reaches ? 1 : (top ? -1 : 0);
+            const int32_t hole = poplar.mSideHoleChance < nextFloat(random) ? 1 : 0;
+            if (std::abs(offsetX) + std::abs(offsetZ) > hole + radius + bonus - 1)
+                continue;
+            if (!replaces(tree, blocks.getBlockAt(x + offsetX, y + offsetY, z + offsetZ)))
+                continue;
+            blocks.setBlockStateAt(x + offsetX, y + offsetY, z + offsetZ, leaves);
         }
     }
 }
