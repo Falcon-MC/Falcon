@@ -653,11 +653,12 @@ bool ServerNetworkHandler::tickPlantedProjectile(ServerActor &projectile, Level 
             || position.y < feet.y - ARROW_PICKUP_REACH_Y || position.y > feet.y + PLAYER_HEIGHT + ARROW_PICKUP_REACH_Y)
             continue;
 
+        // nothing to give outside creative: the arrow stays until it expires
         const bool creative = player.getGameType() == (int32_t) GameType::Creative;
-        if (data.mPickupCreativeOnly && !creative)
+        if (!creative && (data.mPickupCreativeOnly || data.mPickupItem.isAir()))
             continue;
 
-        if (!creative && !data.mPickupCreativeOnly && !data.mPickupItem.isAir()) {
+        if (!creative) {
             std::vector<int> touched;
             if (!player.getInventory().addItem(data.mPickupItem, touched))
                 continue;
@@ -669,7 +670,6 @@ bool ServerNetworkHandler::tickPlantedProjectile(ServerActor &projectile, Level 
         take.mItemRuntimeActorId = projectile.getRuntimeId();
         take.mRuntimeActorId = player.getRuntimeId();
         _sendToViewers(projectile, take);
-        mNetworkHandler->send(player.getNetworkIdentifier(), take, mCodecContext);
         return true;
     }
 
@@ -824,6 +824,9 @@ bool ServerNetworkHandler::onThrownProjectileHitActor(ServerActor &projectile, c
     if (hitActor.isProjectile()) {
         const bool handled = onThrownProjectileHit(projectile, hitPosition, nullptr);
         const bool otherHandled = onThrownProjectileHit(hitActor, hitActor.getPosition(), nullptr);
+        // an arrow knocked out of the air is removed, not planted: its item drops
+        if (hitActor.getProjectileData().mStuck)
+            dropProjectileItem(hitActor, hitActor.getPosition());
         removeActor(hitActor.getUniqueId());
         return handled || otherHandled;
     }
@@ -1809,6 +1812,8 @@ void ServerNetworkHandler::tickActors() {
                             continue;
 
                         const bool candidateIsProjectile = candidate.isProjectile();
+                        if (candidateIsProjectile && candidate.getProjectileData().mStuck)
+                            continue;
                         if (candidateIsProjectile && candidate.getOwnerUniqueId() == actor.getOwnerUniqueId() &&
                             candidate.getLifetimeTicks() < 8)
                             continue;
