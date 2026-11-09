@@ -14,8 +14,10 @@ bool OpCommand::execute(CommandOrigin &sender, const std::vector<std::string> &a
     mHandler.getOpList().addOp(arguments[0]);
 
     ServerPlayer *target = mHandler.getPlayerByName(arguments[0]);
-    if (target != nullptr)
+    if (target != nullptr) {
+        mHandler.getOpList().bindXuid(target->getName(), target->getXuid());
         mHandler.setPlayerOp(*target, true);
+    }
 
     sender.sendTranslation("commands.op.success", {arguments[0]});
     return true;

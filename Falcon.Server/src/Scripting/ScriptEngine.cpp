@@ -156,10 +156,17 @@ namespace {
             return nullptr;
         }
 
+        // canonical first: a prefix test on "<root>/../.." would pass
+        const std::string canonical = canonicalPath(name);
+        if (canonical != name) {
+            JS_ThrowReferenceError(ctx, "could not load module '%s'", moduleName);
+            return nullptr;
+        }
+
         std::string path = name;
         if (path.size() < 3 || path.compare(path.size() - 3, 3, ".js") != 0)
             path += ".js";
-        const std::string root = api->packRoot() + "/";
+        const std::string root = canonicalPath(api->packRoot()) + "/";
         std::string source;
         if (path.compare(0, root.size(), root) == 0)
             source = readFile(path);

@@ -275,7 +275,7 @@ void LoginChainVerifier::_extractIdentity(const std::string &payload) {
 
 // legacy three-link chain: each link signed by the previous identityPublicKey (the first by its own x5u),
 // the second by the root auth key; identity read from the last link
-bool LoginChainVerifier::_verifyChain(const std::vector<std::string> &chain) {
+bool LoginChainVerifier::_verifyChain(const std::vector<std::string> &chain, const std::string &clientJwt) {
     EVP_PKEY *currentKey = nullptr;
     EVP_PKEY *mojangKey = parseKey(MOJANG_PUBLIC_KEY_BASE64);
     if (mojangKey == nullptr) {
@@ -360,6 +360,11 @@ bool LoginChainVerifier::_verifyChain(const std::vector<std::string> &chain) {
 
     _extractIdentity(lastPayload);
     mIdentityPublicKey = ConnectionRequest::findJsonString(lastPayload, "identityPublicKey");
+
+    // a chain is only a certificate: without this anyone who saw it once could present it
+    if (mIdentityPublicKey.empty() || !_verifyClientData(clientJwt, mIdentityPublicKey))
+        return _fail("Your client data token was not signed by your login chain");
+
     mSigned = true;
     return true;
 }
@@ -595,7 +600,7 @@ bool LoginChainVerifier::verify(const std::string &authJwt, const std::string &c
     }
 
     if (chain.size() == 3)
-        return _verifyChain(chain);
+        return _verifyChain(chain, clientJwt);
 
     LOG_WARN(LogAreaID::Network, "Unexpected login chain length %u", (unsigned) chain.size());
     return _fail("Your login chain has an unexpected length");

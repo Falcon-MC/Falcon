@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -29,14 +30,15 @@ PlayerDataProvider::PlayerDataProvider(const std::string &directory) : mDirector
     MAKE_DIRECTORY(mDirectory.c_str());
 }
 
-bool PlayerDataProvider::_isSafeName(const std::string &name) {
+bool PlayerDataProvider::isSafeName(const std::string &name) {
     // client-supplied name: no escaping the directory, no path injection; control bytes rejected (a NUL
     // truncates the path)
     if (name.empty() || name.size() > 64 || name == "." || name == "..")
         return false;
 
     for (const unsigned char character: name) {
-        if (character == '/' || character == '\\' || character < 0x20)
+        // ':' opens an alternate stream on windows
+        if (character == '/' || character == '\\' || character == ':' || character < 0x20)
             return false;
     }
 
@@ -105,11 +107,17 @@ bool PlayerDataProvider::_gzipDecompress(const std::string &input, std::string &
 }
 
 bool PlayerDataProvider::hasData(const std::string &name) const {
+    if (!isSafeName(name))
+        return false;
+
     struct stat info;
     return stat(_getPlayerDataPath(name).c_str(), &info) == 0;
 }
 
 bool PlayerDataProvider::loadData(const std::string &name, Tag &outData) const {
+    if (!isSafeName(name))
+        return false;
+
     std::ifstream file(_getPlayerDataPath(name), std::ios::binary);
     if (!file.is_open())
         return false;
@@ -132,7 +140,18 @@ bool PlayerDataProvider::loadData(const std::string &name, Tag &outData) const {
     return true;
 }
 
+bool PlayerDataProvider::archiveData(const std::string &name, const std::string &suffix) const {
+    if (!isSafeName(name) || !isSafeName(suffix))
+        return false;
+
+    const std::string target = mDirectory + "/" + StringUtil::toLowerCase(name) + "." + suffix + ".dat";
+    return std::rename(_getPlayerDataPath(name).c_str(), target.c_str()) == 0;
+}
+
 bool PlayerDataProvider::saveData(const std::string &name, const Tag &data) const {
+    if (!isSafeName(name))
+        return false;
+
     BinaryStream stream;
 
     try {

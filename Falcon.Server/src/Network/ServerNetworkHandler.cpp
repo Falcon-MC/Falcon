@@ -342,7 +342,48 @@ namespace {
         int mDepth = 0;
     };
 
+    // client text for a log line: one line, no control bytes (a terminal obeys escape sequences), bounded
+    std::string logSafe(const std::string &text, size_t maximum = 256) {
+        std::string out = text.substr(0, maximum);
+        for (char &character: out) {
+            const unsigned char byte = (unsigned char) character;
+            if (byte < 0x20 || byte == 0x7f)
+                character = '?';
+        }
+        if (text.size() > maximum)
+            out += "...";
+        return out;
+    }
+
+    // width * height * 4 bytes, or no image at all
+    bool isValidSkinImage(const SkinImageData &image, int32_t maximumSide) {
+        if (image.mWidth == 0 && image.mHeight == 0)
+            return image.mData.empty();
+        if (image.mWidth <= 0 || image.mHeight <= 0 || image.mWidth > maximumSide || image.mHeight > maximumSide)
+            return false;
+        return image.mData.size() == (size_t) image.mWidth * (size_t) image.mHeight * 4;
+    }
+
+    // everything but the skin image is relayed to every player too: bounded the same way
+    bool isValidSkinExtras(const SerializedSkin &skin) {
+        static const size_t MAX_ANIMATIONS = 16;
+        static const size_t MAX_PERSONA_PIECES = 128;
+        static const size_t MAX_SKIN_JSON = 512 * 1024;
+
+        if (!isValidSkinImage(skin.mCapeData, 512) || skin.mAnimations.size() > MAX_ANIMATIONS
+            || skin.mPersonaPieces.size() > MAX_PERSONA_PIECES || skin.mTintColors.size() > MAX_PERSONA_PIECES)
+            return false;
+        for (const SkinAnimationData &animation: skin.mAnimations) {
+            if (!isValidSkinImage(animation.mImage, 512))
+                return false;
+        }
+        return skin.mGeometryData.size() <= MAX_SKIN_JSON && skin.mSkinResourcePatch.size() <= MAX_SKIN_JSON
+               && skin.mAnimationData.size() <= MAX_SKIN_JSON;
+    }
+
     bool isValidSkin(const SerializedSkin &skin) {
+        if (!isValidSkinExtras(skin))
+            return false;
         if (skin.mSkinData.mWidth <= 0 || skin.mSkinData.mHeight <= 0)
             return skin.mPersona && !skin.mPersonaPieces.empty();
         if (skin.mSkinData.mWidth > 128 || skin.mSkinData.mHeight > 128)
@@ -362,6 +403,21 @@ namespace {
         if (skin.mFullSkinId.empty())
             skin.mFullSkinId = skin.mSkinId;
     }
+}
+
+void ServerNetworkHandler::boundSkin(SerializedSkin &skin) {
+    if (isValidSkinExtras(skin))
+        return;
+
+    // a login is not refused over its cosmetics: what is out of bounds is dropped
+    skin.mCapeData = SkinImageData();
+    skin.mAnimations.clear();
+    skin.mPersonaPieces.clear();
+    skin.mTintColors.clear();
+    skin.mGeometryData.clear();
+    skin.mAnimationData.clear();
+    skin.mSkinResourcePatch.clear();
+    normalizeSkin(skin);
 }
 
 ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
@@ -487,6 +543,11 @@ void ServerNetworkHandler::setProtocolVersion(int protocolVersion, const std::st
 void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     mProperties = properties;
     mPlayerIdleTimeoutTicks = (int64_t) mProperties.getPlayerIdleTimeout() * TICKS_PER_MINUTE;
+
+    // encryption is what proves a client holds the key in its token: without it a login seen once replays
+    if (mProperties.getOnlineMode() && !mProperties.getNetworkEncryption())
+        LOG_WARN(LogAreaID::Server, "online-mode is on but network-encryption is off: a login captured elsewhere "
+                                    "can be replayed here. Turn network-encryption back on");
 
     if (mNetherNetInstance != nullptr) {
         mNetherNetInstance->setServerDataProvider([this]() {
@@ -1842,6 +1903,52 @@ namespace {
         return identifier.find("sign") != std::string::npos;
     }
 
+    void copySignString(const Tag &from, Tag &to, const char *key, size_t maximum) {
+        if (from.contains(key, Tag::Type::String))
+            to.putString(key, from.getString(key).substr(0, maximum));
+    }
+
+    void copySignByte(const Tag &from, Tag &to, const char *key) {
+        if (from.contains(key, Tag::Type::Byte))
+            to.putByte(key, from.getByte(key));
+    }
+
+    Tag sanitizedSignData(const Tag &source, const Vector3i &position, bool hanging) {
+        static const size_t MAX_SIGN_TEXT = 512;
+        static const size_t MAX_SIGN_OWNER = 64;
+
+        Tag data = Tag::ofCompound();
+        data.putString("id", hanging ? "HangingSign" : "Sign");
+        data.putInt("x", position.x);
+        data.putInt("y", position.y);
+        data.putInt("z", position.z);
+        copySignByte(source, data, "IsWaxed");
+
+        // older clients send the lines flat
+        const char *const legacyKeys[] = {"Text", "Text1", "Text2", "Text3", "Text4", "TextOwner"};
+        for (const char *key: legacyKeys)
+            copySignString(source, data, key, MAX_SIGN_TEXT);
+
+        const char *const sideKeys[] = {"FrontText", "BackText"};
+        for (const char *sideKey: sideKeys) {
+            const Tag *side = source.get(sideKey);
+            if (side == nullptr || !side->isCompound())
+                continue;
+
+            Tag clean = Tag::ofCompound();
+            copySignString(*side, clean, "Text", MAX_SIGN_TEXT);
+            copySignString(*side, clean, "FilteredText", MAX_SIGN_TEXT);
+            copySignString(*side, clean, "TextOwner", MAX_SIGN_OWNER);
+            copySignByte(*side, clean, "HideGlowOutline");
+            copySignByte(*side, clean, "IgnoreLighting");
+            copySignByte(*side, clean, "PersistFormatting");
+            if (side->contains("SignTextColor", Tag::Type::Int))
+                clean.putInt("SignTextColor", side->getInt("SignTextColor"));
+            data.put(sideKey, clean);
+        }
+        return data;
+    }
+
     void putPickedItem(ServerPlayer &player, ItemStack item, int hotbarSlot) {
         if (item.isAir() || item.mCount <= 0)
             return;
@@ -1890,15 +1997,11 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     if (player == nullptr || !player->isSpawned())
         return;
 
-    const Vector3f position = player->getPosition();
-    const float dx = position.x - ((float) packet.mBlockPosition.x + 0.5f);
-    const float dy = position.y - ((float) packet.mBlockPosition.y + 0.5f);
-    const float dz = position.z - ((float) packet.mBlockPosition.z + 0.5f);
-    if (dx * dx + dy * dy + dz * dz > 10000.0f)
+    // the editor only opens on a sign in reach
+    if (!BlockActionHandler::canInteractWithBlock(*player, packet.mBlockPosition))
         return;
 
-    // peek only, and require a sign: else any block in range relays arbitrary client NBT to everyone,
-    // and a far position forces a chunk load
+    // peek only: a far position must not force a chunk load
     const BlockState *statePtr = getLevelFor(*player).peekBlockPtr(packet.mBlockPosition.x, packet.mBlockPosition.y,
                                                                    packet.mBlockPosition.z);
     if (statePtr == nullptr || !isSignBlock(statePtr->mName))
@@ -1906,28 +2009,12 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     if (!packet.mData.isCompound())
         return;
 
-    // cap each relayed line: no oversized string pushed to every player
-    static const size_t MAX_SIGN_TEXT = 512;
-    BlockActorDataPacket relayed = packet;
-    const char *const textKeys[] = {"Text1", "Text2", "Text3", "Text4"};
-    for (const char *key: textKeys) {
-        if (relayed.mData.contains(key)) {
-            const std::string line = relayed.mData.getString(key);
-            if (line.size() > MAX_SIGN_TEXT)
-                relayed.mData.putString(key, line.substr(0, MAX_SIGN_TEXT));
-        }
-    }
-    const char *const sideKeys[] = {"FrontText", "BackText"};
-    for (const char *side: sideKeys) {
-        Tag *sideData = relayed.mData.get(side);
-        if (sideData == nullptr || !sideData->isCompound())
-            continue;
-        if (sideData->contains("Text")) {
-            const std::string line = sideData->getString("Text");
-            if (line.size() > MAX_SIGN_TEXT)
-                sideData->putString("Text", line.substr(0, MAX_SIGN_TEXT));
-        }
-    }
+    // rebuilt from the fields a sign has: the client's compound goes to every player, so nothing else
+    // in it may ride along
+    BlockActorDataPacket relayed;
+    relayed.mBlockPosition = packet.mBlockPosition;
+    relayed.mData = sanitizedSignData(packet.mData, packet.mBlockPosition,
+                                      statePtr->mName.find("hanging") != std::string::npos);
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_SIGN_CHANGE)) {
         const char *const sides[] = {"FrontText", "BackText"};
         for (const char *side: sides) {
@@ -2365,11 +2452,15 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ContainerCl
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PacketViolationWarningPacket &packet) {
-    (void) id;
+    // accepted at every login step: before a login it is anyone's free line in the log
+    const ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr || player->getLoginState() < ServerPlayer::LoginState::LoggedIn)
+        return;
 
     const char *causeName = toString((MinecraftPacketIds) packet.mPacketCauseId);
     LOG_ERROR(LogAreaID::Network, "CLIENT REJECTED PACKET id=%d (%s), type=%d, severity=%d, context: %s",
-              packet.mPacketCauseId, causeName, (int) packet.mType, (int) packet.mSeverity, packet.mContext.c_str());
+              packet.mPacketCauseId, causeName, (int) packet.mType, (int) packet.mSeverity,
+              logSafe(packet.mContext).c_str());
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequestPacket &packet) {
@@ -2378,7 +2469,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequ
         return;
 
     player->markActive(mCurrentTick);
-    LOG_INFO(LogAreaID::Server, "%s issued command: %s", player->getName().c_str(), packet.mCommand.c_str());
+    LOG_INFO(LogAreaID::Server, "%s issued command: %s", player->getName().c_str(),
+             logSafe(packet.mCommand, 512).c_str());
 
     std::string commandLine = packet.mCommand;
     PluginEvent commandEvent;

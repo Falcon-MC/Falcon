@@ -14,7 +14,14 @@ void ChatHandler::broadcastChat(ServerNetworkHandler &owner, ServerPlayer &playe
 
     const std::string &finalMessage = before.mMessage;
 
-    LOG_INFO(LogAreaID::Server, "<%s> %s", player.getName().c_str(), finalMessage.c_str());
+    // the log is read in a terminal: no escape sequence from a chat line gets there
+    std::string logged = finalMessage;
+    for (char &character: logged) {
+        const unsigned char byte = (unsigned char) character;
+        if (byte < 0x20 || byte == 0x7f)
+            character = '?';
+    }
+    LOG_INFO(LogAreaID::Server, "<%s> %s", player.getName().c_str(), logged.c_str());
 
     TextPacket chat;
     chat.mType = TextPacket::Type::Chat;
