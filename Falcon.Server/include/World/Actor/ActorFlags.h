@@ -50,6 +50,7 @@ enum class ActorFlag : int {
     Admiring = 94,
     CelebratingSpecial = 95,
     HasDashCooldown = 108,
+    PushTowardsClosestSpace = 109,
     Crawling = 114,
     TimerFlag1 = 115,
     TimerFlag2 = 116,
