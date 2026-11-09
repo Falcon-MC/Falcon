@@ -18,6 +18,8 @@ public:
         return true;
     }
 
+    bool getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const override;
+
     void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                             const BlockState &state) const override;
 
