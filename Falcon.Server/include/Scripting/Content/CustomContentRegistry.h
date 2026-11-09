@@ -1,5 +1,6 @@
 #pragma once
 
+#include "World/Level/Block/BlockPlacementFilter.h"
 #include "World/Actor/ActorPropertySchema.h"
 #include "Core/NBT/Tag.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -67,6 +68,7 @@ struct CustomBlockDefinition {
     bool mHasFriction = false;
     CustomBlockBox mCollision;
     CustomBlockBox mSelection;
+    BlockPlacementFilter mPlacementFilter;
     std::vector<std::string> mCustomComponents;
     bool mHasTick = false;
     bool mTickLooping = true;

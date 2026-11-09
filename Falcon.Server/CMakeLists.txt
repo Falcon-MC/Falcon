@@ -16,6 +16,8 @@ falcon_bedrock_data_file(block_collision_shapes.json FALCON_BLOCK_COLLISION_SHAP
 falcon_bedrock_data_file(creative_items.json FALCON_CREATIVE_ITEMS_JSON)
 falcon_bedrock_data_embed_text(FILE block_support_rules.json NAMESPACE FalconBlockSupportData SYMBOL kBlockSupportRulesJson
         DELIMITER falconsupport OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockSupportRulesJson.h")
+falcon_bedrock_data_embed_text(FILE block_tags.json NAMESPACE FalconBlockTagsData SYMBOL kBlockTagsJson
+        DELIMITER falcontags OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockTagsJson.h")
 falcon_bedrock_data_embed_text(FILE command_hidden_items.json NAMESPACE FalconCommandData SYMBOL kCommandHiddenItemsJson
         DELIMITER falconitems OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/CommandHiddenItemsJson.h")
 falcon_bedrock_data_embed_text(FILE command_hidden_blocks.json NAMESPACE FalconCommandData SYMBOL kCommandHiddenBlocksJson
@@ -325,6 +327,13 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     endif()
     add_test(NAME decoration-order COMMAND FalconDecorationOrderTests)
     set_tests_properties(decoration-order PROPERTIES TIMEOUT 120)
+    add_executable(FalconBlockPlacementFilterTests tests/BlockPlacementFilterTests.cpp)
+    target_link_libraries(FalconBlockPlacementFilterTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconBlockPlacementFilterTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME block-placement-filter COMMAND FalconBlockPlacementFilterTests)
+    set_tests_properties(block-placement-filter PROPERTIES TIMEOUT 60)
     add_executable(FalconBlockTickingQueueTests tests/BlockTickingQueueTests.cpp)
     target_link_libraries(FalconBlockTickingQueueTests PRIVATE FalconCore)
     if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

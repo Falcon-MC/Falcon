@@ -834,6 +834,9 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
 
             parseBox(components->get("minecraft:collision_box"), definition.mCollision);
             parseBox(components->get("minecraft:selection_box"), definition.mSelection);
+            const json::Value *placement = components->get("minecraft:placement_filter");
+            if (placement != nullptr && placement->isObject())
+                definition.mPlacementFilter = BlockPlacementFilter::parse(*placement, definition.mIdentifier);
         }
 
         _registerBlock(definition, items, blocks);

@@ -1188,6 +1188,10 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (!merged && placedBlock != nullptr && !placedBlock->canPlaceAt(level, target, placementFace))
         return false;
 
+    const CustomBlockDefinition *custom = merged ? nullptr : CustomContentRegistry::getInstance().findBlock(placedState.mName);
+    if (custom != nullptr && !custom->mPlacementFilter.allowsPlacement(level, target, placementFace))
+        return false;
+
     if (isBlockedByActor(owner, level, target, placedState, player))
         return false;
 
