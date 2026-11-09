@@ -3,6 +3,9 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 
+#include <cstdint>
+#include <string>
+
 class ServerNetworkHandler;
 class ServerPlayer;
 class ItemStack;
@@ -16,6 +19,21 @@ class PlayerAuthInputPacket;
 
 class BlockActionHandler {
 public:
+    // why a server-authoritative break was refused, for diagnostics plugins
+    struct BreakRejection {
+        const char *mReason = "";
+        std::string mBlock;
+        bool mBreaking = false;
+        Vector3i mBreakingPosition;
+        int64_t mElapsedTicks = 0;
+        int64_t mExpectedTicks = 0;
+        double mProgress = 0.0;
+        double mSpeed = 0.0;
+    };
+    using BreakRejectionHook = void (*)(ServerPlayer &player, const Vector3i &position, const BreakRejection &rejection);
+
+    static void setBreakRejectionHook(BreakRejectionHook hook);
+
     static void broadcastToViewers(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
                                    const Packet &packet, const ServerPlayer *except = nullptr);
 

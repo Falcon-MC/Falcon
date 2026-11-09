@@ -455,7 +455,8 @@ namespace {
                 if (jumpDelay > 0)
                     --jumpDelay;
                 const bool jumpHeld = tick > 5;
-                if (jumpHeld && grounded && jumpDelay == 0) {
+                const bool takeoff = jumpHeld && grounded && jumpDelay == 0;
+                if (takeoff) {
                     velocity.y = std::max(0.42f, velocity.y);
                     velocity.z += 0.2f;
                     jumpDelay = 10;
@@ -477,7 +478,8 @@ namespace {
                 packet.mInputData = {(int32_t) PlayerAuthInputData::Sprinting};
                 if (jumpHeld)
                     packet.mInputData.push_back((int32_t) PlayerAuthInputData::Jumping);
-                if (tick == 6)
+                // the client flags every takeoff, repeats included
+                if (takeoff)
                     packet.mInputData.push_back((int32_t) PlayerAuthInputData::StartJumping);
                 player.getMovementInputs().enqueue(packet);
                 MovementInputProbe::step(owner, player, tick);
@@ -1389,7 +1391,8 @@ namespace {
         close(leavingSwim->getPosition().y, 250.0f,
               "Ground jump ignored the remaining swim pose transition");
         leavingSwim->getSwimAmount().mCurrent = 0.0f;
-        step(*leavingSwim, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
+        step(*leavingSwim, {(int32_t) PlayerAuthInputData::Jumping, (int32_t) PlayerAuthInputData::StartJumping},
+             false, 0.0f);
         close(leavingSwim->getPosition().y, 250.42f, "Ground jump remained blocked after the swim pose ended");
 
         auto stopped = makePlayer();

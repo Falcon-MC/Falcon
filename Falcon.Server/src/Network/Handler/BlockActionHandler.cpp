@@ -775,6 +775,30 @@ void BlockActionHandler::resyncDroppedInput(ServerNetworkHandler &owner, ServerP
                          packet.mItemUseTransaction.mBlockFace);
 }
 
+namespace {
+    BlockActionHandler::BreakRejectionHook breakRejectionHook = nullptr;
+
+    void reportBreakRejection(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                              const char *reason, const BlockState *state, const BlockData *blockData) {
+        if (breakRejectionHook == nullptr)
+            return;
+        BlockActionHandler::BreakRejection rejection;
+        rejection.mReason = reason;
+        rejection.mBlock = state != nullptr ? state->mName : std::string();
+        rejection.mBreaking = player.isBreakingBlock();
+        rejection.mBreakingPosition = player.getBreakingBlockPosition();
+        rejection.mElapsedTicks = player.isBreakingBlock() ? owner.getCurrentTick() - player.getBreakStartTick() : 0;
+        rejection.mExpectedTicks = blockData != nullptr ? expectedBreakTicks(player, blockData) : 0;
+        rejection.mProgress = player.getBreakProgress();
+        rejection.mSpeed = player.getBreakSpeed();
+        breakRejectionHook(player, position, rejection);
+    }
+}
+
+void BlockActionHandler::setBreakRejectionHook(BreakRejectionHook hook) {
+    breakRejectionHook = hook;
+}
+
 void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player,
                                                const Vector3i &position) {
     Level &playerLevel = owner.getLevelFor(player);
@@ -782,6 +806,7 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
         return;
 
     if (!canBreakBlock(owner, player, position) || isInSpawnProtection(owner, player, playerLevel, position)) {
+        reportBreakRejection(owner, player, position, "not allowed", nullptr, nullptr);
         sendCurrentBlockState(owner, player, position);
         return;
     }
@@ -802,6 +827,9 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
         }
 
         if (!player.isBreakingBlock() || player.getBreakingBlockPosition() != position) {
+            reportBreakRejection(owner, player, position, player.isBreakingBlock() ? "breaking another block"
+                                                                                   : "no break started",
+                                 &state, BlockDataTable::find(state.mName.c_str()));
             sendCurrentBlockState(owner, player, position);
             return;
         }
@@ -810,6 +838,8 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
         if (!hasReachedBreakTime(owner, player, blockData) ||
             player.getBreakProgress() + player.getBreakSpeed() * (double) BREAK_TICK_TOLERANCE
                     + BREAK_PROGRESS_EPSILON < 1.0) {
+            reportBreakRejection(owner, player, position, !hasReachedBreakTime(owner, player, blockData)
+                                                          ? "too early" : "progress short", &state, blockData);
             sendCurrentBlockState(owner, player, position);
             return;
         }
