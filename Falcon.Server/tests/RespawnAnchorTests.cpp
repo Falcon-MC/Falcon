@@ -1,5 +1,4 @@
 #include "Network/ServerNetworkHandler.h"
-#include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -28,13 +27,6 @@ namespace {
         BlockState state = VanillaBlocks::RESPAWN_ANCHOR().toBlockState();
         state.mStates.putInt("respawn_anchor_charge", charge);
         return state;
-    }
-
-    ItemStack stack(const char *identifier, int count) {
-        ItemStack item;
-        item.mDefinition = std::make_shared<ItemDefinition>(identifier, 1, false, Tag());
-        item.mCount = count;
-        return item;
     }
 
     // an anchor on stone in a cleared column of the chosen dimension, the player beside it
@@ -78,7 +70,7 @@ namespace {
         }
 
         void hold(const char *identifier, int count) {
-            mPlayer.getInventory().setItemInHand(stack(identifier, count));
+            mPlayer.getInventory().setItemInHand(mOwner.createItemStack(identifier, count));
         }
 
         int held() {
@@ -211,15 +203,14 @@ namespace {
     void respawnCharge() {
         AnchorFixture fixture(DimensionType::Nether);
         fixture.place(2);
-        const std::optional<Vector3f> spawn = RespawnAnchorBlock::respawn(fixture.mOwner, fixture.mLevel, ANCHOR,
-                                                                          Vector3i(10, 64, 8));
+        const std::optional<Vector3f> spawn = RespawnAnchorBlock::findRespawnPosition(fixture.mLevel, ANCHOR,
+                                                                                      Vector3i(10, 64, 8));
         require(spawn.has_value() && spawn->x == 10.5f && spawn->y == 64.0f && spawn->z == 8.5f,
                 "the respawn was not centered on the free spot");
-        require(fixture.charge() == 1, "the respawn did not spend one charge");
+        require(fixture.charge() == 2, "finding the respawn spent a charge");
 
-        require(RespawnAnchorBlock::respawn(fixture.mOwner, fixture.mLevel, ANCHOR, Vector3i(10, 64, 8)).has_value()
-                && fixture.charge() == 0, "the last charge was not spent");
-        require(!RespawnAnchorBlock::respawn(fixture.mOwner, fixture.mLevel, ANCHOR, Vector3i(10, 64, 8)).has_value(),
+        RespawnAnchorBlock::addCharge(fixture.mOwner, fixture.mLevel, ANCHOR, -2);
+        require(!RespawnAnchorBlock::findRespawnPosition(fixture.mLevel, ANCHOR, Vector3i(10, 64, 8)).has_value(),
                 "an empty anchor respawned the player");
 
         fixture.place(3);
@@ -229,8 +220,8 @@ namespace {
             for (int z = 7; z <= 10; ++z)
                 fixture.mLevel.setBlockState(x, 64, z, VanillaBlocks::STONE().toBlockState());
         }
-        require(!RespawnAnchorBlock::respawn(fixture.mOwner, fixture.mLevel, ANCHOR, Vector3i(10, 64, 8)).has_value()
-                && fixture.charge() == 3, "a blocked anchor spent a charge");
+        require(!RespawnAnchorBlock::findRespawnPosition(fixture.mLevel, ANCHOR, Vector3i(10, 64, 8)).has_value(),
+                "a blocked anchor respawned the player");
 
         fixture.mLevel.setBlockState(ANCHOR.x, ANCHOR.y, ANCHOR.z, BlockState("minecraft:air"));
         require(!RespawnAnchorBlock::isChargedAnchor(fixture.mLevel, ANCHOR), "a broken anchor still counts");
@@ -273,6 +264,17 @@ namespace {
         ServerPlayer none{NetworkIdentifier{}, 104};
         none.loadNbt(unset, owner.getCodecContext());
         require(!none.hasSpawnPoint(), "the game's unset spawn point loaded as a spawn");
+
+        ServerPlayer commanded{NetworkIdentifier{}, 105};
+        commanded.setSpawnPosition(Vector3i(3, 70, -4), DimensionType::Nether, "world");
+        const Tag command = commanded.saveNbt("world");
+        require(command.getInt("SpawnBlockPositionX", 0) == std::numeric_limits<int32_t>::min()
+                && command.getInt("SpawnX", 0) == 3, "a command spawn was saved with a block");
+        ServerPlayer reloaded{NetworkIdentifier{}, 106};
+        reloaded.loadNbt(command, owner.getCodecContext());
+        require(reloaded.hasSpawnPoint() && !reloaded.hasSpawnBlock()
+                && reloaded.getSpawnStandPosition() == Vector3i(3, 70, -4)
+                && reloaded.getSpawnDimension() == DimensionType::Nether, "a command spawn did not load back");
     }
 }
 

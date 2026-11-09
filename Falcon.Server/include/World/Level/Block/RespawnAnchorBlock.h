@@ -25,9 +25,9 @@ public:
 
     static std::optional<Vector3i> findStandUpPosition(Level &level, const Vector3i &position);
 
-    // spends a charge; empty when the anchor no longer holds the spawn point
-    static std::optional<Vector3f> respawn(ServerNetworkHandler &owner, Level &level, const Vector3i &anchor,
-                                           const Vector3i &standPosition);
+    // empty when the anchor no longer holds the spawn point; the charge is spent by the caller
+    static std::optional<Vector3f> findRespawnPosition(Level &level, const Vector3i &anchor,
+                                                       const Vector3i &standPosition);
 
     static void explode(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 

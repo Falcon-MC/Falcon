@@ -521,13 +521,25 @@ public:
         return mSpawnDimension;
     }
 
+    // false for a spawn set by command: no bed or anchor has to hold it
+    bool hasSpawnBlock() const {
+        return mHasSpawnBlock;
+    }
+
     void setSpawnPoint(const Vector3i &position, const Vector3i &standPosition, DimensionType dimension,
                        const std::string &world) {
         mHasSpawnPoint = true;
+        mHasSpawnBlock = true;
         mSpawnPoint = position;
         mSpawnStandPosition = standPosition;
         mSpawnDimension = dimension;
         mSpawnWorld = world;
+    }
+
+    // sub_1402DC450: /spawnpoint keeps the position and dimension, clears the block
+    void setSpawnPosition(const Vector3i &standPosition, DimensionType dimension, const std::string &world) {
+        setSpawnPoint(standPosition, standPosition, dimension, world);
+        mHasSpawnBlock = false;
     }
 
     // sub_1402DC130: floor x and z, ceil of the feet
@@ -776,6 +788,7 @@ private:
     int32_t mSleepCounter = 0;
     Vector3i mSleepingPosition;
     bool mHasSpawnPoint = false;
+    bool mHasSpawnBlock = false;
     Vector3i mSpawnPoint;
     Vector3i mSpawnStandPosition;
     DimensionType mSpawnDimension = DimensionType::Overworld;

@@ -2,13 +2,14 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockTypeIds.h"
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Explosion.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Protocol/Types/ItemDefinition.h"
+#include "Protocol/Types/BlockDefinition.h"
 
 #include <algorithm>
 
@@ -16,7 +17,6 @@ FALCON_REGISTER_BLOCK(RespawnAnchorBlock, 405);
 
 namespace {
     const char *CHARGE = "respawn_anchor_charge";
-    const char *GLOWSTONE = "minecraft:glowstone";
     // level sound events 308, 309, 310 (sub_141E293F0 and its neighbours)
     const char *SOUND_CHARGE = "respawn_anchor.charge";
     const char *SOUND_DEPLETE = "respawn_anchor.deplete";
@@ -57,8 +57,13 @@ namespace {
                || LiquidView(level.getBlockStateAtLayer(x, y, z, 1)).isWater();
     }
 
+    // the game compares the item's block with glowstone's
     bool isGlowstone(const ItemStack &item) {
-        return !item.isAir() && item.mDefinition != nullptr && item.mDefinition->getIdentifier() == GLOWSTONE;
+        if (item.isAir() || item.mBlockDefinition == nullptr)
+            return false;
+
+        const Block *block = VanillaBlocks::fromIdentifier(item.mBlockDefinition->getIdentifier());
+        return block != nullptr && block->getTypeId() == BlockTypeIds::GLOWSTONE;
     }
 
     bool holdsSpawnPoint(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
@@ -116,9 +121,9 @@ std::optional<Vector3i> RespawnAnchorBlock::findStandUpPosition(Level &level, co
     return std::nullopt;
 }
 
-// sub_1402DCF30: the anchor must still be charged and the spot standable, then a charge goes
-std::optional<Vector3f> RespawnAnchorBlock::respawn(ServerNetworkHandler &owner, Level &level,
-                                                    const Vector3i &anchor, const Vector3i &standPosition) {
+// sub_1402DCF30: the anchor must still be charged and the spot standable
+std::optional<Vector3f> RespawnAnchorBlock::findRespawnPosition(Level &level, const Vector3i &anchor,
+                                                                const Vector3i &standPosition) {
     if (!isChargedAnchor(level, anchor))
         return std::nullopt;
 
@@ -126,7 +131,6 @@ std::optional<Vector3f> RespawnAnchorBlock::respawn(ServerNetworkHandler &owner,
     if (!standUp.has_value())
         return std::nullopt;
 
-    addCharge(owner, level, anchor, -1);
     return Vector3f((float) standUp->x + 0.5f, (float) standUp->y, (float) standUp->z + 0.5f);
 }
 

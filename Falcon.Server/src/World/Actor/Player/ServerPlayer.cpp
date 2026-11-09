@@ -68,6 +68,7 @@ namespace {
     const char *TAG_SPAWN_BLOCK_Z = "SpawnBlockPositionZ";
     const char *TAG_SPAWN_DIMENSION = "SpawnDimension";
     const int32_t UNSET_SPAWN_DIMENSION = 3;
+    const int32_t UNSET_SPAWN_COORDINATE = std::numeric_limits<int32_t>::min();
 
     int64_t currentTimeMillis() {
         using namespace std::chrono;
@@ -933,9 +934,11 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
 
     // sub_1402CD950: block position, dimension, then where the player stood
     if (mHasSpawnPoint) {
-        data.putInt(TAG_SPAWN_BLOCK_X, mSpawnPoint.x);
-        data.putInt(TAG_SPAWN_BLOCK_Y, mSpawnPoint.y);
-        data.putInt(TAG_SPAWN_BLOCK_Z, mSpawnPoint.z);
+        const Vector3i block = mHasSpawnBlock ? mSpawnPoint : Vector3i(UNSET_SPAWN_COORDINATE, UNSET_SPAWN_COORDINATE,
+                                                                       UNSET_SPAWN_COORDINATE);
+        data.putInt(TAG_SPAWN_BLOCK_X, block.x);
+        data.putInt(TAG_SPAWN_BLOCK_Y, block.y);
+        data.putInt(TAG_SPAWN_BLOCK_Z, block.z);
         data.putInt(TAG_SPAWN_DIMENSION, Dimension::toId(mSpawnDimension));
         data.putInt(TAG_SPAWN_X, mSpawnStandPosition.x);
         data.putInt(TAG_SPAWN_Y, mSpawnStandPosition.y);
@@ -1040,8 +1043,11 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
         mSpawnStandPosition = data.contains(TAG_SPAWN_X) ? stand : mSpawnPoint;
         const int32_t dimension = data.getInt(TAG_SPAWN_DIMENSION, 0);
         mSpawnDimension = Dimension::fromId(dimension);
-        // the game saves an unset spawn as INT_MIN in dimension 3
-        if (dimension == UNSET_SPAWN_DIMENSION || mSpawnPoint.x == std::numeric_limits<int32_t>::min())
+        // INT_MIN block: a /spawnpoint spawn; INT_MIN everywhere in dimension 3: no spawn
+        mHasSpawnBlock = mSpawnPoint.x != UNSET_SPAWN_COORDINATE;
+        if (!mHasSpawnBlock)
+            mSpawnPoint = mSpawnStandPosition;
+        if (dimension == UNSET_SPAWN_DIMENSION || mSpawnStandPosition.x == UNSET_SPAWN_COORDINATE)
             mHasSpawnPoint = false;
     }
     mSpawnWorld = data.getString(TAG_SPAWN_LEVEL, data.getString(TAG_LEVEL, std::string()));
