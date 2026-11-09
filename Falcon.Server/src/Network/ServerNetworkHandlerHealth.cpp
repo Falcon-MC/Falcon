@@ -7,6 +7,7 @@
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/BedBlock.h"
+#include "World/Level/Block/RespawnAnchorBlock.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Event/GameEvents.h"
 #include "Core/Math/MathConstants.h"
@@ -385,11 +386,37 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     _sendInventory(player);
 }
 
-Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player) {
+Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player, Level *&destination,
+                                                   std::optional<Vector3i> &anchor) {
     World &world = getWorldFor(player);
     Level &overworld = world.getOverworld();
+    destination = &overworld;
+    anchor.reset();
     if (!player.hasSpawnPoint() || player.getSpawnWorld() != world.getName())
         return overworld.getSpawnPositionForPlayer();
+
+    // a /spawnpoint spawn has no block to check (sub_1402BF690 needs one)
+    if (!player.hasSpawnBlock()) {
+        destination = &world.getLevel(player.getSpawnDimension());
+        const Vector3i stand = player.getSpawnStandPosition();
+        return Vector3f((float) stand.x + 0.5f, (float) stand.y, (float) stand.z + 0.5f);
+    }
+
+    if (player.getSpawnDimension() == DimensionType::Nether) {
+        Level &nether = world.getLevel(DimensionType::Nether);
+        const std::optional<Vector3f> respawn = RespawnAnchorBlock::findRespawnPosition(
+                nether, player.getSpawnPoint(), player.getSpawnStandPosition());
+        if (respawn.has_value()) {
+            destination = &nether;
+            anchor = player.getSpawnPoint();
+            return *respawn;
+        }
+
+        // sub_1402D44A0: the message follows the spawn dimension
+        player.clearSpawnPoint();
+        player.sendTranslation("§7%tile.respawn_anchor.notValid", {});
+        return overworld.getSpawnPositionForPlayer();
+    }
 
     const Vector3i bed = player.getSpawnPoint();
     if (!BedBlock::isValidAt(overworld, bed)) {
@@ -405,18 +432,25 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     if (!player.isDead())
         return;
 
-    Vector3f spawn = _respawnPositionFor(player);
+    Level *destination = nullptr;
+    std::optional<Vector3i> anchor;
+    Vector3f spawn = _respawnPositionFor(player, destination, anchor);
 
     PluginEvent respawnEvent;
     respawnEvent.mType = FALCON_EVENT_PLAYER_RESPAWN;
     respawnEvent.mPlayer = &player;
     respawnEvent.mTo = spawn;
     PluginManager::getInstance().dispatch(respawnEvent);
-    if (respawnEvent.mToChanged)
+    // a plugin position carries no dimension: it is an overworld one, and the anchor was not used
+    if (respawnEvent.mToChanged) {
         spawn = respawnEvent.mTo;
+        destination = &getWorldFor(player).getOverworld();
+    } else if (anchor.has_value()) {
+        RespawnAnchorBlock::addCharge(*this, *destination, *anchor, -1);
+    }
 
-    if (player.getDimension() != DimensionType::Overworld)
-        changePlayerLevel(player, getWorldFor(player).getOverworld(), spawn);
+    if (player.getDimension() != destination->getDimensionType())
+        changePlayerLevel(player, *destination, spawn);
 
     player.setDead(false);
     player.grantSpawnInvulnerability();

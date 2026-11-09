@@ -178,7 +178,7 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
         return true;
     }
 
-    player.setSpawnPoint(head, level.getName());
+    player.setSpawnPoint(head, player.getSpawnStandPositionHere(), player.getDimension(), level.getName());
     player.sendTranslation("§7%tile.bed.respawnSet", {});
 
     if (!level.isNight() && !level.isThundering()) {

@@ -5,6 +5,7 @@
 #include "Core/Math/Vector3i.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -24,6 +25,11 @@ public:
     }
 
     void setIncendiary(bool incendiary);
+
+    // replaces the in-water check at the center (Explosion +0x74, sub_1422E8870)
+    void setInWater(bool inWater) {
+        mInWater = inWater;
+    }
 
     bool explode();
 
@@ -66,6 +72,7 @@ private:
     double mFireChance = 0.0;
     const ServerActor *mSourceActor;
     bool mFromTnt;
+    std::optional<bool> mInWater;
     std::vector<Vector3i> mAffectedBlocks;
     std::unordered_set<int64_t> mAffectedKeys;
     std::vector<Vector3i> mFireIgnitions;

@@ -834,7 +834,8 @@ private:
 
     void _respawnPlayer(ServerPlayer &player);
 
-    Vector3f _respawnPositionFor(ServerPlayer &player);
+    // anchor: the respawn anchor to spend a charge from once the respawn goes through
+    Vector3f _respawnPositionFor(ServerPlayer &player, Level *&destination, std::optional<Vector3i> &anchor);
 
     void _updateSleepingPlayerList(World &world);
 

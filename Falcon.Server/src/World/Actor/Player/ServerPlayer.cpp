@@ -63,6 +63,12 @@ namespace {
     const char *TAG_SPAWN_Y = "SpawnY";
     const char *TAG_SPAWN_Z = "SpawnZ";
     const char *TAG_SPAWN_LEVEL = "SpawnLevel";
+    const char *TAG_SPAWN_BLOCK_X = "SpawnBlockPositionX";
+    const char *TAG_SPAWN_BLOCK_Y = "SpawnBlockPositionY";
+    const char *TAG_SPAWN_BLOCK_Z = "SpawnBlockPositionZ";
+    const char *TAG_SPAWN_DIMENSION = "SpawnDimension";
+    const int32_t UNSET_SPAWN_DIMENSION = 3;
+    const int32_t UNSET_SPAWN_COORDINATE = std::numeric_limits<int32_t>::min();
 
     int64_t currentTimeMillis() {
         using namespace std::chrono;
@@ -757,6 +763,11 @@ void ServerPlayer::tickItemCooldowns(int64_t currentTick) {
     }
 }
 
+Vector3i ServerPlayer::getSpawnStandPositionHere() const {
+    return Vector3i((int32_t) std::floor(mPosition.x), (int32_t) std::ceil(mPosition.y),
+                    (int32_t) std::floor(mPosition.z));
+}
+
 void ServerPlayer::consumeOneHeldItem() {
     if (getGameType() == (int32_t) GameType::Creative)
         return;
@@ -921,10 +932,17 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
     data.putString(TAG_LAST_KNOWN_XUID, mXuid);
     data.putString(TAG_NAME, mName);
 
+    // sub_1402CD950: block position, dimension, then where the player stood
     if (mHasSpawnPoint) {
-        data.putInt(TAG_SPAWN_X, mSpawnPoint.x);
-        data.putInt(TAG_SPAWN_Y, mSpawnPoint.y);
-        data.putInt(TAG_SPAWN_Z, mSpawnPoint.z);
+        const Vector3i block = mHasSpawnBlock ? mSpawnPoint : Vector3i(UNSET_SPAWN_COORDINATE, UNSET_SPAWN_COORDINATE,
+                                                                       UNSET_SPAWN_COORDINATE);
+        data.putInt(TAG_SPAWN_BLOCK_X, block.x);
+        data.putInt(TAG_SPAWN_BLOCK_Y, block.y);
+        data.putInt(TAG_SPAWN_BLOCK_Z, block.z);
+        data.putInt(TAG_SPAWN_DIMENSION, Dimension::toId(mSpawnDimension));
+        data.putInt(TAG_SPAWN_X, mSpawnStandPosition.x);
+        data.putInt(TAG_SPAWN_Y, mSpawnStandPosition.y);
+        data.putInt(TAG_SPAWN_Z, mSpawnStandPosition.z);
         data.putString(TAG_SPAWN_LEVEL, mSpawnWorld);
     }
 
@@ -1014,9 +1032,24 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
     mGameType = data.getInt(TAG_GAME_MODE, mGameType);
     mFirstPlayed = data.getLong(TAG_FIRST_PLAYED, 0);
 
-    mHasSpawnPoint = data.contains(TAG_SPAWN_X);
-    if (mHasSpawnPoint)
-        mSpawnPoint = Vector3i(data.getInt(TAG_SPAWN_X, 0), data.getInt(TAG_SPAWN_Y, 0), data.getInt(TAG_SPAWN_Z, 0));
+    mHasSpawnPoint = data.contains(TAG_SPAWN_BLOCK_X) || data.contains(TAG_SPAWN_X);
+    if (mHasSpawnPoint) {
+        const Vector3i stand(data.getInt(TAG_SPAWN_X, 0), data.getInt(TAG_SPAWN_Y, 0), data.getInt(TAG_SPAWN_Z, 0));
+        // older saves only kept the bed head, in SpawnX/Y/Z
+        mSpawnPoint = data.contains(TAG_SPAWN_BLOCK_X)
+                      ? Vector3i(data.getInt(TAG_SPAWN_BLOCK_X, 0), data.getInt(TAG_SPAWN_BLOCK_Y, 0),
+                                 data.getInt(TAG_SPAWN_BLOCK_Z, 0))
+                      : stand;
+        mSpawnStandPosition = data.contains(TAG_SPAWN_X) ? stand : mSpawnPoint;
+        const int32_t dimension = data.getInt(TAG_SPAWN_DIMENSION, 0);
+        mSpawnDimension = Dimension::fromId(dimension);
+        // INT_MIN block: a /spawnpoint spawn; INT_MIN everywhere in dimension 3: no spawn
+        mHasSpawnBlock = mSpawnPoint.x != UNSET_SPAWN_COORDINATE;
+        if (!mHasSpawnBlock)
+            mSpawnPoint = mSpawnStandPosition;
+        if (dimension == UNSET_SPAWN_DIMENSION || mSpawnStandPosition.x == UNSET_SPAWN_COORDINATE)
+            mHasSpawnPoint = false;
+    }
     mSpawnWorld = data.getString(TAG_SPAWN_LEVEL, data.getString(TAG_LEVEL, std::string()));
     setFireTicks(std::clamp((int) data.getShort(TAG_FIRE, 0), 0, 32767));
 
