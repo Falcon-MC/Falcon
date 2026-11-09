@@ -613,6 +613,18 @@ public:
         clearMovementSimulation();
         mLastTeleport = std::chrono::steady_clock::now();
         awaitMovementChange();
+        const uint64_t teleport = ++mTeleportCount;
+        mAwaitingTeleport = true;
+        mAcknowledgements.add([this, teleport]() {
+            if (mTeleportCount == teleport)
+                mAwaitingTeleport = false;
+        });
+    }
+
+    // inputs sent before the client took the teleport still carry the old position: they must not move the player
+    // back; bounded by the grace in case the ack never comes
+    bool isAwaitingTeleport() const {
+        return mAwaitingTeleport && std::chrono::steady_clock::now() - mLastTeleport < POST_TELEPORT_GRACE;
     }
 
     bool changedSkinWithin(int seconds) const {
@@ -857,6 +869,8 @@ private:
     PlayerAcknowledgements mAcknowledgements;
     int32_t mPendingMovementChanges = 0;
     static constexpr int32_t MAX_INPUTS_WHILE_PENDING = 20;
+    bool mAwaitingTeleport = false;
+    uint64_t mTeleportCount = 0;
     int32_t mInputsWhilePending = 0;
     bool mHasPendingKnockback = false;
     Vector3f mPendingKnockback;
