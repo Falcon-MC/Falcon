@@ -50,8 +50,10 @@ void steer(float &velocity, float push) {
 
 // MoveTowardsClosestSpaceSystemFromActor per actor (sub_1436273E0)
 void MoveTowardsClosestSpaceSystem::tick(PlayerMovementContext &context) {
+    // spectators fly through blocks: HasCollision stays set for them on this server
     const ActorFlags &flags = context.player.getFlags();
-    if (!flags.get(ActorFlag::PushTowardsClosestSpace) || !flags.get(ActorFlag::HasCollision))
+    if (context.abilities.spectator || !flags.get(ActorFlag::PushTowardsClosestSpace)
+        || !flags.get(ActorFlag::HasCollision))
         return;
 
     auto &state = context.state;
