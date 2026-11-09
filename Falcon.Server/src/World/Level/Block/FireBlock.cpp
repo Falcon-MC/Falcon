@@ -19,16 +19,20 @@ bool FireBlock::canBeReplaced(const BlockState &state) const {
 }
 
 BlockState FireBlock::updateShape(Level &level, const Vector3i &position, const BlockState &state) const {
-    if (!state.mStates.contains("minecraft:connection_up"))
+    // soul fire has only its age; fire without its five connections matches no palette entry: the client draws nothing
+    if (state.mName != "minecraft:fire")
         return state;
-
     const BlockData *neighbours[6] = {};
     bool supported = false;
     for (int face = 0; face < 6; ++face) {
         const Vector3i other = PlacementOrientation::relativePosition(position, face);
         const BlockState *block = level.peekBlockPtr(other.x, other.y, other.z);
-        if (block == nullptr)
-            return state;
+        // unloaded neighbour: unknown, keeps the connections a fire already has, none on a new one
+        if (block == nullptr) {
+            if (state.mStates.contains("minecraft:connection_up"))
+                return state;
+            continue;
+        }
         neighbours[face] = BlockDataTable::find(block->mName.c_str());
         if (face == 0)
             supported = PlacementHelpers::hasSolidFace(*block, PlacementOrientation::FACE_UP);
