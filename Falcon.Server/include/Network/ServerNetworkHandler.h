@@ -218,7 +218,14 @@ public:
     // index rebuilt at most once per tick: positions can lag one tick; callers check exact distances
     template<typename Visitor>
     void forEachActorNear(const Vector3f &position, float radius, Visitor &&visit) {
-        _refreshActorIndex();
+        // a walk nested in a visitor (a collision query) keeps the index: a refresh clears the outer walk's buckets
+        if (mActorIndexWalks == 0)
+            _refreshActorIndex();
+        struct WalkScope {
+            int32_t &mWalks;
+            explicit WalkScope(int32_t &walks) : mWalks(walks) { ++mWalks; }
+            ~WalkScope() { --mWalks; }
+        } scope(mActorIndexWalks);
         const float reach = radius + ACTOR_INDEX_MARGIN;
         const int32_t minX = (int32_t) std::floor(position.x - reach) >> 4;
         const int32_t maxX = (int32_t) std::floor(position.x + reach) >> 4;
@@ -920,6 +927,7 @@ private:
     static constexpr float ACTOR_INDEX_MARGIN = 4.0f;
     std::unordered_map<int64_t, std::vector<ServerActor *>> mActorIndex;
     bool mActorIndexDirty = true;
+    int32_t mActorIndexWalks = 0;
     std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
     std::unordered_set<int64_t> mVehiclesWithPendingPassengers;
     uint32_t mActorUniqueIdCounter = 0;
