@@ -68,9 +68,10 @@ bool CushionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player
         return false;
 
     Level &level = owner.getLevelFor(player);
-    const float clickY = std::max(0.0f, std::min(1.0f, clickPosition.y));
-    const Vector3f clicked((float) blockPosition.x + clickPosition.x, (float) blockPosition.y + clickY,
-                           (float) blockPosition.z + clickPosition.z);
+    // the click is client input: kept on the clicked block, or the occupancy probe misses its cushion
+    const Vector3f clicked((float) blockPosition.x + std::max(0.0f, std::min(1.0f, clickPosition.x)),
+                           (float) blockPosition.y + std::max(0.0f, std::min(1.0f, clickPosition.y)),
+                           (float) blockPosition.z + std::max(0.0f, std::min(1.0f, clickPosition.z)));
     if (isOccupied(owner, level, clicked))
         return false;
 
