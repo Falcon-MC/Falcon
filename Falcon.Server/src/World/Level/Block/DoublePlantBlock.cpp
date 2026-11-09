@@ -1,7 +1,6 @@
 #include "World/Level/Block/DoublePlantBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
-#include "World/Level/Block/BlockSupportRules.h"
 #include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/DoubleBlock.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
@@ -55,9 +54,6 @@ bool DoublePlantBlock::canSurvive(Level &level, const Vector3i &position, const 
 
     if (DoubleBlock::isUpperHalf(state))
         return true;
-
-    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
-        return *measured;
 
     const BlockState below = level.getBlockState(position.x, position.y - 1, position.z);
     return IFeature::isSupportDirt(below);

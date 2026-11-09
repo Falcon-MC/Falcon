@@ -14,8 +14,6 @@ falcon_bedrock_data_file(block_palette.nbt FALCON_BLOCK_PALETTE_NBT)
 falcon_bedrock_data_file(voxel_shapes.json FALCON_VOXEL_SHAPES_JSON)
 falcon_bedrock_data_file(block_collision_shapes.json FALCON_BLOCK_COLLISION_SHAPES_JSON)
 falcon_bedrock_data_file(creative_items.json FALCON_CREATIVE_ITEMS_JSON)
-falcon_bedrock_data_embed_text(FILE block_support_rules.json NAMESPACE FalconBlockSupportData SYMBOL kBlockSupportRulesJson
-        DELIMITER falconsupport OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockSupportRulesJson.h")
 falcon_bedrock_data_embed_text(FILE block_tags.json NAMESPACE FalconBlockTagsData SYMBOL kBlockTagsJson
         DELIMITER falcontags OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockTagsJson.h")
 falcon_bedrock_data_embed_text(FILE command_hidden_items.json NAMESPACE FalconCommandData SYMBOL kCommandHiddenItemsJson

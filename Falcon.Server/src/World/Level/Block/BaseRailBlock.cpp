@@ -1,7 +1,6 @@
 #include "World/Level/Block/BaseRailBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
-#include "World/Level/Block/BlockSupportRules.h"
 
 FALCON_REGISTER_BLOCK(BaseRailBlock, 140);
 
@@ -269,8 +268,7 @@ bool BaseRailBlock::canPlaceAt(Level &level, const Vector3i &position, int block
 }
 
 bool BaseRailBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
-    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
-        return *measured;
+    (void) state;
 
     return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
 }

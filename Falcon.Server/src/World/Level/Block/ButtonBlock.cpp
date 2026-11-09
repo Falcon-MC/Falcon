@@ -1,7 +1,6 @@
 #include "World/Level/Block/ButtonBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
-#include "World/Level/Block/BlockSupportRules.h"
 
 FALCON_REGISTER_BLOCK(ButtonBlock, 90);
 
@@ -25,9 +24,6 @@ bool ButtonBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFa
 
 bool ButtonBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const
 {
-    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
-        return *measured;
-
     const int facing = std::clamp(state.mStates.getInt("facing_direction", PlacementOrientation::FACE_UP),
                                   0, 5);
     return canPlaceAt(level, position, facing);

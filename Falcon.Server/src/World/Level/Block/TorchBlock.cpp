@@ -1,7 +1,6 @@
 #include "World/Level/Block/TorchBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
-#include "World/Level/Block/BlockSupportRules.h"
 #include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/OrientationHelpers.h"
@@ -36,9 +35,6 @@ bool TorchBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFac
 }
 
 bool TorchBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
-    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
-        return *measured;
-
     using namespace PlacementOrientation;
 
     int face = FACE_UP;

@@ -1,7 +1,6 @@
 #include "World/Level/Block/LeverBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
-#include "World/Level/Block/BlockSupportRules.h"
 
 FALCON_REGISTER_BLOCK(LeverBlock, 80);
 
@@ -40,9 +39,6 @@ int LeverBlock::_attachedFace(const BlockState &state)
 
 bool LeverBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const
 {
-    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
-        return *measured;
-
     return canPlaceAt(level, position, _attachedFace(state));
 }
 

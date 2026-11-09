@@ -2,7 +2,6 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockClassRegistry.h"
-#include "World/Level/Block/BlockSupportRules.h"
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/DoorBlock.h"
 #include "World/Level/Block/DoubleBlock.h"
@@ -34,9 +33,6 @@ bool DoorOrientationBlock::canSurvive(Level &level, const Vector3i &position, co
 
     if (DoubleBlock::isUpperHalf(state))
         return true;
-
-    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
-        return *measured;
 
     const BlockState below = level.getBlockState(position.x, position.y - 1, position.z);
     return BlockSupport::isSolidOrCauldron(below);

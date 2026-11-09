@@ -1,7 +1,6 @@
 #include "World/Level/Block/IcicleBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
-#include "World/Level/Block/BlockSupportRules.h"
 #include "World/Level/Block/PlacementHelpers.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/Block/BlockQuery.h"
@@ -35,9 +34,6 @@ bool IcicleBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFa
 }
 
 bool IcicleBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
-    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
-        return *measured;
-
     const bool hanging = state.mStates.getBool("hanging", false);
     if (level.peekBlockPtr(position.x, position.y + (hanging ? 1 : -1), position.z) == nullptr)
         return true;

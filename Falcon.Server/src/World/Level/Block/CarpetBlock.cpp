@@ -1,7 +1,6 @@
 #include "World/Level/Block/CarpetBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
-#include "World/Level/Block/BlockSupportRules.h"
 
 FALCON_REGISTER_BLOCK(CarpetBlock, 380);
 
@@ -24,8 +23,6 @@ bool CarpetBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFa
 }
 
 bool CarpetBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
-    if (const std::optional<bool> measured = BlockSupportRules::survivesAt(level, position, state))
-        return *measured;
-
+    (void) state;
     return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
 }
