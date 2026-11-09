@@ -255,10 +255,11 @@ void Explosion::_damageEntities() {
 
         mOwner.hurt(player, damage, ActorDamageSource::environment(DEATH_KEY, player.getName()).fromOrigin(mSource));
 
-        const Vector3f current = player.getMotion();
-        player.setMotion(Vector3f(current.x + motion.x * (float) impact, current.y + motion.y * (float) impact,
-                                  current.z + motion.z * (float) impact));
-        mOwner.sendActorMotion(player);
+        // pushes the replayed velocity, not the last reported delta; tick-stamped so both sides take it on the same input
+        const Vector3f current = player.hasSimulatedVelocity() ? player.getSimulatedVelocity() : player.getMotion();
+        player.applyServerMotion(mOwner, Vector3f(current.x + motion.x * (float) impact,
+                                                  current.y + motion.y * (float) impact,
+                                                  current.z + motion.z * (float) impact));
     }
 
     const DimensionType dimension = mLevel.getDimensionType();
