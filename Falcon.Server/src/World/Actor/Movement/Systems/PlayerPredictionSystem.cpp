@@ -2,9 +2,11 @@
 #include "World/Actor/Movement/PlayerMovementContext.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Network/Handler/MovementHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Protocol/Packets/CorrectPlayerMovePredictionPacket.h"
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
+#include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "Core/Debug/BedrockLog.h"
 
 using namespace MovementPhysics;
@@ -54,8 +56,24 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
 
     const Vector3f reported = *prediction.feetPosition;
     // the exit moves the player itself; reconciling it would turn up to 15 blocks into velocity
-    if (prediction.validator->takeDismountPosition(state.simulated, reported))
+    if (prediction.validator->takeDismountPosition(state.simulated, reported)) {
         state.simulated = reported;
+        // jumping off a seat: the client lifts off on the exit input itself (0.42, then 0.333, 0.248...); the
+        // replay skipped that tick while riding, so it starts the fall with the jump's next-tick velocity
+        if (input.jumpHeld) {
+            const MobEffectInstance *jumpBoost = context.player.getEffects().get(MobEffectId::JumpBoost);
+            const float jumpBonus = jumpBoost == nullptr ? 0.0f : JUMP_BOOST_PER_LEVEL * (float) jumpBoost->level();
+            // a ground jump: only from a floor out of liquid; off a boat on water or a minecart in the air the
+            // client swims or falls
+            const Vector3f takeOff(reported.x, reported.y - (JUMP_VELOCITY + jumpBonus), reported.z);
+            const LiquidContact liquid = LiquidBlocksFetch::at(context.level, takeOff);
+            if (!liquid.water && !liquid.lava
+                && MovementHandler::checkGroundState(context.level, takeOff, &context.player)) {
+                state.velocity.y = (JUMP_VELOCITY + jumpBonus - GRAVITY) * GRAVITY_MULTIPLIER;
+                state.jumpDelay = JUMP_DELAY_TICKS;
+            }
+        }
+    }
     // measured on every input: the validator skips its comparison right after a correction and corrections are
     // spaced: most inputs of a dropped correction would look fine
     const float errorX = reported.x - state.simulated.x;

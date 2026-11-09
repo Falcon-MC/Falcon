@@ -8,11 +8,15 @@ bool PlayerMovementValidator::takeDismountPosition(const Vector3f &simulated, co
         return false;
 
     // client 0x14A2183E0 grants 225, 15 blocks squared, and 0x14A211A50 spends it on the next input either way
-    mDismountPending = false;
     const float dx = reported.x - simulated.x;
     const float dy = reported.y - simulated.y;
     const float dz = reported.z - simulated.z;
-    return dx * dx + dy * dy + dz * dz <= 225.0f;
+    const float distanceSquared = dx * dx + dy * dy + dz * dz;
+    // the leave request is handled before the client moves off the seat: an input still there spends nothing
+    if (distanceSquared < 1.0e-6f && --mDismountInputsLeft > 0)
+        return false;
+    mDismountPending = false;
+    return distanceSquared <= 225.0f;
 }
 
 bool PlayerMovementValidator::reconcile(Vector3f &simulated, const Vector3f &reported, uint64_t tick,
