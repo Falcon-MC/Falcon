@@ -4,6 +4,7 @@
 #include "CommandHiddenItemsJson.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Json/Json.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "World/Item/StringToItemParser.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
@@ -73,11 +74,20 @@ std::vector<std::string> CommandEnums::blockValues() {
         if (hiddenBlocks().count(namespaced(name)) == 0)
             values.push_back(bare(name));
     }
+    // blocks of packs, scripts and plugins are named in commands too
+    for (const CustomBlockDefinition &block: CustomContentRegistry::getInstance().getBlocks())
+        values.push_back(block.mIdentifier);
     return values;
 }
 
 bool CommandEnums::parseBlock(const std::string &input, BlockState &out) {
     if (hiddenBlocks().count(namespaced(input)) != 0)
         return false;
-    return SetBlockCommand::resolveBlock(input, out);
+    if (SetBlockCommand::resolveBlock(input, out))
+        return true;
+    // a custom block has no permutations of its own
+    if (CustomContentRegistry::getInstance().findBlock(input) == nullptr)
+        return false;
+    out = BlockState(input, Tag::ofCompound());
+    return true;
 }
