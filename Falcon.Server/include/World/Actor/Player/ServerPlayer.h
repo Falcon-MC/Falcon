@@ -1,5 +1,9 @@
 #pragma once
 
+#include "Core/Math/AxisAlignedBB.h"
+
+#include <cmath>
+
 #include "World/Actor/Actor.h"
 #include "World/Actor/Movement/ServerPlayerMovementComponent.h"
 #include "World/Actor/Movement/PlayerMovementValidator.h"
@@ -220,7 +224,25 @@ public:
         mHasSimulatedGround = true;
     }
 
+    // the box the replay ended on: rebuilt from the feet, a box clamped against a wall at x = 1 comes back at
+    // 0.99999995 and stands on the corner of the block beside it
+    void setSimulatedBox(const AxisAlignedBB &box, const Vector3f &feet) {
+        mSimulatedBox = box;
+        mSimulatedBoxFeet = feet;
+        mHasSimulatedBox = true;
+    }
+
+    bool findSimulatedBox(const Vector3f &feet, float height, AxisAlignedBB &box) const {
+        if (!mHasSimulatedBox || feet.x != mSimulatedBoxFeet.x || feet.y != mSimulatedBoxFeet.y
+            || feet.z != mSimulatedBoxFeet.z
+            || std::fabs(mSimulatedBox.mMaxY - mSimulatedBox.mMinY - height) > 1.0e-4f)
+            return false;
+        box = mSimulatedBox;
+        return true;
+    }
+
     void clearMovementSimulation() {
+        mHasSimulatedBox = false;
         mMovementValidator.reset();
         mHasSimulatedVelocity = false;
         mHasSimulatedPosition = false;
@@ -856,6 +878,9 @@ private:
     Vector3f mSimulatedVelocity;
     bool mHasSimulatedPosition = false;
     Vector3f mSimulatedPosition;
+    AxisAlignedBB mSimulatedBox;
+    Vector3f mSimulatedBoxFeet;
+    bool mHasSimulatedBox = false;
     bool mHasSimulatedGround = false;
     bool mSimulatedOnGround = false;
     int32_t mJumpDelay = 0;

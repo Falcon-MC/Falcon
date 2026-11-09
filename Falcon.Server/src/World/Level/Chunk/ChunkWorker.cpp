@@ -53,6 +53,18 @@ void ChunkWorker::start(size_t threadCount) {
     mSources.clear();
     mSources.reserve(count);
     mTerrainCache.reset(new TerrainCache(mGenerator));
+    mTerrainCache->setStoredLoader([this](LevelChunk &chunk) {
+        if (!mStorage.isOpen() || !mStorage.loadChunk(chunk) || !chunk.isPopulated())
+            return false;
+        // spills parked in storage belong to it: the chunk applies them on load
+        for (const GeneratedBlockChange &change: mStorage.loadPendingBlockChanges(chunk.getX(), chunk.getZ())) {
+            if (change.mY >= LevelChunk::MIN_Y && change.mY <= LevelChunk::MAX_Y)
+                chunk.setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
+        }
+        if (!chunk.hasHeightmap())
+            LightSystem::computeHeightmap(chunk);
+        return true;
+    });
     for (size_t i = 0; i < count; ++i)
         mSources.push_back(std::unique_ptr<GeneratorChunkSource>(
                 new GeneratorChunkSource(mGenerator.getSeed(), mGenerator.getDimensionType(), *mTerrainCache)));

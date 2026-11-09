@@ -19,6 +19,18 @@ bool PlayerMovementValidator::takeDismountPosition(const Vector3f &simulated, co
     return distanceSquared <= 225.0f;
 }
 
+bool PlayerMovementValidator::stillSeated(const Vector3f &start, const Vector3f &reported) {
+    if (!mDismountPending)
+        return false;
+
+    // the leave request is handled before the client moves off the seat: an input still on it spends nothing,
+    // even with movement held
+    const float dx = reported.x - start.x;
+    const float dy = reported.y - start.y;
+    const float dz = reported.z - start.z;
+    return dx * dx + dy * dy + dz * dz < 1.0e-6f && --mDismountInputsLeft > 0;
+}
+
 bool PlayerMovementValidator::reconcile(Vector3f &simulated, const Vector3f &reported, uint64_t tick,
                                         float threshold, bool strict, MovementCorrectionDetails *details) {
     // 1.26.10: comparator 0x140B4A560, defaults 0x1437F5420, property scaling 0x140158FA0

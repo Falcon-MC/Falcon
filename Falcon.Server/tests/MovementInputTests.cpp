@@ -699,9 +699,10 @@ namespace {
         packet.mMotionY = 0.4f;
         context.pose.mSneaking = true;
         MovementInputSystem::tick(context);
-        require(std::fabs(context.input.sideways - 0.0588f) < 0.000002f
-                && std::fabs(context.input.forward - 0.1176f) < 0.000002f,
-                "Crouch slowdown clipped analog axes instead of scaling their magnitude");
+        // the wire vector is already pose-scaled: crouching only bounds each axis to 0.3
+        require(std::fabs(context.input.sideways - 0.196f) < 0.000002f
+                && std::fabs(context.input.forward - 0.294f) < 0.000002f,
+                "Crouch slowdown scaled an already scaled move vector again");
         context.abilities.swimming = true;
         MovementInputSystem::tick(context);
         require(std::fabs(context.input.sideways - 0.196f) < 0.000002f

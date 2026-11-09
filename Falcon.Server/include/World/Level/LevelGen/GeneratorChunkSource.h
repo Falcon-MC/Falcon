@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <condition_variable>
+#include <functional>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -68,6 +69,11 @@ public:
 
     void put(LevelChunk chunk);
 
+    // a decorated chunk from storage, false when absent or never decorated
+    using StoredLoader = std::function<bool(LevelChunk &chunk)>;
+
+    void setStoredLoader(StoredLoader loader);
+
     // sub_145CEA040 locks the 3x3 too: two neighbours never decorate at once; waits instead of retrying later
     std::unique_ptr<DecorationArea> lockArea(int32_t chunkX, int32_t chunkZ);
 
@@ -87,6 +93,7 @@ private:
         std::shared_ptr<const LevelChunk> mDecorated;
         std::list<int64_t>::iterator mOrder;
         uint64_t mCreated = 0;
+        bool mStoredChecked = false;
     };
 
     // releases the claim even when generation throws: waiting workers carry on
@@ -101,6 +108,8 @@ private:
 
     std::shared_ptr<const LevelChunk> _get(int32_t chunkX, int32_t chunkZ, bool decorated, uint64_t *created);
 
+    std::shared_ptr<const LevelChunk> _stored(int32_t chunkX, int32_t chunkZ, uint64_t *created);
+
     Entry &_entry(int64_t key);
 
     bool _isAreaFree(int32_t chunkX, int32_t chunkZ) const;
@@ -109,6 +118,8 @@ private:
     std::mutex mMutex;
     std::condition_variable mPublished;
     std::unordered_set<int64_t> mGenerating;
+    std::unordered_set<int64_t> mLoading;
+    StoredLoader mStoredLoader;
     std::unordered_map<int64_t, Entry> mChunks;
     std::list<int64_t> mOrder;
 

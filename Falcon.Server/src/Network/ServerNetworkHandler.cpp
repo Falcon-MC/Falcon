@@ -1679,7 +1679,9 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerActio
     switch (packet.mAction) {
         case PlayerActionType::StartBreak:
         case PlayerActionType::BlockContinueDestroy:
-            if (player->hasLastBlockAttacked() && player->getLastBlockAttacked() == packet.mBlockPosition)
+            // a repeat on the block being broken keeps its progress; a ContinueBreak only marked a new block
+            if (player->hasLastBlockAttacked() && player->getLastBlockAttacked() == packet.mBlockPosition
+                && player->isBreakingBlock() && player->getBreakingBlockPosition() == packet.mBlockPosition)
                 return;
             BlockActionHandler::startBreakingBlock(*this, *player, packet.mBlockPosition, packet.mFace);
             player->setLastBlockAttacked(packet.mBlockPosition);
@@ -1690,8 +1692,11 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerActio
             player->setLastBlockAttacked(packet.mBlockPosition);
             return;
         case PlayerActionType::AbortBreak:
-        case PlayerActionType::StopBreak:
             BlockActionHandler::stopBreakingBlock(*this, *player);
+            player->clearLastBlockAttacked();
+            return;
+        case PlayerActionType::StopBreak:
+            // sent right before the finishing destroy: only AbortBreak cancels, the break stays until validated
             player->clearLastBlockAttacked();
             return;
         case PlayerActionType::BlockPredictDestroy:

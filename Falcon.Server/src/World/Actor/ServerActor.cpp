@@ -248,6 +248,8 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     setHealth(getHealth() - amount);
     setNoDamageTicks(INVULNERABILITY_TICKS);
     setLastDamageAmount(rawAmount);
+    if (auto *mob = dynamic_cast<MobActor *>(this))
+        mob->setLastHurtSource(damageSource);
     onDamaged(owner, attacker);
 
     if (attacker != nullptr && getHealth() > 0.0f && catchFireFrom(*attacker, owner.getProperties().getDifficulty()))

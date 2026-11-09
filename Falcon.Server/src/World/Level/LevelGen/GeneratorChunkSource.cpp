@@ -59,8 +59,61 @@ LevelChunk TerrainCache::base(int32_t chunkX, int32_t chunkZ, uint64_t &created)
     return *_get(chunkX, chunkZ, true, &created);
 }
 
+void TerrainCache::setStoredLoader(StoredLoader loader) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mStoredLoader = std::move(loader);
+}
+
+// a neighbour decorated in another session, or evicted: its raw terrain would let a feature write over its plants
+std::shared_ptr<const LevelChunk> TerrainCache::_stored(int32_t chunkX, int32_t chunkZ, uint64_t *created) {
+    const int64_t key = _packChunk(chunkX, chunkZ);
+    StoredLoader loader;
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        while (mLoading.count(key) != 0)
+            mPublished.wait(lock);
+        if (!mStoredLoader)
+            return nullptr;
+        const auto found = mChunks.find(key);
+        if (found != mChunks.end() && (found->second.mDecorated != nullptr || found->second.mStoredChecked))
+            return nullptr;
+        mLoading.insert(key);
+        loader = mStoredLoader;
+    }
+
+    std::shared_ptr<const LevelChunk> shared;
+    try {
+        LevelChunk chunk(chunkX, chunkZ);
+        chunk.setDimension(mGenerator.getDimensionType());
+        if (loader(chunk))
+            shared = std::make_shared<const LevelChunk>(std::move(chunk));
+    } catch (...) {
+        shared = nullptr;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        mLoading.erase(key);
+        Entry &entry = _entry(key);
+        entry.mStoredChecked = true;
+        if (shared != nullptr && entry.mDecorated == nullptr)
+            entry.mDecorated = shared;
+        else
+            shared = entry.mDecorated;
+        if (shared != nullptr && created != nullptr)
+            *created = entry.mCreated;
+    }
+    mPublished.notify_all();
+    return shared;
+}
+
 std::shared_ptr<const LevelChunk> TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated, uint64_t *created) {
     const int64_t key = _packChunk(chunkX, chunkZ);
+    if (decorated) {
+        std::shared_ptr<const LevelChunk> stored = _stored(chunkX, chunkZ, created);
+        if (stored != nullptr)
+            return stored;
+    }
 
     std::shared_ptr<const LevelChunk> cached;
     {

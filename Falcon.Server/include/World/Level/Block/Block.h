@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "Core/NBT/Tag.h"
 #include "Core/Math/AxisAlignedBB.h"
 #include "Core/Math/Vector3f.h"
@@ -355,6 +357,18 @@ public:
 
     // item and projectile physics read the shape only of these; other blocks stop them at the cell
     virtual bool shapesCollisionPerActor() const {
+        return false;
+    }
+
+    // several boxes resolved with the neighbours; false leaves the single shape and the vanilla table
+    virtual bool getCollisionShapesAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                                      const std::function<const BlockState *(int32_t, int32_t, int32_t)> &neighbours,
+                                      std::vector<AxisAlignedBB> &shapes) const {
+        (void) state;
+        (void) position;
+        (void) actor;
+        (void) neighbours;
+        (void) shapes;
         return false;
     }
 

@@ -178,7 +178,8 @@ namespace {
 
         seconds /= (double) speedMultiplier;
 
-        if (player.getTicksSinceInAir() < 5 && !player.isFlying())
+        // the client's rate this tick: no grace after landing
+        if (player.isRiding() || (!player.isOnGround() && !player.isFlying()))
             seconds *= 5.0;
 
         const bool inWater = player.getFlags().get(ActorFlag::Swimming);
@@ -1185,6 +1186,10 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     const Block *placedBlock = VanillaBlocks::fromIdentifier(placedState.mName);
     if (!merged && placedBlock != nullptr && !placedBlock->canPlaceAt(level, target, placementFace))
+        return false;
+
+    const CustomBlockDefinition *custom = merged ? nullptr : CustomContentRegistry::getInstance().findBlock(placedState.mName);
+    if (custom != nullptr && !custom->mPlacementFilter.allowsPlacement(level, target, placementFace))
         return false;
 
     if (isBlockedByActor(owner, level, target, placedState, player))

@@ -78,18 +78,14 @@ bool CushionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player
     const Vector3f spawnPosition((float) blockPosition.x + 0.5f, clicked.y, (float) blockPosition.z + 0.5f);
     const float yaw = placedYaw(player.getRotation().y);
 
+    // color before the spawn packet: a later variant change makes the client rebuild the model for a few frames
     ServerActor *spawned = owner.spawnActor(level, CushionActor::IDENTIFIER, spawnPosition,
-                                            [yaw](ServerActor &cushion) {
+                                            [yaw, color](ServerActor &cushion) {
                                                 cushion.setRotation(Vector3f(0.0f, yaw, yaw));
+                                                static_cast<CushionActor &>(cushion).setColor(color);
                                             });
     if (spawned == nullptr)
         return false;
-
-    static_cast<CushionActor *>(spawned)->setColor(color);
-
-    EntityDataMap metadata;
-    spawned->fillSpawnMetadata(metadata);
-    owner.sendActorMetadata(*spawned, metadata);
 
     owner.playLevelSound(level, LevelSoundEvent::SPAWN, spawnPosition, CushionActor::IDENTIFIER, -1);
 

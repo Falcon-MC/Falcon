@@ -15,7 +15,6 @@ namespace {
     using Node = OverworldBiomeParameters::Node;
 
     constexpr int32_t NONE = -1;
-    constexpr int32_t DAPPLED_FOREST = 195;
     constexpr size_t CHILDREN_PER_NODE = 6;
 
     // biome tables as the game stores them from xmmword_14F49ABC8, with the tables it picks for new worlds
@@ -37,7 +36,7 @@ namespace {
 
     const int32_t MIDDLE_BIOMES_VARIANT[5][5] = {
             {BiomeIds::ICE_PLAINS_SPIKES, NONE, BiomeIds::COLD_TAIGA, NONE, NONE},
-            {DAPPLED_FOREST, NONE, NONE, NONE, BiomeIds::MEGA_TAIGA},
+            {BiomeIds::DAPPLED_FOREST, NONE, NONE, NONE, BiomeIds::MEGA_TAIGA},
             {BiomeIds::SUNFLOWER_PLAINS, NONE, NONE, BiomeIds::BIRCH_FOREST_MUTATED, NONE},
             {NONE, NONE, BiomeIds::PLAINS, BiomeIds::JUNGLE_EDGE, BiomeIds::BAMBOO_JUNGLE},
             {NONE, NONE, NONE, NONE, NONE}

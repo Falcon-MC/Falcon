@@ -12,7 +12,14 @@ falcon_bedrock_data_file(item_tags.json FALCON_ITEM_TAGS_JSON)
 falcon_bedrock_data_file(biome_definitions.nbt FALCON_BIOME_DEFINITIONS_NBT)
 falcon_bedrock_data_file(block_palette.nbt FALCON_BLOCK_PALETTE_NBT)
 falcon_bedrock_data_file(voxel_shapes.json FALCON_VOXEL_SHAPES_JSON)
+falcon_bedrock_data_file(block_collision_shapes.json FALCON_BLOCK_COLLISION_SHAPES_JSON)
 falcon_bedrock_data_file(creative_items.json FALCON_CREATIVE_ITEMS_JSON)
+falcon_bedrock_data_embed_text(FILE block_tags.json NAMESPACE FalconBlockTagsData SYMBOL kBlockTagsJson
+        DELIMITER falcontags OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockTagsJson.h")
+falcon_bedrock_data_embed_text(FILE command_hidden_items.json NAMESPACE FalconCommandData SYMBOL kCommandHiddenItemsJson
+        DELIMITER falconitems OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/CommandHiddenItemsJson.h")
+falcon_bedrock_data_embed_text(FILE command_hidden_blocks.json NAMESPACE FalconCommandData SYMBOL kCommandHiddenBlocksJson
+        DELIMITER falconblocks OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/CommandHiddenBlocksJson.h")
 falcon_bedrock_data_embed_text(FILE loot_tables.json NAMESPACE FalconLootData SYMBOL kLootTablesJson
         DELIMITER falconloot OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/LootTablesJson.h")
 falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE FalconItemData SYMBOL kItemPaletteJson
@@ -75,6 +82,9 @@ configure_file(cmake/CraftingRecipeJson.h.in "${FALCON_GENERATED_DIR}/CraftingRe
 
 file(READ "${FALCON_VOXEL_SHAPES_JSON}" FALCON_VOXEL_SHAPES_JSON_CONTENT)
 configure_file(cmake/VoxelShapesJson.h.in "${FALCON_GENERATED_DIR}/VoxelShapesJson.h" @ONLY)
+
+file(READ "${FALCON_BLOCK_COLLISION_SHAPES_JSON}" FALCON_BLOCK_COLLISION_SHAPES_JSON_CONTENT)
+configure_file(cmake/BlockCollisionShapesJson.h.in "${FALCON_GENERATED_DIR}/BlockCollisionShapesJson.h" @ONLY)
 
 file(READ "${FALCON_CREATIVE_ITEMS_JSON}" FALCON_CREATIVE_ITEMS_JSON_CONTENT)
 configure_file(cmake/CreativeItemsJson.h.in "${FALCON_GENERATED_DIR}/CreativeItemsJson.h" @ONLY)
@@ -315,6 +325,13 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     endif()
     add_test(NAME decoration-order COMMAND FalconDecorationOrderTests)
     set_tests_properties(decoration-order PROPERTIES TIMEOUT 120)
+    add_executable(FalconBlockPlacementFilterTests tests/BlockPlacementFilterTests.cpp)
+    target_link_libraries(FalconBlockPlacementFilterTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconBlockPlacementFilterTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME block-placement-filter COMMAND FalconBlockPlacementFilterTests)
+    set_tests_properties(block-placement-filter PROPERTIES TIMEOUT 60)
     add_executable(FalconBlockTickingQueueTests tests/BlockTickingQueueTests.cpp)
     target_link_libraries(FalconBlockTickingQueueTests PRIVATE FalconCore)
     if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

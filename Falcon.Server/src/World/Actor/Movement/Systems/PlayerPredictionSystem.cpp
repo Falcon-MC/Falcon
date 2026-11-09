@@ -56,7 +56,10 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
 
     const Vector3f reported = *prediction.feetPosition;
     // the exit moves the player itself; reconciling it would turn up to 15 blocks into velocity
-    if (prediction.validator->takeDismountPosition(state.simulated, reported)) {
+    if (prediction.validator->stillSeated(state.start, reported)) {
+        state.simulated = reported;
+        state.velocity = Vector3f(0.0f, 0.0f, 0.0f);
+    } else if (prediction.validator->takeDismountPosition(state.simulated, reported)) {
         state.simulated = reported;
         // jumping off a seat: the client lifts off on the exit input itself (0.42, then 0.333, 0.248...); the
         // replay skipped that tick while riding, so it starts the fall with the jump's next-tick velocity
@@ -98,12 +101,12 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     context.player.setMotion(state.velocity);
 
     // still diverging after acking a correction: the client dropped it (movement "disabler"); it can't be moved back
-    if (prediction.validator->noteInputAfterCorrection(input.getPacket().mTick, diverging) >= MAX_IGNORED_CORRECTIONS) {
+    if (prediction.validator->noteInputAfterCorrection(input.getPacket().mTick, diverging, reported) >= MAX_IGNORED_CORRECTIONS) {
         context.owner._disconnect(context.id, DisconnectReason::KickedForExploit,
                                   context.player.localize("falcon.disconnect.kicked"));
         return;
     }
-    if (needsCorrection && diverging && prediction.validator->armCorrectionCheck()) {
+    if (needsCorrection && diverging && prediction.validator->armCorrectionCheck(state.simulated, reported)) {
         ServerPlayer &player = context.player;
         player.getAcknowledgements().add([&player]() {
             player.getMovementValidator().acknowledgeCorrection(player.getMovementInputs().lastReceivedTick());

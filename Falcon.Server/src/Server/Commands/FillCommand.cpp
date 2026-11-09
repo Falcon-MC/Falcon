@@ -1,5 +1,6 @@
 #include "Server/Commands/FillCommand.h"
 
+#include "Server/Commands/CommandEnums.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
@@ -39,10 +40,7 @@ std::vector<CommandOverloadData> FillCommand::getOverloads() const {
     to.mHasType = true;
     to.mType = CommandParamType::BlockPosition;
 
-    CommandParamData block;
-    block.mName = "block";
-    block.mHasType = true;
-    block.mType = CommandParamType::String;
+    const CommandParamData block = makeEnumParameter("block", "Block", CommandEnums::blockValues());
 
     CommandParamData mode;
     mode.mName = "mode";
@@ -84,7 +82,7 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     }
 
     BlockState state;
-    if (!SetBlockCommand::resolveBlock(arguments[6], state)) {
+    if (!CommandEnums::parseBlock(arguments[6], state)) {
         sender.sendTranslation("commands.setblock.notFound", {arguments[6]});
         return false;
     }

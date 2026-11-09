@@ -74,6 +74,7 @@ namespace {
             add(result, BiomeIds::MANGROVE_SWAMP, 0.800000011920929f, 0.8999999761581421f, true);
             add(result, BiomeIds::CHERRY_GROVE, 0.30000001192092896f, 0.800000011920929f, true);
             add(result, BiomeIds::PALE_GARDEN, 0.699999988079071f, 0.800000011920929f, true);
+            add(result, BiomeIds::DAPPLED_FOREST, 0.6000000238418579f, 0.6000000238418579f, true);
             add(result, BiomeIds::SULFUR_CAVES, 0.800000011920929f, 0.4000000059604645f, true);
             add(result, BiomeIds::ICE_CAVES, 0.0f, 0.0f, false);
 

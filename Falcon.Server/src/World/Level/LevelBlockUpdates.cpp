@@ -95,6 +95,11 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vecto
         if (block != nullptr && type == BlockUpdateType::Normal) {
             if (block->watchesNeighbour(position, current, changed))
                 block->onNeighbourChanged(owner, *this, position, current);
+        } else if (block == nullptr && type == BlockUpdateType::Normal) {
+            // a pack block has no class: its placement filter is its survival
+            const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(current.mName);
+            if (custom != nullptr && !custom->mPlacementFilter.survives(*this, position))
+                BlockActionHandler::destroyBlock(owner, *this, position, current, true, ItemStack::air());
         }
         else if (block != nullptr)
             block->onScheduledUpdate(owner, *this, position, current);

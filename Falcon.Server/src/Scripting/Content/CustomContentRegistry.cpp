@@ -100,6 +100,14 @@ bool CustomContentRegistry::isCustomBlock(const std::string &identifier) const {
     return false;
 }
 
+const CustomBlockDefinition *CustomContentRegistry::findBlock(const std::string &identifier) const {
+    for (const CustomBlockDefinition &block: mBlocks) {
+        if (block.mIdentifier == identifier)
+            return &block;
+    }
+    return nullptr;
+}
+
 const ActorPropertyDescription *CustomActorDefinition::findProperty(const std::string &name) const {
     return ActorPropertySchema::find(mProperties, name);
 }
@@ -826,6 +834,9 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
 
             parseBox(components->get("minecraft:collision_box"), definition.mCollision);
             parseBox(components->get("minecraft:selection_box"), definition.mSelection);
+            const json::Value *placement = components->get("minecraft:placement_filter");
+            if (placement != nullptr && placement->isObject())
+                definition.mPlacementFilter = BlockPlacementFilter::parse(*placement, definition.mIdentifier);
         }
 
         _registerBlock(definition, items, blocks);
