@@ -4,7 +4,7 @@
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockState.h"
-#include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/BlockShape.h"
 #include "Core/Color/DyeColor.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -26,6 +26,8 @@ namespace {
     constexpr const char *ITEM_SUFFIX = "_cushion";
 
     constexpr const char *WOOL_SUFFIX = "_wool";
+
+    constexpr float SUPPORT_PROBE_DEPTH = 0.015625f;
 }
 
 CushionActor::CushionActor(uint64_t runtimeId, const std::string &identifier)
@@ -33,14 +35,15 @@ CushionActor::CushionActor(uint64_t runtimeId, const std::string &identifier)
     getFlags().set(ActorFlag::HasGravity, false);
 }
 
+// the block 1/64 under the cushion must have a collision shape: a slab or a fence holds it (sub_142DCA020)
 bool CushionActor::hasSupportingBlock(ServerNetworkHandler &owner) const {
     Level &level = owner.getLevelFor(*this);
     const Vector3f position = getPosition();
     const int32_t x = (int32_t) std::floor(position.x);
-    const int32_t y = (int32_t) std::floor(position.y) - 1;
+    const int32_t y = (int32_t) std::floor(position.y - SUPPORT_PROBE_DEPTH);
     const int32_t z = (int32_t) std::floor(position.z);
 
-    return BlockSupport::isSolidOrCauldron(level.getBlockState(x, y, z));
+    return BlockShape::hasCollision(level.getBlockState(x, y, z), this);
 }
 
 void CushionActor::tick(ServerNetworkHandler &owner) {
