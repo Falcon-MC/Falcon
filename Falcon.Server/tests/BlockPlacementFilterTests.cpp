@@ -90,10 +90,10 @@ int main() {
         placement();
         unparsedTags();
         noFilter();
+        std::cout << "placement filter tests passed\n";
+        return 0;
     } catch (const std::exception &error) {
-        std::cerr << "placement filter test failed: " << error.what() << std::endl;
+        std::cout << error.what() << '\n';
         return 1;
     }
-    std::cout << "placement filter tests passed" << std::endl;
-    return 0;
 }

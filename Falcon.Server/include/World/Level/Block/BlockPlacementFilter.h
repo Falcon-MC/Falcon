@@ -36,7 +36,9 @@ struct BlockPlacementFilter {
 
     static BlockPlacementFilter parse(const json::Value &component, const std::string &identifier);
 
-    bool isEmpty() const { return mConditions.empty(); }
+    bool isEmpty() const {
+        return mConditions.empty();
+    }
 
     // placed on a face of the clicked block
     bool allowsPlacement(Level &level, const Vector3i &position, int blockFace) const;
