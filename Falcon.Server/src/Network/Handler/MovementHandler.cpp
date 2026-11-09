@@ -411,10 +411,32 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
                           packet.mPosition.z);
     // the client places and breaks before it moves on the same tick: it already collides with a block it just put
     // down, and walks into the gap of one it just broke, so the replay must see the world after them
+    // in packet order: a block broken in one hit sends its StartBreak and its destroy on the same input
     for (const PlayerBlockActionData &action: packet.mPlayerActions) {
-        if (action.mAction == PlayerActionType::BlockPredictDestroy
-            || action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock)
+        if (action.mAction == PlayerActionType::StartBreak
+            || action.mAction == PlayerActionType::BlockContinueDestroy) {
+            // the client keeps reporting the hit block; restarting on each repeat resets the progress
+            if (player.hasLastBlockAttacked() && player.getLastBlockAttacked() == action.mBlockPosition)
+                continue;
+
+            BlockActionHandler::startBreakingBlock(owner, player, action.mBlockPosition, action.mFace);
+            player.setLastBlockAttacked(action.mBlockPosition);
+        } else if (action.mAction == PlayerActionType::ContinueBreak) {
+            if (player.isBreakingBlock() && player.getBreakingBlockPosition() == action.mBlockPosition)
+                player.setBreakingFace(action.mFace);
+
+            player.setLastBlockAttacked(action.mBlockPosition);
+        } else if (action.mAction == PlayerActionType::AbortBreak) {
+            BlockActionHandler::stopBreakingBlock(owner, player);
+            player.clearLastBlockAttacked();
+        } else if (action.mAction == PlayerActionType::StopBreak) {
+            // StopBreak arrives with the finishing destroy; only AbortBreak cancels: the break stays tracked until validated
+            player.clearLastBlockAttacked();
+        } else if (action.mAction == PlayerActionType::BlockPredictDestroy
+                   || action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock) {
             BlockActionHandler::completeBreakingBlock(owner, player, action.mBlockPosition);
+            player.clearLastBlockAttacked();
+        }
     }
     if (packet.mHasItemUseTransaction) {
         if (packet.mItemUseTransaction.mActionType == 0)
@@ -503,30 +525,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     }
 
     for (const PlayerBlockActionData &action: packet.mPlayerActions) {
-        if (action.mAction == PlayerActionType::StartBreak
-            || action.mAction == PlayerActionType::BlockContinueDestroy) {
-            // the client keeps reporting the hit block; restarting on each repeat resets the progress
-            if (player.hasLastBlockAttacked() && player.getLastBlockAttacked() == action.mBlockPosition)
-                continue;
-
-            BlockActionHandler::startBreakingBlock(owner, player, action.mBlockPosition, action.mFace);
-            player.setLastBlockAttacked(action.mBlockPosition);
-        } else if (action.mAction == PlayerActionType::ContinueBreak) {
-            if (player.isBreakingBlock() && player.getBreakingBlockPosition() == action.mBlockPosition)
-                player.setBreakingFace(action.mFace);
-
-            player.setLastBlockAttacked(action.mBlockPosition);
-        } else if (action.mAction == PlayerActionType::AbortBreak) {
-            BlockActionHandler::stopBreakingBlock(owner, player);
-            player.clearLastBlockAttacked();
-        } else if (action.mAction == PlayerActionType::StopBreak) {
-            // StopBreak arrives with the finishing destroy; only AbortBreak cancels: the break stays tracked until validated
-            player.clearLastBlockAttacked();
-        } else if (action.mAction == PlayerActionType::BlockPredictDestroy ||
-                  action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock) {
-            // the block went before the replay
-            player.clearLastBlockAttacked();
-        } else if (action.mAction == PlayerActionType::Jump) {
+        if (action.mAction == PlayerActionType::Jump) {
             if (!liquidContact(owner.getLevelFor(player), player, player.getPosition()).eyeInWater)
                 player.exhaust(player.getFlags().get(ActorFlag::Sprinting) ? SPRINT_JUMP_EXHAUSTION : JUMP_EXHAUSTION);
         } else if (action.mAction == PlayerActionType::StartUsingItem) {
