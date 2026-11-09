@@ -42,6 +42,9 @@ namespace {
     }
 
     std::string customNameOf(const ItemStack &item) {
+        // an item without user data carries an end tag
+        if (!item.mTag.isCompound())
+            return std::string();
         const Tag *display = item.mTag.get(DISPLAY_TAG);
         if (display == nullptr || !display->isCompound())
             return std::string();
