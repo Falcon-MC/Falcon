@@ -1,5 +1,6 @@
 #include "Server/Commands/ExecuteCommand.h"
 
+#include "Server/Commands/CommandEnums.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Server/Commands/CommandMap.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
@@ -121,7 +122,7 @@ bool ExecuteCommand::testBlock(CommandOrigin &sender, const Context &context,
     }
 
     BlockState expected;
-    if (!SetBlockCommand::resolveBlock(arguments[index + 3], expected)) {
+    if (!CommandEnums::parseBlock(arguments[index + 3], expected)) {
         sender.sendTranslation("commands.setblock.notFound", {arguments[index + 3]});
         return false;
     }

@@ -18,6 +18,8 @@ falcon_bedrock_data_embed_text(FILE block_support_rules.json NAMESPACE FalconBlo
         DELIMITER falconsupport OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockSupportRulesJson.h")
 falcon_bedrock_data_embed_text(FILE command_hidden_items.json NAMESPACE FalconCommandData SYMBOL kCommandHiddenItemsJson
         DELIMITER falconitems OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/CommandHiddenItemsJson.h")
+falcon_bedrock_data_embed_text(FILE command_hidden_blocks.json NAMESPACE FalconCommandData SYMBOL kCommandHiddenBlocksJson
+        DELIMITER falconblocks OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/CommandHiddenBlocksJson.h")
 falcon_bedrock_data_embed_text(FILE loot_tables.json NAMESPACE FalconLootData SYMBOL kLootTablesJson
         DELIMITER falconloot OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/LootTablesJson.h")
 falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE FalconItemData SYMBOL kItemPaletteJson

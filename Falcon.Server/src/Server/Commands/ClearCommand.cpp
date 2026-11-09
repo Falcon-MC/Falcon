@@ -1,6 +1,6 @@
 #include "Server/Commands/ClearCommand.h"
 
-#include "Server/Commands/CommandItems.h"
+#include "Server/Commands/CommandEnums.h"
 #include "World/Item/Item.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/Handler/InventoryHandler.h"
@@ -140,7 +140,7 @@ bool ClearCommand::execute(CommandOrigin &sender, const std::vector<std::string>
     std::string identifier;
     if (arguments.size() > 1) {
         Item parsed;
-        if (!CommandItems::parse(arguments[1], parsed)) {
+        if (!CommandEnums::parseItem(arguments[1], parsed)) {
             sender.sendTranslation("commands.give.item.notFound", {arguments[1]});
             return false;
         }

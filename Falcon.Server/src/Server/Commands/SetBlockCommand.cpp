@@ -1,5 +1,6 @@
 #include "Server/Commands/SetBlockCommand.h"
 
+#include "Server/Commands/CommandEnums.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/BlockSupport.h"
@@ -26,10 +27,7 @@ std::vector<CommandOverloadData> SetBlockCommand::getOverloads() const {
     position.mHasType = true;
     position.mType = CommandParamType::BlockPosition;
 
-    CommandParamData block;
-    block.mName = "block";
-    block.mHasType = true;
-    block.mType = CommandParamType::String;
+    const CommandParamData block = makeEnumParameter("block", "Block", CommandEnums::blockValues());
 
     CommandParamData mode;
     mode.mName = "mode";
@@ -111,7 +109,7 @@ bool SetBlockCommand::execute(CommandOrigin &sender, const std::vector<std::stri
     }
 
     BlockState state;
-    if (!resolveBlock(arguments[3], state)) {
+    if (!CommandEnums::parseBlock(arguments[3], state)) {
         sender.sendTranslation("commands.setblock.notFound", {arguments[3]});
         return false;
     }
