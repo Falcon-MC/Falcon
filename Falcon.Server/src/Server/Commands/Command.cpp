@@ -97,7 +97,7 @@ bool Command::parsePosition(const std::vector<std::string> &arguments, size_t fi
             return false;
     }
 
-    // TODO: local axes unproven, CommandPosition math not located; ServerPlayer::getLookDirection axes for now
+    // sub_145565640: forward is the view vector, up the pitch less 90 degrees, left (cos yaw, 0, sin yaw) = up x forward
     const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
     const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
     const Vector3f forward(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));

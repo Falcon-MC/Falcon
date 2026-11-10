@@ -2276,7 +2276,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*custom, "parse", "CommandError: 'x' is not a valid number");
         expect(*custom, "playerRun",
                "1|true,Entity,minecraft:player,none,6,blue,5/6/7,true,minecraft:player,undefined");
-        expect(*custom, "restricted", "false");
+        expect(*custom, "restricted", "true");
         expect(*custom, "last", "true,Block,none,block,8,red,undefined,undefined,undefined,undefined");
         expect(*custom, "secret", "true,Server,none,none");
         expect(*custom, "calls", "7");

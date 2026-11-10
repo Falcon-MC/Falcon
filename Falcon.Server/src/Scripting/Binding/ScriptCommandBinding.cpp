@@ -464,8 +464,11 @@ bool ScriptApi::runCustomCommand(const ScriptCustomCommand &command, CommandOrig
     callArgs.push_back(origin);
     callArgs.insert(callArgs.end(), args.begin(), args.end());
 
-    // sub_14BD03A90 leaves the context privilege (+0x1B0, sub_14A3C7470) as it is: the callback is not restricted
+    // TODO: callback privilege unproven: no write of the context privilege (+0x1B0, sub_14A3C7470) found yet
+    const ScriptPrivilege previous = mPrivilege;
+    mPrivilege = ScriptPrivilege::Restricted;
     JSValue result = JS_Call(mContext, command.getCallback(), JS_UNDEFINED, (int) callArgs.size(), callArgs.data());
+    mPrivilege = previous;
     JS_FreeValue(mContext, origin);
     release();
 
