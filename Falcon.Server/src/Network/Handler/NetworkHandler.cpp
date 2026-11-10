@@ -139,6 +139,15 @@ size_t NetworkHandler::getPendingOutboundCount() const {
     return pending;
 }
 
+int NetworkHandler::getAveragePing(const NetworkIdentifier &id) const {
+    if (mShards.empty())
+        return -1;
+    const Shard &shard = *mShards[NetworkIdentifier::Hasher()(id) % mShards.size()];
+    std::lock_guard<std::mutex> lock(shard.mPingMutex);
+    const auto found = shard.mPings.find(id);
+    return found == shard.mPings.end() ? -1 : found->second;
+}
+
 NetworkHandler::Shard &NetworkHandler::_shardFor(const NetworkIdentifier &id) {
     return *mShards[NetworkIdentifier::Hasher()(id) % mShards.size()];
 }
@@ -383,6 +392,10 @@ void NetworkHandler::_applyOutbound(Shard &shard, OutboundCommand &command) {
 
     if (command.mKind == OutboundCommand::Kind::Close || command.mKind == OutboundCommand::Kind::Remove) {
         shard.mConnections.erase(it);
+        {
+            std::lock_guard<std::mutex> lock(shard.mPingMutex);
+            shard.mPings.erase(command.mId);
+        }
 
         InboundEvent event;
         event.mKind = InboundEvent::Kind::Closed;
@@ -445,6 +458,14 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
 
         if (failed || entry.second->getEncryptedPeer()->hasFailed())
             _reportFailure(*entry.second);
+    }
+
+    const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+    if (now >= shard.mPingRefresh) {
+        shard.mPingRefresh = now + std::chrono::seconds(1);
+        std::lock_guard<std::mutex> lock(shard.mPingMutex);
+        for (auto &entry: shard.mConnections)
+            shard.mPings[entry.first] = entry.second->getPeer()->getNetworkStatus().mAveragePing;
     }
 
     std::vector<OutboundCommand> commands = shard.mOutbound.drain();

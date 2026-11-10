@@ -9,6 +9,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
+#include <unordered_map>
 #include <array>
 #include <unordered_set>
 
@@ -23,7 +24,7 @@ namespace {
         return open ? LevelSoundEvent::DOOR_OPEN : LevelSoundEvent::DOOR_CLOSE;
     }
 
-    std::array<std::unordered_set<int64_t>, Dimension::DIMENSION_COUNT> gManualOverrides;
+    std::unordered_map<int32_t, std::unordered_set<int64_t>> gManualOverrides;
 
     std::unordered_set<int64_t> &manualOverridesOf(Level &level) {
         return gManualOverrides[level.getDimensionId()];

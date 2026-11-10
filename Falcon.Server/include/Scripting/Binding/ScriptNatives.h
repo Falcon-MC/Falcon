@@ -2,6 +2,7 @@
 
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Level/Dimension/Dimension.h"
+#include "Core/NBT/Tag.h"
 
 #include <cstdint>
 #include <memory>
@@ -62,9 +63,34 @@ struct ScriptBlockRef : ScriptNative {
     int32_t mZ = 0;
 };
 
+// a block component: reads the block on every access
+struct ScriptBlockPart : ScriptNative {
+    ScriptBlockRef mBlock;
+    std::string mComponentId;
+};
+
+// a structure of the shared registry, by identifier: deleting it leaves the object invalid
+struct ScriptStructureRef : ScriptNative {
+    std::string mId;
+};
+
 struct ScriptDimensionRef : ScriptNative {
     DimensionType mDimension = DimensionType::Overworld;
     uint32_t mWorldId = 0;
+};
+
+struct ScriptEffectRef : ScriptNative {
+    ScriptEntityRef mEntity;
+    int32_t mEffectId = 0;
+};
+
+// EffectType, EntityType and EntityHealSource: one name each
+struct ScriptNamedRef : ScriptNative {
+    std::string mName;
+};
+
+struct ScriptInputInfoRef : ScriptNative {
+    uint32_t mHandle = 0;
 };
 
 struct ScriptSignalRef : ScriptNative {
@@ -73,6 +99,12 @@ struct ScriptSignalRef : ScriptNative {
 
 struct ScriptRegistryRef : ScriptNative {
     bool mBlocks = true;
+};
+
+// a world clock, or one of its time markers when mMarker is set; both read the clock system on access
+struct ScriptClockRef : ScriptNative {
+    std::string mClock;
+    std::string mMarker;
 };
 
 namespace ScriptValues {
@@ -94,5 +126,16 @@ namespace ScriptValues {
 
     JSValue dynamicPropertyIds(JSContext *ctx, const std::unordered_map<std::string, DynamicPropertyValue> &store);
 
+    // setDynamicProperties: false with a pending exception
+    bool dynamicPropertySetAll(JSContext *ctx, std::unordered_map<std::string, DynamicPropertyValue> &store,
+                               JSValueConst values);
+
+    int64_t dynamicPropertyByteCount(const std::unordered_map<std::string, DynamicPropertyValue> &store);
+
     bool arrayContainsString(JSContext *ctx, JSValueConst array, const std::string &needle);
+
+    // block states: bytes are booleans, as the palette stores them
+    JSValue statesToJs(JSContext *ctx, const Tag &states);
+
+    Tag statesFromJs(JSContext *ctx, JSValueConst object);
 }

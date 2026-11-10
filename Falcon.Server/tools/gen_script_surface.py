@@ -33,6 +33,21 @@ BOUND = {
         'InputPermissionCategory', 'Direction', 'PlayerInventoryType', 'EntityComponentTypes',
         'ItemComponentTypes', 'BlockComponentTypes', 'BlockEvent', 'GameRules', 'SystemInfo', 'Difficulty',
         'TimeOfDay', 'MoonPhase', 'WeatherType', 'ScriptEventSource', 'GameRule', 'MemoryTier',
+        'CustomComponentParameters', 'CustomComponentNameErrorReason', 'NamespaceNameErrorReason',
+        'ItemUseOnEvent', 'ItemCompleteUseEvent', 'WorldClock', 'TimeMarker', 'WorldClockRegistry',
+        'DimensionRegistry', 'Effect',
+        'EffectType', 'EffectTypes', 'EntityType', 'EntityTypes', 'EntityDamageCause', 'EntityInitializationCause',
+        'EntityHealCause', 'InputButton', 'ButtonState', 'InputMode', 'InputInfo', 'EntitySwingSource',
+        'ContainerAccessSource', 'CommandPermissionLevel', 'PlayerPermissionLevel', 'TickingArea',
+        'TickingAreaError', 'TickingAreaErrorReason', 'EntityComponent', 'EntityBaseMovementComponent',
+        'EntityNavigationComponent', 'EntityRideableComponent', 'EntityRidingComponent', 'PaletteColor',
+        'EntityHealSource', 'BlockVolumeBase', 'ListBlockVolume', 'BlockLocationIterator', 'BlockComponent',
+        'BlockInventoryComponent', 'BlockSignComponent', 'BlockPistonComponent', 'BlockFluidContainerComponent',
+        'BlockRedstoneProducerComponent', 'BlockMapColorComponent', 'BlockMovableComponent',
+        'BlockPrecipitationInteractionsComponent', 'BlockRecordPlayerComponent', 'BlockDynamicPropertiesComponent', 'BiomeType', 'BiomeTypes',
+        'Structure', 'StructureManager', 'BlockPistonState', 'BlockVolumeIntersection', 'FluidType', 'LiquidType',
+        'SignSide', 'StructureAnimationMode', 'StructureMirrorAxis', 'StructureRotation', 'StructureSaveMode',
+        'DyeColor', 'TintMethod', 'MovementType', 'StickyType', 'CloneMode',
     },
     'server-ui': {
         'ActionFormData', 'MessageFormData', 'ModalFormData',
@@ -63,7 +78,7 @@ def parse(path):
     for match in re.finditer(r'\nexport class (\w+)(?: extends ([\w.]+))? \{(.*?)\n\}', raw, re.S):
         members = {}
         for member in re.finditer(r'(/\*\*(?:(?!\*/).)*\*/)?\s*\n {4}((?:readonly |static |private )*)'
-                                  r'(\w+)\??(\(|:|<| =)([^;]*)', match.group(3), re.S):
+                                  r"'?(\w+)'?\??(\(|:|<| =)([^;]*)", match.group(3), re.S):
             doc = member.group(1) or ''
             modifiers = member.group(2)
             if 'private' in modifiers:
@@ -92,7 +107,8 @@ def parse(path):
             line = line.strip().rstrip(',')
             if '=' in line:
                 key, value = [part.strip() for part in line.split('=', 1)]
-                values.append((key, value.strip("'")))
+                # a reserved word is quoted as a key: void = 'void'
+                values.append((key.strip("'"), value.strip("'")))
         enums[match.group(1)] = values
     return exports, classes, enums
 
@@ -161,8 +177,10 @@ def main():
             beta = bool(version_key(version)[3])
             for name, kind in exports.items():
                 is_error = kind == 'class' and name.endswith('Error')
-                payload = name in bound_events
-                if bound is not None and name not in bound and not is_error and not payload:
+                # custom component hook payloads
+                payload = name in bound_events or re.match(r'(Block|Item)Component\w+Event$', name) is not None
+                component = name.startswith('Entity') and name.endswith('Component')
+                if bound is not None and name not in bound and not is_error and not payload and not component:
                     continue
                 entry('%s:%s' % (short, name)).add(version)
                 if kind == 'class' and name in classes:

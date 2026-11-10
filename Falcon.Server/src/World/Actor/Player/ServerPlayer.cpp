@@ -286,6 +286,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             if (!_isFacing(owner, target.getPosition(), size.mWidth, size.mHeight))
                 return false;
 
+            owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");
             owner.getScriptEngine().onEntityHitEntity(*this, target);
             if (!target.isAlive())
                 return false;
@@ -330,7 +331,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             const int32_t weaponWear = weaponType != nullptr && !weaponType->wearsOnAttack()                 ? 0
                                        : (weaponData != nullptr && weaponData->mToolType == ToolType::Sword) ? 1
                                                                                                              : 2;
-            owner.damagePlayerHeldItem(*this, weaponWear);
+            owner.damagePlayerHeldItem(*this, owner.getScriptEngine().onItemHitEntity(*this, target, hurt, weaponWear));
             return true;
         }
     }
@@ -352,6 +353,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (!_isFacing(owner, victim->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
         return false;
 
+    owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");
     owner.getScriptEngine().onEntityHitEntity(*this, *victim);
     if (victim->isDead())
         return false;
@@ -390,7 +392,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
                                : (data != nullptr && data->mToolType == ToolType::Sword) ? 1
                                                                                          : 2;
     if (result == DamageResult::Blocked) {
-        owner.damagePlayerHeldItem(*this, weaponWear);
+        owner.damagePlayerHeldItem(*this, owner.getScriptEngine().onItemHitEntity(*this, *victim, false, weaponWear));
         exhaust(0.1f);
         owner._sendAttributes(*this);
         return true;
@@ -399,7 +401,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (heldType != nullptr)
         heldType->onPostAttack(owner, *this, *victim, effectiveDamage, held);
 
-    owner.damagePlayerHeldItem(*this, weaponWear);
+    owner.damagePlayerHeldItem(*this, owner.getScriptEngine().onItemHitEntity(*this, *victim, true, weaponWear));
 
     if (victim->isDead())
         return true;

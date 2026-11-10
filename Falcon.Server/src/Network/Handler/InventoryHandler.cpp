@@ -644,8 +644,14 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
                     return;
 
                 target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-                if (target != nullptr)
-                    target->onInteractAt(owner, player, packet.mClickPosition);
+                if (target != nullptr) {
+                    const ItemStack before = player.getInventory().getItemInHand();
+                    if (target->onInteractAt(owner, player, packet.mClickPosition)) {
+                        target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
+                        if (target != nullptr)
+                            owner.getScriptEngine().onPlayerInteractWithEntity(player, *target, before);
+                    }
+                }
             }
         }
         return;

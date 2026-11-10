@@ -283,11 +283,15 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
         }
 
         std::string name = arguments[index + 1];
+        bool custom = false;
+        const DimensionType customDimension = Dimension::findCustom(name, custom);
         if (name.find(':') != std::string::npos)
             name = name.substr(name.find(':') + 1);
 
         World &world = mHandler.getWorldOf(context.mLevel);
-        if (name == "overworld")
+        if (custom && world.hasLevel(customDimension))
+            context.mLevel = &world.getLevel(customDimension);
+        else if (name == "overworld")
             context.mLevel = &world.getLevel(DimensionType::Overworld);
         else if (name == "nether")
             context.mLevel = &world.getLevel(DimensionType::Nether);

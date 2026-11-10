@@ -925,6 +925,10 @@ void ServerNetworkHandler::tick(bool paused) {
         _processChunkUnloads(world->getOverworld());
         _tickDimension(*world, world->getLevel(DimensionType::Nether));
         _tickDimension(*world, world->getLevel(DimensionType::TheEnd));
+        for (Level *level: world->getLevels()) {
+            if (Dimension::isCustom(level->getDimensionType()))
+                _tickDimension(*world, *level);
+        }
     }
 
     const std::vector<Level *> levels = getLevels();
@@ -1156,6 +1160,8 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
     World *playerWorld = player != nullptr ? &getWorldFor(*player) : nullptr;
     const std::string playerName = player != nullptr && !player->getName().empty() ? player->getName() : id.toString();
     if (player != nullptr && !player->getName().empty()) {
+        if (player->isSpawned())
+            mScriptEngine.beforePlayerLeave(*player);
         stopSleep(*player);
         if (player->isRiding())
             RideSystem::dismount(*this, *player, false);
@@ -1874,6 +1880,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const EmotePacket
     if (player == nullptr || !player->isSpawned() || packet.mRuntimeActorId != player->getRuntimeId()
         || packet.mEmoteId.empty() || packet.mEmoteId.size() > 256)
         return;
+
+    mScriptEngine.onPlayerEmote(*player, packet.mEmoteId);
 
     EmotePacket emote = packet;
     emote.mRuntimeActorId = player->getRuntimeId();

@@ -116,38 +116,6 @@ foreach(schemaFile IN LISTS FALCON_BLOCK_UPGRADE_SCHEMA_FILES)
 endforeach()
 configure_file(cmake/BlockUpgradeSchemas.h.in "${FALCON_GENERATED_DIR}/BlockUpgradeSchemas.h" @ONLY)
 
-# the tables worlds before 1.12 need: numeric ids and meta values to block states
-configure_file(cmake/LegacyBlockTables.h.in "${FALCON_GENERATED_DIR}/LegacyBlockTables.h" @ONLY)
-set(FALCON_LEGACY_ID_MAP "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/block_legacy_id_map.json")
-set(FALCON_LEGACY_ID_META "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/id_meta_1.12.0.bin")
-set(FALCON_LEGACY_ITEM_IDS "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/item_legacy_id_map.json")
-set(FALCON_LEGACY_ENTITY_IDS "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/entity_id_map.json")
-set(FALCON_LEGACY_TABLES_SOURCE "${FALCON_GENERATED_DIR}/LegacyBlockTables.cpp")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FALCON_LEGACY_ID_MAP}" "${FALCON_LEGACY_ID_META}"
-        "${FALCON_LEGACY_ITEM_IDS}" "${FALCON_LEGACY_ENTITY_IDS}")
-file(READ "${FALCON_LEGACY_ID_MAP}" FALCON_LEGACY_ID_MAP_HEX HEX)
-string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ID_MAP_BYTES "${FALCON_LEGACY_ID_MAP_HEX}")
-file(READ "${FALCON_LEGACY_ID_META}" FALCON_LEGACY_ID_META_HEX HEX)
-string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ID_META_BYTES "${FALCON_LEGACY_ID_META_HEX}")
-file(READ "${FALCON_LEGACY_ITEM_IDS}" FALCON_LEGACY_ITEM_IDS_HEX HEX)
-string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ITEM_IDS_BYTES "${FALCON_LEGACY_ITEM_IDS_HEX}")
-file(READ "${FALCON_LEGACY_ENTITY_IDS}" FALCON_LEGACY_ENTITY_IDS_HEX HEX)
-string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ENTITY_IDS_BYTES "${FALCON_LEGACY_ENTITY_IDS_HEX}")
-file(WRITE "${FALCON_LEGACY_TABLES_SOURCE}.new"
-        "#include \"LegacyBlockTables.h\"\n"
-        "namespace FalconLegacyBlockData {\n"
-        "extern const char kIdMap[] = {${FALCON_LEGACY_ID_MAP_BYTES}};\n"
-        "extern const size_t kIdMapSize = sizeof(kIdMap);\n"
-        "extern const unsigned char kIdMeta[] = {${FALCON_LEGACY_ID_META_BYTES}};\n"
-        "extern const size_t kIdMetaSize = sizeof(kIdMeta);\n"
-        "extern const char kItemIds[] = {${FALCON_LEGACY_ITEM_IDS_BYTES}};\n"
-        "extern const size_t kItemIdsSize = sizeof(kItemIds);\n"
-        "extern const char kEntityIds[] = {${FALCON_LEGACY_ENTITY_IDS_BYTES}};\n"
-        "extern const size_t kEntityIdsSize = sizeof(kEntityIds);\n"
-        "}\n")
-execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FALCON_LEGACY_TABLES_SOURCE}.new"
-        "${FALCON_LEGACY_TABLES_SOURCE}")
-
 file(GLOB FALCON_LANGUAGE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Languages/*.lang")
 list(SORT FALCON_LANGUAGE_SOURCES)
 set(FALCON_LANGUAGE_FILES "")
@@ -202,7 +170,7 @@ list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_TRANSPORT_TRANSCRIPT_SOURCE})
 
 # An object library rather than a static one: blocks, items and actors register themselves from static
 # initialisers, and a static library would let the linker drop every object nothing references by name.
-add_library(FalconCore OBJECT ${FALCON_CORE_SOURCES} ${FALCON_LEGACY_TABLES_SOURCE})
+add_library(FalconCore OBJECT ${FALCON_CORE_SOURCES})
 
 # no fused multiply-adds anywhere in generation: the game rounds every float step, fma changes the terrain
 file(GLOB_RECURSE FALCON_LEVELGEN_SOURCES CONFIGURE_DEPENDS
@@ -276,6 +244,8 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     target_link_libraries(FalconEndGatewayTests PRIVATE FalconCore)
     add_executable(FalconScriptApiTests tests/ScriptApiTests.cpp)
     target_link_libraries(FalconScriptApiTests PRIVATE FalconCore)
+    add_executable(FalconScriptBlockTests tests/ScriptBlockTests.cpp)
+    target_link_libraries(FalconScriptBlockTests PRIVATE FalconCore)
     add_executable(FalconHostileMeleeTests tests/HostileMeleeTests.cpp)
     target_link_libraries(FalconHostileMeleeTests PRIVATE FalconCore)
     add_executable(FalconRangedMobTests tests/RangedMobTests.cpp)
@@ -294,6 +264,7 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
         target_link_options(FalconSulfurCavesTests PRIVATE -static -fuse-ld=lld)
         target_link_options(FalconEndGatewayTests PRIVATE -static -fuse-ld=lld)
         target_link_options(FalconScriptApiTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconScriptBlockTests PRIVATE -static -fuse-ld=lld)
         target_link_options(FalconHostileMeleeTests PRIVATE -static -fuse-ld=lld)
         target_link_options(FalconRangedMobTests PRIVATE -static -fuse-ld=lld)
         target_link_options(FalconStructureTests PRIVATE -static -fuse-ld=lld)
@@ -330,13 +301,6 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     endif()
     add_test(NAME account-binding COMMAND FalconAccountBindingTests)
     set_tests_properties(account-binding PROPERTIES TIMEOUT 60)
-    add_executable(FalconLegacyWorldTests tests/LegacyWorldTests.cpp)
-    target_link_libraries(FalconLegacyWorldTests PRIVATE FalconCore)
-    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        target_link_options(FalconLegacyWorldTests PRIVATE -static -fuse-ld=lld)
-    endif()
-    add_test(NAME legacy-world COMMAND FalconLegacyWorldTests)
-    set_tests_properties(legacy-world PROPERTIES TIMEOUT 60)
     add_executable(FalconClientProbeTests tests/ClientProbeTests.cpp)
     target_link_libraries(FalconClientProbeTests PRIVATE FalconCore)
     if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -358,6 +322,7 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     add_test(NAME end-gateway COMMAND FalconEndGatewayTests)
     set_tests_properties(end-gateway PROPERTIES TIMEOUT 60)
     add_test(NAME script-api-foundation COMMAND FalconScriptApiTests)
+    add_test(NAME script-api-blocks COMMAND FalconScriptBlockTests)
     set_tests_properties(script-api-foundation PROPERTIES TIMEOUT 60)
     add_executable(FalconClientSideGenerationTests tests/ClientSideGenerationTests.cpp)
     target_link_libraries(FalconClientSideGenerationTests PRIVATE FalconCore)

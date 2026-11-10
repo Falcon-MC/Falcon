@@ -112,6 +112,25 @@ void ServerNetworkHandler::addEffect(Actor &actor, MobEffectId effect, int32_t a
     mEventBus.after().mEffectAdd.emit(event);
 }
 
+bool ServerNetworkHandler::applyFood(ServerPlayer &player, const ItemStack &item) {
+    const FoodItemComponent *food = findFoodComponent(item);
+    if (food == nullptr)
+        return false;
+
+    player.consumeFood(food->getNutrition(), food->getSaturation());
+    for (const FoodEffect &effect: food->getEffects())
+        addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
+
+    // cured effects (poison for the honey bottle) come only from the vanilla components
+    const Tag *vanilla = vanillaFood(item);
+    const Tag *removed = vanilla == nullptr ? nullptr : vanilla->get("remove_effects");
+    if (removed != nullptr && removed->isList()) {
+        for (const Tag &effect: removed->getList())
+            player.removeEffect((MobEffectId) effect.asInt());
+    }
+    return true;
+}
+
 void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
     if (!player.isSpawned() || !player.getFlags().get(ActorFlag::UsingItem))
         return;
@@ -168,6 +187,7 @@ void ServerNetworkHandler::emitItemUse(ServerPlayer &player) {
 
     ItemUseAfterEvent useEvent(player, heldItem.mDefinition->getIdentifier());
     mEventBus.after().mItemUse.emit(useEvent);
+    mScriptEngine.onItemUse(player);
 }
 
 bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &itemType) {
@@ -345,21 +365,10 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         const std::string identifier = usedItem.mDefinition->getIdentifier();
         ItemCompleteUseAfterEvent completeEvent(player, identifier, (int32_t) useDurationTicksFor(usedItem));
         mEventBus.after().mItemCompleteUse.emit(completeEvent);
+        mScriptEngine.onItemCompleteUse(player, usedItem);
     }
 
-    if (food != nullptr) {
-        player.consumeFood(food->getNutrition(), food->getSaturation());
-        for (const FoodEffect &effect: food->getEffects())
-            addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
-
-        // cured effects (poison for the honey bottle) come only from the vanilla components
-        const Tag *vanilla = vanillaFood(usedItem);
-        const Tag *removed = vanilla == nullptr ? nullptr : vanilla->get("remove_effects");
-        if (removed != nullptr && removed->isList()) {
-            for (const Tag &effect: removed->getList())
-                player.removeEffect((MobEffectId) effect.asInt());
-        }
-    }
+    applyFood(player, usedItem);
 
     if (itemType != nullptr)
         itemType->onConsumed(*this, player, usedItem);

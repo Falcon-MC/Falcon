@@ -198,7 +198,9 @@ std::string LevelStorage::_makeDataVersionKey(int32_t chunkX, int32_t chunkZ) co
 }
 
 int LevelStorage::_firstBiomeSection() const {
-    return mDimensionId == static_cast<int>(DimensionType::Overworld) ? 0 : -LevelChunk::LOWEST_SUB_CHUNK_Y;
+    const bool overworldRange = mDimensionId == static_cast<int>(DimensionType::Overworld)
+                                || Dimension::isCustom(static_cast<DimensionType>(mDimensionId));
+    return overworldRange ? 0 : -LevelChunk::LOWEST_SUB_CHUNK_Y;
 }
 
 int LevelStorage::_biomeSectionCount() const {
@@ -853,6 +855,35 @@ bool LevelStorage::saveTickingArea(const std::string &id, const Tag &area) {
     return true;
 }
 
+std::vector<std::pair<std::string, Tag>> LevelStorage::loadSavedDataWithPrefix(const std::string &prefix) {
+    std::vector<std::pair<std::string, Tag>> entries;
+    if (mDb == nullptr)
+        return entries;
+
+    std::unique_ptr<leveldb::Iterator> iterator(mDb->NewIterator(_readOptions()));
+    for (iterator->Seek(prefix); iterator->Valid(); iterator->Next()) {
+        const std::string key = iterator->key().ToString();
+        if (key.compare(0, prefix.size(), prefix) != 0)
+            break;
+
+        ReadOnlyBinaryStream stream(iterator->value().ToString());
+        try {
+            entries.emplace_back(key.substr(prefix.size()), NbtIo::readTag(stream, NbtVariant::LittleEndian));
+        } catch (const std::exception &exception) {
+            LOG_WARN(LogAreaID::Server, "Malformed %s: %s", key.c_str(), exception.what());
+        }
+    }
+    return entries;
+}
+
+bool LevelStorage::eraseSavedData(const std::string &key) {
+    if (mDb == nullptr)
+        return false;
+
+    const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), key);
+    return _recordWrite(status.ok() || status.IsNotFound());
+}
+
 bool LevelStorage::eraseTickingArea(const std::string &id) {
     if (mDb == nullptr)
         return false;
@@ -948,12 +979,15 @@ bool LevelStorage::saveGameRules(const Tag &rules) {
     return true;
 }
 
-bool LevelStorage::saveSavedData(const std::string &key, const Tag &data) {
+bool LevelStorage::saveSavedData(const std::string &key, const Tag &data, bool wrapped) {
     if (mDb == nullptr)
         return false;
 
-    Tag root = Tag::ofCompound();
-    root.put("data", data);
+    Tag root = data;
+    if (wrapped) {
+        root = Tag::ofCompound();
+        root.put("data", data);
+    }
 
     BinaryStream stream;
     NbtIo::writeTag(stream, root, NbtVariant::LittleEndian);
@@ -968,7 +1002,7 @@ bool LevelStorage::saveSavedData(const std::string &key, const Tag &data) {
     return true;
 }
 
-bool LevelStorage::loadSavedData(const std::string &key, Tag &data) {
+bool LevelStorage::loadSavedData(const std::string &key, Tag &data, bool wrapped) {
     if (mDb == nullptr)
         return false;
 
@@ -980,7 +1014,7 @@ bool LevelStorage::loadSavedData(const std::string &key, Tag &data) {
 
     try {
         const Tag root = NbtIo::readTag(stream, NbtVariant::LittleEndian);
-        const Tag *stored = root.get("data");
+        const Tag *stored = wrapped ? root.get("data") : &root;
         if (stored == nullptr || !stored->isCompound())
             return false;
 

@@ -29,7 +29,7 @@ namespace {
                 mSyncedRevisions;
     };
 
-    std::array<CommandBlockState, Dimension::DIMENSION_COUNT> gStates;
+    std::unordered_map<int32_t, CommandBlockState> gStates;
 
     CommandBlockState &stateOf(Level &level) {
         return gStates[level.getDimensionId()];

@@ -11,11 +11,15 @@
 
 #include <cstdint>
 #include <algorithm>
+#include <functional>
 #include <string>
 #include <vector>
 
 enum class Difficulty : int;
 class Level;
+
+// the EntityHealCause values
+enum class HealCause { Heal, Regeneration, SelfHeal, TotemOfUndying };
 
 class Actor {
 public:
@@ -406,7 +410,23 @@ public:
 
     float reduceHealth(float amount);
 
-    float heal(float amount);
+    float heal(float amount, HealCause cause = HealCause::Heal);
+
+    // the filter may rewrite the amount and returns false to cancel; the listener sees what was healed
+    using HealFilter = std::function<bool(Actor &, float &, HealCause)>;
+    using HealListener = std::function<void(Actor &, float, HealCause)>;
+
+    static void setHealHooks(HealFilter filter, HealListener listener) {
+        sHealFilter = std::move(filter);
+        sHealListener = std::move(listener);
+    }
+
+    // every health write through setHealth, reduceHealth, heal and kill
+    using HealthListener = std::function<void(Actor &, float, float)>;
+
+    static void setHealthListener(HealthListener listener) {
+        sHealthListener = std::move(listener);
+    }
 
     MobEffectManager &getEffects() {
         return mEffects;
@@ -472,6 +492,15 @@ public:
 
 protected:
     void _changeFood(float food);
+
+    static inline HealFilter sHealFilter;
+    static inline HealListener sHealListener;
+    static inline HealthListener sHealthListener;
+
+    void _healthChanged(float previous) {
+        if (sHealthListener && getHealth() != previous)
+            sHealthListener(*this, previous, getHealth());
+    }
 
     static const float EXHAUSTION_PER_UNIT;
     static const float FALL_DAMAGE_THRESHOLD;

@@ -14,6 +14,7 @@
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
+#include <unordered_map>
 #include <algorithm>
 #include <array>
 #include <memory>
@@ -113,7 +114,7 @@ namespace {
         }
     }
 
-    std::array<std::vector<PendingMove>, Dimension::DIMENSION_COUNT> gPendingMoves;
+    std::unordered_map<int32_t, std::vector<PendingMove>> gPendingMoves;
 
     bool contains(const std::unordered_set<std::string> &set, const std::string &value) {
         return set.find(value) != set.end();
@@ -422,7 +423,9 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
 
     for (size_t index = toDestroy.size(); index > 0; --index) {
         const Vector3i &destroyed = toDestroy[index - 1];
+        const BlockState broken = level.getBlockState(destroyed.x, destroyed.y, destroyed.z);
         level.setBlock(destroyed, BlockState(AIR), false);
+        owner.getScriptEngine().onCustomBlockBreak(level, destroyed, broken, nullptr, &position);
     }
 
     // lifted out now (actors detached, container screens closed), placed when the arm animation ends in
@@ -441,6 +444,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     arm.setSticky(sticky);
     arm.setFacing(face);
     arm.beginMove(extending, toMove);
+    owner.getScriptEngine().onPistonActivate(level, position, extending);
 
     for (size_t index = toMove.size(); index > 0; --index)
         level.setBlock(toMove[index - 1], BlockState(AIR), false);

@@ -17,10 +17,11 @@ void ChatHandler::broadcastChat(ServerNetworkHandler &owner, ServerPlayer &playe
 
     LOG_INFO(LogAreaID::Server, "<%s> %s", player.getName().c_str(), StringUtil::printable(finalMessage, 512).c_str());
 
+    const ServerPlayer::ChatStyle &style = player.getChatStyle();
     TextPacket chat;
     chat.mType = TextPacket::Type::Chat;
-    chat.mSourceName = player.getName();
-    chat.mMessage = finalMessage;
+    chat.mSourceName = style.mNamePrefix + player.getName() + style.mNameSuffix;
+    chat.mMessage = style.mMessagePrefix + finalMessage;
 
     for (auto &entry: owner.getPlayers()) {
         if (entry.second.isSpawned())

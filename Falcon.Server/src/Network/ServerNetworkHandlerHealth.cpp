@@ -147,7 +147,7 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (isDamageDisabledByGameRule(getWorldFor(player).getOverworld().getGameRules(), key))
         return DamageResult::Ignored;
 
-    if (mScriptEngine.beforeEntityHurt(player, amount, key, source.mAttacker))
+    if (mScriptEngine.beforeEntityHurt(player, amount, source) || amount <= 0.0f)
         return DamageResult::Ignored;
 
     // inside the 10-tick invulnerability window only a stronger hit lands, dealing the difference
@@ -221,9 +221,12 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
 
     EntityHurtAfterEvent hurtEvent(player, amount, key);
     mEventBus.after().mEntityHurt.emit(hurtEvent);
+    mScriptEngine.onEntityHurt(player, amount, source);
 
     if (health <= 0.0f) {
+        mFatalSource = &source;
         killPlayer(player, key, source.mDeathMessageParameters);
+        mFatalSource = nullptr;
         return DamageResult::Dealt;
     }
 
@@ -250,6 +253,10 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
 
     EntityDieAfterEvent dieEvent(player, deathMessageKey);
     mEventBus.after().mEntityDie.emit(dieEvent);
+    if (mFatalSource != nullptr)
+        mScriptEngine.onEntityDie(player, *mFatalSource);
+    else
+        mScriptEngine.onEntityDie(player, ActorDamageSource::environment(deathMessageKey, player.getName()));
 
     player.getInventoryManager().onCurrentWindowRemove();
 

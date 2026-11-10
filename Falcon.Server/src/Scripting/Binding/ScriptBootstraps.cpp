@@ -71,6 +71,18 @@ namespace {
         return permutationCache.get(id);
     };
 
+    const infoCache = new Map();
+    const infoOf = (id, states) => {
+        const key = id + JSON.stringify(states);
+        if (!infoCache.has(key))
+            infoCache.set(key, native.blockInfo(id, states));
+        return infoCache.get(key);
+    };
+    const water = (liquidType) => {
+        if (liquidType !== "Water")
+            throw new TypeError("Native type conversion failed.");
+    };
+
     class BlockType {
         #id;
         constructor(key, id) {
@@ -79,6 +91,9 @@ namespace {
         }
         get id() {
             return this.#id;
+        }
+        get localizationKey() {
+            return infoOf(this.#id, {}).localizationKey;
         }
     }
 
@@ -101,6 +116,42 @@ namespace {
 
         getState(name) {
             return this.#states[name];
+        }
+
+        get localizationKey() {
+            return infoOf(this.#type.id, this.#states).localizationKey;
+        }
+
+        getTags() {
+            return infoOf(this.#type.id, this.#states).tags.slice();
+        }
+
+        hasTag(tag) {
+            return infoOf(this.#type.id, this.#states).tags.includes(String(tag));
+        }
+
+        canContainLiquid(liquidType) {
+            water(liquidType);
+            return infoOf(this.#type.id, this.#states).canContainLiquid;
+        }
+
+        canBeDestroyedByLiquidSpread(liquidType) {
+            water(liquidType);
+            return infoOf(this.#type.id, this.#states).destroyedBySpread;
+        }
+
+        liquidSpreadCausesSpawn(liquidType) {
+            water(liquidType);
+            return infoOf(this.#type.id, this.#states).spawnsOnSpread;
+        }
+
+        isLiquidBlocking(liquidType) {
+            water(liquidType);
+            return infoOf(this.#type.id, this.#states).liquidBlocking;
+        }
+
+        getItemStack(amount) {
+            return native.permutationItem(this.#type.id, this.#states, amount === undefined ? 1 : amount);
         }
 
         withState(name, value) {
@@ -299,6 +350,184 @@ namespace {
     };
 
     return { BlockPermutation, BlockType, BlockTypes, BlockStateType, BlockStates, ItemType, ItemTypes, installJobs };
+})
+)JS";
+
+    const char *VOLUMES = R"JS(
+(function (native) {
+    const token = Symbol();
+    const guard = (key, name) => {
+        if (key !== token)
+            throw new ReferenceError("No constructor for native class '" + name + "'.");
+    };
+    const vector = (value) => {
+        if (value === null || typeof value !== "object")
+            throw new TypeError("Native type conversion failed.");
+        const x = Number(value.x), y = Number(value.y), z = Number(value.z);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z))
+            throw new TypeError("Native type conversion failed.");
+        return { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) };
+    };
+    const distance = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2;
+
+    class BlockLocationIterator {
+        #next;
+        constructor(key, next) {
+            guard(key, "BlockLocationIterator");
+            this.#next = next;
+        }
+        [Symbol.iterator]() {
+            return this;
+        }
+        next() {
+            const value = this.#next();
+            return value === undefined ? { done: true, value: undefined } : { done: false, value };
+        }
+    }
+
+    class BlockVolumeBase {
+        constructor(key) {
+            guard(key, "BlockVolumeBase");
+        }
+        getCapacity() {
+            const span = this.getSpan();
+            return span.x * span.y * span.z;
+        }
+        getSpan() {
+            const min = this.getMin(), max = this.getMax();
+            return { x: max.x - min.x + 1, y: max.y - min.y + 1, z: max.z - min.z + 1 };
+        }
+        // TODO: the game's tie order between equally distant locations is unverified
+        getClosest(count, location) {
+            const at = vector(location);
+            return Array.from(this.getBlockLocationIterator()).sort((a, b) => distance(a, at) - distance(b, at))
+                .slice(0, Math.max(0, count | 0));
+        }
+        getFarthest(count, location) {
+            const at = vector(location);
+            return Array.from(this.getBlockLocationIterator()).sort((a, b) => distance(b, at) - distance(a, at))
+                .slice(0, Math.max(0, count | 0));
+        }
+    }
+
+    class BlockVolume extends BlockVolumeBase {
+        constructor(from, to) {
+            super(token);
+            this.from = vector(from);
+            this.to = vector(to);
+        }
+        getMin() {
+            const a = vector(this.from), b = vector(this.to);
+            return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), z: Math.min(a.z, b.z) };
+        }
+        getMax() {
+            const a = vector(this.from), b = vector(this.to);
+            return { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), z: Math.max(a.z, b.z) };
+        }
+        isInside(location) {
+            const at = vector(location), min = this.getMin(), max = this.getMax();
+            return at.x >= min.x && at.x <= max.x && at.y >= min.y && at.y <= max.y && at.z >= min.z && at.z <= max.z;
+        }
+        translate(delta) {
+            const d = vector(delta), a = vector(this.from), b = vector(this.to);
+            this.from = { x: a.x + d.x, y: a.y + d.y, z: a.z + d.z };
+            this.to = { x: b.x + d.x, y: b.y + d.y, z: b.z + d.z };
+        }
+        doesLocationTouchFaces(pos) {
+            const at = vector(pos), min = this.getMin(), max = this.getMax();
+            return this.isInside(at) && (at.x === min.x || at.x === max.x || at.y === min.y || at.y === max.y
+                || at.z === min.z || at.z === max.z);
+        }
+        // TODO: the game's touching rule is unverified: overlapping or sharing a face
+        doesVolumeTouchFaces(other) {
+            const a = this.getMin(), b = this.getMax(), c = other.getMin(), d = other.getMax();
+            return a.x <= d.x + 1 && c.x <= b.x + 1 && a.y <= d.y + 1 && c.y <= b.y + 1 && a.z <= d.z + 1
+                && c.z <= b.z + 1;
+        }
+        // TODO: Contains is read as other inside this one, unverified
+        intersects(other) {
+            const a = this.getMin(), b = this.getMax(), c = other.getMin(), d = other.getMax();
+            if (c.x > b.x || d.x < a.x || c.y > b.y || d.y < a.y || c.z > b.z || d.z < a.z)
+                return 0;
+            if (c.x >= a.x && d.x <= b.x && c.y >= a.y && d.y <= b.y && c.z >= a.z && d.z <= b.z)
+                return 1;
+            return 2;
+        }
+        // TODO: x, then z, then y outermost, unverified against the game's iterator
+        getBlockLocationIterator() {
+            const min = this.getMin(), max = this.getMax();
+            let x = min.x, y = min.y, z = min.z;
+            return new BlockLocationIterator(token, () => {
+                if (y > max.y)
+                    return undefined;
+                const value = { x, y, z };
+                if (++x > max.x) {
+                    x = min.x;
+                    if (++z > max.z) {
+                        z = min.z;
+                        ++y;
+                    }
+                }
+                return value;
+            });
+        }
+    }
+
+    const keyOf = (v) => v.x + "," + v.y + "," + v.z;
+
+    class ListBlockVolume extends BlockVolumeBase {
+        #locations = new Map();
+        constructor(locations) {
+            super(token);
+            this.add(locations);
+        }
+        add(locations) {
+            for (const location of locations) {
+                const v = vector(location);
+                this.#locations.set(keyOf(v), v);
+            }
+        }
+        remove(locations) {
+            for (const location of locations)
+                this.#locations.delete(keyOf(vector(location)));
+        }
+        getCapacity() {
+            return this.#locations.size;
+        }
+        getMin() {
+            const all = Array.from(this.#locations.values());
+            if (all.length === 0)
+                return { x: 0, y: 0, z: 0 };
+            return { x: Math.min(...all.map((v) => v.x)), y: Math.min(...all.map((v) => v.y)),
+                     z: Math.min(...all.map((v) => v.z)) };
+        }
+        getMax() {
+            const all = Array.from(this.#locations.values());
+            if (all.length === 0)
+                return { x: 0, y: 0, z: 0 };
+            return { x: Math.max(...all.map((v) => v.x)), y: Math.max(...all.map((v) => v.y)),
+                     z: Math.max(...all.map((v) => v.z)) };
+        }
+        isInside(location) {
+            return this.#locations.has(keyOf(vector(location)));
+        }
+        translate(delta) {
+            const d = vector(delta);
+            const moved = new Map();
+            for (const v of this.#locations.values()) {
+                const next = { x: v.x + d.x, y: v.y + d.y, z: v.z + d.z };
+                moved.set(keyOf(next), next);
+            }
+            this.#locations = moved;
+        }
+        getBlockLocationIterator() {
+            const values = Array.from(this.#locations.values()).map((v) => ({ x: v.x, y: v.y, z: v.z }));
+            let index = 0;
+            return new BlockLocationIterator(token, () => (index < values.length ? values[index++] : undefined));
+        }
+    }
+
+    return { BlockVolumeBase, BlockVolume, ListBlockVolume, BlockLocationIterator };
 })
 )JS";
 
@@ -531,27 +760,8 @@ namespace {
         }
     }
 
-    // TODO: drive the engine's ticking areas, script-side bookkeeping for now
-    class TickingAreaManager {
-        #areas = new Map();
-        constructor(key) {
-            guard(key, "TickingAreaManager");
-        }
-        createTickingArea(identifier, options) {
-            this.#areas.set(identifier, options || {});
-            return Promise.resolve();
-        }
-        removeTickingArea(identifier) {
-            this.#areas.delete(typeof identifier === "string" ? identifier : identifier.identifier);
-        }
-        getAllTickingAreas() {
-            return Array.from(this.#areas.keys()).map((identifier) => ({ identifier }));
-        }
-    }
-
     return {
-        Scoreboard, ScoreboardObjective, TickingAreaManager,
-        scoreboard: new Scoreboard(token), tickingAreaManager: new TickingAreaManager(token)
+        Scoreboard, ScoreboardObjective, scoreboard: new Scoreboard(token)
     };
 })
 )JS";
@@ -568,6 +778,10 @@ namespace ScriptBootstraps {
 
     const char *ui() {
         return UI;
+    }
+
+    const char *volumes() {
+        return VOLUMES;
     }
 
     const char *world() {

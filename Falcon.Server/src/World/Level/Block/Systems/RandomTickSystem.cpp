@@ -2,6 +2,8 @@
 
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Systems/CopperSystem.h"
+#include "Network/ServerNetworkHandler.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Chunk/SubChunk.h"
@@ -26,17 +28,25 @@ namespace {
         return ticks;
     }
 
+    // a pack block has no class: it ticks for the scripts' onRandomTick
+    bool isScriptedBlock(const BlockState &state) {
+        const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(state.mName);
+        return custom != nullptr && (!custom->mCustomComponents.empty() || !custom->mPermutations.empty());
+    }
+
     bool stateTicksRandomly(const BlockState &state) {
         if (state.mName == "minecraft:air")
             return false;
 
         const Block *block = VanillaBlocks::fromState(state);
-        return block != nullptr && ticksRandomly(*block);
+        return block != nullptr ? ticksRandomly(*block) : isScriptedBlock(state);
     }
 
     struct Candidate {
         Vector3i mPosition;
         const Block *mBlock;
+        // set for a pack block, mBlock is null then
+        std::string mCustom;
     };
 
     std::mt19937 &generator() {
@@ -130,13 +140,15 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
                     continue;
 
                 const Block *block = VanillaBlocks::fromState(state);
-                if (block == nullptr || !ticksRandomly(*block))
+                if (block != nullptr ? !ticksRandomly(*block) : !isScriptedBlock(state))
                     continue;
 
                 Candidate candidate;
                 candidate.mPosition = Vector3i((chunkX << 4) + localX, LevelChunk::MIN_Y + index * 16 + localY,
                                                (chunkZ << 4) + localZ);
                 candidate.mBlock = block;
+                if (block == nullptr)
+                    candidate.mCustom = state.mName;
                 candidates.push_back(std::move(candidate));
             }
         }
@@ -149,6 +161,12 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
         const BlockState *before = level.peekBlockPtr(position.x, position.y, position.z);
         if (before == nullptr || VanillaBlocks::fromState(*before) != candidate.mBlock)
             continue;
+
+        if (candidate.mBlock == nullptr) {
+            if (before->mName == candidate.mCustom)
+                owner.getScriptEngine().onCustomBlockRandomTick(level, candidate.mCustom, position);
+            continue;
+        }
 
         // copy: a reaction may rewrite the palette the peeked pointer points into
         const BlockState current = *before;

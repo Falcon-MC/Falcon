@@ -429,6 +429,8 @@ private:
     bool mPersistent = true;
     int32_t mFarFromPlayerTicks = 0;
     std::vector<int64_t> mPendingPassengers;
+    // the hit being dealt while kill() runs from hurt(): the death event reports its cause
+    const ActorDamageSource *mFatalSource = nullptr;
 
     std::unordered_map<std::string, int32_t> mIntProperties;
     std::unordered_map<std::string, float> mFloatProperties;

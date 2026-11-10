@@ -1,0 +1,1095 @@
+#include "Scripting/Binding/ScriptApi.h"
+
+#include "Network/Handler/BlockActionHandler.h"
+#include "Network/ServerNetworkHandler.h"
+#include "Scripting/Content/CustomContentRegistry.h"
+#include "World/Inventory/Container.h"
+#include "World/Level/Block/Actor/BlockActor.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/ContainerBlockActor.h"
+#include "World/Level/Block/Actor/PistonArmBlockActor.h"
+#include "World/Level/Block/Actor/SignBlockActor.h"
+#include "World/Level/Block/BlockPickItem.h"
+#include "World/Level/Block/BlockPrecipitation.h"
+#include "World/Level/Block/BlockTags.h"
+#include "World/Level/Block/CauldronBlock.h"
+#include "World/Level/Block/LiquidProperties.h"
+#include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
+#include "World/Level/Block/Systems/PistonSystem.h"
+#include "World/Level/Block/Systems/PrecipitationSystem.h"
+#include "World/Level/Block/Actor/CauldronBlockActor.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Level/Level.h"
+#include "World/Level/Map/MapColors.h"
+
+#include <algorithm>
+#include <cmath>
+#include <map>
+#include <tuple>
+#include <unordered_map>
+#include <unordered_set>
+
+using namespace ScriptValues;
+
+namespace {
+    // Direction values in RedstoneFace order
+    const char *const DIRECTIONS[] = {"Down", "Up", "North", "South", "West", "East"};
+
+    JSValue rgba(JSContext *ctx, const float color[4]);
+
+    int faceOf(const std::string &direction) {
+        for (int face = 0; face < 6; ++face) {
+            if (direction == DIRECTIONS[face])
+                return face;
+        }
+        return -1;
+    }
+
+    struct BlockAt {
+        ScriptApi *mApi = nullptr;
+        Level *mLevel = nullptr;
+        Vector3i mPosition;
+
+        BlockState state() const {
+            return mLevel->getBlockState(mPosition.x, mPosition.y, mPosition.z);
+        }
+    };
+
+    BlockAt blockAt(JSContext *ctx, JSValueConst thisVal) {
+        BlockAt at;
+        at.mApi = ScriptApi::fromContext(ctx);
+        const ScriptBlockRef *ref = at.mApi->native<ScriptBlockRef>(thisVal);
+        if (ref == nullptr) {
+            if (const ScriptBlockPart *part = at.mApi->native<ScriptBlockPart>(thisVal))
+                ref = &part->mBlock;
+        }
+        at.mLevel = &at.mApi->resolveLevel(ref->mWorldId, ref->mDimension);
+        at.mPosition = Vector3i(ref->mX, ref->mY, ref->mZ);
+        return at;
+    }
+
+    struct LiquidAnswers {
+        bool mCanContain = false;
+        bool mDestroyedBySpread = false;
+        bool mSpawnsOnSpread = false;
+        bool mBlocking = false;
+        uint8_t mBlockedFaces = 0;
+    };
+
+    // LiquidType has Water alone: lava answers are the game's lava rules, not asked for here
+    LiquidAnswers liquidAnswers(const BlockState &state) {
+        const LiquidProperties properties = LiquidProperties::of(state);
+        LiquidAnswers answers;
+        answers.mCanContain = LiquidPhysicsSystem::getWaterloggingLevel(state) > 0;
+        answers.mDestroyedBySpread = properties.reaction == LiquidReaction::Broken
+                                     || properties.reaction == LiquidReaction::Popped;
+        answers.mSpawnsOnSpread = properties.reaction == LiquidReaction::Popped;
+        answers.mBlocking = properties.reaction == LiquidReaction::Blocking;
+        answers.mBlockedFaces = properties.blockedFaces;
+        return answers;
+    }
+
+    bool readWater(JSContext *ctx, JSValueConst value) {
+        return JS_IsString(value) && toString(ctx, value) == "Water";
+    }
+
+    std::string normalized(std::string identifier) {
+        if (identifier.find(':') == std::string::npos)
+            identifier = "minecraft:" + identifier;
+        return identifier;
+    }
+
+    // TODO: tile.<name>.name is the vanilla convention; the game's own key per block is unverified
+    std::string localizationKeyOf(const std::string &identifier) {
+        const std::string name = identifier.compare(0, 10, "minecraft:") == 0 ? identifier.substr(10) : identifier;
+        return "tile." + name + ".name";
+    }
+
+    BlockState stateFromJs(JSContext *ctx, JSValueConst id, JSValueConst states) {
+        const std::string identifier = normalized(toString(ctx, id));
+        BlockState state = ScriptApi::defaultBlockState(identifier);
+        const Tag read = statesFromJs(ctx, states);
+        for (size_t index = 0; index < read.getKeys().size(); ++index)
+            state.mStates.put(read.getKeys()[index], read.getValues()[index]);
+        return BlockState(state.mName, state.mStates);
+    }
+
+    JSValue dataBlockInfo(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 1)
+            return JS_UNDEFINED;
+        const BlockState state = stateFromJs(ctx, argv[0], argc >= 2 ? argv[1] : JS_UNDEFINED);
+        const LiquidAnswers liquid = liquidAnswers(state);
+
+        JSValue info = JS_NewObject(ctx);
+        JSValue tags = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const std::string &tag: BlockTags::all(state))
+            JS_SetPropertyUint32(ctx, tags, index++, string(ctx, tag));
+        JS_SetPropertyStr(ctx, info, "tags", tags);
+        JS_SetPropertyStr(ctx, info, "localizationKey", string(ctx, localizationKeyOf(state.mName)));
+        JS_SetPropertyStr(ctx, info, "canContainLiquid", JS_NewBool(ctx, liquid.mCanContain));
+        JS_SetPropertyStr(ctx, info, "destroyedBySpread", JS_NewBool(ctx, liquid.mDestroyedBySpread));
+        JS_SetPropertyStr(ctx, info, "spawnsOnSpread", JS_NewBool(ctx, liquid.mSpawnsOnSpread));
+        JS_SetPropertyStr(ctx, info, "liquidBlocking", JS_NewBool(ctx, liquid.mBlocking));
+        return info;
+    }
+
+    JSValue itemOfBlock(ScriptApi &api, const BlockState &state, int32_t amount) {
+        const std::string identifier = BlockPickItem::identifierFor(state.mName);
+        if (identifier.empty() || identifier == "minecraft:air")
+            return JS_UNDEFINED;
+        ScriptItemData data;
+        data.mTypeId = identifier;
+        data.mAmount = amount;
+        ItemStack stack;
+        if (!api.toItemStack(data, stack))
+            return JS_UNDEFINED;
+        return api.makeItemStack(identifier, amount);
+    }
+
+    int32_t readAmount(JSContext *ctx, int argc, JSValueConst *argv, int index) {
+        int32_t amount = 1;
+        if (argc > index && !JS_IsUndefined(argv[index]))
+            JS_ToInt32(ctx, &amount, argv[index]);
+        return amount;
+    }
+
+    JSValue dataPermutationItem(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 1)
+            return JS_UNDEFINED;
+        const int32_t amount = readAmount(ctx, argc, argv, 2);
+        if (amount < 1 || amount > 255)
+            return ScriptApi::fromContext(ctx)->throwError("ArgumentOutOfBoundsError", "");
+        return itemOfBlock(*ScriptApi::fromContext(ctx), stateFromJs(ctx, argv[0], argv[1]), amount);
+    }
+
+    JSValue blockGetPermutation(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        return at.mApi->makePermutation(at.state());
+    }
+
+    JSValue blockGetType(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        JSValue permutation = blockGetPermutation(ctx, thisVal, 0, nullptr);
+        JSValue type = JS_IsObject(permutation) ? JS_GetPropertyStr(ctx, permutation, "type") : JS_UNDEFINED;
+        JS_FreeValue(ctx, permutation);
+        return type;
+    }
+
+    // the permutation answers: one rule for both classes
+    JSValue blockForward(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, const char *member) {
+        JSValue permutation = blockGetPermutation(ctx, thisVal, 0, nullptr);
+        if (!JS_IsObject(permutation))
+            return JS_UNDEFINED;
+        JSAtom atom = JS_NewAtom(ctx, member);
+        JSValue result = JS_Invoke(ctx, permutation, atom, argc, argv);
+        JS_FreeAtom(ctx, atom);
+        JS_FreeValue(ctx, permutation);
+        return result;
+    }
+
+    JSValue blockMatches(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        return blockForward(ctx, thisVal, argc, argv, "matches");
+    }
+
+    JSValue blockGetTags(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        return blockForward(ctx, thisVal, argc, argv, "getTags");
+    }
+
+    JSValue blockHasTag(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        return blockForward(ctx, thisVal, argc, argv, "hasTag");
+    }
+
+    JSValue blockGetLocalizationKey(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        return string(ctx, localizationKeyOf(blockAt(ctx, thisVal).state().mName));
+    }
+
+    JSValue blockGetIsLiquid(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        return JS_NewBool(ctx, LiquidProperties::of(blockAt(ctx, thisVal).state()).isLiquid());
+    }
+
+    JSValue blockGetIsWaterlogged(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        if (LiquidProperties::of(at.state()).isLiquid())
+            return JS_FALSE;
+        const BlockState overlay = at.mLevel->getBlockStateAtLayer(at.mPosition.x, at.mPosition.y, at.mPosition.z, 1);
+        return JS_NewBool(ctx, LiquidProperties::of(overlay).material == LiquidMaterial::Water);
+    }
+
+    JSValue blockSetWaterlogged(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        if (argc < 1 || !JS_IsBool(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const bool waterlogged = JS_ToBool(ctx, argv[0]) == 1;
+        // TODO: the game's error for a block that cannot hold water is unverified
+        if (waterlogged && !liquidAnswers(at.state()).mCanContain)
+            return at.mApi->throwError("Error", "Block can not be waterlogged.");
+
+        BlockState overlay = BlockState("minecraft:air");
+        if (waterlogged) {
+            overlay = BlockState("minecraft:water");
+            overlay.mStates.putInt("liquid_depth", 0);
+        }
+        at.mLevel->setBlockStateAtLayer(at.mPosition.x, at.mPosition.y, at.mPosition.z, 1, overlay);
+        BlockActionHandler::broadcastBlockUpdate(at.mApi->host(), *at.mLevel, at.mPosition, overlay, 1);
+        return JS_UNDEFINED;
+    }
+
+    JSValue blockLiquidQuery(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, int magic) {
+        if (argc < 1 || !readWater(ctx, argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const LiquidAnswers answers = liquidAnswers(blockAt(ctx, thisVal).state());
+        switch (magic) {
+            case 0:
+                return JS_NewBool(ctx, answers.mCanContain);
+            case 1:
+                return JS_NewBool(ctx, answers.mDestroyedBySpread);
+            case 2:
+                return JS_NewBool(ctx, answers.mSpawnsOnSpread);
+            default:
+                return JS_NewBool(ctx, answers.mBlocking);
+        }
+    }
+
+    JSValue blockLiquidCanFlowFrom(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        if (argc < 2 || !readWater(ctx, argv[0]) || !JS_IsString(argv[1]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const int face = faceOf(toString(ctx, argv[1]));
+        if (face < 0)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const LiquidAnswers answers = liquidAnswers(blockAt(ctx, thisVal).state());
+        return JS_NewBool(ctx, !answers.mBlocking && ((answers.mBlockedFaces >> face) & 1) == 0);
+    }
+
+    JSValue blockBottomCenter(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        return vector3(ctx, (float) at.mPosition.x + 0.5f, (float) at.mPosition.y, (float) at.mPosition.z + 0.5f);
+    }
+
+    JSValue blockOffsetBy(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        double x = 0.0, y = 0.0, z = 0.0;
+        if (argc < 1 || !readVector3(ctx, argv[0], x, y, z))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const Vector3i target(at.mPosition.x + (int32_t) std::floor(x), at.mPosition.y + (int32_t) std::floor(y),
+                              at.mPosition.z + (int32_t) std::floor(z));
+        if (target.y < at.mLevel->getMinY() || target.y > at.mLevel->getMaxY())
+            return at.mApi->throwError("LocationOutOfWorldBoundariesError", "");
+        if (at.mLevel->peekBlockPtr(target.x, target.y, target.z) == nullptr)
+            return JS_UNDEFINED;
+        return at.mApi->makeBlock(*at.mLevel, target.x, target.y, target.z);
+    }
+
+    // TODO: the game's combined value is unverified: the brighter of block light and sky light less the darkening
+    JSValue blockGetLightLevel(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        const int block = at.mLevel->getBlockLightAt(at.mPosition.x, at.mPosition.y, at.mPosition.z);
+        const int sky = at.mLevel->getSkyLightAt(at.mPosition.x, at.mPosition.y, at.mPosition.z)
+                        - at.mLevel->getSkyLightSubtracted();
+        return JS_NewInt32(ctx, std::max(block, std::max(sky, 0)));
+    }
+
+    JSValue blockGetSkyLightLevel(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        return JS_NewInt32(ctx, at.mLevel->getSkyLightAt(at.mPosition.x, at.mPosition.y, at.mPosition.z));
+    }
+
+    // TODO: which blocks answer undefined is unverified; any block reports the power it receives
+    JSValue blockGetRedstonePower(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        return JS_NewInt32(ctx,
+                           RedstoneSystem::isBlockIndirectlyGettingPowered(at.mApi->host(), *at.mLevel, at.mPosition));
+    }
+
+    JSValue blockGetItemStack(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        const int32_t amount = readAmount(ctx, argc, argv, 0);
+        if (amount < 1 || amount > 255)
+            return at.mApi->throwError("ArgumentOutOfBoundsError", "");
+        // TODO: withData needs the block actor data on the ItemStack, which V4 carries
+        return itemOfBlock(*at.mApi, at.state(), amount);
+    }
+
+    // doors and double plants: the other half sits above or below
+    JSValue blockGetParts(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        const BlockState state = at.state();
+        const Tag *upper = state.mStates.get("upper_block_bit");
+        // TODO: beds and other multi-block shapes are unverified
+        if (upper == nullptr)
+            return JS_UNDEFINED;
+        const bool isUpper = upper->getType() == Tag::Type::Byte && upper->asByte() != 0;
+        const Vector3i other(at.mPosition.x, at.mPosition.y + (isUpper ? -1 : 1), at.mPosition.z);
+        JSValue parts = JS_NewArray(ctx);
+        const Vector3i lower = isUpper ? other : at.mPosition;
+        const Vector3i top = isUpper ? at.mPosition : other;
+        JS_SetPropertyUint32(ctx, parts, 0, at.mApi->makeBlock(*at.mLevel, lower.x, lower.y, lower.z));
+        JS_SetPropertyUint32(ctx, parts, 1, at.mApi->makeBlock(*at.mLevel, top.x, top.y, top.z));
+        return parts;
+    }
+
+    // components each block has, in BlockComponentTypes order
+    std::vector<std::string> componentIdsAt(Level &level, const Vector3i &position) {
+        std::vector<std::string> ids;
+        const BlockState state = level.getBlockState(position.x, position.y, position.z);
+        BlockActor *actor = level.getBlockActors().find(position);
+        if (actor != nullptr)
+            ids.emplace_back("minecraft:dynamic_properties");
+        if (CauldronBlock::matches(state.mName))
+            ids.emplace_back("minecraft:fluid_container");
+        if (actor != nullptr && actor->getContainer() != nullptr && dynamic_cast<JukeboxBlockActor *>(actor) == nullptr)
+            ids.emplace_back("minecraft:inventory");
+        if (MapColors::find(state.mName) != nullptr)
+            ids.emplace_back("minecraft:map_color");
+        ids.emplace_back("minecraft:movable");
+        if (PistonSystem::isPiston(state.mName))
+            ids.emplace_back("minecraft:piston");
+        ids.emplace_back("minecraft:precipitation_interactions");
+        if (dynamic_cast<JukeboxBlockActor *>(actor) != nullptr)
+            ids.emplace_back("minecraft:record_player");
+        if (RedstoneSystem::isPowerSource(state))
+            ids.emplace_back("minecraft:redstone_producer");
+        if (dynamic_cast<SignBlockActor *>(actor) != nullptr)
+            ids.emplace_back("minecraft:sign");
+        return ids;
+    }
+
+    const char *componentClassOf(const std::string &id) {
+        static const char *const CLASSES[][2] = {
+                {"minecraft:dynamic_properties", "BlockDynamicPropertiesComponent"},
+                {"minecraft:fluid_container", "BlockFluidContainerComponent"},
+                {"minecraft:inventory", "BlockInventoryComponent"},
+                {"minecraft:map_color", "BlockMapColorComponent"},
+                {"minecraft:movable", "BlockMovableComponent"},
+                {"minecraft:piston", "BlockPistonComponent"},
+                {"minecraft:precipitation_interactions", "BlockPrecipitationInteractionsComponent"},
+                {"minecraft:record_player", "BlockRecordPlayerComponent"},
+                {"minecraft:redstone_producer", "BlockRedstoneProducerComponent"},
+                {"minecraft:sign", "BlockSignComponent"},
+        };
+        for (const auto &entry: CLASSES) {
+            if (id == entry[0])
+                return entry[1];
+        }
+        return nullptr;
+    }
+
+    JSValue blockGetComponent(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return at.mApi->makeBlockComponent(*at.mLevel, at.mPosition, normalized(toString(ctx, argv[0])));
+    }
+
+    JSValue blockHasComponent(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        JSValue component = blockGetComponent(ctx, thisVal, argc, argv);
+        if (JS_IsException(component))
+            return component;
+        const bool found = !JS_IsUndefined(component);
+        JS_FreeValue(ctx, component);
+        return JS_NewBool(ctx, found);
+    }
+
+    JSValue blockGetComponents(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        JSValue array = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const std::string &id: componentIdsAt(*at.mLevel, at.mPosition)) {
+            JSValue component = at.mApi->makeBlockComponent(*at.mLevel, at.mPosition, id);
+            if (JS_IsUndefined(component))
+                continue;
+            JS_SetPropertyUint32(ctx, array, index++, component);
+        }
+        return array;
+    }
+
+    const ScriptBlockPart &partOf(JSContext *ctx, JSValueConst thisVal) {
+        return *ScriptApi::fromContext(ctx)->native<ScriptBlockPart>(thisVal);
+    }
+
+    JSValue componentGetBlock(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        return at.mApi->makeBlock(*at.mLevel, at.mPosition.x, at.mPosition.y, at.mPosition.z);
+    }
+
+    JSValue inventoryGetContainer(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        return at.mApi->makeBlockContainer(*at.mLevel, at.mPosition);
+    }
+
+    // signs: the block actor's own tag is read and written back whole
+    SignBlockActor *signAt(const BlockAt &at) {
+        return at.mLevel->getBlockActors().find<SignBlockActor>(at.mPosition);
+    }
+
+    const char *signSide(JSContext *ctx, int argc, JSValueConst *argv, int index, bool &valid) {
+        valid = true;
+        if (argc <= index || JS_IsUndefined(argv[index]))
+            return "FrontText";
+        const std::string side = toString(ctx, argv[index]);
+        if (side == "Front")
+            return "FrontText";
+        if (side == "Back")
+            return "BackText";
+        valid = false;
+        return "FrontText";
+    }
+
+    JSValue signGetText(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, int magic) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        SignBlockActor *sign = signAt(at);
+        bool valid = true;
+        const char *side = signSide(ctx, argc, argv, 0, valid);
+        if (!valid)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (sign == nullptr)
+            return JS_UNDEFINED;
+        const Tag saved = sign->saveNbt();
+        const Tag *face = saved.get(side);
+        const std::string text = face != nullptr && face->isCompound() ? face->getString("Text") : std::string();
+        if (magic == 0)
+            return string(ctx, text);
+        // TODO: the game keeps raw text as its json; a plain text comes back as one text entry
+        JSValue parsed = text.empty() || text[0] != '{' ? JS_UNDEFINED
+                                                        : JS_ParseJSON(ctx, text.c_str(), text.size(), "<sign>");
+        if (JS_IsObject(parsed))
+            return parsed;
+        JS_FreeValue(ctx, parsed);
+        JSValue raw = JS_NewObject(ctx);
+        JSValue list = JS_NewArray(ctx);
+        JSValue entry = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, entry, "text", string(ctx, text));
+        JS_SetPropertyUint32(ctx, list, 0, entry);
+        JS_SetPropertyStr(ctx, raw, "rawtext", list);
+        return raw;
+    }
+
+    void writeSign(const BlockAt &at, SignBlockActor &sign, const Tag &data) {
+        sign.loadNbt(data, at.mApi->host().getCodecContext());
+        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, sign);
+    }
+
+    JSValue signSetText(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        SignBlockActor *sign = signAt(at);
+        bool valid = true;
+        const char *side = signSide(ctx, argc, argv, 1, valid);
+        if (argc < 1 || !valid)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (sign == nullptr)
+            return JS_UNDEFINED;
+        bool isJson = false;
+        const std::string text = JS_IsString(argv[0]) ? toString(ctx, argv[0]) : messageToRawText(ctx, argv[0], isJson);
+        Tag data = sign->saveNbt();
+        Tag face = data.get(side) != nullptr ? *data.get(side) : Tag::ofCompound();
+        face.putString("Text", text);
+        data.put(side, face);
+        writeSign(at, *sign, data);
+        return JS_UNDEFINED;
+    }
+
+    // TODO: only the default opaque black is verified; other dye text colours are not mapped
+    JSValue signGetTextDyeColor(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        SignBlockActor *sign = signAt(at);
+        bool valid = true;
+        const char *side = signSide(ctx, argc, argv, 0, valid);
+        if (!valid)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (sign == nullptr)
+            return JS_UNDEFINED;
+        const Tag saved = sign->saveNbt();
+        const Tag *face = saved.get(side);
+        const int32_t color = face != nullptr && face->isCompound() ? face->getInt("SignTextColor", -16777216)
+                                                                    : -16777216;
+        return color == -16777216 ? JS_NewString(ctx, "Black") : JS_UNDEFINED;
+    }
+
+    JSValue signGetIsWaxed(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        SignBlockActor *sign = signAt(blockAt(ctx, thisVal));
+        return JS_NewBool(ctx, sign != nullptr && sign->saveNbt().getBool("IsWaxed", false));
+    }
+
+    JSValue signSetWaxed(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        SignBlockActor *sign = signAt(at);
+        if (argc < 1 || !JS_IsBool(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (sign == nullptr)
+            return JS_UNDEFINED;
+        Tag data = sign->saveNbt();
+        data.putBool("IsWaxed", JS_ToBool(ctx, argv[0]) == 1);
+        writeSign(at, *sign, data);
+        return JS_UNDEFINED;
+    }
+
+    PistonArmBlockActor *pistonAt(const BlockAt &at) {
+        return at.mLevel->getBlockActors().find<PistonArmBlockActor>(at.mPosition);
+    }
+
+    JSValue pistonGetIsMoving(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const PistonArmBlockActor *piston = pistonAt(blockAt(ctx, thisVal));
+        return JS_NewBool(ctx, piston != nullptr && piston->isMoving());
+    }
+
+    JSValue pistonGetState(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        const PistonArmBlockActor *piston = pistonAt(at);
+        if (piston != nullptr && piston->isMoving())
+            return JS_NewString(ctx, piston->isExtending() ? "Expanding" : "Retracting");
+        return JS_NewString(ctx,
+                            PistonSystem::isExtended(*at.mLevel, at.mPosition, at.state()) ? "Expanded" : "Retracted");
+    }
+
+    JSValue pistonGetAttached(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        const PistonArmBlockActor *piston = pistonAt(at);
+        JSValue array = JS_NewArray(ctx);
+        if (piston == nullptr)
+            return array;
+        uint32_t index = 0;
+        for (const Vector3i &position: piston->getAttachedBlocks()) {
+            JSValue entry = magic == 0 ? at.mApi->makeBlock(*at.mLevel, position.x, position.y, position.z)
+                                       : vector3(ctx, (float) position.x, (float) position.y, (float) position.z);
+            JS_SetPropertyUint32(ctx, array, index++, entry);
+        }
+        return array;
+    }
+
+    JSValue fluidGetFillLevel(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        return JS_NewInt32(ctx, CauldronBlock(blockAt(ctx, thisVal).state()).getFillLevel());
+    }
+
+    void setCauldron(const BlockAt &at, CauldronBlock::Liquid liquid, int fillLevel) {
+        at.mApi->setBlock(*at.mLevel, at.mPosition.x, at.mPosition.y, at.mPosition.z,
+                          CauldronBlock::makeState(liquid, fillLevel));
+    }
+
+    JSValue fluidSetFillLevel(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        int32_t level = 0;
+        if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToInt32(ctx, &level, argv[0]) != 0)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        // fill_level spans 0 to 6
+        if (level < 0 || level > 6)
+            return at.mApi->throwError("ArgumentOutOfBoundsError", "");
+        const CauldronBlock cauldron(at.state());
+        const CauldronBlock::Liquid liquid = cauldron.getLiquid() == CauldronBlock::Liquid::Empty
+                                                     ? CauldronBlock::Liquid::Water
+                                                     : cauldron.getLiquid();
+        setCauldron(at, level == 0 ? CauldronBlock::Liquid::Empty : liquid, level);
+        return JS_UNDEFINED;
+    }
+
+    CauldronBlockActor *cauldronActorAt(const BlockAt &at) {
+        return &at.mLevel->getBlockActors().getOrCreate<CauldronBlockActor>(at.mPosition);
+    }
+
+    // a potion cauldron keeps water as its liquid and a PotionId on its block actor
+    // TODO: powder snow cauldrons are not modelled by CauldronBlock; an empty one reports Water
+    JSValue fluidGetFluidType(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        const CauldronBlock cauldron(at.state());
+        if (cauldron.getLiquid() == CauldronBlock::Liquid::Lava)
+            return JS_NewString(ctx, "Lava");
+        CauldronBlockActor *actor = at.mLevel->getBlockActors().find<CauldronBlockActor>(at.mPosition);
+        if (actor != nullptr && actor->saveNbt().getShort("PotionId", -1) >= 0)
+            return JS_NewString(ctx, "Potion");
+        return JS_NewString(ctx, "Water");
+    }
+
+    JSValue fluidSetFluidType(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const std::string type = toString(ctx, argv[0]);
+        if (type != "Water" && type != "Lava")
+            return at.mApi->throwError("Error", "Fluid type " + type + " is not supported.");
+        const CauldronBlock cauldron(at.state());
+        const int fill = std::max(cauldron.getFillLevel(), 1);
+        setCauldron(at, type == "Lava" ? CauldronBlock::Liquid::Lava : CauldronBlock::Liquid::Water, fill);
+        if (CauldronBlockActor *actor = at.mLevel->getBlockActors().find<CauldronBlockActor>(at.mPosition)) {
+            Tag data = actor->saveNbt();
+            data.putShort("PotionId", -1);
+            data.putShort("PotionType", -1);
+            actor->loadNbt(data, at.mApi->host().getCodecContext());
+            BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *actor);
+        }
+        return JS_UNDEFINED;
+    }
+
+    float channel(JSContext *ctx, JSValueConst color, const char *key, bool &valid) {
+        JSValue value = JS_GetPropertyStr(ctx, color, key);
+        double number = 0.0;
+        valid = valid && JS_ToFloat64(ctx, &number, value) == 0 && std::isfinite(number);
+        JS_FreeValue(ctx, value);
+        return (float) std::clamp(number, 0.0, 1.0);
+    }
+
+    // CustomColor as the game saves it: an argb int
+    // TODO: without a custom colour the cauldron shows its biome's water; Falcon's default water colour stands in
+    JSValue fluidGetColor(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        CauldronBlockActor *actor = at.mLevel->getBlockActors().find<CauldronBlockActor>(at.mPosition);
+        const Tag saved = actor != nullptr ? actor->saveNbt() : Tag::ofCompound();
+        const uint32_t argb = saved.contains("CustomColor") ? (uint32_t) saved.getInt("CustomColor")
+                                                            : MapBiomeColors().mWaterColor;
+        const float color[4] = {(float) ((argb >> 16) & 0xff) / 255.0f, (float) ((argb >> 8) & 0xff) / 255.0f,
+                                (float) (argb & 0xff) / 255.0f, (float) ((argb >> 24) & 0xff) / 255.0f};
+        return rgba(ctx, color);
+    }
+
+    JSValue fluidSetColor(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        if (argc < 1 || !JS_IsObject(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        bool valid = true;
+        const float red = channel(ctx, argv[0], "red", valid), green = channel(ctx, argv[0], "green", valid),
+                    blue = channel(ctx, argv[0], "blue", valid), alpha = channel(ctx, argv[0], "alpha", valid);
+        if (!valid)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const auto byte = [](float value) { return (uint32_t) std::lround(value * 255.0f); };
+        const uint32_t argb = byte(alpha) << 24 | byte(red) << 16 | byte(green) << 8 | byte(blue);
+        CauldronBlockActor *actor = cauldronActorAt(at);
+        Tag data = actor->saveNbt();
+        data.putInt("CustomColor", (int32_t) argb);
+        actor->loadNbt(data, at.mApi->host().getCodecContext());
+        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *actor);
+        return JS_UNDEFINED;
+    }
+
+    // TODO: PotionType 0, 1, 2 for drinkable, splash and lingering follows the item ids, unverified
+    JSValue fluidSetPotion(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        const ScriptItemRef *item = argc >= 1 ? at.mApi->native<ScriptItemRef>(argv[0]) : nullptr;
+        if (item == nullptr)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const std::string &type = item->mItem->mTypeId;
+        int16_t potionType = -1;
+        if (type == "minecraft:potion")
+            potionType = 0;
+        else if (type == "minecraft:splash_potion")
+            potionType = 1;
+        else if (type == "minecraft:lingering_potion")
+            potionType = 2;
+        if (potionType < 0)
+            return at.mApi->throwError("Error", "Item " + type + " is not a potion.");
+        const CauldronBlock cauldron(at.state());
+        setCauldron(at, CauldronBlock::Liquid::Water, std::max(cauldron.getFillLevel(), 1));
+        CauldronBlockActor *actor = cauldronActorAt(at);
+        Tag data = actor->saveNbt();
+        data.putShort("PotionId", (int16_t) item->mItem->mDamage);
+        data.putShort("PotionType", potionType);
+        actor->loadNbt(data, at.mApi->host().getCodecContext());
+        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *actor);
+        return JS_UNDEFINED;
+    }
+
+    JSValue redstoneGetPower(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        int power = 0;
+        for (int face = 0; face < RedstoneFace::COUNT; ++face)
+            power = std::max(power, RedstoneSystem::getWeakPower(at.mApi->host(), *at.mLevel, at.mPosition, face));
+        return JS_NewInt32(ctx, power);
+    }
+
+    JSValue rgba(JSContext *ctx, const float color[4]) {
+        JSValue value = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, value, "red", JS_NewFloat64(ctx, color[0]));
+        JS_SetPropertyStr(ctx, value, "green", JS_NewFloat64(ctx, color[1]));
+        JS_SetPropertyStr(ctx, value, "blue", JS_NewFloat64(ctx, color[2]));
+        JS_SetPropertyStr(ctx, value, "alpha", JS_NewFloat64(ctx, color[3]));
+        return value;
+    }
+
+    JSValue mapColorGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        const BlockState state = blockAt(ctx, thisVal).state();
+        const MapColors::Entry *entry = MapColors::find(state.mName);
+        if (magic == 2) {
+            static const char *const TINTS[] = {"None",       "DefaultFoliage", "BirchFoliage", "EvergreenFoliage",
+                                                "DryFoliage", "Grass",          "Water"};
+            const size_t tint = entry == nullptr ? 0 : (size_t) entry->mTint;
+            return JS_NewString(ctx, tint < 7 ? TINTS[tint] : "None");
+        }
+        float color[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        if (magic == 0 && entry != nullptr) {
+            for (int channel = 0; channel < 4; ++channel)
+                color[channel] = (float) entry->mColor[channel] / 255.0f;
+        } else if (magic == 1) {
+            // TODO: tinted with the default biome colours, not the biome at the block
+            MapColors::getColor(state, MapBiomeColors(), color);
+        }
+        return rgba(ctx, color);
+    }
+
+    JSValue movableGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        const BlockState state = blockAt(ctx, thisVal).state();
+        if (magic == 1)
+            return JS_NewString(ctx, PistonSystem::canSticksBlock(state) ? "Same" : "None");
+        if (!PistonSystem::canBePushed(state))
+            return JS_NewString(ctx, "Immovable");
+        if (PistonSystem::breaksWhenMoved(state))
+            return JS_NewString(ctx, "Popped");
+        return JS_NewString(ctx, PistonSystem::canBePulled(state) ? "PushPull" : "Push");
+    }
+
+    JSValue precipitationQuery(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        const BlockState state = blockAt(ctx, thisVal).state();
+        if (magic == 0)
+            return JS_NewBool(ctx, BlockPrecipitation::isSnowloggable(state));
+        return JS_NewBool(ctx, !BlockPrecipitation::letsRainThrough(state));
+    }
+
+    JukeboxBlockActor *jukeboxAt(const BlockAt &at);
+
+    void playAt(const BlockAt &at, JukeboxBlockActor &jukebox);
+
+    void stopAt(const BlockAt &at);
+
+    JukeboxBlockActor *jukeboxAt(const BlockAt &at) {
+        return at.mLevel->getBlockActors().find<JukeboxBlockActor>(at.mPosition);
+    }
+
+    JSValue recordGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        JukeboxBlockActor *jukebox = jukeboxAt(at);
+        if (jukebox == nullptr)
+            return JS_UNDEFINED;
+        return at.mApi->makeItem(jukebox->getContainer()->getContainerItem(0));
+    }
+
+    JSValue recordSet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        JukeboxBlockActor *jukebox = jukeboxAt(at);
+        if (jukebox == nullptr)
+            return JS_UNDEFINED;
+        ItemStack stack = ItemStack::air();
+        if (argc >= 1 && !JS_IsUndefined(argv[0])) {
+            JSValue id = JS_IsObject(argv[0]) ? JS_GetPropertyStr(ctx, argv[0], "id") : JS_DupValue(ctx, argv[0]);
+            ScriptItemData data;
+            data.mTypeId = normalized(toString(ctx, id));
+            JS_FreeValue(ctx, id);
+            if (!at.mApi->toItemStack(data, stack))
+                return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        }
+        stopAt(at);
+        jukebox->getContainer()->setContainerItem(0, stack);
+        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *jukebox);
+        // TODO: startPlaying is read as true when left out, unverified
+        if (argc < 2 || JS_IsUndefined(argv[1]) || JS_ToBool(ctx, argv[1]) == 1)
+            playAt(at, *jukebox);
+        return JS_UNDEFINED;
+    }
+
+    JSValue recordEject(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        JukeboxBlockActor *jukebox = jukeboxAt(at);
+        if (jukebox == nullptr)
+            return JS_UNDEFINED;
+        const ItemStack record = jukebox->getContainer()->getContainerItem(0);
+        if (record.isAir() || record.mDefinition == nullptr)
+            return JS_UNDEFINED;
+        stopAt(at);
+        jukebox->getContainer()->setContainerItem(0, ItemStack::air());
+        // TODO: the game's eject offset is unverified; the item drops on top of the jukebox
+        at.mApi->host().spawnItemActor(
+                *at.mLevel, record.mDefinition->getIdentifier(), record.mCount,
+                Vector3f((float) at.mPosition.x + 0.5f, (float) at.mPosition.y + 1.0f, (float) at.mPosition.z + 0.5f));
+        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *jukebox);
+        return JS_UNDEFINED;
+    }
+
+    // TODO: the faces read as those that output weak power now; the game reads the component's declared faces
+    JSValue redstoneGetConnectedFaces(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        JSValue array = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (int face = 0; face < RedstoneFace::COUNT; ++face) {
+            if (RedstoneSystem::getWeakPower(at.mApi->host(), *at.mLevel, at.mPosition, face) > 0)
+                JS_SetPropertyUint32(ctx, array, index++, JS_NewString(ctx, DIRECTIONS[face]));
+        }
+        return array;
+    }
+
+    // TODO: the first face with strong power stands for the declared strongly_powered_face
+    JSValue redstoneGetStronglyPoweredFace(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        for (int face = 0; face < RedstoneFace::COUNT; ++face) {
+            if (RedstoneSystem::getStrongPower(at.mApi->host(), *at.mLevel, at.mPosition, face) > 0)
+                return JS_NewString(ctx, DIRECTIONS[face]);
+        }
+        return JS_UNDEFINED;
+    }
+
+    JSValue precipitationAccumulatesSnow(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        return JS_NewBool(ctx, PrecipitationSystem::canHoldSnow(*at.mLevel, at.mPosition));
+    }
+
+    // the record sound events of the 26.60 strings, record.<disc>
+    const char *const RECORDS[] = {"11",        "13",           "5",
+                                   "blocks",    "bounce",       "cat",
+                                   "chirp",     "creator",      "creator_music_box",
+                                   "far",       "lava_chicken", "mall",
+                                   "mellohi",   "otherside",    "pigstep",
+                                   "precipice", "relic",        "stal",
+                                   "strad",     "tears",        "wait",
+                                   "ward"};
+
+    std::string recordSound(const ItemStack &record) {
+        if (record.isAir() || record.mDefinition == nullptr)
+            return std::string();
+        const std::string &identifier = record.mDefinition->getIdentifier();
+        const std::string prefix = "minecraft:music_disc_";
+        if (identifier.compare(0, prefix.size(), prefix) != 0)
+            return std::string();
+        const std::string disc = identifier.substr(prefix.size());
+        for (const char *known: RECORDS) {
+            if (disc == known)
+                return "record." + disc;
+        }
+        return std::string();
+    }
+
+    // TODO: playing state lives here, not in the jukebox's saved data; it ends when the server stops
+    std::unordered_map<const Level *, std::unordered_set<int64_t>> gPlaying;
+
+    bool isPlayingAt(const BlockAt &at) {
+        const auto found = gPlaying.find(at.mLevel);
+        return found != gPlaying.end() && found->second.count(BlockActorStore::packPosition(at.mPosition)) != 0;
+    }
+
+    Vector3f centerOf(const BlockAt &at) {
+        return Vector3f((float) at.mPosition.x + 0.5f, (float) at.mPosition.y + 0.5f, (float) at.mPosition.z + 0.5f);
+    }
+
+    void playAt(const BlockAt &at, JukeboxBlockActor &jukebox) {
+        const std::string sound = recordSound(jukebox.getContainer()->getContainerItem(0));
+        if (sound.empty())
+            return;
+        at.mApi->host().playBlockSound(*at.mLevel, sound, centerOf(at), at.state().getHash());
+        gPlaying[at.mLevel].insert(BlockActorStore::packPosition(at.mPosition));
+    }
+
+    // TODO: record.null is read as the stop event, unverified
+    void stopAt(const BlockAt &at) {
+        if (!isPlayingAt(at))
+            return;
+        gPlaying[at.mLevel].erase(BlockActorStore::packPosition(at.mPosition));
+        at.mApi->host().playBlockSound(*at.mLevel, "record.null", centerOf(at), at.state().getHash());
+    }
+
+    JSValue recordPlay(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        if (JukeboxBlockActor *jukebox = jukeboxAt(at))
+            playAt(at, *jukebox);
+        return JS_UNDEFINED;
+    }
+
+    JSValue recordPause(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        stopAt(blockAt(ctx, thisVal));
+        return JS_UNDEFINED;
+    }
+
+    JSValue recordIsPlaying(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        return JS_NewBool(ctx, isPlayingAt(blockAt(ctx, thisVal)));
+    }
+
+    // per pack and per block actor, as the game keeps them
+    // TODO: not saved with the block actor yet; lost when the chunk unloads
+    using BlockProperties = std::unordered_map<std::string, DynamicPropertyValue>;
+    std::map<std::tuple<const ScriptApi *, const Level *, int64_t>, BlockProperties> gBlockProperties;
+
+    BlockProperties &propertiesAt(const BlockAt &at) {
+        return gBlockProperties[std::make_tuple(at.mApi, at.mLevel, BlockActorStore::packPosition(at.mPosition))];
+    }
+
+    JSValue dynamicGet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return dynamicPropertyGet(ctx, propertiesAt(blockAt(ctx, thisVal)), toString(ctx, argv[0]));
+    }
+
+    // 1KB per pack and block actor, from the definitions
+    constexpr int64_t BLOCK_PROPERTY_LIMIT = 1024;
+
+    JSValue dynamicSet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        BlockProperties &properties = propertiesAt(at);
+        const BlockProperties before = properties;
+        dynamicPropertySet(ctx, properties, toString(ctx, argv[0]), argc >= 2 ? argv[1] : JS_UNDEFINED);
+        if (JS_HasException(ctx))
+            return JS_EXCEPTION;
+        if (dynamicPropertyByteCount(properties) > BLOCK_PROPERTY_LIMIT) {
+            properties = before;
+            return at.mApi->throwError("Error", "Block dynamic properties exceed 1KB.");
+        }
+        return JS_UNDEFINED;
+    }
+
+    JSValue dynamicByteCount(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        return JS_NewInt64(ctx, dynamicPropertyByteCount(propertiesAt(blockAt(ctx, thisVal))));
+    }
+
+    // only the default opaque black is a verified colour: other dyes need the game's text colour table
+    JSValue signSetTextDyeColor(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        SignBlockActor *sign = signAt(at);
+        bool valid = true;
+        const char *side = signSide(ctx, argc, argv, 1, valid);
+        if (!valid)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const bool black = argc < 1 || JS_IsUndefined(argv[0]) || toString(ctx, argv[0]) == "Black";
+        // TODO: dye text colours other than black are unverified without IDA
+        if (!black)
+            return at.mApi->throwError("Error",
+                                       "Sign text dye colour " + toString(ctx, argv[0]) + " is not supported.");
+        if (sign == nullptr)
+            return JS_UNDEFINED;
+        Tag data = sign->saveNbt();
+        Tag face = data.get(side) != nullptr ? *data.get(side) : Tag::ofCompound();
+        face.putInt("SignTextColor", -16777216);
+        data.put(side, face);
+        writeSign(at, *sign, data);
+        return JS_UNDEFINED;
+    }
+}
+
+namespace ScriptBlockData {
+    JSCFunction *blockInfo() {
+        return dataBlockInfo;
+    }
+
+    JSCFunction *permutationItem() {
+        return dataPermutationItem;
+    }
+}
+
+JSValue ScriptApi::makeBlockComponent(Level &level, const Vector3i &position, const std::string &id) {
+    const char *cls = componentClassOf(id);
+    if (cls == nullptr || !mSurface.has(cls))
+        return JS_UNDEFINED;
+    const std::vector<std::string> ids = componentIdsAt(level, position);
+    if (std::find(ids.begin(), ids.end(), id) == ids.end())
+        return JS_UNDEFINED;
+
+    ScriptBlockPart *part = new ScriptBlockPart();
+    part->mBlock.mWorldId = level.getWorldId();
+    part->mBlock.mDimension = level.getDimensionType();
+    part->mBlock.mX = position.x;
+    part->mBlock.mY = position.y;
+    part->mBlock.mZ = position.z;
+    part->mComponentId = id;
+    return makeInstance(cls, part);
+}
+
+// TODO(V4): the Container class over a block actor comes with the items wave; undefined until then
+JSValue ScriptApi::makeBlockContainer(Level &level, const Vector3i &position) {
+    (void) level;
+    (void) position;
+    return JS_UNDEFINED;
+}
+
+void ScriptApi::_bindBlockSurface() {
+    JSValue block = prototypeOf("Block");
+    property(block, "Block", "permutation", blockGetPermutation);
+    property(block, "Block", "type", blockGetType);
+    property(block, "Block", "localizationKey", blockGetLocalizationKey);
+    property(block, "Block", "isLiquid", blockGetIsLiquid);
+    property(block, "Block", "isWaterlogged", blockGetIsWaterlogged);
+    method(block, "Block", "matches", blockMatches, 2);
+    method(block, "Block", "getTags", blockGetTags, 0);
+    method(block, "Block", "hasTag", blockHasTag, 1);
+    method(block, "Block", "setWaterlogged", blockSetWaterlogged, 1);
+    methodMagic(block, "Block", "canContainLiquid", blockLiquidQuery, 1, 0);
+    methodMagic(block, "Block", "canBeDestroyedByLiquidSpread", blockLiquidQuery, 1, 1);
+    methodMagic(block, "Block", "liquidSpreadCausesSpawn", blockLiquidQuery, 1, 2);
+    methodMagic(block, "Block", "isLiquidBlocking", blockLiquidQuery, 1, 3);
+    method(block, "Block", "liquidCanFlowFromDirection", blockLiquidCanFlowFrom, 2);
+    method(block, "Block", "bottomCenter", blockBottomCenter, 0);
+    method(block, "Block", "offset", blockOffsetBy, 1);
+    method(block, "Block", "getLightLevel", blockGetLightLevel, 0);
+    method(block, "Block", "getSkyLightLevel", blockGetSkyLightLevel, 0);
+    method(block, "Block", "getRedstonePower", blockGetRedstonePower, 0);
+    method(block, "Block", "getItemStack", blockGetItemStack, 2);
+    method(block, "Block", "getParts", blockGetParts, 0);
+    method(block, "Block", "getComponent", blockGetComponent, 1);
+    method(block, "Block", "getComponents", blockGetComponents, 0);
+    method(block, "Block", "hasComponent", blockHasComponent, 1);
+
+    if (mSurface.has("BlockComponent")) {
+        JSValue base = defineClass("BlockComponent");
+        property(base, "BlockComponent", "block", componentGetBlock);
+    }
+    if (mSurface.has("BlockInventoryComponent")) {
+        JSValue inventory = defineClass("BlockInventoryComponent");
+        property(inventory, "BlockInventoryComponent", "container", inventoryGetContainer);
+    }
+    if (mSurface.has("BlockSignComponent")) {
+        JSValue sign = defineClass("BlockSignComponent");
+        property(sign, "BlockSignComponent", "isWaxed", signGetIsWaxed);
+        methodMagic(sign, "BlockSignComponent", "getText", signGetText, 1, 0);
+        methodMagic(sign, "BlockSignComponent", "getRawText", signGetText, 1, 1);
+        method(sign, "BlockSignComponent", "setText", signSetText, 2);
+        method(sign, "BlockSignComponent", "getTextDyeColor", signGetTextDyeColor, 1);
+        method(sign, "BlockSignComponent", "setWaxed", signSetWaxed, 1);
+        method(sign, "BlockSignComponent", "setTextDyeColor", signSetTextDyeColor, 2);
+    }
+    if (mSurface.has("BlockPistonComponent")) {
+        JSValue piston = defineClass("BlockPistonComponent");
+        property(piston, "BlockPistonComponent", "isMoving", pistonGetIsMoving);
+        property(piston, "BlockPistonComponent", "state", pistonGetState);
+        methodMagic(piston, "BlockPistonComponent", "getAttachedBlocks", pistonGetAttached, 0, 0);
+        methodMagic(piston, "BlockPistonComponent", "getAttachedBlocksLocations", pistonGetAttached, 0, 1);
+    }
+    if (mSurface.has("BlockFluidContainerComponent")) {
+        JSValue fluid = defineClass("BlockFluidContainerComponent");
+        property(fluid, "BlockFluidContainerComponent", "fillLevel", fluidGetFillLevel, fluidSetFillLevel);
+        method(fluid, "BlockFluidContainerComponent", "getFluidType", fluidGetFluidType, 0);
+        method(fluid, "BlockFluidContainerComponent", "setFluidType", fluidSetFluidType, 1);
+        property(fluid, "BlockFluidContainerComponent", "fluidColor", fluidGetColor, fluidSetColor);
+        method(fluid, "BlockFluidContainerComponent", "setPotion", fluidSetPotion, 1);
+    }
+    if (mSurface.has("BlockRedstoneProducerComponent")) {
+        JSValue producer = defineClass("BlockRedstoneProducerComponent");
+        property(producer, "BlockRedstoneProducerComponent", "power", redstoneGetPower);
+        method(producer, "BlockRedstoneProducerComponent", "getConnectedFaces", redstoneGetConnectedFaces, 0);
+        method(producer, "BlockRedstoneProducerComponent", "getStronglyPoweredFace", redstoneGetStronglyPoweredFace, 0);
+    }
+    if (mSurface.has("BlockMapColorComponent")) {
+        JSValue color = defineClass("BlockMapColorComponent");
+        propertyMagic(color, "BlockMapColorComponent", "color", mapColorGet, 0);
+        propertyMagic(color, "BlockMapColorComponent", "tintedColor", mapColorGet, 1);
+        propertyMagic(color, "BlockMapColorComponent", "tintMethod", mapColorGet, 2);
+    }
+    if (mSurface.has("BlockMovableComponent")) {
+        JSValue movable = defineClass("BlockMovableComponent");
+        propertyMagic(movable, "BlockMovableComponent", "movementType", movableGet, 0);
+        propertyMagic(movable, "BlockMovableComponent", "stickyType", movableGet, 1);
+    }
+    if (mSurface.has("BlockPrecipitationInteractionsComponent")) {
+        JSValue precipitation = defineClass("BlockPrecipitationInteractionsComponent");
+        methodMagic(precipitation, "BlockPrecipitationInteractionsComponent", "isSnowLoggable", precipitationQuery, 0,
+                    0);
+        methodMagic(precipitation, "BlockPrecipitationInteractionsComponent", "obstructsRain", precipitationQuery, 0,
+                    1);
+        method(precipitation, "BlockPrecipitationInteractionsComponent", "accumulatesSnow",
+               precipitationAccumulatesSnow, 0);
+    }
+    if (mSurface.has("BlockRecordPlayerComponent")) {
+        JSValue record = defineClass("BlockRecordPlayerComponent");
+        method(record, "BlockRecordPlayerComponent", "getRecord", recordGet, 0);
+        method(record, "BlockRecordPlayerComponent", "setRecord", recordSet, 2);
+        method(record, "BlockRecordPlayerComponent", "ejectRecord", recordEject, 0);
+        method(record, "BlockRecordPlayerComponent", "playRecord", recordPlay, 0);
+        method(record, "BlockRecordPlayerComponent", "pauseRecord", recordPause, 0);
+        method(record, "BlockRecordPlayerComponent", "isPlaying", recordIsPlaying, 0);
+    }
+    if (mSurface.has("BlockDynamicPropertiesComponent")) {
+        JSValue dynamic = defineClass("BlockDynamicPropertiesComponent");
+        method(dynamic, "BlockDynamicPropertiesComponent", "get", dynamicGet, 1);
+        method(dynamic, "BlockDynamicPropertiesComponent", "set", dynamicSet, 2);
+        method(dynamic, "BlockDynamicPropertiesComponent", "totalByteCount", dynamicByteCount, 0);
+    }
+}

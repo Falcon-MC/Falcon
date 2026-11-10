@@ -118,9 +118,15 @@ public:
     bool saveGameRules(const Tag &rules);
 
     /** Data the game saves under a plain key, such as "TheEnd", as {"data": compound}. */
-    bool saveSavedData(const std::string &key, const Tag &data);
+    // wrapped: under a "data" compound, as SavedData stores it; world clocks store the tag itself
+    bool saveSavedData(const std::string &key, const Tag &data, bool wrapped = true);
 
-    bool loadSavedData(const std::string &key, Tag &data);
+    bool loadSavedData(const std::string &key, Tag &data, bool wrapped = true);
+
+    // every key starting with prefix, prefix removed, with its unwrapped tag
+    std::vector<std::pair<std::string, Tag>> loadSavedDataWithPrefix(const std::string &prefix);
+
+    bool eraseSavedData(const std::string &key);
 
     bool loadGameRules(Tag &rules);
 

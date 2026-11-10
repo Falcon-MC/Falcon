@@ -61,8 +61,14 @@ void EntityEvents::fire(ServerNetworkHandler &owner, MobActor &mob, const std::s
     if (node == nullptr)
         return;
 
+    // a trigger inside fires its own event: each fire reports only the groups its own nodes changed
+    Modifiers *outer = sModifiers;
+    Modifiers modifiers;
+    sModifiers = &modifiers;
     _run(owner, mob, *node, depth, other);
+    sModifiers = outer;
     mob.spawnPendingRiders(owner);
+    owner.getScriptEngine().onDataDrivenEntityTrigger(mob, event, modifiers.mAdded, modifiers.mRemoved);
 }
 
 void EntityEvents::fireTrigger(ServerNetworkHandler &owner, MobActor &mob, const json::Value *trigger, Actor *other,
@@ -134,6 +140,8 @@ void EntityEvents::_applyGroups(MobActor &mob, const json::Value &change, bool a
             mob.addComponentGroup(group->string());
         else
             mob.removeComponentGroup(group->string());
+        if (sModifiers != nullptr)
+            (add ? sModifiers->mAdded : sModifiers->mRemoved).push_back(group->string());
     }
 }
 

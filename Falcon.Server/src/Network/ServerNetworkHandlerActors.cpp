@@ -1,4 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/Systems/DetectorSystem.h"
 
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/ActorFlags.h"
@@ -186,6 +187,9 @@ namespace {
 
 ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                                               const std::function<void(ServerActor &)> &configure) {
+    // taken first: configure may spawn another actor
+    const char *cause = mSpawnCause == nullptr ? "Spawned" : mSpawnCause;
+    mSpawnCause = nullptr;
     const uint64_t runtimeId = allocateRuntimeId();
 
     std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(runtimeId, identifier);
@@ -231,12 +235,13 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     ServerActor *result = _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
-    mScriptEngine.onEntitySpawn(*result);
+    mScriptEngine.onEntitySpawn(*result, cause);
     return result;
 }
 
 ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position,
                                                   float scale) {
+    mSpawnCause = "Born";
     ServerActor *baby = spawnActor(level, identifier, position);
     if (baby == nullptr)
         return nullptr;
@@ -734,7 +739,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimPlayer->getName());
         source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
         source.mAttacker = shooter;
-        source.fromOrigin(origin).asProjectile();
+        source.fromOrigin(origin).asProjectile().withDamager(&projectile);
 
         const DamageResult result = hurt(*victimPlayer, damage, source);
         applyArrowEffect = result == DamageResult::Dealt;
@@ -758,7 +763,8 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
             ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimActor->getName());
             source.mAttacker = shooter != nullptr ? (Actor *) shooter
                                                   : (Actor *) getActor(projectile.getOwnerUniqueId());
-            applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile(), data.mLootingLevel);
+            applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile().withDamager(&projectile),
+                                           data.mLootingLevel);
             if (!isTrident && victimActor->stopsProjectiles())
                 return true;
         }
@@ -1742,6 +1748,8 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 const BlockState hitState = level.getBlockState(blockX, blockY, blockZ);
+                if (DetectorSystem::isTarget(hitState))
+                    DetectorSystem::onTargetHit(*this, level, hitBlock, position, previousPosition, actor, arrowLike);
                 const Block *block = VanillaBlocks::fromIdentifier(hitState.mName);
                 if (block != nullptr && block->onProjectileHit(*this, level, hitBlock, hitState, actor)) {
                     expired.push_back(actorId);

@@ -9,6 +9,9 @@ namespace ScriptBootstraps {
     // (native) => { BlockPermutation, BlockType, BlockTypes, BlockStates, ItemType, ItemTypes, installJobs }
     const char *data();
 
+    // (native) => { BlockVolumeBase, BlockVolume, ListBlockVolume, BlockLocationIterator }
+    const char *volumes();
+
     // (native) => { ActionFormData, MessageFormData, ModalFormData }
     const char *ui();
 

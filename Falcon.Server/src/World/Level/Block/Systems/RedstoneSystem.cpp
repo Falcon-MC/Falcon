@@ -1,4 +1,5 @@
 #include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Level/Block/Systems/DetectorSystem.h"
 
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
@@ -169,7 +170,7 @@ namespace {
         std::vector<Vector3i> mPendingNotifications;
     };
 
-    std::array<RedstoneState, Dimension::DIMENSION_COUNT> gStates;
+    std::unordered_map<int32_t, RedstoneState> gStates;
 
     RedstoneState &stateOf(Level &level) {
         return gStates[level.getDimensionId()];
@@ -668,8 +669,8 @@ namespace {
         return blockAs<PressurePlateBlock>(state)->getSignalForEntityCount(count);
     }
 
-    void pressurePlateUpdateState(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                  int oldStrength) {
+    void pressurePlateUpdateState(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int oldStrength,
+                                  Actor *source = nullptr) {
         const BlockState state = stateAt(level, position);
         if (!isA<PressurePlateBlock>(state))
             return;
@@ -685,6 +686,7 @@ namespace {
             states.putInt("redstone_signal", strength);
             const BlockState updated = BlockState(state.mName, states);
             level.setBlock(position, updated, false);
+            owner.getScriptEngine().onPressurePlate(level, position, oldStrength, strength, source);
 
             RedstoneSystem::updateAroundRedstone(owner, level, position);
             RedstoneSystem::updateAroundRedstone(owner, level, RedstoneFace::relative(position, RedstoneFace::DOWN));
@@ -763,6 +765,8 @@ bool RedstoneSystem::isPowerSource(const BlockState &state) {
 
     if (dynamic_cast<const RedStoneWireBlock *>(block) != nullptr)
         return wireSignal(state) > 0;
+    if (DetectorSystem::isHook(state) || DetectorSystem::isTarget(state))
+        return true;
 
     return block->isSignalSource();
 }
@@ -771,6 +775,9 @@ bool RedstoneSystem::isPowerSource(const BlockState &state) {
 int RedstoneSystem::getWeakPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face) {
     const BlockState state = stateAt(level, position);
     const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+    const int detector = DetectorSystem::weakPower(level, position, state, face);
+    if (detector >= 0)
+        return detector;
 
     if (dynamic_cast<const RedstoneBlock *>(block) != nullptr)
         return MAX_SIGNAL;
@@ -855,6 +862,9 @@ int RedstoneSystem::getWeakPower(ServerNetworkHandler &owner, Level &level, cons
 int RedstoneSystem::getStrongPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face) {
     const BlockState state = stateAt(level, position);
     const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+    const int detector = DetectorSystem::strongPower(level, position, state, face);
+    if (detector >= 0)
+        return detector;
 
     if (const RedstoneTorchBlock *torch = dynamic_cast<const RedstoneTorchBlock *>(block)) {
         if (!torch->isLit())
@@ -1347,7 +1357,7 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
         if (!player.isSpawned() || player.isDead() || !player.isIn(level))
             continue;
 
-        _touchPressurePlate(owner, level, player.getPosition(), visited);
+        _touchPressurePlate(owner, level, player, visited);
     }
 
     for (auto &entry: owner.getActors()) {
@@ -1355,12 +1365,15 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
         if (actor == nullptr || actor->isDead() || !actor->isIn(level))
             continue;
 
-        _touchPressurePlate(owner, level, actor->getPosition(), visited);
+        _touchPressurePlate(owner, level, *actor, visited);
     }
+
+    DetectorSystem::tick(owner, level);
 }
 
-void RedstoneSystem::_touchPressurePlate(ServerNetworkHandler &owner, Level &level, const Vector3f &feet,
+void RedstoneSystem::_touchPressurePlate(ServerNetworkHandler &owner, Level &level, Actor &actor,
                                          std::unordered_set<int64_t> &visited) {
+    const Vector3f &feet = actor.getPosition();
     const Vector3i position((int32_t) std::floor(feet.x), (int32_t) std::floor(feet.y), (int32_t) std::floor(feet.z));
 
     const int64_t key = packPosition(position);
@@ -1377,5 +1390,5 @@ void RedstoneSystem::_touchPressurePlate(ServerNetworkHandler &owner, Level &lev
     if (std::clamp(stateInt(state, "redstone_signal", 0), 0, MAX_SIGNAL) != 0)
         return;
 
-    pressurePlateUpdateState(owner, level, position, 0);
+    pressurePlateUpdateState(owner, level, position, 0, &actor);
 }

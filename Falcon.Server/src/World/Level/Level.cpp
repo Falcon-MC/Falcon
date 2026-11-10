@@ -1,5 +1,4 @@
 #include "World/Level/Level.h"
-#include "World/Level/Storage/LegacyWorldImporter.h"
 
 #include "World/Level/Biome/BiomeRegistry.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
@@ -109,9 +108,6 @@ void Level::addParticle(const Particle &particle) {
 }
 
 bool Level::openStorage(const std::string &worldsDirectory) {
-    if (mDimension == DimensionType::Overworld)
-        LegacyWorldImporter::importIfNeeded(worldsDirectory, mName);
-
     if (!mStorage.open(worldsDirectory, mName, getDimensionId()))
         return false;
 
@@ -340,12 +336,12 @@ std::vector<std::pair<std::string, Tag>> Level::loadTickingAreas() {
     return mStorage.loadTickingAreas();
 }
 
-bool Level::saveSavedData(const std::string &key, const Tag &data) {
-    return mStorage.saveSavedData(key, data);
+bool Level::saveSavedData(const std::string &key, const Tag &data, bool wrapped) {
+    return mStorage.saveSavedData(key, data, wrapped);
 }
 
-bool Level::loadSavedData(const std::string &key, Tag &data) {
-    return mStorage.loadSavedData(key, data);
+bool Level::loadSavedData(const std::string &key, Tag &data, bool wrapped) {
+    return mStorage.loadSavedData(key, data, wrapped);
 }
 
 void Level::saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities) {

@@ -191,12 +191,18 @@ class WindChargedMobEffect final : public MobEffect {};
 class MobEffectManager {
 public:
     using EventCallback = std::function<void(const MobEffectInstance &, MobEffectEvent)>;
-    using AddFilter = std::function<bool(Actor &, const MobEffectInstance &)>;
+    // may rewrite the duration; false refuses the effect
+    using AddFilter = std::function<bool(Actor &, MobEffectInstance &)>;
+    using AddListener = std::function<void(Actor &, const MobEffectInstance &)>;
 
     explicit MobEffectManager(Actor &actor) : mActor(actor) {}
 
     static void setAddFilter(AddFilter filter) {
         sAddFilter = std::move(filter);
+    }
+
+    static void setAddListener(AddListener listener) {
+        sAddListener = std::move(listener);
     }
 
     bool add(const MobEffectInstance &instance);
@@ -238,6 +244,7 @@ private:
     void emit(const MobEffectInstance &instance, MobEffectEvent event) const;
 
     static inline AddFilter sAddFilter;
+    static inline AddListener sAddListener;
 
     Actor &mActor;
     std::unordered_map<int32_t, MobEffectInstance> mEffects;
