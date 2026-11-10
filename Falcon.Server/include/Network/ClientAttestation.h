@@ -5,7 +5,7 @@
 #include <mutex>
 #include <string>
 
-// hands what the server observed of a client to the module shipped in resources/attestation.wasm and
+// hands what the server observed of a client to the module shipped in attestation.bin and
 // returns its verdict: above zero the client is to be removed, below zero it is worth a note, zero
 // says nothing. What the module looks at is not part of this repository
 class ClientAttestation {

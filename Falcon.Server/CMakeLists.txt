@@ -164,6 +164,9 @@ set(FALCON_EXECUTABLE_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/SetupWizard.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/VersionChecker.cpp")
 list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_EXECUTABLE_SOURCES})
+# built as its own library further down: the transport library links against it
+set(FALCON_TRANSPORT_TRANSCRIPT_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/Network/TransportTranscript.cpp")
+list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_TRANSPORT_TRANSCRIPT_SOURCE})
 
 # An object library rather than a static one: blocks, items and actors register themselves from static
 # initialisers, and a static library would let the linker drop every object nothing references by name.
@@ -201,7 +204,7 @@ endif()
 
 # the transport library keeps its secure contexts to itself: it is built to pass them through this
 # small library, which keeps what a peer sent while its session was set up
-add_library(FalconTransportTranscript STATIC transport/TransportTranscript.cpp)
+add_library(FalconTransportTranscript STATIC ${FALCON_TRANSPORT_TRANSCRIPT_SOURCE})
 target_compile_features(FalconTransportTranscript PRIVATE cxx_std_17)
 target_include_directories(FalconTransportTranscript PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${OPENSSL_INCLUDE_DIR})
@@ -215,7 +218,7 @@ target_link_libraries(datachannel-static PUBLIC FalconTransportTranscript)
 target_link_libraries(FalconCore PUBLIC FalconTransportTranscript)
 
 # the attestation module is carried inside the executable
-set(FALCON_ATTESTATION_MODULE "${CMAKE_CURRENT_SOURCE_DIR}/resources/attestation.bin")
+set(FALCON_ATTESTATION_MODULE "${CMAKE_CURRENT_SOURCE_DIR}/src/Network/attestation.bin")
 set(FALCON_ATTESTATION_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/AttestationModule.cpp")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FALCON_ATTESTATION_MODULE}")
 file(READ "${FALCON_ATTESTATION_MODULE}" FALCON_ATTESTATION_HEX HEX)
