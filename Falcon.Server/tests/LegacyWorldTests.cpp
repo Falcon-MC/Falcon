@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 namespace {
     int gFailures = 0;
@@ -36,6 +37,76 @@ namespace {
         uint8_t packed = (uint8_t) metas[index >> 1];
         packed = (index & 1) == 0 ? (uint8_t) ((packed & 0xf0) | meta) : (uint8_t) ((packed & 0x0f) | (meta << 4));
         metas[index >> 1] = (char) packed;
+    }
+
+    Tag floats(float x, float y, float z) {
+        Tag list = Tag::ofList(Tag::Type::Float);
+        list.addToList(Tag::ofFloat(x));
+        list.addToList(Tag::ofFloat(y));
+        list.addToList(Tag::ofFloat(z));
+        return list;
+    }
+
+    Tag oldItem(int16_t id, int8_t count, int16_t damage) {
+        Tag item = Tag::ofCompound();
+        item.putShort("id", id);
+        item.putByte("Count", count);
+        item.putShort("Damage", damage);
+        return item;
+    }
+
+    // entities.dat: "ENT", a version, the length, then the compound
+    void writeEntities(const std::filesystem::path &root) {
+        Tag chicken = Tag::ofCompound();
+        chicken.putInt("id", 10);
+        chicken.put("Pos", floats(40.5f, 70.0f, 50.5f));
+        Tag drop = Tag::ofCompound();
+        drop.putInt("id", 64);
+        drop.put("Pos", floats(-3.5f, 64.0f, 20.0f));
+        drop.put("Item", oldItem(280, 3, 0));
+        Tag unknown = Tag::ofCompound();
+        unknown.putInt("id", 250);
+        unknown.put("Pos", floats(1.0f, 1.0f, 1.0f));
+        Tag entities = Tag::ofList(Tag::Type::Compound);
+        entities.addToList(chicken);
+        entities.addToList(drop);
+        entities.addToList(unknown);
+
+        Tag chest = Tag::ofCompound();
+        chest.putString("id", "Chest");
+        chest.putInt("x", 40);
+        chest.putInt("y", 70);
+        chest.putInt("z", 51);
+        Tag diamonds = oldItem(264, 5, 0);
+        diamonds.putByte("Slot", 0);
+        Tag wool = oldItem(35, 1, 14);
+        wool.putByte("Slot", 1);
+        Tag items = Tag::ofList(Tag::Type::Compound);
+        items.addToList(diamonds);
+        items.addToList(wool);
+        chest.put("Items", items);
+        Tag sign = Tag::ofCompound();
+        sign.putString("id", "Sign");
+        sign.putInt("x", 41);
+        sign.putInt("y", 70);
+        sign.putInt("z", 51);
+        sign.putString("Text1", "hello");
+        sign.putString("Text2", "world");
+        sign.putString("Text3", "");
+        sign.putString("Text4", "");
+        Tag tiles = Tag::ofList(Tag::Type::Compound);
+        tiles.addToList(chest);
+        tiles.addToList(sign);
+
+        Tag data = Tag::ofCompound();
+        data.put("Entities", entities);
+        data.put("TileEntities", tiles);
+        BinaryStream body;
+        NbtIo::writeTag(body, data, NbtVariant::LittleEndian);
+        std::string file("ENT", 4);
+        putLInt(file, 1);
+        putLInt(file, (uint32_t) body.getBuffer().size());
+        write(root / "entities.dat", file + body.getBuffer());
     }
 
     // a world as 0.8 saved it: level.dat with its 8 byte header, chunks.dat with one chunk at 2 3
@@ -77,6 +148,8 @@ namespace {
         for (int shift = 0; shift < 32; shift += 8)
             file[slot + (size_t) (shift / 8)] = (char) ((entry >> shift) & 0xff);
         write(root / "chunks.dat", file + chunk);
+
+        writeEntities(root);
     }
 }
 
@@ -103,6 +176,34 @@ int main() {
     check(chunk.getBlock(1, 3, 3).mName == "minecraft:air", "air stays air");
     LevelChunk missing(0, 0);
     check(!storage.loadChunk(missing), "a chunk never saved stays absent");
+
+    const std::vector<Tag> mobs = storage.loadEntities(2, 3);
+    check(mobs.size() == 1 && mobs[0].getString("identifier") == "minecraft:chicken", "a chicken keeps its kind");
+    const std::vector<Tag> drops = storage.loadEntities(-1, 1);
+    check(drops.size() == 1 && drops[0].getString("identifier") == "minecraft:item", "a dropped item stays one");
+    const Tag *dropped = drops.empty() ? nullptr : drops[0].get("Item");
+    check(dropped != nullptr && dropped->getString("Name") == "minecraft:stick" && dropped->getByte("Count") == 3,
+          "the dropped item is named");
+    check(storage.loadEntities(0, 0).empty(), "an unknown entity is left out");
+
+    const std::vector<Tag> tiles = storage.loadBlockEntities(2, 3);
+    check(tiles.size() == 2, "both block entities are kept");
+    for (const Tag &tile: tiles) {
+        if (tile.getString("id") == "Chest") {
+            const Tag *items = tile.get("Items");
+            check(items != nullptr && items->getList().size() == 2, "the chest keeps its items");
+            if (items != nullptr && items->getList().size() == 2) {
+                check(items->getList()[0].getString("Name") == "minecraft:diamond", "diamonds are named");
+                check(!items->getList()[0].contains("id"), "the numeric id is gone");
+                check(items->getList()[1].getString("Name") == "minecraft:wool"
+                      && items->getList()[1].getShort("Damage") == 14, "wool keeps its colour as damage");
+            }
+        } else {
+            const Tag *front = tile.get("FrontText");
+            check(front != nullptr && front->getString("Text") == "hello\nworld", "the sign keeps its lines");
+            check(!tile.contains("Text1"), "the old lines are gone");
+        }
+    }
     storage.close();
 
     std::filesystem::remove_all(worlds);

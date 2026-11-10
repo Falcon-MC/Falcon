@@ -120,12 +120,19 @@ configure_file(cmake/BlockUpgradeSchemas.h.in "${FALCON_GENERATED_DIR}/BlockUpgr
 configure_file(cmake/LegacyBlockTables.h.in "${FALCON_GENERATED_DIR}/LegacyBlockTables.h" @ONLY)
 set(FALCON_LEGACY_ID_MAP "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/block_legacy_id_map.json")
 set(FALCON_LEGACY_ID_META "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/id_meta_1.12.0.bin")
+set(FALCON_LEGACY_ITEM_IDS "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/item_legacy_id_map.json")
+set(FALCON_LEGACY_ENTITY_IDS "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/entity_id_map.json")
 set(FALCON_LEGACY_TABLES_SOURCE "${FALCON_GENERATED_DIR}/LegacyBlockTables.cpp")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FALCON_LEGACY_ID_MAP}" "${FALCON_LEGACY_ID_META}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FALCON_LEGACY_ID_MAP}" "${FALCON_LEGACY_ID_META}"
+        "${FALCON_LEGACY_ITEM_IDS}" "${FALCON_LEGACY_ENTITY_IDS}")
 file(READ "${FALCON_LEGACY_ID_MAP}" FALCON_LEGACY_ID_MAP_HEX HEX)
 string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ID_MAP_BYTES "${FALCON_LEGACY_ID_MAP_HEX}")
 file(READ "${FALCON_LEGACY_ID_META}" FALCON_LEGACY_ID_META_HEX HEX)
 string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ID_META_BYTES "${FALCON_LEGACY_ID_META_HEX}")
+file(READ "${FALCON_LEGACY_ITEM_IDS}" FALCON_LEGACY_ITEM_IDS_HEX HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ITEM_IDS_BYTES "${FALCON_LEGACY_ITEM_IDS_HEX}")
+file(READ "${FALCON_LEGACY_ENTITY_IDS}" FALCON_LEGACY_ENTITY_IDS_HEX HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ENTITY_IDS_BYTES "${FALCON_LEGACY_ENTITY_IDS_HEX}")
 file(WRITE "${FALCON_LEGACY_TABLES_SOURCE}.new"
         "#include \"LegacyBlockTables.h\"\n"
         "namespace FalconLegacyBlockData {\n"
@@ -133,6 +140,10 @@ file(WRITE "${FALCON_LEGACY_TABLES_SOURCE}.new"
         "extern const size_t kIdMapSize = sizeof(kIdMap);\n"
         "extern const unsigned char kIdMeta[] = {${FALCON_LEGACY_ID_META_BYTES}};\n"
         "extern const size_t kIdMetaSize = sizeof(kIdMeta);\n"
+        "extern const char kItemIds[] = {${FALCON_LEGACY_ITEM_IDS_BYTES}};\n"
+        "extern const size_t kItemIdsSize = sizeof(kItemIds);\n"
+        "extern const char kEntityIds[] = {${FALCON_LEGACY_ENTITY_IDS_BYTES}};\n"
+        "extern const size_t kEntityIdsSize = sizeof(kEntityIds);\n"
         "}\n")
 execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FALCON_LEGACY_TABLES_SOURCE}.new"
         "${FALCON_LEGACY_TABLES_SOURCE}")
