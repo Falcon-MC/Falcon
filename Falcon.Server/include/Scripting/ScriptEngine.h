@@ -8,6 +8,7 @@
 #include <memory>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 struct JSRuntime;
@@ -22,6 +23,15 @@ class ScriptApi;
 class ServerNetworkHandler;
 class ServerActor;
 class ServerPlayer;
+
+// who ran /scriptevent or sent the event; a ScriptEventSource value and its optional actors and block
+struct ScriptEventOrigin {
+    const char *mSourceType = "Server";
+    Actor *mSourceEntity = nullptr;
+    Actor *mInitiator = nullptr;
+    const Level *mBlockLevel = nullptr;
+    Vector3i mBlockPosition;
+};
 
 // one runtime shared by every pack, one context per pack: packs never see each other's globals or handlers
 class ScriptEngine {
@@ -55,6 +65,7 @@ public:
     void shutdown();
 
     void tick(int64_t currentTick);
+
 
     void onProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z);
 
@@ -93,6 +104,22 @@ public:
 
     bool beforeItemUse(ServerPlayer &player);
 
+    // rule is the game's lowercase name; packs whose GameRule enum lacks it get nothing
+    void onGameRuleChange(const std::string &rule, bool isBool, bool boolValue, int32_t intValue);
+
+    // WeatherType values; scripts may rewrite newWeather and duration (ticks); true when cancelled
+    bool beforeWeatherChange(const std::string &previousWeather, std::string &newWeather, int32_t &duration);
+
+    void onWeatherChange(const std::string &dimension, const std::string &previousWeather,
+                         const std::string &newWeather);
+
+    // system.afterEvents.scriptEventReceive in every pack, filtered by each subscriber's namespaces
+    void emitScriptEvent(const std::string &id, const std::string &message,
+                         const ScriptEventOrigin &origin = ScriptEventOrigin());
+
+    // from a running script: delivered on the next tick, never inside the caller's own call
+    void queueScriptEvent(const std::string &id, const std::string &message);
+
     void setWatchdogMs(int64_t milliseconds) {
         mWatchdogMs = milliseconds;
     }
@@ -125,5 +152,6 @@ private:
     std::vector<std::unique_ptr<ScriptApi>> mApis;
     std::mt19937 mTickRandom{std::random_device{}()};
     int64_t mWatchdogMs;
+    std::vector<std::pair<std::string, std::string>> mQueuedScriptEvents;
     int64_t mExecutionDeadlineMs;
 };

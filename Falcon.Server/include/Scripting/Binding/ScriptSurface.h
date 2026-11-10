@@ -50,6 +50,9 @@ public:
 
     static const ScriptSignalEntry *findSignal(const std::string &property);
 
+    // every signal the definitions ever put on owner, whatever the version
+    static std::vector<const ScriptSignalEntry *> signalsOf(const std::string &owner);
+
     static const char *findParent(const std::string &className);
 
 private:

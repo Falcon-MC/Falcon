@@ -35,6 +35,7 @@
 #include "Server/Commands/ProfilerCommand.h"
 #include "Server/Commands/SaveCommand.h"
 #include "Server/Commands/SayCommand.h"
+#include "Server/Commands/ScriptEventCommand.h"
 #include "Server/Commands/SeedCommand.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "Server/Commands/SetMaxPlayersCommand.h"
@@ -241,6 +242,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<SpawnPointCommand>(*this, true));
     mCommands.registerCommand(std::make_shared<SetWorldSpawnCommand>(*this));
     mCommands.registerCommand(std::make_shared<SayCommand>(*this));
+    mCommands.registerCommand(std::make_shared<ScriptEventCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellCommand>(*this));
     mCommands.registerCommand(std::make_shared<MeCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellRawCommand>(*this));

@@ -20,6 +20,7 @@
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -161,6 +162,23 @@ namespace {
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
         api->addSubscriber(signal->mKey, JS_DupValue(ctx, argv[0]));
+        if (signal->mKey == ScriptApi::SCRIPT_EVENT_KEY && argc >= 2 && JS_IsObject(argv[1])) {
+            JSValue list = JS_GetPropertyStr(ctx, argv[1], "namespaces");
+            if (JS_IsArray(list)) {
+                std::vector<std::string> namespaces;
+                uint32_t length = 0;
+                JSValue lengthValue = JS_GetPropertyStr(ctx, list, "length");
+                JS_ToUint32(ctx, &length, lengthValue);
+                JS_FreeValue(ctx, lengthValue);
+                for (uint32_t index = 0; index < length; ++index) {
+                    JSValue item = JS_GetPropertyUint32(ctx, list, index);
+                    namespaces.push_back(toString(ctx, item));
+                    JS_FreeValue(ctx, item);
+                }
+                api->filterScriptEvents(argv[0], std::move(namespaces));
+            }
+            JS_FreeValue(ctx, list);
+        }
         return JS_DupValue(ctx, argv[0]);
     }
 
@@ -311,9 +329,21 @@ namespace {
 
     int moduleInit(JSContext *ctx, JSModuleDef *module);
 
-    const char *const SERVER_ENUMS[] = {
-            "EquipmentSlot",        "GameMode",           "InputPermissionCategory", "Direction", "PlayerInventoryType",
-            "EntityComponentTypes", "ItemComponentTypes", "BlockComponentTypes"};
+    const char *const SERVER_ENUMS[] = {"EquipmentSlot",
+                                        "GameMode",
+                                        "InputPermissionCategory",
+                                        "Direction",
+                                        "PlayerInventoryType",
+                                        "EntityComponentTypes",
+                                        "ItemComponentTypes",
+                                        "BlockComponentTypes",
+                                        "Difficulty",
+                                        "TimeOfDay",
+                                        "MoonPhase",
+                                        "WeatherType",
+                                        "ScriptEventSource",
+                                        "GameRule",
+                                        "MemoryTier"};
 
     const char *const COMPONENT_IDS[][2] = {
             {"EntityInventoryComponent", "minecraft:inventory"},
@@ -392,7 +422,7 @@ ScriptApi::~ScriptApi() {
     }
 
     for (JSValue value: {mWorld, mSystem, mAfterEvents, mBeforeEvents, mSystemAfterEvents, mSystemBeforeEvents,
-                         mScoreboard, mTickingAreas, mErrors, mBlockRegistry, mItemRegistry})
+                         mScoreboard, mTickingAreas, mGameRules, mSystemInfo, mErrors, mBlockRegistry, mItemRegistry})
         JS_FreeValue(mContext, value);
 }
 
@@ -494,7 +524,7 @@ bool ScriptApi::property(JSValueConst target, const char *cls, const char *name,
 }
 
 bool ScriptApi::propertyMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *getter,
-                              int magic) {
+                              int magic, JSCFunctionMagic *setter) {
     const std::string key = std::string(cls) + "." + name;
     if (!mSurface.has(key))
         return false;
@@ -510,8 +540,19 @@ bool ScriptApi::propertyMagic(JSValueConst target, const char *cls, const char *
     JSValue getterValue = JS_NewCFunctionMagic(mContext, bindingTrampoline, name, 0, JS_CFUNC_generic_magic,
                                                _addBinding(read));
 
+    JSValue setterValue = JS_UNDEFINED;
+    if (setter != nullptr) {
+        Binding write = read;
+        write.mKind = Binding::Kind::Setter;
+        write.mMagicFunction = setter;
+        write.mEarly = false;
+        write.mBlocked = mSurface.isBlocked(key);
+        setterValue = JS_NewCFunctionMagic(mContext, bindingTrampoline, name, 1, JS_CFUNC_generic_magic,
+                                           _addBinding(write));
+    }
+
     JSAtom atom = JS_NewAtom(mContext, name);
-    JS_DefinePropertyGetSet(mContext, target, atom, getterValue, JS_UNDEFINED,
+    JS_DefinePropertyGetSet(mContext, target, atom, getterValue, setterValue,
                             JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
     JS_FreeAtom(mContext, atom);
     return true;
@@ -584,12 +625,12 @@ JSValue ScriptApi::makeEvent(const std::string &signalKey) {
     return JS_NewObjectProto(mContext, prototype);
 }
 
-JSValue ScriptApi::throwError(const std::string &errorClass, const std::string &message) {
+JSValue ScriptApi::throwError(const std::string &errorClass, const std::string &message, JSValue fields) {
     JSValue make = JS_GetPropertyStr(mContext, mErrors, "make");
-    JSValue args[2] = {string(mContext, errorClass), string(mContext, message)};
-    JSValue error = JS_Call(mContext, make, JS_UNDEFINED, 2, args);
-    JS_FreeValue(mContext, args[0]);
-    JS_FreeValue(mContext, args[1]);
+    JSValue args[3] = {string(mContext, errorClass), string(mContext, message), fields};
+    JSValue error = JS_Call(mContext, make, JS_UNDEFINED, 3, args);
+    for (JSValue arg: args)
+        JS_FreeValue(mContext, arg);
     JS_FreeValue(mContext, make);
     if (JS_IsException(error))
         return JS_EXCEPTION;
@@ -871,6 +912,8 @@ void ScriptApi::removeSubscriber(const std::string &key, JSValueConst callback) 
     std::vector<JSValue> &list = it->second;
     for (auto entry = list.begin(); entry != list.end(); ++entry) {
         if (JS_VALUE_GET_PTR(*entry) == JS_VALUE_GET_PTR(callback)) {
+            if (key == SCRIPT_EVENT_KEY)
+                mScriptEventNamespaces.erase(JS_VALUE_GET_PTR(callback));
             JS_FreeValue(mContext, *entry);
             list.erase(entry);
             return;
@@ -881,6 +924,17 @@ void ScriptApi::removeSubscriber(const std::string &key, JSValueConst callback) 
 bool ScriptApi::hasSubscribers(const std::string &key) const {
     auto it = mSubscribers.find(key);
     return it != mSubscribers.end() && !it->second.empty();
+}
+
+void ScriptApi::filterScriptEvents(JSValueConst callback, std::vector<std::string> namespaces) {
+    mScriptEventNamespaces[JS_VALUE_GET_PTR(callback)] = std::move(namespaces);
+}
+
+bool ScriptApi::_acceptsScriptEvent(JSValueConst callback, const std::string &eventNamespace) const {
+    const auto filter = mScriptEventNamespaces.find(JS_VALUE_GET_PTR(callback));
+    if (filter == mScriptEventNamespaces.end())
+        return true;
+    return std::find(filter->second.begin(), filter->second.end(), eventNamespace) != filter->second.end();
 }
 
 bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
@@ -903,8 +957,20 @@ bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
     const ScriptPrivilege previous = mPrivilege;
     mPrivilege = privilege;
 
+    std::string eventNamespace;
+    const bool filtered = key == SCRIPT_EVENT_KEY;
+    if (filtered) {
+        JSValue id = JS_GetPropertyStr(mContext, eventObject, "id");
+        const std::string text = toString(mContext, id);
+        JS_FreeValue(mContext, id);
+        eventNamespace = text.substr(0, text.find(':'));
+    }
+
     const std::vector<JSValue> snapshot = it->second;
     for (JSValue callback: snapshot) {
+        if (filtered && !_acceptsScriptEvent(callback, eventNamespace))
+            continue;
+
         JSValue result = JS_Call(mContext, callback, JS_UNDEFINED, 1, &eventObject);
         if (JS_IsException(result))
             logException(mContext, mPackName, "event handler (" + key + ")");
@@ -1017,36 +1083,10 @@ JSValue ScriptApi::_makeSignalHolder(const char *className, const char *signalOw
     JSValue holder = makeInstance(className, new ScriptNative());
     const std::string prefix = std::string(signalOwner) + ".";
 
-    for (const char *property: {"playerBreakBlock",
-                                "playerPlaceBlock",
-                                "playerSpawn",
-                                "playerJoin",
-                                "playerLeave",
-                                "chatSend",
-                                "entityHurt",
-                                "entityDie",
-                                "itemUse",
-                                "projectileHitBlock",
-                                "projectileHitEntity",
-                                "entityHitBlock",
-                                "entityHitEntity",
-                                "entityItemDrop",
-                                "playerHotbarSelectedSlotChange",
-                                "playerInventoryItemChange",
-                                "playerInteractWithBlock",
-                                "entitySpawn",
-                                "entityRemove",
-                                "entityLoad",
-                                "worldLoad",
-                                "worldInitialize",
-                                "effectAdd",
-                                "playerInteractWithEntity",
-                                "itemUseOn",
-                                "startup",
-                                "shutdown"}) {
-        const std::string key = prefix + property;
-        const ScriptSignalEntry *signal = ScriptSurface::findSignal(key);
-        if (signal == nullptr || !mSurface.has(key))
+    for (const ScriptSignalEntry *signal: ScriptSurface::signalsOf(signalOwner)) {
+        const std::string key = signal->mProperty;
+        const char *property = signal->mProperty + prefix.size();
+        if (!mSurface.has(key))
             continue;
 
         if (JS_IsUndefined(prototypeOf(signal->mSignalClass))) {

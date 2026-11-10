@@ -2,7 +2,14 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/BehaviorPackManager.h"
 #include "Scripting/ScriptEngine.h"
+#include "Server/Commands/PlayerCommandOrigin.h"
+#include "Server/Commands/ScriptEventCommand.h"
+#include "Server/Commands/ServerCommandOrigin.h"
 #include "Server/ServerPaths.h"
+#include "World/Level/GameRules.h"
+#include "World/Level/Level.h"
+#include "World/Level/World.h"
+#include "World/Level/WorldManager.h"
 #include "World/Actor/MobEffect.h"
 #include "World/Actor/Player/ServerPlayer.h"
 
@@ -27,7 +34,7 @@ namespace {
 
     // a script pack: dependencies is the manifest's JSON array body
     void writePack(const std::filesystem::path &root, const std::string &name, const std::string &dependencies,
-                   const std::string &script) {
+                   const std::string &script, const std::string &extra = std::string()) {
         static int serial = 0;
         ++serial;
         const std::string header = "00000000-0000-4000-8000-" + std::to_string(100000000000 + serial);
@@ -44,7 +51,7 @@ namespace {
                           + "\","
                             " \"entry\": \"scripts/main.js\", \"version\": [1, 0, 0]}],\n"
                             " \"dependencies\": ["
-                          + dependencies + "]}\n");
+                          + dependencies + "]" + extra + "}\n");
         writeFile(root / name / "scripts" / "main.js", script);
     }
 
@@ -66,7 +73,8 @@ r.internals = Object.getOwnPropertyNames(globalThis).filter((k) => k.startsWith(
     const char *const STABLE2 = R"JS(
 import { world, system, Entity, Player, ItemStack, Dimension, World, GameMode, InputPermissionCategory,
          PlayerInventoryType, EntityInventoryComponent, EntityComponentTypes, InvalidEntityError,
-         ScreenDisplay, TickingAreaManager } from "@minecraft/server";
+         ScreenDisplay, TickingAreaManager, Difficulty, TimeOfDay, MoonPhase, WeatherType, ScriptEventSource,
+         GameRule, MemoryTier } from "@minecraft/server";
 import * as server from "@minecraft/server";
 import { EngineError, InvalidArgumentError, InvalidArgumentErrorType } from "@minecraft/common";
 
@@ -91,6 +99,42 @@ r.legacyExport = "WorldInitializeBeforeEvent" in server;
 r.engineError = capture(() => new EngineError());
 const argument = new InvalidArgumentError("f", "string", InvalidArgumentErrorType.Empty, 1);
 r.invalidArgument = argument instanceof Error && argument.index === 1 && argument.type === "Empty";
+r.enums = [Difficulty.Hard, TimeOfDay.Noon, MoonPhase.NewMoon, WeatherType.Thunder, ScriptEventSource.NPCDialogue,
+           GameRule.KeepInventory, MemoryTier.SuperHigh].join(",");
+r.signals = [world.afterEvents, world.beforeEvents, system.afterEvents, system.beforeEvents]
+    .map((holder) => Object.keys(holder).filter((key) => typeof holder[key].subscribe === "function"
+        && typeof holder[key].unsubscribe === "function").length).join(",");
+r.v1Signals = ["gameRuleChange", "weatherChange"].every((key) => key in world.afterEvents)
+    && "weatherChange" in world.beforeEvents && "scriptEventReceive" in system.afterEvents;
+
+world.afterEvents.gameRuleChange.subscribe((event) => {
+    r.gameRule = event.rule + "=" + event.value + "," + typeof event.value;
+});
+let weatherCalls = 0;
+world.beforeEvents.weatherChange.subscribe((event) => {
+    weatherCalls++;
+    r.weatherBefore = (r.weatherBefore || "") + event.previousWeather + ">" + event.newWeather + ";";
+    if (weatherCalls === 1) {
+        event.cancel = true;
+        return;
+    }
+    event.newWeather = WeatherType.Thunder;
+    event.duration = 1234;
+});
+world.afterEvents.weatherChange.subscribe((event) => {
+    r.weatherAfter = (r.weatherAfter || "") + [event.dimension, event.previousWeather, event.newWeather].join("|") + ";";
+});
+system.afterEvents.scriptEventReceive.subscribe((event) => {
+    r.scriptEvents = (r.scriptEvents || "") + [event.id, event.message, event.sourceType,
+        event.sourceEntity instanceof Player, event.initiator === undefined,
+        event.sourceBlock === undefined].join("|") + ";";
+});
+const filtered = system.afterEvents.scriptEventReceive.subscribe((event) => {
+    r.filtered = (r.filtered || "") + event.id + ";";
+}, { namespaces: ["other"] });
+const removed = (event) => { r.removed = event.id; };
+system.afterEvents.scriptEventReceive.subscribe(removed, { namespaces: ["test"] });
+system.afterEvents.scriptEventReceive.unsubscribe(removed);
 
 let registry;
 system.beforeEvents.startup.subscribe((event) => {
@@ -135,6 +179,64 @@ system.runTimeout(() => {
 }, 6);
 
 import("../../outside.js").then(() => { r.escape = "loaded"; }, () => { r.escape = "blocked"; });
+)JS";
+
+    const char *const WORLD = R"JS(
+import { world, system, GameRules, TimeOfDay, MoonPhase, Difficulty, MemoryTier, NamespaceNameError } from "@minecraft/server";
+
+r.rulesConstructor = capture(() => new GameRules());
+r.earlyRules = capture(() => world.gameRules);
+r.editor = system.isEditorWorld;
+r.earlyTier = capture(() => system.serverSystemInfo.memoryTier);
+r.earlySettings = capture(() => world.getPackSettings());
+r.settings = JSON.stringify(world.getPackSettings());
+system.waitTicks(2).then(() => { r.waited = true; });
+r.waitZero = capture(() => system.waitTicks(0));
+
+world.beforeEvents.effectAdd.subscribe(() => {
+    r.restrictedRuleRead = capture(() => world.gameRules.pvp);
+    r.restrictedRuleWrite = capture(() => { world.gameRules.pvp = false; });
+    r.restrictedTime = capture(() => world.setTimeOfDay(TimeOfDay.Noon));
+    r.restrictedDifficulty = capture(() => world.setDifficulty(Difficulty.Hard));
+    r.restrictedSpawn = capture(() => world.setDefaultSpawnLocation({ x: 0, y: 64, z: 0 }));
+});
+
+system.runTimeout(() => {
+    r.stableRules = world.gameRules === world.gameRules;
+    r.memoryTier = system.serverSystemInfo.memoryTier === MemoryTier.High;
+    r.pvp = world.gameRules.pvp;
+    world.gameRules.pvp = false;
+    world.gameRules.randomTickSpeed = 3;
+    r.rules = world.gameRules.pvp + "," + world.gameRules.randomTickSpeed;
+    r.ruleType = capture(() => { world.gameRules.keepInventory = 1; });
+    world.setAbsoluteTime(24000 * 9 + 100);
+    world.setTimeOfDay(TimeOfDay.Night);
+    r.time = world.getAbsoluteTime() + "," + world.getTimeOfDay() + "," + world.getDay();
+    r.moon = world.getMoonPhase() === MoonPhase.WaningGibbous;
+    r.timeRange = capture(() => world.setTimeOfDay(24001));
+    world.setDifficulty(Difficulty.Hard);
+    r.difficulty = world.getDifficulty();
+    world.setDefaultSpawnLocation({ x: 10, y: 70, z: -5 });
+    const spawn = world.getDefaultSpawnLocation();
+    r.spawn = spawn.x + "," + spawn.y + "," + spawn.z;
+    r.spawnBounds = capture(() => world.setDefaultSpawnLocation({ x: 0, y: 5000, z: 0 }));
+    r.players = world.getPlayers().length + "," + world.getPlayers({ name: "nobody" }).length;
+    r.seed = typeof world.seed;
+    r.hardcore = world.isHardcore;
+    world.setDynamicProperties({ a: 1, b: "xy" });
+    r.bytes = world.getDynamicPropertyTotalByteCount() > 0;
+    r.noNamespace = capture(() => system.sendScriptEvent("noname", "m"));
+    r.minecraftNamespace = (() => {
+        try {
+            system.sendScriptEvent("minecraft:x", "m");
+        } catch (e) {
+            return (e instanceof NamespaceNameError) + "," + e.reason;
+        }
+        return "ok";
+    })();
+    r.sendEvent = capture(() => system.sendScriptEvent("test:event", "m"));
+}, 5);
+system.runTimeout(() => world.setDynamicProperty("world", JSON.stringify(r)), 7);
 )JS";
 
     const char *const STABLE1 = R"JS(
@@ -216,6 +318,12 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                   "{\"module_name\": \"@minecraft/server\", \"version\": \"beta\"},"
                   " {\"module_name\": \"@minecraft/server-ui\", \"version\": \"2.4.0-beta\"}",
                   std::string(PRELUDE) + BETA);
+        writePack(
+                packs, "world", server2 + ", {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
+                std::string(PRELUDE) + WORLD,
+                ", \"settings\": [{\"type\": \"label\", \"text\": \"x\"},"
+                " {\"type\": \"toggle\", \"name\": \"test:on\", \"default\": true},"
+                " {\"type\": \"slider\", \"name\": \"test:level\", \"default\": 4, \"min\": 0, \"max\": 8, \"step\": 1}]");
         writePack(packs, "undeclared", server2, UNDECLARED);
         writePack(packs, "net", server2 + ", {\"module_name\": \"@minecraft/server-net\", \"version\": \"1.0.0-beta\"}",
                   NOT_IMPLEMENTED);
@@ -230,7 +338,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
 
         BehaviorPackManager manager;
         manager.discover(packs.string());
-        require(engine.loadPacks(manager.getPacks()) == 3, "only the three valid packs start");
+        require(engine.loadPacks(manager.getPacks()) == 4, "only the four valid packs start");
 
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
@@ -240,6 +348,23 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         effect.mId = MobEffectId::Speed;
         effect.mDuration = 20;
         engine.beforeEffectAdd(player, effect);
+
+        World &world = owner.getWorlds().getDefault();
+        owner.changeGameRule(world, "keepinventory", "true");
+        owner.changeGameRule(world, "randomtickspeed", "3");
+        owner.setRaining(world, true);
+        require(!world.getOverworld().isRaining(), "a cancelled weatherChange still changed the weather");
+        owner.setRaining(world, true);
+        require(world.getOverworld().isThundering() && world.getOverworld().getRainTime() == 1234,
+                "weatherChange did not apply the new weather and duration");
+
+        ScriptEventCommand scriptEvent(owner);
+        ServerCommandOrigin console(&owner);
+        scriptEvent.execute(console, {"test:ping", "hello", "world"});
+        PlayerCommandOrigin playerOrigin(owner, player, CommandOriginData());
+        scriptEvent.execute(playerOrigin, {"other:pong"});
+        require(!scriptEvent.execute(console, {"minecraft:nope", "x"}), "a minecraft namespace was accepted");
+        require(!scriptEvent.execute(console, {"nonamespace"}), "an id without namespace was accepted");
         for (int64_t tick = 1; tick <= 3; ++tick)
             engine.tick(tick);
 
@@ -270,6 +395,16 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*stable2, "legacyExport", "false");
         expect(*stable2, "engineError", "ReferenceError: No constructor for native class 'EngineError'.");
         expect(*stable2, "invalidArgument", "true");
+        expect(*stable2, "enums", "Hard,6000,4,Thunder,NPCDialogue,keepInventory,4");
+        expect(*stable2, "signals", "65,15,1,2");
+        expect(*stable2, "v1Signals", "true");
+        expect(*stable2, "gameRule", "randomTickSpeed=3,number");
+        expect(*stable2, "weatherBefore", "Clear>Rain;Clear>Rain;");
+        expect(*stable2, "weatherAfter", "minecraft:overworld|Clear|Thunder;");
+        expect(*stable2, "scriptEvents",
+               "test:ping|hello world|Server|false|true|true;other:pong||Entity|true|true|true;test:event|m|Server|false|true|true;");
+        expect(*stable2, "filtered", "other:pong;");
+        require(stable2->get("removed") == nullptr, "an unsubscribed scriptEventReceive callback ran");
         expect(*stable2, "prototypeBound",
                "ReferenceError: Native function [Entity::addTag] object bound to prototype does not exist.");
         expect(*stable2, "startupEarly",
@@ -294,6 +429,49 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                "invalid (has the Entity been removed?).");
         expect(*stable2, "invalidClass", "true");
         expect(*stable2, "isValid", "false");
+
+        const std::unique_ptr<json::Value> worldResult = result(owner, "world");
+        const json::Value &w = *worldResult;
+        expect(w, "rulesConstructor", "ReferenceError: No constructor for native class 'GameRules'.");
+        expect(w, "stableRules", "true");
+        expect(w, "earlyRules",
+               "ReferenceError: Native property getter [World::gameRules] cannot be used in early execution.");
+        expect(w, "editor", "false");
+        expect(w, "memoryTier", "true");
+        expect(w, "earlyTier",
+               "ReferenceError: Native property getter [SystemInfo::memoryTier] cannot be used in early execution.");
+        expect(w, "earlySettings", "ok");
+        expect(w, "settings", "{\"test:on\":true,\"test:level\":4}");
+        expect(w, "waitZero", "EngineError: ");
+        expect(w, "waited", "true");
+        expect(w, "restrictedRuleRead", "ok");
+        expect(w, "restrictedRuleWrite",
+               "ReferenceError: Native property setter [GameRules::pvp] cannot be used in restricted execution.");
+        expect(w, "restrictedTime",
+               "ReferenceError: Native function [World::setTimeOfDay] cannot be used in restricted execution.");
+        expect(w, "restrictedDifficulty",
+               "ReferenceError: Native function [World::setDifficulty] cannot be used in restricted execution.");
+        expect(w, "restrictedSpawn",
+               "ReferenceError: Native function [World::setDefaultSpawnLocation] cannot be used in restricted "
+               "execution.");
+        expect(w, "pvp", "true");
+        expect(w, "rules", "false,3");
+        expect(w, "ruleType", "TypeError: Native type conversion failed.");
+        expect(w, "time", "229000,13000,9");
+        expect(w, "moon", "true");
+        expect(w, "timeRange", "Error: ");
+        expect(w, "difficulty", "Hard");
+        expect(w, "spawn", "10,70,-5");
+        expect(w, "spawnBounds", "LocationOutOfWorldBoundariesError: ");
+        expect(w, "players", "0,0");
+        expect(w, "seed", "string");
+        expect(w, "hardcore", "false");
+        expect(w, "bytes", "true");
+        expect(w, "noNamespace", "NamespaceNameError: ");
+        expect(w, "minecraftNamespace", "true,DisallowedNamespace");
+        expect(w, "sendEvent", "ok");
+        const GameRules &rules = owner.getWorlds().getDefault().getOverworld().getGameRules();
+        require(!rules.getBool("pvp") && rules.getInt("randomtickspeed") == 3, "game rules not written");
 
         const std::unique_ptr<json::Value> stable1 = result(owner, "stable1");
         expect(*stable1, "alone", "true");

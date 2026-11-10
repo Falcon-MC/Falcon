@@ -91,6 +91,8 @@
 #include "World/Actor/Player/PlayerAbility.h"
 #include "Protocol/Packets/StartGamePacket.h"
 #include "Protocol/Packets/SetTimePacket.h"
+#include "Protocol/Packets/SetDifficultyPacket.h"
+#include "Protocol/Packets/SetSpawnPositionPacket.h"
 #include "Protocol/Packets/AvailableActorIdentifiersPacket.h"
 #include "Protocol/Packets/DeathInfoPacket.h"
 #include "Protocol/Packets/ActorEventPacket.h"
@@ -2240,6 +2242,8 @@ bool ServerNetworkHandler::changeGameRule(World &world, const std::string &name,
     }
 
     overworld.saveGameRules();
+    mScriptEngine.onGameRuleChange(rule->mName, rule->mType == GameRuleData::Type::Bool, rule->mBoolValue,
+                                   rule->mIntValue);
     return true;
 }
 
@@ -2267,6 +2271,33 @@ void ServerNetworkHandler::setDefaultGameType(GameType gameType) {
 
 void ServerNetworkHandler::setDifficulty(const std::string &difficulty) {
     mProperties.setProperty("difficulty", difficulty);
+}
+
+void ServerNetworkHandler::changeDifficulty(Difficulty difficulty) {
+    static const char *const NAMES[] = {"peaceful", "easy", "normal", "hard"};
+    setDifficulty(NAMES[(size_t) difficulty]);
+
+    SetDifficultyPacket packet;
+    packet.mDifficulty = (uint32_t) difficulty;
+    for (auto &entry: mPlayers) {
+        if (entry.second.isSpawned())
+            mNetworkHandler->send(entry.first, packet, mCodecContext);
+    }
+}
+
+void ServerNetworkHandler::changeWorldSpawn(Level &level, const Vector3i &spawn) {
+    level.setSpawnPosition(spawn);
+    level.saveLevelDat();
+
+    SetSpawnPositionPacket packet;
+    packet.mSpawnType = SetSpawnPositionPacket::Type::WorldSpawn;
+    packet.mBlockPosition = spawn;
+    packet.mDimensionId = level.getDimensionId();
+    packet.mSpawnPosition = spawn;
+    for (auto &entry: mPlayers) {
+        if (entry.second.isSpawned())
+            mNetworkHandler->send(entry.first, packet, mCodecContext);
+    }
 }
 
 void ServerNetworkHandler::sendPacketTo(const NetworkIdentifier &id, const Packet &packet) {
