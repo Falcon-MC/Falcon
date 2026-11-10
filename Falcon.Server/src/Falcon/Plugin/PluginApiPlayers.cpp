@@ -79,7 +79,7 @@ namespace {
         ServerPlayer *value = player(target);
         const bool isOp = operator_ != 0;
         if (isOp)
-            owner().getOpList().addOp(value->getName());
+            owner().getOpList().addOp(value->getName(), value->getXuid());
         else
             owner().getOpList().removeOp(value->getName());
         owner().setPlayerOp(*value, isOp);

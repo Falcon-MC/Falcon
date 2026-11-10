@@ -45,7 +45,7 @@ private:
 
     bool _verifySelfSignedToken(const std::string &token, const std::string &clientJwt);
 
-    bool _verifyChain(const std::vector<std::string> &chain);
+    bool _verifyChain(const std::vector<std::string> &chain, const std::string &clientJwt);
 
     void _extractIdentity(const std::string &payload);
 

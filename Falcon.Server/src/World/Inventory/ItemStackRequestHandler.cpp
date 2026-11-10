@@ -536,7 +536,7 @@ namespace {
     }
 
     bool createCreativeItem(RequestContext &context, const ItemStackRequestAction &action) {
-        if (context.mCreativeItems == nullptr) {
+        if (context.mCreativeItems == nullptr || !context.mCreativeMode) {
             return false;
         }
 

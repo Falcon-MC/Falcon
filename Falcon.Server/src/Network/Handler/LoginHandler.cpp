@@ -28,6 +28,7 @@
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/LoginChainVerifier.h"
+#include "World/Level/Storage/PlayerDataProvider.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AvailableCommandsPacket.h"
@@ -239,6 +240,21 @@ void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, con
     player.setLoginState(ServerPlayer::LoginState::NetworkSettingsSent);
 }
 
+namespace {
+    // empty, or hex digits and dashes: 36 characters at most
+    bool isUuidShaped(const std::string &uuid) {
+        if (uuid.size() > 36)
+            return false;
+        for (const char character: uuid) {
+            const bool hex = (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')
+                             || (character >= 'A' && character <= 'F');
+            if (!hex && character != '-')
+                return false;
+        }
+        return true;
+    }
+}
+
 void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                const LoginPacket &packet) {
     if (player.getCodec() == nullptr || packet.mProtocolVersion != player.getCodec()->getProtocolVersion()) {
@@ -253,6 +269,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     if (!request.parse(packet.mAuthJwt, packet.mClientJwt)) {
         LOG_WARN(LogAreaID::Network, "%s sent a login that could not be parsed", id.getAddress().c_str());
         owner._disconnect(id, DisconnectReason::UnexpectedPacket, "disconnectionScreen.unexpectedPacket");
+        owner.erasePlayer(id);
         return;
     }
 
@@ -290,7 +307,24 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
 
     player.setPlayFabId(request.getPlayFabId());
 
-    const BanEntry *ban = owner.getBanList().find(player.getName());
+    // the name becomes a file name and a log line: an unverified one is whatever the client typed
+    if (!PlayerDataProvider::isSafeName(player.getName())) {
+        LOG_WARN(LogAreaID::Network, "%s logged in with an unusable name", id.getAddress().c_str());
+        owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.invalidName");
+        owner.erasePlayer(id);
+        return;
+    }
+
+    // an unsigned login picks its own uuid, and it ends up in the log and the player list
+    if (!isUuidShaped(player.getUuid())) {
+        LOG_WARN(LogAreaID::Network, "%s logged in with a malformed uuid", id.getAddress().c_str());
+        owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.notAuthenticated");
+        owner.erasePlayer(id);
+        return;
+    }
+
+    owner.getBanList().bindXuid(player.getName(), player.getXuid());
+    const BanEntry *ban = owner.getBanList().find(player.getName(), player.getXuid());
     if (ban == nullptr)
         ban = owner.getIpBanList().find(id.getAddress());
     if (ban != nullptr) {
@@ -335,7 +369,18 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         }
     }
 
-    player.setSkin(request.getSkin());
+    // a gamertag can change hands: the save under it must be this account's before it is read or written
+    if (!owner.getPlayerDataProvider().claimData(player.getName(), player.getXuid())) {
+        LOG_ERROR(LogAreaID::Server, "Could not set aside the save another account left under the name %s",
+                  player.getName().c_str());
+        owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.internalError.cantConnect");
+        owner.erasePlayer(id);
+        return;
+    }
+
+    SerializedSkin skin = request.getSkin();
+    ServerNetworkHandler::boundSkin(skin);
+    player.setSkin(skin);
     player.setBuildPlatform(request.getBuildPlatform());
     // sub_1404B9270 reads the flag as a JSON bool that defaults to true when the client leaves it out.
     player.setClientSideGenerationCompatible(

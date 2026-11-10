@@ -484,6 +484,9 @@ public:
 
     ServerPlayer *getPlayerByName(const std::string &name);
 
+    // keeps what a skin carries beside its image within the limits a skin change is held to
+    static void boundSkin(SerializedSkin &skin);
+
     std::vector<ServerPlayer *> resolveTargets(CommandOrigin &sender, const std::string &selector);
 
     // non-player actors only: players come from resolveTargets; any-entity commands call both

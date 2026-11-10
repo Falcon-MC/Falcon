@@ -470,7 +470,12 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                                      && level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName
                                         == CartographyTableBlock::IDENTIFIER;
 
-        if (!allowRequest(owner, player, request)) {
+        // creative only: the spectator shares the creative flag below but has no creative inventory
+        bool creativeCraft = false;
+        for (const ItemStackRequestAction &action: request.mActions)
+            creativeCraft = creativeCraft || action.mType == ItemStackRequestActionType::CraftCreative;
+
+        if ((creativeCraft && gameType != (int32_t) GameType::Creative) || !allowRequest(owner, player, request)) {
             ItemStackResponseEntry rejected;
             rejected.mRequestId = request.mRequestId;
             rejected.mResult = ItemStackRequestHandler::RESULT_ERROR;
