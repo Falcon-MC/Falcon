@@ -10,6 +10,7 @@
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/RakPeerHelper.h"
 #include "Network/PacketRateLimiter.h"
+#include "Network/ClientProbe.h"
 #include "Network/PingedCompatibleServer.h"
 #include "Protocol/NetworkPacketHandler.h"
 #include "Protocol/Types/DisconnectReason.h"
@@ -1024,6 +1025,7 @@ private:
     std::vector<QueuedActorCommand> mQueuedActorCommands;
     NaturalSpawner mNaturalSpawner;
     std::unordered_map<NetworkIdentifier, PacketRateLimiter, NetworkIdentifier::Hasher> mRateLimiters;
+    ClientProbeTracker mClientProbes;
 
     struct LingeringCloud {
         int32_t mPotionId;

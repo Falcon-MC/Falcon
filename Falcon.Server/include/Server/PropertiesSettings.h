@@ -231,6 +231,11 @@ public:
         return getBool("disable-custom-skins");
     }
 
+    // off, a client that does not behave as the game does is refused or removed
+    bool getAllowUnofficialClients() const {
+        return getBool("allow-unofficial-clients");
+    }
+
     bool getDisableClientVibrantVisuals() const {
         return getBool("disable-client-vibrant-visuals");
     }

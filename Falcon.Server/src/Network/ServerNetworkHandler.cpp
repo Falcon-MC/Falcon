@@ -537,6 +537,7 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
                                     "can be replayed here. Turn network-encryption back on");
 
     if (mNetherNetInstance != nullptr) {
+        mNetherNetInstance->setUnofficialClientsAllowed(mProperties.getAllowUnofficialClients());
         mNetherNetInstance->setServerDataProvider([this]() {
             nethernet::ServerData data;
             data.mServerName = mProperties.getServerName();
@@ -943,7 +944,12 @@ void ServerNetworkHandler::tick(bool paused) {
 
     std::vector<std::pair<NetworkIdentifier, std::string>> timedOut;
     std::vector<NetworkIdentifier> idle;
+    std::vector<std::pair<NetworkIdentifier, int>> unanswered;
+    const bool unofficialClientsAllowed = mProperties.getAllowUnofficialClients();
     for (auto &entry: mPlayers) {
+        const int failedCheck = unofficialClientsAllowed ? 0 : mClientProbes.tick(*this, entry.second, mCurrentTick);
+        if (failedCheck != 0)
+            unanswered.emplace_back(entry.first, failedCheck);
         entry.second.getAcknowledgements().flush(*this, entry.first);
         if (entry.second.getAcknowledgements().hasTimedOut(mCurrentTick))
             timedOut.emplace_back(entry.first, entry.second.localize("falcon.disconnect.timedOut"));
@@ -955,6 +961,8 @@ void ServerNetworkHandler::tick(bool paused) {
         _disconnect(entry.first, DisconnectReason::Timeout, entry.second);
     for (const NetworkIdentifier &entry: idle)
         _disconnect(entry, DisconnectReason::KickedForIdle, IDLE_MESSAGE);
+    for (const auto &entry: unanswered)
+        _rejectBadPacket(entry.first, "client check " + std::to_string(entry.second));
 
     uint32_t loadedChunks = 0;
     uint32_t pendingChunkTasks = 0;
@@ -1087,6 +1095,7 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
     (void) message;
 
     mRateLimiters.erase(id);
+    mClientProbes.forget(id);
 
     ServerPlayer *player = _getPlayer(id);
     World *playerWorld = player != nullptr ? &getWorldFor(*player) : nullptr;
@@ -2443,6 +2452,12 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PacketViola
     // accepted at every login step, a failed encryption handshake reports through it: one a second,
     // or before a login it is anyone's free line in the log
     if (!_allowPacket(id, RateLimitedPacket::ViolationWarning))
+        return;
+
+    // the answer a probe was waiting for is not a rejection to report
+    ServerPlayer *probed = _getPlayer(id);
+    if (probed != nullptr && !mProperties.getAllowUnofficialClients()
+        && mClientProbes.onViolationWarning(*probed, packet))
         return;
 
     const char *causeName = toString((MinecraftPacketIds) packet.mPacketCauseId);
