@@ -94,6 +94,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"block-network-ids-are-hashes", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"disable-custom-skins", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"allow-unofficial-clients", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"emit-server-telemetry", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"disable-client-vibrant-visuals", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"skin-change-cooldown", "30", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"spawn-protection", "16", PropertyKind::Int, 0, UNBOUNDED, nullptr},
