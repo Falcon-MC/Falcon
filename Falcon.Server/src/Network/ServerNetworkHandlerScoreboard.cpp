@@ -13,11 +13,11 @@ namespace {
                                             ObjectiveSortOrder order) {
         SetDisplayObjectivePacket packet;
         packet.mDisplaySlot = slot;
-        // TODO: a cleared slot sends an empty objective; unverified against the game
+        // sub_1405DBDE0: a cleared slot sends empty strings and sort order 0
         packet.mObjectiveId = objective == nullptr ? std::string() : objective->mName;
         packet.mDisplayName = objective == nullptr ? std::string() : objective->mDisplayName;
-        packet.mCriteria = objective == nullptr ? Scoreboard::CRITERIA_DUMMY : objective->mCriteria;
-        packet.mSortOrder = (int32_t) order;
+        packet.mCriteria = objective == nullptr ? std::string() : objective->mCriteria;
+        packet.mSortOrder = objective == nullptr ? 0 : (int32_t) order;
         return packet;
     }
 
@@ -160,19 +160,19 @@ void ServerNetworkHandler::sendScoreboard(ServerPlayer &player) {
     }
 }
 
-std::string ServerNetworkHandler::getScoreboardName(const ScoreboardIdentity &identity) {
+std::string ServerNetworkHandler::getScoreboardName(const ScoreboardIdentity &identity, bool script) {
     if (identity.mType == ScoreboardIdentityType::FakePlayer)
         return identity.mFakeName;
-    if (identity.mType == ScoreboardIdentityType::Player) {
-        for (auto &entry: mPlayers) {
-            if (entry.second.getUniqueId() == identity.mActorId)
-                return entry.second.getName();
-        }
-        // TODO: the key the game shows for an offline player is assumed to be the raw string
-        return "commands.scoreboard.players.offlinePlayerName";
+    // sub_14BE520A0, sub_14B9D7950: the loaded actor's name string, empty otherwise
+    std::string name;
+    if (Actor *actor = findScoreboardActor(identity)) {
+        const ServerActor *entity = dynamic_cast<const ServerActor *>(actor);
+        name = entity != nullptr ? entity->getNameTag() : actor->getName();
     }
-    // TODO: entities are assumed to show their unique id
-    return std::to_string(identity.mActorId);
+    // the client translates a leading %: the game's own string, sub_14BDDC010
+    if (name.empty() && !script)
+        return "%commands.scoreboard.players.offlinePlayerName";
+    return name;
 }
 
 Actor *ServerNetworkHandler::findScoreboardActor(const ScoreboardIdentity &identity) {

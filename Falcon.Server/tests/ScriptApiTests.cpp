@@ -476,7 +476,7 @@ system.runTimeout(() => {
     const id = player.scoreboardIdentity;
     r.sbIdentity = (id instanceof ScoreboardIdentity) + "," + id.type + "," + id.displayName + "," + id.isValid + ","
         + (id.getEntity() === player) + "," + typeof id.id;
-    r.sbCalf = calf.scoreboardIdentity.type + "," + (calf.scoreboardIdentity.displayName === calf.id);
+    r.sbCalf = calf.scoreboardIdentity.type + "," + JSON.stringify(calf.scoreboardIdentity.displayName);
     r.sbScores = obj.getScores().map((s) => (s instanceof ScoreboardScoreInfo) + ":" + s.participant.type + "="
         + s.score).join(";");
     r.sbGet = obj.getScore(id) + "," + obj.getScore("nobody") + "," + obj.hasParticipant("fake") + ","
@@ -1545,10 +1545,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "sbClasses", "true,true,ReferenceError: No constructor for native class 'ScoreboardObjective'.");
         expect(e, "sbNone", "true");
         expect(e, "sbObjective", "test:kills,Kills,true,test:kills,undefined");
-        expect(e, "sbDuplicate", "Error: Objective 'test:kills' already exists.");
+        expect(e, "sbDuplicate", "Error: Failed to add objective 'test:kills' as it is already being tracked.");
         expect(e, "sbAdd", "7,3,-1");
         expect(e, "sbIdentity", "true,Player,ScriptPlayer,true,true,number");
-        expect(e, "sbCalf", "Entity,true");
+        expect(e, "sbCalf", "Entity,\"\"");
         expect(e, "sbScores", "true:Player=7;true:FakePlayer=3;true:Entity=-1");
         expect(e, "sbGet", "7,undefined,true,true");
         expect(e, "sbOverflow",
@@ -1560,7 +1560,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "sbRemoveParticipant", "true,false");
         expect(e, "sbBadSlot", "TypeError: Native type conversion failed.");
         expect(e, "sbClear", "test:kills,true");
-        expect(e, "sbRemove", "true,false,Error: Scoreboard objective is no longer valid.,false");
+        expect(e, "sbRemove", "true,false,Error: Failed to find objective 'test:other'.,false");
         expect(e, "sbStale", "Error: Failed to set invalid objective at DisplaySlot.");
         expect(e, "sbReAdded", "false");
         expect(e, "sbEnums", "BelowName,1,FakePlayer");

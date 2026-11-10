@@ -4,6 +4,8 @@
 
 #include <climits>
 #include <cmath>
+#include <stdexcept>
+#include <string>
 
 using namespace ScriptValues;
 
@@ -65,9 +67,11 @@ namespace {
         return objective != nullptr && objective->mSerial == ref->mSerial ? objective : nullptr;
     }
 
-    // TODO: the game's message for a removed objective is unverified
-    JSValue invalidObjective(ScriptApi &api) {
-        return api.throwError("Error", "Scoreboard objective is no longer valid.");
+    // sub_14B907520
+    JSValue invalidObjective(ScriptApi &api, JSValueConst value) {
+        const ScriptObjectiveRef *ref = api.native<ScriptObjectiveRef>(value);
+        return api.throwError("Error",
+                              "Failed to find objective '" + (ref == nullptr ? std::string() : ref->mName) + "'.");
     }
 
     // Entity, ScoreboardIdentity or a fake player's name; 0 when it has no identity and create is false
@@ -96,20 +100,25 @@ namespace {
         }
         if (api.native<ScriptEntityRef>(value) == nullptr)
             return false;
-        const Actor *actor = api.resolveEntity(value);
-        if (actor == nullptr)
-            return false;
-        if (const ScoreboardIdentity *identity = api.host().findScoreboardIdentity(*actor))
+        // the game keys an Entity participant by its unique id: a removed entity keeps its scores
+        const ScriptEntityRef *ref = api.native<ScriptEntityRef>(value);
+        int64_t uniqueId = 0;
+        if (const Actor *actor = api.resolveEntity(*ref)) {
+            uniqueId = actor->getUniqueId();
+        } else {
+            try {
+                uniqueId = std::stoll(ref->mEntityId);
+            } catch (const std::exception &) {
+                return false;
+            }
+        }
+        if (const ScoreboardIdentity *identity = scoreboard.findActor(uniqueId))
             id = identity->mId;
         else if (create)
-            id = api.host().createScoreboardIdentity(*actor);
+            id = scoreboard.createActor(uniqueId, ref->mKind == ScriptEntityRef::Kind::Player).mId;
         return true;
     }
 
-    // TODO: the game's message for a participant it cannot read is unverified
-    JSValue invalidParticipant(ScriptApi &api) {
-        return api.throwError("Error", "Invalid scoreboard participant.");
-    }
 
     bool readScore(JSContext *ctx, JSValueConst value, int32_t &score) {
         double number = 0.0;
@@ -128,9 +137,9 @@ namespace {
         const std::string id = toString(ctx, argv[0]);
         const std::string displayName = argc >= 2 && JS_IsString(argv[1]) ? toString(ctx, argv[1]) : std::string();
         ScoreboardObjective *objective = scoreboardOf(api).addObjective(id, displayName);
-        // TODO: the game's message for a taken objective id is unverified
+        // sub_14B9C4540
         if (objective == nullptr)
-            return api.throwError("Error", "Objective '" + id + "' already exists.");
+            return api.throwError("Error", "Failed to add objective '" + id + "' as it is already being tracked.");
         return makeObjective(api, *objective);
     }
 
@@ -199,7 +208,7 @@ namespace {
             return conversionError(ctx);
         if (objective == nullptr)
             return api.throwError("Error", "Failed to set invalid objective at DisplaySlot.");
-        // TODO: descending as the default sort order is unverified
+        // sub_14B9CBAC0: descending unless ascending is given
         const std::string previous = scoreboardOf(api).setDisplay(slot, *objective, (ObjectiveSortOrder) order);
         return previous == objective->mName ? makeObjective(api, *objective) : previousObjective(api, previous);
     }
@@ -233,7 +242,7 @@ namespace {
         ScriptApi &api = *ScriptApi::fromContext(ctx);
         const ScoreboardObjective *objective = objectiveOf(api, thisVal);
         if (objective == nullptr)
-            return invalidObjective(api);
+            return invalidObjective(api, thisVal);
         return string(ctx, magic == 0 ? objective->mName : objective->mDisplayName);
     }
 
@@ -246,10 +255,10 @@ namespace {
         ScriptApi &api = *ScriptApi::fromContext(ctx);
         ScoreboardObjective *objective = objectiveOf(api, thisVal);
         if (objective == nullptr)
-            return invalidObjective(api);
+            return invalidObjective(api, thisVal);
         int64_t id = 0;
         if (argc < 1 || !participantOf(api, argv[0], false, id))
-            return invalidParticipant(api);
+            return conversionError(ctx);
         const int32_t *score = id == 0 ? nullptr : objective->find(id);
         if (magic == 0)
             return score == nullptr ? JS_UNDEFINED : JS_NewInt32(ctx, *score);
@@ -263,20 +272,22 @@ namespace {
         ScriptApi &api = *ScriptApi::fromContext(ctx);
         ScoreboardObjective *objective = objectiveOf(api, thisVal);
         if (objective == nullptr)
-            return invalidObjective(api);
+            return invalidObjective(api, thisVal);
         int32_t value = 0;
         if (argc < 2 || !readScore(ctx, argv[1], value))
             return conversionError(ctx);
         int64_t id = 0;
         if (!participantOf(api, argv[0], false, id))
-            return invalidParticipant(api);
+            return conversionError(ctx);
 
         const int32_t *current = id == 0 ? nullptr : objective->find(id);
         const int64_t next = magic == 0 ? value : (int64_t) (current == nullptr ? 0 : *current) + value;
         // string 0x14F81A828
         if (next < INT32_MIN || next > INT32_MAX) {
             const ScoreboardIdentity *identity = scoreboardOf(api).findIdentity(id);
-            const std::string name = identity == nullptr ? std::string() : api.host().getScoreboardName(*identity);
+            // sub_14B901140 names the participant
+            const std::string name = identity == nullptr ? std::string("<invalid participant>")
+                                                         : api.host().getScoreboardName(*identity, true);
             return api.throwError("Error", "Encountered an integer overflow when trying to modify objective score for "
                                            "participant '"
                                                    + name + "'.");
@@ -292,7 +303,7 @@ namespace {
         ScriptApi &api = *ScriptApi::fromContext(ctx);
         const ScoreboardObjective *objective = objectiveOf(api, thisVal);
         if (objective == nullptr)
-            return invalidObjective(api);
+            return invalidObjective(api, thisVal);
         JSValue list = JS_NewArray(ctx);
         uint32_t index = 0;
         for (const auto &score: objective->mScores) {
@@ -323,7 +334,7 @@ namespace {
             return conversionError(ctx);
         const ScoreboardIdentity &identity = ref->mIdentity;
         if (magic == 0)
-            return string(ctx, api.host().getScoreboardName(identity));
+            return string(ctx, api.host().getScoreboardName(identity, true));
         if (magic == 1)
             return JS_NewInt64(ctx, identity.mId);
         return JS_NewString(ctx, identityTypeName(identity.mType));
@@ -391,7 +402,7 @@ bool ScriptApi::scoresMatch(const Actor &actor, JSValueConst options) {
                                                        ? scoreboard.getObjective(toString(ctx, objectiveValue))
                                                        : nullptr;
         const int32_t *score = objective == nullptr || identity == nullptr ? nullptr : objective->find(identity->mId);
-        // TODO: an entity without a score is assumed to fail the option, excluded or not
+        // sub_1455ECBD0: no score fails the filter, excluded or not
         matches = score != nullptr && ((*score >= low && *score <= high) != exclude);
         JS_FreeValue(ctx, entry);
         JS_FreeValue(ctx, objectiveValue);

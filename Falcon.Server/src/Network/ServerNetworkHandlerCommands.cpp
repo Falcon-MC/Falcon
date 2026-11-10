@@ -172,7 +172,7 @@ namespace {
         return !out.empty();
     }
 
-    // TODO: a negated range is assumed to also leave out targets without a score
+    // sub_1455ECBD0: a target without a score fails, negated or not
     bool matchesScores(const SelectorFilter &filter, Scoreboard &scoreboard, const Actor &actor) {
         if (filter.mScores.empty())
             return true;

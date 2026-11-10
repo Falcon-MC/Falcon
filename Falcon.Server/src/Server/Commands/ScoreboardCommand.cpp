@@ -40,8 +40,7 @@ namespace {
         return true;
     }
 
-    // false on overflow; division by zero leaves the target unchanged
-    // TODO: the game's rounding of /= and %= and its handling of a zero divisor are unverified
+    // sub_1405D3490: false on overflow, INT_MIN by -1 included; truncating division, a zero divisor keeps the target
     bool applyOperation(const std::string &operation, int32_t &target, int32_t &source) {
         int64_t result = target;
         if (operation == "+=")
@@ -53,7 +52,9 @@ namespace {
         else if (operation == "/=")
             result = source == 0 ? target : (source == -1 ? -(int64_t) target : target / source);
         else if (operation == "%=")
-            result = source == 0 || source == -1 ? (source == 0 ? target : 0) : target % source;
+            result = source == 0
+                             ? target
+                             : (source == -1 ? (target == INT32_MIN ? (int64_t) INT32_MAX + 1 : 0) : target % source);
         else if (operation == "=")
             result = source;
         else if (operation == "<")
@@ -141,8 +142,9 @@ bool ScoreboardCommand::execute(CommandOrigin &sender, const std::vector<std::st
     return false;
 }
 
-std::vector<int64_t> ScoreboardCommand::_participants(CommandOrigin &sender, const std::string &argument, bool create) {
-    Scoreboard &scoreboard = mHandler.getScoreboard();
+std::vector<int64_t> ScoreboardCommand::participants(ServerNetworkHandler &handler, CommandOrigin &sender,
+                                                     const std::string &argument, bool create) {
+    Scoreboard &scoreboard = handler.getScoreboard();
     std::vector<int64_t> ids;
     if (argument == "*") {
         for (const ScoreboardIdentity &identity: scoreboard.getIdentities())
@@ -151,23 +153,23 @@ std::vector<int64_t> ScoreboardCommand::_participants(CommandOrigin &sender, con
     }
 
     const auto addActor = [&](const Actor &actor) {
-        const ScoreboardIdentity *identity = mHandler.findScoreboardIdentity(actor);
+        const ScoreboardIdentity *identity = handler.findScoreboardIdentity(actor);
         if (identity != nullptr)
             ids.push_back(identity->mId);
         else if (create)
-            ids.push_back(mHandler.createScoreboardIdentity(actor));
+            ids.push_back(handler.createScoreboardIdentity(actor));
     };
 
     if (!argument.empty() && argument[0] == '@') {
-        for (ServerPlayer *player: mHandler.resolveTargets(sender, argument))
+        for (ServerPlayer *player: handler.resolveTargets(sender, argument))
             addActor(*player);
-        for (ServerActor *actor: mHandler.resolveActorTargets(sender, argument))
+        for (ServerActor *actor: handler.resolveActorTargets(sender, argument))
             addActor(*actor);
         return ids;
     }
 
     // an online player's exact name is that player; any other name is a fake player
-    for (auto &entry: mHandler.getPlayers()) {
+    for (auto &entry: handler.getPlayers()) {
         if (entry.second.isSpawned() && entry.second.getName() == argument) {
             addActor(entry.second);
             return ids;
@@ -250,7 +252,7 @@ bool ScoreboardCommand::_objectives(CommandOrigin &sender, const std::vector<std
             sender.sendTranslation("commands.scoreboard.objectiveNotFound", {arguments[3]});
             return false;
         }
-        // TODO: descending as the default order is unverified
+        // sub_14BE51E00: the command starts descending
         ObjectiveSortOrder order = ObjectiveSortOrder::Descending;
         if (arguments.size() >= 5 && slot != Scoreboard::SLOT_BELOW_NAME) {
             if (arguments[4] == "ascending")
@@ -303,7 +305,7 @@ bool ScoreboardCommand::_list(CommandOrigin &sender, const std::vector<std::stri
         return true;
     }
 
-    const std::vector<int64_t> ids = _participants(sender, arguments[2], false);
+    const std::vector<int64_t> ids = participants(mHandler, sender, arguments[2], false);
     if (ids.empty()) {
         sender.sendTranslation("commands.scoreboard.players.list.player.empty", {arguments[2]});
         return false;
@@ -343,7 +345,7 @@ bool ScoreboardCommand::_change(CommandOrigin &sender, const std::vector<std::st
         sender.sendTranslation("commands.scoreboard.objectiveNotFound", {arguments[3]});
         return false;
     }
-    const std::vector<int64_t> ids = _participants(sender, arguments[2], true);
+    const std::vector<int64_t> ids = participants(mHandler, sender, arguments[2], true);
     if (ids.empty()) {
         sender.sendTranslation("commands.generic.noTargetMatch", {});
         return false;
@@ -355,7 +357,7 @@ bool ScoreboardCommand::_change(CommandOrigin &sender, const std::vector<std::st
     for (int64_t id: ids) {
         const int32_t *current = objective->find(id);
         int32_t value = count;
-        // TODO: an add or remove past the int range is refused like an operation; unverified
+        // sub_1405CE790: an add or remove past the int range is refused, the score kept
         if (action != "set"
             && !checkedAdd(current == nullptr ? 0 : *current, action == "add" ? count : -count, value)) {
             sender.sendTranslation("commands.scoreboard.players.operation.integerOverflow", {});
@@ -404,7 +406,7 @@ bool ScoreboardCommand::_reset(CommandOrigin &sender, const std::vector<std::str
         }
     }
 
-    const std::vector<int64_t> ids = _participants(sender, arguments[2], false);
+    const std::vector<int64_t> ids = participants(mHandler, sender, arguments[2], false);
     if (ids.empty()) {
         sender.sendTranslation("commands.generic.noTargetMatch", {});
         return false;
@@ -444,7 +446,7 @@ bool ScoreboardCommand::_test(CommandOrigin &sender, const std::vector<std::stri
         return false;
     }
 
-    const std::vector<int64_t> ids = _participants(sender, arguments[2], false);
+    const std::vector<int64_t> ids = participants(mHandler, sender, arguments[2], false);
     if (ids.empty()) {
         sender.sendTranslation("commands.scoreboard.players.score.notFound", {objective->mName, arguments[2]});
         return false;
@@ -481,8 +483,8 @@ bool ScoreboardCommand::_random(CommandOrigin &sender, const std::vector<std::st
                                {parseInt(arguments[4], min) ? arguments[5] : arguments[4]});
         return false;
     }
-    // TODO: whether min == max is refused is unverified; the message reads "not less than"
-    if (min > max) {
+    // sub_14BDDC010 refuses min >= max
+    if (min >= max) {
         sender.sendTranslation("commands.scoreboard.players.random.invalidRange",
                                {std::to_string(min), std::to_string(max)});
         return false;
@@ -492,7 +494,7 @@ bool ScoreboardCommand::_random(CommandOrigin &sender, const std::vector<std::st
         sender.sendTranslation("commands.scoreboard.objectiveNotFound", {arguments[3]});
         return false;
     }
-    const std::vector<int64_t> ids = _participants(sender, arguments[2], true);
+    const std::vector<int64_t> ids = participants(mHandler, sender, arguments[2], true);
     if (ids.empty()) {
         sender.sendTranslation("commands.generic.noTargetMatch", {});
         return false;
@@ -500,7 +502,7 @@ bool ScoreboardCommand::_random(CommandOrigin &sender, const std::vector<std::st
 
     static std::mt19937 random{std::random_device{}()};
     std::uniform_int_distribution<int32_t> distribution(min, max);
-    // TODO: the success line of random is assumed to be set's
+    // the game has no random success line: set.success, sub_14BDE3530
     for (int64_t id: ids) {
         const int32_t value = distribution(random);
         scoreboard.setScore(*objective, id, value);
@@ -530,7 +532,12 @@ bool ScoreboardCommand::_operation(CommandOrigin &sender, const std::vector<std:
         return false;
     }
 
-    const std::vector<int64_t> sources = _participants(sender, arguments[5], false);
+    // sub_14BDDC010
+    if (arguments[2] == "*" && arguments[5] == "*") {
+        sender.sendTranslation("commands.scoreboard.noMultiWildcard", {});
+        return false;
+    }
+    const std::vector<int64_t> sources = participants(mHandler, sender, arguments[5], false);
     std::vector<int64_t> scored;
     for (int64_t id: sources) {
         if (sourceObjective->find(id) != nullptr)
@@ -541,7 +548,7 @@ bool ScoreboardCommand::_operation(CommandOrigin &sender, const std::vector<std:
                                {sourceObjective->mName, arguments[5]});
         return false;
     }
-    const std::vector<int64_t> targets = _participants(sender, arguments[2], true);
+    const std::vector<int64_t> targets = participants(mHandler, sender, arguments[2], true);
     if (targets.empty()) {
         sender.sendTranslation("commands.generic.noTargetMatch", {});
         return false;
@@ -549,7 +556,7 @@ bool ScoreboardCommand::_operation(CommandOrigin &sender, const std::vector<std:
 
     size_t updated = 0;
     for (int64_t target: targets) {
-        // TODO: a target without a score starts from 0; unverified
+        // sub_1405D3490: a target without a score starts from 0
         const int32_t *current = targetObjective->find(target);
         int32_t value = current == nullptr ? 0 : *current;
         bool overflow = false;

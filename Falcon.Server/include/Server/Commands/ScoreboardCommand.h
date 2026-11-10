@@ -14,6 +14,10 @@ public:
 
     std::vector<CommandOverloadData> getOverloads() const override;
 
+    // identity ids a participant argument names: "*", a selector or a name; create makes the missing ones
+    static std::vector<int64_t> participants(ServerNetworkHandler &handler, CommandOrigin &sender,
+                                             const std::string &argument, bool create);
+
 private:
     bool _objectives(CommandOrigin &sender, const std::vector<std::string> &arguments);
 
@@ -30,9 +34,6 @@ private:
     bool _random(CommandOrigin &sender, const std::vector<std::string> &arguments);
 
     bool _operation(CommandOrigin &sender, const std::vector<std::string> &arguments);
-
-    // identity ids a participant argument names: "*", a selector or a name; create makes the missing ones
-    std::vector<int64_t> _participants(CommandOrigin &sender, const std::string &argument, bool create);
 
     ServerNetworkHandler &mHandler;
 };

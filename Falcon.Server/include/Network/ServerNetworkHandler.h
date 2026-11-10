@@ -482,8 +482,8 @@ public:
     // the display slots, their scores and the player identities, for a player joining
     void sendScoreboard(ServerPlayer &player);
 
-    // a player's name, an entity's unique id or the fake player's own name
-    std::string getScoreboardName(const ScoreboardIdentity &identity);
+    // a player's name, an entity's name tag or the fake player's own name; script: no offline placeholder
+    std::string getScoreboardName(const ScoreboardIdentity &identity, bool script = false);
 
     // the online player or loaded entity of an identity; null for a fake player
     Actor *findScoreboardActor(const ScoreboardIdentity &identity);

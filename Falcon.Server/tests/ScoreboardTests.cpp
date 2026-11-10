@@ -284,8 +284,11 @@ namespace {
         expectLine(console, "commands.scoreboard.players.operation.invalidOperation", "**");
         require(run("scoreboard players set Alex bank 2147483647"), "max set failed");
         require(!run("scoreboard players add Alex bank 1"), "an overflowing add was accepted");
-        require(run("scoreboard players random Alex bank 3 3"), "random failed");
-        require(*owner.getScoreboard().getObjective("bank")->find(alex) == 3, "random left its range");
+        require(run("scoreboard players random Alex bank 3 4"), "random failed");
+        const int32_t rolled = *owner.getScoreboard().getObjective("bank")->find(alex);
+        require(rolled == 3 || rolled == 4, "random left its range");
+        require(!run("scoreboard players random Alex bank 3 3"), "random accepted min equal to max");
+        expectLine(console, "commands.scoreboard.players.random.invalidRange", "3,3");
         require(!run("scoreboard players random Alex bank 4 3"), "an empty random range was accepted");
         expectLine(console, "commands.scoreboard.players.random.invalidRange", "4,3");
         const auto changed = decoded<SetScorePacket>(owner, sent, MinecraftPacketIds::SetScore);
@@ -301,6 +304,14 @@ namespace {
         sent.clear();
         require(run("scoreboard objectives setdisplay sidebar"), "clearing a slot failed");
         expectLine(console, "commands.scoreboard.objectives.setdisplay.successCleared", "sidebar");
+        const auto cleared = decoded<SetDisplayObjectivePacket>(owner, sent, MinecraftPacketIds::SetDisplayObjective);
+        require(cleared.size() == 1 && cleared[0].mDisplaySlot == "sidebar" && cleared[0].mObjectiveId.empty()
+                        && cleared[0].mCriteria.empty() && cleared[0].mSortOrder == 0,
+                "a cleared slot is not sent like the game");
+        require(run("scoreboard players set Alex bank 2147483647"), "max set failed");
+        require(!run("scoreboard players remove Alex bank -1")
+                        && *owner.getScoreboard().getObjective("bank")->find(alex) == 2147483647,
+                "a remove past the int range was accepted");
         require(!run("scoreboard objectives setdisplay feet kills"), "an unknown slot was accepted");
         expectLine(console, "commands.scoreboard.objectives.setdisplay.invalidSlot", "feet");
         require(run("scoreboard objectives remove kills"), "objectives remove failed");
@@ -326,8 +337,31 @@ namespace {
                                            .size()
                                    == 1,
                 "the join sync is incomplete");
+
+        require(run("execute if score Alex bank matches 8"), "if score matches failed");
+        expectLine(console, "commands.execute.trueCondition", "");
+        require(run("execute unless score Alex bank matches 9.."), "unless score with an open range failed");
+        require(!run("execute if score Alex bank matches ..7"), "a score outside the range matched");
+        expectLine(console, "commands.execute.falseCondition", "if,score");
+        require(run("scoreboard players set Other bank 8"), "fake player for compare failed");
+        require(run("execute if score Alex bank = Other bank") && run("execute if score Alex bank >= Other bank")
+                        && !run("execute if score Alex bank < Other bank"),
+                "score comparisons are wrong");
+        require(!run("execute if score Nobody bank matches 1"), "a missing participant passed");
+        expectLine(console, "commands.execute.ifUnlessScore.targets.empty", "Nobody");
+        require(!run("execute if score Alex nope matches 1"), "a missing objective passed");
+        expectLine(console, "commands.execute.ifUnlessScore.objectiveNotFound", "nope");
+        require(!run("execute if score * bank matches 8"), "several participants passed");
+        expectLine(console, "commands.execute.ifUnlessScore.targets.tooMany", "2");
+        require(!run("scoreboard players operation * bank += * bank"), "two wildcards were accepted");
+        expectLine(console, "commands.scoreboard.noMultiWildcard", "");
+
+        const int64_t alexId = owner.getScoreboard().findActor(555)->mId;
         owner.getNetworkHandler().setOutboundFilter(nullptr);
         owner.getPlayers().clear();
+        require(owner.getScoreboardName(*owner.getScoreboard().findIdentity(alexId))
+                        == "%commands.scoreboard.players.offlinePlayerName",
+                "an offline player is not named like the game");
     }
 }
 

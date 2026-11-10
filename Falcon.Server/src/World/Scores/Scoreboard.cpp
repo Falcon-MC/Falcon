@@ -207,9 +207,7 @@ bool Scoreboard::isDisplayed(const std::string &objective) const {
     return false;
 }
 
-// TODO: only DisplayObjectives, ObjectiveName, FakePlayerName, EntityID and LastUniqueID are seen in the 26.60
-// strings; Objectives, Entries, Name, DisplayName, Criteria, Scores, Score, ScoreboardId, IdentityType, PlayerId and
-// SortOrder are unverified
+// the layout sub_1405D50C0 loads: under the "scoreboard" key itself, IdentityType and SortOrder as bytes
 Tag Scoreboard::save() const {
     Tag objectives = Tag::ofList(Tag::Type::Compound);
     for (const std::unique_ptr<ScoreboardObjective> &objective: mObjectives) {

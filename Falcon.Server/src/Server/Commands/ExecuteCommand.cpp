@@ -4,12 +4,14 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Server/Commands/CommandMap.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
+#include "Server/Commands/ScoreboardCommand.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "Core/Math/MathConstants.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 
 #include <algorithm>
+#include <climits>
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
@@ -20,6 +22,63 @@ namespace {
                                                   "in",    "positioned", "rotated", "run", "unless"};
 
     const float PLAYER_EYE_HEIGHT = 1.62f;
+
+    bool parseScoreValue(const std::string &value, int32_t &out) {
+        char *end = nullptr;
+        errno = 0;
+        const long long parsed = std::strtoll(value.c_str(), &end, 10);
+        if (value.empty() || *end != '\0' || errno == ERANGE || parsed < INT32_MIN || parsed > INT32_MAX)
+            return false;
+        out = (int32_t) parsed;
+        return true;
+    }
+
+    // n, n.., ..m or n..m, both ends included
+    bool parseScoreRange(const std::string &value, int32_t &min, int32_t &max) {
+        const size_t dots = value.find("..");
+        if (dots == std::string::npos) {
+            if (!parseScoreValue(value, min))
+                return false;
+            max = min;
+            return true;
+        }
+        const std::string low = value.substr(0, dots);
+        const std::string high = value.substr(dots + 2);
+        min = INT32_MIN;
+        max = INT32_MAX;
+        return !(low.empty() && high.empty()) && (low.empty() || parseScoreValue(low, min))
+               && (high.empty() || parseScoreValue(high, max));
+    }
+
+    // the one score a selector names; false with the game's message otherwise
+    bool readOneScore(ServerNetworkHandler &handler, CommandOrigin &origin, const std::string &selector,
+                      const std::string &objectiveName, int32_t &score) {
+        Scoreboard &scoreboard = handler.getScoreboard();
+        const ScoreboardObjective *objective = scoreboard.getObjective(objectiveName);
+        if (objective == nullptr) {
+            origin.sendTranslation("commands.execute.ifUnlessScore.objectiveNotFound", {objectiveName});
+            return false;
+        }
+        const std::vector<int64_t> ids = ScoreboardCommand::participants(handler, origin, selector, false);
+        if (ids.size() > 1) {
+            origin.sendTranslation("commands.execute.ifUnlessScore.targets.tooMany", {std::to_string(ids.size())});
+            return false;
+        }
+        if (ids.empty()) {
+            origin.sendTranslation("commands.execute.ifUnlessScore.targets.empty", {selector});
+            return false;
+        }
+        const int32_t *value = objective->find(ids[0]);
+        if (value == nullptr) {
+            const ScoreboardIdentity *identity = scoreboard.findIdentity(ids[0]);
+            origin.sendTranslation(
+                    "commands.execute.ifUnlessScore.score.notFound",
+                    {objectiveName, identity == nullptr ? selector : handler.getScoreboardName(*identity)});
+            return false;
+        }
+        score = *value;
+        return true;
+    }
 
     bool parseFloat(const std::string &value, float &out) {
         char *end = nullptr;
@@ -504,8 +563,50 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
                 matched = !mHandler.resolveActorTargets(origin, arguments[index + 2]).empty();
             }
             next = index + 3;
+        } else if (condition == "score") {
+            // score <target> <objective> (<op> <source> <objective> | matches <range>)
+            if (index + 5 >= arguments.size()) {
+                sender.sendTranslation("commands.generic.usage", {getUsage()});
+                return false;
+            }
+            ExecuteCommandOrigin origin(sender, context.mExecutor, context.mPosition, context.mRotation,
+                                        context.mLevel);
+            const std::string &operation = arguments[index + 4];
+            int32_t target = 0;
+            if (operation == "matches") {
+                int32_t min = 0, max = 0;
+                if (!parseScoreRange(arguments[index + 5], min, max)) {
+                    sender.sendTranslation("commands.generic.parameter.invalid", {arguments[index + 5]});
+                    return false;
+                }
+                if (!readOneScore(mHandler, origin, arguments[index + 2], arguments[index + 3], target))
+                    return false;
+                matched = target >= min && target <= max;
+                next = index + 6;
+            } else {
+                if (index + 6 >= arguments.size()
+                    || (operation != "<" && operation != "<=" && operation != "=" && operation != ">="
+                        && operation != ">")) {
+                    sender.sendTranslation("commands.generic.usage", {getUsage()});
+                    return false;
+                }
+                int32_t source = 0;
+                if (!readOneScore(mHandler, origin, arguments[index + 2], arguments[index + 3], target)
+                    || !readOneScore(mHandler, origin, arguments[index + 5], arguments[index + 6], source))
+                    return false;
+                if (operation == "<")
+                    matched = target < source;
+                else if (operation == "<=")
+                    matched = target <= source;
+                else if (operation == "=")
+                    matched = target == source;
+                else if (operation == ">=")
+                    matched = target >= source;
+                else
+                    matched = target > source;
+                next = index + 7;
+            }
         } else {
-            // TODO: score condition, needs a scoreboard
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
         }
