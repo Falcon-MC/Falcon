@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def verify(root, verify_content):
-    manifest_path = root / 'Falcon.Server/structure/bds-1.26.10.json'
+    manifest_path = root / 'Falcon.Server/tools/Structure/bds-1.26.10.json'
     manifest = json.loads(manifest_path.read_text())
     records = manifest['files']
     headers = {
