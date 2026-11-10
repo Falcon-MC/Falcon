@@ -71,6 +71,21 @@ is a complete plugin written with its small C helper. A Wasm plugin has no file 
 most `wasm-plugin-memory-mb` of memory and `wasm-plugin-fuel` units of fuel per server call. A plugin that runs
 out of fuel or traps is stopped.
 
+## What the server sends out
+
+A Falcon server talks to one outside service, `api.falcon-mc.workers.dev`, for two things.
+
+**Client attestation**, on by default. When a client connects over NetherNet, the server sends what it
+observed of the connection being set up: the handshake of the secure session and the client's offer, without
+the player's account token and without any address. The service answers whether the client behaves as the game
+does, and the server removes it if not. No player name or identifier is sent. If the service does not answer,
+the client stays. Set `allow-unofficial-clients=true` to turn every client check off, including this one.
+
+**Telemetry**, off by default. With `emit-server-telemetry=true` the server reports, at start, every half
+hour and at stop: its version, system, architecture, transport, player count, player limit, uptime, and how
+often each client check fired. Nothing in a report names the server, its world or a player, and the service
+keeps no address.
+
 ## Related repositories
 
 - [Protocol](https://github.com/Falcon-MC/Protocol) - packets and network types

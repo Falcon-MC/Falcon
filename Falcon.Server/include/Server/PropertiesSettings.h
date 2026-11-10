@@ -231,6 +231,11 @@ public:
         return getBool("disable-custom-skins");
     }
 
+    // on, the server reports its version, system, player count and check counts to the Falcon service
+    bool getEmitServerTelemetry() const {
+        return getBool("emit-server-telemetry");
+    }
+
     // off, a client that does not behave as the game does is refused or removed
     bool getAllowUnofficialClients() const {
         return getBool("allow-unofficial-clients");

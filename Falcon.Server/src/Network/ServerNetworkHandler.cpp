@@ -26,6 +26,7 @@
 #include "Network/AuthKeyProvider.h"
 #include "Network/TransportFactory.h"
 #include "Network/ClientAttestation.h"
+#include "Server/ServerTelemetry.h"
 #include "Network/NetherNet/NetherNetInstance.h"
 #include "Network/Handler/BadPacketHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -540,6 +541,12 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     if (mNetherNetInstance != nullptr) {
         mNetherNetInstance->setUnofficialClientsAllowed(mProperties.getAllowUnofficialClients());
         // the verdict comes back later, see the tick: the connection is not held for it
+        mNetherNetInstance->setNegotiationFailureObserver([](int errorCode, int clientCheck) {
+            if (clientCheck != 0)
+                ServerTelemetry::getInstance().countFailure(ServerTelemetry::FailureStage::OfferCheck, clientCheck);
+            else
+                ServerTelemetry::getInstance().countFailure(ServerTelemetry::FailureStage::Offer, errorCode);
+        });
         mNetherNetInstance->setConnectionObserver(
                 [](const nethernet::Connection &connection) { ClientAttestation::getInstance().inspect(connection); });
         mNetherNetInstance->setServerDataProvider([this]() {
@@ -965,16 +972,21 @@ void ServerNetworkHandler::tick(bool paused) {
         _disconnect(entry.first, DisconnectReason::Timeout, entry.second);
     for (const NetworkIdentifier &entry: idle)
         _disconnect(entry, DisconnectReason::KickedForIdle, IDLE_MESSAGE);
-    for (const auto &entry: unanswered)
+    for (const auto &entry: unanswered) {
+        ServerTelemetry::getInstance().countCheck(entry.second);
         _rejectBadPacket(entry.first, "client check " + std::to_string(entry.second));
+    }
 
     if (!unofficialClientsAllowed) {
         for (const auto &verdict: ClientAttestation::getInstance().takeVerdicts()) {
-            if (verdict.second > 0)
+            if (verdict.second > 0) {
+                ServerTelemetry::getInstance().countCheck(100 + verdict.second);
                 _rejectBadPacket(verdict.first, "client check " + std::to_string(100 + verdict.second));
-            else
+            } else {
+                ServerTelemetry::getInstance().countCheck(1000 - verdict.second);
                 LOG_INFO(LogAreaID::Network, "Client note %d for %s", 100 - verdict.second,
                          verdict.first.getAddress().c_str());
+            }
         }
     }
 
@@ -990,11 +1002,13 @@ void ServerNetworkHandler::tick(bool paused) {
         fluidsProcessed += (uint32_t) overworld.getLastFluidProcessedCount();
         fluidsScheduled += (uint32_t) overworld.getScheduledFluidCount();
     }
+    ServerTelemetry::getInstance().setPlayers((int) mPlayers.size());
     mProfiler.endTick((uint32_t) mPlayers.size(), loadedChunks, pendingChunkTasks, fluidsProcessed, fluidsScheduled);
 
     const double elapsedMs =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tickStart).count();
 
+    ServerTelemetry::getInstance().recordTick(elapsedMs);
     mTickDurationSamples.push_back(elapsedMs);
     if (mTickDurationSamples.size() > TICK_SAMPLE_COUNT)
         mTickDurationSamples.pop_front();
@@ -1457,6 +1471,11 @@ ServerPlayer *ServerNetworkHandler::_getPlayer(const NetworkIdentifier &id) {
 
 void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, DisconnectReason reason,
                                        const std::string &message) {
+    // a player who never made it into the world: the reason is what an operator would ask about
+    const ServerPlayer *leaving = _getPlayer(id);
+    if (leaving == nullptr || !leaving->isSpawned())
+        ServerTelemetry::getInstance().countFailure(ServerTelemetry::FailureStage::Login, (int) reason);
+
     DisconnectPacket disconnect;
     disconnect.mReason = (int32_t) reason;
     disconnect.mMessageSkipped = false;
