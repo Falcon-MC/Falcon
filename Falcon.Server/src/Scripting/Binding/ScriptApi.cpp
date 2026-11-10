@@ -275,46 +275,6 @@ namespace {
         return api->showForm(argv[0], toString(ctx, argv[1]));
     }
 
-    JSValue scoreboardSetScore(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc < 3)
-            return JS_UNDEFINED;
-        int32_t score = 0;
-        JS_ToInt32(ctx, &score, argv[2]);
-        api->host().setScoreboardScore(toString(ctx, argv[0]), toString(ctx, argv[1]), score);
-        return JS_UNDEFINED;
-    }
-
-    JSValue scoreboardRemoveScore(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc >= 2)
-            api->host().removeScoreboardScore(toString(ctx, argv[0]), toString(ctx, argv[1]));
-        return JS_UNDEFINED;
-    }
-
-    JSValue scoreboardDisplay(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc < 2)
-            return JS_UNDEFINED;
-        const std::string displayName = argc >= 3 ? toString(ctx, argv[2]) : std::string();
-        api->host().displayScoreboardObjective(toString(ctx, argv[0]), toString(ctx, argv[1]), displayName);
-        return JS_UNDEFINED;
-    }
-
-    JSValue scoreboardClearDisplay(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc >= 1)
-            api->host().clearScoreboardDisplay(toString(ctx, argv[0]));
-        return JS_UNDEFINED;
-    }
-
-    JSValue scoreboardRemoveObjective(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc >= 1)
-            api->host().removeScoreboardObjective(toString(ctx, argv[0]));
-        return JS_UNDEFINED;
-    }
-
     JSValue runBootstrap(JSContext *ctx, const std::string &pack, const char *source, const char *name,
                          JSValue argument) {
         JSValue factory = JS_Eval(ctx, source, std::strlen(source), name, JS_EVAL_TYPE_GLOBAL);
@@ -340,7 +300,10 @@ namespace {
 
     int moduleInit(JSContext *ctx, JSModuleDef *module);
 
-    const char *const SERVER_ENUMS[] = {"EntityDamageCause",
+    const char *const SERVER_ENUMS[] = {"DisplaySlotId",
+                                        "ObjectiveSortOrder",
+                                        "ScoreboardIdentityType",
+                                        "EntityDamageCause",
                                         "EntityInitializationCause",
                                         "EntityHealCause",
                                         "EntitySwingSource",
@@ -1434,20 +1397,6 @@ void ScriptApi::_installBootstraps() {
     }
     JS_FreeValue(mContext, installJobs);
     JS_FreeValue(mContext, dataExports);
-
-    JSValue world = JS_NewObject(mContext);
-    addFunction(mContext, world, "setScore", scoreboardSetScore, 3);
-    addFunction(mContext, world, "removeScore", scoreboardRemoveScore, 2);
-    addFunction(mContext, world, "display", scoreboardDisplay, 3);
-    addFunction(mContext, world, "clearDisplay", scoreboardClearDisplay, 1);
-    addFunction(mContext, world, "removeObjective", scoreboardRemoveObjective, 1);
-    JSValue worldExports = runBootstrap(mContext, mPackName, ScriptBootstraps::world(), "<world>", world);
-    for (const char *name: {"Scoreboard", "ScoreboardObjective"}) {
-        if (mSurface.has(name))
-            mServerExports.emplace_back(name, JS_GetPropertyStr(mContext, worldExports, name));
-    }
-    mScoreboard = JS_GetPropertyStr(mContext, worldExports, "scoreboard");
-    JS_FreeValue(mContext, worldExports);
 
     if (mModules.find("@minecraft/server-ui") == nullptr)
         return;

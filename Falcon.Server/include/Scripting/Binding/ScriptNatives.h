@@ -3,6 +3,7 @@
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "Core/NBT/Tag.h"
+#include "World/Scores/Scoreboard.h"
 
 #include <cstdint>
 #include <memory>
@@ -118,6 +119,18 @@ struct ScriptRegistryRef : ScriptNative {
 struct ScriptClockRef : ScriptNative {
     std::string mClock;
     std::string mMarker;
+};
+
+// an objective by name and serial: a removed objective stays invalid once another takes its name
+struct ScriptObjectiveRef : ScriptNative {
+    std::string mName;
+    uint64_t mSerial = 0;
+};
+
+// a ScoreboardIdentity, or a ScoreboardScoreInfo with its score; the identity is kept for an invalid one
+struct ScriptIdentityRef : ScriptNative {
+    ScoreboardIdentity mIdentity;
+    int32_t mScore = 0;
 };
 
 namespace ScriptValues {
