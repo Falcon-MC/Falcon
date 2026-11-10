@@ -501,10 +501,11 @@ bool ScoreboardCommand::_random(CommandOrigin &sender, const std::vector<std::st
     }
 
     static std::mt19937 random{std::random_device{}()};
-    std::uniform_int_distribution<int32_t> distribution(min, max);
+    // sub_14BDDC010: min + nextInt(max - min + 1); mt19937 output is the same everywhere, distributions are not
+    const uint64_t range = (uint64_t) ((int64_t) max - min + 1);
     // the game has no random success line: set.success, sub_14BDE3530
     for (int64_t id: ids) {
-        const int32_t value = distribution(random);
+        const int32_t value = (int32_t) ((int64_t) min + (int64_t) ((uint64_t) random() % range));
         scoreboard.setScore(*objective, id, value);
         if (const ScoreboardIdentity *identity = scoreboard.findIdentity(id))
             sender.sendTranslation("commands.scoreboard.players.set.success",

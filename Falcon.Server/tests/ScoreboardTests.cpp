@@ -295,6 +295,8 @@ namespace {
         require(!changed.empty() && changed.back().mInfos[0].mObjectiveId == "kills",
                 "a displayed objective's change was not sent");
 
+        // random above left 3 or 4: pin it
+        require(run("scoreboard players set Alex bank 3"), "reset before list failed");
         require(run("scoreboard players list Alex"), "players list failed");
         expectLine(console, "commands.scoreboard.players.list.player.entry", "3,bank,bank");
         require(run("scoreboard players reset \"Fake Name\" kills"), "resetscore failed");
