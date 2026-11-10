@@ -11,7 +11,7 @@
 #include <cstring>
 #include <vector>
 
-// generated from resources/attestation.bin: the module is kept packed so the executable carries no
+// generated from attestation.bin: the module is kept packed so the executable carries no
 // readable copy of it
 extern const unsigned char FALCON_ATTESTATION_MODULE[];
 extern const size_t FALCON_ATTESTATION_MODULE_SIZE;

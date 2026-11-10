@@ -84,7 +84,7 @@ on the issue first so the approach can be agreed on before you write the code.
 
 The source layout follows the domains recovered from BDS 1.26.10, using PascalCase
 folder names as required by Falcon rules. See
-[`Falcon.Server/structure/README.md`](Falcon.Server/structure/README.md) for the evidence,
+[`Falcon.Server/tools/Structure/README.md`](Falcon.Server/tools/Structure/README.md) for the evidence,
 limits and old-to-new file inventory. New code should use the relocated include paths.
 Build-generated forwarding headers preserve existing internal-plugin includes; the
 public `Falcon/EmbeddedServer.h` and external plugin C API remain stable.

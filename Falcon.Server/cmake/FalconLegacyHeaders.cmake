@@ -1,6 +1,6 @@
 # Internal plugins are maintained in PluginAPI and still include the old server paths.
 # Keep forwarding headers in the build/SDK, rather than restoring the old source tree.
-set(FALCON_STRUCTURE_INVENTORY "${CMAKE_CURRENT_SOURCE_DIR}/structure/bds-1.26.10.json")
+set(FALCON_STRUCTURE_INVENTORY "${CMAKE_CURRENT_SOURCE_DIR}/tools/Structure/bds-1.26.10.json")
 set(FALCON_LEGACY_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/legacy-include")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FALCON_STRUCTURE_INVENTORY}")
 
