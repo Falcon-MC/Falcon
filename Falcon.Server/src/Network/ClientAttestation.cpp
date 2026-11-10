@@ -14,11 +14,12 @@ namespace {
     const int TIMEOUT_MS = 4000;
     const size_t MAX_TRANSCRIPT = 16 * 1024;
     const size_t MAX_OFFER = 12 * 1024;
+    const size_t MAX_REQUEST = 2 * 1024;
     // a flood of connections must not grow a queue of questions
     const size_t MAX_QUESTIONS = 256;
 
     // evidence is a run of sections: what it is, three bytes of length, the bytes
-    enum class Section : unsigned char { TransportTranscript = 1, Offer = 2 };
+    enum class Section : unsigned char { TransportTranscript = 1, Offer = 2, JoinRequest = 3 };
 
     void append(std::string &evidence, Section section, const std::string &bytes) {
         evidence.push_back((char) section);
@@ -81,6 +82,36 @@ namespace {
     }
 }
 
+namespace {
+    // the join request as the client wrote it, without the Host header: its value is this server's own
+    // address
+    std::string withoutServerAddress(const std::string &request) {
+        std::string out;
+        size_t start = 0;
+        while (start < request.size()) {
+            size_t end = request.find('\n', start);
+            if (end == std::string::npos)
+                end = request.size();
+            std::string line = request.substr(start, end - start);
+            start = end + 1;
+            if (!line.empty() && line.back() == '\r')
+                line.pop_back();
+
+            // the name is kept as written: only what follows the colon goes
+            const size_t colon = line.find(':');
+            if (colon == 4 && (line[0] == 'H' || line[0] == 'h') && (line[1] == 'O' || line[1] == 'o')
+                && (line[2] == 'S' || line[2] == 's') && (line[3] == 'T' || line[3] == 't'))
+                line = line.substr(0, colon + 1) + " -";
+
+            if (out.size() + line.size() + 1 > MAX_REQUEST)
+                break;
+            out += line;
+            out.push_back('\n');
+        }
+        return out;
+    }
+}
+
 ClientAttestation &ClientAttestation::getInstance() {
     static ClientAttestation instance;
     return instance;
@@ -104,6 +135,7 @@ void ClientAttestation::inspect(const nethernet::Connection &connection) {
     std::string evidence;
     append(evidence, Section::TransportTranscript, transcript);
     append(evidence, Section::Offer, withoutPersonalData(connection.getRemoteOffer()));
+    append(evidence, Section::JoinRequest, withoutServerAddress(connection.getRemoteRequest()));
 
     {
         std::lock_guard<std::mutex> lock(mMutex);

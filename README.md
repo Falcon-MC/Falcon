@@ -76,8 +76,8 @@ out of fuel or traps is stopped.
 A Falcon server talks to one outside service, `api.falcon-mc.workers.dev`, for two things.
 
 **Client attestation**, on by default. When a client connects over NetherNet, the server sends what it
-observed of the connection being set up: the handshake of the secure session and the client's offer, without
-the player's account token and without any address. The service answers whether the client behaves as the game
+observed of the connection being set up: the handshake of the secure session, the client's offer and the headers of its join
+request, without the player's account token and without any address, the server's own included. The service answers whether the client behaves as the game
 does, and the server removes it if not. No player name or identifier is sent. If the service does not answer,
 the client stays. Set `allow-unofficial-clients=true` to turn every client check off, including this one.
 
