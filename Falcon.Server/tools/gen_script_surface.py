@@ -31,7 +31,8 @@ BOUND = {
         'ScoreboardObjective', 'TickingAreaManager', 'StartupEvent', 'ShutdownEvent', 'BlockComponentRegistry',
         'ItemComponentRegistry', 'CommandResult', 'BlockVolume', 'EntityWaypoint', 'EquipmentSlot', 'GameMode',
         'InputPermissionCategory', 'Direction', 'PlayerInventoryType', 'EntityComponentTypes',
-        'ItemComponentTypes', 'BlockComponentTypes', 'BlockEvent',
+        'ItemComponentTypes', 'BlockComponentTypes', 'BlockEvent', 'GameRules', 'SystemInfo', 'Difficulty',
+        'TimeOfDay', 'MoonPhase', 'WeatherType', 'ScriptEventSource', 'GameRule', 'MemoryTier',
     },
     'server-ui': {
         'ActionFormData', 'MessageFormData', 'ModalFormData',
@@ -39,23 +40,8 @@ BOUND = {
     'common': None,
 }
 
+# every signal of these classes is subscribable; their signal and event classes join the bound set
 SIGNAL_OWNERS = ('WorldAfterEvents', 'WorldBeforeEvents', 'SystemAfterEvents', 'SystemBeforeEvents')
-
-# signals the scripting layer fires; their signal and event classes join the bound set
-BOUND_SIGNALS = {
-    'WorldAfterEvents': {
-        'playerBreakBlock', 'playerPlaceBlock', 'playerSpawn', 'playerJoin', 'playerLeave', 'chatSend', 'entityHurt',
-        'entityDie', 'itemUse', 'projectileHitBlock', 'projectileHitEntity', 'entityHitBlock', 'entityHitEntity',
-        'entityItemDrop', 'playerHotbarSelectedSlotChange', 'playerInventoryItemChange', 'playerInteractWithBlock',
-        'entitySpawn', 'entityRemove', 'entityLoad', 'worldLoad', 'worldInitialize',
-    },
-    'WorldBeforeEvents': {
-        'playerBreakBlock', 'chatSend', 'playerInteractWithBlock', 'entityHurt', 'effectAdd',
-        'playerInteractWithEntity', 'itemUse', 'itemUseOn', 'worldInitialize',
-    },
-    'SystemAfterEvents': set(),
-    'SystemBeforeEvents': {'startup', 'shutdown'},
-}
 
 
 def version_key(text):
@@ -161,8 +147,6 @@ def main():
             if owner not in classes:
                 continue
             for member, (_, _, _, signature) in classes[owner][1].items():
-                if member not in BOUND_SIGNALS[owner]:
-                    continue
                 signal = signature.strip().rstrip(';').split('.')[-1]
                 bound_events.add(signal)
                 subscribe = classes.get(signal, (None, {}))[1].get('subscribe')
@@ -191,7 +175,7 @@ def main():
                         # the newest declaration wins: versions arrive in ascending order
                         item.early = early
                         item.blocked = blocked
-                        if name in SIGNAL_OWNERS and member in BOUND_SIGNALS[name]:
+                        if name in SIGNAL_OWNERS:
                             signal = signature.strip().rstrip(';').split('.')[-1]
                             signals['%s.%s' % (name, member)] = signal
                 if kind == 'enum':

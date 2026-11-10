@@ -50,6 +50,18 @@ namespace {
         return std::vector<std::string>();
     }
 
+    // 1.x names the game modes in lowercase, 2.0 capitalised
+    const char *const GAME_MODES_1[] = {"survival", "creative", "adventure", "spectator"};
+    const char *const GAME_MODES_2[] = {"Survival", "Creative", "Adventure", "Spectator"};
+
+    const char *gameModeName(const EntityTarget &target) {
+        const char *const *names = target.mApi->isStable1() ? GAME_MODES_1 : GAME_MODES_2;
+        const int32_t mode = target.mPlayer->getGameType();
+        // GameType::Spectator is 6 on the wire
+        const int32_t index = mode == 6 ? 3 : mode;
+        return index >= 0 && index <= 3 ? names[index] : names[0];
+    }
+
     bool matchesQuery(JSContext *ctx, const EntityTarget &target, JSValueConst options) {
         if (!JS_IsObject(options))
             return true;
@@ -107,7 +119,31 @@ namespace {
             if (missing)
                 return false;
         }
-        return true;
+
+        const std::string name = target.mActor->getName();
+        JSValue nameValue = JS_GetPropertyStr(ctx, options, "name");
+        const bool nameMismatch = JS_IsString(nameValue) && toString(ctx, nameValue) != name;
+        JS_FreeValue(ctx, nameValue);
+        JSValue excludeNames = JS_GetPropertyStr(ctx, options, "excludeNames");
+        const bool nameExcluded = arrayContainsString(ctx, excludeNames, name);
+        JS_FreeValue(ctx, excludeNames);
+        if (nameMismatch || nameExcluded)
+            return false;
+
+        JSValue gameMode = JS_GetPropertyStr(ctx, options, "gameMode");
+        JSValue excludeGameModes = JS_GetPropertyStr(ctx, options, "excludeGameModes");
+        bool gameModeMismatch = false;
+        // only players have a game mode: any game mode filter leaves other entities out
+        if (target.mPlayer == nullptr) {
+            gameModeMismatch = JS_IsString(gameMode);
+        } else {
+            const std::string mode = gameModeName(target);
+            gameModeMismatch = (JS_IsString(gameMode) && toString(ctx, gameMode) != mode)
+                               || arrayContainsString(ctx, excludeGameModes, mode);
+        }
+        JS_FreeValue(ctx, gameMode);
+        JS_FreeValue(ctx, excludeGameModes);
+        return !gameModeMismatch;
     }
 
     JSValue entityGetTypeId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -636,17 +672,8 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // 1.x names the game modes in lowercase, 2.0 capitalised
-    const char *const GAME_MODES_1[] = {"survival", "creative", "adventure", "spectator"};
-    const char *const GAME_MODES_2[] = {"Survival", "Creative", "Adventure", "Spectator"};
-
     JSValue playerGetGameMode(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const EntityTarget target = entityOf(ctx, thisVal);
-        const char *const *names = target.mApi->isStable1() ? GAME_MODES_1 : GAME_MODES_2;
-        const int32_t mode = target.mPlayer->getGameType();
-        // GameType::Spectator is 6 on the wire
-        const int32_t index = mode == 6 ? 3 : mode;
-        return JS_NewString(ctx, index >= 0 && index <= 3 ? names[index] : names[0]);
+        return JS_NewString(ctx, gameModeName(entityOf(ctx, thisVal)));
     }
 
     JSValue playerSetGameMode(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {

@@ -622,6 +622,12 @@ public:
 
     void setDifficulty(const std::string &difficulty);
 
+    // saves it and sends it to every spawned player
+    void changeDifficulty(Difficulty difficulty);
+
+    // overworld levels only; saves level.dat and sends it to every spawned player
+    void changeWorldSpawn(Level &level, const Vector3i &spawn);
+
     ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
                         int pickupDelay);
 

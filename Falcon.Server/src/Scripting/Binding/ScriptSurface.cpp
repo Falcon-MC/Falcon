@@ -98,6 +98,16 @@ const ScriptSignalEntry *ScriptSurface::findSignal(const std::string &property) 
     return nullptr;
 }
 
+std::vector<const ScriptSignalEntry *> ScriptSurface::signalsOf(const std::string &owner) {
+    std::vector<const ScriptSignalEntry *> signals;
+    const std::string prefix = owner + ".";
+    for (const ScriptSignalEntry &entry: SCRIPT_SIGNALS) {
+        if (std::strncmp(entry.mProperty, prefix.c_str(), prefix.size()) == 0)
+            signals.push_back(&entry);
+    }
+    return signals;
+}
+
 const char *ScriptSurface::findParent(const std::string &className) {
     for (const ScriptParentEntry &entry: SCRIPT_PARENTS) {
         if (className == entry.mClass)

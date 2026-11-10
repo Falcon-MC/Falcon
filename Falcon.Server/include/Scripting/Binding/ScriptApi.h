@@ -3,6 +3,7 @@
 #include "Core/Math/Vector3i.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "Protocol/Types/ItemStack.h"
+#include "Scripting/BehaviorPackManager.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
 #include "Scripting/Binding/ScriptNatives.h"
 #include "Scripting/Binding/ScriptSurface.h"
@@ -30,6 +31,8 @@ enum class ScriptPrivilege { Normal, Early, Restricted };
 // one behavior pack's scripts: its own context, module versions and official surface
 class ScriptApi {
 public:
+    static constexpr const char *SCRIPT_EVENT_KEY = "system.after.scriptEventReceive";
+
     // players share handles across packs: projectile owners store them
     ScriptApi(JSContext *context, ServerNetworkHandler &host, PlayerHandleRegistry &players, JSClassID nativeClassId,
               std::string packName, std::string packRoot, ScriptModuleSet modules);
@@ -70,6 +73,10 @@ public:
         return mModules;
     }
 
+    const ScriptSurface &surface() const {
+        return mSurface;
+    }
+
     bool isStable1() const {
         return mTrack == ScriptApiTrack::Stable1;
     }
@@ -93,7 +100,8 @@ public:
     // an event object of the class the signal fires
     JSValue makeEvent(const std::string &signalKey);
 
-    JSValue throwError(const std::string &errorClass, const std::string &message);
+    // fields: extra properties of the error object, taken
+    JSValue throwError(const std::string &errorClass, const std::string &message, JSValue fields = JS_UNDEFINED);
 
     JSValue throwInvalidEntity(const char *action, const std::string &member, const ScriptEntityRef &entity);
 
@@ -147,6 +155,9 @@ public:
 
     bool hasSubscribers(const std::string &key) const;
 
+    // the namespaces option of scriptEventReceive.subscribe; the callback must already be subscribed
+    void filterScriptEvents(JSValueConst callback, std::vector<std::string> namespaces);
+
     // before events run restricted, startup early; true when a subscriber set cancel
     bool emit(const std::string &key, JSValue eventObject);
 
@@ -159,6 +170,18 @@ public:
     void startup();
 
     void shutdown();
+
+
+    // EntityQueryOptions over spawned players and, unless playersOnly, live actors; null level: every dimension
+    JSValue queryEntities(JSValueConst options, const Level *level, bool playersOnly);
+
+    void setPackSettings(std::vector<PackSetting> settings) {
+        mPackSettings = std::move(settings);
+    }
+
+    const std::vector<PackSetting> &packSettings() const {
+        return mPackSettings;
+    }
 
     void forgetEntity(int64_t uniqueId);
 
@@ -187,6 +210,14 @@ public:
 
     JSValue moduleTickingAreas() const {
         return mTickingAreas;
+    }
+
+    JSValue gameRules() const {
+        return mGameRules;
+    }
+
+    JSValue serverSystemInfo() const {
+        return mSystemInfo;
     }
 
     JSValue worldAfterEvents() const {
@@ -237,7 +268,8 @@ public:
     bool property(JSValueConst target, const char *cls, const char *name, JSCFunction *getter,
                   JSCFunction *setter = nullptr);
 
-    bool propertyMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *getter, int magic);
+    bool propertyMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *getter, int magic,
+                       JSCFunctionMagic *setter = nullptr);
 
     // constructor and prototype of an official class; constructors throw unless a native constructor is given
     JSValue defineClass(const std::string &name, JSCFunction *constructor = nullptr, int length = 0);
@@ -295,6 +327,8 @@ private:
 
     JSValue _makeSignalHolder(const char *className, const char *signalOwner, const char *keyPrefix);
 
+    bool _acceptsScriptEvent(JSValueConst callback, const std::string &eventNamespace) const;
+
     JSContext *mContext;
     ServerNetworkHandler &mHost;
     JSClassID mNativeClassId;
@@ -337,11 +371,15 @@ private:
     JSValue mSystemBeforeEvents = JS_UNDEFINED;
     JSValue mScoreboard = JS_UNDEFINED;
     JSValue mTickingAreas = JS_UNDEFINED;
+    JSValue mGameRules = JS_UNDEFINED;
+    JSValue mSystemInfo = JS_UNDEFINED;
+    std::vector<PackSetting> mPackSettings;
     JSValue mErrors = JS_UNDEFINED;
     JSValue mBlockRegistry = JS_UNDEFINED;
     JSValue mItemRegistry = JS_UNDEFINED;
 
     std::unordered_map<std::string, std::vector<JSValue>> mSubscribers;
+    std::unordered_map<void *, std::vector<std::string>> mScriptEventNamespaces;
     std::unordered_map<std::string, JSValue> mBlockComponents;
     std::unordered_map<std::string, JSValue> mItemComponents;
     bool mRegistrationOpen = false;

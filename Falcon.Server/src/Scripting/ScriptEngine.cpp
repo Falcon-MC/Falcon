@@ -15,6 +15,7 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -312,6 +313,7 @@ bool ScriptEngine::_loadPack(const BehaviorPack &pack) {
 
     std::unique_ptr<ScriptApi> api(
             new ScriptApi(context, *mHost, mPlayers, mNativeClassId, pack.mName, canonicalPath(pack.mPath), modules));
+    api->setPackSettings(pack.mSettings);
     _arm();
     api->install();
 
@@ -583,7 +585,104 @@ bool ScriptEngine::beforeItemUse(ServerPlayer &player) {
     });
 }
 
+void ScriptEngine::onGameRuleChange(const std::string &rule, bool isBool, bool boolValue, int32_t intValue) {
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("after.gameRuleChange"))
+            continue;
+
+        std::string official;
+        for (const auto &value: api->surface().enumValues("GameRule")) {
+            std::string lower = value.second;
+            std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+            if (lower == rule)
+                official = value.second;
+        }
+        if (official.empty())
+            continue;
+
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldAfterEvents.gameRuleChange");
+        JS_SetPropertyStr(ctx, event, "rule", string(ctx, official));
+        JS_SetPropertyStr(ctx, event, "value", isBool ? JS_NewBool(ctx, boolValue) : JS_NewInt32(ctx, intValue));
+        api->emit("after.gameRuleChange", event);
+        _pumpJobs();
+    }
+}
+
+bool ScriptEngine::beforeWeatherChange(const std::string &previousWeather, std::string &newWeather, int32_t &duration) {
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("before.weatherChange"))
+            continue;
+
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldBeforeEvents.weatherChange");
+        JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
+        JS_SetPropertyStr(ctx, event, "duration", JS_NewInt32(ctx, duration));
+        JS_SetPropertyStr(ctx, event, "newWeather", string(ctx, newWeather));
+        JS_SetPropertyStr(ctx, event, "previousWeather", string(ctx, previousWeather));
+
+        // emit frees the event: keep it to read back what the subscribers changed
+        JS_DupValue(ctx, event);
+        cancelled = api->emit("before.weatherChange", event) || cancelled;
+
+        JSValue weatherValue = JS_GetPropertyStr(ctx, event, "newWeather");
+        const std::string weather = toString(ctx, weatherValue);
+        JS_FreeValue(ctx, weatherValue);
+        if (weather == "Clear" || weather == "Rain" || weather == "Thunder")
+            newWeather = weather;
+
+        JSValue durationValue = JS_GetPropertyStr(ctx, event, "duration");
+        double ticks = 0;
+        if (JS_ToFloat64(ctx, &ticks, durationValue) == 0 && std::isfinite(ticks) && ticks >= 1 && ticks <= INT32_MAX)
+            duration = (int32_t) ticks;
+        JS_FreeValue(ctx, durationValue);
+        JS_FreeValue(ctx, event);
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+void ScriptEngine::onWeatherChange(const std::string &dimension, const std::string &previousWeather,
+                                   const std::string &newWeather) {
+    _emit("after.weatherChange", "WorldAfterEvents.weatherChange", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "dimension", string(ctx, dimension));
+        JS_SetPropertyStr(ctx, event, "newWeather", string(ctx, newWeather));
+        JS_SetPropertyStr(ctx, event, "previousWeather", string(ctx, previousWeather));
+    });
+}
+
+void ScriptEngine::emitScriptEvent(const std::string &id, const std::string &message, const ScriptEventOrigin &origin) {
+    _emit(ScriptApi::SCRIPT_EVENT_KEY, "SystemAfterEvents.scriptEventReceive", false,
+          [&](ScriptApi &api, JSValue event) {
+              JSContext *ctx = api.context();
+              JS_SetPropertyStr(ctx, event, "id", string(ctx, id));
+              JS_SetPropertyStr(ctx, event, "message", string(ctx, message));
+              JS_SetPropertyStr(ctx, event, "sourceType", string(ctx, origin.mSourceType));
+              if (origin.mSourceEntity != nullptr)
+                  JS_SetPropertyStr(ctx, event, "sourceEntity", api.makeEntity(*origin.mSourceEntity));
+              if (origin.mInitiator != nullptr)
+                  JS_SetPropertyStr(ctx, event, "initiator", api.makeEntity(*origin.mInitiator));
+              if (origin.mBlockLevel != nullptr)
+                  JS_SetPropertyStr(ctx, event, "sourceBlock",
+                                    api.makeBlock(*origin.mBlockLevel, origin.mBlockPosition.x, origin.mBlockPosition.y,
+                                                  origin.mBlockPosition.z));
+          });
+}
+
+void ScriptEngine::queueScriptEvent(const std::string &id, const std::string &message) {
+    mQueuedScriptEvents.emplace_back(id, message);
+}
+
 void ScriptEngine::tick(int64_t currentTick) {
+    std::vector<std::pair<std::string, std::string>> queued;
+    queued.swap(mQueuedScriptEvents);
+    for (const auto &event: queued)
+        emitScriptEvent(event.first, event.second);
+
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();
         api->tick(currentTick);

@@ -5,6 +5,17 @@
 #include <string>
 #include <vector>
 
+// a manifest setting at its default: the server has no settings screen to change it
+struct PackSetting {
+    enum class Type { Boolean, Number, String };
+
+    std::string mName;
+    Type mType = Type::Boolean;
+    bool mBoolean = false;
+    double mNumber = 0.0;
+    std::string mString;
+};
+
 struct BehaviorPack {
     std::string mName;
     std::string mUuid;
@@ -13,6 +24,7 @@ struct BehaviorPack {
     std::string mScriptModuleUuid;
     std::vector<ScriptModuleDependency> mScriptModules;
     std::vector<std::string> mDependencyUuids;
+    std::vector<PackSetting> mSettings;
 
     bool hasScript() const {
         return !mScriptEntry.empty();

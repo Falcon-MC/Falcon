@@ -7,9 +7,11 @@
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Scripting/ScriptEngine.h"
 
 #include <cmath>
 #include <random>
+#include <string>
 
 namespace {
     const int32_t WEATHER_MIN_DURATION = 12000;
@@ -44,6 +46,33 @@ namespace {
         plugins->dispatch(event);
         return !event.mCancelled;
     }
+
+    const char *weatherName(bool raining, bool thundering) {
+        if (!raining)
+            return "Clear";
+        return thundering ? "Thunder" : "Rain";
+    }
+
+    // false when a script cancelled; otherwise raining, thundering and duration hold what scripts chose
+    bool scriptsAllowWeather(ScriptEngine &scripts, const Level &level, bool &raining, bool &thundering,
+                             int32_t &duration) {
+        const std::string previous = weatherName(level.isRaining(), level.isThundering());
+        std::string next = weatherName(raining, thundering);
+        if (next == previous)
+            return true;
+
+        if (scripts.beforeWeatherChange(previous, next, duration))
+            return false;
+        raining = next != "Clear";
+        thundering = next == "Thunder";
+        return true;
+    }
+
+    void notifyWeather(ScriptEngine &scripts, const Level &level, const std::string &previous) {
+        const std::string current = weatherName(level.isRaining(), level.isThundering());
+        if (current != previous)
+            scripts.onWeatherChange("minecraft:overworld", previous, current);
+    }
 }
 
 void ServerNetworkHandler::sendWeatherTo(ServerPlayer &player) {
@@ -74,13 +103,25 @@ void ServerNetworkHandler::setRaining(World &world, bool raining) {
     if (raining != level.isRaining() && !allowsWeatherChange(level, FALCON_EVENT_WEATHER_CHANGE, raining))
         raining = level.isRaining();
 
+    const std::string previous = weatherName(level.isRaining(), level.isThundering());
+    bool thundering = level.isThundering();
+    int32_t duration = raining ? randomBetween(WEATHER_MIN_DURATION, RAIN_SPAN)
+                               : randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN);
+    if (!scriptsAllowWeather(mScriptEngine, level, raining, thundering, duration)) {
+        raining = level.isRaining();
+        thundering = level.isThundering();
+        duration = raining ? randomBetween(WEATHER_MIN_DURATION, RAIN_SPAN)
+                           : randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN);
+    }
+
     level.setRainingState(raining);
+    level.setRainTime(duration);
+    if (thundering != level.isThundering()) {
+        level.setThunderingState(thundering);
+        level.setThunderTime(duration);
+    }
 
-    if (raining)
-        level.setRainTime(randomBetween(WEATHER_MIN_DURATION, RAIN_SPAN));
-    else
-        level.setRainTime(randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN));
-
+    notifyWeather(mScriptEngine, level, previous);
     broadcastWeather(world);
 }
 
@@ -94,13 +135,25 @@ void ServerNetworkHandler::setThundering(World &world, bool thundering) {
     if (thundering && !level.isRaining())
         thundering = false;
 
+    const std::string previous = weatherName(level.isRaining(), level.isThundering());
+    bool raining = level.isRaining();
+    int32_t duration = thundering ? randomBetween(THUNDER_MIN_DURATION, THUNDER_SPAN)
+                                  : randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN);
+    if (!scriptsAllowWeather(mScriptEngine, level, raining, thundering, duration)) {
+        raining = level.isRaining();
+        thundering = level.isThundering();
+        duration = thundering ? randomBetween(THUNDER_MIN_DURATION, THUNDER_SPAN)
+                              : randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN);
+    }
+
+    if (raining != level.isRaining()) {
+        level.setRainingState(raining);
+        level.setRainTime(duration);
+    }
     level.setThunderingState(thundering);
+    level.setThunderTime(duration);
 
-    if (thundering)
-        level.setThunderTime(randomBetween(THUNDER_MIN_DURATION, THUNDER_SPAN));
-    else
-        level.setThunderTime(randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN));
-
+    notifyWeather(mScriptEngine, level, previous);
     broadcastWeather(world);
 }
 
