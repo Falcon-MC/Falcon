@@ -15,13 +15,20 @@ public:
 
     bool saveData(const std::string &name, const Tag &data) const;
 
-    // sets a file aside under another suffix, so the name can be saved again without losing it
-    bool archiveData(const std::string &name, const std::string &suffix) const;
+    // xuid a save was written for, kept inside it
+    static constexpr const char *TAG_OWNER_XUID = "FalconOwnerXuid";
+
+    // makes the save under this name the one of this account: another account's is set aside under its
+    // own xuid and this account's earlier one brought back. false when that could not be done, and
+    // nothing may then be saved under the name
+    bool claimData(const std::string &name, const std::string &xuid) const;
 
     // no path separators, no traversal; every name used as a file goes through it
     static bool isSafeName(const std::string &name);
 
 private:
+    std::string _getArchivePath(const std::string &name, const std::string &xuid) const;
+
 
     std::string _getPlayerDataPath(const std::string &name) const;
 

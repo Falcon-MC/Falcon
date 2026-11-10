@@ -31,7 +31,6 @@ namespace {
         }
 
         OpList ops(path);
-        require(ops.isOp("steve"), "a listed name is not an operator");
         require(ops.isOp("Steve", "1001"), "the first account under an operator name was refused");
 
         ops.bindXuid("Steve", "1001");
@@ -47,6 +46,10 @@ namespace {
                 "the recorded account did not survive a reload");
         require(reloaded.getNames().size() == 1 && reloaded.getNames()[0] == "steve",
                 "the account leaked into the operator names");
+
+        reloaded.addOp("Steve", "2002");
+        require(reloaded.isOp("Steve", "2002") && !reloaded.isOp("Steve", "1001"),
+                "an explicit grant did not move the rank to the new account");
     }
 
     void bansFollowTheAccount(const std::filesystem::path &directory) {
@@ -87,9 +90,28 @@ namespace {
         require(provider.loadData("alex smith", loaded) && loaded.getInt("Marker") == 7,
                 "an ordinary name did not load back");
 
-        require(provider.archiveData("Alex Smith", "4004"), "a save could not be set aside");
-        require(!provider.hasData("Alex Smith") && std::filesystem::exists(players / "alex smith.4004.dat"),
-                "the archived save is not where it should be");
+        // a gamertag changing hands twice: each account finds its own save again
+        Tag first = Tag::ofCompound();
+        first.putString(PlayerDataProvider::TAG_OWNER_XUID, "4004");
+        first.putInt("Marker", 1);
+        require(provider.saveData("Shared", first), "the first account could not save");
+
+        require(provider.claimData("Shared", "4004") && provider.hasData("Shared"),
+                "an account was parted from its own save");
+        require(provider.claimData("Shared", "5005") && !provider.hasData("Shared"),
+                "another account was handed a save that is not its own");
+
+        Tag second = Tag::ofCompound();
+        second.putString(PlayerDataProvider::TAG_OWNER_XUID, "5005");
+        second.putInt("Marker", 2);
+        require(provider.saveData("Shared", second), "the second account could not save");
+
+        require(provider.claimData("Shared", "4004") && provider.loadData("Shared", loaded)
+                && loaded.getInt("Marker") == 1, "the first account did not get its save back");
+        require(provider.claimData("Shared", "5005") && provider.loadData("Shared", loaded)
+                && loaded.getInt("Marker") == 2, "the second account did not get its save back");
+        require(provider.claimData("Shared", "4004") && provider.loadData("Shared", loaded)
+                && loaded.getInt("Marker") == 1, "a save was lost on the third change of hands");
     }
 }
 

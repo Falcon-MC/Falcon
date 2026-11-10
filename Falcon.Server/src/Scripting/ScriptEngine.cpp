@@ -1,5 +1,7 @@
 #include "Scripting/ScriptEngine.h"
 
+#include <algorithm>
+
 #include "World/Actor/MobEffect.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Misc/ItemActor.h"
@@ -156,9 +158,11 @@ namespace {
             return nullptr;
         }
 
-        // canonical first: a prefix test on "<root>/../.." would pass
-        const std::string canonical = canonicalPath(name);
-        if (canonical != name) {
+        // canonical first: a prefix test on "<root>/../.." would pass. windows walks up through either
+        // separator, so both count
+        std::string slashed = name;
+        std::replace(slashed.begin(), slashed.end(), '\\', '/');
+        if (canonicalPath(slashed) != slashed) {
             JS_ThrowReferenceError(ctx, "could not load module '%s'", moduleName);
             return nullptr;
         }

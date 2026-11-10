@@ -9,8 +9,6 @@ class OpList {
 public:
     explicit OpList(const std::string &path);
 
-    bool isOp(const std::string &name) const;
-
     // a name whose xuid is on record belongs to that account only; an unsigned login has none to compare
     bool isOp(const std::string &name, const std::string &xuid) const;
 
@@ -19,7 +17,8 @@ public:
 
     std::vector<std::string> getNames() const;
 
-    void addOp(const std::string &name);
+    // an explicit grant goes to whoever holds the name now: the account on record is replaced
+    void addOp(const std::string &name, const std::string &xuid = std::string());
 
     void removeOp(const std::string &name);
 

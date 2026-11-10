@@ -32,14 +32,10 @@ namespace {
     }
 }
 
-namespace {
-    const char *TAG_OWNER_XUID = "FalconOwnerXuid";
-}
-
 void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player, bool checked) {
     Tag data = player.saveNbt(getWorldFor(player).getName());
     if (!player.getXuid().empty())
-        data.putString(TAG_OWNER_XUID, player.getXuid());
+        data.putString(PlayerDataProvider::TAG_OWNER_XUID, player.getXuid());
 
     if (mPlayerData.saveData(player.getName(), data))
         LOG_INFO(LogAreaID::Server, "Saved player data for %s", player.getName().c_str());
@@ -61,16 +57,6 @@ void ServerNetworkHandler::_loadPlayerData(ServerPlayer &player) {
 
     Tag data;
     if (!mPlayerData.loadData(player.getName(), data)) {
-        player.resetFallDistance();
-        return;
-    }
-
-    // a gamertag can change hands: the save of another account is set aside, not handed over
-    const std::string owner = data.getString(TAG_OWNER_XUID, std::string());
-    if (!owner.empty() && !player.getXuid().empty() && owner != player.getXuid()) {
-        LOG_WARN(LogAreaID::Server, "Player data for %s belongs to another account, starting fresh",
-                 player.getName().c_str());
-        mPlayerData.archiveData(player.getName(), owner);
         player.resetFallDistance();
         return;
     }

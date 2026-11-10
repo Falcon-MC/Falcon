@@ -1,5 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 
+#include "Core/Text/StringUtil.h"
+
 #include "World/Actor/Movement/PlayerMovementRegistry.h"
 
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -342,43 +344,25 @@ namespace {
         int mDepth = 0;
     };
 
-    // client text for a log line: one line, no control bytes (a terminal obeys escape sequences), bounded
-    std::string logSafe(const std::string &text, size_t maximum = 256) {
-        std::string out = text.substr(0, maximum);
-        for (char &character: out) {
-            const unsigned char byte = (unsigned char) character;
-            if (byte < 0x20 || byte == 0x7f)
-                character = '?';
-        }
-        if (text.size() > maximum)
-            out += "...";
-        return out;
-    }
-
     // width * height * 4 bytes, or no image at all
-    bool isValidSkinImage(const SkinImageData &image, int32_t maximumSide) {
+    bool isValidSkinImage(const SkinImageData &image) {
         if (image.mWidth == 0 && image.mHeight == 0)
             return image.mData.empty();
-        if (image.mWidth <= 0 || image.mHeight <= 0 || image.mWidth > maximumSide || image.mHeight > maximumSide)
+        if (image.mWidth <= 0 || image.mHeight <= 0)
             return false;
         return image.mData.size() == (size_t) image.mWidth * (size_t) image.mHeight * 4;
     }
 
-    // everything but the skin image is relayed to every player too: bounded the same way
+    // the cape and the animations are relayed to every player like the skin: each image must be the
+    // size its header announces, which the packet itself then bounds
     bool isValidSkinExtras(const SerializedSkin &skin) {
-        static const size_t MAX_ANIMATIONS = 16;
-        static const size_t MAX_PERSONA_PIECES = 128;
-        static const size_t MAX_SKIN_JSON = 512 * 1024;
-
-        if (!isValidSkinImage(skin.mCapeData, 512) || skin.mAnimations.size() > MAX_ANIMATIONS
-            || skin.mPersonaPieces.size() > MAX_PERSONA_PIECES || skin.mTintColors.size() > MAX_PERSONA_PIECES)
+        if (!isValidSkinImage(skin.mCapeData))
             return false;
         for (const SkinAnimationData &animation: skin.mAnimations) {
-            if (!isValidSkinImage(animation.mImage, 512))
+            if (!isValidSkinImage(animation.mImage))
                 return false;
         }
-        return skin.mGeometryData.size() <= MAX_SKIN_JSON && skin.mSkinResourcePatch.size() <= MAX_SKIN_JSON
-               && skin.mAnimationData.size() <= MAX_SKIN_JSON;
+        return true;
     }
 
     bool isValidSkin(const SerializedSkin &skin) {
@@ -409,15 +393,13 @@ void ServerNetworkHandler::boundSkin(SerializedSkin &skin) {
     if (isValidSkinExtras(skin))
         return;
 
-    // a login is not refused over its cosmetics: what is out of bounds is dropped
-    skin.mCapeData = SkinImageData();
-    skin.mAnimations.clear();
-    skin.mPersonaPieces.clear();
-    skin.mTintColors.clear();
-    skin.mGeometryData.clear();
-    skin.mAnimationData.clear();
-    skin.mSkinResourcePatch.clear();
-    normalizeSkin(skin);
+    // a login is not refused over its cosmetics: an image that lies about its size is dropped
+    if (!isValidSkinImage(skin.mCapeData))
+        skin.mCapeData = SkinImageData();
+    skin.mAnimations.erase(std::remove_if(skin.mAnimations.begin(), skin.mAnimations.end(),
+                                          [](const SkinAnimationData &animation) {
+                                              return !isValidSkinImage(animation.mImage);
+                                          }), skin.mAnimations.end());
 }
 
 ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
@@ -1289,6 +1271,7 @@ bool ServerNetworkHandler::_allowPacket(const NetworkIdentifier &id, RateLimited
         rates[(size_t) RateLimitedPacket::Chat] = mProperties.getMaxChatMessagesPerSecond();
         rates[(size_t) RateLimitedPacket::FormResponse] = mProperties.getMaxFormResponsesPerSecond();
         rates[(size_t) RateLimitedPacket::Movement] = mProperties.getMaxMovementPacketsPerSecond();
+        rates[(size_t) RateLimitedPacket::ViolationWarning] = 1;
         limiter = mRateLimiters.emplace(id, PacketRateLimiter(rates)).first;
     }
 
@@ -2452,15 +2435,15 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ContainerCl
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PacketViolationWarningPacket &packet) {
-    // accepted at every login step: before a login it is anyone's free line in the log
-    const ServerPlayer *player = _getPlayer(id);
-    if (player == nullptr || player->getLoginState() < ServerPlayer::LoginState::LoggedIn)
+    // accepted at every login step, a failed encryption handshake reports through it: one a second,
+    // or before a login it is anyone's free line in the log
+    if (!_allowPacket(id, RateLimitedPacket::ViolationWarning))
         return;
 
     const char *causeName = toString((MinecraftPacketIds) packet.mPacketCauseId);
     LOG_ERROR(LogAreaID::Network, "CLIENT REJECTED PACKET id=%d (%s), type=%d, severity=%d, context: %s",
               packet.mPacketCauseId, causeName, (int) packet.mType, (int) packet.mSeverity,
-              logSafe(packet.mContext).c_str());
+              StringUtil::printable(packet.mContext).c_str());
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequestPacket &packet) {
@@ -2470,7 +2453,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequ
 
     player->markActive(mCurrentTick);
     LOG_INFO(LogAreaID::Server, "%s issued command: %s", player->getName().c_str(),
-             logSafe(packet.mCommand, 512).c_str());
+             StringUtil::printable(packet.mCommand, 512).c_str());
 
     std::string commandLine = packet.mCommand;
     PluginEvent commandEvent;

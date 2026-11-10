@@ -240,6 +240,21 @@ void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, con
     player.setLoginState(ServerPlayer::LoginState::NetworkSettingsSent);
 }
 
+namespace {
+    // empty, or hex digits and dashes: 36 characters at most
+    bool isUuidShaped(const std::string &uuid) {
+        if (uuid.size() > 36)
+            return false;
+        for (const char character: uuid) {
+            const bool hex = (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')
+                             || (character >= 'A' && character <= 'F');
+            if (!hex && character != '-')
+                return false;
+        }
+        return true;
+    }
+}
+
 void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                const LoginPacket &packet) {
     if (player.getCodec() == nullptr || packet.mProtocolVersion != player.getCodec()->getProtocolVersion()) {
@@ -300,6 +315,14 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
+    // an unsigned login picks its own uuid, and it ends up in the log and the player list
+    if (!isUuidShaped(player.getUuid())) {
+        LOG_WARN(LogAreaID::Network, "%s logged in with a malformed uuid", id.getAddress().c_str());
+        owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.notAuthenticated");
+        owner.erasePlayer(id);
+        return;
+    }
+
     owner.getBanList().bindXuid(player.getName(), player.getXuid());
     const BanEntry *ban = owner.getBanList().find(player.getName(), player.getXuid());
     if (ban == nullptr)
@@ -344,6 +367,15 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
             owner.erasePlayer(id);
             return;
         }
+    }
+
+    // a gamertag can change hands: the save under it must be this account's before it is read or written
+    if (!owner.getPlayerDataProvider().claimData(player.getName(), player.getXuid())) {
+        LOG_ERROR(LogAreaID::Server, "Could not set aside the save another account left under the name %s",
+                  player.getName().c_str());
+        owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.internalError.cantConnect");
+        owner.erasePlayer(id);
+        return;
     }
 
     SerializedSkin skin = request.getSkin();

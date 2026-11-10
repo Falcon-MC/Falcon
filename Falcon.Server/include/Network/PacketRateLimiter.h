@@ -11,6 +11,7 @@ enum class RateLimitedPacket : uint8_t {
     Chat,
     FormResponse,
     Movement,
+    ViolationWarning,
     Count
 };
 

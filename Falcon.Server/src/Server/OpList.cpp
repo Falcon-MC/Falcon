@@ -30,10 +30,6 @@ void OpList::reload() {
     }
 }
 
-bool OpList::isOp(const std::string &name) const {
-    return mNames.find(StringUtil::toLowerCase(name)) != mNames.end();
-}
-
 bool OpList::isOp(const std::string &name, const std::string &xuid) const {
     const auto found = mNames.find(StringUtil::toLowerCase(name));
     if (found == mNames.end())
@@ -65,9 +61,14 @@ std::vector<std::string> OpList::getNames() const {
     return names;
 }
 
-void OpList::addOp(const std::string &name) {
-    if (mNames.emplace(StringUtil::toLowerCase(name), std::string()).second)
-        _save();
+void OpList::addOp(const std::string &name, const std::string &xuid) {
+    const std::string lowered = StringUtil::toLowerCase(name);
+    const auto found = mNames.find(lowered);
+    if (found != mNames.end() && found->second == xuid)
+        return;
+
+    mNames[lowered] = xuid;
+    _save();
 }
 
 void OpList::removeOp(const std::string &name) {

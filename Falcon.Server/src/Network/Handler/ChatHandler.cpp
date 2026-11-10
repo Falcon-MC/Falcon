@@ -1,6 +1,7 @@
 #include "Network/Handler/ChatHandler.h"
 
 #include "Core/Debug/BedrockLog.h"
+#include "Core/Text/StringUtil.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
@@ -14,14 +15,8 @@ void ChatHandler::broadcastChat(ServerNetworkHandler &owner, ServerPlayer &playe
 
     const std::string &finalMessage = before.mMessage;
 
-    // the log is read in a terminal: no escape sequence from a chat line gets there
-    std::string logged = finalMessage;
-    for (char &character: logged) {
-        const unsigned char byte = (unsigned char) character;
-        if (byte < 0x20 || byte == 0x7f)
-            character = '?';
-    }
-    LOG_INFO(LogAreaID::Server, "<%s> %s", player.getName().c_str(), logged.c_str());
+    LOG_INFO(LogAreaID::Server, "<%s> %s", player.getName().c_str(),
+             StringUtil::printable(finalMessage, 512).c_str());
 
     TextPacket chat;
     chat.mType = TextPacket::Type::Chat;
