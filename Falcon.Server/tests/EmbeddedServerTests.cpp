@@ -57,8 +57,12 @@ int main() {
         require(ServerPaths::getRoot() == originalRoot, "Failed start changed root");
 
         config.dataDirectory = directory / "new-directory";
-        config.properties = {
-                {"view-distance", "5"}, {"tick-distance", "4"}, {"level-seed", "1"}, {"auto-compaction-interval", "0"}};
+        // the client dialled below is the server's own, not the game
+        config.properties = {{"view-distance", "5"},
+                             {"tick-distance", "4"},
+                             {"level-seed", "1"},
+                             {"auto-compaction-interval", "0"},
+                             {"allow-unofficial-clients", "true"}};
         config.log = [&logCalls](LogLevel, const std::string &) {
             logCalls.fetch_add(1);
             throw std::runtime_error("Host logger failure");
