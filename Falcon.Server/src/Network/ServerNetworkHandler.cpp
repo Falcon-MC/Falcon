@@ -25,6 +25,7 @@
 #include "Network/ConnectionRequest.h"
 #include "Network/AuthKeyProvider.h"
 #include "Network/TransportFactory.h"
+#include "Network/ClientAttestation.h"
 #include "Network/NetherNet/NetherNetInstance.h"
 #include "Network/Handler/BadPacketHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -538,6 +539,9 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
 
     if (mNetherNetInstance != nullptr) {
         mNetherNetInstance->setUnofficialClientsAllowed(mProperties.getAllowUnofficialClients());
+        mNetherNetInstance->setConnectionInspector([](const std::string &fingerprint) {
+            return ClientAttestation::getInstance().inspectTransport(fingerprint);
+        });
         mNetherNetInstance->setServerDataProvider([this]() {
             nethernet::ServerData data;
             data.mServerName = mProperties.getServerName();

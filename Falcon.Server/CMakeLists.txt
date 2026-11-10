@@ -199,6 +199,34 @@ else()
     target_link_libraries(FalconCore PUBLIC ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto)
 endif()
 
+# the transport library keeps its secure contexts to itself: it is built to pass them through this
+# small library, which keeps what a peer sent while its session was set up
+add_library(FalconTransportTranscript STATIC transport/TransportTranscript.cpp)
+target_compile_features(FalconTransportTranscript PRIVATE cxx_std_17)
+target_include_directories(FalconTransportTranscript PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${OPENSSL_INCLUDE_DIR})
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_link_libraries(FalconTransportTranscript PUBLIC ssl crypto)
+else()
+    target_link_libraries(FalconTransportTranscript PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+endif()
+target_compile_definitions(datachannel-static PRIVATE SSL_CTX_set_info_callback=falcon_transport_install)
+target_link_libraries(datachannel-static PUBLIC FalconTransportTranscript)
+target_link_libraries(FalconCore PUBLIC FalconTransportTranscript)
+
+# the attestation module is carried inside the executable
+set(FALCON_ATTESTATION_MODULE "${CMAKE_CURRENT_SOURCE_DIR}/resources/attestation.bin")
+set(FALCON_ATTESTATION_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/AttestationModule.cpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FALCON_ATTESTATION_MODULE}")
+file(READ "${FALCON_ATTESTATION_MODULE}" FALCON_ATTESTATION_HEX HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_ATTESTATION_BYTES "${FALCON_ATTESTATION_HEX}")
+file(WRITE "${FALCON_ATTESTATION_SOURCE}.new"
+        "#include <cstddef>\nextern const unsigned char FALCON_ATTESTATION_MODULE[] = {${FALCON_ATTESTATION_BYTES}};\n"
+        "extern const size_t FALCON_ATTESTATION_MODULE_SIZE = sizeof(FALCON_ATTESTATION_MODULE);\n")
+execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FALCON_ATTESTATION_SOURCE}.new"
+        "${FALCON_ATTESTATION_SOURCE}")
+target_sources(FalconCore PRIVATE "${FALCON_ATTESTATION_SOURCE}")
+
 option(FALCON_BUILD_SERVER_EXECUTABLE "Build the dedicated server executable" ON)
 
 option(FALCON_BUILD_EMBEDDED_TESTS "Build embedded server lifecycle checks" OFF)
