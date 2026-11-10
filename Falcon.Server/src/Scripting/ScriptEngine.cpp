@@ -459,6 +459,14 @@ void ScriptEngine::startup() {
     if (mHost != nullptr
         && mHost->getWorlds().getDefault().getOverworld().loadSavedData(WorldClockSystem::STORAGE_KEY, saved, false))
         mClocks.load(saved);
+    if (mHost != nullptr) {
+        Level &overworld = mHost->getWorlds().getDefault().getOverworld();
+        WorldClockSystem::LevelTime time;
+        time.mGet = [&overworld]() { return overworld.getTime(); };
+        time.mSet = [&overworld](int64_t value) { overworld.setTime(value); };
+        time.mSetPaused = [&overworld](bool paused) { overworld.setTimePaused(paused); };
+        mClocks.bindOverworld(std::move(time));
+    }
 
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();

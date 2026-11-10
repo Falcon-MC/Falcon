@@ -805,6 +805,23 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(restored.registerClock("test:clock", {}, markerError) == WorldClockError::None
                         && restored.find("test:clock")->mTime == 5 && restored.find("test:clock")->mPaused,
                 "a registered clock did not take its saved state");
+        int64_t levelTime = 1000;
+        bool levelPaused = false;
+        WorldClockSystem::LevelTime binding;
+        binding.mGet = [&levelTime]() { return levelTime; };
+        binding.mSet = [&levelTime](int64_t value) { levelTime = value; };
+        binding.mSetPaused = [&levelPaused](bool paused) { levelPaused = paused; };
+        restored.bindOverworld(binding);
+        WorldClock *overworldClock = restored.find("minecraft:overworld");
+        require(overworldClock->mTime == 1000, "the overworld clock does not start at the level's time");
+        levelTime = 1001;
+        restored.tick();
+        require(overworldClock->mTime == 1001, "the overworld clock does not follow the level's time");
+        restored.setTime(*overworldClock, 6000);
+        require(levelTime == 6000, "setting the overworld clock does not set the level's time");
+        restored.setPaused(*overworldClock, true);
+        require(levelPaused, "pausing the overworld clock does not stop the level's day");
+        restored.setPaused(*overworldClock, false);
         SyncWorldClocksPacket states;
         restored.writeStates(states);
         require(states.mType == SyncWorldClocksType::SyncState && states.mClockStates.size() == 2

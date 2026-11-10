@@ -8,6 +8,7 @@
 
 namespace {
     const int32_t DAY_LENGTH = 24000;
+    const char *const OVERWORLD = "minecraft:overworld";
 
     // sub_142CA2AF0: one colon, two non-empty parts, no whitespace, case-insensitive, no minecraft namespace
     bool validName(const std::string &name) {
@@ -54,7 +55,7 @@ namespace {
 WorldClockSystem::WorldClockSystem() {
     // sub_145D01CF0: the overworld clock and its day markers, each repeating every day
     WorldClock overworld;
-    overworld.mName = "minecraft:overworld";
+    overworld.mName = OVERWORLD;
     const std::pair<const char *, int32_t> markers[] = {{"minecraft:day", 1000},       {"minecraft:noon", 6000},
                                                         {"minecraft:sunset", 12000},   {"minecraft:night", 13000},
                                                         {"minecraft:midnight", 18000}, {"minecraft:sunrise", 23000}};
@@ -179,10 +180,56 @@ void WorldClockSystem::_checkMarkers(WorldClock &clock) {
     }
 }
 
+void WorldClockSystem::bindOverworld(LevelTime time) {
+    mLevelTime = std::move(time);
+    WorldClock *overworld = find(OVERWORLD);
+    if (overworld == nullptr || !mLevelTime.mGet)
+        return;
+    overworld->mTime = (int32_t) std::min<int64_t>(mLevelTime.mGet(), INT32_MAX);
+    overworld->mMarkersChecked = false;
+    if (mLevelTime.mSetPaused)
+        mLevelTime.mSetPaused(overworld->mPaused);
+}
+
+bool WorldClockSystem::_isBound(const WorldClock &clock) const {
+    return mLevelTime.mGet && clock.mName == OVERWORLD;
+}
+
+void WorldClockSystem::_tickBound(WorldClock &clock) {
+    // the level steps the time: commands and sleep move it too
+    const int64_t time = mLevelTime.mGet();
+    if (time > INT32_MAX) {
+        int32_t newTime = 0;
+        if (mListener.mRestart && mListener.mRestart(clock, newTime)) {
+            mLevelTime.mSet(INT32_MAX);
+            return;
+        }
+        mLevelTime.mSet(std::max(0, newTime));
+        setTime(clock, std::max(0, newTime));
+        return;
+    }
+    if (time == clock.mTime) {
+        _checkMarkers(clock);
+        return;
+    }
+    const bool jumped = time != (int64_t) clock.mTime + 1;
+    clock.mTime = (int32_t) time;
+    clock.mMarkersChecked = false;
+    if (jumped) {
+        if (mListener.mTimeModified)
+            mListener.mTimeModified(clock);
+        if (mListener.mStateChanged)
+            mListener.mStateChanged(clock);
+    }
+    _checkMarkers(clock);
+}
+
 void WorldClockSystem::setTime(WorldClock &clock, int32_t time) {
     if (clock.mTime == time)
         return;
     clock.mTime = time;
+    if (_isBound(clock))
+        mLevelTime.mSet(time);
     if (mListener.mTimeModified)
         mListener.mTimeModified(clock);
     if (mListener.mStateChanged)
@@ -195,6 +242,8 @@ void WorldClockSystem::setPaused(WorldClock &clock, bool paused) {
     if (clock.mPaused == paused)
         return;
     clock.mPaused = paused;
+    if (_isBound(clock) && mLevelTime.mSetPaused)
+        mLevelTime.mSetPaused(paused);
     if (mListener.mPauseChanged)
         mListener.mPauseChanged(clock, paused);
     if (mListener.mStateChanged)
@@ -245,6 +294,10 @@ void WorldClockSystem::tick() {
     for (WorldClock &clock: mClocks) {
         if (clock.mPaused)
             continue;
+        if (_isBound(clock)) {
+            _tickBound(clock);
+            continue;
+        }
 
         // sub_145D06B10: markers of the current time first, then the step or the restart at the maximum
         _checkMarkers(clock);
@@ -327,7 +380,8 @@ void WorldClockSystem::_restore(WorldClock &clock) const {
             continue;
         const Tag *time = entry.get("Time");
         const Tag *paused = entry.get("IsPaused");
-        if (time != nullptr)
+        // a bound clock keeps the level's own saved time
+        if (time != nullptr && !_isBound(clock))
             clock.mTime = std::max(0, time->asInt());
         if (paused != nullptr)
             clock.mPaused = paused->asByte() != 0;
