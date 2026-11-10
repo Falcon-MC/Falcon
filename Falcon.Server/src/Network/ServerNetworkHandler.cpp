@@ -539,8 +539,9 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
 
     if (mNetherNetInstance != nullptr) {
         mNetherNetInstance->setUnofficialClientsAllowed(mProperties.getAllowUnofficialClients());
-        mNetherNetInstance->setConnectionInspector([](const std::string &fingerprint) {
-            return ClientAttestation::getInstance().inspectTransport(fingerprint);
+        // the verdict comes back later, see the tick: the connection is not held for it
+        mNetherNetInstance->setConnectionObserver([](const std::string &fingerprint, const NetworkIdentifier &id) {
+            ClientAttestation::getInstance().inspectTransport(fingerprint, id);
         });
         mNetherNetInstance->setServerDataProvider([this]() {
             nethernet::ServerData data;
@@ -967,6 +968,16 @@ void ServerNetworkHandler::tick(bool paused) {
         _disconnect(entry, DisconnectReason::KickedForIdle, IDLE_MESSAGE);
     for (const auto &entry: unanswered)
         _rejectBadPacket(entry.first, "client check " + std::to_string(entry.second));
+
+    if (!unofficialClientsAllowed) {
+        for (const auto &verdict: ClientAttestation::getInstance().takeVerdicts()) {
+            if (verdict.second > 0)
+                _rejectBadPacket(verdict.first, "client check " + std::to_string(100 + verdict.second));
+            else
+                LOG_INFO(LogAreaID::Network, "Client note %d for %s", 100 - verdict.second,
+                         verdict.first.getAddress().c_str());
+        }
+    }
 
     uint32_t loadedChunks = 0;
     uint32_t pendingChunkTasks = 0;
