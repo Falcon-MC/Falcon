@@ -11,6 +11,7 @@
 #include "Server/Localization.h"
 #include "Server/Commands/ScriptEventCommand.h"
 #include "Protocol/Packets/AvailableCommandsPacket.h"
+#include "Protocol/Packets/CommandOutputPacket.h"
 #include "Server/Commands/ServerCommandOrigin.h"
 #include "Server/ServerPaths.h"
 #include "World/Level/GameRules.h"
@@ -1572,7 +1573,24 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(!commands.dispatch(playerOrigin, "cmd:echo 1.5 red"), "an integer parameter took a float");
         require(!commands.dispatch(playerOrigin, "cmd:echo 1 green"), "an enum parameter took an unknown value");
         require(!commands.dispatch(playerOrigin, "cmd:echo 1"), "a mandatory parameter was skipped");
+        std::vector<std::string> outputs;
+        owner.getNetworkHandler().setOutboundFilter([&outputs](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            if (Packet::peekId(header, sender, client) == MinecraftPacketIds::CommandOutput)
+                outputs.push_back(data);
+            return false;
+        });
         require(!commands.dispatch(playerOrigin, "cmd:echo -3 red"), "a Failure status counted as success");
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        require(outputs.size() == 1, "a Failure message was not sent as command output");
+        ReadOnlyBinaryStream outputBody(outputs[0]);
+        CommandOutputPacket failure;
+        failure.readHeader(outputBody);
+        failure.read(outputBody, owner.getCodecContext());
+        require(failure.mSuccessCount == 0 && failure.mMessages.size() == 1
+                        && failure.mMessages[0].mMessageId == "negative" && !failure.mMessages[0].mInternal,
+                "a Failure message was not sent as unsuccessful output");
         const bool wasOp = player.getCommandPermission() != CommandPermission::Any;
         player.setOp(false);
         require(!commands.dispatch(playerOrigin, "cmd:give"), "a non-operator ran a GameDirectors custom command");
@@ -2258,7 +2276,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*custom, "parse", "CommandError: 'x' is not a valid number");
         expect(*custom, "playerRun",
                "1|true,Entity,minecraft:player,none,6,blue,5/6/7,true,minecraft:player,undefined");
-        expect(*custom, "restricted", "true");
+        expect(*custom, "restricted", "false");
         expect(*custom, "last", "true,Block,none,block,8,red,undefined,undefined,undefined,undefined");
         expect(*custom, "secret", "true,Server,none,none");
         expect(*custom, "calls", "7");

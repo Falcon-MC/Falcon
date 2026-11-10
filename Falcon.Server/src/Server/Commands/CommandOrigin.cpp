@@ -34,5 +34,5 @@ bool CommandOrigin::getSourceBlock(Level *&, Vector3i &) {
 }
 
 void CommandOrigin::sendError(const std::string &message) {
-    sendMessage("\u00a7c" + message);
+    sendMessage(message);
 }

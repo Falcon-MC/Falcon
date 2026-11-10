@@ -48,6 +48,6 @@ public:
         return false;
     }
 
-    // error output: the client shows it red
+    // error output (sub_145576240 type 1); only origins with a client tell it apart
     virtual void sendError(const std::string &message);
 };

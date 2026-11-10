@@ -26,6 +26,8 @@ public:
 
     std::string getLocale() const override;
 
+    void sendError(const std::string &message) override;
+
     CommandPermission getCommandPermission() const override;
 
     Level *getLevel() override;

@@ -551,14 +551,15 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
 }
 
 void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,
-                                             const std::string &message) {
+                                             const std::string &message, bool success) {
     CommandOutputPacket output;
     output.mOrigin = origin;
     output.mType = CommandOutputType::AllOutput;
-    output.mSuccessCount = 1;
+    output.mSuccessCount = success ? 1 : 0;
 
+    // sub_147EFA4B0: the per-message bool is "Successful?", the client shows a failed one as an error
     CommandOutputMessage line;
-    line.mInternal = false;
+    line.mInternal = success;
     line.mMessageId = message;
     output.mMessages.push_back(line);
 
@@ -573,7 +574,7 @@ void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const Command
     output.mSuccessCount = 1;
 
     CommandOutputMessage line;
-    line.mInternal = false;
+    line.mInternal = true;
     line.mMessageId = key;
     line.mParameters = parameters;
     output.mMessages.push_back(std::move(line));
