@@ -38,6 +38,9 @@ public:
 
     void countFailure(FailureStage stage, int reason);
 
+    // a client removed by a check, with the platform it said it was on, zero when it never said
+    void countRefusal(int code, int platform);
+
     void recordTick(double milliseconds);
 
 private:
@@ -53,6 +56,7 @@ private:
     std::condition_variable mWake;
     std::map<int, long long> mChecks;
     std::map<std::string, long long> mFailures;
+    std::map<std::string, long long> mRefusals;
     std::atomic<long long> mTickTotalUs{0};
     std::atomic<long long> mTickMaxUs{0};
     std::atomic<long long> mTicks{0};

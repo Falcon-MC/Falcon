@@ -1027,6 +1027,14 @@ private:
     std::unordered_map<NetworkIdentifier, PacketRateLimiter, NetworkIdentifier::Hasher> mRateLimiters;
     ClientProbeTracker mClientProbes;
 
+    // a client the attestation service asked to remove, kept until it has said what platform it is on
+    struct PendingRemoval {
+        NetworkIdentifier mId;
+        int mCheck;
+        int64_t mDeadline;
+    };
+    std::vector<PendingRemoval> mPendingRemovals;
+
     struct LingeringCloud {
         int32_t mPotionId;
         int32_t mAge;
