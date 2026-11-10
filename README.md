@@ -26,6 +26,8 @@ all reimplemented by hand, with vanilla behavior as the reference.
 
 - **Native** - no runtime to install, the server ships as a single self-contained executable
 - **Vanilla worlds** - Bedrock world format, so worlds move between Falcon and the game unchanged
+- **Worlds from before 0.9** - a world with a `chunks.dat` is imported into the current format the first time it
+  is opened, blocks and their variants included; `chunks.dat` itself is left untouched
 - **Behavior packs** - custom content and a JavaScript scripting API loaded from packs
 
 ## Getting started
