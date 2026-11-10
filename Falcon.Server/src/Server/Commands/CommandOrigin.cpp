@@ -24,3 +24,11 @@ Vector3f CommandOrigin::getRotation() {
 Level *CommandOrigin::getLevel() {
     return nullptr;
 }
+
+Actor *CommandOrigin::getEntity() {
+    return asPlayer();
+}
+
+bool CommandOrigin::getSourceBlock(Level *&, Vector3i &) {
+    return false;
+}

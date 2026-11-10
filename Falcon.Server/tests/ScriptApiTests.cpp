@@ -5,7 +5,12 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/ScriptEngine.h"
 #include "Server/Commands/PlayerCommandOrigin.h"
+#include "Scripting/Binding/ScriptCustomCommand.h"
+#include "Server/Commands/CommandMap.h"
+#include "Server/Commands/ScriptCommandOrigin.h"
+#include "Server/Localization.h"
 #include "Server/Commands/ScriptEventCommand.h"
+#include "Protocol/Packets/AvailableCommandsPacket.h"
 #include "Server/Commands/ServerCommandOrigin.h"
 #include "Server/ServerPaths.h"
 #include "World/Level/GameRules.h"
@@ -36,6 +41,7 @@
 #include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -1010,6 +1016,122 @@ system.runTimeout(() => {
 }, 8);
 )JS";
 
+    const char *const COMMANDS = R"JS(
+import { world, system, CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, CustomCommandSource,
+         CustomCommandOrigin, CustomCommandRegistry, CustomCommandErrorReason, CommandResult } from "@minecraft/server";
+const save = () => world.setDynamicProperty("commands", JSON.stringify(r));
+const reason = (f) => {
+    try {
+        f();
+    } catch (e) {
+        return e.name + "," + e.reason + "," + e.message;
+    }
+    return "ok";
+};
+const describe = (origin, args) => [origin instanceof CustomCommandOrigin, origin.sourceType,
+    origin.sourceEntity ? origin.sourceEntity.typeId : "none", origin.sourceBlock ? "block" : "none",
+    ...args.map((a) => a === undefined ? "undefined" : Array.isArray(a) ? a.map((e) => e.typeId).join("+")
+        : typeof a === "object" ? (a.id || (a.x + "/" + a.y + "/" + a.z)) : String(a))].join(",");
+let late;
+r.enums = [CustomCommandParamType.PlayerSelector, CustomCommandStatus.Failure, CustomCommandSource.Server,
+           CustomCommandErrorReason.EnumDependencyMissing, CommandPermissionLevel.Admin].join(",");
+system.beforeEvents.startup.subscribe((event) => {
+    const registry = event.customCommandRegistry;
+    late = registry;
+    r.registry = registry instanceof CustomCommandRegistry;
+    r.enumAdd = capture(() => registry.registerEnum("cmd:color", ["red", "blue"]));
+    r.enumDuplicate = reason(() => registry.registerEnum("cmd:color", ["x"]));
+    r.enumNoNamespace = reason(() => registry.registerEnum("color", []));
+    r.enumMismatch = reason(() => registry.registerEnum("other:color", []));
+    r.register = capture(() => registry.registerCommand({
+        name: "cmd:echo", description: "echo", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false,
+        mandatoryParameters: [{ name: "count", type: CustomCommandParamType.Integer },
+                              { name: "cmd:color", type: CustomCommandParamType.Enum }],
+        optionalParameters: [{ name: "where", type: CustomCommandParamType.Location },
+                             { name: "flag", type: CustomCommandParamType.Boolean },
+                             { name: "who", type: CustomCommandParamType.EntitySelector },
+                             { name: "block", type: CustomCommandParamType.BlockType }],
+    }, (origin, ...args) => {
+        r.calls = (r.calls || 0) + 1;
+        r.last = describe(origin, args);
+        r.restricted = capture(() => world.getDimension("overworld").runCommand("say restricted")) !== "ok";
+        system.run(save);
+        return args[0] < 0 ? { status: CustomCommandStatus.Failure, message: "negative" }
+            : { status: CustomCommandStatus.Success, message: "echo " + args[0] };
+    }));
+    r.duplicate = reason(() => registry.registerCommand({ name: "cmd:echo", description: "",
+        permissionLevel: CommandPermissionLevel.Any }, () => {}));
+    r.noNamespace = reason(() => registry.registerCommand({ name: "echo2", description: "",
+        permissionLevel: CommandPermissionLevel.Any }, () => {}));
+    r.mismatch = reason(() => registry.registerCommand({ name: "other:echo", description: "",
+        permissionLevel: CommandPermissionLevel.Any }, () => {}));
+    r.missingEnum = reason(() => registry.registerCommand({ name: "cmd:missing", description: "",
+        permissionLevel: CommandPermissionLevel.Any,
+        mandatoryParameters: [{ name: "cmd:nope", type: CustomCommandParamType.Enum }] }, () => {}));
+    r.badType = capture(() => registry.registerCommand({ name: "cmd:bad", description: "",
+        permissionLevel: CommandPermissionLevel.Any, mandatoryParameters: [{ name: "x", type: "Nope" }] }, () => {}));
+    const nine = [];
+    for (let index = 0; index < 9; index++)
+        nine.push({ name: "p" + index, type: CustomCommandParamType.Integer });
+    r.limit = reason(() => registry.registerCommand({ name: "cmd:nine", description: "",
+        permissionLevel: CommandPermissionLevel.Any, mandatoryParameters: nine.slice(0, 5),
+        optionalParameters: nine.slice(5) }, () => {}));
+    r.eight = capture(() => registry.registerCommand({ name: "cmd:eight", description: "",
+        permissionLevel: CommandPermissionLevel.Any, mandatoryParameters: nine.slice(1) }, () => {}));
+    r.admin = capture(() => registry.registerCommand({ name: "cmd:admin", description: "",
+        permissionLevel: CommandPermissionLevel.Admin, cheatsRequired: false }, () => {}));
+    r.give = capture(() => registry.registerCommand({ name: "cmd:give", description: "shadowed",
+        permissionLevel: CommandPermissionLevel.GameDirectors }, (origin) => {
+        r.secret = describe(origin, []);
+        system.run(save);
+    }));
+    save();
+});
+
+world.afterEvents.worldLoad.subscribe(() => {
+    r.late = reason(() => late.registerCommand({ name: "cmd:late", description: "",
+        permissionLevel: CommandPermissionLevel.Any }, () => {}));
+    r.lateEnum = reason(() => late.registerEnum("cmd:late", []));
+    const overworld = world.getDimension("overworld");
+    const result = overworld.runCommand("cmd:echo 4 red 1 ~2 3");
+    r.dimension = (result instanceof CommandResult) + "," + result.successCount + "|" + r.last;
+    r.failed = overworld.runCommand("echo -1 blue").successCount;
+    r.unknown = capture(() => overworld.runCommand("nosuchcommand"));
+    r.parse = capture(() => overworld.runCommand("echo x red"));
+    save();
+});
+
+system.runTimeout(() => {
+    const player = world.getAllPlayers()[0];
+    r.playerRun = player.runCommand("echo 6 blue 5 6 7 true @s").successCount + "|" + r.last;
+    r.adminDenied = capture(() => player.runCommand("cmd:admin"));
+    save();
+}, 2);
+)JS";
+
+    const char *const BETA_COMMANDS = R"JS(
+import { world, system, CommandPermissionLevel, CustomCommandParamType } from "@minecraft/server";
+system.beforeEvents.startup.subscribe((event) => {
+    const registry = event.customCommandRegistry;
+    registry.registerEnum("beta:mode", ["on", "off"]);
+    r.named = capture(() => registry.registerCommand({ name: "beta:toggle", description: "",
+        permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false,
+        mandatoryParameters: [{ name: "state", type: CustomCommandParamType.Enum, enumName: "beta:mode" }] },
+        (origin, state) => {
+            r.state = state;
+            system.run(() => world.setDynamicProperty("betacommands", JSON.stringify(r)));
+        }));
+    try {
+        registry.registerCommand({ name: "beta:wrong", description: "", permissionLevel: CommandPermissionLevel.Any,
+            mandatoryParameters: [{ name: "n", type: CustomCommandParamType.Integer, enumName: "beta:mode" }] },
+            () => {});
+    } catch (e) {
+        r.unexpected = e.name + "," + e.reason + "," + e.message;
+    }
+    world.setDynamicProperty("betacommands", JSON.stringify(r));
+});
+)JS";
+
     const char *const COMPONENT_BLOCK = R"JSON({
   "format_version": "1.21.90",
   "minecraft:block": {
@@ -1115,6 +1237,42 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
 
     DimensionDefinition sentDimension;
 
+    // a command block's origin, as CommandBlockSystem builds it
+    class BlockOrigin final : public CommandOrigin {
+    public:
+        BlockOrigin(Level &level, const Vector3i &position) : mLevel(level), mPosition(position) {}
+
+        std::string getSenderName() const override {
+            return "@";
+        }
+
+        bool isPlayer() const override {
+            return false;
+        }
+
+        ServerPlayer *asPlayer() override {
+            return nullptr;
+        }
+
+        void sendMessage(const std::string &) override {}
+
+        void sendTranslation(const std::string &, const std::vector<std::string> &) override {}
+
+        CommandPermission getCommandPermission() const override {
+            return CommandPermission::Internal;
+        }
+
+        bool getSourceBlock(Level *&level, Vector3i &position) override {
+            level = &mLevel;
+            position = mPosition;
+            return true;
+        }
+
+    private:
+        Level &mLevel;
+        Vector3i mPosition;
+    };
+
     void run(const std::filesystem::path &directory) {
         const std::filesystem::path packs = directory / "packs";
         const std::string server2 = "{\"module_name\": \"@minecraft/server\", \"version\": \"2.11.0\"}";
@@ -1148,6 +1306,9 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                   server2 + ", {\"module_name\": \"@minecraft/server-unknown\", \"version\": \"1.0.0\"}", NEVER_RUNS);
         writeFile(packs / "outside.js", "export const x = 1;\n");
         writePack(packs, "components", server2, std::string(PRELUDE) + COMPONENTS);
+        writePack(packs, "commands", server2, std::string(PRELUDE) + COMMANDS);
+        writePack(packs, "betacommands", "{\"module_name\": \"@minecraft/server\", \"version\": \"beta\"}",
+                  std::string(PRELUDE) + BETA_COMMANDS);
         writeFile(packs / "components" / "blocks" / "block.json", COMPONENT_BLOCK);
         writeFile(packs / "components" / "items" / "wand.json", COMPONENT_ITEM);
         writeFile(packs / "components" / "items" / "snack.json", COMPONENT_FOOD);
@@ -1185,7 +1346,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             const Tag *states = property.mProperties.get("properties");
             require(states != nullptr && states->getList().size() == 2, "states not sent");
         }
-        require(engine.loadPacks(manager.getPacks()) == 8, "only the eight valid packs start");
+        require(engine.loadPacks(manager.getPacks()) == 10, "only the ten valid packs start");
 
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
@@ -1389,6 +1550,110 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         // the items pack clears it at tick 2: a grab then a release
         for (int64_t tick = 1; tick <= 3; ++tick)
             engine.tick(tick);
+
+        // custom commands: in the command map under both names, parsed from a player and gated by cheats
+        CommandMap &commands = owner.getCommands();
+        Command *echo = commands.getCommand("cmd:echo");
+        require(echo != nullptr && commands.getCommand("echo") == echo, "cmd:echo is not reachable by its alias");
+        require(commands.getCommand("cmd:give") != nullptr
+                        && commands.getCommand("give") != commands.getCommand("cmd:give"),
+                "a custom command took a vanilla name");
+        require(commands.getCommand("cmd:bad") == nullptr && commands.getCommand("cmd:late") == nullptr,
+                "a refused custom command was registered");
+        require(commands.dispatch(playerOrigin, "echo 2 blue 1 2 3 false @s minecraft:stone"),
+                "a player could not run cmd:echo");
+        require(!commands.dispatch(playerOrigin, "cmd:echo 1.5 red"), "an integer parameter took a float");
+        require(!commands.dispatch(playerOrigin, "cmd:echo 1 green"), "an enum parameter took an unknown value");
+        require(!commands.dispatch(playerOrigin, "cmd:echo 1"), "a mandatory parameter was skipped");
+        require(!commands.dispatch(playerOrigin, "cmd:echo -3 red"), "a Failure status counted as success");
+        const bool wasOp = player.getCommandPermission() != CommandPermission::Any;
+        player.setOp(false);
+        require(!commands.dispatch(playerOrigin, "cmd:give"), "a non-operator ran a GameDirectors custom command");
+        // setProperties reopens the worlds: flip the one key in place
+        PropertiesSettings &serverProperties = const_cast<PropertiesSettings &>(owner.getProperties());
+        serverProperties.setProperty("allow-cheats", "false");
+        player.setOp(true);
+        require(commands.dispatch(console, "cmd:give"), "the console could not run a cheat command");
+        require(dynamic_cast<ScriptCustomCommand *>(commands.getCommand("cmd:give"))->requiresCheats(),
+                "cheatsRequired does not default to true");
+        require(!commands.dispatch(playerOrigin, "cmd:give"), "a cheat command ran without cheats");
+        require(commands.dispatch(playerOrigin, "echo 7 red"), "cheatsRequired false was refused without cheats");
+        serverProperties.setProperty("allow-cheats", "true");
+        player.setOp(false);
+        BlockOrigin fromBlock(world.getOverworld(), Vector3i(0, 101, 8));
+        require(commands.dispatch(fromBlock, "echo 8 red"), "a command block could not run cmd:echo");
+
+        // the commands reach the client with their aliases, parameter types and enums
+        std::vector<std::string> advertised;
+        owner.getNetworkHandler().setOutboundFilter([&advertised](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            if (Packet::peekId(header, sender, client) == MinecraftPacketIds::AvailableCommands)
+                advertised.push_back(data);
+            return false;
+        });
+        LoginHandler::sendAvailableCommands(owner, player);
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        require(advertised.size() == 1, "no AvailableCommandsPacket");
+        ReadOnlyBinaryStream commandsBody(advertised[0]);
+        AvailableCommandsPacket available;
+        available.readHeader(commandsBody);
+        available.read(commandsBody, owner.getCodecContext());
+        const CommandData *echoData = nullptr;
+        bool adminSent = false;
+        for (const CommandData &data: available.mCommands) {
+            if (data.mName == "cmd:echo")
+                echoData = &data;
+            adminSent = adminSent || data.mName == "cmd:give";
+        }
+        require(echoData != nullptr && !adminSent, "custom commands were not filtered by permission");
+        require(echoData->mDescription == "echo" && echoData->mHasAliases
+                        && echoData->mAliases.mValues == std::vector<std::string>({"cmd:echo", "echo"}),
+                "cmd:echo was sent without its alias");
+        require(echoData->mOverloads.size() == 1 && echoData->mOverloads[0].mParameters.size() == 6,
+                "cmd:echo was sent without its parameters");
+        const std::vector<CommandParamData> &sentParameters = echoData->mOverloads[0].mParameters;
+        require(sentParameters[0].mType == CommandParamType::Int && !sentParameters[0].mOptional,
+                "the Integer parameter was not sent as an int");
+        require(sentParameters[1].mHasEnumData && sentParameters[1].mEnumData.mName == "cmd:color"
+                        && sentParameters[1].mEnumData.mValues == std::vector<std::string>({"red", "blue"}),
+                "the script enum was not sent");
+        require(sentParameters[2].mType == CommandParamType::Position && sentParameters[2].mOptional,
+                "the Location parameter was not sent as a position");
+        require(sentParameters[3].mHasEnumData && sentParameters[3].mEnumData.mName == "Boolean",
+                "the Boolean parameter was not sent as the Boolean enum");
+        require(sentParameters[4].mType == CommandParamType::Target, "the selector was not sent as a target");
+        require(sentParameters[5].mHasEnumData && sentParameters[5].mEnumData.mName == "Block",
+                "the BlockType parameter was not sent as the Block enum");
+        // the script origin: permission level 1, its own name, one count per output
+        ScriptCommandOrigin fromScript(world.getOverworld(), nullptr);
+        require(fromScript.getCommandPermission() == CommandPermission::GameDirectors,
+                "the script origin does not run at level 1");
+        require(fromScript.getSenderName() == "Script Engine", "the script origin is not named Script Engine");
+        fromScript.sendTranslation("commands.kill.successful", {"a"});
+        fromScript.sendTranslation("commands.kill.successful", {"b"});
+        fromScript.sendTranslation("commands.generic.noTargetMatch", {});
+        require(fromScript.getOutputCount() == 2, "an error output counted as a success");
+        Vector3f local;
+        require(Command::parsePosition({"^", "^", "^2"}, 0, Vector3f(1.0f, 2.0f, 3.0f), Vector3f(0.0f, 0.0f, 0.0f),
+                                       local)
+                        && std::fabs(local.x - 1.0f) < 0.001f && std::fabs(local.z - 5.0f) < 0.001f,
+                "^ ^ ^2 did not move forward along +z");
+        require(Command::parsePosition({"^1", "^", "^"}, 0, Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 90.0f, 0.0f),
+                                       local)
+                        && std::fabs(local.z - 1.0f) < 0.001f && std::fabs(local.x) < 0.001f,
+                "^1 is not to the left facing west");
+        require(Command::parsePosition({"^", "^1", "^"}, 0, Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 0.0f, 0.0f),
+                                       local)
+                        && std::fabs(local.y - 1.0f) < 0.001f,
+                "^ ^1 ^ did not move up");
+        require(!Command::parsePosition({"^", "~", "^"}, 0, Vector3f(), Vector3f(), local), "^ mixed with ~ parsed");
+        ScriptCommandOrigin fromCow(world.getOverworld(), cow);
+        const std::vector<ServerActor *> selfTargets = owner.resolveActorTargets(fromCow, "@s");
+        require(selfTargets.size() == 1 && selfTargets[0] == cow, "@s of a cow did not resolve to it");
+        require(owner.resolveActorTargets(fromCow, "@s[type=minecraft:pig]").empty(), "@s ignored its type filter");
+        require(commands.dispatch(playerOrigin, "beta:toggle off"), "an enumName parameter did not parse");
+        player.setOp(wasOp);
 
         // an entity container opens with the actor's id, saves as ChestItems and loads back
         std::vector<ContainerOpenPacket> opened;
@@ -1940,6 +2205,60 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*beta, "alone", "true");
         expect(*beta, "chatSend", "true");
         expect(*beta, "form", "true");
+
+        const std::unique_ptr<json::Value> custom = result(owner, "commands");
+        expect(*custom, "enums", "PlayerSelector,1,Server,EnumDependencyMissing,2");
+        expect(*custom, "registry", "true");
+        expect(*custom, "enumAdd", "ok");
+        expect(*custom, "enumDuplicate",
+               "CustomCommandError,AlreadyRegistered,Custom Command Enum 'cmd:color' was already registered.");
+        expect(*custom, "enumNoNamespace", "NamespaceNameError,NoNamespace,");
+        expect(*custom, "enumMismatch",
+               "CustomCommandError,NamespaceMismatch,Custom Command Enum namespaces must match. Namespace 'other' does not "
+               "match existing namespace 'cmd'.");
+        expect(*custom, "register", "ok");
+        expect(*custom, "duplicate",
+               "CustomCommandError,AlreadyRegistered,Custom Command 'cmd:echo' was already registered.");
+        expect(*custom, "noNamespace", "NamespaceNameError,NoNamespace,");
+        expect(*custom, "mismatch",
+               "CustomCommandError,NamespaceMismatch,Custom Command Enum namespaces must match. Namespace 'other' does not "
+               "match existing namespace 'cmd'.");
+        expect(*custom, "missingEnum",
+               "CustomCommandError,EnumDependencyMissing,Custom Command depends on one or more unknown enums [cmd:nope].");
+        expect(*custom, "badType", "TypeError: Native type conversion failed.");
+        expect(*custom, "give", "ok");
+        expect(*custom, "limit",
+               "CustomCommandError,ParameterLimit,Custom Command 'cmd:nine' has '9' parameters, the limit is '8'.");
+        expect(*custom, "eight", "ok");
+        expect(*custom, "admin", "ok");
+        expect(*custom, "adminDenied",
+               "CommandError: "
+                       + Localization::getInstance().translate("commands.generic.error.permissions",
+                                                               std::vector<std::string>{"cmd:admin"}));
+        expect(*custom, "late",
+               "CustomCommandError,RegistryInvalid,Custom Command registration failed outside of the ModuleStartup event.");
+        expect(*custom, "lateEnum",
+               "CustomCommandError,RegistryInvalid,Custom Command Enum registration failed outside of the ModuleStartup "
+               "event.");
+        expect(*custom, "dimension", "true,1|true,Server,none,none,4,red,1/2/3,undefined,undefined,undefined");
+        expect(*custom, "failed", "0");
+        expect(*custom, "unknown",
+               "CommandError: Unknown command: nosuchcommand. Please check that the command exists "
+               "and that you have permission to use it.");
+        expect(*custom, "parse", "CommandError: 'x' is not a valid number");
+        expect(*custom, "playerRun",
+               "1|true,Entity,minecraft:player,none,6,blue,5/6/7,true,minecraft:player,undefined");
+        expect(*custom, "restricted", "true");
+        expect(*custom, "last", "true,Block,none,block,8,red,undefined,undefined,undefined,undefined");
+        expect(*custom, "secret", "true,Server,none,none");
+        expect(*custom, "calls", "7");
+
+        const std::unique_ptr<json::Value> betaCommands = result(owner, "betacommands");
+        expect(*betaCommands, "named", "ok");
+        expect(*betaCommands, "state", "off");
+        expect(*betaCommands, "unexpected",
+               "CustomCommandError,UnexpectedEnumName,Custom Command parameter 'n' using enumName 'beta:mode' but is not "
+               "an Enum type.");
 
         const auto &properties = owner.getWorldDynamicProperties();
         require(properties.find("undeclared") == properties.end(), "an undeclared module was importable");

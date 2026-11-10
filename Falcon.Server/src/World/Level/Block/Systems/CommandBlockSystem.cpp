@@ -37,7 +37,8 @@ namespace {
 
     class CommandBlockOrigin final : public CommandOrigin {
     public:
-        explicit CommandBlockOrigin(const std::string &name) : mName(name) {}
+        CommandBlockOrigin(const std::string &name, Level &level, const Vector3i &position)
+                : mName(name), mLevel(level), mPosition(position) {}
 
         std::string getSenderName() const override {
             return mName;
@@ -70,12 +71,20 @@ namespace {
             return CommandPermission::Internal;
         }
 
+        bool getSourceBlock(Level *&level, Vector3i &position) override {
+            level = &mLevel;
+            position = mPosition;
+            return true;
+        }
+
         const std::string &getOutput() const {
             return mOutput;
         }
 
     private:
         std::string mName;
+        Level &mLevel;
+        Vector3i mPosition;
         std::string mOutput;
     };
 
@@ -179,7 +188,8 @@ namespace {
 
             if (actor.mConditionMet && (actor.isAuto() || actor.isPowered())) {
                 if (!actor.mCommand.empty() && rules.getBool("commandblocksenabled")) {
-                    CommandBlockOrigin origin(actor.mCustomName.empty() ? std::string("@") : actor.mCustomName);
+                    CommandBlockOrigin origin(actor.mCustomName.empty() ? std::string("@") : actor.mCustomName, level,
+                                              position);
                     const bool success = owner.getCommands().dispatch(origin, actor.mCommand);
                     actor.mSuccessCount = success ? 1 : 0;
 

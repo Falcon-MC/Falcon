@@ -40,6 +40,10 @@ public:
         return mLevel;
     }
 
+    bool getSourceBlock(Level *&level, Vector3i &position) override {
+        return mBase.getSourceBlock(level, position);
+    }
+
     void setPosition(const Vector3f &position) {
         mPosition = position;
     }

@@ -466,6 +466,14 @@ std::vector<ServerActor *> ServerNetworkHandler::resolveActorTargets(CommandOrig
     std::vector<ServerActor *> targets;
 
     const SelectorFilter filter = parseSelector(selector);
+    // @s of an entity that is not a player: the executing actor itself
+    if (filter.mValid && filter.mKind == 's') {
+        ServerActor *self = dynamic_cast<ServerActor *>(sender.getEntity());
+        if (self != nullptr && !self->isDead() && matchesType(filter, self->getTypeId())
+            && matchesName(filter, self->getName()))
+            targets.push_back(self);
+        return targets;
+    }
     if (!filter.mValid || filter.mKind != 'e')
         return targets;
 

@@ -616,12 +616,9 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    JSValue dimensionRunCommand(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue dimensionRunCommand(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
-        const int32_t success = api->runCommandAsConsole(argc >= 1 ? toString(ctx, argv[0]) : std::string());
-        JSValue result = api->makeInstance("CommandResult", new ScriptNative());
-        JS_DefinePropertyValueStr(ctx, result, "successCount", JS_NewInt32(ctx, success), JS_PROP_ENUMERABLE);
-        return result;
+        return api->runCommand(api->levelOf(thisVal), nullptr, argc >= 1 ? toString(ctx, argv[0]) : std::string());
     }
 
     JSValue dimensionGetPlayers(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
