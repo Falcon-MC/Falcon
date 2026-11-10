@@ -1,183 +1,154 @@
 #include "Network/ClientAttestation.h"
 
-#include "Core/Debug/BedrockLog.h"
+#include "Network/Http/HttpClient.h"
+#include "Network/NetherNet/NetherNetConnection.h"
 #include "Network/TransportTranscript.h"
 
-#include <wasmtime.h>
-
-#include <openssl/evp.h>
-
-#include <algorithm>
+#include <cstdlib>
 #include <cstring>
-#include <vector>
-
-// generated from attestation.bin: the module is kept packed so the executable carries no
-// readable copy of it
-extern const unsigned char FALCON_ATTESTATION_MODULE[];
-extern const size_t FALCON_ATTESTATION_MODULE_SIZE;
 
 namespace {
-    // the keystream is SHA-256(seed || counter), the seed shared with the packer
-    std::vector<unsigned char> unpack() {
-        static const uint64_t SEED_WORDS[4] = {0xae7c23aff9a36877ull, 0x9e5bba55bee3edfdull, 0xdfd5e8f3088465afull,
-                                               0x1d104e36b65138fdull};
-        unsigned char seed[32];
-        for (int word = 0; word < 4; word++)
-            for (int byte = 0; byte < 8; byte++)
-                seed[word * 8 + byte] = (unsigned char) (SEED_WORDS[word] >> (byte * 8));
+    const char *const SERVICE = "https://api.falcon-mc.workers.dev/v1/client";
 
-        std::vector<unsigned char> out(FALCON_ATTESTATION_MODULE,
-                                       FALCON_ATTESTATION_MODULE + FALCON_ATTESTATION_MODULE_SIZE);
-        unsigned char block[EVP_MAX_MD_SIZE];
-        for (size_t offset = 0; offset < out.size(); offset += 32) {
-            unsigned char counter[8];
-            for (int byte = 0; byte < 8; byte++)
-                counter[byte] = (unsigned char) ((offset / 32) >> (byte * 8));
+    // an answer that is late says nothing: the client stays
+    const int TIMEOUT_MS = 4000;
+    const size_t MAX_TRANSCRIPT = 16 * 1024;
+    const size_t MAX_OFFER = 12 * 1024;
+    // a flood of connections must not grow a queue of questions
+    const size_t MAX_QUESTIONS = 256;
 
-            EVP_MD_CTX *context = EVP_MD_CTX_new();
-            unsigned int length = 0;
-            EVP_DigestInit_ex(context, EVP_sha256(), nullptr);
-            EVP_DigestUpdate(context, seed, sizeof(seed));
-            EVP_DigestUpdate(context, counter, sizeof(counter));
-            EVP_DigestFinal_ex(context, block, &length);
-            EVP_MD_CTX_free(context);
+    // evidence is a run of sections: what it is, three bytes of length, the bytes
+    enum class Section : unsigned char { TransportTranscript = 1, Offer = 2 };
 
-            for (size_t byte = 0; byte < 32 && offset + byte < out.size(); byte++)
-                out[offset + byte] ^= block[byte];
+    void append(std::string &evidence, Section section, const std::string &bytes) {
+        evidence.push_back((char) section);
+        evidence.push_back((char) ((bytes.size() >> 16) & 255));
+        evidence.push_back((char) ((bytes.size() >> 8) & 255));
+        evidence.push_back((char) (bytes.size() & 255));
+        evidence += bytes;
+    }
+
+    bool startsWith(const std::string &line, const char *prefix) {
+        return line.compare(0, std::strlen(prefix), prefix) == 0;
+    }
+
+    // the offer as the client wrote it, without what belongs to the player: the identity assertion
+    // carries their account token and the candidates their addresses
+    std::string withoutPersonalData(const std::string &offer) {
+        std::string out;
+        size_t start = 0;
+        while (start < offer.size()) {
+            size_t end = offer.find('\n', start);
+            if (end == std::string::npos)
+                end = offer.size();
+            std::string line = offer.substr(start, end - start);
+            start = end + 1;
+            if (!line.empty() && line.back() == '\r')
+                line.pop_back();
+
+            if (startsWith(line, "a=identity:")) {
+                line = "a=identity:-";
+            } else if (startsWith(line, "c=")) {
+                line = "c=-";
+            } else if (startsWith(line, "a=candidate:")) {
+                // foundation, component, protocol, priority, address, port, then pairs
+                std::string masked;
+                size_t index = 0;
+                size_t token = 0;
+                bool afterRelated = false;
+                while (index <= line.size()) {
+                    size_t space = line.find(' ', index);
+                    if (space == std::string::npos)
+                        space = line.size();
+                    const std::string word = line.substr(index, space - index);
+                    const bool address = token == 4 || afterRelated;
+                    if (!masked.empty())
+                        masked.push_back(' ');
+                    masked += address ? (word.find(':') != std::string::npos ? "v6" : "v4") : word;
+                    afterRelated = word == "raddr";
+                    token++;
+                    index = space + 1;
+                }
+                line = masked;
+            }
+
+            if (out.size() + line.size() + 1 > MAX_OFFER)
+                break;
+            out += line;
+            out.push_back('\n');
         }
         return out;
     }
 }
-
-struct ClientAttestation::Runtime {
-    wasm_engine_t *mEngine = nullptr;
-    wasmtime_store_t *mStore = nullptr;
-    wasmtime_context_t *mContext = nullptr;
-    wasmtime_memory_t mMemory;
-    wasmtime_func_t mJudge;
-    uint32_t mBuffer = 0;
-    uint32_t mCapacity = 0;
-
-    ~Runtime() {
-        if (mStore != nullptr)
-            wasmtime_store_delete(mStore);
-        if (mEngine != nullptr)
-            wasm_engine_delete(mEngine);
-    }
-
-    bool function(wasmtime_instance_t &instance, const char *name, wasmtime_func_t &out) {
-        wasmtime_extern_t item;
-        if (!wasmtime_instance_export_get(mContext, &instance, name, std::strlen(name), &item)
-            || item.kind != WASMTIME_EXTERN_FUNC)
-            return false;
-        out = item.of.func;
-        return true;
-    }
-
-    // every export takes and returns 32-bit integers
-    bool call(wasmtime_func_t &function, const uint32_t *arguments, size_t count, int32_t &result) {
-        wasmtime_val_t values[2];
-        for (size_t index = 0; index < count; index++) {
-            values[index].kind = WASMTIME_I32;
-            values[index].of.i32 = (int32_t) arguments[index];
-        }
-
-        wasmtime_val_t returned;
-        wasm_trap_t *trap = nullptr;
-        wasmtime_error_t *error = wasmtime_func_call(mContext, &function, values, count, &returned, 1, &trap);
-        if (error != nullptr || trap != nullptr) {
-            if (error != nullptr)
-                wasmtime_error_delete(error);
-            if (trap != nullptr)
-                wasm_trap_delete(trap);
-            return false;
-        }
-
-        result = returned.of.i32;
-        return returned.kind == WASMTIME_I32;
-    }
-};
-
-ClientAttestation::ClientAttestation() = default;
-
-ClientAttestation::~ClientAttestation() = default;
 
 ClientAttestation &ClientAttestation::getInstance() {
     static ClientAttestation instance;
     return instance;
 }
 
-bool ClientAttestation::_load() {
-    if (mTried)
-        return mRuntime != nullptr;
-    mTried = true;
-
-    std::unique_ptr<Runtime> runtime(new Runtime());
-    runtime->mEngine = wasm_engine_new();
-    if (runtime->mEngine == nullptr)
-        return false;
-    runtime->mStore = wasmtime_store_new(runtime->mEngine, nullptr, nullptr);
-    runtime->mContext = wasmtime_store_context(runtime->mStore);
-
-    std::vector<unsigned char> bytes = unpack();
-    wasmtime_module_t *module = nullptr;
-    wasmtime_error_t *error = wasmtime_module_new(runtime->mEngine, bytes.data(), bytes.size(), &module);
-    if (error != nullptr) {
-        wasmtime_error_delete(error);
-        LOG_WARN(LogAreaID::Network, "The attestation module could not be read: clients are not attested");
-        return false;
+ClientAttestation::~ClientAttestation() {
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        mStopping = true;
     }
-
-    // the module imports nothing: it can only compute on what it is handed
-    wasmtime_instance_t instance;
-    wasm_trap_t *trap = nullptr;
-    error = wasmtime_instance_new(runtime->mContext, module, nullptr, 0, &instance, &trap);
-    std::fill(bytes.begin(), bytes.end(), (unsigned char) 0);
-    wasmtime_module_delete(module);
-    if (error != nullptr || trap != nullptr) {
-        if (error != nullptr)
-            wasmtime_error_delete(error);
-        if (trap != nullptr)
-            wasm_trap_delete(trap);
-        LOG_WARN(LogAreaID::Network, "The attestation module could not be started: clients are not attested");
-        return false;
-    }
-
-    wasmtime_extern_t memory;
-    wasmtime_func_t buffer;
-    wasmtime_func_t capacity;
-    int32_t address = 0;
-    int32_t size = 0;
-    if (!wasmtime_instance_export_get(runtime->mContext, &instance, "memory", 6, &memory)
-        || memory.kind != WASMTIME_EXTERN_MEMORY || !runtime->function(instance, "a", buffer)
-        || !runtime->function(instance, "c", capacity) || !runtime->function(instance, "b", runtime->mJudge)
-        || !runtime->call(buffer, nullptr, 0, address) || !runtime->call(capacity, nullptr, 0, size)) {
-        LOG_WARN(LogAreaID::Network, "The attestation module is not one this server knows: clients are not attested");
-        return false;
-    }
-
-    runtime->mMemory = memory.of.memory;
-    runtime->mBuffer = (uint32_t) address;
-    runtime->mCapacity = (uint32_t) size;
-    if ((uint64_t) runtime->mBuffer + runtime->mCapacity
-        > wasmtime_memory_data_size(runtime->mContext, &runtime->mMemory))
-        return false;
-
-    mRuntime = std::move(runtime);
-    return true;
+    mWake.notify_all();
+    if (mWorker.joinable())
+        mWorker.join();
 }
 
-int ClientAttestation::inspectTransport(const std::string &fingerprint) {
+void ClientAttestation::inspect(const nethernet::Connection &connection) {
+    std::string transcript(MAX_TRANSCRIPT, '\0');
+    transcript.resize(falcon_transport_take(connection.getRemoteFingerprint().c_str(),
+                                            reinterpret_cast<unsigned char *>(&transcript[0]), transcript.size()));
+
+    std::string evidence;
+    append(evidence, Section::TransportTranscript, transcript);
+    append(evidence, Section::Offer, withoutPersonalData(connection.getRemoteOffer()));
+
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        if (mStopping || mQuestions.size() >= MAX_QUESTIONS)
+            return;
+        mQuestions.push_back(Question{connection.getNetworkIdentifier(), std::move(evidence)});
+        if (!mWorker.joinable())
+            mWorker = std::thread([this]() { _run(); });
+    }
+    mWake.notify_one();
+}
+
+std::vector<std::pair<NetworkIdentifier, int>> ClientAttestation::takeVerdicts() {
     std::lock_guard<std::mutex> lock(mMutex);
-    if (!_load())
-        return 0;
+    std::vector<std::pair<NetworkIdentifier, int>> verdicts;
+    verdicts.swap(mVerdicts);
+    return verdicts;
+}
 
-    unsigned char *buffer = wasmtime_memory_data(mRuntime->mContext, &mRuntime->mMemory) + mRuntime->mBuffer;
-    const size_t length = falcon_transport_take(fingerprint.c_str(), buffer, mRuntime->mCapacity);
-    if (length == 0)
-        return 0;
+void ClientAttestation::_run() {
+    for (;;) {
+        Question question;
+        {
+            std::unique_lock<std::mutex> lock(mMutex);
+            mWake.wait(lock, [this]() { return mStopping || !mQuestions.empty(); });
+            if (mStopping)
+                return;
+            question = std::move(mQuestions.front());
+            mQuestions.pop_front();
+        }
 
-    const uint32_t arguments[2] = {(uint32_t) Evidence::Transport, (uint32_t) length};
-    int32_t verdict = 0;
-    return mRuntime->call(mRuntime->mJudge, arguments, 2, verdict) ? verdict : 0;
+        // the service being away or wrong must never cost a player their place: only a clear answer counts
+        HttpResponse response;
+        std::string error;
+        const HttpClient::Headers headers = {{"Content-Type", "application/octet-stream"}};
+        if (!HttpClient::post(SERVICE, headers, question.mEvidence, response, error, TIMEOUT_MS)
+            || response.mStatus != 200 || response.mBody.empty() || response.mBody.size() > 8)
+            continue;
+
+        char *end = nullptr;
+        const long verdict = std::strtol(response.mBody.c_str(), &end, 10);
+        if (end == response.mBody.c_str() || *end != '\0' || verdict == 0 || verdict < -1000 || verdict > 1000)
+            continue;
+
+        std::lock_guard<std::mutex> lock(mMutex);
+        mVerdicts.emplace_back(question.mId, (int) verdict);
+    }
 }

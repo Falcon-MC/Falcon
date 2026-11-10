@@ -217,19 +217,6 @@ target_compile_definitions(datachannel-static PRIVATE SSL_CTX_set_info_callback=
 target_link_libraries(datachannel-static PUBLIC FalconTransportTranscript)
 target_link_libraries(FalconCore PUBLIC FalconTransportTranscript)
 
-# the attestation module is carried inside the executable
-set(FALCON_ATTESTATION_MODULE "${CMAKE_CURRENT_SOURCE_DIR}/src/Network/attestation.bin")
-set(FALCON_ATTESTATION_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/AttestationModule.cpp")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FALCON_ATTESTATION_MODULE}")
-file(READ "${FALCON_ATTESTATION_MODULE}" FALCON_ATTESTATION_HEX HEX)
-string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_ATTESTATION_BYTES "${FALCON_ATTESTATION_HEX}")
-file(WRITE "${FALCON_ATTESTATION_SOURCE}.new"
-        "#include <cstddef>\nextern const unsigned char FALCON_ATTESTATION_MODULE[] = {${FALCON_ATTESTATION_BYTES}};\n"
-        "extern const size_t FALCON_ATTESTATION_MODULE_SIZE = sizeof(FALCON_ATTESTATION_MODULE);\n")
-execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FALCON_ATTESTATION_SOURCE}.new"
-        "${FALCON_ATTESTATION_SOURCE}")
-target_sources(FalconCore PRIVATE "${FALCON_ATTESTATION_SOURCE}")
-
 option(FALCON_BUILD_SERVER_EXECUTABLE "Build the dedicated server executable" ON)
 
 option(FALCON_BUILD_EMBEDDED_TESTS "Build embedded server lifecycle checks" OFF)
