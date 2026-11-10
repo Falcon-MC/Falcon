@@ -1,0 +1,9 @@
+# data tables laid out by hand: one entry per line reads better than what a formatter packs
+Falcon.Server/src/World/Level/Block/BlockData.cpp
+Falcon.Server/src/World/Level/Map/MapColors.cpp
+Falcon.Server/src/World/Level/LevelGen/Structure/JigsawPoolData.cpp
+Falcon.Server/src/World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.cpp
+Falcon.Server/src/World/Item/ItemDataTable.cpp
+Falcon.Server/src/World/Item/FurnaceExperience.cpp
+Falcon.Server/src/World/Actor/VanillaActorTable.cpp
+Falcon.Server/src/Falcon/Plugin/WasmImports.cpp
