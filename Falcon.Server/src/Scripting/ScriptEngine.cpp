@@ -1123,7 +1123,9 @@ void ScriptEngine::tick(int64_t currentTick) {
     for (const auto &event: queued)
         emitScriptEvent(event.first, event.second);
 
-    mClocks.tick();
+    // sub_145D0A460: every clock stands still without the daylight cycle
+    if (mHost == nullptr || mHost->getWorlds().getDefault().getOverworld().getGameRules().getBool("dodaylightcycle"))
+        mClocks.tick();
     if (currentTick - mLastClockSync >= WorldClockSystem::SYNC_INTERVAL_TICKS) {
         mLastClockSync = currentTick;
         SyncWorldClocksPacket packet;
