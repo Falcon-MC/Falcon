@@ -8,4 +8,9 @@ namespace FalconLegacyBlockData {
     extern const size_t kIdMapSize;
     extern const unsigned char kIdMeta[];
     extern const size_t kIdMetaSize;
+    // item names and entity identifiers to their numeric ids, for the items and entities of old worlds
+    extern const char kItemIds[];
+    extern const size_t kItemIdsSize;
+    extern const char kEntityIds[];
+    extern const size_t kEntityIdsSize;
 }

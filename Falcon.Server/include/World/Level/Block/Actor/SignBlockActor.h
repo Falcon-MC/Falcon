@@ -22,6 +22,9 @@ public:
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
+    // one side with no text, as the game saves it
+    static Tag emptyText();
+
 private:
     void _putFields(Tag &data) const;
 
@@ -29,6 +32,4 @@ private:
     Tag mFront = emptyText();
     Tag mBack = emptyText();
     bool mWaxed = false;
-
-    static Tag emptyText();
 };
