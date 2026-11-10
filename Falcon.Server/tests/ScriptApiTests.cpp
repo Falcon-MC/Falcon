@@ -1,6 +1,8 @@
 #include "Core/Json/Json.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Event/EventBus.h"
 #include "Scripting/BehaviorPackManager.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/ScriptEngine.h"
 #include "Server/Commands/PlayerCommandOrigin.h"
 #include "Server/Commands/ScriptEventCommand.h"
@@ -9,9 +11,29 @@
 #include "World/Level/GameRules.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
+#include "Scripting/WorldClockSystem.h"
+#include "Core/Utility/ReadOnlyBinaryStream.h"
+#include "Network/Handler/LoginHandler.h"
+#include "Network/Handler/NetworkHandler.h"
+#include "Protocol/Packets/ChangeDimensionPacket.h"
+#include "Protocol/Packets/DimensionDataPacket.h"
+#include "World/Level/LevelGen/DimensionFactory.h"
+#include "World/Level/Chunk/LevelChunk.h"
+#include "Protocol/Packets/SyncWorldClocksPacket.h"
 #include "World/Level/WorldManager.h"
 #include "World/Actor/MobEffect.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Chunk/LevelChunk.h"
+#include "World/Actor/ActorDamageSource.h"
+#include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Misc/ItemActor.h"
+#include "World/Actor/Vehicle/ChestVehicleActor.h"
+#include "World/Inventory/InventoryManager.h"
+#include "Protocol/Packets/ContainerOpenPacket.h"
+#include "Network/Handler/ItemActorHandler.h"
+#include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 
 #include <chrono>
 #include <filesystem>
@@ -145,6 +167,8 @@ system.beforeEvents.startup.subscribe((event) => {
 
 let saved;
 world.beforeEvents.effectAdd.subscribe((event) => {
+    if (saved !== undefined || event.entity.typeId !== "minecraft:player")
+        return;
     saved = event.entity;
     r.restrictedWrite = capture(() => event.entity.addTag("x"));
     r.restrictedRead = capture(() => event.entity.getTags());
@@ -239,6 +263,451 @@ system.runTimeout(() => {
 system.runTimeout(() => world.setDynamicProperty("world", JSON.stringify(r)), 7);
 )JS";
 
+    const char *const ENTITIES = R"JS(
+import { world, system, Entity, Player, Effect, EffectTypes, ItemStack, BlockPermutation, EntityTypes, EntityComponentTypes, EntityHealthComponent,
+         EntityTypeFamilyComponent, EntityDamageCause, EntityInitializationCause, EntityHealCause, InputButton,
+         ButtonState, InputMode, EntitySwingSource, CommandPermissionLevel, PlayerPermissionLevel,
+         TickingAreaManager, EntityComponent } from "@minecraft/server";
+
+const log = (line) => { r.events = (r.events || "") + line + ";"; };
+world.afterEvents.entitySpawn.subscribe((e) => log("spawn:" + e.entity.typeId + ":" + e.cause));
+world.beforeEvents.entityHurt.subscribe((e) => {
+    if (e.hurtEntity.typeId === "minecraft:cow" && e.damage === 5)
+        e.damage = 3;
+});
+world.afterEvents.entityHurt.subscribe((e) => log("hurt:" + e.hurtEntity.typeId + ":" + e.damage + ":"
+    + e.damageSource.cause + ":" + (e.damageSource.damagingEntity instanceof Player)));
+world.afterEvents.entityDie.subscribe((e) => log("die:" + e.deadEntity.typeId + ":" + e.damageSource.cause));
+world.beforeEvents.effectAdd.subscribe((e) => {
+    if (e.effectType === "speed")
+        e.duration = 40;
+    if (e.effectType === "poison")
+        e.cancel = true;
+});
+world.afterEvents.effectAdd.subscribe((e) => log("effect:" + e.effect.typeId + ":" + e.effect.duration
+    + ":" + (e.effect instanceof Effect)));
+world.afterEvents.entityHealthChanged.subscribe((e) => {
+    if (e.entity.typeId === "minecraft:player")
+        log("health:" + e.oldValue + ">" + e.newValue);
+});
+world.beforeEvents.entityHeal.subscribe((e) => { e.healing = 2; });
+world.afterEvents.entityHeal.subscribe((e) => log("heal:" + e.healing + ":" + e.healSource.cause));
+world.afterEvents.dataDrivenEntityTrigger.subscribe((e) => {
+    if (e.eventId === "minecraft:ageable_grow_up")
+        log("trigger:" + e.eventId + ":" + JSON.stringify(e.getModifiers()));
+});
+world.beforeEvents.entityRemove.subscribe((e) => log("beforeRemove:" + e.removedEntity.typeId));
+world.afterEvents.entityRemove.subscribe((e) => log("remove:" + e.typeId));
+world.beforeEvents.playerGameModeChange.subscribe((e) => {
+    if (e.toGameMode === "Adventure")
+        e.toGameMode = "Creative";
+});
+world.afterEvents.playerGameModeChange.subscribe((e) => log("gm:" + e.fromGameMode + ">" + e.toGameMode));
+world.afterEvents.playerEmote.subscribe((e) => log("emote:" + e.personaPieceId));
+world.afterEvents.playerButtonInput.subscribe((e) => log("button:" + e.button + ":" + e.newButtonState));
+world.afterEvents.playerInputModeChange.subscribe((e) => log("mode:" + e.previousInputModeUsed + ">"
+    + e.newInputModeUsed));
+world.afterEvents.playerSwingStart.subscribe((e) => log("swing:" + e.swingSource));
+world.afterEvents.entityStartSneaking.subscribe((e) => log("sneak:" + e.entity.typeId));
+world.afterEvents.entityStopSneaking.subscribe((e) => log("unsneak:" + e.entity.typeId));
+world.beforeEvents.entityTamed.subscribe((e) => log("beforeTame:" + e.entity.typeId));
+world.afterEvents.entityTamed.subscribe((e) => log("tamed:" + e.entity.typeId + ":" + (e.tamingEntity instanceof Player)));
+world.afterEvents.playerDimensionChange.subscribe((e) => log("dimension:" + e.fromDimension.id + ">"
+    + e.toDimension.id));
+world.beforeEvents.playerLeave.subscribe((e) => log("leaving:" + (e.player instanceof Player)));
+world.afterEvents.playerInteractWithEntity.subscribe((e) => log("interact:" + e.target.typeId));
+
+r.enums = [EntityDamageCause.void, EntityDamageCause.entityAttack, EntityInitializationCause.Born,
+           EntityHealCause.SelfHeal, InputButton.Jump, ButtonState.Pressed, InputMode.Touch, EntitySwingSource.Attack,
+           CommandPermissionLevel.Admin, PlayerPermissionLevel.Operator].join(",");
+r.componentIds = [EntityHealthComponent.componentId, EntityTypeFamilyComponent.componentId,
+                  EntityComponentTypes.Movement].join(",");
+r.componentChain = Object.getPrototypeOf(EntityHealthComponent.prototype) !== null
+    && EntityHealthComponent.prototype instanceof EntityComponent;
+r.typesConstructor = (() => { try { new EffectTypes(); return "ok"; } catch (e) { return e.name; } })();
+
+system.runTimeout(() => {
+  try {
+    const overworld = world.getDimension("overworld");
+    const cow = overworld.getEntities({ type: "minecraft:cow" })[0];
+    const player = world.getPlayers()[0];
+    r.cowFound = cow instanceof Entity;
+    r.families = cow.getComponent("type_family").getTypeFamilies().join(",");
+    r.familyQuery = overworld.getEntities({ families: ["mob"], type: "minecraft:cow" }).length + ","
+        + overworld.getEntities({ excludeFamilies: ["cow"], type: "minecraft:cow" }).length;
+    const health = cow.getComponent(EntityComponentTypes.Health);
+    r.health = (health instanceof EntityHealthComponent) + ":" + health.effectiveMax + ":" + health.currentValue
+        + ":" + (health.entity === cow);
+    health.setCurrentValue(4);
+    r.healthSet = health.currentValue + ":" + health.setCurrentValue(1000);
+    health.resetToMaxValue();
+    r.componentsCount = cow.getComponents().length > 5;
+    r.movement = cow.hasComponent("minecraft:movement") + ":" + (cow.getComponent("movement").currentValue > 0);
+    r.missing = cow.getComponent("minecraft:tameable") === undefined && !cow.hasComponent("minecraft:is_tamed");
+    r.navigation = cow.getComponent("minecraft:navigation.walk").avoidWater + ":" + cow.getComponent("minecraft:navigation.walk").canWalk;
+    r.localization = cow.localizationKey + "," + EntityTypes.get("cow").localizationKey + ","
+        + EntityTypes.get("minecraft:cow").id + "," + (EntityTypes.get("nope:nope") === undefined)
+        + "," + (EntityTypes.getAll().length > 50);
+    r.effectTypes = EffectTypes.get("minecraft:speed").getName() + "," + (EffectTypes.getAll().length > 20)
+        + "," + (EffectTypes.get("nope") === undefined);
+    const added = cow.addEffect("speed", 200, { amplifier: 1 });
+    r.addEffect = (added instanceof Effect) + ":" + added.amplifier + ":" + added.duration + ":" + added.isValid;
+    r.cancelledEffect = cow.addEffect(EffectTypes.get("poison"), 100) === undefined;
+    r.effects = cow.getEffects().map((effect) => effect.typeId).join(",");
+    cow.removeEffect("speed");
+    r.removedEffect = added.isValid;
+    const box = cow.getAABB();
+    r.aabb = (box.extent.y > 0) + ":" + (box.center.y > cow.location.y);
+    r.states = [cow.isOnGround, cow.isInWater, cow.isFalling, cow.isClimbing, cow.isSwimming, cow.isSleeping].join(",");
+    cow.isSneaking = true;
+    r.sneaking = cow.isSneaking;
+    cow.isSneaking = false;
+    r.hurt = cow.applyDamage(5, { cause: EntityDamageCause.fall, damagingEntity: player });
+    r.projectileOption = (() => { try { cow.applyDamage(1, { damagingProjectile: {} }); return "ok"; }
+                                  catch (e) { return e.name; } })();
+    cow.triggerEvent("minecraft:ageable_grow_up");
+    cow.setRotation({ x: 10, y: 20 });
+    r.rotation = cow.getRotation().x + "," + cow.getRotation().y;
+    cow.lookAt({ x: cow.location.x, y: cow.location.y, z: cow.location.z + 10 });
+    r.lookAt = Math.round(cow.getRotation().y);
+    const viewer = overworld.getEntities({ type: "minecraft:wolf" })[0];
+    viewer.lookAt(player.location);
+    const seen = viewer.getEntitiesFromViewDirection({ maxDistance: 20, ignoreBlockCollision: true });
+    r.entityRay = seen.length + ":" + (seen.length > 0 && seen[0].entity === player) + ":"
+        + (seen.length > 0 ? seen[0].distance.toFixed(2) : "-")
+        + ":" + viewer.getEntitiesFromViewDirection({ maxDistance: 0, ignoreBlockCollision: true }).length
+        + ":" + viewer.getEntitiesFromViewDirection({ maxDistance: 20, excludeTypes: ["minecraft:player"],
+                                                    ignoreBlockCollision: true }).length;
+    r.blockRay = cow.getBlockFromViewDirection() === undefined;
+    player.setRotation({ x: 0, y: 0 });
+    const fence = player.getBlockFromViewDirection();
+    r.shapeRay = fence.block.typeId + ":" + fence.face + ":" + fence.faceLocation.z.toFixed(3);
+    const stone = player.getBlockFromViewDirection({ excludeTypes: ["oak_fence"] });
+    const permutation = player.getBlockFromViewDirection({ includePermutations: [BlockPermutation.resolve("minecraft:stone")] });
+    r.filterRay = stone.block.location.z + ":" + permutation.block.location.z + ":"
+        + (player.getBlockFromViewDirection({ maxDistance: 4 }) === undefined) + ":"
+        + (player.getBlockFromViewDirection({ excludeTags: ["stone"], excludeTypes: ["oak_fence"] }) === undefined);
+    const horse = overworld.getEntities({ type: "minecraft:horse" })[0];
+    // the spawn event rolls a foal at random: make it an adult, wild horse
+    if (!horse.hasComponent("minecraft:tamemount"))
+        horse.triggerEvent("minecraft:spawn_adult");
+    const mount = horse.getComponent("minecraft:tamemount");
+    mount.tame(false);
+    r.tameMount = mount.isTamed + ":" + mount.isTamedToPlayer + ":" + (mount.tamedToPlayerId === undefined);
+    r.emoting = player.isEmoting;
+    r.betaAbsent = !("chatDisplayName" in Player.prototype) && !("eatItem" in Player.prototype);
+    player.commandPermissionLevel = CommandPermissionLevel.GameDirectors;
+    r.op = player.commandPermissionLevel + ":" + player.playerPermissionLevel;
+    const promise = world.tickingAreaManager.createTickingArea("test:pending", { dimension: overworld,
+        from: { x: 4000, y: 0, z: 4000 }, to: { x: 4000, y: 0, z: 4000 } });
+    promise.then(() => { r.pending = "resolved"; }, () => { r.pending = "rejected"; });
+    world.tickingAreaManager.removeTickingArea("test:pending");
+    r.blockedTeleport = cow.tryTeleport({ x: 3000, y: 200, z: 3000 });
+    r.teleport = cow.tryTeleport({ x: 3, y: 200, z: 3 }, { rotation: { x: 0, y: 90 }, checkForBlocks: false })
+        + ":" + cow.location.y + ":" + cow.getRotation().y;
+    r.teleportBounds = (() => { try { cow.teleport({ x: 0, y: 100000, z: 0 }); return "ok"; }
+                                catch (e) { return e.name; } })();
+    cow.setDynamicProperties({ a: 1, b: "two" });
+    r.entityDynamic = cow.getDynamicProperty("b") + ":" + (cow.getDynamicPropertyTotalByteCount() > 0);
+    r.resetProperty = typeof cow.resetProperty;
+    r.matchesLevel = player.matches({ minLevel: 0, maxLevel: 0 }) + "," + player.matches({ minLevel: 1 }) + ","
+        + cow.matches({ minLevel: 0 }) + "," + cow.matches({ minVerticalRotation: -90, maxVerticalRotation: 90 });
+
+    r.player = [player.isFlying, player.isGliding, player.isJumping, player.getTotalXp(),
+                player.xpEarnedAtCurrentLevel, player.totalXpNeededForNextLevel, player.commandPermissionLevel,
+                player.playerPermissionLevel].join(",");
+    r.input = player.inputInfo.lastInputModeUsed + ":" + player.inputInfo.getButtonState(InputButton.Jump) + ":"
+        + JSON.stringify(player.inputInfo.getMovementVector());
+    player.selectedSlotIndex = 4;
+    r.slot = player.selectedSlotIndex + ":" + (() => { try { player.selectedSlotIndex = 9; return "ok"; }
+                                                    catch (e) { return e.name; } })();
+    r.spawnBefore = player.getSpawnPoint() === undefined;
+    player.setSpawnPoint({ dimension: overworld, x: 5, y: 70, z: 6 });
+    const spawn = player.getSpawnPoint();
+    r.spawn = spawn.x + "," + spawn.y + "," + spawn.z + "," + (spawn.dimension === overworld);
+    player.setSpawnPoint();
+    r.spawnCleared = player.getSpawnPoint() === undefined;
+    r.playerFamilies = player.getComponent("type_family").getTypeFamilies().join(",")
+        + ":" + player.matches({ families: ["player"] });
+    r.playerHealth = player.getComponent("health").effectiveMax + ":" + player.hasComponent("player.hunger");
+    player.setGameMode("Adventure");
+    r.gameMode = player.getGameMode();
+
+    const manager = world.tickingAreaManager;
+    r.tickingClass = manager instanceof TickingAreaManager;
+    manager.createTickingArea("test:area", { dimension: overworld, from: { x: 0, y: 0, z: 0 }, to: { x: 20, y: 0, z: 5 } });
+    r.ticking = manager.hasTickingArea("test:area") + ":" + manager.getAllTickingAreas().length + ":"
+        + manager.getTickingArea("test:area").chunkCount + ":" + manager.chunkCount;
+    r.tickingDuplicate = (() => { try { manager.createTickingArea("test:area", { dimension: overworld,
+        from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 0 } }); return "ok"; } catch (e) { return e.name + ":" + e.reason; } })();
+    manager.removeTickingArea("test:area");
+    r.tickingRemoved = manager.hasTickingArea("test:area");
+    r.killed = cow.kill();
+  } catch (e) { r.error = e.name + ":" + e.message + ":" + e.stack; }
+    world.setDynamicProperty("entities", JSON.stringify(r));
+}, 2);
+system.runTimeout(() => world.setDynamicProperty("entities", JSON.stringify(r)), 7);
+)JS";
+
+    const char *const ITEMS = R"JS(
+import { world, system, ItemStack, ItemType, ItemTypes, Container, ContainerSlot, EnchantmentType, EnchantmentTypes,
+         EnchantmentSlot, ItemLockMode, Potions, PotionEffectType, ItemDurabilityComponent, ItemEnchantableComponent,
+         ItemFoodComponent, ItemBookComponent, ItemPotionComponent, ItemInventoryComponent, ItemCooldownComponent,
+         EntityInventoryComponent, EntityEquippableComponent, EntityEnderInventoryComponent,
+         PlayerCursorInventoryComponent, BlockTypes, BlockPermutation } from "@minecraft/server";
+
+const log = (line) => { r.events = (r.events || "") + line + ";"; };
+const fail = (f) => { try { f(); return "ok"; } catch (e) { return e.name; } };
+world.afterEvents.itemStartUse.subscribe((e) => log("start:" + e.itemStack.typeId + ":" + e.useDuration));
+world.afterEvents.itemStopUse.subscribe((e) => log("stop:" + e.itemStack.typeId + ":" + e.useDuration));
+world.afterEvents.itemReleaseUse.subscribe((e) => log("release:" + e.itemStack.typeId + ":" + e.useDuration));
+world.afterEvents.itemCompleteUse.subscribe((e) => log("complete:" + e.itemStack.typeId + ":" + e.source.name));
+world.beforeEvents.entityItemPickup.subscribe((e) => {
+    log("beforePickup:" + e.entity.typeId + ":" + e.item.typeId);
+    if (e.entity.typeId === "minecraft:piglin")
+        e.cancel = true;
+});
+world.afterEvents.entityItemPickup.subscribe((e) => log("pickup:" + e.entity.typeId + ":"
+    + e.items.map((i) => i.typeId + "x" + i.amount).join(",")), { itemFilter: { includeTypes: ["diamond"] } });
+world.afterEvents.entityItemPickup.subscribe((e) => log("filteredPickup"), { itemFilter: { includeTypes: ["stone"] } });
+world.afterEvents.playerInventoryItemChange.subscribe((e) => log("change:" + e.slot + ":" + e.inventoryType + ":"
+    + (e.beforeItemStack ? e.beforeItemStack.typeId : "-") + ">" + (e.itemStack ? e.itemStack.typeId : "-")),
+    { includeItems: ["minecraft:diamond"] });
+world.afterEvents.entityContainerOpened.subscribe((e) => log("opened:" + e.entity.typeId + ":"
+    + e.openSource.entity.typeId), { entityFilter: { type: "minecraft:chest_minecart" } });
+world.afterEvents.entityContainerOpened.subscribe((e) => log("wrongOpened"), { entityFilter: { type: "minecraft:cow" } });
+world.afterEvents.entityContainerClosed.subscribe((e) => log("closed:" + e.entity.typeId + ":"
+    + e.closeSource.entity.typeId), { accessSourceFilter: { entityFilter: { type: "minecraft:player" } } });
+world.afterEvents.playerInventoryItemChange.subscribe((e) => log("hotbar:" + e.slot),
+    { inventoryType: "Hotbar", allowedSlots: [3] });
+
+system.runTimeout(() => {
+  try {
+    const player = world.getPlayers()[0];
+    const sword = new ItemStack("diamond_sword");
+    r.constructed = sword.typeId + ":" + sword.amount + ":" + sword.maxAmount + ":" + sword.isStackable + ":"
+        + (sword.type instanceof ItemType) + ":" + sword.type.id;
+    r.badType = fail(() => new ItemStack("minecraft:nope"));
+    r.badAmount = fail(() => new ItemStack("stone", 256));
+    r.clamped = new ItemStack("ender_pearl", 40).amount;
+    sword.nameTag = "Blade";
+    sword.setLore(["first", { rawtext: [{ text: "second" }] }]);
+    sword.keepOnDeath = true;
+    sword.lockMode = ItemLockMode.slot;
+    r.meta = sword.nameTag + ":" + sword.getLore().length + ":" + sword.getRawLore()[1].rawtext[0].text + ":"
+        + sword.getRawLore()[0].text + ":" + sword.keepOnDeath + ":" + sword.lockMode;
+    r.loreBounds = fail(() => sword.setLore(["x".repeat(51)]));
+    sword.setCanDestroy(["stone"]);
+    r.canDestroy = sword.getCanDestroy().join(",") + ":" + fail(() => sword.setCanDestroy(["nope:block"]));
+    sword.setDynamicProperty("test:owner", "me");
+    r.dynamic = sword.getDynamicProperty("test:owner") + ":" + fail(() => new ItemStack("stone").setDynamicProperty("a", 1));
+    const copy = sword.clone();
+    copy.nameTag = undefined;
+    r.clone = copy.getLore().length + ":" + (copy.nameTag === undefined) + ":" + sword.nameTag + ":"
+        + copy.getDynamicProperty("test:owner");
+    r.stackable = new ItemStack("stone").isStackableWith(new ItemStack("stone", 5)) + ":"
+        + sword.isStackableWith(copy) + ":" + new ItemStack("stone").matches("stone");
+
+    const durability = sword.getComponent("durability");
+    durability.damage = 10;
+    r.durability = (durability instanceof ItemDurabilityComponent) + ":" + durability.maxDurability + ":"
+        + sword.getComponent(ItemDurabilityComponent.componentId).damage + ":" + fail(() => { durability.damage = 99999; })
+        + ":" + fail(() => durability.getDamageChance(4));
+    const enchantable = sword.getComponent("minecraft:enchantable");
+    enchantable.addEnchantment({ type: new EnchantmentType("sharpness"), level: 3 });
+    r.enchant = (enchantable instanceof ItemEnchantableComponent) + ":" + enchantable.getEnchantments().length + ":"
+        + enchantable.getEnchantment("minecraft:sharpness").level + ":" + enchantable.hasEnchantment("unbreaking") + ":"
+        + enchantable.slots.join("|");
+    r.enchantErrors = [fail(() => enchantable.addEnchantment({ type: "nope", level: 1 })),
+        fail(() => enchantable.addEnchantment({ type: "sharpness", level: 9 })),
+        fail(() => enchantable.addEnchantment({ type: "power", level: 1 })),
+        enchantable.canAddEnchantment({ type: "smite", level: 1 }),
+        enchantable.canAddEnchantment({ type: "unbreaking", level: 1 })].join(",");
+    r.enchantTypes = EnchantmentTypes.get("minecraft:flame").id + ":" + EnchantmentTypes.get("flame").maxLevel + ":"
+        + (EnchantmentTypes.getAll().length > 30) + ":" + (EnchantmentTypes.get("nope") === undefined) + ":"
+        + EnchantmentSlot.Sword;
+    r.components = sword.getComponents().map((c) => c.typeId).sort().join(",");
+
+    const apple = new ItemStack("apple");
+    const food = apple.getComponent("food");
+    r.food = (food instanceof ItemFoodComponent) + ":" + food.nutrition + ":" + food.saturationModifier.toFixed(1)
+        + ":" + food.canAlwaysEat + ":" + (apple.getComponent("durability") === undefined);
+    const pearl = new ItemStack("ender_pearl").getComponent("cooldown");
+    r.cooldown = (pearl instanceof ItemCooldownComponent) + ":" + pearl.cooldownCategory + ":"
+        + pearl.isCooldownCategory(pearl.cooldownCategory);
+
+    const potion = Potions.resolve("minecraft:swiftness", "ThrownSplash");
+    const potionComponent = potion.getComponent("potion");
+    r.potion = potion.typeId + ":" + (potionComponent instanceof ItemPotionComponent) + ":"
+        + potionComponent.potionEffectType.id + ":" + potionComponent.potionDeliveryType.id + ":"
+        + Potions.getEffectType("minecraft:swiftness").durationTicks + ":"
+        + (Potions.getEffectType("minecraft:healing").durationTicks === undefined) + ":"
+        + Potions.getAllDeliveryTypes().length + ":" + fail(() => Potions.resolve("nope", "Consume"));
+
+    const book = new ItemStack("writable_book");
+    const pages = book.getComponent("book");
+    pages.setContents(["one", "two"]);
+    pages.insertPage(1, "inserted");
+    pages.setPageContent(4, { rawtext: [{ text: "raw" }] });
+    r.bookBefore = (pages instanceof ItemBookComponent) + ":" + pages.pageCount + ":" + pages.getPageContent(1) + ":"
+        + (pages.getPageContent(4) === undefined) + ":" + pages.getRawPageContent(4).rawtext[0].text + ":"
+        + pages.isSigned + ":" + fail(() => pages.setPageContent(0, "x".repeat(257)));
+    r.bookTitle = (() => { try { pages.signBook("x".repeat(17), "me"); return "ok"; } catch (e) { return e.name + ":" + e.reason; } })();
+    pages.signBook("Story", "ScriptPlayer");
+    r.bookSigned = book.typeId + ":" + pages.isSigned + ":" + pages.title + ":" + pages.author;
+
+    const bundle = new ItemStack("bundle");
+    const storage = bundle.getComponent("inventory");
+    storage.container.addItem(new ItemStack("stone", 3));
+    r.bundle = (storage instanceof ItemInventoryComponent) + ":" + storage.container.getItem(0).amount + ":"
+        + bundle.getComponent("inventory").container.firstEmptySlot() + ":" + storage.container.weight + ":"
+        + storage.container.containerRules.bannedItems.length;
+
+    const inventory = player.getComponent("inventory");
+    const container = inventory.container;
+    container.clearAll();
+    r.inventory = (inventory instanceof EntityInventoryComponent) + ":" + (container instanceof Container) + ":"
+        + container.size + ":" + container.emptySlotsCount + ":" + inventory.inventorySize;
+    const rest = container.addItem(new ItemStack("ender_pearl", 16));
+    container.setItem(5, sword);
+    container.setItem(3, new ItemStack("diamond", 2));
+    container.setItem(12, new ItemStack("diamond", 1));
+    r.container = (rest === undefined) + ":" + container.getItem(5).nameTag + ":" + container.firstItem() + ":"
+        + container.find(new ItemStack("diamond", 1)) + ":" + container.findLast(new ItemStack("diamond", 2)) + ":"
+        + container.contains(new ItemStack("diamond", 2)) + ":" + fail(() => container.getItem(36));
+    const slot = container.getSlot(5);
+    slot.nameTag = "Renamed";
+    slot.amount = 1;
+    r.slot = (slot instanceof ContainerSlot) + ":" + slot.hasItem() + ":" + container.getItem(5).nameTag + ":"
+        + slot.typeId + ":" + slot.getComponent + ":" + slot.isValid + ":" + slot.getLore().length;
+    container.swapItems(3, 12, container);
+    container.moveItem(12, 20, container);
+    r.moved = container.getItem(3).amount + ":" + (container.getItem(12) === undefined) + ":" + container.getItem(20).amount;
+    const transferred = container.transferItem(20, bundle.getComponent("inventory").container);
+    r.transferred = (transferred === undefined) + ":" + (container.getItem(20) === undefined);
+
+    const equipment = player.getComponent("equippable");
+    equipment.setEquipment("Head", new ItemStack("diamond_helmet"));
+    equipment.setEquipment("Offhand", new ItemStack("shield"));
+    r.equipment = (equipment instanceof EntityEquippableComponent) + ":" + equipment.getEquipment("Head").typeId + ":"
+        + equipment.getEquipmentSlot("Offhand").typeId + ":" + equipment.totalArmor + ":" + equipment.totalToughness;
+    const ender = player.getComponent("minecraft:ender_inventory");
+    ender.container.setItem(0, new ItemStack("emerald", 4));
+    r.ender = (ender instanceof EntityEnderInventoryComponent) + ":" + ender.container.size + ":"
+        + player.getComponent("ender_inventory").container.getItem(0).amount;
+    const cursor = player.getComponent("cursor_inventory");
+    r.cursor = (cursor instanceof PlayerCursorInventoryComponent) + ":" + (cursor.item === undefined);
+    r.playerComponents = player.getComponents().map((c) => c.typeId).filter((id) => id.endsWith("inventory")
+        || id === "minecraft:equippable").sort().join(",");
+
+    const piglin = world.getDimension("overworld").getEntities({ type: "minecraft:piglin" })[0];
+    const mobInventory = piglin.getComponent("inventory");
+    mobInventory.container.setItem(1, new ItemStack("gold_ingot", 3));
+    piglin.getComponent("equippable").setEquipment("Mainhand", new ItemStack("golden_sword"));
+    r.mob = mobInventory.inventorySize + ":" + mobInventory.containerType + ":" + mobInventory.private + ":"
+        + mobInventory.container.getItem(1).amount + ":" + piglin.getComponent("equippable").getEquipment("Mainhand").typeId
+        + ":" + (world.getDimension("overworld").getEntities({ type: "minecraft:cow" })[0].getComponent("inventory") === undefined);
+    r.itemTypes = (ItemTypes.get("apple") === new ItemStack("apple").type) + ":" + new ItemStack("apple").localizationKey;
+
+    const tool = new ItemStack("iron_pickaxe");
+    tool.setDynamicProperties({ "test:a": 1, "test:b": "two" });
+    r.dynamicMore = tool.getDynamicPropertyIds().sort().join(",") + ":" + (tool.getDynamicPropertyTotalByteCount() > 0);
+    tool.clearDynamicProperties();
+    tool.setCanPlaceOn(["minecraft:dirt"]);
+    const toolDurability = tool.getComponent("durability");
+    toolDurability.unbreakable = true;
+    r.toolMore = tool.getDynamicPropertyIds().length + ":" + tool.getCanPlaceOn().join(",") + ":"
+        + toolDurability.unbreakable + ":" + JSON.stringify(toolDurability.getDamageChanceRange()) + ":"
+        + toolDurability.getDamageChance(1) + ":" + tool.matches("minecraft:iron_pickaxe") + ":" + tool.matches("stone");
+    const toolEnchant = tool.getComponent("enchantable");
+    toolEnchant.addEnchantments([{ type: "efficiency", level: 2 }, { type: "unbreaking", level: 1 }]);
+    toolEnchant.removeEnchantment("efficiency");
+    r.enchantMore = toolEnchant.getEnchantments().map((e) => e.type.id + e.level).join(",");
+    toolEnchant.removeAllEnchantments();
+    r.enchantCleared = toolEnchant.getEnchantments().length + ":" + toolEnchant.slots.join("|");
+    const leather = new ItemStack("leather_helmet").getComponent("dyeable");
+    leather.color = { red: 1, green: 0, blue: 0.5 };
+    r.dye = Math.round(leather.color.red * 255) + "," + Math.round(leather.color.blue * 255) + ":"
+        + (leather.defaultColor === undefined) + ":" + (new ItemStack("stone").getComponent("dyeable") === undefined);
+    r.compost = new ItemStack("red_shrub").getComponent("compostable").compostingChance;
+    const quill = new ItemStack("writable_book").getComponent("book");
+    quill.setContents(["a", { rawtext: [{ text: "b" }] }, "c"]);
+    quill.removePage(2);
+    r.bookMore = quill.contents.map((page) => page === undefined ? "~" : page).join(",") + ":"
+        + quill.rawContents.map((page) => page === undefined ? "~" : page.rawtext[0].text).join(",") + ":"
+        + (quill.title === undefined) + ":" + (quill.author === undefined);
+    r.potionsMore = Potions.getAllEffectTypes().length + ":" + Potions.getDeliveryType("Consume").id + ":"
+        + (Potions.getDeliveryType("nope") === undefined) + ":" + Potions.resolve("minecraft:healing", "Consume").typeId;
+    const pearl2 = new ItemStack("ender_pearl").getComponent("cooldown");
+    pearl2.startCooldown(player);
+    r.cooldownMore = pearl2.cooldownTicks + ":" + (pearl2.getCooldownTicksRemaining(player) > 0);
+    const playerInventory = player.getComponent("inventory");
+    r.inventoryMore = playerInventory.containerType + ":" + playerInventory.private + ":"
+        + playerInventory.canBeSiphonedFrom + ":" + playerInventory.restrictToOwner + ":"
+        + playerInventory.additionalSlotsPerStrength + ":" + (playerInventory.container.containerRules === undefined);
+    r.rules = (() => { try { new ItemStack("bundle").getComponent("inventory").container.addItem(new ItemStack("shulker_box"));
+        return "ok"; } catch (e) { return e.name + ":" + e.reason; } })();
+    const cart = world.getDimension("overworld").getEntities({ type: "minecraft:chest_minecart" })[0];
+    const cartInventory = cart.getComponent("inventory");
+    cartInventory.container.setItem(4, new ItemStack("diamond", 7));
+    r.cart = cartInventory.inventorySize + ":" + cartInventory.containerType + ":" + cartInventory.canBeSiphonedFrom
+        + ":" + cartInventory.container.size + ":" + cartInventory.container.getItem(4).amount + ":"
+        + (cart.getComponent("equippable") === undefined);
+    const chestItem = new ItemStack("chest");
+    const blockProperties = chestItem.getComponent("minecraft:block_actor_dynamic_properties");
+    blockProperties.set("test:key", 5);
+    r.blockProperties = blockProperties.get("test:key") + ":" + (blockProperties.totalByteCount() > 0) + ":"
+        + chestItem.clone().getComponent("block_actor_dynamic_properties").get("test:key") + ":"
+        + (new ItemStack("apple").getComponent("block_actor_dynamic_properties") === undefined);
+    blockProperties.set("test:key", undefined);
+    r.blockPropertiesCleared = String(blockProperties.get("test:key"));
+    const log = new ItemStack("oak_log");
+    r.stateMatches = log.matches("oak_log", { pillar_axis: "y" }) + ":" + log.matches("oak_log", { pillar_axis: "x" })
+        + ":" + log.matches("oak_log", { nope: 1 }) + ":" + new ItemStack("apple").matches("apple", { pillar_axis: "y" });
+    const stoneBlock = world.getDimension("overworld").getBlock({ x: 0, y: 101, z: 8 });
+    r.blockType = stoneBlock.type.id + ":" + (stoneBlock.type === BlockTypes.get("stone")) + ":"
+        + (BlockPermutation.resolve("stone").type === BlockTypes.get("minecraft:stone"));
+    const cursorComponent = player.getComponent("cursor_inventory");
+    r.cursorMore = fail(() => cursorComponent.clear()) + ":" + (cursorComponent.item === undefined) + ":"
+        + cursorComponent.isValid + ":" + (cursorComponent.entity === player);
+  } catch (e) { r.error = e.name + ":" + e.message + ":" + e.stack; }
+    world.setDynamicProperty("items", JSON.stringify(r));
+}, 2);
+system.runTimeout(() => world.setDynamicProperty("items", JSON.stringify(r)), 7);
+)JS";
+
+    const char *const BETA_ENTITIES = R"JS(
+import { world, system, Entity, Player, ItemStack } from "@minecraft/server";
+r.target = "target" in Entity.prototype;
+world.afterEvents.playerCursorItemGrab.subscribe((e) => { r.cursor = (r.cursor || "") + "grab:" + e.item.typeId + ";"; });
+world.afterEvents.playerCursorItemRelease.subscribe((e) => {
+    r.cursor = (r.cursor || "") + "release:" + e.item.typeId + ":" + e.player.name + ";";
+    world.setDynamicProperty("betaEntities", JSON.stringify(r));
+});
+r.betaPlayer = ["chatDisplayName", "chatNamePrefix", "eatItem", "postClientMessage", "stopSound", "stopAllSounds"]
+    .every((key) => key in Player.prototype);
+system.runTimeout(() => {
+    const player = world.getPlayers()[0];
+    player.chatNamePrefix = "[A] ";
+    player.chatNameSuffix = "!";
+    player.chatMessagePrefix = "§a";
+    r.chat = player.chatDisplayName + ":" + player.chatMessagePrefix;
+    player.chatNameSuffix = undefined;
+    r.chatCleared = player.chatDisplayName + ":" + (player.chatNameSuffix === undefined);
+    player.stopSound("random.click");
+    player.stopAllSounds();
+    player.postClientMessage("test:id", "value");
+    const food = player.getComponent("player.hunger");
+    food.setCurrentValue(10);
+    player.eatItem(new ItemStack("minecraft:apple"));
+    r.eat = food.currentValue > 10;
+    r.eatStone = (() => { try { player.eatItem(new ItemStack("minecraft:stone")); return "ok"; }
+                          catch (e) { return e.name; } })();
+    r.ping = (() => { try { return String(player.getPing()); } catch (e) { return e.name; } })();
+    world.setDynamicProperty("betaEntities", JSON.stringify(r));
+}, 3);
+)JS";
+
     const char *const STABLE1 = R"JS(
 import { world, system, GameMode } from "@minecraft/server";
 import * as server from "@minecraft/server";
@@ -250,12 +719,271 @@ r.systemBefore = "beforeEvents" in system;
 r.early = capture(() => world.getAllPlayers());
 r.startupEvent = "StartupEvent" in server;
 world.beforeEvents.worldInitialize.subscribe((event) => {
-    r.register = capture(() => event.blockComponentRegistry.registerCustomComponent("legacy:comp", {}));
+    r.register = capture(() => event.blockComponentRegistry.registerCustomComponent("legacy:comp", {
+        onPlayerInteract(...args) {
+            r.legacyInteract = args.length + "|" + Object.getPrototypeOf(args[0]).constructor.name;
+            world.setDynamicProperty("stable1", JSON.stringify(r));
+        },
+        onPlayerDestroy(event) {
+            r.legacyDestroy = Object.keys(event).filter((k) => k !== "block" && k !== "dimension").sort().join("+");
+            world.setDynamicProperty("stable1", JSON.stringify(r));
+        },
+        onPlayerBreak() {
+            r.legacyBreak = "called";
+        },
+    }));
+    r.legacyName = (() => {
+        try {
+            event.blockComponentRegistry.registerCustomComponent("nonamespace", {});
+        } catch (e) {
+            return e.name + "," + e.reason;
+        }
+        return "ok";
+    })();
 });
 world.afterEvents.worldInitialize.subscribe(() => {
     world.setDynamicProperty("stable1", JSON.stringify(r));
 });
 )JS";
+
+    const char *const COMPONENTS = R"JS(
+import { world, system, BlockPermutation, CustomComponentParameters, BlockComponentPlayerInteractEvent,
+         BlockEvent, ItemComponentUseOnEvent, ItemUseOnEvent, NamespaceNameError, WorldClock, Dimension } from "@minecraft/server";
+
+const save = () => world.setDynamicProperty("components", JSON.stringify(r));
+const describe = (event, params) => {
+    const fields = Object.keys(event).filter((k) => k !== "block" && k !== "dimension").sort();
+    return [Object.getPrototypeOf(event).constructor.name, fields.join("+"),
+            params instanceof CustomComponentParameters ? JSON.stringify(params.params) : "none"].join("|");
+};
+const log = (name) => (event, params) => {
+    r[name] = describe(event, params);
+    save();
+};
+
+let placeCalls = 0;
+system.beforeEvents.startup.subscribe((event) => {
+    const blocks = event.blockComponentRegistry;
+    const items = event.itemComponentRegistry;
+    r.noNamespace = (() => {
+        try {
+            blocks.registerCustomComponent("nonamespace", {});
+        } catch (e) {
+            return (e instanceof NamespaceNameError) + "," + e.reason;
+        }
+        return "ok";
+    })();
+    r.minecraftNamespace = capture(() => items.registerCustomComponent("minecraft:thing", {}));
+    r.notObject = capture(() => blocks.registerCustomComponent("test:bad", 3));
+    r.registerBlock = capture(() => blocks.registerCustomComponent("test:hooks", {
+        beforeOnPlayerPlace(event, params) {
+            placeCalls++;
+            r.beforePlace = describe(event, params) + "|" + event.permutationToPlace.type.id + "|" + event.face;
+            if (placeCalls === 1)
+                event.cancel = true;
+            else
+                event.permutationToPlace = BlockPermutation.resolve("minecraft:stone");
+            save();
+        },
+        onPlace(event, params) {
+            r.onPlace = describe(event, params) + "|" + event.previousBlock.type.id;
+            save();
+        },
+        onBreak(event, params) {
+            r.onBreak = describe(event, params) + "|" + (event.entitySource !== undefined);
+            save();
+        },
+        onPlayerBreak: log("onPlayerBreak"),
+        onPlayerInteract(event, params) {
+            r.onPlayerInteract = describe(event, params) + "|" + event.face + "|" + event.faceLocation.x + ","
+                + event.faceLocation.z + "|" + (event instanceof BlockComponentPlayerInteractEvent)
+                + (event instanceof BlockEvent) + "|" + event.block.x;
+            save();
+        },
+        onTick: log("onTick"),
+        onRandomTick: log("onRandomTick"),
+        onStepOn: log("onStepOn"),
+        onStepOff: log("onStepOff"),
+        onEntityFallOn(event, params) {
+            r.onEntityFallOn = (r.onEntityFallOn || "") + describe(event, params) + "|" + event.fallDistance + ";";
+            save();
+        },
+        onRedstoneUpdate(event, params) {
+            r.onRedstoneUpdate = (r.onRedstoneUpdate || "") + event.previousPowerLevel + ">" + event.powerLevel + ";";
+            save();
+        },
+        onPlayerDestroy: log("onPlayerDestroy"),
+    }));
+    r.duplicate = capture(() => blocks.registerCustomComponent("test:hooks", {}));
+    r.registerItem = capture(() => items.registerCustomComponent("test:wand", {
+        onUse: log("onUse"),
+        onUseOn(event, params) {
+            r.onUseOn = describe(event, params) + "|" + event.blockFace + "|" + event.faceLocation.y + "|"
+                + (event instanceof ItemComponentUseOnEvent) + (event instanceof ItemUseOnEvent);
+            save();
+        },
+        onCompleteUse: log("onCompleteUse"),
+        onConsume: log("onConsume"),
+        onHitEntity(event, params) {
+            r.itemOrder = (r.itemOrder || "") + "hit;";
+            log("onHitEntity")(event, params);
+        },
+        onBeforeDurabilityDamage(event, params) {
+            r.itemOrder = (r.itemOrder || "") + "durability;";
+            r.onBeforeDurabilityDamage = describe(event, params) + "|" + event.durabilityDamage;
+            event.durabilityDamage = 7;
+            save();
+        },
+        onMineBlock: log("onMineBlock"),
+    }));
+    r.itemDuplicate = capture(() => items.registerCustomComponent("test:wand", {}));
+    r.litHook = capture(() => blocks.registerCustomComponent("test:lit_hook", {
+        onTick(event, params) {
+            r.litTick = JSON.stringify(params.params);
+            save();
+        },
+    }));
+    r.stateHook = capture(() => blocks.registerCustomComponent("test:states", {
+        onBlockStateChange(event, params) {
+            r.stateChange = Object.getPrototypeOf(event).constructor.name + "|"
+                + event.previousPermutation.getState("test:lit") + "|" + event.previousPermutation.getState("test:level");
+            save();
+        },
+    }));
+
+    const dimensions = event.dimensionRegistry;
+    dimensionsLate = dimensions;
+    r.dimRegister = capture(() => dimensions.registerCustomDimension("test:void"));
+    r.dimDuplicate = capture(() => dimensions.registerCustomDimension("test:void"));
+    const reason = (name) => {
+        try {
+            dimensions.registerCustomDimension(name);
+        } catch (e) {
+            return e.name + "," + e.reason;
+        }
+        return "ok";
+    };
+    r.dimNoNamespace = reason("void");
+    r.dimMinecraft = reason("minecraft:void");
+    r.dimChars = capture(() => dimensions.registerCustomDimension("test:a b"));
+
+    const clocks = event.worldClockRegistry;
+    r.registerClock = capture(() => clocks.registerClock("test:clock",
+        { timeMarkers: [{ name: "test:mark", time: 2, period: 5 }] }));
+    r.clockDuplicate = capture(() => clocks.registerClock("test:clock"));
+    r.clockName = capture(() => clocks.registerClock("noname"));
+    r.clockNames = [" test:a", "test:a:b", "test", "minecraft:mine", "test:with space", "Test:Upper"]
+        .map((name) => capture(() => clocks.registerClock(name)).startsWith("ok") ? "ok" : "no").join(",");
+    r.clockPeriod = capture(() => clocks.registerClock("test:other",
+        { timeMarkers: [{ name: "test:bad", time: 5, period: 5 }] }));
+    save();
+});
+
+world.afterEvents.worldLoad.subscribe(() => {
+    r.lateClock = capture(() => clocksLate.registerClock("test:late"));
+    r.dimLate = capture(() => dimensionsLate.registerCustomDimension("test:late"));
+    const custom = world.getDimension("test:void");
+    r.dimId = custom.id;
+    r.dimSame = custom === world.getDimension("test:void") && custom instanceof Dimension
+        && custom !== world.getDimension("overworld");
+    const clock = world.getClock("test:clock");
+    r.clockSame = clock === world.getClock("test:clock") && clock instanceof WorldClock;
+    r.clockMissing = capture(() => world.getClock("test:nope"));
+    r.overworld = world.getClock("minecraft:overworld").timeMarkers
+        .map((m) => m.name + "@" + m.time + "/" + m.period).join(",");
+    r.resolve = BlockPermutation.resolve("test:stateful", { "test:level": 2 }).getState("test:level") + ","
+        + BlockPermutation.resolve("test:stateful").getState("test:lit");
+    world.afterEvents.worldClockOnTimeMarker.subscribe((event) => {
+        r.markers = (r.markers || "") + event.clock.time + ";";
+        save();
+    }, { clock: "test:clock" });
+    world.afterEvents.worldClockOnTimeMarker.subscribe((event) => {
+        r.otherClock = event.clock.name;
+    }, { clock: "test:none" });
+    world.afterEvents.worldClockOnTimeModified.subscribe((event) => {
+        r.modified = (r.modified || 0) + 1;
+    }, { clock: "test:clock" });
+    world.afterEvents.worldClockOnPaused.subscribe((event) => { r.paused = event.clock.name; }, { clock: "test:clock" });
+    world.beforeEvents.worldClockOnRestart.subscribe((event) => {
+        r.restart = event.clock.name + "|" + event.newTime;
+        event.newTime = 5;
+        save();
+    }, { clock: "test:clock" });
+    save();
+});
+
+let clocksLate;
+let dimensionsLate;
+system.beforeEvents.startup.subscribe((event) => { clocksLate = event.worldClockRegistry; });
+
+system.runTimeout(() => {
+    const clock = world.getClock("test:clock");
+    r.clockTime = clock.time;
+    clock.isPaused = true;
+    r.rewind = capture(() => clock.rewindTo("test:mark")) + "@" + clock.time;
+    r.skip = capture(() => clock.skipTo(clock.timeMarkers[0])) + "@" + clock.time;
+    r.setMarker = capture(() => clock.set("test:mark")) + "@" + clock.time;
+    clock.time = 1;
+    r.rewindEarly = capture(() => clock.rewindTo("test:mark"));
+    r.unknownMarker = capture(() => clock.set("test:unknown"));
+    r.addMarker = capture(() => clock.addTimeMarker({ name: "test:added", time: 3 })) + ","
+        + capture(() => clock.addTimeMarker({ name: "test:added", time: 4 }));
+    const added = clock.timeMarkers.find((m) => m.name === "test:added");
+    r.removeMarker = capture(() => clock.removeTimeMarker("test:added")) + "," + capture(() => added.time);
+    r.removeMinecraft = capture(() => world.getClock("minecraft:overworld").removeTimeMarker("minecraft:noon"));
+    const block = world.getDimension("overworld").getBlock({ x: 4, y: 70, z: 4 });
+    r.setPermutation = capture(() => {
+        block.setPermutation(BlockPermutation.resolve("test:stateful"));
+        block.setPermutation(BlockPermutation.resolve("test:stateful", { "test:lit": true, "test:level": 1 }));
+    });
+    save();
+}, 8);
+)JS";
+
+    const char *const COMPONENT_BLOCK = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:block": {
+    "description": { "identifier": "test:block" },
+    "components": {
+      "minecraft:tick": { "interval_range": [10, 10] },
+      "minecraft:redstone_consumer": { "min_power": 3 },
+      "minecraft:entity_fall_on": { "min_fall_distance": 2 },
+      "test:hooks": { "value": 42, "list": ["a", true] }
+    }
+  }
+})JSON";
+
+    const char *const COMPONENT_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:wand" },
+    "components": { "test:wand": {} }
+  }
+})JSON";
+
+    const char *const STATEFUL_BLOCK = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:block": {
+    "description": {
+      "identifier": "test:stateful",
+      "states": { "test:lit": [false, true], "test:level": { "values": { "min": 0, "max": 2 } } }
+    },
+    "components": { "minecraft:tick": { "interval_range": [10, 10] }, "test:states": {} },
+    "permutations": [
+      { "condition": "q.block_state('test:lit') == true && q.block_state('test:level') >= 1",
+        "components": { "test:lit_hook": { "lit": true }, "minecraft:geometry": "geometry.lamp",
+                        "minecraft:material_instances": { "*": { "texture": "lit_tex", "render_method": "alpha_test" } } } }
+    ]
+  }
+})JSON";
+
+    const char *const LEGACY_BLOCK = R"JSON({
+  "format_version": "1.21.40",
+  "minecraft:block": {
+    "description": { "identifier": "legacy:block" },
+    "components": { "minecraft:custom_components": ["legacy:comp"] }
+  }
+})JSON";
 
     const char *const BETA = R"JS(
 import { world } from "@minecraft/server";
@@ -307,6 +1035,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(actual == wanted, std::string(key) + ": expected \"" + wanted + "\", got \"" + actual + "\"");
     }
 
+    DimensionDefinition sentDimension;
+
     void run(const std::filesystem::path &directory) {
         const std::filesystem::path packs = directory / "packs";
         const std::string server2 = "{\"module_name\": \"@minecraft/server\", \"version\": \"2.11.0\"}";
@@ -324,6 +1054,14 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                 ", \"settings\": [{\"type\": \"label\", \"text\": \"x\"},"
                 " {\"type\": \"toggle\", \"name\": \"test:on\", \"default\": true},"
                 " {\"type\": \"slider\", \"name\": \"test:level\", \"default\": 4, \"min\": 0, \"max\": 8, \"step\": 1}]");
+        writePack(packs, "entities", server2 + ", {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
+                  std::string(PRELUDE) + ENTITIES);
+        writePack(packs, "betaentities",
+                  "{\"module_name\": \"@minecraft/server\", \"version\": \"beta\"},"
+                  " {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
+                  std::string(PRELUDE) + BETA_ENTITIES);
+        writePack(packs, "items", server2 + ", {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
+                  std::string(PRELUDE) + ITEMS);
         writePack(packs, "undeclared", server2, UNDECLARED);
         writePack(packs, "net", server2 + ", {\"module_name\": \"@minecraft/server-net\", \"version\": \"1.0.0-beta\"}",
                   NOT_IMPLEMENTED);
@@ -331,6 +1069,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writePack(packs, "unknown",
                   server2 + ", {\"module_name\": \"@minecraft/server-unknown\", \"version\": \"1.0.0\"}", NEVER_RUNS);
         writeFile(packs / "outside.js", "export const x = 1;\n");
+        writePack(packs, "components", server2, std::string(PRELUDE) + COMPONENTS);
+        writeFile(packs / "components" / "blocks" / "block.json", COMPONENT_BLOCK);
+        writeFile(packs / "components" / "items" / "wand.json", COMPONENT_ITEM);
+        writeFile(packs / "components" / "blocks" / "stateful.json", STATEFUL_BLOCK);
+        writeFile(packs / "stable1" / "blocks" / "legacy.json", LEGACY_BLOCK);
 
         ServerNetworkHandler owner("Script API", "", 1);
         ScriptEngine &engine = owner.getScriptEngine();
@@ -338,18 +1081,192 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
 
         BehaviorPackManager manager;
         manager.discover(packs.string());
-        require(engine.loadPacks(manager.getPacks()) == 4, "only the four valid packs start");
+        CustomContentRegistry::getInstance().load(manager, owner.getItemDefinitions(), owner.getBlockDefinitions());
+        for (const BlockPropertyData &property: CustomContentRegistry::getInstance().getBlockProperties()) {
+            if (property.mName != "test:stateful")
+                continue;
+            const Tag *permutations = property.mProperties.get("permutations");
+            require(permutations != nullptr && permutations->getList().size() == 1, "permutations not sent");
+            const Tag &first = permutations->getList().front();
+            const Tag *components = first.get("components");
+            require(components != nullptr && components->get("test:lit_hook") == nullptr,
+                    "a custom component reached the client");
+            const Tag *geometry = components->get("minecraft:geometry");
+            const Tag *materials = components->get("minecraft:material_instances");
+            require(geometry != nullptr && geometry->get("identifier")->asString() == "geometry.lamp",
+                    "the permutation geometry was not sent");
+            require(materials != nullptr
+                            && materials->get("materials")->get("*")->get("texture")->asString() == "lit_tex"
+                            && materials->get("materials")->get("*")->get("render_method")->asString() == "alpha_test",
+                    "the permutation material was not sent");
+            require(components->get("minecraft:friction") == nullptr, "an undeclared component was sent");
+            const Tag *base = property.mProperties.get("components")->get("minecraft:material_instances");
+            require(base->get("materials")->get("*")->get("texture")->asString() == "stateful",
+                    "the permutation changed the base material");
+            const Tag *states = property.mProperties.get("properties");
+            require(states != nullptr && states->getList().size() == 2, "states not sent");
+        }
+        require(engine.loadPacks(manager.getPacks()) == 8, "only the eight valid packs start");
 
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
         engine.startup();
+        EntityDefinitions::initialize();
+        World &world = owner.getWorlds().getDefault();
+        world.getOverworld().insertChunk(LevelChunk(0, 0));
+        world.getOverworld().setBlock(Vector3i(0, 101, 5),
+                                      VanillaBlocks::fromIdentifier("minecraft:oak_fence")->toBlockState(), false);
+        world.getOverworld().setBlock(Vector3i(0, 101, 8),
+                                      VanillaBlocks::fromIdentifier("minecraft:stone")->toBlockState(), false);
+        player.setName("ScriptPlayer");
+        player.getAttributes() = ActorAttributes::createPlayerDefaults();
+        player.moveToLevel(world.getOverworld());
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.setPosition(Vector3f(0.5f, 100.0f, 0.5f));
+        ServerActor *cow = owner.spawnActor(world.getOverworld(), "minecraft:cow", Vector3f(0.5f, 100.0f, 2.5f));
+        require(cow != nullptr, "no fixture cow");
+        if (MobActor *mob = dynamic_cast<MobActor *>(cow))
+            mob->startDefinition(owner);
+        owner.setSpawnCause("Born");
+        ServerActor *calf = owner.spawnActor(world.getOverworld(), "minecraft:cow", Vector3f(4.5f, 100.0f, 4.5f));
+        require(calf != nullptr, "no fixture calf");
+        ServerActor *wolf = owner.spawnActor(world.getOverworld(), "minecraft:wolf", Vector3f(8.5f, 100.0f, 8.5f));
+        MobActor *wolfMob = dynamic_cast<MobActor *>(wolf);
+        require(wolfMob != nullptr, "no fixture wolf");
+        wolfMob->startDefinition(owner);
+        require(wolfMob->tameTo(owner, player, "minecraft:tameable", true), "the wolf was not tamed");
+        ServerActor *horse = owner.spawnActor(world.getOverworld(), "minecraft:horse", Vector3f(-8.5f, 100.0f, 8.5f));
+        require(dynamic_cast<MobActor *>(horse) != nullptr, "no fixture horse");
+        static_cast<MobActor *>(horse)->startDefinition(owner);
+        ServerActor *piglin = owner.spawnActor(world.getOverworld(), "minecraft:piglin",
+                                               Vector3f(14.5f, 100.0f, 14.5f));
+        MobActor *piglinMob = dynamic_cast<MobActor *>(piglin);
+        require(piglinMob != nullptr, "no fixture piglin");
+        piglinMob->startDefinition(owner);
+        ServerActor *minecart = owner.spawnActor(world.getOverworld(), "minecraft:chest_minecart",
+                                                 Vector3f(-14.5f, 100.0f, -14.5f));
+        require(minecart != nullptr && minecart->getEntityContainer() != nullptr, "no fixture chest minecart");
+        player.setHealth(10.0f);
+        engine.tick(0);
+        player.heal(5.0f, HealCause::Regeneration);
+        owner.hurt(player, 1.0f, ActorDamageSource::environment("death.attack.magic", player.getName()));
+        engine.onPlayerEmote(player, "emote:wave");
+        engine.onPlayerButtonInput(player, "Jump", true);
+        engine.onPlayerInputModeChange(player, "KeyboardAndMouse", "Touch");
+        engine.onPlayerSwingStart(player, "Attack");
+        engine.onEntitySneak(player, true);
+        engine.onEntitySneak(player, false);
+        engine.onPlayerInteractWithEntity(player, *cow, player.getInventory().getItemInHand());
+        engine.onPlayerDimensionChange(player, world.getOverworld(), player.getPosition(),
+                                       world.getLevel(DimensionType::Nether), player.getPosition());
+        MobEffectInstance speed;
+        speed.mId = MobEffectId::Speed;
+        speed.mDuration = 400;
+        player.addEffect(speed);
+
+        bool customFound = false;
+        const DimensionType voidDimension = Dimension::findCustom("test:void", customFound);
+        require(customFound && Dimension::toId(voidDimension) == Dimension::FIRST_CUSTOM_ID
+                        && Dimension::fromId(Dimension::FIRST_CUSTOM_ID) == voidDimension
+                        && std::string(Dimension::getName(voidDimension)) == "test:void",
+                "the custom dimension did not get the first custom id");
+        World &defaultWorld = owner.getWorlds().getDefault();
+
+        // a packet sensor: every encoded packet, dropped before any transport
+        require(owner.isTransportReady(), "the test server has no network handler to observe");
+        std::vector<std::pair<MinecraftPacketIds, std::string>> sent;
+        owner.getNetworkHandler().setOutboundFilter([&sent](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            sent.emplace_back(Packet::peekId(header, sender, client), data);
+            return false;
+        });
+        LoginHandler::sendStartGame(owner, player);
+        size_t startGameAt = sent.size(), dimensionsAt = sent.size();
+        for (size_t index = 0; index < sent.size(); ++index) {
+            if (sent[index].first == MinecraftPacketIds::StartGame && startGameAt == sent.size())
+                startGameAt = index;
+            if (sent[index].first == MinecraftPacketIds::DimensionData && dimensionsAt == sent.size())
+                dimensionsAt = index;
+        }
+        require(startGameAt < sent.size() && dimensionsAt == startGameAt + 1,
+                "DimensionDataPacket does not follow StartGame");
+        ReadOnlyBinaryStream body(sent[dimensionsAt].second);
+        DimensionDataPacket dimensionData;
+        dimensionData.readHeader(body);
+        dimensionData.read(body, owner.getCodecContext());
+        require(dimensionData.mDefinitions.size() == 1 && dimensionData.mDefinitions[0].mId == "test:void",
+                "DimensionDataPacket does not carry the custom dimension");
+        sentDimension = dimensionData.mDefinitions[0];
+
+        sent.clear();
+        owner.changePlayerLevel(player, defaultWorld.getLevel(voidDimension), Vector3f(0.5f, 80.0f, 0.5f));
+        require(player.getDimension() == voidDimension, "the player did not move to the custom dimension");
+        bool changed = false;
+        for (const auto &packet: sent) {
+            if (packet.first != MinecraftPacketIds::ChangeDimension)
+                continue;
+            ReadOnlyBinaryStream change(packet.second);
+            ChangeDimensionPacket decoded;
+            decoded.readHeader(change);
+            decoded.read(change, owner.getCodecContext());
+            changed = decoded.mDimension == Dimension::FIRST_CUSTOM_ID;
+        }
+        require(changed, "no ChangeDimensionPacket named the custom dimension");
+        owner.changePlayerLevel(player, defaultWorld.getOverworld(), Vector3f(0.5f, 80.0f, 0.5f));
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        // back where the entities pack expects a spawned player
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.setPosition(Vector3f(0.5f, 100.0f, 0.5f));
+        require(defaultWorld.hasLevel(voidDimension)
+                        && defaultWorld.getLevel(voidDimension).getDimensionType() == voidDimension
+                        && &defaultWorld.getLevel(voidDimension) != &defaultWorld.getOverworld(),
+                "no level was created for the custom dimension");
+        const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(voidDimension, 1);
+        const std::unique_ptr<LevelChunk> terrain = generator->generateTerrain(0, 0);
+        require(terrain->getBlock(0, 64, 0).mName == "minecraft:air"
+                        && terrain->getBlock(0, LevelChunk::MIN_Y, 0).mName == "minecraft:air",
+                "the custom dimension is not generated empty");
+
+        Level &level = owner.getLevelFor(player);
+        const Vector3i at(4, 70, 4);
+        BlockState placed("test:block");
+        require(engine.beforeCustomBlockPlace(player, level, at, 1, placed), "beforeOnPlayerPlace did not cancel");
+        require(!engine.beforeCustomBlockPlace(player, level, at, 1, placed) && placed.mName == "minecraft:stone",
+                "beforeOnPlayerPlace did not replace the permutation");
+        engine.onCustomBlockPlaced(level, at, BlockState("test:block"), BlockState("minecraft:air"));
+        engine.onPlayerInteractWithBlock(player, "test:block", at, 1, Vector3f(0.25f, 1.0f, 0.75f));
+        engine.onPlayerInteractWithBlock(player, "legacy:block", at, 1, Vector3f(0.25f, 1.0f, 0.75f));
+        engine.onCustomBlockTick(level, "test:block", at);
+        engine.onCustomBlockRandomTick(level, "test:block", at);
+        engine.onCustomBlockStep(player, level, "test:block", at);
+        engine.onCustomBlockStepOff(player, level);
+        engine.onCustomBlockFallOn(player, level, "test:block", at, 1.5f);
+        engine.onCustomBlockFallOn(player, level, "test:block", at, 3.5f);
+        for (int32_t power: {0, 2, 5, 5, 9, 0})
+            engine.onCustomBlockRedstone(level, "test:block", at, power);
+        engine.onCustomBlockBreak(level, at, BlockState("test:block"), &player);
+        PlayerBreakBlockAfterEvent legacyBroken(player, at, "legacy:block");
+        owner.getEventBus().after().mPlayerBreakBlock.emit(legacyBroken);
+
+        ItemStack wand;
+        wand.mDefinition = owner.getItemDefinitions().getDefinition("test:wand");
+        wand.mCount = 1;
+        require(wand.mDefinition != nullptr, "the custom item was not registered");
+        player.getInventory().setItemInHand(wand);
+        engine.onItemUse(player);
+        engine.onItemUseOnBlock(player, at, 1, Vector3f(0.5f, 1.0f, 0.5f));
+        engine.onItemCompleteUse(player, wand);
+        require(engine.onItemHitEntity(player, player, true, 2) == 7, "onBeforeDurabilityDamage was not applied");
+        PlayerBreakBlockAfterEvent broken(player, at, "test:block");
+        owner.getEventBus().after().mPlayerBreakBlock.emit(broken);
+        player.getInventory().setItemInHand(ItemStack::air());
 
         MobEffectInstance effect;
         effect.mId = MobEffectId::Speed;
         effect.mDuration = 20;
         engine.beforeEffectAdd(player, effect);
 
-        World &world = owner.getWorlds().getDefault();
         owner.changeGameRule(world, "keepinventory", "true");
         owner.changeGameRule(world, "randomtickspeed", "3");
         owner.setRaining(world, true);
@@ -365,12 +1282,293 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         scriptEvent.execute(playerOrigin, {"other:pong"});
         require(!scriptEvent.execute(console, {"minecraft:nope", "x"}), "a minecraft namespace was accepted");
         require(!scriptEvent.execute(console, {"nonamespace"}), "an id without namespace was accepted");
+        ItemStack apple = owner.createItemStack("minecraft:apple", 1);
+        engine.onItemStartUse(player, apple, 32);
+        engine.onItemStopUse(player, owner.createItemStack("minecraft:bow", 1), 5, true);
+        engine.onItemCompleteUse(player, apple, 0);
+        ItemStack diamonds = owner.createItemStack("minecraft:diamond", 2);
+        ItemActor *dropped = ItemActorHandler::dropItem(owner, world.getOverworld(), Vector3f(0.5f, 100.0f, 1.5f),
+                                                        diamonds, Vector3f(0.0f, 0.0f, 0.0f), 0);
+        require(dropped != nullptr, "no fixture item entity");
+        require(!engine.beforeEntityItemPickup(player, *dropped, diamonds), "a player pickup was cancelled");
+        engine.onEntityItemPickup(player, diamonds);
+        require(engine.beforeEntityItemPickup(*piglin, *dropped, diamonds), "entityItemPickup did not cancel");
+        player.getInventory().setCursor(owner.createItemStack("minecraft:diamond", 1));
+        // the items pack clears it at tick 2: a grab then a release
         for (int64_t tick = 1; tick <= 3; ++tick)
             engine.tick(tick);
 
+        // an entity container opens with the actor's id, saves as ChestItems and loads back
+        std::vector<ContainerOpenPacket> opened;
+        owner.getNetworkHandler().setOutboundFilter([&opened, &owner](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            if (Packet::peekId(header, sender, client) == MinecraftPacketIds::ContainerOpen) {
+                ReadOnlyBinaryStream body(data);
+                ContainerOpenPacket packet;
+                packet.readHeader(body);
+                packet.read(body, owner.getCodecContext());
+                opened.push_back(packet);
+            }
+            return false;
+        });
+        InventoryManager &windows = player.getInventoryManager();
+        require(windows.openEntityContainer(*minecart, ContainerType::MinecartChest),
+                "the chest minecart did not open");
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        require(opened.size() == 1 && opened.front().mUniqueActorId == minecart->getUniqueId()
+                        && opened.front().mType == ContainerType::MinecartChest,
+                "ContainerOpenPacket does not name the minecart");
+        require(windows.getContainer() == minecart->getEntityContainer()
+                        && windows.getContainer()->getContainerItem(4).mCount == 7,
+                "the open window does not reach the minecart inventory");
+        require(!windows.openEntityContainer(*cow, ContainerType::Horse), "a cow opened an inventory");
+        windows.onClientRemoveWindow(windows.getContainerWindowId());
+        require(windows.getContainerActorId() == -1 && !windows.isContainerOpen(), "the window did not close");
+        const Tag savedCart = minecart->saveNbt();
+        const Tag *chestItems = savedCart.get("ChestItems");
+        require(chestItems != nullptr && chestItems->getList().size() == 1
+                        && chestItems->getList().front().getByte("Slot") == 4,
+                "the minecart items were not saved as ChestItems");
+        ChestVehicleActor reloaded(9999, "minecraft:chest_minecart", ActorSize{0.98f, 0.7f});
+        Tag legacy = Tag::ofCompound();
+        legacy.put("Items", *chestItems);
+        reloaded.loadEquipment(legacy, owner.getCodecContext());
+        require(reloaded.getEntityContainer()->getContainerItem(4).mCount == 7, "Items did not load");
+
+        // the script edits land in the game's NBT, as the game saves them
+        const ItemStack &edited = player.getInventory().getItem(5);
+        require(edited.mDefinition != nullptr && edited.mDefinition->getIdentifier() == "minecraft:diamond_sword"
+                        && edited.mDamage == 10,
+                "the scripted sword did not reach the inventory");
+        const Tag *display = edited.mTag.get("display");
+        require(display != nullptr && display->getString("Name") == "Renamed"
+                        && display->get("Lore")->getList().size() == 2,
+                "the name tag and lore were not written to display");
+        const Tag *enchantments = edited.mTag.get("ench");
+        require(enchantments != nullptr && enchantments->getList().size() == 1
+                        && enchantments->getList().front().getShort("id") == 9
+                        && enchantments->getList().front().getShort("lvl") == 3,
+                "the enchantment was not written to ench");
+        require(edited.mTag.getByte("minecraft:keep_on_death") == 1 && edited.mTag.getByte("minecraft:item_lock") == 1
+                        && edited.mCanBreak.size() == 1 && edited.mCanBreak.front() == "minecraft:stone"
+                        && edited.mTag.get("DynamicProperties") != nullptr,
+                "keepOnDeath, lockMode, canDestroy or dynamic properties were lost");
+        require(player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD).mDefinition->getIdentifier()
+                                == "minecraft:diamond_helmet"
+                        && player.getInventory().getOffhand().mDefinition->getIdentifier() == "minecraft:shield",
+                "setEquipment did not reach the armor and offhand");
+        require(EnderChestInventoryStore::getInstance().get(player.getUniqueId()).getContainerItem(0).mCount == 4,
+                "the ender inventory was not written");
+        require(piglinMob->getEquipment().getSlot(MobEquipment::MAINHAND).mDefinition->getIdentifier()
+                                == "minecraft:golden_sword"
+                        && piglinMob->getEquipment().getInventoryItem(1).mCount == 3,
+                "the piglin equipment or inventory was not written");
+
+        require(wolfMob->getEntityContainer() == nullptr, "a wolf opens an inventory");
+        if (static_cast<MobActor *>(horse)->isTamed()) {
+            Container *saddleBags = horse->getEntityContainer();
+            require(saddleBags != nullptr && saddleBags->getContainerSize() == 2,
+                    "a tamed horse has no two slot inventory to open");
+            {
+                ServerActor *copy = owner.spawnActor(world.getOverworld(), "minecraft:horse",
+                                                     Vector3f(-8.5f, 100.0f, 4.5f));
+                MobActor *loaded = dynamic_cast<MobActor *>(copy);
+                require(loaded != nullptr && !loaded->isTamed(), "no second horse");
+                loaded->loadNbt(horse->saveNbt());
+                require(loaded->isTamed() && loaded->getOwnerId() == MobActor::NO_OWNER,
+                        "an ownerless tame was not saved");
+                owner.removeActor(copy->getUniqueId());
+            }
+        }
+        engine.beforePlayerLeave(player);
         owner.getPlayers().erase(id);
         for (int64_t tick = 4; tick <= 8; ++tick)
             engine.tick(tick);
+
+        const BlockState stateful = level.getBlockState(at.x, at.y, at.z);
+        require(stateful.mName == "test:stateful" && stateful.mStates.get("test:lit") != nullptr
+                        && stateful.mStates.get("test:lit")->asByte() == 1
+                        && stateful.mStates.get("test:level")->asInt() == 1,
+                "setPermutation did not keep the states");
+        engine.onCustomBlockTick(level, "test:stateful", at);
+
+        WorldClock *clock = engine.worldClocks().find("test:clock");
+        require(clock != nullptr, "the script clock was not registered");
+        engine.worldClocks().setPaused(*clock, false);
+        engine.worldClocks().setTime(*clock, INT32_MAX);
+        engine.tick(9);
+        require(clock->mTime == 5, "worldClockOnRestart did not set the new time");
+
+        engine.worldClocks().setPaused(*clock, true);
+        const Tag saved = engine.worldClocks().save();
+        const Tag *found = nullptr;
+        for (const Tag &entry: saved.get("clocks")->getList()) {
+            if (entry.get("Name")->asString() == "test:clock")
+                found = &entry;
+        }
+        require(found != nullptr, "the script clock was not saved");
+        const Tag &entries = *found;
+        require(entries.get("Name")->asString() == "test:clock" && entries.get("Time")->asInt() == 5
+                        && entries.get("IsPaused")->asByte() == 1,
+                "the clocks were not saved in the game's form");
+        WorldClockSystem restored;
+        restored.load(saved);
+        bool markerError = false;
+        require(restored.registerClock("test:clock", {}, markerError) == WorldClockError::None
+                        && restored.find("test:clock")->mTime == 5 && restored.find("test:clock")->mPaused,
+                "a registered clock did not take its saved state");
+        SyncWorldClocksPacket states;
+        restored.writeStates(states);
+        require(states.mType == SyncWorldClocksType::SyncState && states.mClockStates.size() == 2
+                        && states.mClockStates.front().mClockId == 0x63D7EDE73C38F916ull,
+                "the periodic sync does not carry every clock under its hashed id");
+        const std::unique_ptr<json::Value> entities = result(owner, "entities");
+        const json::Value &e = *entities;
+        if (e.get("error") != nullptr)
+            require(false, "the entities pack threw: " + text(e, "error"));
+        expect(e, "enums", "void,entityAttack,Born,SelfHeal,Jump,Pressed,Touch,Attack,2,2");
+        expect(e, "componentIds", "minecraft:health,minecraft:type_family,minecraft:movement");
+        expect(e, "componentChain", "true");
+        expect(e, "typesConstructor", "ReferenceError");
+        expect(e, "cowFound", "true");
+        expect(e, "families", "cow,mob");
+        expect(e, "familyQuery", "2,0");
+        expect(e, "health", "true:10:10:true");
+        expect(e, "healthSet", "4:false");
+        expect(e, "componentsCount", "true");
+        expect(e, "movement", "true:true");
+        expect(e, "missing", "true");
+        expect(e, "navigation", "true:undefined");
+        expect(e, "localization", "entity.cow.name,entity.cow.name,minecraft:cow,true,true");
+        expect(e, "effectTypes", "speed,true,true");
+        expect(e, "addEffect", "true:1:40:true");
+        expect(e, "cancelledEffect", "true");
+        expect(e, "effects", "speed");
+        expect(e, "removedEffect", "false");
+        expect(e, "aabb", "true:true");
+        expect(e, "sneaking", "true");
+        expect(e, "hurt", "true");
+        expect(e, "projectileOption", "TypeError");
+        expect(e, "rotation", "10,20");
+        expect(e, "lookAt", "0");
+        expect(e, "entityRay", "2:false:5.03:0:1");
+        expect(e, "blockRay", "true");
+        expect(e, "shapeRay", "minecraft:oak_fence:North:0.375");
+        expect(e, "filterRay", "8:8:true:true");
+        expect(e, "tameMount", "true:false:true");
+        expect(e, "emoting", "false");
+        expect(e, "betaAbsent", "true");
+        expect(e, "op", "1:2");
+        expect(e, "pending", "rejected");
+        expect(e, "blockedTeleport", "false");
+        expect(e, "teleport", "true:200:90");
+        expect(e, "teleportBounds", "LocationOutOfWorldBoundariesError");
+        expect(e, "entityDynamic", "two:true");
+        expect(e, "resetProperty", "function");
+        expect(e, "matchesLevel", "true,false,false,true");
+        expect(e, "player", "false,false,false,0,0,7,1,2");
+        expect(e, "input", "KeyboardAndMouse:Released:{\"x\":0,\"y\":0}");
+        expect(e, "slot", "4:InvalidArgumentError");
+        expect(e, "spawnBefore", "true");
+        expect(e, "spawn", "5,70,6,true");
+        expect(e, "spawnCleared", "true");
+        expect(e, "playerFamilies", "player:true");
+        expect(e, "playerHealth", "20:true");
+        expect(e, "gameMode", "Creative");
+        expect(e, "tickingClass", "true");
+        expect(e, "ticking", "true:1:2:2");
+        expect(e, "tickingDuplicate", "TickingAreaError:IdentifierAlreadyExists");
+        expect(e, "tickingRemoved", "false");
+        expect(e, "killed", "true");
+        expect(e, "events",
+               "spawn:minecraft:cow:Spawned;spawn:minecraft:cow:Born;spawn:minecraft:wolf:Spawned;"
+               "beforeTame:minecraft:wolf;tamed:minecraft:wolf:true;spawn:minecraft:horse:Spawned;spawn:minecraft:piglin:Spawned;spawn:minecraft:chest_minecart:Spawned;health:20>10;"
+               "health:10>12;heal:2:Regeneration;health:12>11;hurt:minecraft:player:1:magic:false;emote:emote:wave;button:Jump:Pressed;"
+               "mode:KeyboardAndMouse>Touch;swing:Attack;sneak:minecraft:player;unsneak:minecraft:player;"
+               "interact:minecraft:cow;dimension:minecraft:overworld>minecraft:nether;effect:speed:40:true;"
+               "dimension:minecraft:overworld>test:void;dimension:test:void>minecraft:overworld;effect:speed:40:true;hurt:minecraft:cow:3:fall:true;"
+               "trigger:minecraft:ageable_grow_up:[{\"addedComponentGroups\":[\"minecraft:cow_adult\"],"
+               "\"removedComponentGroups\":[\"minecraft:cow_baby\"]}];"
+               "gm:Survival>Creative;die:minecraft:cow:override;spawn:minecraft:horse:Spawned;"
+               "beforeRemove:minecraft:horse;remove:minecraft:horse;leaving:true;");
+
+        const std::unique_ptr<json::Value> items = result(owner, "items");
+        const json::Value &it = *items;
+        if (it.get("error") != nullptr)
+            require(false, "the items pack threw: " + text(it, "error"));
+        expect(it, "constructed", "minecraft:diamond_sword:1:1:false:true:minecraft:diamond_sword");
+        expect(it, "badType", "TypeError");
+        expect(it, "badAmount", "ArgumentOutOfBoundsError");
+        expect(it, "clamped", "16");
+        expect(it, "meta", "Blade:2:second:first:true:slot");
+        expect(it, "loreBounds", "ArgumentOutOfBoundsError");
+        expect(it, "canDestroy", "minecraft:stone:TypeError");
+        expect(it, "dynamic", "me:TypeError");
+        expect(it, "clone", "2:true:Blade:me");
+        expect(it, "stackable", "true:false:true");
+        expect(it, "durability", "true:1562:10:ArgumentOutOfBoundsError:ArgumentOutOfBoundsError");
+        expect(it, "enchant", "true:1:3:false:Sword");
+        expect(it, "enchantErrors",
+               "EnchantmentTypeUnknownIdError,EnchantmentLevelOutOfBoundsError,"
+               "EnchantmentTypeNotCompatibleError,false,true");
+        expect(it, "enchantTypes", "minecraft:flame:1:true:true:Sword");
+        expect(it, "components", "minecraft:durability,minecraft:enchantable");
+        expect(it, "food", "true:4:0.3:false:true");
+        expect(it, "cooldown", "true:minecraft:ender_pearl:true");
+        expect(it, "potion",
+               "minecraft:splash_potion:true:minecraft:swiftness:ThrownSplash:3600:true:3:"
+               "InvalidPotionEffectTypeError");
+        expect(it, "bookBefore", "true:5:inserted:true:raw:false:BookPageContentError");
+        expect(it, "bookTitle", "BookError:ExceedsTitleLength");
+        expect(it, "bookSigned", "minecraft:written_book:true:Story:ScriptPlayer");
+        expect(it, "bundle", "true:3:1:3:2");
+        expect(it, "inventory", "true:true:36:36:36");
+        expect(it, "container", "true:Blade:0:12:3:true:ArgumentOutOfBoundsError");
+        expect(it, "slot", "true:true:Renamed:minecraft:diamond_sword:undefined:true:2");
+        expect(it, "moved", "1:true:2");
+        expect(it, "transferred", "true:true");
+        expect(it, "equipment", "true:minecraft:diamond_helmet:minecraft:shield:3:2");
+        expect(it, "ender", "true:27:4");
+        expect(it, "cursor", "true:false");
+        expect(it, "playerComponents",
+               "minecraft:cursor_inventory,minecraft:ender_inventory,minecraft:equippable,"
+               "minecraft:inventory");
+        expect(it, "mob", "8:none:false:3:minecraft:golden_sword:true");
+        expect(it, "itemTypes", "true:item.apple.name");
+        expect(it, "dynamicMore", "test:a,test:b:true");
+        expect(it, "toolMore", "0:minecraft:dirt:true:{\"min\":100,\"max\":100}:50:true:false");
+        expect(it, "enchantMore", "minecraft:unbreaking1");
+        expect(it, "enchantCleared", "0:Pickaxe");
+        expect(it, "dye", "255,128:true:true");
+        expect(it, "compost", "30");
+        expect(it, "bookMore", "a,~:~,b:true:true");
+        expect(it, "potionsMore", "49:Consume:true:minecraft:potion");
+        expect(it, "cooldownMore", "20:true");
+        expect(it, "inventoryMore", "inventory:false:false:false:0:true");
+        expect(it, "cursorMore", "ok:true:true:true");
+        expect(it, "rules", "ContainerRulesError:BannedItem");
+        expect(it, "cart", "27:minecart_chest:true:27:7:true");
+        expect(it, "blockProperties", "5:true:5:true");
+        expect(it, "blockPropertiesCleared", "undefined");
+        expect(it, "stateMatches", "true:false:false:false");
+        expect(it, "blockType", "minecraft:stone:true:true");
+        expect(it, "events",
+               "complete:test:wand:ScriptPlayer;start:minecraft:apple:32;release:minecraft:bow:5;stop:minecraft:bow:5;"
+               "complete:minecraft:apple:ScriptPlayer;beforePickup:minecraft:player:minecraft:item;"
+               "pickup:minecraft:player:minecraft:diamondx2;beforePickup:minecraft:piglin:minecraft:item;"
+               "change:3:Hotbar:->minecraft:diamond;hotbar:3;opened:minecraft:chest_minecart:minecraft:player;"
+               "closed:minecraft:chest_minecart:minecraft:player;");
+
+        const std::unique_ptr<json::Value> betaEntities = result(owner, "betaEntities");
+        expect(*betaEntities, "cursor", "grab:minecraft:diamond;release:minecraft:diamond:ScriptPlayer;");
+        expect(*betaEntities, "target", "true");
+        expect(*betaEntities, "betaPlayer", "true");
+        expect(*betaEntities, "chat", "[A] ScriptPlayer!:§a");
+        expect(*betaEntities, "chatCleared", "[A] ScriptPlayer:true");
+        expect(*betaEntities, "eat", "true");
+        expect(*betaEntities, "eatStone", "Error");
+        expect(*betaEntities, "ping", "EngineError");
 
         const std::unique_ptr<json::Value> stable2 = result(owner, "stable2");
         expect(*stable2, "alone", "true");
@@ -473,6 +1671,102 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         const GameRules &rules = owner.getWorlds().getDefault().getOverworld().getGameRules();
         require(!rules.getBool("pvp") && rules.getInt("randomtickspeed") == 3, "game rules not written");
 
+        const std::unique_ptr<json::Value> components = result(owner, "components");
+        const json::Value &c = *components;
+        const std::string params = "{\"value\":42,\"list\":[\"a\",true]}";
+        expect(c, "noNamespace", "true,NoNamespace");
+        expect(c, "minecraftNamespace", "NamespaceNameError: ");
+        expect(c, "notObject", "TypeError: Native type conversion failed.");
+        expect(c, "registerBlock", "ok");
+        expect(c, "duplicate",
+               "BlockCustomComponentAlreadyRegisteredError: Block custom component 'test:hooks' was already registered.");
+        expect(c, "registerItem", "ok");
+        expect(c, "itemDuplicate",
+               "ItemCustomComponentAlreadyRegisteredError: Item custom component 'test:wand' was already registered.");
+        expect(c, "beforePlace",
+               "BlockComponentPlayerPlaceBeforeEvent|cancel+face+permutationToPlace+player|" + params
+                       + "|test:block|Up");
+        expect(c, "onPlace", "BlockComponentOnPlaceEvent|previousBlock|" + params + "|minecraft:air");
+        expect(c, "onPlayerInteract",
+               "BlockComponentPlayerInteractEvent|face+faceLocation+player|" + params + "|Up|0.25,0.75|truetrue|4");
+        expect(c, "onTick", "BlockComponentTickEvent||" + params);
+        expect(c, "onRandomTick", "BlockComponentRandomTickEvent||" + params);
+        expect(c, "onStepOn", "BlockComponentStepOnEvent|entity|" + params);
+        expect(c, "onStepOff", "BlockComponentStepOffEvent|entity|" + params);
+        expect(c, "onEntityFallOn", "BlockComponentEntityFallOnEvent|entity+fallDistance|" + params + "|3.5;");
+        expect(c, "onRedstoneUpdate", "2>5;5>9;");
+        expect(c, "onBreak", "BlockComponentBlockBreakEvent|brokenBlockPermutation+entitySource|" + params + "|true");
+        expect(c, "onPlayerBreak", "BlockComponentPlayerBreakEvent|brokenBlockPermutation+player|" + params);
+        require(c.get("onPlayerDestroy") == nullptr, "a 2.x pack received the 1.x onPlayerDestroy hook");
+        expect(c, "onUse", "ItemComponentUseEvent|itemStack+source|{}");
+        expect(c, "onUseOn",
+               "ItemComponentUseOnEvent|blockFace+faceLocation+itemStack+source+usedOnBlockPermutation|{}|Up|1|"
+               "truetrue");
+        expect(c, "onCompleteUse", "ItemComponentCompleteUseEvent|itemStack+source|{}");
+        expect(c, "onConsume", "ItemComponentConsumeEvent|itemStack+source|{}");
+        expect(c, "onHitEntity", "ItemComponentHitEntityEvent|attackingEntity+hadEffect+hitEntity+itemStack|{}");
+        expect(c, "onBeforeDurabilityDamage",
+               "ItemComponentBeforeDurabilityDamageEvent|attackingEntity+durabilityDamage+hitEntity+itemStack|{}|2");
+        expect(c, "onMineBlock", "ItemComponentMineBlockEvent|itemStack+minedBlockPermutation+source|{}");
+        expect(c, "litHook", "ok");
+        expect(c, "stateHook", "ok");
+        expect(c, "resolve", "2,false");
+        expect(c, "setPermutation", "ok");
+        expect(c, "stateChange", "BlockComponentBlockStateChangeEvent|false|0");
+        expect(c, "litTick", "{\"lit\":true}");
+        expect(c, "registerClock", "ok");
+        expect(c, "dimRegister", "ok");
+        expect(c, "dimDuplicate",
+               "CustomDimensionAlreadyRegisteredError: Custom dimension 'test:void' was already registered.");
+        expect(c, "dimNoNamespace", "NamespaceNameError,NoNamespace");
+        expect(c, "dimMinecraft", "NamespaceNameError,DisallowedNamespace");
+        expect(c, "dimChars", "CustomDimensionNameError: Custom dimension 'test:a b' has invalid characters.");
+        expect(c, "dimLate",
+               "CustomDimensionInvalidRegistryError: Cannot register custom dimension 'test:late' outside of "
+               "StartupEvent.");
+        expect(c, "dimId", "test:void");
+        expect(c, "dimSame", "true");
+        expect(c, "itemOrder", "durability;hit;");
+        expect(c, "clockNames", "no,no,no,no,no,ok");
+        expect(c, "clockDuplicate",
+               "WorldClockRegistrationError: Failed to register world clock 'test:clock'. World clock name already "
+               "exists.");
+        expect(c, "clockName",
+               "WorldClockRegistrationError: Failed to register world clock 'noname'. World clock has invalid or "
+               "missing name.");
+        expect(c, "clockPeriod",
+               "WorldClockRegistrationError: Failed to register world clock 'test:other'. Time marker period must be "
+               "greater than its time.");
+        expect(c, "lateClock",
+               "WorldClockInvalidRegistryError: Cannot register world clock 'test:late' outside of StartupEvent.");
+        expect(c, "clockSame", "true");
+        expect(c, "clockMissing", "WorldClockNotFoundError: Failed to find world clock 'test:nope'.");
+        expect(c, "overworld",
+               "minecraft:day@1000/24000,minecraft:noon@6000/24000,minecraft:sunset@12000/24000,"
+               "minecraft:night@13000/24000,minecraft:midnight@18000/24000,minecraft:sunrise@23000/24000");
+        expect(c, "clockTime", "9");
+        expect(c, "rewind", "ok@7");
+        expect(c, "skip", "ok@7");
+        expect(c, "setMarker", "ok@2");
+        expect(c, "rewindEarly",
+               "WorldClockRewindError: Failed to rewind world clock 'test:clock'. Current time is behind time marker "
+               "'test:mark'");
+        expect(c, "unknownMarker",
+               "WorldClockTimeMarkerNotFoundError: Failed to find time marker 'test:unknown' in world clock "
+               "'test:clock'.");
+        expect(c, "addMarker",
+               "ok,WorldClockAddTimeMarkerError: Failed to add time marker 'test:added' on world clock 'test:clock' "
+               "Time marker name already exists.");
+        expect(c, "removeMarker", "ok,WorldClockInvalidTimeMarkerError: ");
+        expect(c, "removeMinecraft",
+               "WorldClockRemoveMinecraftTimeMarkerError: Failed to remove time marker 'minecraft:noon' from world "
+               "clock 'minecraft:overworld'. A time marker with the 'minecraft' namespace cannot be removed.");
+        expect(c, "paused", "test:clock");
+        expect(c, "markers", "2;7;7;2;2147483647;");
+        expect(c, "modified", "4");
+        expect(c, "restart", "test:clock|0");
+        require(c.get("otherClock") == nullptr, "a clock filter let another clock's event through");
+
         const std::unique_ptr<json::Value> stable1 = result(owner, "stable1");
         expect(*stable1, "alone", "true");
         expect(*stable1, "gameMode", "survival,undefined");
@@ -482,6 +1776,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*stable1, "early", "ok");
         expect(*stable1, "startupEvent", "false");
         expect(*stable1, "register", "ok");
+        expect(*stable1, "legacyName", "CustomComponentNameError,1");
+        expect(*stable1, "legacyInteract", "1|BlockComponentPlayerInteractEvent");
+        expect(*stable1, "legacyDestroy", "destroyedBlockPermutation+player");
+        require(stable1->get("legacyBreak") == nullptr, "a 1.x pack received the 2.x onPlayerBreak hook");
 
         const std::unique_ptr<json::Value> beta = result(owner, "beta");
         expect(*beta, "alone", "true");
@@ -509,6 +1807,7 @@ int main() {
         std::clog << "Script API regression failed: " << error.what() << '\n';
         result = 1;
     }
+    CustomContentRegistry::getInstance().reset();
     ServerPaths::setRoot(originalRoot);
     std::error_code ignored;
     std::filesystem::remove_all(directory, ignored);

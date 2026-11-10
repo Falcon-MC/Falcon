@@ -112,6 +112,25 @@ void ServerNetworkHandler::addEffect(Actor &actor, MobEffectId effect, int32_t a
     mEventBus.after().mEffectAdd.emit(event);
 }
 
+bool ServerNetworkHandler::applyFood(ServerPlayer &player, const ItemStack &item) {
+    const FoodItemComponent *food = findFoodComponent(item);
+    if (food == nullptr)
+        return false;
+
+    player.consumeFood(food->getNutrition(), food->getSaturation());
+    for (const FoodEffect &effect: food->getEffects())
+        addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
+
+    // cured effects (poison for the honey bottle) come only from the vanilla components
+    const Tag *vanilla = vanillaFood(item);
+    const Tag *removed = vanilla == nullptr ? nullptr : vanilla->get("remove_effects");
+    if (removed != nullptr && removed->isList()) {
+        for (const Tag &effect: removed->getList())
+            player.removeEffect((MobEffectId) effect.asInt());
+    }
+    return true;
+}
+
 void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
     if (!player.isSpawned() || !player.getFlags().get(ActorFlag::UsingItem))
         return;
@@ -157,6 +176,12 @@ void ServerNetworkHandler::_completeItemUse(ServerPlayer &player, int32_t itemId
     _consumeHeldItem(player);
 }
 
+int32_t ServerNetworkHandler::getItemUseTicksLeft(const ServerPlayer &player) const {
+    const int64_t left = useDurationTicksFor(player.getInventory().getItemInHand())
+                         - (mCurrentTick - player.getItemUseStartTick());
+    return left > 0 ? (int32_t) left : 0;
+}
+
 void ServerNetworkHandler::emitItemUse(ServerPlayer &player) {
     const ItemStack &heldItem = player.getInventory().getItemInHand();
     if (heldItem.isAir() || heldItem.mDefinition == nullptr)
@@ -168,6 +193,7 @@ void ServerNetworkHandler::emitItemUse(ServerPlayer &player) {
 
     ItemUseAfterEvent useEvent(player, heldItem.mDefinition->getIdentifier());
     mEventBus.after().mItemUse.emit(useEvent);
+    mScriptEngine.onItemUse(player);
 }
 
 bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &itemType) {
@@ -241,6 +267,8 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
             player.getFlags().set(ActorFlag::UsingItem, true);
             player.setItemUseStartTick(mCurrentTick);
             _sendEntityData(player);
+            // TODO: the charge length scripts see for bows and crossbows is unverified (IDA unavailable)
+            mScriptEngine.onItemStartUse(player, heldItem, (int32_t) useDurationTicksFor(heldItem));
             return;
         }
     }
@@ -267,6 +295,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
         if (usingItem) {
             player.getFlags().set(ActorFlag::UsingItem, false);
             _sendEntityData(player);
+            mScriptEngine.onItemStopUse(player, heldItem, getItemUseTicksLeft(player), false);
         }
         return;
     }
@@ -283,6 +312,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
                                      (int32_t) useDurationTicksFor(heldItem));
         mEventBus.after().mItemStartUse.emit(event);
     }
+    mScriptEngine.onItemStartUse(player, heldItem, (int32_t) useDurationTicksFor(heldItem));
 }
 
 void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
@@ -303,6 +333,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
     if (wasUsing) {
         player.getFlags().set(ActorFlag::UsingItem, false);
         _sendEntityData(player);
+        mScriptEngine.onItemStopUse(player, heldItem, getItemUseTicksLeft(player), false);
     }
 
     if (!consumable)
@@ -345,21 +376,10 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         const std::string identifier = usedItem.mDefinition->getIdentifier();
         ItemCompleteUseAfterEvent completeEvent(player, identifier, (int32_t) useDurationTicksFor(usedItem));
         mEventBus.after().mItemCompleteUse.emit(completeEvent);
+        mScriptEngine.onItemCompleteUse(player, usedItem, 0);
     }
 
-    if (food != nullptr) {
-        player.consumeFood(food->getNutrition(), food->getSaturation());
-        for (const FoodEffect &effect: food->getEffects())
-            addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
-
-        // cured effects (poison for the honey bottle) come only from the vanilla components
-        const Tag *vanilla = vanillaFood(usedItem);
-        const Tag *removed = vanilla == nullptr ? nullptr : vanilla->get("remove_effects");
-        if (removed != nullptr && removed->isList()) {
-            for (const Tag &effect: removed->getList())
-                player.removeEffect((MobEffectId) effect.asInt());
-        }
-    }
+    applyFood(player, usedItem);
 
     if (itemType != nullptr)
         itemType->onConsumed(*this, player, usedItem);

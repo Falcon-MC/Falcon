@@ -34,6 +34,7 @@
 #include "Protocol/Packets/AvailableCommandsPacket.h"
 #include "Protocol/Packets/AvailableActorIdentifiersPacket.h"
 #include "Protocol/Packets/BiomeDefinitionListPacket.h"
+#include "Protocol/Packets/DimensionDataPacket.h"
 #include "Protocol/Packets/CreativeContentPacket.h"
 #include "Protocol/Packets/CameraPresetsPacket.h"
 #include "Protocol/Types/CameraPresets.h"
@@ -75,6 +76,9 @@ namespace {
     const int64_t RESOURCE_PACK_CHUNK_SIZE = 1024 * 1024;
     const float PLAYER_BASE_OFFSET = 1.62f;
     const char *const ENABLED_EXPERIMENTS[] = {"data_driven_vanilla_blocks_and_items"};
+
+    // TODO: the void value of the dimension generator type, its place after Overworld and Flat (1, 2) for now
+    const int32_t CUSTOM_DIMENSION_GENERATOR = 5;
 
     std::vector<ExperimentData> enabledExperiments() {
         std::vector<ExperimentData> experiments;
@@ -614,6 +618,22 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
 
     owner.getNetworkHandler().send(id, startGame, owner.getCodecContext());
 
+    // sub_1422AA6C0: right after StartGame, only when there are definitions to send
+    if (!Dimension::customDimensions().empty()) {
+        DimensionDataPacket dimensions;
+        for (const auto &entry: Dimension::customDimensions()) {
+            const DimensionType custom = (DimensionType) entry.first;
+            DimensionDefinition definition;
+            definition.mId = entry.second;
+            definition.mMinimumHeight = Dimension::getMinY(custom);
+            definition.mMaximumHeight = Dimension::getMaxY(custom) + 1;
+            definition.mGeneratorType = CUSTOM_DIMENSION_GENERATOR;
+            definition.mDimensionType = Dimension::toId(custom);
+            dimensions.mDefinitions.push_back(definition);
+        }
+        owner.getNetworkHandler().send(id, dimensions, owner.getCodecContext());
+    }
+
     SetTimePacket time;
     time.mTime = (int32_t) world.getDayTime();
     owner.getNetworkHandler().send(id, time, owner.getCodecContext());
@@ -622,6 +642,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     player.getInventoryManager().attach(&player, &owner);
 
     sendItemComponents(owner, player);
+    // sub_1422AA6C0: the clock registry follows the item registry
+    owner.getScriptEngine().sendWorldClocks(player);
     sendActorIdentifiers(owner, player);
     sendCameraPresets(owner, player);
     sendSharedLoginPacket(

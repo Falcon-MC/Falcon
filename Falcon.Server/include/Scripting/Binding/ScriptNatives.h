@@ -2,6 +2,7 @@
 
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Level/Dimension/Dimension.h"
+#include "Core/NBT/Tag.h"
 
 #include <cstdint>
 #include <memory>
@@ -40,10 +41,14 @@ struct ScriptEntityPart : ScriptNative {
     std::string mComponentId;
 };
 
+// the stack's own NBT (name, lore, enchantments, lock, book, color) stays in mTag as the game saves it
 struct ScriptItemData {
     std::string mTypeId;
     int32_t mAmount = 1;
     int32_t mDamage = 0;
+    Tag mTag = Tag::ofCompound();
+    std::vector<std::string> mCanPlaceOn;
+    std::vector<std::string> mCanDestroy;
     std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;
 };
 
@@ -52,6 +57,26 @@ struct ScriptItemRef : ScriptNative {
     std::shared_ptr<ScriptItemData> mItem;
     // set on an item component, empty on the ItemStack itself
     std::string mComponentId;
+};
+
+// an entity's container, one of its slots, or the storage of an item; read on every access
+struct ScriptContainerRef : ScriptEntityPart {
+    enum class Kind { Inventory, Ender, Equipment, Cursor, Item, Block };
+
+    Kind mKind = Kind::Inventory;
+    // Kind::Item: the bundle the container lives in
+    std::shared_ptr<ScriptItemData> mItem;
+    // a ContainerSlot: its index, or its EquipmentSlot name; -1 and empty on the Container
+    int32_t mSlot = -1;
+    std::string mEquipmentSlot;
+    // the Container itself, not its owning component
+    bool mIsContainer = false;
+    // Kind::Block: the block actor holding the container
+    uint32_t mWorldId = 0;
+    DimensionType mDimension = DimensionType::Overworld;
+    int32_t mX = 0;
+    int32_t mY = 0;
+    int32_t mZ = 0;
 };
 
 struct ScriptBlockRef : ScriptNative {
@@ -67,12 +92,32 @@ struct ScriptDimensionRef : ScriptNative {
     uint32_t mWorldId = 0;
 };
 
+struct ScriptEffectRef : ScriptNative {
+    ScriptEntityRef mEntity;
+    int32_t mEffectId = 0;
+};
+
+// EffectType, EntityType and EntityHealSource: one name each
+struct ScriptNamedRef : ScriptNative {
+    std::string mName;
+};
+
+struct ScriptInputInfoRef : ScriptNative {
+    uint32_t mHandle = 0;
+};
+
 struct ScriptSignalRef : ScriptNative {
     std::string mKey;
 };
 
 struct ScriptRegistryRef : ScriptNative {
     bool mBlocks = true;
+};
+
+// a world clock, or one of its time markers when mMarker is set; both read the clock system on access
+struct ScriptClockRef : ScriptNative {
+    std::string mClock;
+    std::string mMarker;
 };
 
 namespace ScriptValues {
@@ -94,5 +139,16 @@ namespace ScriptValues {
 
     JSValue dynamicPropertyIds(JSContext *ctx, const std::unordered_map<std::string, DynamicPropertyValue> &store);
 
+    // setDynamicProperties: false with a pending exception
+    bool dynamicPropertySetAll(JSContext *ctx, std::unordered_map<std::string, DynamicPropertyValue> &store,
+                               JSValueConst values);
+
+    int64_t dynamicPropertyByteCount(const std::unordered_map<std::string, DynamicPropertyValue> &store);
+
     bool arrayContainsString(JSContext *ctx, JSValueConst array, const std::string &needle);
+
+    // block states: bytes are booleans, as the palette stores them
+    JSValue statesToJs(JSContext *ctx, const Tag &states);
+
+    Tag statesFromJs(JSContext *ctx, JSValueConst object);
 }

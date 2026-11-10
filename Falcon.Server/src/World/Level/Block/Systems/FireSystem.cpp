@@ -39,7 +39,7 @@ namespace {
         std::map<int64_t, std::vector<ScheduledPosition>> mBuckets;
     };
 
-    std::array<FireSchedule, Dimension::DIMENSION_COUNT> gSchedules;
+    std::unordered_map<int32_t, FireSchedule> gSchedules;
 
     FireSchedule &scheduleOf(Level &level) {
         return gSchedules[level.getDimensionId()];

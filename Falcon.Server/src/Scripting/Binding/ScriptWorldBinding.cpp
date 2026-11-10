@@ -1,6 +1,9 @@
 #include "Scripting/Binding/ScriptApi.h"
+#include <functional>
 
 #include "World/Actor/ServerActor.h"
+#include "World/Actor/Misc/ItemActor.h"
+#include "Network/Handler/ItemActorHandler.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/CraftingRecipeTable.h"
 #include "World/Level/GameRules.h"
@@ -290,46 +293,14 @@ namespace {
     JSValue worldSetDynamicProperties(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         if (argc < 1 || !JS_IsObject(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-
-        auto &store = ScriptApi::fromContext(ctx)->host().getWorldDynamicProperties();
-        JSPropertyEnum *properties = nullptr;
-        uint32_t count = 0;
-        if (JS_GetOwnPropertyNames(ctx, &properties, &count, argv[0], JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) != 0)
+        if (!dynamicPropertySetAll(ctx, ScriptApi::fromContext(ctx)->host().getWorldDynamicProperties(), argv[0]))
             return JS_EXCEPTION;
-        for (uint32_t i = 0; i < count; ++i) {
-            JSValue key = JS_AtomToString(ctx, properties[i].atom);
-            JSValue value = JS_GetProperty(ctx, argv[0], properties[i].atom);
-            dynamicPropertySet(ctx, store, toString(ctx, key), value);
-            JS_FreeValue(ctx, value);
-            JS_FreeValue(ctx, key);
-        }
-        JS_FreePropertyEnum(ctx, properties, count);
         return JS_UNDEFINED;
     }
 
-    // TODO: the game's own accounting is unverified; key and value payload bytes for now
     JSValue worldGetDynamicPropertyTotalByteCount(JSContext *ctx, JSValueConst, int, JSValueConst *) {
-        int64_t total = 0;
-        for (const auto &entry: ScriptApi::fromContext(ctx)->host().getWorldDynamicProperties()) {
-            total += (int64_t) entry.first.size();
-            switch (entry.second.mType) {
-                case DynamicPropertyValue::Type::Boolean:
-                    total += 1;
-                    break;
-                case DynamicPropertyValue::Type::Number:
-                    total += 8;
-                    break;
-                case DynamicPropertyValue::Type::String:
-                    total += (int64_t) entry.second.mString.size();
-                    break;
-                case DynamicPropertyValue::Type::Vector:
-                    total += 12;
-                    break;
-                default:
-                    break;
-            }
-        }
-        return JS_NewInt64(ctx, total);
+        return JS_NewInt64(ctx,
+                           dynamicPropertyByteCount(ScriptApi::fromContext(ctx)->host().getWorldDynamicProperties()));
     }
 
     JSValue worldGetPackSettings(JSContext *ctx, JSValueConst, int, JSValueConst *) {
@@ -391,6 +362,10 @@ namespace {
             return api->makeDimension(api->host().getDimension(DimensionType::TheEnd));
         if (identifier == "minecraft:overworld")
             return api->makeDimension(api->host().getDimension(DimensionType::Overworld));
+        bool custom = false;
+        const DimensionType dimension = Dimension::findCustom(identifier, custom);
+        if (custom && api->host().getWorlds().getDefault().hasLevel(dimension))
+            return api->makeDimension(api->host().getDimension(dimension));
         return JS_ThrowTypeError(ctx, "Unknown dimension %s", identifier.c_str());
     }
 
@@ -458,6 +433,22 @@ namespace {
 
     JSValue blockGetTypeId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         return string(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)));
+    }
+
+    // BlockType lives in the data bootstrap: the object BlockTypes.get hands out
+    JSValue blockGetType(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        for (const auto &entry: api->moduleExports("@minecraft/server")) {
+            if (entry.first != "BlockTypes")
+                continue;
+            JSValue get = JS_GetPropertyStr(ctx, entry.second, "get");
+            JSValue id = string(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)));
+            JSValue type = JS_Call(ctx, get, entry.second, 1, &id);
+            JS_FreeValue(ctx, id);
+            JS_FreeValue(ctx, get);
+            return type;
+        }
+        return JS_UNDEFINED;
     }
 
     JSValue blockGetIsAir(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -554,11 +545,10 @@ namespace {
         if (argc < 1 || !JS_IsObject(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
-        // TODO: apply the permutation's states, the type only for now
-        const std::string identifier = typeIdentifier(ctx, argv[0]);
-        if (!identifier.empty())
-            ScriptApi::fromContext(ctx)->setBlockType(blockLevel(ctx, *block), block->mX, block->mY, block->mZ,
-                                                      identifier);
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        BlockState state;
+        if (api->readPermutation(argv[0], state))
+            api->setBlock(blockLevel(ctx, *block), block->mX, block->mY, block->mZ, state);
         return JS_UNDEFINED;
     }
 
@@ -583,166 +573,11 @@ namespace {
         return object;
     }
 
-    ScriptItemData *itemOf(JSContext *ctx, JSValueConst thisVal) {
-        const ScriptItemRef *ref = ScriptApi::fromContext(ctx)->native<ScriptItemRef>(thisVal);
-        return ref == nullptr ? nullptr : ref->mItem.get();
-    }
-
-    JSValue itemStackConstructor(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc < 1)
-            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-
-        std::string typeId = typeIdentifier(ctx, argv[0]);
-        if (typeId.empty())
-            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        if (typeId.find(':') == std::string::npos)
-            typeId = "minecraft:" + typeId;
-
-        int32_t amount = 1;
-        if (argc >= 2 && !JS_IsUndefined(argv[1]))
-            JS_ToInt32(ctx, &amount, argv[1]);
-        return api->makeItemStack(typeId, amount < 1 ? 1 : amount);
-    }
-
-    JSValue itemStackGetTypeId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return string(ctx, itemOf(ctx, thisVal)->mTypeId);
-    }
-
-    JSValue itemStackGetAmount(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return JS_NewInt32(ctx, itemOf(ctx, thisVal)->mAmount);
-    }
-
-    JSValue itemStackSetAmount(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        int32_t amount = 1;
-        if (argc >= 1)
-            JS_ToInt32(ctx, &amount, argv[0]);
-        itemOf(ctx, thisVal)->mAmount = amount;
-        return JS_UNDEFINED;
-    }
-
-    JSValue itemStackGetDynamicProperty(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_UNDEFINED;
-        return dynamicPropertyGet(ctx, itemOf(ctx, thisVal)->mDynamicProperties, toString(ctx, argv[0]));
-    }
-
-    JSValue itemStackSetDynamicProperty(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc >= 1)
-            dynamicPropertySet(ctx, itemOf(ctx, thisVal)->mDynamicProperties, toString(ctx, argv[0]),
-                               argc >= 2 ? argv[1] : JS_UNDEFINED);
-        return JS_UNDEFINED;
-    }
-
-    JSValue itemStackGetDynamicPropertyIds(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return dynamicPropertyIds(ctx, itemOf(ctx, thisVal)->mDynamicProperties);
-    }
-
-    JSValue itemStackGetTags(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        JSValue tags = JS_NewArray(ctx);
-        uint32_t index = 0;
-        for (const std::string &tag: CraftingRecipeTable::getItemTags(itemOf(ctx, thisVal)->mTypeId))
-            JS_SetPropertyUint32(ctx, tags, index++, string(ctx, tag));
-        return tags;
-    }
-
-    JSValue itemStackHasTag(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_FALSE;
-        const std::string wanted = toString(ctx, argv[0]);
-        for (const std::string &tag: CraftingRecipeTable::getItemTags(itemOf(ctx, thisVal)->mTypeId)) {
-            if (tag == wanted)
-                return JS_TRUE;
-        }
-        return JS_FALSE;
-    }
-
-    // the item components a stack of this type carries; getComponent and hasComponent both answer from here
-    JSValue makeItemComponent(JSContext *ctx, JSValueConst thisVal, const std::string &requested) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        const ScriptItemRef *item = api->native<ScriptItemRef>(thisVal);
-        const std::string id = requested.find(':') == std::string::npos ? "minecraft:" + requested : requested;
-        const CustomItemDefinition *definition = CustomContentRegistry::getInstance().findItem(item->mItem->mTypeId);
-
-        const char *className = nullptr;
-        if (id == "minecraft:durability" && definition != nullptr && definition->mMaxDurability > 0)
-            className = "ItemDurabilityComponent";
-        else if (id == "minecraft:enchantable")
-            className = "ItemEnchantableComponent";
-        else if (id == "minecraft:cooldown" && definition != nullptr
-                 && (definition->mCooldownTicks > 0 || !definition->mCooldownCategory.empty()))
-            className = "ItemCooldownComponent";
-        if (className == nullptr)
-            return JS_UNDEFINED;
-
-        ScriptItemRef *component = new ScriptItemRef();
-        component->mItem = item->mItem;
-        component->mComponentId = id;
-        return api->makeInstance(className, component);
-    }
-
-    JSValue itemStackGetComponent(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_UNDEFINED;
-        return makeItemComponent(ctx, thisVal, toString(ctx, argv[0]));
-    }
-
-    JSValue itemStackHasComponent(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_FALSE;
-        JSValue component = makeItemComponent(ctx, thisVal, toString(ctx, argv[0]));
-        const bool has = !JS_IsUndefined(component);
-        JS_FreeValue(ctx, component);
-        return JS_NewBool(ctx, has);
-    }
-
-    const CustomItemDefinition *componentDefinition(JSContext *ctx, JSValueConst thisVal) {
-        return CustomContentRegistry::getInstance().findItem(itemOf(ctx, thisVal)->mTypeId);
-    }
-
-    JSValue durabilityGetDamage(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return JS_NewInt32(ctx, itemOf(ctx, thisVal)->mDamage);
-    }
-
-    JSValue durabilitySetDamage(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        int32_t value = 0;
-        if (argc >= 1)
-            JS_ToInt32(ctx, &value, argv[0]);
-        itemOf(ctx, thisVal)->mDamage = value < 0 ? 0 : value;
-        return JS_UNDEFINED;
-    }
-
-    JSValue durabilityGetMax(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const CustomItemDefinition *definition = componentDefinition(ctx, thisVal);
-        return JS_NewInt32(ctx, definition == nullptr ? 0 : definition->mMaxDurability);
-    }
-
-    // TODO: the game's unbreaking chance range, a plain 1 / (level + 1) for now
-    JSValue durabilityGetDamageChance(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        int32_t unbreaking = 0;
-        if (argc >= 1)
-            JS_ToInt32(ctx, &unbreaking, argv[0]);
-        if (unbreaking < 0)
-            unbreaking = 0;
-        return JS_NewInt32(ctx, (int32_t) (100.0 / (double) (unbreaking + 1) + 0.5));
-    }
-
-    JSValue enchantableGetEnchantment(JSContext *, JSValueConst, int, JSValueConst *) {
-        return JS_UNDEFINED;
-    }
-
-    JSValue cooldownGetTicks(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const CustomItemDefinition *definition = componentDefinition(ctx, thisVal);
-        return JS_NewInt32(ctx, definition == nullptr ? 0 : definition->mCooldownTicks);
-    }
-
-    JSValue cooldownGetCategory(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const CustomItemDefinition *definition = componentDefinition(ctx, thisVal);
-        return string(ctx, definition == nullptr ? std::string() : definition->mCooldownCategory);
-    }
-
     JSValue dimensionGetId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const ScriptDimensionRef *ref = ScriptApi::fromContext(ctx)->native<ScriptDimensionRef>(thisVal);
+        const std::string *custom = Dimension::customName(ref->mDimension);
+        if (custom != nullptr)
+            return string(ctx, *custom);
         if (ref->mDimension == DimensionType::Nether)
             return JS_NewString(ctx, "minecraft:nether");
         if (ref->mDimension == DimensionType::TheEnd)
@@ -814,9 +649,13 @@ namespace {
         if (item == nullptr || argc < 2 || !readVector3(ctx, argv[1], x, y, z))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
-        api->host().spawnItemActor(api->levelOf(thisVal), item->mItem->mTypeId, item->mItem->mAmount,
-                                   Vector3f((float) x, (float) y, (float) z));
-        return JS_UNDEFINED;
+        ItemStack stack;
+        if (!api->toItemStack(*item->mItem, stack))
+            return JS_UNDEFINED;
+        ItemActor *spawned = ItemActorHandler::dropItem(
+                api->host(), api->levelOf(thisVal), Vector3f((float) x, (float) y, (float) z), stack,
+                ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
+        return spawned == nullptr ? JS_UNDEFINED : api->makeEntity(*spawned);
     }
 
     JSValue dimensionSpawnParticle(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -869,6 +708,193 @@ namespace {
         return result;
     }
 
+}
+
+namespace {
+    World &worldOfPack(ScriptApi &api) {
+        return api.host().getWorlds().getDefault();
+    }
+
+    const TickingArea *findArea(ScriptApi &api, const std::string &name) {
+        const std::vector<std::string> &names = api.tickingAreaNames();
+        if (std::find(names.begin(), names.end(), name) == names.end())
+            return nullptr;
+        for (const TickingArea &area: worldOfPack(api).getTickingAreas().getAreas()) {
+            if (area.mName == name)
+                return &area;
+        }
+        return nullptr;
+    }
+
+    std::string areaIdentifier(JSContext *ctx, JSValueConst value) {
+        if (!JS_IsObject(value))
+            return toString(ctx, value);
+        JSValue identifier = JS_GetPropertyStr(ctx, value, "identifier");
+        const std::string name = toString(ctx, identifier);
+        JS_FreeValue(ctx, identifier);
+        return name;
+    }
+
+    bool areaLoaded(ScriptApi &api, const TickingArea &area) {
+        Level &level = worldOfPack(api).getLevel(area.mDimension);
+        for (const int64_t column: area.getColumns()) {
+            const int32_t chunkX = (int32_t) (column >> 32);
+            const int32_t chunkZ = (int32_t) (uint32_t) column;
+            if (level.peekBlockPtr(chunkX * 16, level.getMinY(), chunkZ * 16) == nullptr)
+                return false;
+        }
+        return true;
+    }
+
+    JSValue makeTickingArea(ScriptApi &api, const TickingArea &area) {
+        JSContext *ctx = api.context();
+        Level &level = worldOfPack(api).getLevel(area.mDimension);
+        const std::vector<int64_t> columns = area.getColumns();
+        const bool loaded = areaLoaded(api, area);
+
+        JSValue object = JS_NewObject(ctx);
+        JSValue box = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, box, "min",
+                          vector3(ctx, (float) area.mMinX, (float) level.getMinY(), (float) area.mMinZ));
+        JS_SetPropertyStr(ctx, box, "max",
+                          vector3(ctx, (float) area.mMaxX, (float) level.getMaxY(), (float) area.mMaxZ));
+        JS_SetPropertyStr(ctx, object, "boundingBox", box);
+        JS_SetPropertyStr(ctx, object, "chunkCount", JS_NewInt32(ctx, (int32_t) columns.size()));
+        JS_SetPropertyStr(ctx, object, "dimension", api.makeDimension(level));
+        JS_SetPropertyStr(ctx, object, "identifier", string(ctx, area.mName));
+        JS_SetPropertyStr(ctx, object, "isFullyLoaded", JS_NewBool(ctx, loaded));
+        return object;
+    }
+
+    JSValue tickingAreaError(ScriptApi &api, const char *reason) {
+        JSValue fields = JS_NewObject(api.context());
+        JS_SetPropertyStr(api.context(), fields, "reason", JS_NewString(api.context(), reason));
+        return api.throwError("TickingAreaError", "", fields);
+    }
+
+    JSValue tickingCreate(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi &api = *ScriptApi::fromContext(ctx);
+        if (argc < 2 || !JS_IsObject(argv[1]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+
+        const std::string name = toString(ctx, argv[0]);
+        JSValue dimension = JS_GetPropertyStr(ctx, argv[1], "dimension");
+        JSValue from = JS_GetPropertyStr(ctx, argv[1], "from");
+        JSValue to = JS_GetPropertyStr(ctx, argv[1], "to");
+        double fx = 0, fy = 0, fz = 0, tx = 0, ty = 0, tz = 0;
+        const bool valid = api.native<ScriptDimensionRef>(dimension) != nullptr && readVector3(ctx, from, fx, fy, fz)
+                           && readVector3(ctx, to, tx, ty, tz);
+        const DimensionType type = valid ? api.levelOf(dimension).getDimensionType() : DimensionType::Overworld;
+        JS_FreeValue(ctx, dimension);
+        JS_FreeValue(ctx, from);
+        JS_FreeValue(ctx, to);
+        if (!valid)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (findArea(api, name) != nullptr)
+            return tickingAreaError(api, "IdentifierAlreadyExists");
+
+        TickingArea area = TickingArea::box(
+                Vector3i((int32_t) std::floor(fx), (int32_t) std::floor(fy), (int32_t) std::floor(fz)),
+                Vector3i((int32_t) std::floor(tx), (int32_t) std::floor(ty), (int32_t) std::floor(tz)));
+        area.mName = name;
+        area.mDimension = type;
+        worldOfPack(api).getTickingAreas().add(worldOfPack(api), area);
+        api.tickingAreaNames().push_back(name);
+
+        // settles once every chunk of the area is loaded, checked each tick
+        JSValue functions[2];
+        JSValue promise = JS_NewPromiseCapability(ctx, functions);
+        api.pendingTickingAreas().push_back({name, functions[0], functions[1]});
+        api.resolveTickingAreas();
+        return promise;
+    }
+
+    void removeAreas(ScriptApi &api, const std::function<bool(const std::string &)> &match) {
+        std::vector<std::string> &names = api.tickingAreaNames();
+        worldOfPack(api).getTickingAreas().remove(worldOfPack(api), [&](const TickingArea &area) {
+            return std::find(names.begin(), names.end(), area.mName) != names.end() && match(area.mName);
+        });
+        names.erase(std::remove_if(names.begin(), names.end(), match), names.end());
+    }
+
+    JSValue tickingRemove(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi &api = *ScriptApi::fromContext(ctx);
+        const std::string name = argc >= 1 ? areaIdentifier(ctx, argv[0]) : std::string();
+        if (findArea(api, name) == nullptr)
+            return tickingAreaError(api, "UnknownIdentifier");
+        removeAreas(api, [&name](const std::string &candidate) { return candidate == name; });
+        return JS_UNDEFINED;
+    }
+
+    JSValue tickingRemoveAll(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        removeAreas(*ScriptApi::fromContext(ctx), [](const std::string &) { return true; });
+        return JS_UNDEFINED;
+    }
+
+    JSValue tickingGet(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi &api = *ScriptApi::fromContext(ctx);
+        const TickingArea *area = argc >= 1 ? findArea(api, areaIdentifier(ctx, argv[0])) : nullptr;
+        return area == nullptr ? JS_UNDEFINED : makeTickingArea(api, *area);
+    }
+
+    JSValue tickingHas(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi &api = *ScriptApi::fromContext(ctx);
+        return JS_NewBool(ctx, argc >= 1 && findArea(api, toString(ctx, argv[0])) != nullptr);
+    }
+
+    JSValue tickingGetAll(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        ScriptApi &api = *ScriptApi::fromContext(ctx);
+        JSValue array = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const std::string &name: api.tickingAreaNames()) {
+            const TickingArea *area = findArea(api, name);
+            if (area != nullptr)
+                JS_SetPropertyUint32(ctx, array, index++, makeTickingArea(api, *area));
+        }
+        return array;
+    }
+
+    JSValue tickingChunkCount(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        ScriptApi &api = *ScriptApi::fromContext(ctx);
+        int32_t count = 0;
+        for (const std::string &name: api.tickingAreaNames()) {
+            const TickingArea *area = findArea(api, name);
+            if (area != nullptr)
+                count += (int32_t) area->getColumns().size();
+        }
+        return JS_NewInt32(ctx, count);
+    }
+}
+
+void ScriptApi::resolveTickingAreas() {
+    for (size_t i = 0; i < mPendingTickingAreas.size();) {
+        PendingTickingArea &pending = mPendingTickingAreas[i];
+        const TickingArea *area = findArea(*this, pending.mName);
+        // a removed area rejects: it will never load
+        if (area != nullptr && !areaLoaded(*this, *area)) {
+            ++i;
+            continue;
+        }
+        JSValue settle = area != nullptr ? pending.mResolve : pending.mReject;
+        JSValue result = JS_Call(mContext, settle, JS_UNDEFINED, 0, nullptr);
+        JS_FreeValue(mContext, result);
+        JS_FreeValue(mContext, pending.mResolve);
+        JS_FreeValue(mContext, pending.mReject);
+        mPendingTickingAreas.erase(mPendingTickingAreas.begin() + (std::ptrdiff_t) i);
+    }
+}
+
+void ScriptApi::_bindTickingAreas() {
+    JSValue manager = defineClass("TickingAreaManager");
+    property(manager, "TickingAreaManager", "chunkCount", tickingChunkCount);
+    method(manager, "TickingAreaManager", "createTickingArea", tickingCreate, 2);
+    method(manager, "TickingAreaManager", "getAllTickingAreas", tickingGetAll, 0);
+    method(manager, "TickingAreaManager", "getTickingArea", tickingGet, 1);
+    method(manager, "TickingAreaManager", "hasTickingArea", tickingHas, 1);
+    method(manager, "TickingAreaManager", "removeAllTickingAreas", tickingRemoveAll, 0);
+    method(manager, "TickingAreaManager", "removeTickingArea", tickingRemove, 1);
+    if (mSurface.has("TickingAreaManager"))
+        mTickingAreas = makeInstance("TickingAreaManager", new ScriptNative());
 }
 
 JSValue ScriptApi::queryEntities(JSValueConst options, const Level *level, bool playersOnly) {
@@ -995,6 +1021,7 @@ void ScriptApi::_bindWorld() {
     propertyMagic(world, "World", "afterEvents", holderGetter, 0);
     propertyMagic(world, "World", "beforeEvents", holderGetter, 1);
     propertyMagic(world, "World", "scoreboard", holderGetter, 4);
+    _bindTickingAreas();
     propertyMagic(world, "World", "tickingAreaManager", holderGetter, 5);
     propertyMagic(world, "World", "gameRules", holderGetter, 6);
     property(world, "World", "isHardcore", worldGetIsHardcore);
@@ -1045,36 +1072,12 @@ void ScriptApi::_bindBlock() {
     propertyMagic(block, "Block", "y", blockGetCoord, 1);
     propertyMagic(block, "Block", "z", blockGetCoord, 2);
     property(block, "Block", "typeId", blockGetTypeId);
+    property(block, "Block", "type", blockGetType);
     property(block, "Block", "isAir", blockGetIsAir);
     property(block, "Block", "permutation", blockGetPermutation);
 
     defineClass("BlockVolume", blockVolumeConstructor, 2);
     defineClass("EntityWaypoint", entityWaypointConstructor, 3);
-}
-
-void ScriptApi::_bindItemStack() {
-    JSValue item = defineClass("ItemStack", itemStackConstructor, 2);
-    property(item, "ItemStack", "typeId", itemStackGetTypeId);
-    property(item, "ItemStack", "amount", itemStackGetAmount, itemStackSetAmount);
-    method(item, "ItemStack", "getDynamicProperty", itemStackGetDynamicProperty, 1);
-    method(item, "ItemStack", "setDynamicProperty", itemStackSetDynamicProperty, 2);
-    method(item, "ItemStack", "getDynamicPropertyIds", itemStackGetDynamicPropertyIds, 0);
-    method(item, "ItemStack", "getComponent", itemStackGetComponent, 1);
-    method(item, "ItemStack", "hasComponent", itemStackHasComponent, 1);
-    method(item, "ItemStack", "getTags", itemStackGetTags, 0);
-    method(item, "ItemStack", "hasTag", itemStackHasTag, 1);
-
-    JSValue durability = defineClass("ItemDurabilityComponent");
-    property(durability, "ItemDurabilityComponent", "damage", durabilityGetDamage, durabilitySetDamage);
-    property(durability, "ItemDurabilityComponent", "maxDurability", durabilityGetMax);
-    method(durability, "ItemDurabilityComponent", "getDamageChance", durabilityGetDamageChance, 1);
-
-    JSValue enchantable = defineClass("ItemEnchantableComponent");
-    method(enchantable, "ItemEnchantableComponent", "getEnchantment", enchantableGetEnchantment, 1);
-
-    JSValue cooldown = defineClass("ItemCooldownComponent");
-    property(cooldown, "ItemCooldownComponent", "cooldownTicks", cooldownGetTicks);
-    property(cooldown, "ItemCooldownComponent", "cooldownCategory", cooldownGetCategory);
 }
 
 void ScriptApi::_bindDimension() {

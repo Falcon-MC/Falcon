@@ -46,6 +46,8 @@ enum class ActorFlag : int {
     BlockedUsingDamagedShield = 75,
     Sleeping = 76,
     FacingTargetToRangeAttack = 88,
+    // read by Player.isEmoting (sub_14D53E890)
+    Emoting = 92,
     Celebrating = 93,
     Admiring = 94,
     CelebratingSpecial = 95,

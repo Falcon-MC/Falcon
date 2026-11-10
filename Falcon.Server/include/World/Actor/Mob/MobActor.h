@@ -25,6 +25,7 @@
 #include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/Movement/RideControlSystem.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Inventory/Container.h"
 #include "World/Level/Block/BlockState.h"
 #include "Core/Json/Json.h"
 #include "Core/Math/Vector3i.h"
@@ -264,7 +265,7 @@ public:
     void inheritVariant(const MobActor &firstParent, const MobActor &secondParent);
 
     bool isTamed() const {
-        return mOwnerId != NO_OWNER || !mLegacyOwnerName.empty();
+        return mOwnerId != NO_OWNER || !mLegacyOwnerName.empty() || mOwnerless;
     }
 
     int64_t getOwnerId() const {
@@ -395,6 +396,9 @@ public:
 
     int getInventoryCapacity() const;
 
+    // a tamed mount with a horse container_type: its saddle, armor and chest slots
+    Container *getEntityContainer() override;
+
     std::vector<ItemStack> rollLoot(ServerNetworkHandler &owner, const std::string &path);
 
     void onKilledActor(ServerNetworkHandler &owner, Actor &victim);
@@ -414,6 +418,12 @@ public:
     bool isMountTaming() const;
 
     void attemptMountTame(ServerNetworkHandler &owner, ServerPlayer &rider);
+
+    // the success of minecraft:tameable or minecraft:tamemount; false when untameable, tamed or cancelled
+    bool tameTo(ServerNetworkHandler &owner, Actor &tamer, const char *component, bool showEffects);
+
+    // tamed with no owner, as a script's EntityTameMountComponent.tame does (sub_143C9C590)
+    bool tameWithoutOwner(ServerNetworkHandler &owner, const char *component, bool showEffects);
 
     float getJumpStrength() const;
 
@@ -443,6 +453,27 @@ protected:
     void tickControls(ServerNetworkHandler &owner);
 
 private:
+    // the minecraft:inventory slots of the mob's equipment, as a container the UI can show
+    class InventoryView : public Container {
+    public:
+        explicit InventoryView(MobActor &mob) : mMob(mob) {}
+
+        int getContainerSize() const override {
+            return mMob.getInventoryCapacity();
+        }
+
+        const ItemStack &getContainerItem(int slot) const override {
+            return mMob.mEquipment.getInventoryItem(slot);
+        }
+
+        void setContainerItem(int slot, ItemStack item) override {
+            mMob.mEquipment.setInventoryItem(slot, std::move(item));
+        }
+
+    private:
+        MobActor &mMob;
+    };
+
     friend class RideControlSystem;
     friend class RideControlProbe;
 
@@ -592,6 +623,7 @@ private:
     int32_t mAgeTicks = 0;
     int64_t mOwnerId = NO_OWNER;
     std::string mLegacyOwnerName;
+    bool mOwnerless = false;
     int64_t mSyncedOwnerId = NO_OWNER;
     bool mSitting = false;
     bool mGoalsRegistered = false;
@@ -652,6 +684,7 @@ private:
     JumpControl mJumpControl;
     BodyControl mBodyControl;
     MobEquipment mEquipment;
+    InventoryView mInventoryView{*this};
     MobEntitySpawner mEntitySpawner;
     std::vector<int32_t> mEntitySensorCooldowns;
     int32_t mTemper = 0;

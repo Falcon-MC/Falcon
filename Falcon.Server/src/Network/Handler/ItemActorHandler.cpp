@@ -334,6 +334,11 @@ namespace {
                 return;
             if (pluginEvent.mCancelled)
                 continue;
+            if (owner.getScriptEngine().beforeEntityItemPickup(player, actor, pickedItem)) {
+                if (actor.isRemoved())
+                    return;
+                continue;
+            }
 
             std::vector<int> touchedSlots;
             if (!inventory.addItem(actor.getItem(), touchedSlots))
@@ -343,6 +348,7 @@ namespace {
                 EntityItemPickupAfterEvent pickupEvent(player, pickedItem.mDefinition->getIdentifier(),
                                                        pickedItem.mCount);
                 owner.getEventBus().after().mEntityItemPickup.emit(pickupEvent);
+                owner.getScriptEngine().onEntityItemPickup(player, pickedItem);
             }
 
             for (int slot: touchedSlots)

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 class Actor;
 class MobActor;
@@ -21,6 +22,14 @@ public:
                              Actor *other = nullptr);
 
 private:
+    struct Modifiers {
+        std::vector<std::string> mAdded;
+        std::vector<std::string> mRemoved;
+    };
+
+    // the groups the running event changed, read by the dataDrivenEntityTrigger script event
+    static inline Modifiers *sModifiers = nullptr;
+
     static bool _run(ServerNetworkHandler &owner, MobActor &mob, const json::Value &node, int32_t depth, Actor *other);
 
     static MobActor *_resolveTarget(ServerNetworkHandler &owner, MobActor &mob, const std::string &target,

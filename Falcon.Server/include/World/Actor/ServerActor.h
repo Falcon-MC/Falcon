@@ -20,6 +20,7 @@
 #include <vector>
 
 struct CustomActorDefinition;
+class Container;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -153,6 +154,11 @@ public:
     virtual void loadEquipment(const Tag &data, const PacketCodecContext &context) {
         (void) data;
         (void) context;
+    }
+
+    // the minecraft:inventory a player can open: chest vehicles, chested and tamed mounts
+    virtual Container *getEntityContainer() {
+        return nullptr;
     }
 
     virtual int32_t getDeathDuration() const {
@@ -429,6 +435,8 @@ private:
     bool mPersistent = true;
     int32_t mFarFromPlayerTicks = 0;
     std::vector<int64_t> mPendingPassengers;
+    // the hit being dealt while kill() runs from hurt(): the death event reports its cause
+    const ActorDamageSource *mFatalSource = nullptr;
 
     std::unordered_map<std::string, int32_t> mIntProperties;
     std::unordered_map<std::string, float> mFloatProperties;

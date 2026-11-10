@@ -186,6 +186,9 @@ namespace {
 
 ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                                               const std::function<void(ServerActor &)> &configure) {
+    // taken first: configure may spawn another actor
+    const char *cause = mSpawnCause == nullptr ? "Spawned" : mSpawnCause;
+    mSpawnCause = nullptr;
     const uint64_t runtimeId = allocateRuntimeId();
 
     std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(runtimeId, identifier);
@@ -231,12 +234,13 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     ServerActor *result = _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
-    mScriptEngine.onEntitySpawn(*result);
+    mScriptEngine.onEntitySpawn(*result, cause);
     return result;
 }
 
 ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position,
                                                   float scale) {
+    mSpawnCause = "Born";
     ServerActor *baby = spawnActor(level, identifier, position);
     if (baby == nullptr)
         return nullptr;
@@ -734,7 +738,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimPlayer->getName());
         source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
         source.mAttacker = shooter;
-        source.fromOrigin(origin).asProjectile();
+        source.fromOrigin(origin).asProjectile().withDamager(&projectile);
 
         const DamageResult result = hurt(*victimPlayer, damage, source);
         applyArrowEffect = result == DamageResult::Dealt;
@@ -758,7 +762,8 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
             ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimActor->getName());
             source.mAttacker = shooter != nullptr ? (Actor *) shooter
                                                   : (Actor *) getActor(projectile.getOwnerUniqueId());
-            applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile(), data.mLootingLevel);
+            applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile().withDamager(&projectile),
+                                           data.mLootingLevel);
             if (!isTrident && victimActor->stopsProjectiles())
                 return true;
         }
@@ -971,6 +976,14 @@ void ServerNetworkHandler::refreshContainerViewers(const Vector3i &position, con
 
         if (player.isSpawned())
             player.getInventoryManager().refreshOpenContainer(position);
+    }
+}
+
+void ServerNetworkHandler::refreshEntityContainerViewers(int64_t actorId, const ServerPlayer *except) {
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (&player != except && player.isSpawned())
+            player.getInventoryManager().refreshEntityContainer(actorId);
     }
 }
 

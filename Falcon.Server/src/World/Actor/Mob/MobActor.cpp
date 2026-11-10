@@ -1045,6 +1045,17 @@ const PushableByEntityPresets &MobActor::getPushPresets() const {
     return mPushPresets;
 }
 
+// TODO: which mounts open a window and how its slots map to saddle, armor and chest is unverified (IDA unavailable)
+Container *MobActor::getEntityContainer() {
+    const json::Value *inventory = getComponent(INVENTORY_COMPONENT);
+    const json::Value *type = inventory == nullptr ? nullptr : inventory->get("container_type");
+    if (type == nullptr || type->mType != json::Value::Type::String || type->mString != "horse" || !isTamed()
+        || getInventoryCapacity() <= 0)
+        return nullptr;
+    mEquipment.ensureInventorySize(getInventoryCapacity());
+    return &mInventoryView;
+}
+
 int MobActor::getInventoryCapacity() const {
     return (int) numberIn(getComponent(INVENTORY_COMPONENT), "inventory_size", 0.0f);
 }
@@ -1157,6 +1168,7 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
         }
     };
 
+    owner.setSpawnCause("Transformed");
     ServerActor *result = owner.spawnActor(level, identifier, getPosition(), configure);
     if (result == nullptr) {
         mTransformationTicks = transformationTicks(transformation);
@@ -1427,13 +1439,7 @@ void MobActor::attemptMountTame(ServerNetworkHandler &owner, ServerPlayer &rider
 
     const int32_t maximum = (int32_t) numberIn(tamemount, "max_temper", 100.0f);
     if (maximum > 0 && std::uniform_int_distribution<int32_t>(0, maximum - 1)(lifecycleRandom()) < mTemper) {
-        mOwnerId = rider.getUniqueId();
-        mLegacyOwnerName.clear();
-        setPersistent(true);
-        _setFlag(owner, ActorFlag::Tamed, true);
-        _syncOwner(owner);
-        owner.broadcastActorEvent(*this, EntityEventType::TamingSucceeded);
-        EntityEvents::fireTrigger(owner, *this, tamemount->get("tame_event"), &rider);
+        tameTo(owner, rider, TAMEMOUNT_COMPONENT, true);
         return;
     }
 
@@ -1722,14 +1728,39 @@ bool MobActor::_tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const
         return true;
     }
 
-    mOwnerId = player.getUniqueId();
+    tameTo(owner, player, "minecraft:tameable", true);
+    return true;
+}
+
+bool MobActor::tameTo(ServerNetworkHandler &owner, Actor &tamer, const char *component, bool showEffects) {
+    const json::Value *settings = getComponent(component);
+    if (settings == nullptr || isTamed() || owner.getScriptEngine().beforeEntityTamed(*this, tamer))
+        return false;
+
+    mOwnerId = tamer.getUniqueId();
     mLegacyOwnerName.clear();
     setPersistent(true);
     _setFlag(owner, ActorFlag::Tamed, true);
     _syncOwner(owner);
-    owner.broadcastActorEvent(*this, EntityEventType::TamingSucceeded);
+    if (showEffects)
+        owner.broadcastActorEvent(*this, EntityEventType::TamingSucceeded);
 
-    EntityEvents::fireTrigger(owner, *this, tameable->get("tame_event"), &player);
+    EntityEvents::fireTrigger(owner, *this, settings->get("tame_event"), &tamer);
+    owner.getScriptEngine().onEntityTamed(*this, tamer);
+    return true;
+}
+
+bool MobActor::tameWithoutOwner(ServerNetworkHandler &owner, const char *component, bool showEffects) {
+    const json::Value *settings = getComponent(component);
+    if (settings == nullptr || isTamed())
+        return false;
+
+    mOwnerless = true;
+    setPersistent(true);
+    _setFlag(owner, ActorFlag::Tamed, true);
+    if (showEffects)
+        owner.broadcastActorEvent(*this, EntityEventType::TamingSucceeded);
+    EntityEvents::fireTrigger(owner, *this, settings->get("tame_event"), nullptr);
     return true;
 }
 
@@ -2224,7 +2255,7 @@ Tag MobActor::saveNbt() const {
     data.putByte("Color", (int8_t) numberIn(getComponent("minecraft:color"), "value", 0.0f));
     data.putByte("Color2", (int8_t) numberIn(getComponent("minecraft:color2"), "value", 0.0f));
     data.putByte("IsBaby", getComponent("minecraft:is_baby") != nullptr ? 1 : 0);
-    data.putByte("IsTamed", getComponent("minecraft:is_tamed") != nullptr ? 1 : 0);
+    data.putByte("IsTamed", getComponent("minecraft:is_tamed") != nullptr || mOwnerless ? 1 : 0);
     data.putByte("Saddled", getComponent("minecraft:is_saddled") != nullptr ? 1 : 0);
     data.putByte("Chested", getComponent("minecraft:is_chested") != nullptr ? 1 : 0);
     data.putByte("Sheared", getComponent("minecraft:is_sheared") != nullptr ? 1 : 0);
@@ -2261,6 +2292,8 @@ void MobActor::loadNbt(const Tag &data) {
     mBreedCooldown = data.getInt(TAG_BREED_COOLDOWN, 0);
     mOwnerId = data.getLong(TAG_OWNER, NO_OWNER);
     mLegacyOwnerName = mOwnerId == NO_OWNER ? data.getString(TAG_TAMED_BY, std::string()) : std::string();
+    // the game keeps an ownerless tame only as IsTamed
+    mOwnerless = mOwnerId == NO_OWNER && mLegacyOwnerName.empty() && data.getByte("IsTamed", 0) != 0;
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
     mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);

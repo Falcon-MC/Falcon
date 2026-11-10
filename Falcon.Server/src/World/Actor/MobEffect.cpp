@@ -231,7 +231,7 @@ int32_t RegenerationMobEffect::getApplyInterval(const MobEffectInstance &instanc
 
 void RegenerationMobEffect::tick(Actor &actor, const MobEffectInstance &) const {
     if (actor.getHealth() < actor.getMaxHealth())
-        actor.heal(1.0f);
+        actor.heal(1.0f, HealCause::Regeneration);
 }
 
 void SaturationMobEffect::tick(Actor &actor, const MobEffectInstance &instance) const {
@@ -310,10 +310,12 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
     if (input.mDuration == 0 && !input.mInfinite)
         return false;
 
-    if (sAddFilter && !sAddFilter(mActor, input))
+    MobEffectInstance instance = input;
+    if (sAddFilter && !sAddFilter(mActor, instance))
+        return false;
+    if (instance.mDuration == 0 && !instance.mInfinite)
         return false;
 
-    MobEffectInstance instance = input;
     instance.mAmplifier = std::clamp(instance.mAmplifier, 0, 255);
     const int32_t key = (int32_t) instance.mId;
     auto existing = mEffects.find(key);
@@ -327,6 +329,8 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
         effect(instance.mId).onRefresh(mActor, previous, instance);
         refreshDerivedAttributes();
         emit(instance, MobEffectEvent::Modify);
+        if (sAddListener)
+            sAddListener(mActor, instance);
         return true;
     }
 
@@ -334,6 +338,8 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
     effect(instance.mId).onAdd(mActor, instance);
     refreshDerivedAttributes();
     emit(instance, MobEffectEvent::Add);
+    if (sAddListener)
+        sAddListener(mActor, instance);
     return true;
 }
 

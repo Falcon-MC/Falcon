@@ -217,8 +217,7 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     if (!senseDamage(owner, amount, damageSource))
         return false;
 
-    const char *cause = attacker != nullptr ? "entityAttack" : "none";
-    if (owner.getScriptEngine().beforeEntityHurt(*this, amount, cause, attacker))
+    if (owner.getScriptEngine().beforeEntityHurt(*this, amount, damageSource) || amount <= 0.0f)
         return false;
 
     PluginEvent damageEvent;
@@ -262,6 +261,7 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
 
     owner.broadcastActorEvent(*this, EntityEventType::HurtAnimation);
     owner.playLevelSound(owner.getLevelFor(*this), LevelSoundEvent::HIT, getPosition(), mIdentifier);
+    owner.getScriptEngine().onEntityHurt(*this, amount, damageSource);
 
     if (source != nullptr) {
         const Vector3f sourcePosition = source->getPosition();
@@ -276,7 +276,9 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
                                                                      EnchantmentIds::LOOTING)
                                         : 0;
         }
+        mFatalSource = &damageSource;
         kill(owner, source, looting);
+        mFatalSource = nullptr;
     }
 
     return true;
@@ -299,6 +301,15 @@ void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_
     event.mEntity = this;
     event.mAttacker = source;
     PluginManager::getInstance().dispatch(event);
+
+    if (mFatalSource != nullptr) {
+        owner.getScriptEngine().onEntityDie(*this, *mFatalSource);
+        return;
+    }
+    ActorDamageSource fallback;
+    fallback.mDeathMessageKey = "death.attack.generic";
+    fallback.mAttacker = source;
+    owner.getScriptEngine().onEntityDie(*this, fallback);
 }
 
 int32_t ServerActor::getIntProperty(const std::string &name, int32_t fallback) const {

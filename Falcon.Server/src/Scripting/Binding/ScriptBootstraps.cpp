@@ -87,7 +87,8 @@ namespace {
         #states;
         constructor(key, id, states) {
             guard(key, "BlockPermutation");
-            this.#type = new BlockType(token, id);
+            // the registered type when there is one: permutation.type === BlockTypes.get(id)
+            this.#type = allBlockTypes().get(id) || new BlockType(token, id);
             this.#states = states;
         }
 
@@ -531,27 +532,8 @@ namespace {
         }
     }
 
-    // TODO: drive the engine's ticking areas, script-side bookkeeping for now
-    class TickingAreaManager {
-        #areas = new Map();
-        constructor(key) {
-            guard(key, "TickingAreaManager");
-        }
-        createTickingArea(identifier, options) {
-            this.#areas.set(identifier, options || {});
-            return Promise.resolve();
-        }
-        removeTickingArea(identifier) {
-            this.#areas.delete(typeof identifier === "string" ? identifier : identifier.identifier);
-        }
-        getAllTickingAreas() {
-            return Array.from(this.#areas.keys()).map((identifier) => ({ identifier }));
-        }
-    }
-
     return {
-        Scoreboard, ScoreboardObjective, TickingAreaManager,
-        scoreboard: new Scoreboard(token), tickingAreaManager: new TickingAreaManager(token)
+        Scoreboard, ScoreboardObjective, scoreboard: new Scoreboard(token)
     };
 })
 )JS";
