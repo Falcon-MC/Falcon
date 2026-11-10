@@ -680,6 +680,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(dimensionData.mDefinitions.size() == 1 && dimensionData.mDefinitions[0].mId == "test:void",
                 "DimensionDataPacket does not carry the custom dimension");
         sentDimension = dimensionData.mDefinitions[0];
+        require(sentDimension.mMinimumHeight == -64 && sentDimension.mMaximumHeight == 384
+                        && sentDimension.mGeneratorType == 5 && sentDimension.mCloudHeight == 128
+                        && !sentDimension.mRenderClouds,
+                "DimensionDataPacket does not carry the game's script dimension definition");
 
         sent.clear();
         owner.changePlayerLevel(player, defaultWorld.getLevel(voidDimension), Vector3f(0.5f, 80.0f, 0.5f));

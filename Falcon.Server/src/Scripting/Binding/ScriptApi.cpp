@@ -1101,7 +1101,7 @@ JSValue ScriptApi::registerCustomDimension(const std::string &name) {
         return throwError("NamespaceNameError", "", fields);
     }
 
-    // sub_142CA2AF0: one colon, no whitespace
+    // sub_142CA2AF0, sub_1403ED180: one colon, no space, tab, cr or lf
     if (name.find(':', colon + 1) != std::string::npos || name.find_first_of(" \t\n\r") != std::string::npos)
         return throwError("CustomDimensionNameError", "Custom dimension '" + name + "' has invalid characters.");
 

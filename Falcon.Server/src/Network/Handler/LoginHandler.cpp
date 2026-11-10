@@ -77,8 +77,10 @@ namespace {
     const float PLAYER_BASE_OFFSET = 1.62f;
     const char *const ENABLED_EXPERIMENTS[] = {"data_driven_vanilla_blocks_and_items"};
 
-    // TODO: the void value of the dimension generator type, its place after Overworld and Flat (1, 2) for now
+    // sub_14C703FD0: the definition the game gives every script dimension
     const int32_t CUSTOM_DIMENSION_GENERATOR = 5;
+    const char *const CUSTOM_DIMENSION_BIOME = "minecraft:ocean";
+    const int32_t CUSTOM_DIMENSION_CLOUD_HEIGHT = 128;
 
     std::vector<ExperimentData> enabledExperiments() {
         std::vector<ExperimentData> experiments;
@@ -626,9 +628,12 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
             DimensionDefinition definition;
             definition.mId = entry.second;
             definition.mMinimumHeight = Dimension::getMinY(custom);
-            definition.mMaximumHeight = Dimension::getMaxY(custom) + 1;
+            // sub_14295DD30: the second field is the height range, not the top
+            definition.mMaximumHeight = Dimension::getMaxY(custom) + 1 - Dimension::getMinY(custom);
             definition.mGeneratorType = CUSTOM_DIMENSION_GENERATOR;
             definition.mDimensionType = Dimension::toId(custom);
+            definition.mDefaultBiome = CUSTOM_DIMENSION_BIOME;
+            definition.mCloudHeight = CUSTOM_DIMENSION_CLOUD_HEIGHT;
             dimensions.mDefinitions.push_back(definition);
         }
         owner.getNetworkHandler().send(id, dimensions, owner.getCodecContext());
