@@ -8,6 +8,7 @@
 
 class ServerNetworkHandler;
 class ServerPlayer;
+class Actor;
 class ItemStack;
 class ItemUseTransaction;
 class Level;
@@ -47,8 +48,10 @@ public:
 
     static void breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 
+    // entitySource: who broke it, for the custom block onBreak hook
     static void destroyBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                             const BlockState &brokenState, bool dropItems, const ItemStack &tool);
+                             const BlockState &brokenState, bool dropItems, const ItemStack &tool,
+                             const Actor *entitySource = nullptr);
 
     static void spawnBlockDrops(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                 const BlockState &brokenState, const ItemStack &tool);

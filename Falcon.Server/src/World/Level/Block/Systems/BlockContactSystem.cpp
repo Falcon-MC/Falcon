@@ -33,9 +33,13 @@ void BlockContactSystem::land(ServerNetworkHandler &owner, Actor &actor, float f
 
     Vector3i below;
     const BlockState *state = nullptr;
-    const Block *block = blockBelow(owner.getLevelFor(actor), actor.getPosition(), below, state);
-    if (block == nullptr)
+    Level &level = owner.getLevelFor(actor);
+    const Block *block = blockBelow(level, actor.getPosition(), below, state);
+    if (block == nullptr) {
+        if (state != nullptr)
+            owner.getScriptEngine().onCustomBlockFallOn(actor, level, std::string(state->mName), below, fallDistance);
         return;
+    }
 
     const BlockState landed = *state;
     block->onFallOn(owner, actor, below, landed, fallDistance);

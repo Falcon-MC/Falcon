@@ -519,7 +519,7 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     const bool creative = player.getGameType() == (int32_t) GameType::Creative;
     const ItemStack heldItem = player.getInventory().getItemInHand();
 
-    destroyBlock(owner, level, position, brokenState, !creative, heldItem);
+    destroyBlock(owner, level, position, brokenState, !creative, heldItem, &player);
     BlockSensor::onBlockBroken(owner, level, position, brokenState, player);
     PluginBlock::brokenBy(player, position, brokenIdentifier);
 
@@ -606,7 +606,8 @@ void BlockActionHandler::spawnBlockDrops(ServerNetworkHandler &owner, Level &lev
 }
 
 void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                      const BlockState &brokenState, bool dropItems, const ItemStack &tool) {
+                                      const BlockState &brokenState, bool dropItems, const ItemStack &tool,
+                                      const Actor *entitySource) {
     const int32_t brokenHash = BlockStateHasher::hash(brokenState.mName, brokenState.mStates);
     const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
 
@@ -642,6 +643,8 @@ void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level,
         brokenBlock->onBroken(owner, level, position, brokenState);
 
     level.onBlockBroken(position, brokenState);
+    if (brokenBlock == nullptr)
+        owner.getScriptEngine().onCustomBlockBreak(level, position, brokenState, entitySource);
 }
 
 void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
@@ -1060,10 +1063,9 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (interactPluginEvent.mCancelled)
         return false;
 
-    scripts.onPlayerInteractWithBlock(player, clickedState.mName, transaction.mBlockPosition, face);
-
-    owner.getScriptEngine().onItemUseOnBlock(player, transaction.mBlockPosition.x, transaction.mBlockPosition.y,
-                                             transaction.mBlockPosition.z);
+    scripts.onPlayerInteractWithBlock(player, clickedState.mName, transaction.mBlockPosition, face,
+                                      transaction.mClickPosition);
+    scripts.onItemUseOnBlock(player, transaction.mBlockPosition, face, transaction.mClickPosition);
 
     const Block *clickedBlock = VanillaBlocks::fromIdentifier(clickedState.mName);
     if (clickedBlock != nullptr)
@@ -1169,6 +1171,9 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
                                               BlockState(definition.getIdentifier(), definition.getState()), &level,
                                               player.getRotation().y, player.getRotation().x, placementFace,
                                               transaction.mClickPosition, player.getPosition(), target);
+
+    if (!merged && scripts.beforeCustomBlockPlace(player, level, target, face, placedState))
+        return false;
 
     const Block *placedBlock = VanillaBlocks::fromIdentifier(placedState.mName);
     if (!merged && placedBlock != nullptr && !placedBlock->canPlaceAt(level, target, placementFace))
@@ -1280,5 +1285,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     }
 
     level.onBlockPlaced(target, placedState);
+    if (!merged)
+        scripts.onCustomBlockPlaced(level, target, placedState, targetState);
     return true;
 }

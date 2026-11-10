@@ -336,12 +336,12 @@ std::vector<std::pair<std::string, Tag>> Level::loadTickingAreas() {
     return mStorage.loadTickingAreas();
 }
 
-bool Level::saveSavedData(const std::string &key, const Tag &data) {
-    return mStorage.saveSavedData(key, data);
+bool Level::saveSavedData(const std::string &key, const Tag &data, bool wrapped) {
+    return mStorage.saveSavedData(key, data, wrapped);
 }
 
-bool Level::loadSavedData(const std::string &key, Tag &data) {
-    return mStorage.loadSavedData(key, data);
+bool Level::loadSavedData(const std::string &key, Tag &data, bool wrapped) {
+    return mStorage.loadSavedData(key, data, wrapped);
 }
 
 void Level::saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities) {

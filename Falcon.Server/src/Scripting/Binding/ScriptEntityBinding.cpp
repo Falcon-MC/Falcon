@@ -215,7 +215,16 @@ namespace {
 
         const Vector3f position((float) x, (float) y, (float) z);
         if (target.mPlayer != nullptr) {
-            target.mPlayer->teleport(target.mApi->host(), position);
+            // TeleportOptions.dimension: another level goes through the dimension change
+            JSValue dimension = argc >= 2 && JS_IsObject(argv[1]) ? JS_GetPropertyStr(ctx, argv[1], "dimension")
+                                                                  : JS_UNDEFINED;
+            const bool otherLevel = target.mApi->native<ScriptDimensionRef>(dimension) != nullptr
+                                    && !target.mPlayer->isIn(target.mApi->levelOf(dimension));
+            if (otherLevel)
+                target.mApi->host().changePlayerLevel(*target.mPlayer, target.mApi->levelOf(dimension), position);
+            JS_FreeValue(ctx, dimension);
+            if (!otherLevel)
+                target.mPlayer->teleport(target.mApi->host(), position);
             return JS_UNDEFINED;
         }
 

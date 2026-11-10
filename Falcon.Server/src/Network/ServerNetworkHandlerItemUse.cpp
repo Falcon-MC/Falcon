@@ -168,6 +168,7 @@ void ServerNetworkHandler::emitItemUse(ServerPlayer &player) {
 
     ItemUseAfterEvent useEvent(player, heldItem.mDefinition->getIdentifier());
     mEventBus.after().mItemUse.emit(useEvent);
+    mScriptEngine.onItemUse(player);
 }
 
 bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &itemType) {
@@ -345,6 +346,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         const std::string identifier = usedItem.mDefinition->getIdentifier();
         ItemCompleteUseAfterEvent completeEvent(player, identifier, (int32_t) useDurationTicksFor(usedItem));
         mEventBus.after().mItemCompleteUse.emit(completeEvent);
+        mScriptEngine.onItemCompleteUse(player, usedItem);
     }
 
     if (food != nullptr) {

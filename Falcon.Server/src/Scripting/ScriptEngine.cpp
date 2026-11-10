@@ -9,10 +9,14 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Event/EventBus.h"
 #include "World/Level/Level.h"
+#include "World/Level/World.h"
+#include "World/Level/WorldManager.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/BehaviorPackManager.h"
 #include "Scripting/Binding/ScriptApi.h"
 #include "Scripting/Content/CustomContentRegistry.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "Protocol/Packets/SyncWorldClocksPacket.h"
 
 #include <chrono>
 #include <cmath>
@@ -45,6 +49,26 @@ namespace {
         JS_SetPropertyStr(ctx, event, "blockFace", JS_NewString(ctx, directionName(face)));
         JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(player.getInventory().getItemInHand()));
         JS_SetPropertyStr(ctx, event, "isFirstEvent", JS_TRUE);
+    }
+
+    const CustomItemDefinition *heldCustomItem(ServerPlayer &player) {
+        const ItemStack &held = player.getInventory().getItemInHand();
+        if (held.isAir() || held.mDefinition == nullptr)
+            return nullptr;
+        return CustomContentRegistry::getInstance().findItem(held.mDefinition->getIdentifier());
+    }
+
+    // the states the block has where it stands, its defaults once it is gone or unloaded
+    Tag statesAt(const CustomBlockDefinition &block, const Level &level, const Vector3i &position) {
+        const BlockState *state = const_cast<Level &>(level).peekBlockPtr(position.x, position.y, position.z);
+        if (state != nullptr && state->mName == block.mIdentifier)
+            return state->mStates;
+        return CustomContentRegistry::defaultStatesOf(block);
+    }
+
+    std::vector<CustomComponentUse> usesAt(const CustomBlockDefinition &block, const Level &level,
+                                           const Vector3i &position) {
+        return CustomContentRegistry::componentsFor(block, statesAt(block, level, position));
     }
 
     JSValue hitGetter(JSContext *ctx, JSValueConst, int, JSValueConst *, int, JSValue *data) {
@@ -248,11 +272,106 @@ void ScriptEngine::bindHost(ServerNetworkHandler &host) {
     mHost = &host;
     MobEffectManager::setAddFilter(
             [this](Actor &actor, const MobEffectInstance &effect) { return !beforeEffectAdd(actor, effect); });
+    _bindClockListener();
+}
 
-    // once for the server, not per pack: every pack sees the same custom block ticking
-    host.getEventBus().after().mPlayerPlaceBlock.subscribe([this](PlayerPlaceBlockAfterEvent &event) {
-        _scheduleBlockTick(mHost->getLevelFor(event.mPlayer), event.mBlockIdentifier, event.mBlockPosition);
-    });
+void ScriptEngine::_bindClockListener() {
+    WorldClockSystem::Listener listener;
+    const auto fire = [this](const char *key, const char *signal, const WorldClock &clock,
+                             const WorldClockMarker *marker, int32_t *newTime) {
+        bool cancelled = false;
+        for (std::unique_ptr<ScriptApi> &api: mApis) {
+            if (!api->hasSubscribers(key))
+                continue;
+            _arm();
+            JSContext *ctx = api->context();
+            JSValue event = api->makeEvent(signal);
+            JS_SetPropertyStr(ctx, event, "clock", api->makeClock(clock.mName));
+            if (marker != nullptr)
+                JS_SetPropertyStr(ctx, event, "timeMarker", api->makeTimeMarker(clock.mName, marker->mName));
+            if (newTime != nullptr) {
+                JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
+                JS_SetPropertyStr(ctx, event, "newTime", JS_NewInt32(ctx, *newTime));
+                // emit frees the event: keep it to read newTime back
+                JS_DupValue(ctx, event);
+            }
+            cancelled = api->emitClockEvent(key, event, clock.mName, marker == nullptr ? std::string() : marker->mName)
+                        || cancelled;
+            if (newTime != nullptr) {
+                JSValue value = JS_GetPropertyStr(ctx, event, "newTime");
+                double ticks = 0.0;
+                if (JS_ToFloat64(ctx, &ticks, value) == 0 && std::isfinite(ticks) && ticks >= 0.0 && ticks <= INT32_MAX)
+                    *newTime = (int32_t) ticks;
+                JS_FreeValue(ctx, value);
+                JS_FreeValue(ctx, event);
+            }
+            _pumpJobs();
+        }
+        return cancelled;
+    };
+    listener.mTimeMarker = [fire](const WorldClock &clock, const WorldClockMarker &marker) {
+        fire("after.worldClockOnTimeMarker", "WorldAfterEvents.worldClockOnTimeMarker", clock, &marker, nullptr);
+    };
+    listener.mTimeModified = [fire](const WorldClock &clock) {
+        fire("after.worldClockOnTimeModified", "WorldAfterEvents.worldClockOnTimeModified", clock, nullptr, nullptr);
+    };
+    listener.mPauseChanged = [fire](const WorldClock &clock, bool paused) {
+        if (paused)
+            fire("after.worldClockOnPaused", "WorldAfterEvents.worldClockOnPaused", clock, nullptr, nullptr);
+        else
+            fire("after.worldClockOnResumed", "WorldAfterEvents.worldClockOnResumed", clock, nullptr, nullptr);
+    };
+    listener.mRestart = [fire](const WorldClock &clock, int32_t &newTime) {
+        return fire("before.worldClockOnRestart", "WorldBeforeEvents.worldClockOnRestart", clock, nullptr, &newTime);
+    };
+    listener.mStateChanged = [this](const WorldClock &clock) {
+        SyncWorldClocksPacket packet;
+        WorldClockSystem::writeState(clock, packet);
+        _broadcastClocks(packet);
+    };
+    listener.mMarkerChanged = [this](const WorldClock &clock, const WorldClockMarker &marker, bool added) {
+        SyncWorldClocksPacket packet;
+        if (added) {
+            packet.mType = SyncWorldClocksType::AddTimeMarker;
+            packet.mAddClockId = WorldClockSystem::idOf(clock.mName);
+            TimeMarkerData data;
+            data.mId = WorldClockSystem::idOf(marker.mName);
+            data.mName = marker.mName;
+            data.mTime = marker.mTime;
+            data.mHasPeriod = marker.mHasPeriod;
+            data.mPeriod = marker.mPeriod;
+            packet.mAddTimeMarkers.push_back(data);
+        } else {
+            packet.mType = SyncWorldClocksType::RemoveTimeMarker;
+            packet.mRemoveClockId = WorldClockSystem::idOf(clock.mName);
+            packet.mRemoveTimeMarkerIds.push_back(WorldClockSystem::idOf(marker.mName));
+        }
+        _broadcastClocks(packet);
+    };
+    mClocks.setListener(std::move(listener));
+}
+
+void ScriptEngine::_broadcastClocks(const SyncWorldClocksPacket &packet) {
+    if (mHost == nullptr || !mHost->isTransportReady())
+        return;
+    for (auto &entry: mHost->getPlayers()) {
+        if (entry.second.isSpawned())
+            mHost->getNetworkHandler().send(entry.first, packet, mHost->getCodecContext());
+    }
+}
+
+void ScriptEngine::saveWorldClocks() {
+    if (mHost != nullptr)
+        mHost->getWorlds().getDefault().getOverworld().saveSavedData(WorldClockSystem::STORAGE_KEY, mClocks.save(),
+                                                                     false);
+}
+
+void ScriptEngine::sendWorldClocks(ServerPlayer &player) {
+    if (mHost == nullptr || !mHost->isTransportReady())
+        return;
+    SyncWorldClocksPacket packet;
+    mClocks.writeRegistry(packet);
+    mHost->getNetworkHandler().send(player.getNetworkIdentifier(), packet, mHost->getCodecContext());
 }
 
 void ScriptEngine::_arm() {
@@ -335,9 +454,21 @@ bool ScriptEngine::_loadPack(const BehaviorPack &pack) {
 }
 
 void ScriptEngine::startup() {
+    // before startup: packs register their clocks during it
+    Tag saved;
+    if (mHost != nullptr
+        && mHost->getWorlds().getDefault().getOverworld().loadSavedData(WorldClockSystem::STORAGE_KEY, saved, false))
+        mClocks.load(saved);
+
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();
         api->startup();
+        _pumpJobs();
+    }
+    createCustomDimensions();
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        _arm();
+        api->worldLoad();
         _pumpJobs();
     }
 }
@@ -391,12 +522,31 @@ void ScriptEngine::onProjectileHitBlock(ServerActor &projectile, int32_t x, int3
     }
 }
 
-void ScriptEngine::onItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, int32_t z) {
+void ScriptEngine::onItemUseOnBlock(ServerPlayer &player, const Vector3i &position, int32_t face,
+                                    const Vector3f &clickPosition) {
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();
-        api->emitItemUseOnBlock(player, x, y, z);
+        api->emitItemUseOnBlock(player, position.x, position.y, position.z);
         _pumpJobs();
     }
+
+    const CustomItemDefinition *item = heldCustomItem(player);
+    if (item == nullptr)
+        return;
+
+    Level &level = mHost->getLevelFor(player);
+    const std::string usedOn = level.getBlockState(position.x, position.y, position.z).mName;
+    _fireComponent(false, item->mCustomComponents, "onUseOn", "ItemComponentUseOnEvent",
+                   [&](ScriptApi &api, JSValue event) {
+                       JSContext *ctx = api.context();
+                       JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+                       JS_SetPropertyStr(ctx, event, "block", api.makeBlock(level, position.x, position.y, position.z));
+                       JS_SetPropertyStr(ctx, event, "blockFace", JS_NewString(ctx, directionName(face)));
+                       JS_SetPropertyStr(ctx, event, "faceLocation",
+                                         vector3(ctx, clickPosition.x, clickPosition.y, clickPosition.z));
+                       JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(player.getInventory().getItemInHand()));
+                       JS_SetPropertyStr(ctx, event, "usedOnBlockPermutation", api.makePermutation(usedOn));
+                   });
 }
 
 void ScriptEngine::onProjectileHitEntity(ServerActor &projectile, Actor &hitEntity, const Vector3f &location) {
@@ -454,50 +604,136 @@ void ScriptEngine::onEntityItemDrop(Actor &entity, ItemActor *dropped) {
 }
 
 void ScriptEngine::onPlayerInteractWithBlock(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
-                                             int32_t face) {
+                                             int32_t face, const Vector3f &clickPosition) {
     _emit("after.playerInteractWithBlock", "WorldAfterEvents.playerInteractWithBlock", false,
           [&](ScriptApi &api, JSValue event) { fillBlockInteraction(api, event, player, position, face); });
 
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(blockId);
+    if (block == nullptr)
+        return;
+
+    Level &level = mHost->getLevelFor(player);
+    _fireComponent(true, usesAt(*block, level, position), "onPlayerInteract", "BlockComponentPlayerInteractEvent",
+                   [&](ScriptApi &api, JSValue event) {
+                       JSContext *ctx = api.context();
+                       api.fillBlockEvent(event, level, position);
+                       JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+                       JS_SetPropertyStr(ctx, event, "face", JS_NewString(ctx, directionName(face)));
+                       JS_SetPropertyStr(ctx, event, "faceLocation",
+                                         vector3(ctx, clickPosition.x, clickPosition.y, clickPosition.z));
+                   });
+}
+
+template <typename Fill, typename Read>
+void ScriptEngine::_fireComponent(bool blocks, const std::vector<CustomComponentUse> &uses, const char *hook,
+                                  const char *eventClass, Fill fill, Read read) {
+    if (uses.empty())
+        return;
+
     for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->handlesHook(blocks, uses, hook))
+            continue;
+
         _arm();
-        api->emitBlockInteract(player, blockId, position, directionName(face));
+        JSValue event = api->makeComponentEvent(eventClass);
+        if (JS_IsUndefined(event))
+            continue;
+        fill(*api, event);
+        api->fireComponents(blocks, uses, hook, event);
+        read(*api, event);
+        JS_FreeValue(api->context(), event);
         _pumpJobs();
     }
+}
+
+template <typename Fill>
+void ScriptEngine::_fireComponent(bool blocks, const std::vector<CustomComponentUse> &uses, const char *hook,
+                                  const char *eventClass, Fill fill) {
+    _fireComponent(blocks, uses, hook, eventClass, fill, [](ScriptApi &, JSValue) {});
+}
+
+bool ScriptEngine::isDimensionPending(const std::string &name) const {
+    for (const std::unique_ptr<ScriptApi> &api: mApis) {
+        const std::vector<std::string> &pending = api->pendingDimensions();
+        if (std::find(pending.begin(), pending.end(), name) != pending.end())
+            return true;
+    }
+    return false;
+}
+
+void ScriptEngine::createCustomDimensions() {
+    if (mHost == nullptr)
+        return;
+
+    // sub_14382A4C0: DimensionNameIdTable keeps each custom name's id across restarts
+    Level &overworld = mHost->getWorlds().getDefault().getOverworld();
+    Tag table;
+    if (!overworld.loadSavedData("DimensionNameIdTable", table, false))
+        table = Tag::ofCompound();
+
+    bool added = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        for (const std::string &name: api->pendingDimensions()) {
+            const Tag *saved = table.get(name);
+            const DimensionType dimension = Dimension::registerCustom(name, saved == nullptr ? -1 : saved->asInt());
+            if (saved == nullptr || saved->asInt() != Dimension::toId(dimension)) {
+                table.putInt(name, Dimension::toId(dimension));
+                added = true;
+            }
+            for (World *world: mHost->getWorlds().getWorlds())
+                world->addCustomLevel(dimension);
+        }
+    }
+    if (added)
+        overworld.saveSavedData("DimensionNameIdTable", table, false);
+}
+
+bool ScriptEngine::isCustomComponentRegistered(bool blocks, const std::string &name) const {
+    for (const std::unique_ptr<ScriptApi> &api: mApis) {
+        if (api->hasCustomComponent(blocks, name))
+            return true;
+    }
+    return false;
 }
 
 void ScriptEngine::_scheduleBlockTick(Level &level, const std::string &blockId, const Vector3i &position) {
-    for (const CustomBlockDefinition &definition: CustomContentRegistry::getInstance().getBlocks()) {
-        if (definition.mIdentifier != blockId)
-            continue;
-        if (definition.mHasTick) {
-            std::uniform_int_distribution<int32_t> delay(definition.mTickMin, definition.mTickMax);
-            level.scheduleBlockUpdate(position, delay(mTickRandom));
-        }
+    const CustomBlockDefinition *definition = CustomContentRegistry::getInstance().findBlock(blockId);
+    if (definition == nullptr || !definition->mHasTick)
         return;
-    }
+
+    std::uniform_int_distribution<int32_t> delay(definition->mTickMin, definition->mTickMax);
+    level.scheduleBlockUpdate(position, delay(mTickRandom));
 }
 
 void ScriptEngine::onCustomBlockTick(Level &level, const std::string &blockId, const Vector3i &position) {
-    for (std::unique_ptr<ScriptApi> &api: mApis) {
-        _arm();
-        api->emitBlockTick(level, blockId, position);
-        _pumpJobs();
-    }
-
-    for (const CustomBlockDefinition &definition: CustomContentRegistry::getInstance().getBlocks()) {
-        if (definition.mIdentifier != blockId)
-            continue;
-        if (definition.mTickLooping)
-            _scheduleBlockTick(level, blockId, position);
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(blockId);
+    if (block == nullptr)
         return;
-    }
+
+    // the game warns and skips onTick for a block without minecraft:tick
+    if (block->mHasTick)
+        _fireComponent(true, usesAt(*block, level, position), "onTick", "BlockComponentTickEvent",
+                       [&](ScriptApi &api, JSValue event) { api.fillBlockEvent(event, level, position); });
+
+    if (block->mTickLooping)
+        _scheduleBlockTick(level, blockId, position);
+}
+
+void ScriptEngine::onCustomBlockRandomTick(Level &level, const std::string &blockId, const Vector3i &position) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(blockId);
+    if (block == nullptr)
+        return;
+
+    _fireComponent(true, usesAt(*block, level, position), "onRandomTick", "BlockComponentRandomTickEvent",
+                   [&](ScriptApi &api, JSValue event) { api.fillBlockEvent(event, level, position); });
 }
 
 void ScriptEngine::onCustomBlockStep(Actor &actor, const Level &level, const std::string &blockId,
                                      const Vector3i &position) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(blockId);
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();
-        api->emitBlockStep(actor, level, blockId, position);
+        api->emitBlockStep(actor, level, block, position);
         _pumpJobs();
     }
 }
@@ -507,9 +743,205 @@ void ScriptEngine::onCustomBlockStepOff(Actor &actor, const Level &level) {
         if (!api->hasSteppingActors())
             continue;
         _arm();
-        api->emitBlockStepOff(actor, level);
+        api->emitBlockStep(actor, level, nullptr, Vector3i());
         _pumpJobs();
     }
+}
+
+void ScriptEngine::onCustomBlockFallOn(Actor &actor, Level &level, const std::string &blockId, const Vector3i &position,
+                                       float fallDistance) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(blockId);
+    if (block == nullptr || !block->mEntityFallOn || fallDistance < block->mMinFallDistance)
+        return;
+
+    _fireComponent(true, usesAt(*block, level, position), "onEntityFallOn", "BlockComponentEntityFallOnEvent",
+                   [&](ScriptApi &api, JSValue event) {
+                       api.fillBlockEvent(event, level, position);
+                       JS_SetPropertyStr(api.context(), event, "entity", api.makeEntity(actor));
+                       JS_SetPropertyStr(api.context(), event, "fallDistance",
+                                         JS_NewFloat64(api.context(), fallDistance));
+                   });
+}
+
+void ScriptEngine::onCustomBlockRedstone(Level &level, const std::string &blockId, const Vector3i &position,
+                                         int32_t power) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(blockId);
+    if (block == nullptr || !block->mRedstoneConsumer)
+        return;
+
+    std::unordered_map<int64_t, int32_t> &powers = mRedstonePower[&level];
+    const int64_t key = RedstoneSystem::packPosition(position);
+    const auto known = powers.find(key);
+    const bool first = known == powers.end();
+    const int32_t previous = first ? 0 : known->second;
+    if (!first && previous == power)
+        return;
+    powers[key] = power;
+
+    if (power < block->mRedstoneMinPower || (first && power == 0))
+        return;
+
+    _fireComponent(true, usesAt(*block, level, position), "onRedstoneUpdate", "BlockComponentRedstoneUpdateEvent",
+                   [&](ScriptApi &api, JSValue event) {
+                       JSContext *ctx = api.context();
+                       api.fillBlockEvent(event, level, position);
+                       JS_SetPropertyStr(ctx, event, "powerLevel", JS_NewInt32(ctx, power));
+                       JS_SetPropertyStr(ctx, event, "previousPowerLevel", JS_NewInt32(ctx, previous));
+                       if (api.surface().has("BlockComponentRedstoneUpdateEvent.firstUpdate"))
+                           JS_SetPropertyStr(ctx, event, "firstUpdate", JS_NewBool(ctx, first));
+                   });
+}
+
+bool ScriptEngine::beforeCustomBlockPlace(ServerPlayer &player, Level &level, const Vector3i &position, int32_t face,
+                                          BlockState &placed) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(placed.mName);
+    if (block == nullptr)
+        return false;
+
+    bool cancelled = false;
+    BlockState chosen = placed;
+    _fireComponent(
+            true, CustomContentRegistry::componentsFor(*block, placed.mStates), "beforeOnPlayerPlace",
+            "BlockComponentPlayerPlaceBeforeEvent",
+            [&](ScriptApi &api, JSValue event) {
+                JSContext *ctx = api.context();
+                api.fillBlockEvent(event, level, position);
+                JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+                JS_SetPropertyStr(ctx, event, "face", JS_NewString(ctx, directionName(face)));
+                JS_SetPropertyStr(ctx, event, "permutationToPlace", api.makePermutation(placed));
+                JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
+            },
+            [&](ScriptApi &api, JSValue event) {
+                JSContext *ctx = api.context();
+                JSValue cancel = JS_GetPropertyStr(ctx, event, "cancel");
+                cancelled = JS_ToBool(ctx, cancel) == 1 || cancelled;
+                JS_FreeValue(ctx, cancel);
+
+                JSValue permutation = JS_GetPropertyStr(ctx, event, "permutationToPlace");
+                BlockState read;
+                if (api.readPermutation(permutation, read))
+                    chosen = read;
+                JS_FreeValue(ctx, permutation);
+            });
+
+    if (!cancelled)
+        placed = chosen;
+    return cancelled;
+}
+
+void ScriptEngine::onCustomBlockPlaced(Level &level, const Vector3i &position, const BlockState &placed,
+                                       const BlockState &previous) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(placed.mName);
+    if (block == nullptr)
+        return;
+
+    // once for the server, not per pack: every pack sees the same custom block ticking
+    _scheduleBlockTick(level, placed.mName, position);
+    _fireComponent(true, CustomContentRegistry::componentsFor(*block, placed.mStates), "onPlace",
+                   "BlockComponentOnPlaceEvent", [&](ScriptApi &api, JSValue event) {
+                       api.fillBlockEvent(event, level, position);
+                       JS_SetPropertyStr(api.context(), event, "previousBlock", api.makePermutation(previous));
+                   });
+}
+
+void ScriptEngine::onCustomBlockStateChange(Level &level, const Vector3i &position, const BlockState &now,
+                                            const BlockState &previous) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(now.mName);
+    if (block == nullptr)
+        return;
+
+    _fireComponent(true, CustomContentRegistry::componentsFor(*block, now.mStates), "onBlockStateChange",
+                   "BlockComponentBlockStateChangeEvent", [&](ScriptApi &api, JSValue event) {
+                       api.fillBlockEvent(event, level, position);
+                       JS_SetPropertyStr(api.context(), event, "previousPermutation", api.makePermutation(previous));
+                   });
+}
+
+void ScriptEngine::onCustomBlockBreak(Level &level, const Vector3i &position, const BlockState &broken,
+                                      const Actor *entitySource, const Vector3i *blockSource) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(broken.mName);
+    if (block == nullptr)
+        return;
+
+    mRedstonePower[&level].erase(RedstoneSystem::packPosition(position));
+    _fireComponent(true, CustomContentRegistry::componentsFor(*block, broken.mStates), "onBreak",
+                   "BlockComponentBlockBreakEvent", [&](ScriptApi &api, JSValue event) {
+                       JSContext *ctx = api.context();
+                       api.fillBlockEvent(event, level, position);
+                       JS_SetPropertyStr(ctx, event, "brokenBlockPermutation", api.makePermutation(broken));
+                       if (entitySource != nullptr)
+                           JS_SetPropertyStr(ctx, event, "entitySource",
+                                             api.makeEntity(const_cast<Actor &>(*entitySource)));
+                       if (blockSource != nullptr)
+                           JS_SetPropertyStr(ctx, event, "blockDestructionSource",
+                                             api.makeBlock(level, blockSource->x, blockSource->y, blockSource->z));
+                   });
+}
+
+void ScriptEngine::onItemUse(ServerPlayer &player) {
+    const CustomItemDefinition *item = heldCustomItem(player);
+    if (item == nullptr)
+        return;
+
+    _fireComponent(false, item->mCustomComponents, "onUse", "ItemComponentUseEvent",
+                   [&](ScriptApi &api, JSValue event) {
+                       JS_SetPropertyStr(api.context(), event, "source", api.makePlayer(player));
+                       JS_SetPropertyStr(api.context(), event, "itemStack",
+                                         api.makeItem(player.getInventory().getItemInHand()));
+                   });
+}
+
+void ScriptEngine::onItemCompleteUse(ServerPlayer &player, const ItemStack &used) {
+    if (used.isAir() || used.mDefinition == nullptr)
+        return;
+    const CustomItemDefinition *item = CustomContentRegistry::getInstance().findItem(used.mDefinition->getIdentifier());
+    if (item == nullptr)
+        return;
+
+    const auto fill = [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(api.context(), event, "source", api.makePlayer(player));
+        JS_SetPropertyStr(api.context(), event, "itemStack", api.makeItem(used));
+    };
+    _fireComponent(false, item->mCustomComponents, "onCompleteUse", "ItemComponentCompleteUseEvent", fill);
+    _fireComponent(false, item->mCustomComponents, "onConsume", "ItemComponentConsumeEvent", fill);
+}
+
+int32_t ScriptEngine::onItemHitEntity(ServerPlayer &attacker, Actor &target, bool hadEffect, int32_t durabilityDamage) {
+    const CustomItemDefinition *item = heldCustomItem(attacker);
+    if (item == nullptr)
+        return durabilityDamage;
+
+    const ItemStack held = attacker.getInventory().getItemInHand();
+    // before the hit: item custom component after events wait for ScriptDeferredEventCoordinator's flush,
+    // onBeforeDurabilityDamage runs in place to read durabilityDamage back
+    _fireComponent(
+            false, item->mCustomComponents, "onBeforeDurabilityDamage", "ItemComponentBeforeDurabilityDamageEvent",
+            [&](ScriptApi &api, JSValue event) {
+                JSContext *ctx = api.context();
+                JS_SetPropertyStr(ctx, event, "attackingEntity", api.makePlayer(attacker));
+                JS_SetPropertyStr(ctx, event, "hitEntity", api.makeEntity(target));
+                JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(held));
+                JS_SetPropertyStr(ctx, event, "durabilityDamage", JS_NewInt32(ctx, durabilityDamage));
+            },
+            [&](ScriptApi &api, JSValue event) {
+                JSContext *ctx = api.context();
+                JSValue value = JS_GetPropertyStr(ctx, event, "durabilityDamage");
+                double damage = 0.0;
+                if (JS_ToFloat64(ctx, &damage, value) == 0 && std::isfinite(damage) && damage >= 0.0
+                    && damage <= INT32_MAX)
+                    durabilityDamage = (int32_t) damage;
+                JS_FreeValue(ctx, value);
+            });
+    _fireComponent(false, item->mCustomComponents, "onHitEntity", "ItemComponentHitEntityEvent",
+                   [&](ScriptApi &api, JSValue event) {
+                       JSContext *ctx = api.context();
+                       JS_SetPropertyStr(ctx, event, "attackingEntity", api.makePlayer(attacker));
+                       JS_SetPropertyStr(ctx, event, "hitEntity", api.makeEntity(target));
+                       JS_SetPropertyStr(ctx, event, "hadEffect", JS_NewBool(ctx, hadEffect));
+                       JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(held));
+                   });
+
+    return durabilityDamage;
 }
 
 void ScriptEngine::onEntitySpawn(ServerActor &entity) {
@@ -682,6 +1114,14 @@ void ScriptEngine::tick(int64_t currentTick) {
     queued.swap(mQueuedScriptEvents);
     for (const auto &event: queued)
         emitScriptEvent(event.first, event.second);
+
+    mClocks.tick();
+    if (currentTick - mLastClockSync >= WorldClockSystem::SYNC_INTERVAL_TICKS) {
+        mLastClockSync = currentTick;
+        SyncWorldClocksPacket packet;
+        mClocks.writeStates(packet);
+        _broadcastClocks(packet);
+    }
 
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();

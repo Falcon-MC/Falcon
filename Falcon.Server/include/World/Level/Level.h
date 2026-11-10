@@ -231,9 +231,10 @@ public:
 
     std::vector<std::pair<std::string, Tag>> loadTickingAreas();
 
-    bool saveSavedData(const std::string &key, const Tag &data);
+    // wrapped: under a "data" compound, as SavedData stores it; world clocks store the tag itself
+    bool saveSavedData(const std::string &key, const Tag &data, bool wrapped = true);
 
-    bool loadSavedData(const std::string &key, Tag &data);
+    bool loadSavedData(const std::string &key, Tag &data, bool wrapped = true);
 
     void saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities);
 
