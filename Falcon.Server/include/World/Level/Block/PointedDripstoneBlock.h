@@ -4,8 +4,7 @@
 
 class PointedDripstoneBlock : public SpeleothemBlock {
 public:
-    explicit PointedDripstoneBlock(const Block &block) : SpeleothemBlock(block) {
-    }
+    explicit PointedDripstoneBlock(const Block &block) : SpeleothemBlock(block) {}
 
     static constexpr const char *IDENTIFIER = "minecraft:pointed_dripstone";
 

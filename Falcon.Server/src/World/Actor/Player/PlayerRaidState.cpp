@@ -76,8 +76,8 @@ void PlayerRaidState::_tickTrigger(ServerNetworkHandler &owner, ServerPlayer &pl
     const Vector3i position = mHasOmenPosition ? mOmenPosition : floored(player.getPosition());
     mHasOmenPosition = false;
 
-    const std::shared_ptr<Village> village =
-            owner.getLevelFor(player).getVillageManager().getClosestVillage(position, 0);
+    const std::shared_ptr<Village> village = owner.getLevelFor(player).getVillageManager().getClosestVillage(position,
+                                                                                                             0);
     if (village == nullptr || village->getRaid() != nullptr)
         return;
 

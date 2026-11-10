@@ -4,8 +4,7 @@
 
 class BambooBlock : public Block {
 public:
-    explicit BambooBlock(const Block &block) : Block(block) {
-    }
+    explicit BambooBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

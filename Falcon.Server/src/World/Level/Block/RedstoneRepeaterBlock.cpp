@@ -13,29 +13,24 @@ namespace {
     const char *POWERED_REPEATER = "minecraft:powered_repeater";
 }
 
-bool RedstoneRepeaterBlock::matches(const std::string &identifier)
-{
+bool RedstoneRepeaterBlock::matches(const std::string &identifier) {
     return identifier == UNPOWERED_REPEATER || identifier == POWERED_REPEATER;
 }
 
-bool RedstoneRepeaterBlock::isPowered(const BlockState &state) const
-{
+bool RedstoneRepeaterBlock::isPowered(const BlockState &state) const {
     return state.mName == POWERED_REPEATER;
 }
 
-BlockState RedstoneRepeaterBlock::getPoweredState(const BlockState &state) const
-{
+BlockState RedstoneRepeaterBlock::getPoweredState(const BlockState &state) const {
     return BlockState(POWERED_REPEATER, state.mStates);
 }
 
-BlockState RedstoneRepeaterBlock::getUnpoweredState(const BlockState &state) const
-{
+BlockState RedstoneRepeaterBlock::getUnpoweredState(const BlockState &state) const {
     return BlockState(UNPOWERED_REPEATER, state.mStates);
 }
 
-bool RedstoneRepeaterBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
-                                       const Vector3i &position, const BlockState &state) const
-{
+bool RedstoneRepeaterBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                                       const BlockState &state) const {
     RedstoneSystem::onRepeaterActivated(owner, owner.getLevelFor(player), position, state);
     return true;
 }

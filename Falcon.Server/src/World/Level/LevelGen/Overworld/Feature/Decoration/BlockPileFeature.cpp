@@ -66,8 +66,7 @@ bool BlockPileFeature::placeIce(BlockManager &blocks, int32_t x, int32_t y, int3
     return _place(blocks, Pile::Ice, x, y, z, random);
 }
 
-bool BlockPileFeature::_place(BlockManager &blocks, Pile pile, int32_t x, int32_t y, int32_t z,
-                              std::mt19937 &random) {
+bool BlockPileFeature::_place(BlockManager &blocks, Pile pile, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
     // sub_147173AD0: x outermost, then the two layers, then z; a cell is filled inside a drawn distance or 3.1 % of
     // the time
     if (y < LevelChunk::MIN_Y + 5)

@@ -11,9 +11,13 @@ public:
 
     std::size_t add(const BlockState &state);
 
-    std::size_t size() const noexcept { return mStates.size(); }
+    std::size_t size() const noexcept {
+        return mStates.size();
+    }
 
-    void clear() noexcept { mStates.clear(); }
+    void clear() noexcept {
+        mStates.clear();
+    }
 
 private:
     std::vector<BlockState> mStates;

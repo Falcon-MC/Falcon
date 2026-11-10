@@ -4,9 +4,8 @@
 #include "Core/Event/EventBus.h"
 
 PluginPermissions::PluginPermissions(EventBus &bus) : mBus(bus) {
-    mLeaveHook = mBus.after().mPlayerLeave.subscribe([this](PlayerLeaveAfterEvent &source) {
-        mPlayers.erase(source.mPlayerName);
-    });
+    mLeaveHook = mBus.after().mPlayerLeave.subscribe(
+            [this](PlayerLeaveAfterEvent &source) { mPlayers.erase(source.mPlayerName); });
 }
 
 PluginPermissions::~PluginPermissions() {

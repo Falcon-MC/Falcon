@@ -7,13 +7,7 @@ class PlayerAuthInputPacket;
 class ServerNetworkHandler;
 class ServerPlayer;
 
-enum class RideControlType {
-    None,
-    Ground,
-    Air,
-    Water,
-    Item
-};
+enum class RideControlType { None, Ground, Air, Water, Item };
 
 struct RiderInput {
     float mStrafe = 0.0f;

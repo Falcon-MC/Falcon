@@ -64,7 +64,9 @@ namespace {
             mChanged.push_back(Vector3i(x, y, z));
         }
 
-        const std::vector<Vector3i> &getChanged() const { return mChanged; }
+        const std::vector<Vector3i> &getChanged() const {
+            return mChanged;
+        }
 
     private:
         Level &mLevel;
@@ -108,8 +110,7 @@ bool BoneMealItem::applyToCrop(ServerNetworkHandler &owner, Level &level, const 
 
     Tag states = state.mStates;
     states.putInt(growthState, grown);
-    return BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow,
-                                     false);
+    return BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow, false);
 }
 
 bool BoneMealItem::applyToSapling(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -159,8 +160,7 @@ bool BoneMealItem::applyToNylium(ServerNetworkHandler &owner, Level &level, cons
 }
 
 bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
-                                const Vector3i &blockPosition, int32_t face,
-                                const Vector3f &clickPosition) const {
+                                const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
     (void) face;
     (void) clickPosition;
 
@@ -195,8 +195,7 @@ bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
 
         PlayerInventory &inventory = player.getInventory();
         inventory.setItemInHand(std::move(remaining));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     }
 
     return true;

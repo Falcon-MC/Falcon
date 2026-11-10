@@ -25,7 +25,7 @@ namespace {
 
     std::vector<const StructureProcessors::Rule *> rules(const std::string &name) {
         std::vector<const StructureProcessors::Rule *> out;
-        for (const StructureProcessors::Rule &rule : StructureProcessors::get(name))
+        for (const StructureProcessors::Rule &rule: StructureProcessors::get(name))
             out.push_back(&rule);
         return out;
     }
@@ -111,7 +111,7 @@ namespace {
         const auto a = VillageStructure::placeInChunk(*generator, *first, -92, -27, terrain);
         const auto b = VillageStructure::placeInChunk(*generator, *first, -92, -27, terrain);
         require(!a.mBlocks.empty() && a.mBlocks.size() == b.mBlocks.size(), "The chunk share is not reproducible");
-        for (const auto &entry : a.mBlocks) {
+        for (const auto &entry: a.mBlocks) {
             require(std::get<0>(entry.first) >> 4 == -92 && std::get<2>(entry.first) >> 4 == -27,
                     "A block left its chunk");
         }
@@ -119,10 +119,10 @@ namespace {
         // BDS 1.26.61 saves the meeting point's bell there
         bool bell = false;
         const VillageStructure::Position bellPosition(-1467, 64, -422);
-        for (const auto &entity : a.mBlockEntities)
+        for (const auto &entity: a.mBlockEntities)
             bell = bell || (entity.mBlock.mName == "minecraft:bell" && entity.mPosition == bellPosition);
         require(bell, "The meeting point bell has no block actor");
-        for (const auto &mob : a.mMobs) {
+        for (const auto &mob: a.mMobs) {
             if (mob.mIdentifier == "minecraft:villager_v2")
                 require(mob.mEvent == "minecraft:spawn_from_village", "A village villager lost its spawn event");
         }

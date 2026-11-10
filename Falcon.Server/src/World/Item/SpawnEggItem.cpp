@@ -52,37 +52,35 @@ namespace {
     }
 }
 
-FALCON_REGISTER_ITEM_CUSTOM(SpawnEggItem, 90,
-                            [](const std::string &identifier) {
-                                return identifier.size() > SPAWN_EGG_SUFFIX.size()
-                                       && identifier.compare(identifier.size() - SPAWN_EGG_SUFFIX.size(),
-                                                             SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX) == 0;
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<SpawnEggItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        SpawnEggItem, 90,
+        [](const std::string &identifier) {
+            return identifier.size() > SPAWN_EGG_SUFFIX.size()
+                   && identifier.compare(identifier.size() - SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX.size(),
+                                         SPAWN_EGG_SUFFIX)
+                              == 0;
+        },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<SpawnEggItem>(item); });
 
 SpawnEggItem::SpawnEggItem(const Item &base) : Item(base) {}
 
 bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
-                                const Vector3i &blockPosition, int32_t face,
-                                const Vector3f &clickPosition) const {
+                                const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
     (void) clickPosition;
 
     if (item.mDefinition == nullptr)
         return false;
 
     const std::string &identifier = item.mDefinition->getIdentifier();
-    if (identifier.size() <= SPAWN_EGG_SUFFIX.size() ||
-        identifier.compare(identifier.size() - SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX.size(),
-                           SPAWN_EGG_SUFFIX) != 0)
+    if (identifier.size() <= SPAWN_EGG_SUFFIX.size()
+        || identifier.compare(identifier.size() - SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX)
+                   != 0)
         return false;
 
-    const std::string entityIdentifier =
-            resolveSpawnedActor(identifier.substr(0, identifier.size() - SPAWN_EGG_SUFFIX.size()));
+    const std::string entityIdentifier = resolveSpawnedActor(
+            identifier.substr(0, identifier.size() - SPAWN_EGG_SUFFIX.size()));
 
-    Vector3f spawnPosition((float) blockPosition.x + 0.5f, (float) blockPosition.y,
-                           (float) blockPosition.z + 0.5f);
+    Vector3f spawnPosition((float) blockPosition.x + 0.5f, (float) blockPosition.y, (float) blockPosition.z + 0.5f);
     switch (face) {
         case 0:
             spawnPosition.y -= 1.0f;

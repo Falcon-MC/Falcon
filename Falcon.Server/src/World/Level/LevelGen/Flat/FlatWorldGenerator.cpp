@@ -105,8 +105,8 @@ bool FlatWorldGenerator::_parse(const std::string &source) {
         const json::Value *worldVersion = settings.get("world_version");
         if (worldVersion == nullptr || worldVersion->string() != POST_1_18) {
             const json::Value *first = layers->mArray.empty() ? nullptr : layers->mArray.front().get();
-            prependAir = first == nullptr || !hasLayerFields(*first) || layerBlock(*first).mName != AIR ||
-                         layerCount(*first) != LEGACY_AIR_LAYERS;
+            prependAir = first == nullptr || !hasLayerFields(*first) || layerBlock(*first).mName != AIR
+                         || layerCount(*first) != LEGACY_AIR_LAYERS;
         }
     }
 
@@ -186,8 +186,7 @@ void FlatWorldGenerator::_generateEmpty(LevelChunk &chunk) const {
         chunk.setBlock(0, LevelChunk::MIN_Y, 0, mCobblestone);
 }
 
-void FlatWorldGenerator::decorate(Level &, LevelChunk &, std::vector<GeneratedBlockChange> *) const {
-}
+void FlatWorldGenerator::decorate(Level &, LevelChunk &, std::vector<GeneratedBlockChange> *) const {}
 
 int32_t FlatWorldGenerator::pickBiome(int32_t, int32_t, int32_t) const {
     return mBiomeId;

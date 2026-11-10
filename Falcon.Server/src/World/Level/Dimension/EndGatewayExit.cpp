@@ -35,7 +35,8 @@ namespace {
     }
 
     bool isPortal(const BlockState *state) {
-        return isNamed(state, END_GATEWAY) || isNamed(state, "minecraft:end_portal") || isNamed(state, "minecraft:portal");
+        return isNamed(state, END_GATEWAY) || isNamed(state, "minecraft:end_portal")
+               || isNamed(state, "minecraft:portal");
     }
 
     /**

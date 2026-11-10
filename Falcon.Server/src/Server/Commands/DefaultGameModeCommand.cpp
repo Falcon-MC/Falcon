@@ -11,8 +11,7 @@ DefaultGameModeCommand::DefaultGameModeCommand(ServerNetworkHandler &handler)
 std::vector<CommandOverloadData> DefaultGameModeCommand::getOverloads() const {
     CommandOverloadData byName;
     byName.mParameters.push_back(makeEnumParameter("gameMode", "GameMode",
-                                                   {"survival", "creative", "adventure", "spectator", "s", "c",
-                                                    "a"}));
+                                                   {"survival", "creative", "adventure", "spectator", "s", "c", "a"}));
 
     CommandOverloadData byNumber;
     byNumber.mParameters.push_back(makeTypedParameter("gameMode", CommandParamType::Int));

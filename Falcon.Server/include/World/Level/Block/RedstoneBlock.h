@@ -6,9 +6,7 @@
 
 class RedstoneBlock final : public Block {
 public:
-    explicit RedstoneBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit RedstoneBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

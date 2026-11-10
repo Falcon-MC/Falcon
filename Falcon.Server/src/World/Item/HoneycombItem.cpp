@@ -13,8 +13,7 @@
 
 FALCON_REGISTER_ITEM(HoneycombItem, 101);
 
-HoneycombItem::HoneycombItem(const Item &base) : Item(base) {
-}
+HoneycombItem::HoneycombItem(const Item &base) : Item(base) {}
 
 bool HoneycombItem::matches(const std::string &identifier) {
     return identifier == "minecraft:honeycomb";
@@ -33,10 +32,10 @@ bool HoneycombItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &play
 
     CopperSystem::replaceWithPair(owner, level, blockPosition, clicked, waxed);
 
-    owner.broadcastLevelEvent(level, CopperSystem::WAX_ON_EVENT,
-                              Vector3f((float) blockPosition.x + 0.5f, (float) blockPosition.y + 0.5f,
-                                       (float) blockPosition.z + 0.5f),
-                              0);
+    owner.broadcastLevelEvent(
+            level, CopperSystem::WAX_ON_EVENT,
+            Vector3f((float) blockPosition.x + 0.5f, (float) blockPosition.y + 0.5f, (float) blockPosition.z + 0.5f),
+            0);
 
     if (player.getGameType() != (int32_t) GameType::Creative) {
         ItemStack remaining = item;
@@ -46,8 +45,7 @@ bool HoneycombItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &play
 
         PlayerInventory &inventory = player.getInventory();
         inventory.setItemInHand(std::move(remaining));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     }
 
     return true;

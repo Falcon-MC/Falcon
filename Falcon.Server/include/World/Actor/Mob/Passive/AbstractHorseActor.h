@@ -12,7 +12,9 @@ public:
 
     static constexpr float HORSE_STEP_HEIGHT = 1.0625f;
 
-    ActorSize getSize() const override { return ActorSize{1.4f, 1.6f}; }
+    ActorSize getSize() const override {
+        return ActorSize{1.4f, 1.6f};
+    }
 
     PhysicsComponent getPhysics() const override {
         PhysicsComponent physics = PassiveActor::getPhysics();
@@ -20,7 +22,9 @@ public:
         return physics;
     }
 
-    float getDefaultMaxHealth() const override { return (float) MINIMUM_HEALTH; }
+    float getDefaultMaxHealth() const override {
+        return (float) MINIMUM_HEALTH;
+    }
 
     float resolveMaxHealth(Difficulty difficulty) const override {
         (void) difficulty;

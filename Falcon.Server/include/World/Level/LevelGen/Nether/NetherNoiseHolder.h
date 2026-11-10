@@ -13,15 +13,25 @@ class NetherTerrainNoises {
 public:
     explicit NetherTerrainNoises(uint32_t seed);
 
-    const TheEndOctaveNoise &getMinLimitNoise() const { return *mMinLimitNoise; }
+    const TheEndOctaveNoise &getMinLimitNoise() const {
+        return *mMinLimitNoise;
+    }
 
-    const TheEndOctaveNoise &getMaxLimitNoise() const { return *mMaxLimitNoise; }
+    const TheEndOctaveNoise &getMaxLimitNoise() const {
+        return *mMaxLimitNoise;
+    }
 
-    const TheEndOctaveNoise &getMainNoise() const { return *mMainNoise; }
+    const TheEndOctaveNoise &getMainNoise() const {
+        return *mMainNoise;
+    }
 
-    const std::vector<SurfaceSimplexNoise> &getDepthNoise() const { return mDepthNoise; }
+    const std::vector<SurfaceSimplexNoise> &getDepthNoise() const {
+        return mDepthNoise;
+    }
 
-    const std::vector<SurfaceSimplexNoise> &getAdjustmentNoise() const { return mAdjustmentNoise; }
+    const std::vector<SurfaceSimplexNoise> &getAdjustmentNoise() const {
+        return mAdjustmentNoise;
+    }
 
 private:
     std::unique_ptr<TheEndOctaveNoise> mMinLimitNoise;
@@ -35,9 +45,13 @@ class NetherDeltaNoises {
 public:
     explicit NetherDeltaNoises(IRandom &random);
 
-    const NormalNoisePtr &getSurfaceNoise() const { return mSurfaceNoise; }
+    const NormalNoisePtr &getSurfaceNoise() const {
+        return mSurfaceNoise;
+    }
 
-    const NormalNoisePtr &getSurfaceSecondaryNoise() const { return mSurfaceSecondaryNoise; }
+    const NormalNoisePtr &getSurfaceSecondaryNoise() const {
+        return mSurfaceSecondaryNoise;
+    }
 
 private:
     NormalNoisePtr mSurfaceNoise;
@@ -48,11 +62,17 @@ class NetherNoiseHolder {
 public:
     explicit NetherNoiseHolder(int64_t seed);
 
-    const NetherTerrainNoises &getTerrainNoises() const { return *mTerrainNoises; }
+    const NetherTerrainNoises &getTerrainNoises() const {
+        return *mTerrainNoises;
+    }
 
-    const NetherDeltaNoises &getDeltaNoises() const { return *mDeltaNoises; }
+    const NetherDeltaNoises &getDeltaNoises() const {
+        return *mDeltaNoises;
+    }
 
-    IRandom &getRandomSource() const { return *mRandomSource; }
+    IRandom &getRandomSource() const {
+        return *mRandomSource;
+    }
 
     static void setInstance(const NetherNoiseHolder *instance);
 

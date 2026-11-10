@@ -9,7 +9,9 @@ class ChestBlockActor final : public BlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "Chest";
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -17,9 +19,13 @@ public:
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    bool isPaired() const { return mPaired; }
+    bool isPaired() const {
+        return mPaired;
+    }
 
-    const Vector3i &getPairPosition() const { return mPairPosition; }
+    const Vector3i &getPairPosition() const {
+        return mPairPosition;
+    }
 
     void pairWith(ChestBlockActor &other);
 
@@ -37,9 +43,13 @@ public:
 
     int getViewerCount() const;
 
-    ChestInventory &getInventory() { return mInventory; }
+    ChestInventory &getInventory() {
+        return mInventory;
+    }
 
-    const ChestInventory &getInventory() const { return mInventory; }
+    const ChestInventory &getInventory() const {
+        return mInventory;
+    }
 
 private:
     ChestInventory mInventory;

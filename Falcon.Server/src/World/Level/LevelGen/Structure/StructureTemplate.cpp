@@ -146,7 +146,7 @@ bool StructureTemplate::_read(const Tag &root) {
     mSizeY = size->getList()[1].asInt();
     mSizeZ = size->getList()[2].asInt();
 
-    for (const Tag &state : palette->getList()) {
+    for (const Tag &state: palette->getList()) {
         const Tag *name = state.get("Name");
         if (name == nullptr)
             return false;
@@ -163,7 +163,7 @@ bool StructureTemplate::_read(const Tag &root) {
         mPalette.push_back(std::move(entry));
     }
 
-    for (const Tag &block : blocks->getList()) {
+    for (const Tag &block: blocks->getList()) {
         const Tag *position = block.get("pos");
         const Tag *state = block.get("state");
         if (position == nullptr || state == nullptr || position->getList().size() != 3)

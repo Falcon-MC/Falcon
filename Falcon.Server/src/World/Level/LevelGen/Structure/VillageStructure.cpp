@@ -91,8 +91,8 @@ namespace {
         if (!current.empty())
             rules->mProcessors.push_back(current);
 
-        for (const std::string &name : rules->mProcessors) {
-            for (const StructureProcessors::Rule &rule : StructureProcessors::get(name))
+        for (const std::string &name: rules->mProcessors) {
+            for (const StructureProcessors::Rule &rule: StructureProcessors::get(name))
                 rules->mRules.push_back(&rule);
         }
         cached = std::move(rules);
@@ -100,7 +100,7 @@ namespace {
     }
 
     bool hasProcessor(const std::vector<std::string> &names, const char *name) {
-        for (const std::string &candidate : names) {
+        for (const std::string &candidate: names) {
             if (candidate == name)
                 return true;
         }
@@ -128,7 +128,7 @@ namespace {
         }
 
         auto palette = std::make_shared<TranslatedPalette>();
-        for (const StructureTemplate::PaletteEntry &entry : shape.getPalette()) {
+        for (const StructureTemplate::PaletteEntry &entry: shape.getPalette()) {
             TranslatedEntry translated;
             // jigsaws and structure blocks are read from their data, never translated
             translated.mPlaced = entry.mName != "minecraft:jigsaw" && entry.mName != "minecraft:structure_block"
@@ -294,19 +294,19 @@ namespace {
                     uint32_t seed, std::mt19937 &chunkRandom, StructureTerrain &terrain,
                     VillageStructure::ChunkShare &share, BlockManager *world,
                     const VillageStructure::Neighbours *neighbours)
-            : mGenerator(generator), mPiece(piece), mChunkX(chunkX), mChunkZ(chunkZ), mSeed(seed),
-              mChunkRandom(chunkRandom), mTerrain(terrain), mShare(share), mWorld(world), mNeighbours(neighbours),
-              mRules(rulesOf(*piece.mElement)) {}
+                : mGenerator(generator), mPiece(piece), mChunkX(chunkX), mChunkZ(chunkZ), mSeed(seed),
+                  mChunkRandom(chunkRandom), mTerrain(terrain), mShare(share), mWorld(world), mNeighbours(neighbours),
+                  mRules(rulesOf(*piece.mElement)) {}
 
         void place(const StructureTemplate &shape) {
-            for (const StructureTemplate::BlockEntry &entry : shape.getBlocks()) {
+            for (const StructureTemplate::BlockEntry &entry: shape.getBlocks()) {
                 if (shape.getPalette()[(size_t) entry.mPaletteIndex].mName == "minecraft:jigsaw")
                     _placeJigsaw(entry);
             }
 
             const std::shared_ptr<const TranslatedPalette> translated = translatedPalette(shape, mPiece.mQuarterTurns);
             std::mt19937 random(mSeed);
-            for (const StructureTemplate::BlockEntry &entry : shape.getBlocks()) {
+            for (const StructureTemplate::BlockEntry &entry: shape.getBlocks()) {
                 const size_t index = (size_t) entry.mPaletteIndex;
                 _placeBlock(shape.getPalette()[index], (*translated)[index], entry, random);
             }
@@ -330,8 +330,8 @@ namespace {
             for (int32_t x = box.mMinX; x <= box.mMaxX; ++x) {
                 for (int32_t z = box.mMinZ; z <= box.mMaxZ; ++z) {
                     const bool inside = insideChunk(x, z, mChunkX, mChunkZ);
-                    const BlockState *done =
-                            inside || mNeighbours == nullptr ? nullptr : (*mNeighbours)(x, box.mMinY, z);
+                    const BlockState *done = inside || mNeighbours == nullptr ? nullptr
+                                                                              : (*mNeighbours)(x, box.mMinY, z);
                     const BlockState bottom = done != nullptr ? *done : _world({x, box.mMinY, z});
                     if (DecorationSupport::isAir(bottom))
                         continue;
@@ -371,10 +371,10 @@ namespace {
 
         // the feature pieces before this one too, in the world they were placed into
         BlockState _world(const VillageStructure::Position &position) {
-            const BlockState *world = mWorld == nullptr ? nullptr
-                                                        : mWorld->getCachedBlock(std::get<0>(position),
-                                                                                 std::get<1>(position),
-                                                                                 std::get<2>(position));
+            const BlockState *world = mWorld == nullptr
+                                              ? nullptr
+                                              : mWorld->getCachedBlock(std::get<0>(position), std::get<1>(position),
+                                                                       std::get<2>(position));
             if (world != nullptr)
                 return *world;
 
@@ -496,12 +496,13 @@ std::vector<JigsawPiece> VillageStructure::plan(const ChunkGenerator &generator,
     const int32_t quarterTurns = FeatureRandom::nextInt(random, 4);
     const bool abandoned = FeatureRandom::nextFloat(random) < ABANDONED_CHANCE;
 
-    const JigsawPools::Pool *centres =
-            JigsawPools::get("minecraft:village/" + std::string(abandoned ? "abandoned/" : "") + style + "/town_centers");
+    const JigsawPools::Pool *centres = JigsawPools::get(
+            "minecraft:village/" + std::string(abandoned ? "abandoned/" : "") + style + "/town_centers");
     if (centres == nullptr || centres->mSlots.empty())
         return {};
 
-    const JigsawElementData *start = centres->mSlots[(size_t) FeatureRandom::nextInt(random, (int32_t) centres->mSlots.size())];
+    const JigsawElementData *start =
+            centres->mSlots[(size_t) FeatureRandom::nextInt(random, (int32_t) centres->mSlots.size())];
     if (start == nullptr)
         return {};
 
@@ -544,15 +545,15 @@ std::shared_ptr<const std::vector<JigsawPiece>> VillageStructure::cachedPlan(con
     return pieces;
 }
 
-std::vector<std::shared_ptr<const std::vector<JigsawPiece>>> VillageStructure::plansNear(
-        const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) {
+std::vector<std::shared_ptr<const std::vector<JigsawPiece>>>
+VillageStructure::plansNear(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) {
     std::vector<std::shared_ptr<const std::vector<JigsawPiece>>> found;
     const StructureFeature *village = StructureFeature::get("village");
     if (village == nullptr)
         return found;
 
-    for (const StructureChunkPos &start : village->getCandidatesIn(generator.getSeed(), chunkX - REACH, chunkZ - REACH,
-                                                                    chunkX + REACH, chunkZ + REACH)) {
+    for (const StructureChunkPos &start: village->getCandidatesIn(generator.getSeed(), chunkX - REACH, chunkZ - REACH,
+                                                                  chunkX + REACH, chunkZ + REACH)) {
         std::shared_ptr<const std::vector<JigsawPiece>> pieces = cachedPlan(generator, start.x, start.z);
         if (pieces != nullptr)
             found.push_back(std::move(pieces));
@@ -567,7 +568,7 @@ VillageStructure::ChunkShare VillageStructure::placeInChunk(const ChunkGenerator
     ChunkShare share;
     const uint32_t seed = StructureFeature::getPostProcessSeed(generator.getSeed(), chunkX, chunkZ);
     std::mt19937 chunkRandom(seed);
-    for (const JigsawPiece &piece : pieces) {
+    for (const JigsawPiece &piece: pieces) {
         // chunk post process random (sub_1469B1230)
         if (piece.mElement->mFeature != nullptr) {
             if (features != nullptr && insideChunk(piece.x, piece.z, chunkX, chunkZ))
@@ -589,18 +590,16 @@ VillageStructure::ChunkShare VillageStructure::placeInChunk(const ChunkGenerator
     return share;
 }
 
-void VillageStructure::addBeard(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ,
-                                TerrainBeard &beard) {
-    for (const std::shared_ptr<const std::vector<JigsawPiece>> &pieces : plansNear(generator, chunkX, chunkZ)) {
+void VillageStructure::addBeard(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ, TerrainBeard &beard) {
+    for (const std::shared_ptr<const std::vector<JigsawPiece>> &pieces: plansNear(generator, chunkX, chunkZ)) {
         // rigid pieces only: streets follow the ground
-        for (const JigsawPiece &piece : *pieces) {
+        for (const JigsawPiece &piece: *pieces) {
             if (piece.mElement->mTerrainMatching)
                 continue;
 
             const JigsawBox &box = piece.mBox;
             beard.addPiece(chunkX, chunkZ,
-                           {box.mMinX, box.mMinY, box.mMinZ, box.mMaxX, box.mMaxY, box.mMaxZ,
-                            piece.mGroundLevelDelta});
+                           {box.mMinX, box.mMinY, box.mMinZ, box.mMaxX, box.mMaxY, box.mMaxZ, piece.mGroundLevelDelta});
         }
     }
 }
@@ -609,10 +608,10 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
                              std::vector<GeneratedBlockChange> *overflow) {
     // shared by the villages: they overlap and read the same columns
     StructureTerrain terrain(generator, level.getTerrainCache());
-    for (const std::shared_ptr<const std::vector<JigsawPiece>> &pieces :
+    for (const std::shared_ptr<const std::vector<JigsawPiece>> &pieces:
          plansNear(generator, chunk.getX(), chunk.getZ())) {
         bool reaches = false;
-        for (const JigsawPiece &piece : *pieces)
+        for (const JigsawPiece &piece: *pieces)
             reaches = reaches || touchesChunk(piece.mBox, chunk.getX(), chunk.getZ());
         if (!reaches)
             continue;
@@ -626,8 +625,7 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
             LevelChunk *other = level.peekChunkPtr(x >> 4, z >> 4);
             return other != nullptr && other->isPopulated() ? &other->getBlock(x & 15, y, z & 15) : nullptr;
         };
-        ChunkShare own = placeInChunk(generator, *pieces, chunk.getX(), chunk.getZ(), terrain, &features,
-                                      &neighbours);
+        ChunkShare own = placeInChunk(generator, *pieces, chunk.getX(), chunk.getZ(), terrain, &features, &neighbours);
         // the template blocks a later feature piece replaced
         for (auto entry = own.mBlocks.begin(); entry != own.mBlocks.end();) {
             const BlockState *now = features.getCachedBlock(std::get<0>(entry->first), std::get<1>(entry->first),
@@ -666,7 +664,7 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
         };
         const auto shape = [&](const ChunkShare &share) {
             std::vector<std::pair<Position, BlockState>> blocks;
-            for (const auto &entry : share.mBlocks) {
+            for (const auto &entry: share.mBlocks) {
                 const int32_t x = std::get<0>(entry.first);
                 const int32_t y = std::get<1>(entry.first);
                 const int32_t z = std::get<2>(entry.first);
@@ -675,7 +673,7 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
             return blocks;
         };
         const auto write = [](LevelChunk &target, const std::vector<std::pair<Position, BlockState>> &blocks) {
-            for (const auto &entry : blocks)
+            for (const auto &entry: blocks)
                 target.setBlock(std::get<0>(entry.first) & 15, std::get<1>(entry.first), std::get<2>(entry.first) & 15,
                                 entry.second);
         };
@@ -683,26 +681,23 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
         // shaped before the manager is applied: it holds the final blocks of this chunk
         const std::vector<std::pair<Position, BlockState>> shapedOwn = shape(own);
         // neighbour features then meet the village whatever the post process order
-        for (const auto &entry : staged)
+        for (const auto &entry: staged)
             write(*entry.first, shape(entry.second));
 
         features.applySubChunkUpdate();
         write(chunk, shapedOwn);
 
-        const auto kept = [&own](const Position &position) {
-            return own.mBlocks.count(position) != 0;
-        };
-        for (const Chest &chest : own.mChests) {
+        const auto kept = [&own](const Position &position) { return own.mBlocks.count(position) != 0; };
+        for (const Chest &chest: own.mChests) {
             if (!kept(chest.mPosition))
                 continue;
             ChestBlockActor &actor = level.getBlockActors().getOrCreate<ChestBlockActor>(
-                    Vector3i(std::get<0>(chest.mPosition), std::get<1>(chest.mPosition),
-                             std::get<2>(chest.mPosition)));
+                    Vector3i(std::get<0>(chest.mPosition), std::get<1>(chest.mPosition), std::get<2>(chest.mPosition)));
             if (!chest.mLootTable.empty())
                 actor.setLootTable(chest.mLootTable, chest.mLootSeed);
         }
 
-        for (const Bed &bed : own.mBeds) {
+        for (const Bed &bed: own.mBeds) {
             if (!kept(bed.mPosition))
                 continue;
             level.getBlockActors()
@@ -711,12 +706,12 @@ void VillageStructure::place(const ChunkGenerator &generator, Level &level, Leve
                     .setColor((int8_t) bed.mColor);
         }
 
-        for (const BlockEntity &entity : own.mBlockEntities) {
+        for (const BlockEntity &entity: own.mBlockEntities) {
             if (kept(entity.mPosition))
                 createBlockActor(level.getBlockActors(), entity);
         }
 
-        for (const Mob &mob : own.mMobs)
+        for (const Mob &mob: own.mMobs)
             level.addGeneratedEntity(generatedMob(mob));
     }
 }

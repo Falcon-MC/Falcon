@@ -59,8 +59,7 @@ const ExplorationMaps::Entry *ExplorationMaps::findByDestination(const std::stri
     return nullptr;
 }
 
-void ExplorationMaps::create(ServerNetworkHandler &owner, ItemStack &item, const Actor *searcher,
-                             const Entry &entry) {
+void ExplorationMaps::create(ServerNetworkHandler &owner, ItemStack &item, const Actor *searcher, const Entry &entry) {
     World &world = searcher != nullptr ? owner.getWorldFor(*searcher) : owner.getWorldOf(nullptr);
     const DimensionType dimension = searcher != nullptr ? searcher->getDimension() : DimensionType::Overworld;
     Vector3f position;
@@ -85,11 +84,9 @@ void ExplorationMaps::create(ServerNetworkHandler &owner, ItemStack &item, const
         item.mDamage = entry.mAux;
 
     Level &mapLevel = world.getOverworld();
-    MapItemSavedData &data = mapLevel.getMaps().createMapSavedData(
-            [&owner]() {
-                return owner.allocateActorUniqueId();
-            },
-            position, Dimension::toId(dimension), EXPLORATION_SCALE);
+    MapItemSavedData &data = mapLevel.getMaps().createMapSavedData([&owner]() { return owner.allocateActorUniqueId(); },
+                                                                   position, Dimension::toId(dimension),
+                                                                   EXPLORATION_SCALE);
     MapItem::setMapId(item, data);
     data.setUnlimitedTracking(true);
 

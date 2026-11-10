@@ -111,7 +111,7 @@ private:
     void _arm();
 
     // calls fill(api, event) for each pack with subscribers; true when one cancelled
-    template<typename Fill>
+    template <typename Fill>
     bool _emit(const char *key, const char *signal, bool cancellable, Fill fill);
 
     void _scheduleBlockTick(Level &level, const std::string &blockId, const Vector3i &position);

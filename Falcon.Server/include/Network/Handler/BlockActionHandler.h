@@ -30,7 +30,8 @@ public:
         double mProgress = 0.0;
         double mSpeed = 0.0;
     };
-    using BreakRejectionHook = void (*)(ServerPlayer &player, const Vector3i &position, const BreakRejection &rejection);
+    using BreakRejectionHook = void (*)(ServerPlayer &player, const Vector3i &position,
+                                        const BreakRejection &rejection);
 
     static void setBreakRejectionHook(BreakRejectionHook hook);
 
@@ -80,12 +81,11 @@ private:
 
     static constexpr float MAX_SYNC_DISTANCE_SQUARED = 10000.0f;
 
-    static bool interactBlock(ServerNetworkHandler &owner, ServerPlayer &player,
-                              const ItemUseTransaction &transaction, bool selectedSlotChanged);
+    static bool interactBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemUseTransaction &transaction,
+                              bool selectedSlotChanged);
 
     // compares as the client sees them: an item it only knows under another one still matches
-    static bool matchesTransactionItem(const PacketCodecContext &context, const ItemStack &held,
-                                       const ItemStack &sent);
+    static bool matchesTransactionItem(const PacketCodecContext &context, const ItemStack &held, const ItemStack &sent);
 
     static bool isBlockChangeAllowed(Level &level, const Vector3i &position, const ServerPlayer &player);
 

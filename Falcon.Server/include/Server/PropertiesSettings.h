@@ -8,27 +8,11 @@
 #include <unordered_map>
 #include <vector>
 
-enum class Difficulty : int {
-    Peaceful = 0,
-    Easy = 1,
-    Normal = 2,
-    Hard = 3
-};
+enum class Difficulty : int { Peaceful = 0, Easy = 1, Normal = 2, Hard = 3 };
 
-enum class ContentLogLevel : int {
-    Error = 0,
-    Warning = 1,
-    Info = 2,
-    Verbose = 3
-};
+enum class ContentLogLevel : int { Error = 0, Warning = 1, Info = 2, Verbose = 3 };
 
-enum class PropertyKind {
-    String,
-    Bool,
-    Int,
-    Float,
-    Enum
-};
+enum class PropertyKind { String, Bool, Int, Float, Enum };
 
 struct PropertyDefinition {
     const char *mKey;
@@ -54,9 +38,13 @@ public:
 
     bool load(const std::string &path);
 
-    bool isLoaded() const { return mLoaded; }
+    bool isLoaded() const {
+        return mLoaded;
+    }
 
-    const std::string &getPath() const { return mPath; }
+    const std::string &getPath() const {
+        return mPath;
+    }
 
     bool hasProperty(const std::string &key) const;
 
@@ -76,9 +64,13 @@ public:
 
     bool getBool(const char *key) const;
 
-    const std::vector<std::string> &getInvalidProperties() const { return mInvalid; }
+    const std::vector<std::string> &getInvalidProperties() const {
+        return mInvalid;
+    }
 
-    std::string getServerName() const { return getString("server-name"); }
+    std::string getServerName() const {
+        return getString("server-name");
+    }
 
     std::string getLanguage() const {
         return getString("language");
@@ -86,25 +78,39 @@ public:
 
     GameType getGameType() const;
 
-    bool getForceGameType() const { return getBool("force-gamemode"); }
+    bool getForceGameType() const {
+        return getBool("force-gamemode");
+    }
 
     Difficulty getDifficulty() const;
 
-    bool getAllowCheats() const { return getBool("allow-cheats"); }
+    bool getAllowCheats() const {
+        return getBool("allow-cheats");
+    }
 
-    int getMaxPlayers() const { return getInt("max-players"); }
+    int getMaxPlayers() const {
+        return getInt("max-players");
+    }
 
-    bool getOnlineMode() const { return getBool("online-mode"); }
+    bool getOnlineMode() const {
+        return getBool("online-mode");
+    }
 
     bool getNetworkEncryption() const {
         return getBool("network-encryption");
     }
 
-    bool getAllowList() const { return getBool("allow-list"); }
+    bool getAllowList() const {
+        return getBool("allow-list");
+    }
 
-    unsigned short getServerPort() const { return (unsigned short) getInt("server-port"); }
+    unsigned short getServerPort() const {
+        return (unsigned short) getInt("server-port");
+    }
 
-    unsigned short getServerPortV6() const { return (unsigned short) getInt("server-portv6"); }
+    unsigned short getServerPortV6() const {
+        return (unsigned short) getInt("server-portv6");
+    }
 
     std::string getSignalingCertificate() const {
         return getString("signaling-certificate");
@@ -134,47 +140,77 @@ public:
         return getString("signaling-acme-challenge");
     }
 
-    bool getEnableLanVisibility() const { return getBool("enable-lan-visibility"); }
+    bool getEnableLanVisibility() const {
+        return getBool("enable-lan-visibility");
+    }
 
-    int getViewDistance() const { return getInt("view-distance"); }
+    int getViewDistance() const {
+        return getInt("view-distance");
+    }
 
-    int getTickDistance() const { return getInt("tick-distance"); }
+    int getTickDistance() const {
+        return getInt("tick-distance");
+    }
 
-    int getPlayerIdleTimeout() const { return getInt("player-idle-timeout"); }
+    int getPlayerIdleTimeout() const {
+        return getInt("player-idle-timeout");
+    }
 
-    int getMaxThreads() const { return getInt("max-threads"); }
+    int getMaxThreads() const {
+        return getInt("max-threads");
+    }
 
-    int getAutoSaveInterval() const { return getInt("autosave-interval"); }
+    int getAutoSaveInterval() const {
+        return getInt("autosave-interval");
+    }
 
-    std::string getLevelName() const { return getString("level-name"); }
+    std::string getLevelName() const {
+        return getString("level-name");
+    }
 
-    std::string getLevelSeed() const { return getString("level-seed"); }
+    std::string getLevelSeed() const {
+        return getString("level-seed");
+    }
 
     // comma-separated `worlds-autoload` list
     std::vector<std::string> getAutoloadWorlds() const;
 
     PlayerPermission getDefaultPlayerPermissionLevel() const;
 
-    bool getTexturePackRequired() const { return getBool("texturepack-required"); }
+    bool getTexturePackRequired() const {
+        return getBool("texturepack-required");
+    }
 
     // false: only the newest protocol may join
-    bool getAnyVersion() const { return getBool("any-version"); }
+    bool getAnyVersion() const {
+        return getBool("any-version");
+    }
 
-    bool getContentLogFileEnabled() const { return getBool("content-log-file-enabled"); }
+    bool getContentLogFileEnabled() const {
+        return getBool("content-log-file-enabled");
+    }
 
-    bool getContentLogConsoleOutputEnabled() const { return getBool("content-log-console-output-enabled"); }
+    bool getContentLogConsoleOutputEnabled() const {
+        return getBool("content-log-console-output-enabled");
+    }
 
     ContentLogLevel getContentLogLevel() const;
 
-    unsigned short getCompressionThreshold() const { return (unsigned short) getInt("compression-threshold"); }
+    unsigned short getCompressionThreshold() const {
+        return (unsigned short) getInt("compression-threshold");
+    }
 
     NetworkSettingsPacket::CompressionAlgorithm getCompressionAlgorithm() const;
 
     ChatRestrictionLevel getChatRestrictionLevel() const;
 
-    bool getDisablePlayerInteraction() const { return getBool("disable-player-interaction"); }
+    bool getDisablePlayerInteraction() const {
+        return getBool("disable-player-interaction");
+    }
 
-    bool getClientSideChunkGenerationEnabled() const { return getBool("client-side-chunk-generation-enabled"); }
+    bool getClientSideChunkGenerationEnabled() const {
+        return getBool("client-side-chunk-generation-enabled");
+    }
 
     // Comma-separated structure names, as StructureFeature registers them.
     std::string getClientSideChunkGenerationServerStructures() const {
@@ -187,36 +223,62 @@ public:
      */
     float getServerBuildRadiusRatio() const;
 
-    bool getBlockNetworkIdsAreHashes() const { return getBool("block-network-ids-are-hashes"); }
+    bool getBlockNetworkIdsAreHashes() const {
+        return getBool("block-network-ids-are-hashes");
+    }
 
-    bool getDisableCustomSkins() const { return getBool("disable-custom-skins"); }
+    bool getDisableCustomSkins() const {
+        return getBool("disable-custom-skins");
+    }
 
     bool getDisableClientVibrantVisuals() const {
         return getBool("disable-client-vibrant-visuals");
     }
 
     // seconds between two skin changes of one player
-    int getSkinChangeCooldown() const { return getInt("skin-change-cooldown"); }
+    int getSkinChangeCooldown() const {
+        return getInt("skin-change-cooldown");
+    }
 
-    int getSpawnProtection() const { return getInt("spawn-protection"); }
+    int getSpawnProtection() const {
+        return getInt("spawn-protection");
+    }
 
-    int getAutoCompactionInterval() const { return getInt("auto-compaction-interval"); }
+    int getAutoCompactionInterval() const {
+        return getInt("auto-compaction-interval");
+    }
 
-    int getMaxInboundPacketsPerSecond() const { return getInt("max-inbound-packets-per-second"); }
+    int getMaxInboundPacketsPerSecond() const {
+        return getInt("max-inbound-packets-per-second");
+    }
 
-    int getMaxCommandsPerSecond() const { return getInt("max-commands-per-second"); }
+    int getMaxCommandsPerSecond() const {
+        return getInt("max-commands-per-second");
+    }
 
-    int getMaxChatMessagesPerSecond() const { return getInt("max-chat-messages-per-second"); }
+    int getMaxChatMessagesPerSecond() const {
+        return getInt("max-chat-messages-per-second");
+    }
 
-    int getMaxFormResponsesPerSecond() const { return getInt("max-form-responses-per-second"); }
+    int getMaxFormResponsesPerSecond() const {
+        return getInt("max-form-responses-per-second");
+    }
 
-    int getMaxMovementPacketsPerSecond() const { return getInt("max-movement-packets-per-second"); }
+    int getMaxMovementPacketsPerSecond() const {
+        return getInt("max-movement-packets-per-second");
+    }
 
-    int getMaxChatMessageLength() const { return getInt("max-chat-message-length"); }
+    int getMaxChatMessageLength() const {
+        return getInt("max-chat-message-length");
+    }
 
-    int getWasmPluginMemoryMb() const { return getInt("wasm-plugin-memory-mb"); }
+    int getWasmPluginMemoryMb() const {
+        return getInt("wasm-plugin-memory-mb");
+    }
 
-    int getWasmPluginFuel() const { return getInt("wasm-plugin-fuel"); }
+    int getWasmPluginFuel() const {
+        return getInt("wasm-plugin-fuel");
+    }
 
     float getPlayerPositionAcceptanceThreshold() const {
         return getFloat("player-position-acceptance-threshold");

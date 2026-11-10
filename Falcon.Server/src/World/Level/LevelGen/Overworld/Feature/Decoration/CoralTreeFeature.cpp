@@ -29,12 +29,9 @@ bool CoralTreeFeature::placeFeature(LevelChunk &chunk, IRandom &random, int32_t 
     const int32_t topY = py;
     const int32_t branches = random.nextInt(3) + 2;
 
-    DecorationSupport::FaceOffset directions[4] = {
-            DecorationSupport::HORIZONTALS[0],
-            DecorationSupport::HORIZONTALS[1],
-            DecorationSupport::HORIZONTALS[2],
-            DecorationSupport::HORIZONTALS[3]
-    };
+    DecorationSupport::FaceOffset directions[4] = {DecorationSupport::HORIZONTALS[0], DecorationSupport::HORIZONTALS[1],
+                                                   DecorationSupport::HORIZONTALS[2],
+                                                   DecorationSupport::HORIZONTALS[3]};
 
     for (int32_t i = 3; i > 0; i--) {
         const int32_t j = random.nextInt(i + 1);

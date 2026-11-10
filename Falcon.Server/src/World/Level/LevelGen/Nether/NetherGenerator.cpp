@@ -34,8 +34,7 @@ namespace {
     }
 }
 
-NetherGenerator::NetherGenerator(int64_t seed)
-        : mSeed(seed), mAirHash(BlockStateHasher::hash("minecraft:air")) {
+NetherGenerator::NetherGenerator(int64_t seed) : mSeed(seed), mAirHash(BlockStateHasher::hash("minecraft:air")) {
     mNoiseHolder = std::make_unique<NetherNoiseHolder>(seed);
     mBiomeSource = std::make_unique<VanillaNetherBiomeSource>(seed);
 
@@ -61,8 +60,7 @@ int32_t NetherGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
     return mBiomeSource->pickBiomeId(x, y, z);
 }
 
-void NetherGenerator::decorate(Level &level, LevelChunk &chunk,
-                               std::vector<GeneratedBlockChange> *overflow) const {
+void NetherGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const {
     NetherFeatureBuilder::apply(level, chunk, overflow);
 }
 

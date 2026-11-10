@@ -40,8 +40,8 @@ namespace {
     }
 
     bool isInside(Level &value, const FalconBlockPos &position) {
-        return position.y >= value.getMinY() && position.y <= value.getMaxY() &&
-               isLoaded(value, position.x, position.z);
+        return position.y >= value.getMinY() && position.y <= value.getMaxY()
+               && isLoaded(value, position.x, position.z);
     }
 
     std::string stateValueToJson(const Tag &value) {

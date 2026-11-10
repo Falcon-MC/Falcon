@@ -123,8 +123,8 @@ namespace {
                                ServerNetworkHandler::SharedLoginPacket kind,
                                const std::function<std::string(const PacketCodecContext &)> &encode) {
         const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
-        std::shared_ptr<const SharedPacket> &cached =
-                owner.getSharedLoginPacket(kind, context.getCodec().getProtocolVersion());
+        std::shared_ptr<const SharedPacket> &cached = owner.getSharedLoginPacket(
+                kind, context.getCodec().getProtocolVersion());
         if (cached == nullptr)
             cached = std::make_shared<const SharedPacket>(encode(context));
 
@@ -180,8 +180,8 @@ namespace {
 
 void LoginHandler::registerVanillaDefinitions(ServerNetworkHandler &owner) {
     for (const std::unique_ptr<Block> &block: VanillaBlocks::getAll()) {
-        owner.getBlockDefinitions().registerDefinition(std::make_shared<BlockDefinition>(
-                block->getIdentifier(), block->getNetworkHash(), block->getStates()));
+        owner.getBlockDefinitions().registerDefinition(
+                std::make_shared<BlockDefinition>(block->getIdentifier(), block->getNetworkHash(), block->getStates()));
     }
 
     for (size_t index = 0; index < ItemNetworkIdTable::getCount(); ++index) {
@@ -191,9 +191,8 @@ void LoginHandler::registerVanillaDefinitions(ServerNetworkHandler &owner) {
                 entry.mIdentifier, entry.mNetworkId, entry.mComponentBased, entry.mComponents));
     }
 
-    LOG_TRACE(LogAreaID::Server, "Registered %zu block(s) and %zu item definition(s)",
-             VanillaBlocks::getAll().size(), owner.getItemDefinitions().size());
-
+    LOG_TRACE(LogAreaID::Server, "Registered %zu block(s) and %zu item definition(s)", VanillaBlocks::getAll().size(),
+              owner.getItemDefinitions().size());
 }
 
 void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, const NetworkIdentifier &id,
@@ -204,15 +203,14 @@ void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, con
         codec = nullptr;
     if (codec == nullptr) {
         PlayStatusPacket status;
-        status.mStatus = packet.mProtocolVersion < newest
-                         ? PlayStatusPacket::Status::LoginFailedClientOld
-                         : PlayStatusPacket::Status::LoginFailedServerOld;
+        status.mStatus = packet.mProtocolVersion < newest ? PlayStatusPacket::Status::LoginFailedClientOld
+                                                          : PlayStatusPacket::Status::LoginFailedServerOld;
 
         owner.getNetworkHandler().send(id, status, owner.getCodecContext());
         owner.getNetworkHandler().flush(id);
 
-        LOG_WARN(LogAreaID::Network, "%s uses protocol %d, which the server does not support",
-                 id.getAddress().c_str(), packet.mProtocolVersion);
+        LOG_WARN(LogAreaID::Network, "%s uses protocol %d, which the server does not support", id.getAddress().c_str(),
+                 packet.mProtocolVersion);
         return;
     }
 
@@ -233,8 +231,8 @@ void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, con
     owner.getNetworkHandler().flush(id);
     const CompressedNetworkPeer::CompressionAlgorithm algorithm =
             settings.mCompressionAlgorithm == NetworkSettingsPacket::CompressionAlgorithm::Snappy
-            ? CompressedNetworkPeer::CompressionAlgorithm::Snappy
-            : CompressedNetworkPeer::CompressionAlgorithm::ZLib;
+                    ? CompressedNetworkPeer::CompressionAlgorithm::Snappy
+                    : CompressedNetworkPeer::CompressionAlgorithm::ZLib;
     owner.getNetworkHandler().enableCompression(id, algorithm, settings.mCompressionThreshold);
 
     player.setLoginState(ServerPlayer::LoginState::NetworkSettingsSent);
@@ -330,10 +328,11 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     if (ban != nullptr) {
         LOG_INFO(LogAreaID::Server, "Player %s is banned", player.getName().c_str());
         const Localization &localization = Localization::getInstance();
-        owner._disconnect(id, DisconnectReason::NotAllowed, ban->mReason.empty()
-                              ? localization.translate(request.getLanguageCode(), "falcon.disconnect.banned")
-                              : localization.translate(request.getLanguageCode(), "falcon.disconnect.bannedReason",
-                                                       {ban->mReason}));
+        owner._disconnect(id, DisconnectReason::NotAllowed,
+                          ban->mReason.empty()
+                                  ? localization.translate(request.getLanguageCode(), "falcon.disconnect.banned")
+                                  : localization.translate(request.getLanguageCode(), "falcon.disconnect.bannedReason",
+                                                           {ban->mReason}));
         owner.erasePlayer(id);
         return;
     }
@@ -559,7 +558,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mRuntimeActorId = player.getRuntimeId();
     startGame.mPlayerGameType = (GameType) player.getGameType();
     startGame.mPlayerPosition = Vector3f(player.getPosition().x, player.getPosition().y + PLAYER_BASE_OFFSET,
-                                        player.getPosition().z);
+                                         player.getPosition().z);
     startGame.mRotation = Vector2f(player.getRotation().x, player.getRotation().y);
 
     startGame.mSeed = world.getSeed();
@@ -598,20 +597,20 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
 
     startGame.mGamerules = world.getGameRules().toNetwork();
 
-    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::JigsawStructures,
-                          [](const PacketCodecContext &context) {
-        JigsawStructureDataPacket jigsawStructureData;
-        jigsawStructureData.mJigsawStructureData.put("processors", Tag::ofList(Tag::Type::Compound));
-        jigsawStructureData.mJigsawStructureData.put("template_pools", Tag::ofList(Tag::Type::Compound));
-        jigsawStructureData.mJigsawStructureData.put("jigsaws", Tag::ofList(Tag::Type::Compound));
-        jigsawStructureData.mJigsawStructureData.put("structure_sets", Tag::ofList(Tag::Type::Compound));
-        return encodePacket(jigsawStructureData, context);
-    });
+    sendSharedLoginPacket(
+            owner, player, ServerNetworkHandler::SharedLoginPacket::JigsawStructures,
+            [](const PacketCodecContext &context) {
+                JigsawStructureDataPacket jigsawStructureData;
+                jigsawStructureData.mJigsawStructureData.put("processors", Tag::ofList(Tag::Type::Compound));
+                jigsawStructureData.mJigsawStructureData.put("template_pools", Tag::ofList(Tag::Type::Compound));
+                jigsawStructureData.mJigsawStructureData.put("jigsaws", Tag::ofList(Tag::Type::Compound));
+                jigsawStructureData.mJigsawStructureData.put("structure_sets", Tag::ofList(Tag::Type::Compound));
+                return encodePacket(jigsawStructureData, context);
+            });
 
-    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::VoxelShapes,
-                          [](const PacketCodecContext &context) {
-        return encodePacket(VoxelShapeRegistry::getPacket(), context);
-    });
+    sendSharedLoginPacket(
+            owner, player, ServerNetworkHandler::SharedLoginPacket::VoxelShapes,
+            [](const PacketCodecContext &context) { return encodePacket(VoxelShapeRegistry::getPacket(), context); });
 
     owner.getNetworkHandler().send(id, startGame, owner.getCodecContext());
 
@@ -625,10 +624,9 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     sendItemComponents(owner, player);
     sendActorIdentifiers(owner, player);
     sendCameraPresets(owner, player);
-    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::ArmorTrims,
-                          [](const PacketCodecContext &context) {
-        return encodePacket(ArmorTrims::getPacket(), context);
-    });
+    sendSharedLoginPacket(
+            owner, player, ServerNetworkHandler::SharedLoginPacket::ArmorTrims,
+            [](const PacketCodecContext &context) { return encodePacket(ArmorTrims::getPacket(), context); });
     sendBiomeDefinitions(owner, player);
     sendAttributes(owner, player);
     sendAbilities(owner, player);
@@ -725,97 +723,100 @@ Uuid LoginHandler::playerListUuid(const ServerPlayer &player) {
 void LoginHandler::sendBiomeDefinitions(ServerNetworkHandler &owner, ServerPlayer &player) {
     sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::BiomeDefinitions,
                           [&owner](const PacketCodecContext &context) {
-        BiomeDefinitionListPacket biomes;
-        biomes.mBiomes = owner.getBiomes().getBiomes();
-        biomes.mStrings = owner.getBiomes().getStrings();
-        return encodePacket(biomes, context);
-    });
+                              BiomeDefinitionListPacket biomes;
+                              biomes.mBiomes = owner.getBiomes().getBiomes();
+                              biomes.mStrings = owner.getBiomes().getStrings();
+                              return encodePacket(biomes, context);
+                          });
 }
 
 void LoginHandler::sendCameraPresets(ServerNetworkHandler &owner, ServerPlayer &player) {
     sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::CameraPresets,
                           [](const PacketCodecContext &context) {
-        CameraPresetsPacket presets;
-        presets.mPresets = standardCameraPresets();
-        return encodePacket(presets, context);
-    });
+                              CameraPresetsPacket presets;
+                              presets.mPresets = standardCameraPresets();
+                              return encodePacket(presets, context);
+                          });
 }
 
 void LoginHandler::sendItemComponents(ServerNetworkHandler &owner, ServerPlayer &player) {
-    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::ItemRegistry,
-                          [&owner](const PacketCodecContext &context) {
-        ItemRegistryPacket components;
-        const int protocol = context.getCodec().getProtocolVersion();
-        const bool translated = ItemNetworkIdTable::getNetworkIds(protocol) != nullptr;
+    sendSharedLoginPacket(
+            owner, player, ServerNetworkHandler::SharedLoginPacket::ItemRegistry,
+            [&owner](const PacketCodecContext &context) {
+                ItemRegistryPacket components;
+                const int protocol = context.getCodec().getProtocolVersion();
+                const bool translated = ItemNetworkIdTable::getNetworkIds(protocol) != nullptr;
 
-        if (translated) {
-            for (const ItemNetworkIdEntry &source: ItemNetworkIdTable::getPalette(protocol)) {
-                ItemComponentEntry entry;
-                entry.mIdentifier = source.mIdentifier;
-                entry.mRuntimeId = (int16_t) source.mNetworkId;
-                entry.mComponentBased = source.mComponentBased;
-                entry.mItemVersion = source.mVersion;
-                entry.mComponentData = source.mComponents;
-                components.mEntries.push_back(entry);
-            }
-        }
+                if (translated) {
+                    for (const ItemNetworkIdEntry &source: ItemNetworkIdTable::getPalette(protocol)) {
+                        ItemComponentEntry entry;
+                        entry.mIdentifier = source.mIdentifier;
+                        entry.mRuntimeId = (int16_t) source.mNetworkId;
+                        entry.mComponentBased = source.mComponentBased;
+                        entry.mItemVersion = source.mVersion;
+                        entry.mComponentData = source.mComponents;
+                        components.mEntries.push_back(entry);
+                    }
+                }
 
-        for (const std::shared_ptr<ItemDefinition> &definition: owner.getItemDefinitions().getAll()) {
-            if (translated && ItemNetworkIdTable::find(definition->getIdentifier()) != nullptr)
-                continue;
+                for (const std::shared_ptr<ItemDefinition> &definition: owner.getItemDefinitions().getAll()) {
+                    if (translated && ItemNetworkIdTable::find(definition->getIdentifier()) != nullptr)
+                        continue;
 
-            ItemComponentEntry entry;
-            entry.mIdentifier = definition->getIdentifier();
-            entry.mRuntimeId = (int16_t) context.toNetworkItemId(definition->getRuntimeId());
-            entry.mComponentBased = definition->isComponentBased();
+                    ItemComponentEntry entry;
+                    entry.mIdentifier = definition->getIdentifier();
+                    entry.mRuntimeId = (int16_t) context.toNetworkItemId(definition->getRuntimeId());
+                    entry.mComponentBased = definition->isComponentBased();
 
-            const ItemNetworkIdEntry *source = ItemNetworkIdTable::find(definition->getIdentifier());
-            entry.mItemVersion = source != nullptr ? source->mVersion : (definition->isComponentBased() ? 1 : 0);
+                    const ItemNetworkIdEntry *source = ItemNetworkIdTable::find(definition->getIdentifier());
+                    entry.mItemVersion = source != nullptr ? source->mVersion
+                                                           : (definition->isComponentBased() ? 1 : 0);
 
-            entry.mComponentData = definition->getComponentData();
-            components.mEntries.push_back(entry);
-        }
+                    entry.mComponentData = definition->getComponentData();
+                    components.mEntries.push_back(entry);
+                }
 
-        BinaryStream stream;
-        components.writeWithHeader(stream, context);
-        return stream.getBuffer();
-    });
+                BinaryStream stream;
+                components.writeWithHeader(stream, context);
+                return stream.getBuffer();
+            });
 }
 
 void LoginHandler::sendActorIdentifiers(ServerNetworkHandler &owner, ServerPlayer &player) {
     sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::ActorIdentifiers,
                           [](const PacketCodecContext &context) {
-        AvailableActorIdentifiersPacket identifiers;
-        identifiers.mIdentifiers = Tag::ofCompound();
+                              AvailableActorIdentifiersPacket identifiers;
+                              identifiers.mIdentifiers = Tag::ofCompound();
 
-        Tag idlist = Tag::ofList(Tag::Type::Compound);
-        int32_t rid = 1;
+                              Tag idlist = Tag::ofList(Tag::Type::Compound);
+                              int32_t rid = 1;
 
-        const char *const *vanillaIds = VanillaActorTable::getIdentifiers();
-        for (size_t index = 0; index < VanillaActorTable::getCount(); ++index) {
-            Tag entry = Tag::ofCompound();
-            entry.putString("bid", "");
-            entry.putByte("hasspawnegg", 0);
-            entry.putString("id", vanillaIds[index]);
-            entry.putInt("rid", rid++);
-            entry.putByte("summonable", 1);
-            entry.putByte("experimental", 0);
-            idlist.addToList(entry);
-        }
+                              const char *const *vanillaIds = VanillaActorTable::getIdentifiers();
+                              for (size_t index = 0; index < VanillaActorTable::getCount(); ++index) {
+                                  Tag entry = Tag::ofCompound();
+                                  entry.putString("bid", "");
+                                  entry.putByte("hasspawnegg", 0);
+                                  entry.putString("id", vanillaIds[index]);
+                                  entry.putInt("rid", rid++);
+                                  entry.putByte("summonable", 1);
+                                  entry.putByte("experimental", 0);
+                                  idlist.addToList(entry);
+                              }
 
-        for (const CustomActorDefinition &actor: CustomContentRegistry::getInstance().getActors()) {
-            Tag entry = Tag::ofCompound();
-            entry.putString("bid", "");
-            entry.putByte("hasspawnegg", actor.mIsSpawnable ? 1 : 0);
-            entry.putString("id", actor.mIdentifier);
-            entry.putInt("rid", rid++);
-            entry.putByte("summonable", actor.mIsSummonable ? 1 : 0);
-            entry.putByte("experimental", actor.mIsExperimental ? 1 : 0);
-            idlist.addToList(entry);
-        }
-        identifiers.mIdentifiers.put("idlist", idlist);
-        return encodePacket(identifiers, context);
-    });
+                              for (const CustomActorDefinition &actor:
+                                   CustomContentRegistry::getInstance().getActors()) {
+                                  Tag entry = Tag::ofCompound();
+                                  entry.putString("bid", "");
+                                  entry.putByte("hasspawnegg", actor.mIsSpawnable ? 1 : 0);
+                                  entry.putString("id", actor.mIdentifier);
+                                  entry.putInt("rid", rid++);
+                                  entry.putByte("summonable", actor.mIsSummonable ? 1 : 0);
+                                  entry.putByte("experimental", actor.mIsExperimental ? 1 : 0);
+                                  idlist.addToList(entry);
+                              }
+                              identifiers.mIdentifiers.put("idlist", idlist);
+                              return encodePacket(identifiers, context);
+                          });
 
     const CustomContentRegistry &custom = CustomContentRegistry::getInstance();
     for (const auto &entry: EntityDefinitions::getAllProperties()) {
@@ -1015,29 +1016,30 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
 }
 
 void LoginHandler::sendCraftingData(ServerNetworkHandler &owner, ServerPlayer &player) {
-    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::CraftingData,
-                          [&owner](const PacketCodecContext &context) {
-        buildCraftingData(owner);
+    sendSharedLoginPacket(
+            owner, player, ServerNetworkHandler::SharedLoginPacket::CraftingData,
+            [&owner](const PacketCodecContext &context) {
+                buildCraftingData(owner);
 
-        const int protocol = context.getCodec().getProtocolVersion();
-        const std::unordered_map<int32_t, std::string> &vanillaIds = owner.getVanillaRecipeIdsMutable();
-        auto unknown = [&](const CraftingRecipeEntry &recipe) {
-            const auto it = vanillaIds.find(recipe.mRecipeNetId);
-            return it != vanillaIds.end() && !CraftingRecipeTable::isKnownBy(it->second, protocol);
-        };
+                const int protocol = context.getCodec().getProtocolVersion();
+                const std::unordered_map<int32_t, std::string> &vanillaIds = owner.getVanillaRecipeIdsMutable();
+                auto unknown = [&](const CraftingRecipeEntry &recipe) {
+                    const auto it = vanillaIds.find(recipe.mRecipeNetId);
+                    return it != vanillaIds.end() && !CraftingRecipeTable::isKnownBy(it->second, protocol);
+                };
 
-        CraftingDataPacket crafting = owner.getCachedCraftingData();
-        crafting.mShapedRecipes.erase(std::remove_if(crafting.mShapedRecipes.begin(),
-                                                     crafting.mShapedRecipes.end(), unknown),
-                                      crafting.mShapedRecipes.end());
-        crafting.mShapelessRecipes.erase(std::remove_if(crafting.mShapelessRecipes.begin(),
-                                                        crafting.mShapelessRecipes.end(), unknown),
-                                         crafting.mShapelessRecipes.end());
+                CraftingDataPacket crafting = owner.getCachedCraftingData();
+                crafting.mShapedRecipes.erase(
+                        std::remove_if(crafting.mShapedRecipes.begin(), crafting.mShapedRecipes.end(), unknown),
+                        crafting.mShapedRecipes.end());
+                crafting.mShapelessRecipes.erase(
+                        std::remove_if(crafting.mShapelessRecipes.begin(), crafting.mShapelessRecipes.end(), unknown),
+                        crafting.mShapelessRecipes.end());
 
-        BinaryStream stream;
-        crafting.writeWithHeader(stream, context);
-        return stream.getBuffer();
-    });
+                BinaryStream stream;
+                crafting.writeWithHeader(stream, context);
+                return stream.getBuffer();
+            });
 }
 
 namespace {
@@ -1197,42 +1199,43 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
 void LoginHandler::sendCreativeContent(ServerNetworkHandler &owner, ServerPlayer &player) {
     sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::CreativeContent,
                           [&owner](const PacketCodecContext &context) {
-        buildCreativeContent(owner);
+                              buildCreativeContent(owner);
 
-        const int protocol = context.getCodec().getProtocolVersion();
-        const std::vector<CreativeItemData> &items = owner.getCreativeItemsMutable();
-        const std::vector<int32_t> &sources = owner.getCreativeSourceIndicesMutable();
-        const std::vector<CreativeItemGroup> &groups = owner.getCreativeGroups();
+                              const int protocol = context.getCodec().getProtocolVersion();
+                              const std::vector<CreativeItemData> &items = owner.getCreativeItemsMutable();
+                              const std::vector<int32_t> &sources = owner.getCreativeSourceIndicesMutable();
+                              const std::vector<CreativeItemGroup> &groups = owner.getCreativeGroups();
 
-        CreativeContentPacket creative;
-        std::vector<bool> groupUsed(groups.size(), false);
-        for (size_t index = 0; index < items.size(); ++index) {
-            if (sources[index] >= 0 && !CreativeContentTable::isKnownBy((size_t) sources[index], protocol))
-                continue;
+                              CreativeContentPacket creative;
+                              std::vector<bool> groupUsed(groups.size(), false);
+                              for (size_t index = 0; index < items.size(); ++index) {
+                                  if (sources[index] >= 0
+                                      && !CreativeContentTable::isKnownBy((size_t) sources[index], protocol))
+                                      continue;
 
-            creative.mItems.push_back(items[index]);
-            if (items[index].mGroupIndex >= 0)
-                groupUsed[items[index].mGroupIndex] = true;
-        }
+                                  creative.mItems.push_back(items[index]);
+                                  if (items[index].mGroupIndex >= 0)
+                                      groupUsed[items[index].mGroupIndex] = true;
+                              }
 
-        std::vector<int32_t> groupRemap(groups.size(), -1);
-        for (size_t index = 0; index < groups.size(); ++index) {
-            if (!groupUsed[index])
-                continue;
+                              std::vector<int32_t> groupRemap(groups.size(), -1);
+                              for (size_t index = 0; index < groups.size(); ++index) {
+                                  if (!groupUsed[index])
+                                      continue;
 
-            groupRemap[index] = (int32_t) creative.mGroups.size();
-            creative.mGroups.push_back(groups[index]);
-        }
+                                  groupRemap[index] = (int32_t) creative.mGroups.size();
+                                  creative.mGroups.push_back(groups[index]);
+                              }
 
-        for (CreativeItemData &item: creative.mItems) {
-            if (item.mGroupIndex >= 0)
-                item.mGroupIndex = groupRemap[item.mGroupIndex];
-        }
+                              for (CreativeItemData &item: creative.mItems) {
+                                  if (item.mGroupIndex >= 0)
+                                      item.mGroupIndex = groupRemap[item.mGroupIndex];
+                              }
 
-        BinaryStream stream;
-        creative.writeWithHeader(stream, context);
-        return stream.getBuffer();
-    });
+                              BinaryStream stream;
+                              creative.writeWithHeader(stream, context);
+                              return stream.getBuffer();
+                          });
 }
 
 void LoginHandler::sendAvailableCommands(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -1351,5 +1354,4 @@ void LoginHandler::checkTerrainReady(ServerNetworkHandler &owner, ServerPlayer &
     PlayStatusPacket spawn;
     spawn.mStatus = PlayStatusPacket::Status::PlayerSpawn;
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), spawn, owner.getCodecContext());
-
 }

@@ -7,12 +7,7 @@
 // float spline extrapolating along the end derivatives past its points, like the game (sub_1471C1360)
 class TerrainSpline {
 public:
-    enum class Coordinate : uint8_t {
-        Continents,
-        Erosion,
-        RidgesFolded,
-        Ridges
-    };
+    enum class Coordinate : uint8_t { Continents, Erosion, RidgesFolded, Ridges };
 
     // the climate a spline reads, in this order
     struct Climate {

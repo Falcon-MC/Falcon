@@ -134,9 +134,9 @@ void MobDweller::_updateVillage(ServerNetworkHandler &owner, MobActor &mob) {
     if (mCanFindPoi)
         villages.requestScan(id);
 
-    const int32_t roll = mUpdateIntervalVariant > 0
-                         ? std::uniform_int_distribution<int32_t>(0, mUpdateIntervalVariant - 1)(dwellerRandom())
-                         : 0;
+    const int32_t roll = mUpdateIntervalVariant > 0 ? std::uniform_int_distribution<int32_t>(
+                                                              0, mUpdateIntervalVariant - 1)(dwellerRandom())
+                                                    : 0;
     mUpdateCountdown = mUpdateIntervalBase + roll;
 
     // the game saves the dweller's village with the actor; a reloaded dweller finds it again here: joining anew

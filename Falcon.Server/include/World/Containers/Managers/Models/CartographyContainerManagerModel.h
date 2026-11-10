@@ -2,8 +2,7 @@
 
 #include "World/Containers/Managers/Models/ContainerManagerModel.h"
 
-class CartographyContainerScreenValidator : public ContainerScreenValidatorBase {
-};
+class CartographyContainerScreenValidator : public ContainerScreenValidatorBase {};
 
 class CartographyContainerManagerModel : public ContainerManagerModel {
 public:

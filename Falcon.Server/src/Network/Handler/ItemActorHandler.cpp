@@ -73,8 +73,8 @@ namespace {
         if (item.isAir() || item.mDefinition == nullptr)
             return false;
 
-        const FireResistantItemComponent *component = ItemDataTable::getComponents(
-                item.mDefinition->getIdentifier()).get<FireResistantItemComponent>();
+        const FireResistantItemComponent *component =
+                ItemDataTable::getComponents(item.mDefinition->getIdentifier()).get<FireResistantItemComponent>();
         return component != nullptr && component->isFireResistant();
     }
 
@@ -116,8 +116,8 @@ namespace {
             return;
 
         AddItemActorPacket add;
-    add.mUniqueActorId = actor.getUniqueId();
-    add.mRuntimeActorId = actor.getRuntimeId();
+        add.mUniqueActorId = actor.getUniqueId();
+        add.mRuntimeActorId = actor.getRuntimeId();
         add.mItemInHand = actor.getItem();
         add.mPosition = actor.getPosition();
         add.mMotion = actor.getMotion();
@@ -147,7 +147,7 @@ namespace {
 
     void broadcastItemActorMove(ServerNetworkHandler &owner, const ItemActor &actor, bool teleported = false) {
         MoveActorAbsolutePacket move;
-    move.mRuntimeActorId = (int64_t) actor.getRuntimeId();
+        move.mRuntimeActorId = (int64_t) actor.getRuntimeId();
         move.mPosition = actor.getPosition();
         move.mRotation = actor.getRotation();
         move.mOnGround = actor.isOnGround();
@@ -162,7 +162,7 @@ namespace {
 
     void broadcastItemActorRemove(ServerNetworkHandler &owner, const ItemActor &actor) {
         RemoveActorPacket remove;
-    remove.mUniqueActorId = actor.getUniqueId();
+        remove.mUniqueActorId = actor.getUniqueId();
 
         for (auto &entry: owner.getPlayers()) {
             if (entry.second.isSpawned() && entry.second.sharesLevelWith(actor))
@@ -174,8 +174,8 @@ namespace {
         const Vector3f &position = actor.getPosition();
 
         return owner.getLevelFor(actor).isSolidAt((int32_t) std::floor(position.x),
-                                          (int32_t) std::floor(position.y - ITEM_GROUND_PROBE_DEPTH),
-                                          (int32_t) std::floor(position.z));
+                                                  (int32_t) std::floor(position.y - ITEM_GROUND_PROBE_DEPTH),
+                                                  (int32_t) std::floor(position.z));
     }
 
     // top an item rests on in a solid cell: a snow layer's look, the cell top for other blocks
@@ -414,9 +414,9 @@ void ItemActorHandler::teleport(ServerNetworkHandler &owner, Level &level, ItemA
 
     broadcastItemActorRemove(owner, item);
     std::vector<std::unique_ptr<ItemActor>> &actors = owner.getItemEntities();
-    actors.erase(std::remove_if(actors.begin(), actors.end(), [&item](const std::unique_ptr<ItemActor> &entry) {
-        return entry.get() == &item;
-    }), actors.end());
+    actors.erase(std::remove_if(actors.begin(), actors.end(),
+                                [&item](const std::unique_ptr<ItemActor> &entry) { return entry.get() == &item; }),
+                 actors.end());
     level.releaseChunkIfUnused(chunkX, chunkZ);
 }
 
@@ -492,8 +492,8 @@ void ItemActorHandler::saveItemsInChunk(ServerNetworkHandler &owner, Level &leve
     for (auto it = actors.begin(); it != actors.end();) {
         ItemActor &actor = **it;
         const Vector3f &position = actor.getPosition();
-        if (actor.isRemoved() || !actor.isIn(level)
-            || ((int32_t) std::floor(position.x) >> 4) != chunkX || ((int32_t) std::floor(position.z) >> 4) != chunkZ) {
+        if (actor.isRemoved() || !actor.isIn(level) || ((int32_t) std::floor(position.x) >> 4) != chunkX
+            || ((int32_t) std::floor(position.z) >> 4) != chunkZ) {
             ++it;
             continue;
         }

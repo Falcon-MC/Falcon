@@ -31,9 +31,8 @@ namespace {
     const char *const TAG_INVENTORY = "EquippableItems";
     const char *const TAG_CHEST_ITEMS = "ChestItems";
     const char *const SLOT_NAMES[MobEquipment::SLOT_COUNT] = {
-            "slot.weapon.mainhand", "slot.weapon.offhand", "slot.armor.head", "slot.armor.chest", "slot.armor.legs",
-            "slot.armor.feet", "slot.armor.body"
-    };
+            "slot.weapon.mainhand", "slot.weapon.offhand", "slot.armor.head", "slot.armor.chest",
+            "slot.armor.legs",      "slot.armor.feet",     "slot.armor.body"};
 
     const ItemStack &emptyItem() {
         static const ItemStack air = ItemStack::air();
@@ -188,9 +187,7 @@ int MobEquipment::_slotFor(const ItemStack &item) const {
 }
 
 bool MobEquipment::_isEmpty() const {
-    return std::all_of(mSlots.begin(), mSlots.end(), [](const ItemStack &item) {
-        return item.isAir();
-    });
+    return std::all_of(mSlots.begin(), mSlots.end(), [](const ItemStack &item) { return item.isAir(); });
 }
 
 void MobEquipment::sendTo(ServerNetworkHandler &owner, const ServerPlayer &player, const Actor &actor) const {

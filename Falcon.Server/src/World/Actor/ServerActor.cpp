@@ -83,9 +83,9 @@ namespace {
                                         actor.getFloatProperty(descriptor.mName, descriptor.mDefaultFloat));
                     break;
                 case ActorPropertyDescription::Type::Bool:
-                    properties.putByte(descriptor.mName,
-                                       actor.getIntProperty(descriptor.mName, descriptor.mDefaultBool ? 1 : 0) != 0
-                                       ? 1 : 0);
+                    properties.putByte(
+                            descriptor.mName,
+                            actor.getIntProperty(descriptor.mName, descriptor.mDefaultBool ? 1 : 0) != 0 ? 1 : 0);
                     break;
                 case ActorPropertyDescription::Type::Enum: {
                     const int32_t index = actor.getIntProperty(descriptor.mName, descriptor.mDefaultInt);
@@ -120,7 +120,8 @@ namespace {
                     actor.setIntProperty(descriptor.mName, properties.getByte(descriptor.mName, 0) != 0 ? 1 : 0);
                     break;
                 case ActorPropertyDescription::Type::Enum: {
-                    const int32_t index = descriptor.findEnumIndex(properties.getString(descriptor.mName, std::string()));
+                    const int32_t index = descriptor.findEnumIndex(
+                            properties.getString(descriptor.mName, std::string()));
                     if (index >= 0)
                         actor.setIntProperty(descriptor.mName, index);
                     break;
@@ -163,8 +164,8 @@ bool ServerActor::needsMovementSync() const {
     const Vector3f rotation = getRotation();
     return std::fabs(position.x - mSyncedPosition.x) > SYNC_POSITION_EPSILON
            || std::fabs(position.y - mSyncedPosition.y) > SYNC_POSITION_EPSILON
-           || std::fabs(position.z - mSyncedPosition.z) > SYNC_POSITION_EPSILON
-           || rotation.x != mSyncedRotation.x || rotation.y != mSyncedRotation.y || rotation.z != mSyncedRotation.z;
+           || std::fabs(position.z - mSyncedPosition.z) > SYNC_POSITION_EPSILON || rotation.x != mSyncedRotation.x
+           || rotation.y != mSyncedRotation.y || rotation.z != mSyncedRotation.z;
 }
 
 void ServerActor::markMovementSynced() {
@@ -197,8 +198,9 @@ void ServerActor::tickFire(ServerNetworkHandler &owner) {
 
 bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel) {
     ActorDamageSource source;
-    source.mDeathMessageKey = attacker == nullptr ? "death.attack.generic"
-                                                  : attacker->isPlayer() ? "death.attack.player" : "death.attack.mob";
+    source.mDeathMessageKey = attacker == nullptr    ? "death.attack.generic"
+                              : attacker->isPlayer() ? "death.attack.player"
+                                                     : "death.attack.mob";
     source.mAttacker = attacker;
     return hurt(owner, amount, source, lootingLevel);
 }
@@ -270,9 +272,9 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     if (getHealth() <= 0.0f) {
         int32_t looting = lootingLevel;
         if (looting < 0) {
-            looting = source != nullptr
-                      ? ItemEnchantments::getLevel(source->getInventory().getItemInHand(), EnchantmentIds::LOOTING)
-                      : 0;
+            looting = source != nullptr ? ItemEnchantments::getLevel(source->getInventory().getItemInHand(),
+                                                                     EnchantmentIds::LOOTING)
+                                        : 0;
         }
         kill(owner, source, looting);
     }
@@ -329,10 +331,9 @@ void ServerActor::initializeProperties() {
         const bool computed = !descriptor.mDefaultExpression.empty();
         if (descriptor.mType == ActorPropertyDescription::Type::Float) {
             if (!hasFloatProperty(descriptor.mName))
-                setFloatProperty(descriptor.mName, computed
-                                                   ? (float) Molang::evaluate(descriptor.mDefaultExpression,
-                                                                              *this).mNumber
-                                                   : descriptor.mDefaultFloat);
+                setFloatProperty(descriptor.mName,
+                                 computed ? (float) Molang::evaluate(descriptor.mDefaultExpression, *this).mNumber
+                                          : descriptor.mDefaultFloat);
             continue;
         }
 
@@ -438,21 +439,18 @@ void ServerActor::loadNbt(const Tag &data) {
     if (data.contains("UniqueID"))
         setUniqueId(data.getLong("UniqueID"));
 
-    mPosition = Vector3f(listValue(data, "Pos", 0, mPosition.x),
-                         listValue(data, "Pos", 1, mPosition.y),
+    mPosition = Vector3f(listValue(data, "Pos", 0, mPosition.x), listValue(data, "Pos", 1, mPosition.y),
                          listValue(data, "Pos", 2, mPosition.z));
 
     if (data.contains(FalconDataVersion::TAG) && !data.contains("Attributes")) {
-        mRotation = Vector3f(listValue(data, "Rotation", 0, 0.0f),
-                             listValue(data, "Rotation", 1, 0.0f),
+        mRotation = Vector3f(listValue(data, "Rotation", 0, 0.0f), listValue(data, "Rotation", 1, 0.0f),
                              listValue(data, "Rotation", 2, 0.0f));
     } else {
         const float yaw = listValue(data, "Rotation", 0, 0.0f);
         mRotation = Vector3f(listValue(data, "Rotation", 1, 0.0f), yaw, yaw);
     }
 
-    mMotion = Vector3f(listValue(data, "Motion", 0, 0.0f),
-                       listValue(data, "Motion", 1, 0.0f),
+    mMotion = Vector3f(listValue(data, "Motion", 0, 0.0f), listValue(data, "Motion", 1, 0.0f),
                        listValue(data, "Motion", 2, 0.0f));
 
     const Tag *attributes = data.get("Attributes");

@@ -23,7 +23,7 @@ namespace {
 
 std::vector<StructureMarkers::Marker> StructureMarkers::inGameOrder(const std::vector<Marker> &markers) {
     std::vector<Marker> ordered;
-    for (const Marker &marker : markers) {
+    for (const Marker &marker: markers) {
         // a new key goes in front of its bucket, and an empty bucket opens at the end of the list
         auto position = ordered.begin();
         while (position != ordered.end() && bucketOf(*position) != bucketOf(marker))

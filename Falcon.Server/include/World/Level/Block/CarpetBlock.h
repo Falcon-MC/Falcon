@@ -6,9 +6,7 @@
 
 class CarpetBlock final : public Block {
 public:
-    explicit CarpetBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit CarpetBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

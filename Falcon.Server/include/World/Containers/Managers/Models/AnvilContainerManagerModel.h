@@ -2,8 +2,7 @@
 
 #include "World/Containers/Managers/Models/ContainerManagerModel.h"
 
-class AnvilContainerScreenValidator : public ContainerScreenValidatorBase {
-};
+class AnvilContainerScreenValidator : public ContainerScreenValidatorBase {};
 
 class AnvilContainerManagerModel : public ContainerManagerModel {
 public:

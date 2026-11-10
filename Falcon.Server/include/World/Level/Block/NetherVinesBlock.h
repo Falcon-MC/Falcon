@@ -4,8 +4,7 @@
 
 class NetherVinesBlock : public Block {
 public:
-    explicit NetherVinesBlock(const Block &block) : Block(block) {
-    }
+    explicit NetherVinesBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

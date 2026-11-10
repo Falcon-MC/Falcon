@@ -151,8 +151,7 @@ int64_t BlockTickingQueue::getColumnTick(int32_t chunkX, int32_t chunkZ) const {
     return mRandomClock ? 0 : mTick;
 }
 
-const std::vector<BlockTickingQueue::Entry> *BlockTickingQueue::getColumnEntries(int32_t chunkX,
-                                                                                int32_t chunkZ) const {
+const std::vector<BlockTickingQueue::Entry> *BlockTickingQueue::getColumnEntries(int32_t chunkX, int32_t chunkZ) const {
     auto found = mQueues.find(column(chunkX, chunkZ));
     return found == mQueues.end() || found->second.heap.empty() ? nullptr : &found->second.heap;
 }

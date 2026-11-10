@@ -13,13 +13,7 @@ class ServerPlayer;
 
 class BucketItem {
 public:
-    enum class Content {
-        Empty,
-        Water,
-        Lava,
-        PowderSnow,
-        None
-    };
+    enum class Content { Empty, Water, Lava, PowderSnow, None };
 
     static Content getContent(const ItemStack &item);
 

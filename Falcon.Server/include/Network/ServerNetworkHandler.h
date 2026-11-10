@@ -89,7 +89,9 @@ public:
     ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
                          TransportLayer transport = TransportLayer::NetherNet);
 
-    bool isTransportReady() const { return mNetworkHandler != nullptr; }
+    bool isTransportReady() const {
+        return mNetworkHandler != nullptr;
+    }
 
     ~ServerNetworkHandler() override;
 
@@ -108,11 +110,17 @@ public:
 
     void setProperties(const PropertiesSettings &properties);
 
-    const PropertiesSettings &getProperties() const { return mProperties; }
+    const PropertiesSettings &getProperties() const {
+        return mProperties;
+    }
 
-    int getActivePlayerCount() const { return (int) mNetworkHandler->getConnectionCount(); }
+    int getActivePlayerCount() const {
+        return (int) mNetworkHandler->getConnectionCount();
+    }
 
-    int64_t getCurrentTick() const { return mCurrentTick; }
+    int64_t getCurrentTick() const {
+        return mCurrentTick;
+    }
 
     // a player is still waiting for its spawn chunks: the others' streaming makes way
     bool isJoinBurst() const {
@@ -129,13 +137,21 @@ public:
 
     double getMillisecondsPerTick() const;
 
-    Profiler &getProfiler() { return mProfiler; }
+    Profiler &getProfiler() {
+        return mProfiler;
+    }
 
-    EventBus &getEventBus() { return mEventBus; }
+    EventBus &getEventBus() {
+        return mEventBus;
+    }
 
-    ScriptEngine &getScriptEngine() { return mScriptEngine; }
+    ScriptEngine &getScriptEngine() {
+        return mScriptEngine;
+    }
 
-    PluginManager &getPluginManager() { return *mPluginManager; }
+    PluginManager &getPluginManager() {
+        return *mPluginManager;
+    }
 
     // the same bytes for every player of a protocol: encoded and compressed once
     enum class SharedLoginPacket : int {
@@ -160,26 +176,36 @@ public:
 
     double getPeakMillisecondsPerTick() const;
 
-    int getMaxPlayers() const { return mMaxPlayers; }
+    int getMaxPlayers() const {
+        return mMaxPlayers;
+    }
 
-    NetworkHandler &getNetworkHandler() { return *mNetworkHandler; }
+    NetworkHandler &getNetworkHandler() {
+        return *mNetworkHandler;
+    }
 
     // overworld of the `level-name` world
-    Level &getLevel() { return mWorlds.getDefault().getOverworld(); }
+    Level &getLevel() {
+        return mWorlds.getDefault().getOverworld();
+    }
 
     // default world only: code holding an actor or a level uses getLevelFor or getWorldOf
     Level &getDimension(DimensionType dimension);
 
     Level &getLevelFor(const Actor &actor);
 
-    WorldManager &getWorlds() { return mWorlds; }
+    WorldManager &getWorlds() {
+        return mWorlds;
+    }
 
     World &getWorldFor(const Actor &actor);
 
     World &getWorldOf(const Level &level);
 
     // null level (console sender): the default world
-    World &getWorldOf(const Level *level) { return level == nullptr ? mWorlds.getDefault() : getWorldOf(*level); }
+    World &getWorldOf(const Level *level) {
+        return level == nullptr ? mWorlds.getDefault() : getWorldOf(*level);
+    }
 
     std::vector<Level *> getLevels();
 
@@ -207,24 +233,32 @@ public:
 
     void onPlayerDimensionChangeAck(ServerPlayer &player);
 
-    std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> &getPlayers() { return mPlayers; }
+    std::unordered_map<NetworkIdentifier, ServerPlayer, NetworkIdentifier::Hasher> &getPlayers() {
+        return mPlayers;
+    }
 
     PlayerMovementRegistry &getPlayerMovementRegistry();
 
     void erasePlayer(const NetworkIdentifier &id);
 
-    std::unordered_map<int64_t, std::unique_ptr<ServerActor>> &getActors() { return mActors; }
+    std::unordered_map<int64_t, std::unique_ptr<ServerActor>> &getActors() {
+        return mActors;
+    }
 
     // index rebuilt at most once per tick: positions can lag one tick; callers check exact distances
-    template<typename Visitor>
+    template <typename Visitor>
     void forEachActorNear(const Vector3f &position, float radius, Visitor &&visit) {
         // a walk nested in a visitor (a collision query) keeps the index: a refresh clears the outer walk's buckets
         if (mActorIndexWalks == 0)
             _refreshActorIndex();
         struct WalkScope {
             int32_t &mWalks;
-            explicit WalkScope(int32_t &walks) : mWalks(walks) { ++mWalks; }
-            ~WalkScope() { --mWalks; }
+            explicit WalkScope(int32_t &walks) : mWalks(walks) {
+                ++mWalks;
+            }
+            ~WalkScope() {
+                --mWalks;
+            }
         } scope(mActorIndexWalks);
         const float reach = radius + ACTOR_INDEX_MARGIN;
         const int32_t minX = (int32_t) std::floor(position.x - reach) >> 4;
@@ -246,8 +280,7 @@ public:
     ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                             const std::function<void(ServerActor &)> &configure = nullptr);
 
-    ServerActor *spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position,
-                                float scale);
+    ServerActor *spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position, float scale);
 
     FallingBlock *spawnFallingBlock(Level &level, const BlockState &state, const Vector3f &position);
 
@@ -398,8 +431,7 @@ public:
     void playBlockSound(Level &level, const std::string &sound, const Vector3f &position, int32_t blockHash,
                         const std::string &actorType = "");
 
-    void playNamedSound(Level &level, const std::string &sound, const Vector3f &position, float volume,
-                        float pitch);
+    void playNamedSound(Level &level, const std::string &sound, const Vector3f &position, float volume, float pitch);
 
     void spawnItemActor(Level &level, const std::string &typeId, int32_t amount, const Vector3f &position);
 
@@ -466,18 +498,28 @@ public:
 
     void saveWorldDynamicProperties(bool checked = false);
 
-    std::vector<std::unique_ptr<ItemActor>> &getItemEntities() { return mItemEntities; }
+    std::vector<std::unique_ptr<ItemActor>> &getItemEntities() {
+        return mItemEntities;
+    }
 
-    uint64_t allocateRuntimeId() { return mNextRuntimeId++; }
+    uint64_t allocateRuntimeId() {
+        return mNextRuntimeId++;
+    }
 
     int64_t allocateActorUniqueId();
 
 
-    BlockDefinitionRegistry &getBlockDefinitions() { return mBlockDefinitions; }
+    BlockDefinitionRegistry &getBlockDefinitions() {
+        return mBlockDefinitions;
+    }
 
-    ItemDefinitionRegistry &getItemDefinitions() { return mItemDefinitions; }
+    ItemDefinitionRegistry &getItemDefinitions() {
+        return mItemDefinitions;
+    }
 
-    const PacketCodecContext &getCodecContext() const { return mCodecContext; }
+    const PacketCodecContext &getCodecContext() const {
+        return mCodecContext;
+    }
 
     // the current protocol's context until the connection picks one
     const PacketCodecContext &getCodecContext(const NetworkIdentifier &id);
@@ -498,7 +540,9 @@ public:
 
     void setPlayerOp(ServerPlayer &player, bool isOp);
 
-    OpList &getOpList() { return mOps; }
+    OpList &getOpList() {
+        return mOps;
+    }
 
     static constexpr const char *NOT_ALLOW_LISTED_MESSAGE = "disconnectionScreen.notAllowed";
     static constexpr const char *IDLE_MESSAGE = "disconnectionScreen.body.idleTooLong";
@@ -516,11 +560,17 @@ public:
         return mIpBanList;
     }
 
-    bool isAutoSaveEnabled() const { return mAutoSaveEnabled; }
+    bool isAutoSaveEnabled() const {
+        return mAutoSaveEnabled;
+    }
 
-    void setAutoSaveEnabled(bool enabled) { mAutoSaveEnabled = enabled; }
+    void setAutoSaveEnabled(bool enabled) {
+        mAutoSaveEnabled = enabled;
+    }
 
-    void setPluginsEnabled(bool enabled) { mPluginsEnabled = enabled; }
+    void setPluginsEnabled(bool enabled) {
+        mPluginsEnabled = enabled;
+    }
 
     unsigned short getBoundPort() const;
 
@@ -528,9 +578,13 @@ public:
 
     unsigned short getExtraSignalingPort() const;
 
-    bool isStopRequested() const { return mStopRequested; }
+    bool isStopRequested() const {
+        return mStopRequested;
+    }
 
-    void requestStop() { mStopRequested = true; }
+    void requestStop() {
+        mStopRequested = true;
+    }
 
     void setMaxPlayers(int maxPlayers);
 
@@ -589,25 +643,46 @@ public:
 
     void _sendInventory(ServerPlayer &player);
 
-    const std::vector<CreativeItemData> &getCreativeItems() { _buildCreativeContent(); return mCreativeItems; }
+    const std::vector<CreativeItemData> &getCreativeItems() {
+        _buildCreativeContent();
+        return mCreativeItems;
+    }
 
-    const std::vector<ItemStack> &getRecipeOutputs() { _buildCraftingData(); return mRecipeOutputs; }
+    const std::vector<ItemStack> &getRecipeOutputs() {
+        _buildCraftingData();
+        return mRecipeOutputs;
+    }
 
-    const std::vector<uint32_t> &getRecipeSourceIndices() { _buildCraftingData(); return mRecipeSourceIndices; }
+    const std::vector<uint32_t> &getRecipeSourceIndices() {
+        _buildCraftingData();
+        return mRecipeSourceIndices;
+    }
 
-    std::vector<CreativeItemData> &getCreativeItemsMutable() { return mCreativeItems; }
+    std::vector<CreativeItemData> &getCreativeItemsMutable() {
+        return mCreativeItems;
+    }
 
-    std::vector<ItemStack> &getRecipeOutputsMutable() { return mRecipeOutputs; }
+    std::vector<ItemStack> &getRecipeOutputsMutable() {
+        return mRecipeOutputs;
+    }
 
-    std::vector<uint32_t> &getRecipeSourceIndicesMutable() { return mRecipeSourceIndices; }
+    std::vector<uint32_t> &getRecipeSourceIndicesMutable() {
+        return mRecipeSourceIndices;
+    }
 
     // custom recipes absent
-    std::unordered_map<int32_t, std::string> &getVanillaRecipeIdsMutable() { return mVanillaRecipeIds; }
+    std::unordered_map<int32_t, std::string> &getVanillaRecipeIdsMutable() {
+        return mVanillaRecipeIds;
+    }
 
     // -1 for a custom item
-    std::vector<int32_t> &getCreativeSourceIndicesMutable() { return mCreativeSourceIndices; }
+    std::vector<int32_t> &getCreativeSourceIndicesMutable() {
+        return mCreativeSourceIndices;
+    }
 
-    CraftingDataPacket &getCachedCraftingData() { return mCachedCraftingData; }
+    CraftingDataPacket &getCachedCraftingData() {
+        return mCachedCraftingData;
+    }
 
     void _loadPlayerData(ServerPlayer &player);
 
@@ -654,11 +729,7 @@ public:
 
     bool _allowPacket(const NetworkIdentifier &id, RateLimitedPacket category);
 
-    enum class LoginGate {
-        Accept,
-        Ignore,
-        Reject
-    };
+    enum class LoginGate { Accept, Ignore, Reject };
 
     // a login packet out of step is rejected: no skipping auth, bans or the allowlist;
     // other packets before the game starts are ignored: vanilla clients send a few during login
@@ -673,17 +744,29 @@ public:
 
     void _rejectBadPacket(const NetworkIdentifier &id, const std::string &reason);
 
-    ResourcePackManager &getResourcePacks() { return mResourcePacks; }
+    ResourcePackManager &getResourcePacks() {
+        return mResourcePacks;
+    }
 
-    PingedCompatibleServer &getAnnouncement() { return mAnnouncement; }
+    PingedCompatibleServer &getAnnouncement() {
+        return mAnnouncement;
+    }
 
-    CommandMap &getCommands() { return mCommands; }
+    CommandMap &getCommands() {
+        return mCommands;
+    }
 
-    BiomeRegistry &getBiomes() { return mBiomes; }
+    BiomeRegistry &getBiomes() {
+        return mBiomes;
+    }
 
-    std::vector<CreativeItemGroup> &getCreativeGroups() { return mCreativeGroups; }
+    std::vector<CreativeItemGroup> &getCreativeGroups() {
+        return mCreativeGroups;
+    }
 
-    PlayerDataProvider &getPlayerDataProvider() { return mPlayerData; }
+    PlayerDataProvider &getPlayerDataProvider() {
+        return mPlayerData;
+    }
 
     void _registerVanillaDefinitions();
 
@@ -875,8 +958,11 @@ private:
     PropertiesSettings mProperties;
     static const int DEFAULT_VIEW_DISTANCE = 4;
     static const int MAX_VIEW_DISTANCE = 12;
+
 public:
-    unsigned getChunksPerTick() const { return CHUNKS_PER_TICK; }
+    unsigned getChunksPerTick() const {
+        return CHUNKS_PER_TICK;
+    }
 
 private:
     static const unsigned CHUNKS_PER_TICK = 32;
@@ -960,8 +1046,8 @@ private:
     std::unordered_map<std::string, DynamicPropertyValue> mWorldDynamicProperties;
     std::unordered_map<std::string, int64_t> mScoreboardIds;
     int64_t mNextScoreboardId = 1;
-    std::unordered_map<NetworkIdentifier, std::unordered_map<uint32_t, ModalFormCallback>,
-                       NetworkIdentifier::Hasher> mModalFormCallbacks;
+    std::unordered_map<NetworkIdentifier, std::unordered_map<uint32_t, ModalFormCallback>, NetworkIdentifier::Hasher>
+            mModalFormCallbacks;
     std::vector<std::unique_ptr<ItemActor>> mItemEntities;
     uint64_t mNextRuntimeId;
     int64_t mCurrentTick = 0;

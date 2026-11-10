@@ -14,18 +14,26 @@ struct BehaviorPack {
     std::vector<ScriptModuleDependency> mScriptModules;
     std::vector<std::string> mDependencyUuids;
 
-    bool hasScript() const { return !mScriptEntry.empty(); }
+    bool hasScript() const {
+        return !mScriptEntry.empty();
+    }
 
-    std::string scriptPath() const { return mPath + "/" + mScriptEntry; }
+    std::string scriptPath() const {
+        return mPath + "/" + mScriptEntry;
+    }
 };
 
 class BehaviorPackManager {
 public:
     void discover(const std::string &directory);
 
-    const std::vector<BehaviorPack> &getPacks() const { return mPacks; }
+    const std::vector<BehaviorPack> &getPacks() const {
+        return mPacks;
+    }
 
-    size_t getPackCount() const { return mPacks.size(); }
+    size_t getPackCount() const {
+        return mPacks.size();
+    }
 
     std::vector<std::string> getLoadedUuids() const;
 

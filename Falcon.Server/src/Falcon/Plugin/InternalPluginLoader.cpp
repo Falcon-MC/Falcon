@@ -22,8 +22,7 @@
 #include <windows.h>
 #endif
 
-extern "C" void FALCON_BUILD_GUARD() {
-}
+extern "C" void FALCON_BUILD_GUARD() {}
 
 namespace {
     bool gLoaded = false;
@@ -86,15 +85,17 @@ namespace {
 
 bool InternalPluginLoader::load(LoadedPlugin &plugin, ServerNetworkHandler &owner) {
     const std::string &name = plugin.mDescription.mName;
-    const std::string path = (std::filesystem::path(plugin.mDirectory)
-                              / NativeLibrary::fileName(plugin.mDescription.mMain)).string();
+    const std::string path =
+            (std::filesystem::path(plugin.mDirectory) / NativeLibrary::fileName(plugin.mDescription.mMain)).string();
     const InternalPluginBuild &server = serverBuild();
 
 #if defined(_WIN32)
     const std::string executable = runningExecutable();
     if (lstrcmpiA(executable.c_str(), EXECUTABLE_NAME) != 0) {
-        LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: internal plugins link against %s, but the server "
-                                     "runs as %s", name.c_str(), EXECUTABLE_NAME, executable.c_str());
+        LOG_ERROR(LogAreaID::Server,
+                  "Could not load plugin %s: internal plugins link against %s, but the server "
+                  "runs as %s",
+                  name.c_str(), EXECUTABLE_NAME, executable.c_str());
         return false;
     }
 #endif
@@ -103,9 +104,10 @@ bool InternalPluginLoader::load(LoadedPlugin &plugin, ServerNetworkHandler &owne
     std::string error;
     if (!openInert(plugin, path, error)) {
         discard(plugin);
-        LOG_ERROR(LogAreaID::Server, "Could not load plugin %s from %s: %s. Internal plugins must be built against "
-                                     "this exact server (Falcon %s, %s)", name.c_str(), path.c_str(), error.c_str(),
-                  describe(server).c_str(), server.mCompiler);
+        LOG_ERROR(LogAreaID::Server,
+                  "Could not load plugin %s from %s: %s. Internal plugins must be built against "
+                  "this exact server (Falcon %s, %s)",
+                  name.c_str(), path.c_str(), error.c_str(), describe(server).c_str(), server.mCompiler);
         return false;
     }
 
@@ -126,16 +128,19 @@ bool InternalPluginLoader::load(LoadedPlugin &plugin, ServerNetworkHandler &owne
     if (build == nullptr || !sameText(build->mCommitId, server.mCommitId)
         || !sameText(build->mBuildId, server.mBuildId)) {
         discard(plugin);
-        LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: it was built against Falcon %s, this server is "
-                                     "Falcon %s", name.c_str(), build == nullptr ? "unknown" : describe(*build).c_str(),
-                  describe(server).c_str());
+        LOG_ERROR(LogAreaID::Server,
+                  "Could not load plugin %s: it was built against Falcon %s, this server is "
+                  "Falcon %s",
+                  name.c_str(), build == nullptr ? "unknown" : describe(*build).c_str(), describe(server).c_str());
         return false;
     }
 
     if (!sameText(build->mCompiler, server.mCompiler)) {
         discard(plugin);
-        LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: it was compiled with %s, this server was compiled "
-                                     "with %s", name.c_str(), textOf(build->mCompiler), server.mCompiler);
+        LOG_ERROR(LogAreaID::Server,
+                  "Could not load plugin %s: it was compiled with %s, this server was compiled "
+                  "with %s",
+                  name.c_str(), textOf(build->mCompiler), server.mCompiler);
         return false;
     }
 

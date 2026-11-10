@@ -37,8 +37,8 @@ namespace {
                 "the ACME directory is not the production one by default");
         require(defaults.getSignalingAcmeChallenge() == "tls-alpn-01", "the default challenge is not tls-alpn-01");
         require(generated.find("signaling-acme-domain=\n") != std::string::npos
-                && generated.find("signaling-acme-email=\n") != std::string::npos
-                && generated.find("signaling-acme-challenge=tls-alpn-01\n") != std::string::npos,
+                        && generated.find("signaling-acme-email=\n") != std::string::npos
+                        && generated.find("signaling-acme-challenge=tls-alpn-01\n") != std::string::npos,
                 "generated properties omit the ACME settings");
     }
 
@@ -54,10 +54,13 @@ namespace {
         const std::string staging = "https://acme-staging-v02.api.letsencrypt.org/directory";
         auto issuing = settings(directory, "signaling-acme-domain=play.example.org\n"
                                            "signaling-acme-email=ops@example.org\n"
-                                           "signaling-acme-directory=" + staging + "\n"
-                                           "signaling-acme-challenge=http-01\n");
+                                           "signaling-acme-directory="
+                                                   + staging
+                                                   + "\n"
+                                                     "signaling-acme-challenge=http-01\n");
         require(issuing.getSignalingAcmeDomain() == "play.example.org"
-                && issuing.getSignalingAcmeEmail() == "ops@example.org", "ACME domain or email differs");
+                        && issuing.getSignalingAcmeEmail() == "ops@example.org",
+                "ACME domain or email differs");
         require(issuing.getSignalingAcmeDirectory() == staging, "the staging directory was not kept");
         require(issuing.getSignalingAcmeChallenge() == "http-01" && issuing.getInvalidProperties().empty(),
                 "http-01 was not accepted");
@@ -76,7 +79,8 @@ namespace {
 
 int main() {
     const auto directory = std::filesystem::temp_directory_path()
-            / ("falcon-signaling-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                           / ("falcon-signaling-"
+                              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     int result = 0;
     try {
         std::filesystem::create_directories(directory);

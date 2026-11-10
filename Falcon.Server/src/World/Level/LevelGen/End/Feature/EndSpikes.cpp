@@ -36,8 +36,8 @@ namespace {
 }
 
 AxisAlignedBB EndSpike::getCrystalArea() const {
-    return AxisAlignedBB((float) (mX - mRadius), 0.0f, (float) (mZ - mRadius), (float) (mX + mRadius),
-                         CRYSTAL_AREA_TOP, (float) (mZ + mRadius));
+    return AxisAlignedBB((float) (mX - mRadius), 0.0f, (float) (mZ - mRadius), (float) (mX + mRadius), CRYSTAL_AREA_TOP,
+                         (float) (mZ + mRadius));
 }
 
 Vector3i EndSpike::getTop() const {

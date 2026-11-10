@@ -8,11 +8,17 @@ public:
 
     using HostileActor::HostileActor;
 
-    ActorSize getSize() const override { return ActorSize{0.85f, 0.85f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.85f, 0.85f};
+    }
 
-    float getDefaultMaxHealth() const override { return 30.0f; }
+    float getDefaultMaxHealth() const override {
+        return 30.0f;
+    }
 
-    int getExperienceDrop() const override { return 10; }
+    int getExperienceDrop() const override {
+        return 10;
+    }
 
     // target data drives the laser: GuardianAttackGoal sets it only while charging
     bool syncsTargetData() const override {

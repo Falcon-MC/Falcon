@@ -27,7 +27,8 @@ namespace {
     void checkPalette() {
         std::string bytes;
         require(Gzip::decompress(std::string((const char *) FalconBlockPaletteData::kBlockPaletteNbt,
-                                            FalconBlockPaletteData::kBlockPaletteNbtSize), bytes),
+                                             FalconBlockPaletteData::kBlockPaletteNbtSize),
+                                 bytes),
                 "Could not decompress reference palette");
         ReadOnlyBinaryStream stream(bytes);
         EncodingSettings settings;
@@ -105,7 +106,8 @@ namespace {
 
 int main() {
     const auto directory = std::filesystem::temp_directory_path()
-            / ("falcon-startup-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                           / ("falcon-startup-test-"
+                              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         BiomeChunkGenDataRegistry::initialize();
         BlockPaletteRegistry::getInstance().initialize();
@@ -126,7 +128,8 @@ int main() {
             Tag data;
             require(storage.readLevelDat(data), "Missing level.dat");
             require(data.getInt("SpawnX") == generatedSpawn.x && data.getInt("SpawnY") == generatedSpawn.y
-                    && data.getInt("SpawnZ") == generatedSpawn.z, "Generated spawn was not persisted");
+                            && data.getInt("SpawnZ") == generatedSpawn.z,
+                    "Generated spawn was not persisted");
         }
         {
             Level reopened("World", 4, 67890);

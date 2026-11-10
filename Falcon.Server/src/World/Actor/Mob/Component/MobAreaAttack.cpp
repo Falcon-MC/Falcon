@@ -38,7 +38,8 @@ void MobAreaAttack::_read(const json::Value &component) {
     const json::Value *message = component.get("death_message_override");
     const char *causeKey = DamageCause::findDeathMessageKey(mSettings.mCause);
     mSettings.mDeathMessageKey = message != nullptr && message->isString() ? message->mString
-                                 : causeKey != nullptr ? causeKey : GENERIC_DEATH;
+                                 : causeKey != nullptr                     ? causeKey
+                                                                           : GENERIC_DEATH;
 
     const json::Value *useSelf = component.get("use_self_as_damage_source");
     mSettings.mSelfAsSource = useSelf != nullptr && useSelf->boolean(false);
@@ -95,9 +96,9 @@ void MobAreaAttack::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor &t
     }
 
     ActorDamageSource source = mSettings.mSelfAsSource
-                               ? ActorDamageSource::attack(mSettings.mDeathMessageKey, target.getName(), mob,
-                                                           mob.getName(), mob.getPosition())
-                               : ActorDamageSource::environment(mSettings.mDeathMessageKey, target.getName());
+                                       ? ActorDamageSource::attack(mSettings.mDeathMessageKey, target.getName(), mob,
+                                                                   mob.getName(), mob.getPosition())
+                                       : ActorDamageSource::environment(mSettings.mDeathMessageKey, target.getName());
     source.withCause(mSettings.mCause);
 
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&target)) {

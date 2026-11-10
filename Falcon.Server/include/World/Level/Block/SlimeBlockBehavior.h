@@ -4,11 +4,17 @@
 
 class SlimeBlockBehavior final : public BlockBehavior {
 public:
-    float getFrictionFactor() const override { return 0.8f; }
+    float getFrictionFactor() const override {
+        return 0.8f;
+    }
 
-    float getLandingBounce() const override { return 1.0f; }
+    float getLandingBounce() const override {
+        return 1.0f;
+    }
 
-    bool slowsWalking() const override { return true; }
+    bool slowsWalking() const override {
+        return true;
+    }
 
     bool onEntityLand(Actor &actor, float downwardVelocity) const override;
 

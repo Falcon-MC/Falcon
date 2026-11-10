@@ -34,11 +34,7 @@ public:
     void loadNbt(const Tag &data);
 
 private:
-    enum class SpringType : uint8_t {
-        Bouncy = 0,
-        Dampened = 1,
-        QuadDampened = 2
-    };
+    enum class SpringType : uint8_t { Bouncy = 0, Dampened = 1, QuadDampened = 2 };
 
     struct Preset {
         float mSoftDistance;

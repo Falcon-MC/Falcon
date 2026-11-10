@@ -78,16 +78,15 @@ namespace {
         return true;
     }
 
-    bool buildFadeInstruction(const std::vector<std::string> &arguments, size_t start,
-                              CameraFadeInstruction &fade) {
+    bool buildFadeInstruction(const std::vector<std::string> &arguments, size_t start, CameraFadeInstruction &fade) {
         for (size_t index = start; index < arguments.size();) {
             const std::string &keyword = arguments[index];
             if (keyword == "time") {
                 if (index + 3 >= arguments.size())
                     return false;
-                if (!parseFloat(arguments[index + 1], fade.mTimeData.mFadeInTime) ||
-                    !parseFloat(arguments[index + 2], fade.mTimeData.mWaitTime) ||
-                    !parseFloat(arguments[index + 3], fade.mTimeData.mFadeOutTime))
+                if (!parseFloat(arguments[index + 1], fade.mTimeData.mFadeInTime)
+                    || !parseFloat(arguments[index + 2], fade.mTimeData.mWaitTime)
+                    || !parseFloat(arguments[index + 3], fade.mTimeData.mFadeOutTime))
                     return false;
                 fade.mHasTimeData = true;
                 index += 4;
@@ -95,8 +94,8 @@ namespace {
                 if (index + 3 >= arguments.size())
                     return false;
                 float red = 0.0f, green = 0.0f, blue = 0.0f;
-                if (!parseFloat(arguments[index + 1], red) || !parseFloat(arguments[index + 2], green) ||
-                    !parseFloat(arguments[index + 3], blue))
+                if (!parseFloat(arguments[index + 1], red) || !parseFloat(arguments[index + 2], green)
+                    || !parseFloat(arguments[index + 3], blue))
                     return false;
                 fade.mColor.mRed = red / 255.0f;
                 fade.mColor.mGreen = green / 255.0f;
@@ -139,17 +138,17 @@ namespace {
             } else if (keyword == "pos") {
                 if (index + 3 >= arguments.size())
                     return false;
-                if (!parseRelativeFloat(arguments[index + 1], position.x, set.mPos.x) ||
-                    !parseRelativeFloat(arguments[index + 2], position.y, set.mPos.y) ||
-                    !parseRelativeFloat(arguments[index + 3], position.z, set.mPos.z))
+                if (!parseRelativeFloat(arguments[index + 1], position.x, set.mPos.x)
+                    || !parseRelativeFloat(arguments[index + 2], position.y, set.mPos.y)
+                    || !parseRelativeFloat(arguments[index + 3], position.z, set.mPos.z))
                     return false;
                 set.mHasPos = true;
                 index += 4;
             } else if (keyword == "rot") {
                 if (index + 2 >= arguments.size())
                     return false;
-                if (!parseRelativeFloat(arguments[index + 1], rotation.x, set.mRot.x) ||
-                    !parseRelativeFloat(arguments[index + 2], rotation.y, set.mRot.y))
+                if (!parseRelativeFloat(arguments[index + 1], rotation.x, set.mRot.x)
+                    || !parseRelativeFloat(arguments[index + 2], rotation.y, set.mRot.y))
                     return false;
                 set.mHasRot = true;
                 index += 3;
@@ -166,8 +165,8 @@ namespace {
 }
 
 CameraCommand::CameraCommand(ServerNetworkHandler &handler)
-        : Command("camera", "commands.camera.description",
-                  "/camera <target> <clear|fade|set> ..."), mHandler(handler) {}
+        : Command("camera", "commands.camera.description", "/camera <target> <clear|fade|set> ..."), mHandler(handler) {
+}
 
 std::vector<CommandOverloadData> CameraCommand::getOverloads() const {
     CommandParamData mode;

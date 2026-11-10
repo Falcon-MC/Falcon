@@ -37,19 +37,33 @@ public:
 
     LevelChunk(int32_t x, int32_t z);
 
-    int32_t getX() const { return mX; }
+    int32_t getX() const {
+        return mX;
+    }
 
-    int32_t getZ() const { return mZ; }
+    int32_t getZ() const {
+        return mZ;
+    }
 
-    bool isDirty() const { return mDirty; }
+    bool isDirty() const {
+        return mDirty;
+    }
 
-    void clearDirty() { mDirty = false; }
+    void clearDirty() {
+        mDirty = false;
+    }
 
-    void markDirty() { mDirty = true; }
+    void markDirty() {
+        mDirty = true;
+    }
 
-    bool isPopulated() const { return mPopulated; }
+    bool isPopulated() const {
+        return mPopulated;
+    }
 
-    void setPopulated(bool populated) { mPopulated = populated; }
+    void setPopulated(bool populated) {
+        mPopulated = populated;
+    }
 
     // in memory only, this session's TerrainCache order: see decorationHolds
     uint64_t getDecorationSequence() const {
@@ -77,7 +91,9 @@ public:
 
     void setBiome(uint32_t biomeId);
 
-    uint32_t getBiome() const { return mBiomeId; }
+    uint32_t getBiome() const {
+        return mBiomeId;
+    }
 
     void setBiomeAt(int x, int32_t y, int z, uint32_t biomeId);
 
@@ -130,7 +146,9 @@ public:
         return mSubChunks[index];
     }
 
-    static int subChunkIndexFor(int32_t y) { return (y - MIN_Y) >> 4; }
+    static int subChunkIndexFor(int32_t y) {
+        return (y - MIN_Y) >> 4;
+    }
 
     static const int32_t UNKNOWN_HEIGHT = -32768;
 
@@ -158,7 +176,9 @@ public:
         return mBlockLight.isAllocated();
     }
 
-    bool hasHeightmap() const { return !mHeightmap.empty(); }
+    bool hasHeightmap() const {
+        return !mHeightmap.empty();
+    }
 
     void clearSkyLight();
 
@@ -167,9 +187,13 @@ public:
     void compactBiomes();
     void setDimension(DimensionType dimension);
 
-    DimensionType getDimension() const { return mDimension; }
+    DimensionType getDimension() const {
+        return mDimension;
+    }
 
-    int getFirstNetworkSubChunk() const { return mFirstNetworkSubChunk; }
+    int getFirstNetworkSubChunk() const {
+        return mFirstNetworkSubChunk;
+    }
 
     // sections and light into one compressed buffer: most loaded chunks are only kept for viewers; any read
     // or write unpacks it; main thread only, a copy stays packed

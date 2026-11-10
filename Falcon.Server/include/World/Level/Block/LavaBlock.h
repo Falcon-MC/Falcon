@@ -33,6 +33,10 @@ public:
     // ultrawarm dimensions run lava three times faster
     int32_t getTickDelay(DimensionType dimension) const override;
 
-    const char *getBucketFillSound() const override { return LevelSoundEvent::BUCKET_FILL_LAVA; }
-    const char *getBucketEmptySound() const override { return LevelSoundEvent::BUCKET_EMPTY_LAVA; }
+    const char *getBucketFillSound() const override {
+        return LevelSoundEvent::BUCKET_FILL_LAVA;
+    }
+    const char *getBucketEmptySound() const override {
+        return LevelSoundEvent::BUCKET_EMPTY_LAVA;
+    }
 };

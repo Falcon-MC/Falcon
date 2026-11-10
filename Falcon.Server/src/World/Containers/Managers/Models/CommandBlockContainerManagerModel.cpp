@@ -20,8 +20,8 @@ bool CommandBlockContainerScreenValidator::isValid(ServerNetworkHandler &owner, 
 }
 
 CommandBlockContainerManagerModel::CommandBlockContainerManagerModel()
-        : ContainerManagerModel(ContainerType::CommandBlock,
-                                std::make_unique<CommandBlockContainerScreenValidator>()) {}
+        : ContainerManagerModel(ContainerType::CommandBlock, std::make_unique<CommandBlockContainerScreenValidator>()) {
+}
 
 bool CommandBlockContainerManagerModel::openWindow(ServerNetworkHandler &owner, ServerPlayer &player,
                                                    const Vector3i &position) {

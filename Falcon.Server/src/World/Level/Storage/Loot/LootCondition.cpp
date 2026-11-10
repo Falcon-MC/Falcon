@@ -56,16 +56,14 @@ std::vector<std::unique_ptr<LootCondition>> LootCondition::createAll(const json:
     return conditions;
 }
 
-bool LootCondition::testAll(const std::vector<std::unique_ptr<LootCondition>> &conditions,
-                            const LootContext &context) {
-    return std::all_of(conditions.begin(), conditions.end(), [&context](const std::unique_ptr<LootCondition> &condition) {
-        return condition->test(context);
-    });
+bool LootCondition::testAll(const std::vector<std::unique_ptr<LootCondition>> &conditions, const LootContext &context) {
+    return std::all_of(
+            conditions.begin(), conditions.end(),
+            [&context](const std::unique_ptr<LootCondition> &condition) { return condition->test(context); });
 }
 
 RandomChanceCondition::RandomChanceCondition(const json::Value &definition)
-        : mChance(definition.get("chance") == nullptr ? 1.0f : (float) definition.get("chance")->number(1.0)) {
-}
+        : mChance(definition.get("chance") == nullptr ? 1.0f : (float) definition.get("chance")->number(1.0)) {}
 
 bool RandomChanceCondition::test(const LootContext &context) const {
     return chance(context.mRandom, mChance);
@@ -74,9 +72,8 @@ bool RandomChanceCondition::test(const LootContext &context) const {
 RandomChanceWithLootingCondition::RandomChanceWithLootingCondition(const json::Value &definition)
         : mChance(definition.get("chance") == nullptr ? 1.0f : (float) definition.get("chance")->number(1.0)),
           mLootingMultiplier(definition.get("looting_multiplier") == nullptr
-                             ? 0.0f
-                             : (float) definition.get("looting_multiplier")->number(0.0)) {
-}
+                                     ? 0.0f
+                                     : (float) definition.get("looting_multiplier")->number(0.0)) {}
 
 bool RandomChanceWithLootingCondition::test(const LootContext &context) const {
     return chance(context.mRandom, mChance + mLootingMultiplier * (float) context.mLootingLevel);
@@ -101,15 +98,13 @@ bool RandomDifficultyChanceCondition::test(const LootContext &context) const {
 
 RandomRegionalDifficultyChanceCondition::RandomRegionalDifficultyChanceCondition(const json::Value &definition)
         : mMaxChance(definition.get("max_chance") == nullptr ? 1.0f
-                                                              : (float) definition.get("max_chance")->number(1.0)) {
-}
+                                                             : (float) definition.get("max_chance")->number(1.0)) {}
 
 bool RandomRegionalDifficultyChanceCondition::test(const LootContext &context) const {
     return chance(context.mRandom, mMaxChance * std::clamp(context.mRegionalDifficulty, 0.0f, 1.0f));
 }
 
-KilledByPlayerCondition::KilledByPlayerCondition(bool allowPets) : mAllowPets(allowPets) {
-}
+KilledByPlayerCondition::KilledByPlayerCondition(bool allowPets) : mAllowPets(allowPets) {}
 
 bool KilledByPlayerCondition::test(const LootContext &context) const {
     return context.mKilledByPlayer || (mAllowPets && context.mKilledByPet);
@@ -117,16 +112,14 @@ bool KilledByPlayerCondition::test(const LootContext &context) const {
 
 KilledByEntityCondition::KilledByEntityCondition(const json::Value &definition)
         : mEntityType(definition.get("entity_type") == nullptr ? std::string()
-                                                                : definition.get("entity_type")->string()) {
-}
+                                                               : definition.get("entity_type")->string()) {}
 
 bool KilledByEntityCondition::test(const LootContext &context) const {
     return context.mKillerIdentifier == mEntityType;
 }
 
 HasMarkVariantCondition::HasMarkVariantCondition(const json::Value &definition)
-        : mValue(definition.get("value") == nullptr ? 0 : definition.get("value")->integer(0)) {
-}
+        : mValue(definition.get("value") == nullptr ? 0 : definition.get("value")->integer(0)) {}
 
 bool HasMarkVariantCondition::test(const LootContext &context) const {
     return context.mMarkVariant == mValue;

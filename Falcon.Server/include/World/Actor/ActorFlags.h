@@ -88,9 +88,13 @@ public:
 
     bool get(ActorFlag flag) const;
 
-    int64_t getLowBits() const { return mLow; }
+    int64_t getLowBits() const {
+        return mLow;
+    }
 
-    int64_t getHighBits() const { return mHigh; }
+    int64_t getHighBits() const {
+        return mHigh;
+    }
 
     void applyPlayerDefaults();
 

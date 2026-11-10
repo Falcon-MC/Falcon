@@ -144,8 +144,7 @@ bool ObsidianBlock::lightPortalAtBase(Level &level, const Vector3i &position, Se
             return false;
         }
 
-        if (!(innerWidth <= maxSize - 2 && innerWidth >= 2
-              && innerHeight <= maxSize - 2 && innerHeight >= 3))
+        if (!(innerWidth <= maxSize - 2 && innerWidth >= 2 && innerHeight <= maxSize - 2 && innerHeight >= 3))
             return false;
 
         for (int32_t height = 0; height < innerHeight + 1; ++height) {
@@ -229,8 +228,7 @@ bool ObsidianBlock::lightPortalAtBase(Level &level, const Vector3i &position, Se
             return false;
         }
 
-        if (!(innerWidth <= maxSize - 2 && innerWidth >= 2
-              && innerHeight <= maxSize - 2 && innerHeight >= 3))
+        if (!(innerWidth <= maxSize - 2 && innerWidth >= 2 && innerHeight <= maxSize - 2 && innerHeight >= 3))
             return false;
 
         for (int32_t height = 0; height < innerHeight + 1; ++height) {

@@ -23,8 +23,7 @@ namespace {
         std::unique_lock<std::mutex> lock(gMutex);
 
         while (gRunning.load()) {
-            if (gSignal.wait_for(lock, std::chrono::seconds(intervalSeconds),
-                                 []() { return !gRunning.load(); }))
+            if (gSignal.wait_for(lock, std::chrono::seconds(intervalSeconds), []() { return !gRunning.load(); }))
                 return;
 
             // released while compacting: stop() can signal without blocking behind a long compaction

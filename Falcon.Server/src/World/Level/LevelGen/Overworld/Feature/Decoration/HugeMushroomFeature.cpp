@@ -38,8 +38,7 @@ ObjectGeneratorPtr HugeMushroomFeature::getGenerator(IRandom &random) {
 }
 
 bool HugeMushroomFeature::canSpawnHere(int32_t biomeId) const {
-    return DecorationSupport::isBiomeRoofed(biomeId)
-           || DecorationSupport::isBiomeSwamp(biomeId)
+    return DecorationSupport::isBiomeRoofed(biomeId) || DecorationSupport::isBiomeSwamp(biomeId)
            || DecorationSupport::isBiomeMooshroomIsland(biomeId);
 }
 

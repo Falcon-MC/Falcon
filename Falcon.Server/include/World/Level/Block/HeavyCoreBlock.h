@@ -6,8 +6,7 @@
 
 class HeavyCoreBlock final : public Block {
 public:
-    explicit HeavyCoreBlock(const Block &block) : Block(block) {
-    }
+    explicit HeavyCoreBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

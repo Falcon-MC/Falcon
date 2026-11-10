@@ -21,8 +21,7 @@ namespace {
     const char *const USE_SOUND = "ui.cartography_table.take_result";
 }
 
-EmptyMapItem::EmptyMapItem(const Item &base) : Item(base) {
-}
+EmptyMapItem::EmptyMapItem(const Item &base) : Item(base) {}
 
 bool EmptyMapItem::matches(const std::string &identifier) {
     return identifier == IDENTIFIER;
@@ -44,9 +43,7 @@ bool EmptyMapItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
     const Vector3f &position = player.getPosition();
     Level &mapLevel = MapItem::getMapLevel(owner, player);
     MapItemSavedData &data = mapLevel.getMaps().createMapSavedData(
-            [&owner]() {
-                return owner.allocateActorUniqueId();
-            },
+            [&owner]() { return owner.allocateActorUniqueId(); },
             Vector3f(std::floor(position.x), std::floor(position.y), std::floor(position.z)),
             Dimension::toId(player.getDimension()), (int8_t) scale);
     MapItem::setMapId(map, data);

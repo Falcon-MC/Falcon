@@ -4,11 +4,7 @@
 
 class BlockState;
 
-enum class LiquidMaterial : uint8_t {
-    None,
-    Water,
-    Lava
-};
+enum class LiquidMaterial : uint8_t { None, Water, Lava };
 
 // what spreading water does to the block in its way (BlockType +186, sub_149C3F9B0)
 enum class LiquidReaction : uint8_t {

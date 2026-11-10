@@ -14,14 +14,22 @@ namespace {
     const std::string MINECRAFT_PREFIX = "minecraft:";
 
     uint8_t faceBits(const std::string &name) {
-        if (name == "down") return 1u << 0;
-        if (name == "up") return 1u << 1;
-        if (name == "north") return 1u << 2;
-        if (name == "south") return 1u << 3;
-        if (name == "west") return 1u << 4;
-        if (name == "east") return 1u << 5;
-        if (name == "side") return 0x3Cu;
-        if (name == "all") return 0x3Fu;
+        if (name == "down")
+            return 1u << 0;
+        if (name == "up")
+            return 1u << 1;
+        if (name == "north")
+            return 1u << 2;
+        if (name == "south")
+            return 1u << 3;
+        if (name == "west")
+            return 1u << 4;
+        if (name == "east")
+            return 1u << 5;
+        if (name == "side")
+            return 0x3Cu;
+        if (name == "all")
+            return 0x3Fu;
         return 0;
     }
 

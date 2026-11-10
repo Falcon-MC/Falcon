@@ -103,9 +103,11 @@ namespace {
 
         for (int32_t dx = -RADIUS; dx <= RADIUS; dx++) {
             for (int32_t dz = -RADIUS; dz <= RADIUS; dz++) {
-                const float edge = (float) std::min(RADIUS - std::abs(dx), RADIUS - std::abs(dz)) / EDGE_CHANCE_DISTANCE;
-                const double chance = edge < 0.0f ? MIN_COLUMN_CHANCE
-                                                  : edge > 1.0f ? 1.0 : MIN_COLUMN_CHANCE + (1.0f - MIN_COLUMN_CHANCE) * edge;
+                const float edge = (float) std::min(RADIUS - std::abs(dx), RADIUS - std::abs(dz))
+                                   / EDGE_CHANCE_DISTANCE;
+                const double chance = edge < 0.0f   ? MIN_COLUMN_CHANCE
+                                      : edge > 1.0f ? 1.0
+                                                    : MIN_COLUMN_CHANCE + (1.0f - MIN_COLUMN_CHANCE) * edge;
 
                 const int32_t x = originX + dx;
                 const int32_t z = originZ + dz;

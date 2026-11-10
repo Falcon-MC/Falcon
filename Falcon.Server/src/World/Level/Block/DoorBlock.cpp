@@ -32,8 +32,7 @@ bool DoorBlock::isOpenableByHand(const std::string &identifier) {
     return data != nullptr && data->mTypeId != BlockTypeIds::IRON_DOOR;
 }
 
-bool DoorBlock::isRightHinged(Level *level, const std::string &identifier, const Vector3i &position,
-                              int playerFacing) {
+bool DoorBlock::isRightHinged(Level *level, const std::string &identifier, const Vector3i &position, int playerFacing) {
     if (level == nullptr)
         return false;
 
@@ -69,12 +68,11 @@ bool DoorBlock::isGettingPower(ServerNetworkHandler &owner, Level &level, const 
     const Vector3i lower = lowerPosition(level, position, state);
     const Vector3i upper = RedstoneFace::relative(lower, RedstoneFace::UP);
 
-    return RedstoneSystem::isGettingPower(owner, level, lower)
-           || RedstoneSystem::isGettingPower(owner, level, upper);
+    return RedstoneSystem::isGettingPower(owner, level, lower) || RedstoneSystem::isGettingPower(owner, level, upper);
 }
 
-bool DoorBlock::setOpen(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                        const BlockState &state, bool open) {
+bool DoorBlock::setOpen(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                        bool open) {
     const Vector3i lower = lowerPosition(level, position, state);
     const Vector3i upper = RedstoneFace::relative(lower, RedstoneFace::UP);
 
@@ -89,8 +87,7 @@ bool DoorBlock::setOpen(ServerNetworkHandler &owner, Level &level, const Vector3
     return true;
 }
 
-bool DoorBlock::toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                       const BlockState &state) {
+bool DoorBlock::toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state) {
     const Vector3i lower = lowerPosition(level, position, state);
     const BlockState lowerState = stateAt(level, lower);
     const bool open = !OpenableBlock::isOpen(lowerState);

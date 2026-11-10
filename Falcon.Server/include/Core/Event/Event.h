@@ -7,11 +7,17 @@ public:
 
 class CancellableEvent : public Event {
 public:
-    bool isCancelled() const { return mCancelled; }
+    bool isCancelled() const {
+        return mCancelled;
+    }
 
-    void cancel() { mCancelled = true; }
+    void cancel() {
+        mCancelled = true;
+    }
 
-    void setCancelled(bool cancelled) { mCancelled = cancelled; }
+    void setCancelled(bool cancelled) {
+        mCancelled = cancelled;
+    }
 
 private:
     bool mCancelled = false;

@@ -29,9 +29,9 @@ OverworldClimate::OverworldClimate(const XoroshiroPositionalFactory &noiseFactor
     mErosion = NormalNoise::create(noiseFactory, "minecraft:erosion", -9, {1.0f, 1.0f, 0.0f, 1.0f, 1.0f});
     mRidges = NormalNoise::create(noiseFactory, "minecraft:ridge", -7, {1.0f, 2.0f, 1.0f, 0.0f, 0.0f, 0.0f});
     mShift = NormalNoise::create(noiseFactory, "minecraft:offset", -3, {1.0f, 1.0f, 1.0f, 0.0f});
-    mJagged = NormalNoise::create(noiseFactory, "minecraft:jagged", -16,
-                                  {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-                                   1.0f, 1.0f});
+    mJagged = NormalNoise::create(
+            noiseFactory, "minecraft:jagged", -16,
+            {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f});
     mOffsetSpline = TerrainSpline::overworldOffset();
     mFactorSpline = TerrainSpline::overworldFactor();
     mJaggednessSpline = TerrainSpline::overworldJaggedness();

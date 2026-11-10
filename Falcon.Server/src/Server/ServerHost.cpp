@@ -39,13 +39,12 @@ namespace {
     const char *const PROFILER_CONFIG_FILE = "bootstrap.json";
     const char *const CDN_CONFIG_FILE = "cdn_config.json";
 
-    const char *const LOADING_WORLD_BANNER =
-            "\n\n"
-            "#####################################################\n"
-            "#                                                   #\n"
-            "#               LOADING VANILLA WORLD               #\n"
-            "#                                                   #\n"
-            "#####################################################";
+    const char *const LOADING_WORLD_BANNER = "\n\n"
+                                             "#####################################################\n"
+                                             "#                                                   #\n"
+                                             "#               LOADING VANILLA WORLD               #\n"
+                                             "#                                                   #\n"
+                                             "#####################################################";
 
     std::string generateSessionId() {
         std::random_device device;
@@ -159,8 +158,10 @@ namespace {
         std::error_code error;
         std::filesystem::create_directories(directory, error);
         if (error) {
-            LOG_WARN(LogAreaID::Server, "Content logging to disk is disabled because its directory could not be "
-                                        "created: %s", directory.c_str());
+            LOG_WARN(LogAreaID::Server,
+                     "Content logging to disk is disabled because its directory could not be "
+                     "created: %s",
+                     directory.c_str());
             return nullptr;
         }
 
@@ -189,8 +190,7 @@ namespace {
     }
 
     // ACME validates on fixed ports whatever the game port: RFC 8737 on 443, RFC 8555 http-01 on 80
-    void logAcmeNotice(const PropertiesSettings &properties, const ServerNetworkHandler &handler,
-                       unsigned short port) {
+    void logAcmeNotice(const PropertiesSettings &properties, const ServerNetworkHandler &handler, unsigned short port) {
         const std::string domain = properties.getSignalingAcmeDomain();
         if (domain.empty() || hasCertificatePair(properties))
             return;
@@ -198,9 +198,10 @@ namespace {
         const bool tlsAlpn = properties.getSignalingAcmeChallenge() != "http-01";
         const unsigned short needed = tlsAlpn ? 443 : 80;
         if (port != needed && handler.getExtraSignalingPort() != needed)
-            LOG_INFO(LogAreaID::Server, "ACME for %s validates on TCP %u: set signaling-extra-port=%u or forward "
-                                        "TCP %u to TCP %u of this server.", domain.c_str(), (unsigned) needed,
-                     (unsigned) needed, (unsigned) needed, (unsigned) port);
+            LOG_INFO(LogAreaID::Server,
+                     "ACME for %s validates on TCP %u: set signaling-extra-port=%u or forward "
+                     "TCP %u to TCP %u of this server.",
+                     domain.c_str(), (unsigned) needed, (unsigned) needed, (unsigned) needed, (unsigned) port);
         LOG_INFO(LogAreaID::Server, "%s must resolve to this server's public address.", domain.c_str());
     }
 
@@ -288,12 +289,16 @@ namespace {
 ServerHost::ServerHost() = default;
 
 ServerHost::~ServerHost() {
-    try { stop(); } catch (...) {}
+    try {
+        stop();
+    } catch (...) {
+    }
     release();
 }
 
 bool ServerHost::acquire() {
-    if (mOwnsProcess) return true;
+    if (mOwnsProcess)
+        return true;
     bool expected = false;
     mOwnsProcess = processOwned.compare_exchange_strong(expected, true);
     return mOwnsProcess;
@@ -343,12 +348,16 @@ bool ServerHost::start(const ServerHostOptions &options) {
 
     const std::vector<std::string> &invalid = properties.getInvalidProperties();
     if (std::find(invalid.begin(), invalid.end(), "transport=raknet") != invalid.end())
-        LOG_ERROR(LogAreaID::Server, "RakNet is no longer supported, set transport=nethernet in %s. "
-                                     "Falling back to NetherNet.", PROPERTIES_FILE);
+        LOG_ERROR(LogAreaID::Server,
+                  "RakNet is no longer supported, set transport=nethernet in %s. "
+                  "Falling back to NetherNet.",
+                  PROPERTIES_FILE);
 
     if (properties.getServerAuthoritativeMovementStrict() && !properties.getMovementSimulation())
-        LOG_WARN(LogAreaID::Server, "server-authoritative-movement-strict has no effect while movement-simulation "
-                                    "is false in %s", PROPERTIES_FILE);
+        LOG_WARN(LogAreaID::Server,
+                 "server-authoritative-movement-strict has no effect while movement-simulation "
+                 "is false in %s",
+                 PROPERTIES_FILE);
 
     const TransportLayer transport = properties.getTransportLayer();
 
@@ -471,7 +480,8 @@ void ServerHost::stop() {
     resetProcessState();
     BedrockLog::flush();
     _closeContentLog();
-    if (error) std::rethrow_exception(error);
+    if (error)
+        std::rethrow_exception(error);
 }
 
 bool ServerHost::isRunning() const {

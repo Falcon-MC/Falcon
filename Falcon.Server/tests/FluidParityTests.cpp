@@ -122,8 +122,7 @@ namespace {
     // a console in the level of the scenario; a refused command fails the scenario
     class TraceOrigin : public CommandOrigin {
     public:
-        explicit TraceOrigin(Level &level) : mLevel(level) {
-        }
+        explicit TraceOrigin(Level &level) : mLevel(level) {}
 
         std::string getSenderName() const override {
             return "fluid-parity";
@@ -230,8 +229,8 @@ namespace {
         for (const auto &cell: expected) {
             auto found = actual.find(cell.first);
             if (found == actual.end() || found->second != cell.second)
-                result += " " + cell.first + " bds=" + cell.second + " falcon="
-                          + (found == actual.end() ? "air" : found->second);
+                result += " " + cell.first + " bds=" + cell.second
+                          + " falcon=" + (found == actual.end() ? "air" : found->second);
         }
         for (const auto &cell: actual) {
             if (expected.find(cell.first) == expected.end())
@@ -256,13 +255,12 @@ namespace {
         // ~name@tick: counted, and only until the random shape starts to matter
         const bool counted = argument[0] == '~';
         const size_t at = argument.find('@');
-        const std::string name = argument.substr(counted ? 1 : 0, at == std::string::npos ? std::string::npos
-                                                                                   : at - (counted ? 1 : 0));
+        const std::string name = argument.substr(counted ? 1 : 0,
+                                                 at == std::string::npos ? std::string::npos : at - (counted ? 1 : 0));
         Trace trace = readTrace(name);
         if (at != std::string::npos)
             trace.mTicks = std::stoi(argument.substr(at + 1));
-        const DimensionType dimension = trace.mDimension == "nether" ? DimensionType::Nether
-                                                                     : DimensionType::Overworld;
+        const DimensionType dimension = trace.mDimension == "nether" ? DimensionType::Nether : DimensionType::Overworld;
         ServerNetworkHandler owner("Fluid parity", "", 1);
         Level level("fluid-parity", 4, 1, dimension);
         level.setOwner(&owner);
@@ -315,8 +313,8 @@ namespace {
         for (int tick = 0; tick < ticks; ++tick) {
             const auto start = std::chrono::steady_clock::now();
             level.tick();
-            const double elapsed = std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - start).count();
+            const double elapsed =
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
             result.mTotal += elapsed;
             result.mWorst = std::max(result.mWorst, elapsed);
             result.mProcessed += level.getLastFluidProcessedCount();
@@ -327,10 +325,10 @@ namespace {
     }
 
     void print(const char *name, int ticks, const BenchResult &result) {
-        std::cout << std::left << std::setw(10) << name << std::right << std::fixed << std::setprecision(3)
-                  << " " << ticks << " ticks  " << result.mTotal << " ms total  " << result.mTotal / ticks
-                  << " ms/tick  " << result.mWorst << " ms worst  " << result.mProcessed << " ticks run  "
-                  << result.mPeakScheduled << " peak queued\n";
+        std::cout << std::left << std::setw(10) << name << std::right << std::fixed << std::setprecision(3) << " "
+                  << ticks << " ticks  " << result.mTotal << " ms total  " << result.mTotal / ticks << " ms/tick  "
+                  << result.mWorst << " ms worst  " << result.mProcessed << " ticks run  " << result.mPeakScheduled
+                  << " peak queued\n";
     }
 
     // not a parity check: the cost of a flood, its drain and a field of waterfalls on 6x6 chunks

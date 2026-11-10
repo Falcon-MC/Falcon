@@ -3,17 +3,15 @@
 #include <exception>
 
 World::World(uint32_t id, const std::string &name, int viewDistance, int64_t seed)
-        : mId(id),
-          mOverworld(new Level(name, viewDistance, seed, DimensionType::Overworld)),
+        : mId(id), mOverworld(new Level(name, viewDistance, seed, DimensionType::Overworld)),
           mNether(new Level(name, viewDistance, seed, DimensionType::Nether)),
-          mTheEnd(new Level(name, viewDistance, seed, DimensionType::TheEnd)),
-          mDragonFight(new EndDragonFight(seed)) {
+          mTheEnd(new Level(name, viewDistance, seed, DimensionType::TheEnd)), mDragonFight(new EndDragonFight(seed)) {
     for (Level *level: getLevels())
         level->setWorldId(id);
 }
 
-bool World::open(const std::string &worldsDirectory, size_t workerThreads,
-                 const Level::PacketBroadcaster &broadcaster, ServerNetworkHandler *owner) {
+bool World::open(const std::string &worldsDirectory, size_t workerThreads, const Level::PacketBroadcaster &broadcaster,
+                 ServerNetworkHandler *owner) {
     const bool opened = mOverworld->openStorage(worldsDirectory);
     mOverworld->initializeWeather();
     mOverworld->initializeGameRules();

@@ -163,8 +163,7 @@ bool DragonGoal::hasTarget(ServerNetworkHandler &owner, EnderDragon &dragon) {
     return dragon.getTarget(owner) != nullptr;
 }
 
-DragonHoldingPatternGoal::DragonHoldingPatternGoal() : DragonGoal(FLYING_GROUP) {
-}
+DragonHoldingPatternGoal::DragonHoldingPatternGoal() : DragonGoal(FLYING_GROUP) {}
 
 bool DragonHoldingPatternGoal::canStart(ServerNetworkHandler &owner, EnderDragon &dragon) {
     return !dragon.isSitting() && !hasTarget(owner, dragon);
@@ -239,8 +238,7 @@ void DragonHoldingPatternGoal::_findNewTarget(ServerNetworkHandler &owner, Ender
 }
 
 DragonStrafePlayerGoal::DragonStrafePlayerGoal(const Settings &settings)
-        : DragonGoal(FLYING_GROUP), mSettings(settings) {
-}
+        : DragonGoal(FLYING_GROUP), mSettings(settings) {}
 
 bool DragonStrafePlayerGoal::canStart(ServerNetworkHandler &owner, EnderDragon &dragon) {
     return !dragon.isSitting() && hasTarget(owner, dragon);
@@ -300,8 +298,7 @@ void DragonStrafePlayerGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
 void DragonStrafePlayerGoal::_findNewTarget(ServerNetworkHandler &owner, EnderDragon &dragon) {
     const int32_t from = dragon.findClosestNode(owner);
     int32_t to = from;
-    if (mSettings.mSwitchDirectionProbability != 0.0f
-        && mSettings.mSwitchDirectionProbability >= dragon.nextFloat()) {
+    if (mSettings.mSwitchDirectionProbability != 0.0f && mSettings.mSwitchDirectionProbability >= dragon.nextFloat()) {
         mClockwise = !mClockwise;
         to = from + 6;
     }
@@ -360,8 +357,7 @@ void DragonStrafePlayerGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
 }
 
 DragonChargePlayerGoal::DragonChargePlayerGoal(const Settings &settings)
-        : DragonGoal(FLYING_GROUP), mSettings(settings) {
-}
+        : DragonGoal(FLYING_GROUP), mSettings(settings) {}
 
 bool DragonChargePlayerGoal::canStart(ServerNetworkHandler &owner, EnderDragon &dragon) {
     return dragon.isSitting() && hasTarget(owner, dragon);
@@ -415,8 +411,7 @@ void DragonChargePlayerGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         mTimer++;
 }
 
-DragonLandingGoal::DragonLandingGoal() : DragonGoal(SITTING_GROUP) {
-}
+DragonLandingGoal::DragonLandingGoal() : DragonGoal(SITTING_GROUP) {}
 
 bool DragonLandingGoal::canStart(ServerNetworkHandler &owner, EnderDragon &dragon) {
     (void) owner;
@@ -496,8 +491,7 @@ void DragonLandingGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     }
 }
 
-DragonFlamingGoal::DragonFlamingGoal(const Settings &settings) : DragonGoal(SITTING_GROUP), mSettings(settings) {
-}
+DragonFlamingGoal::DragonFlamingGoal(const Settings &settings) : DragonGoal(SITTING_GROUP), mSettings(settings) {}
 
 bool DragonFlamingGoal::canStart(ServerNetworkHandler &owner, EnderDragon &dragon) {
     return hasTarget(owner, dragon);
@@ -586,8 +580,7 @@ void DragonFlamingGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         _breathe(owner, dragon);
 }
 
-DragonScanningGoal::DragonScanningGoal() : DragonGoal(SITTING_GROUP) {
-}
+DragonScanningGoal::DragonScanningGoal() : DragonGoal(SITTING_GROUP) {}
 
 bool DragonScanningGoal::canStart(ServerNetworkHandler &owner, EnderDragon &dragon) {
     return dragon.isSitting() && !hasTarget(owner, dragon);
@@ -652,9 +645,8 @@ void DragonScanningGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     const float dx = other.x - std::floor(head.x);
     const float dz = other.z - std::floor(head.z);
     Vector3f rotation = dragon.getRotation();
-    const float turn = std::max(-100.0f, std::min(100.0f,
-                                                  wrapDegrees(180.0f - std::atan2(dx, dz) * RADIANS_TO_DEGREES
-                                                              - rotation.y)));
+    const float turn = std::max(
+            -100.0f, std::min(100.0f, wrapDegrees(180.0f - std::atan2(dx, dz) * RADIANS_TO_DEGREES - rotation.y)));
     const float reach = std::sqrt(dx * dx + dz * dz) + 1.0f;
     const float acceleration = 1.0f / std::min(40.0f, reach) / reach * turn + dragon.getYawAcceleration() * 0.8f;
     dragon.setYawAcceleration(acceleration);
@@ -663,8 +655,7 @@ void DragonScanningGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     dragon.setRotation(rotation);
 }
 
-DragonTakeoffGoal::DragonTakeoffGoal() : DragonGoal(FLYING_GROUP) {
-}
+DragonTakeoffGoal::DragonTakeoffGoal() : DragonGoal(FLYING_GROUP) {}
 
 bool DragonTakeoffGoal::canStart(ServerNetworkHandler &owner, EnderDragon &dragon) {
     return dragon.isSitting() && !hasTarget(owner, dragon);
@@ -711,8 +702,7 @@ void DragonTakeoffGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     navigate(dragon, mPath.get());
 }
 
-DragonDeathGoal::DragonDeathGoal() : DragonGoal(DEATH_GROUP) {
-}
+DragonDeathGoal::DragonDeathGoal() : DragonGoal(DEATH_GROUP) {}
 
 bool DragonDeathGoal::canStart(ServerNetworkHandler &owner, EnderDragon &dragon) {
     (void) owner;

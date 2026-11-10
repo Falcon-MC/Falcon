@@ -62,7 +62,9 @@ public:
 
     void compact();
 
-    bool isOpen() const { return mDb != nullptr; }
+    bool isOpen() const {
+        return mDb != nullptr;
+    }
 
     uint64_t getWriteFailures() const {
         return mWriteFailures.load();
@@ -124,9 +126,9 @@ public:
 
     // display name, game mode, difficulty and the game's own options are kept from the file;
     // the arguments only fill them in when missing
-    void writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ,
-                       int32_t gameType, int32_t difficulty, int64_t seed, int64_t time, bool bonusChestEnabled,
-                       bool bonusChestSpawned, int64_t worldStartCount) const;
+    void writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ, int32_t gameType,
+                       int32_t difficulty, int64_t seed, int64_t time, bool bonusChestEnabled, bool bonusChestSpawned,
+                       int64_t worldStartCount) const;
 
     bool readLevelDat(Tag &out) const;
 

@@ -5,8 +5,7 @@
 
 FALCON_REGISTER_ITEM(EnchantedGoldenAppleItem, 100);
 
-EnchantedGoldenAppleItem::EnchantedGoldenAppleItem(const Item &base) : Item(base) {
-}
+EnchantedGoldenAppleItem::EnchantedGoldenAppleItem(const Item &base) : Item(base) {}
 
 bool EnchantedGoldenAppleItem::matches(const std::string &identifier) {
     return identifier == IDENTIFIER;

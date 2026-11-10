@@ -23,11 +23,7 @@ public:
         Removed = 6
     };
 
-    enum class Result : int32_t {
-        None = 0,
-        Victory = 1,
-        Defeat = 2
-    };
+    enum class Result : int32_t { None = 0, Victory = 1, Defeat = 2 };
 
     explicit Raid(uint8_t waveCount);
 

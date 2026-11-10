@@ -2,13 +2,9 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
-FALCON_REGISTER_ITEM_CUSTOM(BowItem, 60,
-                            [](const std::string &identifier) {
-                                return identifier == "minecraft:bow";
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<BowItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        BowItem, 60, [](const std::string &identifier) { return identifier == "minecraft:bow"; },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<BowItem>(item); });
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -40,8 +36,7 @@ namespace {
     }
 }
 
-BowItem::BowItem(const Item &base) : Item(base) {
-}
+BowItem::BowItem(const Item &base) : Item(base) {}
 
 bool BowItem::onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     (void) owner;

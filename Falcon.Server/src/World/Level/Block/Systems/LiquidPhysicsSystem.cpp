@@ -31,13 +31,11 @@ namespace {
     };
 
     const Side SPREAD_SIDES[4] = {
-            {-1, 0, LiquidFace::EAST}, {1, 0, LiquidFace::WEST}, {0, -1, LiquidFace::SOUTH}, {0, 1, LiquidFace::NORTH}
-    };
+            {-1, 0, LiquidFace::EAST}, {1, 0, LiquidFace::WEST}, {0, -1, LiquidFace::SOUTH}, {0, 1, LiquidFace::NORTH}};
 
     // the order _tick reads neighbour depths in: west, east, south, north
     const Side FEED_SIDES[4] = {
-            {-1, 0, LiquidFace::EAST}, {1, 0, LiquidFace::WEST}, {0, 1, LiquidFace::NORTH}, {0, -1, LiquidFace::SOUTH}
-    };
+            {-1, 0, LiquidFace::EAST}, {1, 0, LiquidFace::WEST}, {0, 1, LiquidFace::NORTH}, {0, -1, LiquidFace::SOUTH}};
 
     Vector3i offset(const Vector3i &position, int32_t x, int32_t y, int32_t z) {
         return Vector3i(position.x + x, position.y + y, position.z + z);
@@ -344,9 +342,9 @@ void LiquidPhysicsSystem::_fizz(const Vector3i &position) {
     const float first = (float) RandomTickSystem::nextInt(1 << 24) / (float) (1 << 24);
     const float second = (float) RandomTickSystem::nextInt(1 << 24) / (float) (1 << 24);
     const int32_t pitch = (int32_t) (((first - second) * 0.8f + 2.6f) * 1000.0f);
-    owner->broadcastLevelEvent(mLevel, SOUND_FIZZ,
-                               Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                        (float) position.z + 0.5f), pitch);
+    owner->broadcastLevelEvent(
+            mLevel, SOUND_FIZZ,
+            Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f), pitch);
 }
 
 void LiquidPhysicsSystem::schedule(const Vector3i &position, int64_t delay) {
@@ -369,12 +367,8 @@ void LiquidPhysicsSystem::queueRandomTick(const Vector3i &position, const Block 
 // no early out when nothing is queued: every ticked chunk's clock advances each tick (sub_14381B7E0)
 void LiquidPhysicsSystem::tick(int64_t levelTick, const std::vector<int64_t> &columns) {
     const Scope scope(*this);
-    const auto loaded = [this](int32_t chunkX, int32_t chunkZ) {
-        return _chunkAt(chunkX, chunkZ) != nullptr;
-    };
-    const auto run = [this](const Vector3i &position, const Block *block) {
-        _onTick(position, block);
-    };
+    const auto loaded = [this](int32_t chunkX, int32_t chunkZ) { return _chunkAt(chunkX, chunkZ) != nullptr; };
+    const auto run = [this](const Vector3i &position, const Block *block) { _onTick(position, block); };
     mTicks.beginTick(levelTick);
     mRandomTicks.beginTick(levelTick, mLevel.getGameRules().getInt("randomtickspeed"));
     for (int64_t column: columns) {
@@ -580,8 +574,7 @@ void LiquidPhysicsSystem::_tickLiquid(const Vector3i &position, LiquidMaterial s
         // still lava source under water turns to obsidian without telling its neighbours
         const Liquid current = _liquidAt(position);
         if (current.properties.material == LiquidMaterial::Lava && !current.properties.dynamic
-            && current.properties.depth == 0
-            && LiquidProperties::of(_stateAt(above)).material == LiquidMaterial::Water
+            && current.properties.depth == 0 && LiquidProperties::of(_stateAt(above)).material == LiquidMaterial::Water
             && allows(position, obsidian, BlockChangeCause::Form))
             _write(position, 0, obsidian, false);
     }
@@ -625,7 +618,8 @@ void LiquidPhysicsSystem::_tickLiquid(const Vector3i &position, LiquidMaterial s
         if (liquid.material == self && liquid.depth == 0)
             continue;
         costs[side] = _isLiquidBlocking(offset(neighbor, 0, -1, 0), position, LiquidFace::UP)
-                      ? _slopeDistance(self, neighbor, start, side) : 0;
+                              ? _slopeDistance(self, neighbor, start, side)
+                              : 0;
     }
     mSearching = false;
 

@@ -53,14 +53,13 @@ namespace {
     typedef int32_t(DOTNET_HOST_CALLTYPE *HostfxrClose)(void *context);
 
     typedef int(DOTNET_DELEGATE_CALLTYPE *LoadAssemblyAndGetFunctionPointer)(const DotnetChar *assemblyPath,
-                                                                              const DotnetChar *typeName,
-                                                                              const DotnetChar *methodName,
-                                                                              const DotnetChar *delegateTypeName,
-                                                                              void *reserved, void **function);
+                                                                             const DotnetChar *typeName,
+                                                                             const DotnetChar *methodName,
+                                                                             const DotnetChar *delegateTypeName,
+                                                                             void *reserved, void **function);
 
-    typedef int (*PluginLoaderEntry)(const FalconServerApi *api, FalconPlugin *plugin,
-                                     FalconPluginCallbacks *callbacks, const char *assemblyPath,
-                                     const char *mainClass, const char *const *dependencies,
+    typedef int (*PluginLoaderEntry)(const FalconServerApi *api, FalconPlugin *plugin, FalconPluginCallbacks *callbacks,
+                                     const char *assemblyPath, const char *mainClass, const char *const *dependencies,
                                      uint32_t dependencyCount);
 
 #if defined(_WIN32)
@@ -278,7 +277,8 @@ namespace {
         const int32_t initialized = initialize(runtimeConfig.native().c_str(), &parameters, &context);
         if (initialized < 0 || context == nullptr) {
             error = describeFailure("Starting the runtime from " + runtimeConfig.u8string() + " with "
-                                    + library.u8string(), initialized);
+                                            + library.u8string(),
+                                    initialized);
             return false;
         }
 
@@ -379,7 +379,9 @@ bool DotnetHost::load(LoadedPlugin &plugin) {
     }
 
     LOG_INFO(LogAreaID::Server, "Loaded .NET plugin %s %s", name.c_str(), plugin.mDescription.mVersion.c_str());
-    LOG_WARN(LogAreaID::Server, ".NET plugins are deprecated and will be removed in a future release: %s should "
-                                "move to a native or Java plugin", name.c_str());
+    LOG_WARN(LogAreaID::Server,
+             ".NET plugins are deprecated and will be removed in a future release: %s should "
+             "move to a native or Java plugin",
+             name.c_str());
     return true;
 }

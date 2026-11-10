@@ -7,8 +7,7 @@
 // drops itself only, with shears or Silk Touch
 class ShearableVegetationBlock : public Block {
 public:
-    explicit ShearableVegetationBlock(const Block &block) : Block(block) {
-    }
+    explicit ShearableVegetationBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

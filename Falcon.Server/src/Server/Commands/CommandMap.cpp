@@ -36,9 +36,8 @@ void CommandMap::unregisterCommand(const std::string &name) {
     }
 
     mCommands.erase(std::remove_if(mCommands.begin(), mCommands.end(),
-                                   [command](const std::shared_ptr<Command> &entry) {
-                                       return entry.get() == command;
-                                   }), mCommands.end());
+                                   [command](const std::shared_ptr<Command> &entry) { return entry.get() == command; }),
+                    mCommands.end());
 }
 
 Command *CommandMap::getCommand(const std::string &name) const {

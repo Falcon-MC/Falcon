@@ -18,15 +18,12 @@ namespace {
 
     // the chunk offsets the game copies into each level (sub_1430054F0, 57 entries)
     const std::pair<int32_t, int32_t> GAME_OFFSETS[] = {
-            {-1, -4}, {0, -4}, {1, -4},
-            {-2, -3}, {-1, -3}, {0, -3}, {1, -3}, {2, -3},
-            {-3, -2}, {-2, -2}, {-1, -2}, {0, -2}, {1, -2}, {2, -2}, {3, -2},
-            {-4, -1}, {-3, -1}, {-2, -1}, {-1, -1}, {0, -1}, {1, -1}, {2, -1}, {3, -1}, {4, -1},
-            {-4, 0}, {-3, 0}, {-2, 0}, {-1, 0}, {0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0},
-            {-4, 1}, {-3, 1}, {-2, 1}, {-1, 1}, {0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1},
-            {-3, 2}, {-2, 2}, {-1, 2}, {0, 2}, {1, 2}, {2, 2}, {3, 2},
-            {-2, 3}, {-1, 3}, {0, 3}, {1, 3}, {2, 3},
-            {-1, 4}, {0, 4}, {1, 4},
+            {-1, -4}, {0, -4}, {1, -4}, {-2, -3}, {-1, -3}, {0, -3},  {1, -3},  {2, -3},  {-3, -2}, {-2, -2},
+            {-1, -2}, {0, -2}, {1, -2}, {2, -2},  {3, -2},  {-4, -1}, {-3, -1}, {-2, -1}, {-1, -1}, {0, -1},
+            {1, -1},  {2, -1}, {3, -1}, {4, -1},  {-4, 0},  {-3, 0},  {-2, 0},  {-1, 0},  {0, 0},   {1, 0},
+            {2, 0},   {3, 0},  {4, 0},  {-4, 1},  {-3, 1},  {-2, 1},  {-1, 1},  {0, 1},   {1, 1},   {2, 1},
+            {3, 1},   {4, 1},  {-3, 2}, {-2, 2},  {-1, 2},  {0, 2},   {1, 2},   {2, 2},   {3, 2},   {-2, 3},
+            {-1, 3},  {0, 3},  {1, 3},  {2, 3},   {-1, 4},  {0, 4},   {1, 4},
     };
 
     Vector3f inChunk(int32_t chunkX, int32_t chunkZ) {
@@ -41,8 +38,7 @@ namespace {
             for (int32_t dx = -8; dx <= 8; ++dx) {
                 for (int32_t dz = -8; dz <= 8; ++dz) {
                     const bool seen = ChunkStreamHandler::isInActorRange(
-                            inChunk(centre.first, centre.second),
-                            inChunk(centre.first + dx, centre.second + dz));
+                            inChunk(centre.first, centre.second), inChunk(centre.first + dx, centre.second + dz));
                     require(seen == (expected.count(std::make_pair(dx, dz)) != 0),
                             "an actor is sent exactly in the chunks of the game table");
                 }
@@ -56,8 +52,7 @@ namespace {
                 "six chunks out is past the actor range");
         require(!ChunkStreamHandler::isInActorRange(inChunk(0, 0), inChunk(3, 3)),
                 "the corner at 3, 3 is past the actor range");
-        require(ChunkStreamHandler::isInActorRange(inChunk(0, 0), inChunk(4, 1)),
-                "4, 1 is inside the actor range");
+        require(ChunkStreamHandler::isInActorRange(inChunk(0, 0), inChunk(4, 1)), "4, 1 is inside the actor range");
     }
 
     void negativeCoordinates() {

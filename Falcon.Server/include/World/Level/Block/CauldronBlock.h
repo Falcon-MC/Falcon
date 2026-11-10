@@ -6,11 +6,7 @@
 
 class CauldronBlock final : public Block {
 public:
-    enum class Liquid {
-        Empty,
-        Water,
-        Lava
-    };
+    enum class Liquid { Empty, Water, Lava };
 
     explicit CauldronBlock(const BlockState &state) : Block(state) {}
 

@@ -16,16 +16,15 @@ namespace {
     }
 
     int lightFilterOverride(const std::string &identifier) {
-        if (BlockIdentifier::equalsAny(identifier, {"minecraft:water", "minecraft:flowing_water", "minecraft:lava",
-                                                    "minecraft:flowing_lava", "minecraft:ice",
-                                                    "minecraft:frosted_ice"}))
+        if (BlockIdentifier::equalsAny(identifier,
+                                       {"minecraft:water", "minecraft:flowing_water", "minecraft:lava",
+                                        "minecraft:flowing_lava", "minecraft:ice", "minecraft:frosted_ice"}))
             return 2;
 
         if (identifier == "minecraft:packed_ice")
             return FULL_FILTER;
 
-        if (BlockIdentifier::equalsAny(identifier, {"minecraft:slime", "minecraft:honey_block",
-                                                    "minecraft:barrier"}))
+        if (BlockIdentifier::equalsAny(identifier, {"minecraft:slime", "minecraft:honey_block", "minecraft:barrier"}))
             return 1;
 
         if (identifier == "minecraft:cauldron")

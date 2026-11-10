@@ -135,8 +135,8 @@ bool Level::openStorage(const std::string &worldsDirectory) {
             mBonusChestSpawned = levelDat.getByte("bonusChestSpawned", 0) != 0;
 
             if (levelDat.contains("SpawnY") && levelDat.getInt("SpawnY") != UNSET_SPAWN_Y)
-                setSpawnPosition(Vector3i(levelDat.getInt("SpawnX"), levelDat.getInt("SpawnY"),
-                                          levelDat.getInt("SpawnZ")));
+                setSpawnPosition(
+                        Vector3i(levelDat.getInt("SpawnX"), levelDat.getInt("SpawnY"), levelDat.getInt("SpawnZ")));
         }
 
         if (!mHasSpawnPosition) {
@@ -151,10 +151,11 @@ bool Level::openStorage(const std::string &worldsDirectory) {
 }
 
 void Level::saveLevelDat() {
-    const Vector3i spawn = mHasSpawnPosition ? mSpawnPosition
-                           : mHasDefaultSpawnPosition ? mDefaultSpawnPosition : Vector3i(0, UNSET_SPAWN_Y, 0);
-    mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime, mBonusChestEnabled,
-                           mBonusChestSpawned, (int64_t) (uint32_t) (mWorldStartCount - 1));
+    const Vector3i spawn = mHasSpawnPosition          ? mSpawnPosition
+                           : mHasDefaultSpawnPosition ? mDefaultSpawnPosition
+                                                      : Vector3i(0, UNSET_SPAWN_Y, 0);
+    mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime, mBonusChestEnabled, mBonusChestSpawned,
+                           (int64_t) (uint32_t) (mWorldStartCount - 1));
 }
 
 bool Level::attachStorage(Level &overworld) {
@@ -207,8 +208,8 @@ void Level::saveAll(bool wait) {
 
     for (auto &entry: mChunks) {
         _syncPendingTicks(entry.second);
-        if (!entry.second.isDirty() && (mChunkWorker == nullptr ||
-                !mChunkWorker->hasFailedSave(entry.second.getX(), entry.second.getZ())))
+        if (!entry.second.isDirty()
+            && (mChunkWorker == nullptr || !mChunkWorker->hasFailedSave(entry.second.getX(), entry.second.getZ())))
             continue;
 
         // copying every dirty chunk at once stalls the tick for seconds after a generation burst:
@@ -260,9 +261,11 @@ std::vector<Tag> Level::loadEntities(int32_t chunkX, int32_t chunkZ) {
     if (mErasingEntities.empty())
         return entities;
 
-    entities.erase(std::remove_if(entities.begin(), entities.end(), [this](const Tag &entity) {
-        return mErasingEntities.count(entity.getLong("UniqueID", 0)) != 0;
-    }), entities.end());
+    entities.erase(std::remove_if(entities.begin(), entities.end(),
+                                  [this](const Tag &entity) {
+                                      return mErasingEntities.count(entity.getLong("UniqueID", 0)) != 0;
+                                  }),
+                   entities.end());
     return entities;
 }
 
@@ -436,8 +439,8 @@ bool Level::isStandable(int32_t x, int32_t y, int32_t z) {
     const std::string below = getBlockState(x, y - 1, z).mName;
     const bool supported = isSolidAt(x, y - 1, z) || below == "minecraft:water" || below == "minecraft:flowing_water";
 
-    return supported && !isSolidAt(x, y, z) && !isLiquid(getBlockState(x, y, z).mName)
-           && !isSolidAt(x, y + 1, z) && !isLiquid(getBlockState(x, y + 1, z).mName);
+    return supported && !isSolidAt(x, y, z) && !isLiquid(getBlockState(x, y, z).mName) && !isSolidAt(x, y + 1, z)
+           && !isLiquid(getBlockState(x, y + 1, z).mName);
 }
 
 Vector3i Level::findSafeSpawn(const Vector3i &around) {
@@ -463,11 +466,18 @@ int32_t Level::_topSolidOrLiquidY(int32_t x, int32_t z) {
 }
 
 Vector3i Level::_findLandSpawn() {
-    static const int32_t WATER_BIOMES[] = {
-            BiomeIds::OCEAN, BiomeIds::DEEP_OCEAN, BiomeIds::WARM_OCEAN, BiomeIds::LUKEWARM_OCEAN,
-            BiomeIds::DEEP_LUKEWARM_OCEAN, BiomeIds::COLD_OCEAN, BiomeIds::DEEP_COLD_OCEAN, BiomeIds::FROZEN_OCEAN,
-            BiomeIds::DEEP_FROZEN_OCEAN, BiomeIds::LEGACY_FROZEN_OCEAN, BiomeIds::RIVER, BiomeIds::FROZEN_RIVER
-    };
+    static const int32_t WATER_BIOMES[] = {BiomeIds::OCEAN,
+                                           BiomeIds::DEEP_OCEAN,
+                                           BiomeIds::WARM_OCEAN,
+                                           BiomeIds::LUKEWARM_OCEAN,
+                                           BiomeIds::DEEP_LUKEWARM_OCEAN,
+                                           BiomeIds::COLD_OCEAN,
+                                           BiomeIds::DEEP_COLD_OCEAN,
+                                           BiomeIds::FROZEN_OCEAN,
+                                           BiomeIds::DEEP_FROZEN_OCEAN,
+                                           BiomeIds::LEGACY_FROZEN_OCEAN,
+                                           BiomeIds::RIVER,
+                                           BiomeIds::FROZEN_RIVER};
     const int32_t SEARCH_STEP = 16;
     const int32_t SEARCH_RADIUS = 1024;
     const int32_t SAMPLE_Y = 64;
@@ -793,7 +803,8 @@ void Level::_flushParkedChanges() {
     _flushPendingBlockChanges(false);
     const size_t handed = before > mPendingBlockChangeCount ? before - mPendingBlockChangeCount : 0;
     mParkedChangesToFlush = handed >= mParkedChangesToFlush || mPendingBlockChangeCount == 0
-                            ? 0 : mParkedChangesToFlush - handed;
+                                    ? 0
+                                    : mParkedChangesToFlush - handed;
 }
 
 // true: nothing parked or in flight for the eight neighbours; else starts writing theirs if no write runs;
@@ -957,7 +968,6 @@ void Level::_sweepOrphanChunks() {
     }
 
     mOrphanCandidates.swap(orphans);
-
 }
 
 void Level::setOccupiedColumns(std::unordered_set<int64_t> columns) {
@@ -994,8 +1004,8 @@ void Level::processDeferredSaves() {
                                 && mPendingChunks.empty() && mCompletedChunks.empty() && mIncomingChanges.empty();
     const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + DEFERRED_SAVE_BUDGET;
     while ((!mDeferredSaves.empty() || (generationIdle && !mIdleSaves.empty()))
-           && std::chrono::steady_clock::now() < deadline
-           && mChunkWorker != nullptr && mChunkWorker->getPendingSaveCount() < MAX_QUEUED_BACKGROUND_SAVES) {
+           && std::chrono::steady_clock::now() < deadline && mChunkWorker != nullptr
+           && mChunkWorker->getPendingSaveCount() < MAX_QUEUED_BACKGROUND_SAVES) {
         std::deque<int64_t> &queue = mDeferredSaves.empty() ? mIdleSaves : mDeferredSaves;
         const int64_t key = queue.front();
         queue.pop_front();
@@ -1470,9 +1480,7 @@ bool Level::isSolidAt(int32_t x, int32_t y, int32_t z) {
 
 std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area, const Actor *actor) {
     std::vector<AxisAlignedBB> boxes;
-    const BlockShape::Neighbours neighbours = [this](int32_t x, int32_t y, int32_t z) {
-        return peekBlockPtr(x, y, z);
-    };
+    const BlockShape::Neighbours neighbours = [this](int32_t x, int32_t y, int32_t z) { return peekBlockPtr(x, y, z); };
     const int32_t minX = (int32_t) std::floor(area.mMinX);
     const int32_t minY = std::max((int32_t) std::floor(area.mMinY) - 1, LevelChunk::MIN_Y);
     const int32_t minZ = (int32_t) std::floor(area.mMinZ);
@@ -1659,15 +1667,15 @@ std::vector<Level::ChunkPosition> Level::getChunksAround(int32_t centerChunkX, i
         }
     }
 
-    std::sort(chunks.begin(), chunks.end(), [centerChunkX, centerChunkZ](const ChunkPosition &left,
-                                                                        const ChunkPosition &right) {
-        const int64_t leftX = left.mX - centerChunkX;
-        const int64_t leftZ = left.mZ - centerChunkZ;
-        const int64_t rightX = right.mX - centerChunkX;
-        const int64_t rightZ = right.mZ - centerChunkZ;
+    std::sort(chunks.begin(), chunks.end(),
+              [centerChunkX, centerChunkZ](const ChunkPosition &left, const ChunkPosition &right) {
+                  const int64_t leftX = left.mX - centerChunkX;
+                  const int64_t leftZ = left.mZ - centerChunkZ;
+                  const int64_t rightX = right.mX - centerChunkX;
+                  const int64_t rightZ = right.mZ - centerChunkZ;
 
-        return leftX * leftX + leftZ * leftZ < rightX * rightX + rightZ * rightZ;
-    });
+                  return leftX * leftX + leftZ * leftZ < rightX * rightX + rightZ * rightZ;
+              });
 
     return chunks;
 }

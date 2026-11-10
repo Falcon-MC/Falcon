@@ -12,8 +12,8 @@ namespace {
 
 PlayerInventory::PlayerInventory()
         : mItems((size_t) CONTAINER_SIZE), mArmor((size_t) ARMOR_SIZE), mCrafting((size_t) CRAFTING_SIZE),
-          mCraftingTable((size_t) CRAFTING_TABLE_SIZE), mFurnace((size_t) FURNACE_SIZE),
-          mAnvil((size_t) ANVIL_SIZE), mCartography((size_t) CARTOGRAPHY_SIZE), mSelectedSlot(0), mNextNetId(1) {
+          mCraftingTable((size_t) CRAFTING_TABLE_SIZE), mFurnace((size_t) FURNACE_SIZE), mAnvil((size_t) ANVIL_SIZE),
+          mCartography((size_t) CARTOGRAPHY_SIZE), mSelectedSlot(0), mNextNetId(1) {
     mOffhand = ItemStack::air();
     mCursor = ItemStack::air();
 
@@ -239,8 +239,7 @@ const ItemStack *PlayerInventory::resolveSlot(ContainerSlotType container, int s
             return &mCartography[(size_t) CARTOGRAPHY_ADDITIONAL];
 
         case ContainerSlotType::CraftingInput:
-            if (slot >= CRAFTING_NETWORK_SLOT_FIRST
-                && slot < CRAFTING_NETWORK_SLOT_FIRST + CRAFTING_SIZE) {
+            if (slot >= CRAFTING_NETWORK_SLOT_FIRST && slot < CRAFTING_NETWORK_SLOT_FIRST + CRAFTING_SIZE) {
                 return &mCrafting[(size_t) (slot - CRAFTING_NETWORK_SLOT_FIRST)];
             }
             if (slot >= CRAFTING_TABLE_NETWORK_SLOT_FIRST
@@ -311,16 +310,14 @@ int PlayerInventory::getMaxStackSize(const ItemStack &item) {
 
     const ItemData *data = ItemDataTable::find(identifier);
     if (data == nullptr) {
-        const char *blockIdentifier = item.mBlockDefinition != nullptr
-                                      ? item.mBlockDefinition->getIdentifier().c_str()
-                                      : identifier.c_str();
+        const char *blockIdentifier = item.mBlockDefinition != nullptr ? item.mBlockDefinition->getIdentifier().c_str()
+                                                                       : identifier.c_str();
 
         const BlockData *blockData = BlockDataTable::find(blockIdentifier);
         if (blockData != nullptr && blockData->mMaxStackSize > 0)
             return blockData->mMaxStackSize;
 
-        const int32_t customMax = CustomContentRegistry::getInstance().getItemMaxStackSize(
-                identifier);
+        const int32_t customMax = CustomContentRegistry::getInstance().getItemMaxStackSize(identifier);
         return customMax > 0 ? customMax : DEFAULT_MAX_STACK_SIZE;
     }
 

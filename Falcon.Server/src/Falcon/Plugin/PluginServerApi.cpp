@@ -102,8 +102,8 @@ namespace {
 
             owner().sendModalForm(found->second, formId, form,
                                   [formId](ServerPlayer &responder, const std::string &response, bool closed) {
-                                      PluginManager *plugins =
-                                          PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FORM_RESPONSE);
+                                      PluginManager *plugins = PluginManager::findWithSubscribers(
+                                              FALCON_EVENT_PLAYER_FORM_RESPONSE);
                                       if (plugins == nullptr)
                                           return;
 
@@ -127,9 +127,7 @@ namespace {
         TransferPacket packet;
         packet.mAddress = address;
         packet.mPort = (uint16_t) port;
-        owner().postToMainThread([id, packet] {
-            owner().sendPacketTo(id, packet);
-        });
+        owner().postToMainThread([id, packet] { owner().sendPacketTo(id, packet); });
         return 1;
     }
 
@@ -143,8 +141,9 @@ namespace {
     }
 
     int playerUpdateBossBar(FalconPlayer *target, uint32_t bar, const char *title, float percent, uint32_t color) {
-        return player(target)->getBossBars().update(bar, title == nullptr ? "" : title, percent,
-                                                    bossBarColor(color)) ? 1 : 0;
+        return player(target)->getBossBars().update(bar, title == nullptr ? "" : title, percent, bossBarColor(color))
+                       ? 1
+                       : 0;
     }
 
     int playerRemoveBossBar(FalconPlayer *target, uint32_t bar) {
@@ -154,9 +153,7 @@ namespace {
     void playerKick(FalconPlayer *target, const char *reason) {
         const NetworkIdentifier id = player(target)->getNetworkIdentifier();
         const std::string text = reason == nullptr ? std::string() : std::string(reason);
-        owner().postToMainThread([id, text] {
-            owner()._disconnect(id, DisconnectReason::Kicked, text);
-        });
+        owner().postToMainThread([id, text] { owner()._disconnect(id, DisconnectReason::Kicked, text); });
     }
 
     void broadcastMessage(const char *message) {

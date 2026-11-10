@@ -4,8 +4,7 @@
 
 class IceBlock : public Block {
 public:
-    explicit IceBlock(const Block &block) : Block(block) {
-    }
+    explicit IceBlock(const Block &block) : Block(block) {}
 
     static constexpr const char *IDENTIFIER = "minecraft:ice";
 

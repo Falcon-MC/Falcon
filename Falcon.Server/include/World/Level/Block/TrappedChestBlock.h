@@ -6,9 +6,7 @@
 
 class TrappedChestBlock final : public ChestBlock {
 public:
-    explicit TrappedChestBlock(const Block &block) : ChestBlock(block)
-    {
-    }
+    explicit TrappedChestBlock(const Block &block) : ChestBlock(block) {}
 
     static bool matches(const std::string &identifier);
 

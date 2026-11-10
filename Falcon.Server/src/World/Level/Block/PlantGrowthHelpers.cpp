@@ -10,10 +10,8 @@ namespace PlantGrowthHelpers {
     const char *STALK_THICKNESS = "bamboo_stalk_thickness";
 
     namespace {
-        const Vector3i FACE_OFFSETS[] = {
-                Vector3i(0, -1, 0), Vector3i(0, 1, 0), Vector3i(0, 0, -1),
-                Vector3i(0, 0, 1), Vector3i(-1, 0, 0), Vector3i(1, 0, 0)
-        };
+        const Vector3i FACE_OFFSETS[] = {Vector3i(0, -1, 0), Vector3i(0, 1, 0),  Vector3i(0, 0, -1),
+                                         Vector3i(0, 0, 1),  Vector3i(-1, 0, 0), Vector3i(1, 0, 0)};
     }
 
     Vector3i side(const Vector3i &position, int32_t face) {

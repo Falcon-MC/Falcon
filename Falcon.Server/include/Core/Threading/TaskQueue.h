@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-template<typename T>
+template <typename T>
 class TaskQueue {
 public:
     void push(T value) {

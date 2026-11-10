@@ -27,21 +27,19 @@ namespace {
     }
 
     const std::unordered_map<std::string, int> &oreExperienceRanges() {
-        static const std::unordered_map<std::string, int> ores = {
-                {"minecraft:coal_ore", 0},
-                {"minecraft:deepslate_coal_ore", 0},
-                {"minecraft:diamond_ore", 1},
-                {"minecraft:deepslate_diamond_ore", 1},
-                {"minecraft:emerald_ore", 2},
-                {"minecraft:deepslate_emerald_ore", 2},
-                {"minecraft:lapis_ore", 3},
-                {"minecraft:deepslate_lapis_ore", 3},
-                {"minecraft:redstone_ore", 4},
-                {"minecraft:lit_redstone_ore", 4},
-                {"minecraft:deepslate_redstone_ore", 4},
-                {"minecraft:lit_deepslate_redstone_ore", 4},
-                {"minecraft:quartz_ore", 5}
-        };
+        static const std::unordered_map<std::string, int> ores = {{"minecraft:coal_ore", 0},
+                                                                  {"minecraft:deepslate_coal_ore", 0},
+                                                                  {"minecraft:diamond_ore", 1},
+                                                                  {"minecraft:deepslate_diamond_ore", 1},
+                                                                  {"minecraft:emerald_ore", 2},
+                                                                  {"minecraft:deepslate_emerald_ore", 2},
+                                                                  {"minecraft:lapis_ore", 3},
+                                                                  {"minecraft:deepslate_lapis_ore", 3},
+                                                                  {"minecraft:redstone_ore", 4},
+                                                                  {"minecraft:lit_redstone_ore", 4},
+                                                                  {"minecraft:deepslate_redstone_ore", 4},
+                                                                  {"minecraft:lit_deepslate_redstone_ore", 4},
+                                                                  {"minecraft:quartz_ore", 5}};
 
         return ores;
     }

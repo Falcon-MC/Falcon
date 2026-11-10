@@ -12,9 +12,13 @@ public:
 
     std::string getSenderName() const override;
 
-    bool isPlayer() const override { return mExecutor != nullptr; }
+    bool isPlayer() const override {
+        return mExecutor != nullptr;
+    }
 
-    ServerPlayer *asPlayer() override { return mExecutor; }
+    ServerPlayer *asPlayer() override {
+        return mExecutor;
+    }
 
     void sendMessage(const std::string &message) override;
 
@@ -24,19 +28,33 @@ public:
 
     CommandPermission getCommandPermission() const override;
 
-    Vector3f getPosition() override { return mPosition; }
+    Vector3f getPosition() override {
+        return mPosition;
+    }
 
-    Vector3f getRotation() override { return mRotation; }
+    Vector3f getRotation() override {
+        return mRotation;
+    }
 
-    Level *getLevel() override { return mLevel; }
+    Level *getLevel() override {
+        return mLevel;
+    }
 
-    void setPosition(const Vector3f &position) { mPosition = position; }
+    void setPosition(const Vector3f &position) {
+        mPosition = position;
+    }
 
-    void setRotation(const Vector3f &rotation) { mRotation = rotation; }
+    void setRotation(const Vector3f &rotation) {
+        mRotation = rotation;
+    }
 
-    void setExecutor(ServerPlayer *executor) { mExecutor = executor; }
+    void setExecutor(ServerPlayer *executor) {
+        mExecutor = executor;
+    }
 
-    void setLevel(Level *level) { mLevel = level; }
+    void setLevel(Level *level) {
+        mLevel = level;
+    }
 
 private:
     CommandOrigin &mBase;

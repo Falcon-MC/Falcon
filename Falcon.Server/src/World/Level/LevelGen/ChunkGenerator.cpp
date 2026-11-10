@@ -52,7 +52,7 @@ std::unique_ptr<LevelChunk> ChunkGenerator::generateTerrain(int32_t chunkX, int3
 }
 
 int32_t ChunkGenerator::solidHeight(const LevelChunk &chunk, int32_t localX, int32_t localZ) {
-    static const BlockStateSet SKIPPED{"minecraft:air", "minecraft:water", "minecraft:flowing_water",
+    static const BlockStateSet SKIPPED{"minecraft:air",  "minecraft:water",        "minecraft:flowing_water",
                                        "minecraft:lava", "minecraft:flowing_lava", "minecraft:snow_layer"};
 
     int32_t y = LevelChunk::MAX_Y;

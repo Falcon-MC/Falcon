@@ -45,8 +45,7 @@ namespace {
     }
 }
 
-TakeBlockGoal::TakeBlockGoal(Settings settings) : mSettings(std::move(settings)) {
-}
+TakeBlockGoal::TakeBlockGoal(Settings settings) : mSettings(std::move(settings)) {}
 
 bool TakeBlockGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (mob.hasCarriedBlock() || std::uniform_real_distribution<float>(0.0f, 1.0f)(takeRandom()) >= mSettings.mChance)

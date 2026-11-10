@@ -21,8 +21,8 @@ namespace {
     }
 
     uint32_t readU32(const std::string &data, size_t offset) {
-        return (uint32_t) ((unsigned char) data[offset] | ((unsigned char) data[offset + 1] << 8) |
-                           ((unsigned char) data[offset + 2] << 16) | ((unsigned char) data[offset + 3] << 24));
+        return (uint32_t) ((unsigned char) data[offset] | ((unsigned char) data[offset + 1] << 8)
+                           | ((unsigned char) data[offset + 2] << 16) | ((unsigned char) data[offset + 3] << 24));
     }
 
     bool inflateRaw(const std::string &input, size_t uncompressedSize, std::string &out) {
@@ -177,8 +177,8 @@ bool ResourcePackManager::_extractZipEntry(const std::string &zip, const std::st
         const std::string name = zip.substr(offset + 46, nameLength);
         offset += 46 + nameLength + extraLength + commentLength;
 
-        const bool matches = name.size() >= suffix.size() &&
-                             name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
+        const bool matches = name.size() >= suffix.size()
+                             && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
         if (!matches)
             continue;
 
@@ -243,8 +243,8 @@ bool ResourcePackManager::_loadPackBytes(std::string data, const std::string &la
 
     for (const ResourcePack &existing: mPacks) {
         if (existing.mUuidString == uuid) {
-            LOG_WARN(LogAreaID::Resource, "Skipping duplicate resource pack %s (uuid %s already loaded)",
-                     label.c_str(), uuid.c_str());
+            LOG_WARN(LogAreaID::Resource, "Skipping duplicate resource pack %s (uuid %s already loaded)", label.c_str(),
+                     uuid.c_str());
             return false;
         }
     }
@@ -296,8 +296,7 @@ void ResourcePackManager::_loadFolder(const std::string &path, const std::string
     ZipWriter writer;
     const std::filesystem::path base(path);
 
-    for (const std::filesystem::directory_entry &entry:
-                 std::filesystem::recursive_directory_iterator(base, error)) {
+    for (const std::filesystem::directory_entry &entry: std::filesystem::recursive_directory_iterator(base, error)) {
         if (!entry.is_regular_file())
             continue;
 
@@ -441,8 +440,7 @@ bool ResourcePackManager::loadCdnConfig(const std::string &path) {
         }
 
         pack->mCdnUrl = url->mString;
-        LOG_INFO(LogAreaID::Resource, "CDN URL for resource pack %s: %s", pack->mName.c_str(),
-                 pack->mCdnUrl.c_str());
+        LOG_INFO(LogAreaID::Resource, "CDN URL for resource pack %s: %s", pack->mName.c_str(), pack->mCdnUrl.c_str());
     }
 
     return true;

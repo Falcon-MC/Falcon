@@ -91,19 +91,33 @@ public:
 
     bool openContainer(ContainerType type, const Vector3i &position);
 
-    bool isCraftingTableOpen() const { return mCraftingTableWindowId != CONTAINER_ID_NONE; }
+    bool isCraftingTableOpen() const {
+        return mCraftingTableWindowId != CONTAINER_ID_NONE;
+    }
 
-    bool isFurnaceOpen() const { return mFurnaceWindowId != CONTAINER_ID_NONE; }
+    bool isFurnaceOpen() const {
+        return mFurnaceWindowId != CONTAINER_ID_NONE;
+    }
 
-    int getCraftingTableWindowId() const { return mCraftingTableWindowId; }
+    int getCraftingTableWindowId() const {
+        return mCraftingTableWindowId;
+    }
 
-    int getFurnaceWindowId() const { return mFurnaceWindowId; }
+    int getFurnaceWindowId() const {
+        return mFurnaceWindowId;
+    }
 
-    const Vector3i &getFurnacePosition() const { return mFurnacePosition; }
+    const Vector3i &getFurnacePosition() const {
+        return mFurnacePosition;
+    }
 
-    FurnaceKind getFurnaceKind() const { return mFurnaceKind; }
+    FurnaceKind getFurnaceKind() const {
+        return mFurnaceKind;
+    }
 
-    ContainerType getFurnaceContainerType() const { return mFurnaceContainerType; }
+    ContainerType getFurnaceContainerType() const {
+        return mFurnaceContainerType;
+    }
 
     void tickFurnace(ServerNetworkHandler &owner);
 
@@ -119,17 +133,27 @@ public:
 
     bool onClientOpenBlockContainer(const Vector3i &position, ContainerType type);
 
-    bool isContainerOpen() const { return mContainerWindowId != CONTAINER_ID_NONE; }
+    bool isContainerOpen() const {
+        return mContainerWindowId != CONTAINER_ID_NONE;
+    }
 
-    int getContainerWindowId() const { return mContainerWindowId; }
+    int getContainerWindowId() const {
+        return mContainerWindowId;
+    }
 
-    const Vector3i &getContainerPosition() const { return mContainerPosition; }
+    const Vector3i &getContainerPosition() const {
+        return mContainerPosition;
+    }
 
-    ContainerType getCurrentWindowType() const { return mCurrentWindowType; }
+    ContainerType getCurrentWindowType() const {
+        return mCurrentWindowType;
+    }
 
     bool refreshEnchantInput(const ItemStack &current, int32_t newSeed);
 
-    int32_t getEnchantSeed() const { return mEnchantSeed; }
+    int32_t getEnchantSeed() const {
+        return mEnchantSeed;
+    }
 
     Container *getContainer();
 
@@ -149,16 +173,16 @@ public:
 
     int getCurrentWindowId() const {
         return mFurnaceWindowId != CONTAINER_ID_NONE
-               ? mFurnaceWindowId
-               : (mCraftingTableWindowId != CONTAINER_ID_NONE
-                      ? mCraftingTableWindowId
-                      : (mAnvilWindowId != CONTAINER_ID_NONE
-                             ? mAnvilWindowId
-                             : (mContainerWindowId != CONTAINER_ID_NONE
-                                    ? mContainerWindowId
-                                    : (mMainInventoryWindowId != CONTAINER_ID_NONE
-                                           ? mMainInventoryWindowId
-                                           : mLastInventoryNetworkId))));
+                       ? mFurnaceWindowId
+                       : (mCraftingTableWindowId != CONTAINER_ID_NONE
+                                  ? mCraftingTableWindowId
+                                  : (mAnvilWindowId != CONTAINER_ID_NONE
+                                             ? mAnvilWindowId
+                                             : (mContainerWindowId != CONTAINER_ID_NONE
+                                                        ? mContainerWindowId
+                                                        : (mMainInventoryWindowId != CONTAINER_ID_NONE
+                                                                   ? mMainInventoryWindowId
+                                                                   : mLastInventoryNetworkId))));
     }
 
 private:
@@ -172,8 +196,7 @@ private:
 
     void _animateChest(ChestBlockActor &chest, bool open);
 
-    void _animateBlockContainer(const Vector3i &position, bool open, const char *openSound,
-                                const char *closeSound);
+    void _animateBlockContainer(const Vector3i &position, bool open, const char *openSound, const char *closeSound);
 
     void _animateBarrel(const Vector3i &position, bool open);
 

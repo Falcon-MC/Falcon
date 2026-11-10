@@ -10,5 +10,4 @@ namespace {
 }
 
 OverworldNoiseHolder::OverworldNoiseHolder(int64_t seed)
-    : mRandomSource(std::make_shared<XoroshiroRandom>(seed)), mNoiseFactory(createNoiseFactory(seed)) {
-}
+        : mRandomSource(std::make_shared<XoroshiroRandom>(seed)), mNoiseFactory(createNoiseFactory(seed)) {}

@@ -11,11 +11,17 @@ public:
 
     using HostileActor::HostileActor;
 
-    ActorSize getSize() const override { return ActorSize{0.4f, 0.3f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.4f, 0.3f};
+    }
 
-    float getDefaultMaxHealth() const override { return 8.0f; }
+    float getDefaultMaxHealth() const override {
+        return 8.0f;
+    }
 
-    int getExperienceDrop() const override { return 3; }
+    int getExperienceDrop() const override {
+        return 3;
+    }
 
     void tick(ServerNetworkHandler &owner) override;
 

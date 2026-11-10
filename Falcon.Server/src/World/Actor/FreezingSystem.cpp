@@ -80,7 +80,8 @@ void FreezingSystem::tick(ServerNetworkHandler &owner, Actor &actor) {
     const float damage = actor.getEffects().advanceFreezing(rising);
     if (damage <= 0.0f || !level.getGameRules().getBool("freezedamage"))
         return;
-    const ActorDamageSource source = ActorDamageSource::environment("death.attack.freeze", actor.getName()).withoutArmor();
+    const ActorDamageSource source =
+            ActorDamageSource::environment("death.attack.freeze", actor.getName()).withoutArmor();
     if (auto *player = dynamic_cast<ServerPlayer *>(&actor))
         owner.hurt(*player, damage, source);
     else if (auto *mob = dynamic_cast<ServerActor *>(&actor))

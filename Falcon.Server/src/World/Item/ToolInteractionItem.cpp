@@ -21,11 +21,7 @@ namespace {
     const std::string STRIPPED = "minecraft:stripped_";
     const char *const STRIPPABLE_SUFFIXES[] = {"_log", "_wood", "_stem", "_hyphae"};
 
-    enum class Effect {
-        Sound,
-        WaxOff,
-        Scrape
-    };
+    enum class Effect { Sound, WaxOff, Scrape };
 
     struct Transformation {
         std::string mIdentifier;
@@ -120,8 +116,7 @@ bool ToolInteractionItem::matches(const std::string &identifier) {
     if (data == nullptr)
         return false;
 
-    return data->mToolType == ToolType::Hoe || data->mToolType == ToolType::Axe
-           || data->mToolType == ToolType::Shovel;
+    return data->mToolType == ToolType::Hoe || data->mToolType == ToolType::Axe || data->mToolType == ToolType::Shovel;
 }
 
 bool ToolInteractionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,

@@ -18,13 +18,19 @@ public:
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    Container *getContainer() override { return &mInventory; }
+    Container *getContainer() override {
+        return &mInventory;
+    }
 
     bool tick(ServerNetworkHandler &owner) override;
 
-    FurnaceInventory &getInventory() { return mInventory; }
+    FurnaceInventory &getInventory() {
+        return mInventory;
+    }
 
-    const FurnaceInventory &getInventory() const { return mInventory; }
+    const FurnaceInventory &getInventory() const {
+        return mInventory;
+    }
 
     int32_t takeStoredExperience();
 

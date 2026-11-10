@@ -20,8 +20,8 @@ namespace MovementPhysics {
 
     bool input(const PlayerAuthInputPacket &packet, PlayerAuthInputData flag);
 
-    bool activeState(bool previous, const PlayerAuthInputPacket &packet,
-                     PlayerAuthInputData start, PlayerAuthInputData stop);
+    bool activeState(bool previous, const PlayerAuthInputPacket &packet, PlayerAuthInputData start,
+                     PlayerAuthInputData stop);
 
     bool chunkLoaded(Level &level, const Vector3f &position);
 

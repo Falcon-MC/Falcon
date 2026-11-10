@@ -13,8 +13,7 @@
 
 World &ServerNetworkHandler::_openWorld(const std::string &name, int64_t seed) {
     World &world = mWorlds.add(name, _getServerViewDistance(), seed);
-    const Level::PacketBroadcaster broadcaster = [this](Level &level, const Vector3f &position,
-                                                        const Packet &packet) {
+    const Level::PacketBroadcaster broadcaster = [this](Level &level, const Vector3f &position, const Packet &packet) {
         BlockActionHandler::broadcastToViewers(*this, level, position, packet);
     };
 

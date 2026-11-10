@@ -8,8 +8,7 @@ public:
     static constexpr float DEFAULT_GRAVITY = 0.05f;
 
     ProjectileActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size)
-            : SizedActor(runtimeId, identifier, size, true) {
-    }
+            : SizedActor(runtimeId, identifier, size, true) {}
 
     virtual float getGravity() const {
         return DEFAULT_GRAVITY;
@@ -191,11 +190,8 @@ public:
     }
 };
 
-#define FALCON_REGISTER_PROJECTILE(type, tag, identifier, width, height)                  \
-    static const ActorClassRegistry::Registration gActorRegistration##tag(               \
-            (identifier),                                                                \
-            [](uint64_t runtimeId, const std::string &actorIdentifier)                   \
-                    -> std::unique_ptr<ServerActor> {                                    \
-                return std::make_unique<type>(runtimeId, actorIdentifier,                \
-                                              ActorSize{width, height});                 \
+#define FALCON_REGISTER_PROJECTILE(type, tag, identifier, width, height)                                               \
+    static const ActorClassRegistry::Registration gActorRegistration##tag(                                             \
+            (identifier), [](uint64_t runtimeId, const std::string &actorIdentifier) -> std::unique_ptr<ServerActor> { \
+                return std::make_unique<type>(runtimeId, actorIdentifier, ActorSize{width, height});                   \
             })

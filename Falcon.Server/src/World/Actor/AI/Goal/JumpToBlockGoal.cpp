@@ -47,7 +47,7 @@ bool JumpToBlockGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     Level &level = owner.getLevelFor(mob);
     const bool preferred = !mSettings.mPreferredBlocks.empty()
                            && std::uniform_real_distribution<float>(0.0f, 1.0f)(jumpRandom())
-                              < mSettings.mPreferredBlocksChance;
+                                      < mSettings.mPreferredBlocksChance;
     if ((preferred && _findTarget(level, mob, true)) || _findTarget(level, mob, false))
         return true;
 

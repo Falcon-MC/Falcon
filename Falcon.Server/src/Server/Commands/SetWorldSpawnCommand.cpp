@@ -10,8 +10,7 @@
 #include <string>
 
 SetWorldSpawnCommand::SetWorldSpawnCommand(ServerNetworkHandler &handler)
-        : Command("setworldspawn", "commands.setworldspawn.description", "/setworldspawn [x y z]"),
-          mHandler(handler) {}
+        : Command("setworldspawn", "commands.setworldspawn.description", "/setworldspawn [x y z]"), mHandler(handler) {}
 
 std::vector<CommandOverloadData> SetWorldSpawnCommand::getOverloads() const {
     CommandParamData position;

@@ -86,8 +86,7 @@ void ForestFlowerFoliageFeature::populate(ChunkGenerateContext &context, IRandom
             int32_t depth = 0;
             const int32_t height = level.getHeightAt(x, z);
             const BlockState *topBlockState = level.peekBlockPtr(x, height, z);
-            while (topBlockState != nullptr
-                   && (isLeaves(*topBlockState) || DecorationSupport::isAir(*topBlockState))) {
+            while (topBlockState != nullptr && (isLeaves(*topBlockState) || DecorationSupport::isAir(*topBlockState))) {
                 depth++;
                 topBlockState = level.peekBlockPtr(x, height - depth, z);
             }

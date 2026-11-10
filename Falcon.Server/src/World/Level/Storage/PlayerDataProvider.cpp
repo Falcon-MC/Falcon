@@ -52,9 +52,9 @@ bool PlayerDataProvider::isSafeName(const std::string &name) {
         return false;
 
     const std::string stem = StringUtil::toLowerCase(name.substr(0, name.find('.')));
-    static const char *const devices[] = {"con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5",
-                                          "com6", "com7", "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4",
-                                          "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"};
+    static const char *const devices[] = {"con",  "prn",  "aux",  "nul",  "com1", "com2", "com3", "com4",
+                                          "com5", "com6", "com7", "com8", "com9", "lpt1", "lpt2", "lpt3",
+                                          "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"};
     for (const char *device: devices) {
         if (stem == device)
             return false;
@@ -73,7 +73,8 @@ bool PlayerDataProvider::_gzipCompress(const std::string &input, std::string &ou
     std::memset(&stream, 0, sizeof(stream));
 
     if (deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, GZIP_WINDOW_BITS, GZIP_MEMORY_LEVEL,
-                     Z_DEFAULT_STRATEGY) != Z_OK)
+                     Z_DEFAULT_STRATEGY)
+        != Z_OK)
         return false;
 
     output.resize(deflateBound(&stream, (uLong) input.size()) + 32);

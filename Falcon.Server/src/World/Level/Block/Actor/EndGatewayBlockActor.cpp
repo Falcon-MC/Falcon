@@ -199,8 +199,8 @@ void EndGatewayBlockActor::_teleportEntities(ServerNetworkHandler &owner, Level 
     if (!hasExit())
         return;
 
-    const AxisAlignedBB block((float) mPosition.x, (float) mPosition.y, (float) mPosition.z,
-                              (float) mPosition.x + 1.0f, (float) mPosition.y + 1.0f, (float) mPosition.z + 1.0f);
+    const AxisAlignedBB block((float) mPosition.x, (float) mPosition.y, (float) mPosition.z, (float) mPosition.x + 1.0f,
+                              (float) mPosition.y + 1.0f, (float) mPosition.z + 1.0f);
 
     std::vector<Actor *> inside;
     for (auto &entry: owner.getPlayers()) {
@@ -209,7 +209,7 @@ void EndGatewayBlockActor::_teleportEntities(ServerNetworkHandler &owner, Level 
             continue;
 
         if (boxAt(player.getPosition(), MovementPhysics::PLAYER_WIDTH, MovementPhysics::PLAYER_HEIGHT)
-                .intersectsWith(block))
+                    .intersectsWith(block))
             inside.push_back(&player);
     }
 
@@ -264,8 +264,7 @@ void EndGatewayBlockActor::_teleport(ServerNetworkHandler &owner, Level &level, 
     event.mBlockPosition = mPosition;
     event.mEventType = COOLDOWN_EVENT;
     event.mEventData = 0;
-    BlockActionHandler::broadcastToViewers(owner, level,
-                                           Vector3f((float) mPosition.x + 0.5f, (float) mPosition.y + 0.5f,
-                                                    (float) mPosition.z + 0.5f),
-                                           event);
+    BlockActionHandler::broadcastToViewers(
+            owner, level, Vector3f((float) mPosition.x + 0.5f, (float) mPosition.y + 0.5f, (float) mPosition.z + 0.5f),
+            event);
 }

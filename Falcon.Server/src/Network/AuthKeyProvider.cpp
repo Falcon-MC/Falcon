@@ -192,10 +192,8 @@ namespace {
         bitString.push_back((char) 0);
         bitString.append(sequence);
 
-        const unsigned char rsaIdentifier[] = {
-                0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
-                0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00
-        };
+        const unsigned char rsaIdentifier[] = {0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+                                               0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00};
 
         std::string algorithm(reinterpret_cast<const char *>(rsaIdentifier), sizeof(rsaIdentifier));
         const std::string der = encodeDerBytes(0x30, algorithm + encodeDerBytes(0x03, bitString));

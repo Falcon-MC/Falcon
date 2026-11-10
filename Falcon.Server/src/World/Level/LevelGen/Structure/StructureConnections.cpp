@@ -129,7 +129,8 @@ namespace {
     bool raisesPost(const BlockState &above) {
         const Block *block = VanillaBlocks::fromIdentifier(above.mName);
         if (dynamic_cast<const TorchBlock *>(block) != nullptr || dynamic_cast<const LanternBlock *>(block) != nullptr
-            || dynamic_cast<const SignBlock *>(block) != nullptr || dynamic_cast<const WallSignBlock *>(block) != nullptr
+            || dynamic_cast<const SignBlock *>(block) != nullptr
+            || dynamic_cast<const WallSignBlock *>(block) != nullptr
             || dynamic_cast<const BannerBlock *>(block) != nullptr
             || dynamic_cast<const WallBannerBlock *>(block) != nullptr
             || dynamic_cast<const PressurePlateBlock *>(block) != nullptr)
@@ -153,12 +154,8 @@ namespace {
         }
 
         // a lone post or an uneven pair keeps the post, two tall opposite sides drop it, else the block above decides
-        const auto none = [&](size_t i) {
-            return std::string(sides[i]) == "none";
-        };
-        const auto tall = [&](size_t i) {
-            return std::string(sides[i]) == "tall";
-        };
+        const auto none = [&](size_t i) { return std::string(sides[i]) == "none"; };
+        const auto tall = [&](size_t i) { return std::string(sides[i]) == "tall"; };
         bool post = true;
         const bool alone = none(0) && none(1) && none(2) && none(3);
         if (!alone && none(1) == none(2) && none(0) == none(3)) {
@@ -196,9 +193,8 @@ BlockState StructureConnections::connected(const BlockState &post, bool east, bo
 
 BlockState StructureConnections::shaped(const BlockState &block, int32_t x, int32_t y, int32_t z, const Lookup &at) {
     if (isThinOrFence(block))
-        return connected(block, postConnects(block, at(x + 1, y, z), 1, 0),
-                         postConnects(block, at(x, y, z - 1), 0, -1), postConnects(block, at(x, y, z + 1), 0, 1),
-                         postConnects(block, at(x - 1, y, z), -1, 0));
+        return connected(block, postConnects(block, at(x + 1, y, z), 1, 0), postConnects(block, at(x, y, z - 1), 0, -1),
+                         postConnects(block, at(x, y, z + 1), 0, 1), postConnects(block, at(x - 1, y, z), -1, 0));
 
     if (isWall(block))
         return shapedWall(block, x, y, z, at);

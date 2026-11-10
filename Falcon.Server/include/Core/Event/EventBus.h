@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-template<typename T>
+template <typename T>
 class EventSignal {
 public:
     using Handler = std::function<void(T &)>;
@@ -37,11 +37,17 @@ public:
             entry.mHandler(event);
     }
 
-    bool hasSubscribers() const { return !mEntries.empty(); }
+    bool hasSubscribers() const {
+        return !mEntries.empty();
+    }
 
-    size_t subscriberCount() const { return mEntries.size(); }
+    size_t subscriberCount() const {
+        return mEntries.size();
+    }
 
-    void clear() { mEntries.clear(); }
+    void clear() {
+        mEntries.clear();
+    }
 
 private:
     struct Entry {
@@ -103,9 +109,13 @@ public:
 
 class EventBus {
 public:
-    BeforeEvents &before() { return mBefore; }
+    BeforeEvents &before() {
+        return mBefore;
+    }
 
-    AfterEvents &after() { return mAfter; }
+    AfterEvents &after() {
+        return mAfter;
+    }
 
     void clear() {
         mBefore.clear();

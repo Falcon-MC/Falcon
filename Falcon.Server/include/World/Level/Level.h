@@ -39,6 +39,7 @@ class TerrainCache;
 // one dimension; main thread only: loading and generation go to a ChunkWorker, back via drainCompletedChunks()
 class Level {
     friend class LevelPersistenceProbe;
+
 public:
     struct ChunkPosition {
         int32_t mX;
@@ -50,33 +51,59 @@ public:
 
     Level &operator=(Level &&other) noexcept;
 
-    const std::string &getName() const { return mName; }
+    const std::string &getName() const {
+        return mName;
+    }
 
-    int getViewDistance() const { return mViewDistance; }
+    int getViewDistance() const {
+        return mViewDistance;
+    }
 
-    DimensionType getDimensionType() const { return mDimension; }
+    DimensionType getDimensionType() const {
+        return mDimension;
+    }
 
-    uint32_t getWorldId() const { return mWorldId; }
+    uint32_t getWorldId() const {
+        return mWorldId;
+    }
 
-    void setWorldId(uint32_t worldId) { mWorldId = worldId; }
+    void setWorldId(uint32_t worldId) {
+        mWorldId = worldId;
+    }
 
-    int getDimensionId() const { return Dimension::toId(mDimension); }
+    int getDimensionId() const {
+        return Dimension::toId(mDimension);
+    }
 
-    int32_t getMinY() const { return Dimension::getMinY(mDimension); }
+    int32_t getMinY() const {
+        return Dimension::getMinY(mDimension);
+    }
 
-    int32_t getMaxY() const { return Dimension::getMaxY(mDimension); }
+    int32_t getMaxY() const {
+        return Dimension::getMaxY(mDimension);
+    }
 
-    bool hasSkyLight() const { return Dimension::hasSkyLight(mDimension); }
+    bool hasSkyLight() const {
+        return Dimension::hasSkyLight(mDimension);
+    }
 
     void decorate(LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow);
 
-    int64_t getTime() const { return mTime; }
+    int64_t getTime() const {
+        return mTime;
+    }
 
-    int64_t getDayTime() const { return mTime % 24000; }
+    int64_t getDayTime() const {
+        return mTime % 24000;
+    }
 
-    void setTime(int64_t time) { mTime = time < 0 ? 0 : time; }
+    void setTime(int64_t time) {
+        mTime = time < 0 ? 0 : time;
+    }
 
-    void addTime(int64_t time) { setTime(mTime + time); }
+    void addTime(int64_t time) {
+        setTime(mTime + time);
+    }
 
     bool isNight() const {
         return getDayTime() > 13184 && getDayTime() < 22800;
@@ -87,21 +114,37 @@ public:
             ++mTime;
     }
 
-    bool isRaining() const { return mRaining; }
+    bool isRaining() const {
+        return mRaining;
+    }
 
-    bool isThundering() const { return mRaining && mThundering; }
+    bool isThundering() const {
+        return mRaining && mThundering;
+    }
 
-    int32_t getRainTime() const { return mRainTime; }
+    int32_t getRainTime() const {
+        return mRainTime;
+    }
 
-    int32_t getThunderTime() const { return mThunderTime; }
+    int32_t getThunderTime() const {
+        return mThunderTime;
+    }
 
-    void setRainTime(int32_t rainTime) { mRainTime = rainTime; }
+    void setRainTime(int32_t rainTime) {
+        mRainTime = rainTime;
+    }
 
-    void setThunderTime(int32_t thunderTime) { mThunderTime = thunderTime; }
+    void setThunderTime(int32_t thunderTime) {
+        mThunderTime = thunderTime;
+    }
 
-    void setRainingState(bool raining) { mRaining = raining; }
+    void setRainingState(bool raining) {
+        mRaining = raining;
+    }
 
-    void setThunderingState(bool thundering) { mThundering = thundering; }
+    void setThunderingState(bool thundering) {
+        mThundering = thundering;
+    }
 
     void initializeWeather();
 
@@ -115,21 +158,35 @@ public:
 
     void addParticle(const Particle &particle);
 
-    BlockActorStore &getBlockActors() { return mBlockActors; }
+    BlockActorStore &getBlockActors() {
+        return mBlockActors;
+    }
 
     // mobs spawned by a generating structure; the chunk worker stores them with the chunk
-    void addGeneratedEntity(Tag entity) { mGeneratedEntities.push_back(std::move(entity)); }
+    void addGeneratedEntity(Tag entity) {
+        mGeneratedEntities.push_back(std::move(entity));
+    }
 
-    std::vector<Tag> takeGeneratedEntities() { return std::exchange(mGeneratedEntities, std::vector<Tag>()); }
+    std::vector<Tag> takeGeneratedEntities() {
+        return std::exchange(mGeneratedEntities, std::vector<Tag>());
+    }
 
-    const BlockActorStore &getBlockActors() const { return mBlockActors; }
+    const BlockActorStore &getBlockActors() const {
+        return mBlockActors;
+    }
 
-    GameRules &getGameRules() { return mRulesOwner == nullptr ? mGameRules : mRulesOwner->mGameRules; }
+    GameRules &getGameRules() {
+        return mRulesOwner == nullptr ? mGameRules : mRulesOwner->mGameRules;
+    }
 
-    const GameRules &getGameRules() const { return mRulesOwner == nullptr ? mGameRules : mRulesOwner->mGameRules; }
+    const GameRules &getGameRules() const {
+        return mRulesOwner == nullptr ? mGameRules : mRulesOwner->mGameRules;
+    }
 
     // game rules belong to the world: Nether and End use the overworld ones
-    void shareGameRulesWith(Level &overworld) { mRulesOwner = &overworld; }
+    void shareGameRulesWith(Level &overworld) {
+        mRulesOwner = &overworld;
+    }
 
     void initializeGameRules();
 
@@ -151,9 +208,13 @@ public:
 
     void closeStorage();
 
-    void compactStorage() { mStorage.compact(); }
+    void compactStorage() {
+        mStorage.compact();
+    }
 
-    bool isStorageOpen() const { return mStorage.isOpen(); }
+    bool isStorageOpen() const {
+        return mStorage.isOpen();
+    }
 
     void saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
 
@@ -188,7 +249,9 @@ public:
 
     static constexpr uint32_t DEFAULT_WORLD_START_COUNT = 0xFFFFFFFFu;
 
-    uint32_t getWorldStartCount() const { return mWorldStartCount; }
+    uint32_t getWorldStartCount() const {
+        return mWorldStartCount;
+    }
 
     int32_t getMoonPhase() const;
 
@@ -196,9 +259,13 @@ public:
 
     float getRegionalDifficulty(int32_t difficulty) const;
 
-    bool isBonusChestPending() const { return mBonusChestEnabled && !mBonusChestSpawned; }
+    bool isBonusChestPending() const {
+        return mBonusChestEnabled && !mBonusChestSpawned;
+    }
 
-    void markBonusChestSpawned() { mBonusChestSpawned = true; }
+    void markBonusChestSpawned() {
+        mBonusChestSpawned = true;
+    }
 
     bool isStandable(int32_t x, int32_t y, int32_t z);
 
@@ -264,7 +331,9 @@ public:
 
     void releaseChunkIfUnused(int32_t chunkX, int32_t chunkZ);
 
-    size_t getUnloadQueueSize() const { return mUnloadQueue.size(); }
+    size_t getUnloadQueueSize() const {
+        return mUnloadQueue.size();
+    }
 
     LevelChunk *peekChunkPtr(int32_t chunkX, int32_t chunkZ);
 
@@ -290,7 +359,9 @@ public:
     // Nether: skips the solid blocks at y first, a column under the ceiling finds the ground
     int32_t getAboveTopSolidBlock(int32_t x, int32_t y, int32_t z);
 
-    int32_t getSkyLightSubtracted() const { return mSkyLightSubtracted; }
+    int32_t getSkyLightSubtracted() const {
+        return mSkyLightSubtracted;
+    }
 
     void updateSkyLightSubtracted();
 
@@ -300,16 +371,22 @@ public:
 
     void startWorkers(size_t threadCount);
 
-    const ChunkWorker *getChunkWorker() const { return mChunkWorker.get(); }
+    const ChunkWorker *getChunkWorker() const {
+        return mChunkWorker.get();
+    }
 
     // cached per translation; main thread only: caches filled here, cleared on block changes without a lock
     std::string getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds = nullptr);
 
     int getChunkSubChunkCount(int32_t chunkX, int32_t chunkZ);
 
-    uint32_t getSubChunkCount() const { return LevelChunk::SUB_CHUNK_COUNT; }
+    uint32_t getSubChunkCount() const {
+        return LevelChunk::SUB_CHUNK_COUNT;
+    }
 
-    size_t getLoadedChunkCount() const { return mChunks.size(); }
+    size_t getLoadedChunkCount() const {
+        return mChunks.size();
+    }
 
     int32_t getBlock(int32_t x, int32_t y, int32_t z);
 
@@ -345,9 +422,13 @@ public:
 
     void scheduleBlockUpdate(const Vector3i &position, int64_t delay = 1);
 
-    void setOwner(ServerNetworkHandler *owner) { mOwner = owner; }
+    void setOwner(ServerNetworkHandler *owner) {
+        mOwner = owner;
+    }
 
-    ServerNetworkHandler *getOwner() const { return mOwner; }
+    ServerNetworkHandler *getOwner() const {
+        return mOwner;
+    }
 
     void setBlock(const Vector3i &position, const BlockState &state, bool update);
 
@@ -364,7 +445,9 @@ public:
 
     void tickBlockUpdates();
 
-    size_t getScheduledUpdateCount() const { return mBlockUpdates.getScheduledCount(); }
+    size_t getScheduledUpdateCount() const {
+        return mBlockUpdates.getScheduledCount();
+    }
 
     void onBlockPlaced(const Vector3i &position, const BlockState &state);
 
@@ -374,7 +457,9 @@ public:
 
     bool isColumnActive(int32_t chunkX, int32_t chunkZ) const;
 
-    const std::unordered_set<int64_t> &getActiveColumns() const { return mActiveColumns; }
+    const std::unordered_set<int64_t> &getActiveColumns() const {
+        return mActiveColumns;
+    }
 
     size_t getScheduledFluidCount() const {
         return mLiquidPhysics.getScheduledCount();
@@ -392,11 +477,17 @@ public:
 
     std::vector<FluidChange> consumeFluidChanges();
 
-    int32_t getAirHash() const { return mGenerator->getAirHash(); }
+    int32_t getAirHash() const {
+        return mGenerator->getAirHash();
+    }
 
-    int64_t getSeed() const { return mSeed; }
+    int64_t getSeed() const {
+        return mSeed;
+    }
 
-    int32_t pickBiome(int32_t x, int32_t y, int32_t z) const { return mGenerator->pickBiome(x, y, z); }
+    int32_t pickBiome(int32_t x, int32_t y, int32_t z) const {
+        return mGenerator->pickBiome(x, y, z);
+    }
 
     const ChunkGenerator &getGenerator() const {
         return *mGenerator;
@@ -420,7 +511,9 @@ public:
 
     std::vector<int64_t> consumeRepopulatedChunks();
 
-    size_t getPendingChangeChunkCount() const { return mPendingBlockChanges.size(); }
+    size_t getPendingChangeChunkCount() const {
+        return mPendingBlockChanges.size();
+    }
 
 private:
     void _refreshChunkShapes(int32_t chunkX, int32_t chunkZ);
@@ -463,7 +556,8 @@ private:
     size_t _generationBacklog() const {
         // parked changes only hold generation back once far beyond what storage is asked to take
         const size_t parkedOverflow = mPendingBlockChangeCount > MAX_PARKED_CHANGES
-                                      ? mPendingBlockChangeCount - MAX_PARKED_CHANGES : 0;
+                                              ? mPendingBlockChangeCount - MAX_PARKED_CHANGES
+                                              : 0;
         return mIncomingChanges.size() + parkedOverflow;
     }
 

@@ -155,10 +155,9 @@ void ActorMovementSystem::_applyMovementFriction(Level &level, ServerActor &acto
     }
 
     Vector3f velocity = actor.getMotion();
-    MobMovementFrictionSystem::apply(velocity,
-                                     MobMovementFrictionSystem::factor(friction, physics.mFrictionModifier,
-                                                                       physics.mAirDragModifier),
-                                     physics.mUniformAirDrag);
+    MobMovementFrictionSystem::apply(
+            velocity, MobMovementFrictionSystem::factor(friction, physics.mFrictionModifier, physics.mAirDragModifier),
+            physics.mUniformAirDrag);
     actor.setMotion(velocity);
 }
 

@@ -31,8 +31,8 @@ bool PlayerMovementValidator::stillSeated(const Vector3f &start, const Vector3f 
     return dx * dx + dy * dy + dz * dz < 1.0e-6f && --mDismountInputsLeft > 0;
 }
 
-bool PlayerMovementValidator::reconcile(Vector3f &simulated, const Vector3f &reported, uint64_t tick,
-                                        float threshold, bool strict, MovementCorrectionDetails *details) {
+bool PlayerMovementValidator::reconcile(Vector3f &simulated, const Vector3f &reported, uint64_t tick, float threshold,
+                                        bool strict, MovementCorrectionDetails *details) {
     // 1.26.10: comparator 0x140B4A560, defaults 0x1437F5420, property scaling 0x140158FA0
     if (details != nullptr)
         *details = {};

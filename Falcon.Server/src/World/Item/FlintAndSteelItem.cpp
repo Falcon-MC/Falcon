@@ -2,13 +2,9 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
-FALCON_REGISTER_ITEM_CUSTOM(FlintAndSteelItem, 40,
-                            [](const std::string &identifier) {
-                                return identifier == "minecraft:flint_and_steel";
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<FlintAndSteelItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        FlintAndSteelItem, 40, [](const std::string &identifier) { return identifier == "minecraft:flint_and_steel"; },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<FlintAndSteelItem>(item); });
 
 #include "World/Level/Block/Systems/FireSystem.h"
 #include "World/Inventory/InventoryManager.h"
@@ -24,8 +20,7 @@ using namespace FireStarterHelpers;
 FlintAndSteelItem::FlintAndSteelItem(const Item &base) : Item(base) {}
 
 bool FlintAndSteelItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
-                                     const Vector3i &blockPosition, int32_t face,
-                                     const Vector3f &clickPosition) const {
+                                     const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
     (void) item;
     (void) clickPosition;
 

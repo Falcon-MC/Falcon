@@ -6,7 +6,9 @@ class LiquidView {
 public:
     explicit LiquidView(const BlockState &state) : mState(state) {}
 
-    const std::string &identifier() const { return mState.mName; }
+    const std::string &identifier() const {
+        return mState.mName;
+    }
 
     bool isWater() const {
         return mState.mName == "minecraft:water" || mState.mName == "minecraft:flowing_water";
@@ -16,9 +18,13 @@ public:
         return mState.mName == "minecraft:lava" || mState.mName == "minecraft:flowing_lava";
     }
 
-    bool isLiquid() const { return isWater() || isLava(); }
+    bool isLiquid() const {
+        return isWater() || isLava();
+    }
 
-    bool isBubbleColumn() const { return mState.mName == "minecraft:bubble_column"; }
+    bool isBubbleColumn() const {
+        return mState.mName == "minecraft:bubble_column";
+    }
 
     int getDepth() const {
         return mState.mStates.getInt("liquid_depth", 0);
@@ -37,7 +43,9 @@ public:
         return isLiquid() && getDepth() >= 8;
     }
 
-    bool isDragDown() const { return mState.mStates.getBool("drag_down", false); }
+    bool isDragDown() const {
+        return mState.mStates.getBool("drag_down", false);
+    }
 
     float getFluidHeightPercent() const {
         if (isBubbleColumn())

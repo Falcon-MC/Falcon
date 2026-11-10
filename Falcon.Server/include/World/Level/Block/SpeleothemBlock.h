@@ -4,8 +4,7 @@
 
 class SpeleothemBlock : public Block {
 public:
-    explicit SpeleothemBlock(const Block &block) : Block(block) {
-    }
+    explicit SpeleothemBlock(const Block &block) : Block(block) {}
 
     void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                             const BlockState &state) const override;

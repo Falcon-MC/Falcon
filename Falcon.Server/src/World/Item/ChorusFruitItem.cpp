@@ -29,8 +29,7 @@ namespace {
 
 FALCON_REGISTER_ITEM(ChorusFruitItem, 100);
 
-ChorusFruitItem::ChorusFruitItem(const Item &base) : Item(base) {
-}
+ChorusFruitItem::ChorusFruitItem(const Item &base) : Item(base) {}
 
 bool ChorusFruitItem::matches(const std::string &identifier) {
     return identifier == CHORUS_FRUIT_IDENTIFIER;
@@ -57,8 +56,7 @@ bool ChorusFruitItem::isLiquid(Level &level, int x, int y, int z) {
     return LiquidBlock(level.getBlockState(x, y, z)).isLiquid();
 }
 
-bool ChorusFruitItem::findTeleportPosition(ServerNetworkHandler &owner, ServerPlayer &player,
-                                            Vector3f &destination) {
+bool ChorusFruitItem::findTeleportPosition(ServerNetworkHandler &owner, ServerPlayer &player, Vector3f &destination) {
     Level &level = owner.getLevelFor(player);
     const Vector3f origin = player.getPosition();
     const int minWorldY = level.getMinY();
@@ -89,8 +87,8 @@ bool ChorusFruitItem::findTeleportPosition(ServerNetworkHandler &owner, ServerPl
         if (y < minWorldY || y + 2 > maxWorldY)
             continue;
 
-        if (isSolid(level, x, y + 1, z) || isLiquid(level, x, y + 1, z)
-            || isSolid(level, x, y + 2, z) || isLiquid(level, x, y + 2, z))
+        if (isSolid(level, x, y + 1, z) || isLiquid(level, x, y + 1, z) || isSolid(level, x, y + 2, z)
+            || isLiquid(level, x, y + 2, z))
             continue;
 
         destination = Vector3f((float) x + 0.5f, (float) y + 1.0f, (float) z + 0.5f);

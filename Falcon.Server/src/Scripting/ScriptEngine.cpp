@@ -26,7 +26,8 @@ using namespace ScriptValues;
 namespace {
     int64_t nowMs() {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now().time_since_epoch()).count();
+                       std::chrono::steady_clock::now().time_since_epoch())
+                .count();
     }
 
     const char *directionName(int32_t face) {
@@ -38,8 +39,8 @@ namespace {
                               int32_t face) {
         JSContext *ctx = api.context();
         JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
-        JS_SetPropertyStr(ctx, event, "block", api.makeBlock(api.host().getLevelFor(player), position.x, position.y,
-                                                             position.z));
+        JS_SetPropertyStr(ctx, event, "block",
+                          api.makeBlock(api.host().getLevelFor(player), position.x, position.y, position.z));
         JS_SetPropertyStr(ctx, event, "blockFace", JS_NewString(ctx, directionName(face)));
         JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(player.getInventory().getItemInHand()));
         JS_SetPropertyStr(ctx, event, "isFirstEvent", JS_TRUE);
@@ -244,9 +245,8 @@ void ScriptEngine::bindHost(ServerNetworkHandler &host) {
         return;
 
     mHost = &host;
-    MobEffectManager::setAddFilter([this](Actor &actor, const MobEffectInstance &effect) {
-        return !beforeEffectAdd(actor, effect);
-    });
+    MobEffectManager::setAddFilter(
+            [this](Actor &actor, const MobEffectInstance &effect) { return !beforeEffectAdd(actor, effect); });
 
     // once for the server, not per pack: every pack sees the same custom block ticking
     host.getEventBus().after().mPlayerPlaceBlock.subscribe([this](PlayerPlaceBlockAfterEvent &event) {
@@ -310,8 +310,8 @@ bool ScriptEngine::_loadPack(const BehaviorPack &pack) {
     }
     _installConsole(context);
 
-    std::unique_ptr<ScriptApi> api(new ScriptApi(context, *mHost, mPlayers, mNativeClassId, pack.mName,
-                                                 canonicalPath(pack.mPath), modules));
+    std::unique_ptr<ScriptApi> api(
+            new ScriptApi(context, *mHost, mPlayers, mNativeClassId, pack.mName, canonicalPath(pack.mPath), modules));
     _arm();
     api->install();
 
@@ -363,7 +363,7 @@ void ScriptEngine::_pumpJobs() {
     }
 }
 
-template<typename Fill>
+template <typename Fill>
 bool ScriptEngine::_emit(const char *key, const char *signal, bool cancellable, Fill fill) {
     bool cancelled = false;
     for (std::unique_ptr<ScriptApi> &api: mApis) {
@@ -451,12 +451,10 @@ void ScriptEngine::onEntityItemDrop(Actor &entity, ItemActor *dropped) {
     });
 }
 
-void ScriptEngine::onPlayerInteractWithBlock(ServerPlayer &player, const std::string &blockId,
-                                             const Vector3i &position, int32_t face) {
+void ScriptEngine::onPlayerInteractWithBlock(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
+                                             int32_t face) {
     _emit("after.playerInteractWithBlock", "WorldAfterEvents.playerInteractWithBlock", false,
-          [&](ScriptApi &api, JSValue event) {
-              fillBlockInteraction(api, event, player, position, face);
-          });
+          [&](ScriptApi &api, JSValue event) { fillBlockInteraction(api, event, player, position, face); });
 
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();
@@ -538,9 +536,7 @@ void ScriptEngine::onEntityLoad(ServerActor &entity) {
 
 bool ScriptEngine::beforePlayerInteractWithBlock(ServerPlayer &player, const Vector3i &position, int32_t face) {
     return _emit("before.playerInteractWithBlock", "WorldBeforeEvents.playerInteractWithBlock", true,
-                 [&](ScriptApi &api, JSValue event) {
-                     fillBlockInteraction(api, event, player, position, face);
-                 });
+                 [&](ScriptApi &api, JSValue event) { fillBlockInteraction(api, event, player, position, face); });
 }
 
 bool ScriptEngine::beforeEntityHurt(Actor &hurtEntity, float damage, const std::string &cause, const Actor *attacker) {

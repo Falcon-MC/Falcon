@@ -25,22 +25,13 @@ public:
     static const int RESULT_OK = 0;
     static const int RESULT_ERROR = 1;
 
-    static ItemStackResponseEntry execute(PlayerInventory &inventory, const ItemStackRequest &request,
-                                          const std::vector<CreativeItemData> &creativeItems,
-                                          const std::vector<ItemStack> &recipeOutputs,
-                                          const std::vector<uint32_t> &recipeSourceIndices,
-                                          bool craftingTableOpen,
-                                          bool furnaceOpen,
-                                          Container *openContainer = nullptr,
-                                          std::vector<ItemStack> *outDroppedItems = nullptr,
-                                          const PacketCodecContext *codecContext = nullptr,
-                                          std::vector<BundleSyncData> *outBundles = nullptr,
-                                          int32_t playerXpLevel = 0,
-                                          bool creativeMode = false,
-                                          int32_t *outEnchantLevelsConsumed = nullptr,
-                                          bool anvilOpen = false,
-                                          int32_t *outAnvilLevelsConsumed = nullptr,
-                                          bool *outAnvilUsed = nullptr,
-                                          const CartographyRecipes::Maps *cartographyMaps = nullptr,
-                                          CartographyLock *outCartographyLock = nullptr);
+    static ItemStackResponseEntry
+    execute(PlayerInventory &inventory, const ItemStackRequest &request,
+            const std::vector<CreativeItemData> &creativeItems, const std::vector<ItemStack> &recipeOutputs,
+            const std::vector<uint32_t> &recipeSourceIndices, bool craftingTableOpen, bool furnaceOpen,
+            Container *openContainer = nullptr, std::vector<ItemStack> *outDroppedItems = nullptr,
+            const PacketCodecContext *codecContext = nullptr, std::vector<BundleSyncData> *outBundles = nullptr,
+            int32_t playerXpLevel = 0, bool creativeMode = false, int32_t *outEnchantLevelsConsumed = nullptr,
+            bool anvilOpen = false, int32_t *outAnvilLevelsConsumed = nullptr, bool *outAnvilUsed = nullptr,
+            const CartographyRecipes::Maps *cartographyMaps = nullptr, CartographyLock *outCartographyLock = nullptr);
 };

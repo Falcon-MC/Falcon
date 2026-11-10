@@ -13,7 +13,11 @@ public:
         return true;
     }
 
-    ActorSize getSize() const override { return ActorSize{0.8f, 0.8f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.8f, 0.8f};
+    }
 
-    float getDefaultMaxHealth() const override { return 3.0f; }
+    float getDefaultMaxHealth() const override {
+        return 3.0f;
+    }
 };

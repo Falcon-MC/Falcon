@@ -25,7 +25,8 @@ float TheEndOctaveNoise::sample(float x, float y, float z) const {
 
     for (const TheEndImprovedNoise &octave: mOctaves) {
         total += octave.sample(x * frequency + octave.getXCoord(), y * frequency + octave.getYCoord(),
-                               z * frequency + octave.getZCoord()) / frequency;
+                               z * frequency + octave.getZCoord())
+                 / frequency;
         amplitudeSum += 1.0f / frequency;
         frequency *= 0.5f;
     }

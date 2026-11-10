@@ -23,9 +23,8 @@ bool TreeBiomeTags::isFlowerForest(int32_t biomeId) {
 }
 
 bool TreeBiomeTags::isForest(int32_t biomeId) {
-    return biomeId == BiomeIds::FOREST || biomeId == BiomeIds::FLOWER_FOREST
-           || biomeId == BiomeIds::BIRCH_FOREST || biomeId == BiomeIds::BIRCH_FOREST_MUTATED
-           || biomeId == BiomeIds::ROOFED_FOREST;
+    return biomeId == BiomeIds::FOREST || biomeId == BiomeIds::FLOWER_FOREST || biomeId == BiomeIds::BIRCH_FOREST
+           || biomeId == BiomeIds::BIRCH_FOREST_MUTATED || biomeId == BiomeIds::ROOFED_FOREST;
 }
 
 bool TreeBiomeTags::isGrove(int32_t biomeId) {
@@ -33,8 +32,7 @@ bool TreeBiomeTags::isGrove(int32_t biomeId) {
 }
 
 bool TreeBiomeTags::isJungle(int32_t biomeId) {
-    return biomeId == BiomeIds::JUNGLE || biomeId == BiomeIds::JUNGLE_EDGE
-           || biomeId == BiomeIds::BAMBOO_JUNGLE;
+    return biomeId == BiomeIds::JUNGLE || biomeId == BiomeIds::JUNGLE_EDGE || biomeId == BiomeIds::BAMBOO_JUNGLE;
 }
 
 bool TreeBiomeTags::isMangroveSwamp(int32_t biomeId) {
@@ -46,8 +44,7 @@ bool TreeBiomeTags::isMeadow(int32_t biomeId) {
 }
 
 bool TreeBiomeTags::isMesa(int32_t biomeId) {
-    return biomeId == BiomeIds::MESA || biomeId == BiomeIds::MESA_PLATEAU_STONE
-           || biomeId == BiomeIds::MESA_BRYCE;
+    return biomeId == BiomeIds::MESA || biomeId == BiomeIds::MESA_PLATEAU_STONE || biomeId == BiomeIds::MESA_BRYCE;
 }
 
 bool TreeBiomeTags::isMooshroomIsland(int32_t biomeId) {
@@ -67,8 +64,7 @@ bool TreeBiomeTags::isRoofed(int32_t biomeId) {
 }
 
 bool TreeBiomeTags::isSavanna(int32_t biomeId) {
-    return biomeId == BiomeIds::SAVANNA || biomeId == BiomeIds::SAVANNA_PLATEAU
-           || biomeId == BiomeIds::SAVANNA_MUTATED;
+    return biomeId == BiomeIds::SAVANNA || biomeId == BiomeIds::SAVANNA_PLATEAU || biomeId == BiomeIds::SAVANNA_MUTATED;
 }
 
 bool TreeBiomeTags::isSwamp(int32_t biomeId) {
@@ -76,6 +72,6 @@ bool TreeBiomeTags::isSwamp(int32_t biomeId) {
 }
 
 bool TreeBiomeTags::isTaiga(int32_t biomeId) {
-    return biomeId == BiomeIds::TAIGA || biomeId == BiomeIds::COLD_TAIGA
-           || biomeId == BiomeIds::MEGA_TAIGA || biomeId == BiomeIds::REDWOOD_TAIGA_MUTATED;
+    return biomeId == BiomeIds::TAIGA || biomeId == BiomeIds::COLD_TAIGA || biomeId == BiomeIds::MEGA_TAIGA
+           || biomeId == BiomeIds::REDWOOD_TAIGA_MUTATED;
 }

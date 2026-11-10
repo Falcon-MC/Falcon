@@ -70,8 +70,7 @@ namespace {
 
 TheEndDecorationFeature::TheEndDecorationFeature(int64_t seed, const TheEndSimplexNoise &islandNoise)
         : mSeed((uint32_t) seed), mIslandNoise(&islandNoise), mSpikes(EndSpikes::create((uint32_t) seed)),
-          mSpikeRandom((uint32_t) seed) {
-}
+          mSpikeRandom((uint32_t) seed) {}
 
 const char *TheEndDecorationFeature::name() const {
     return "the_end_decoration";
@@ -200,11 +199,12 @@ void TheEndDecorationFeature::_placeChorus(std::mt19937 &random, int32_t x, int3
         const BlockState state = mRoot->getBlockAt(plant.x, plant.y, plant.z);
         // measured against the game: a generated plant does not connect down to the end stone it grows on
         mRoot->setBlockStateAt(plant.x, plant.y, plant.z, ChorusPlantBlock::connectedState(state, [&](int face) {
-            const Vector3i other = PlacementOrientation::relativePosition(plant, face);
-            const BlockState &neighbour = mRoot->getBlockAt(other.x, other.y, other.z);
-            const bool standsOn = face == PlacementOrientation::FACE_DOWN && neighbour.mName == endStoneState().mName;
-            return standsOn ? &airState() : &neighbour;
-        }));
+                                   const Vector3i other = PlacementOrientation::relativePosition(plant, face);
+                                   const BlockState &neighbour = mRoot->getBlockAt(other.x, other.y, other.z);
+                                   const bool standsOn = face == PlacementOrientation::FACE_DOWN
+                                                         && neighbour.mName == endStoneState().mName;
+                                   return standsOn ? &airState() : &neighbour;
+                               }));
     }
 }
 
@@ -213,10 +213,10 @@ void TheEndDecorationFeature::placeGateway(int32_t x, int32_t y, int32_t z, cons
         for (int32_t offsetY = -2; offsetY <= 2; offsetY++) {
             for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++) {
                 const bool center = offsetX == 0 && offsetZ == 0;
-                const bool frame = std::abs(offsetY) == 2 ? center
-                                                          : offsetY != 0 && (offsetX == 0 || offsetZ == 0);
+                const bool frame = std::abs(offsetY) == 2 ? center : offsetY != 0 && (offsetX == 0 || offsetZ == 0);
                 const BlockState &state = offsetY == 0 && center ? endGatewayState()
-                                                                 : frame ? infiniburnBedrockState() : airState();
+                                          : frame                ? infiniburnBedrockState()
+                                                                 : airState();
                 sink(x + offsetX, y + offsetY, z + offsetZ, state);
             }
         }

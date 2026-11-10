@@ -11,8 +11,8 @@ DebugHudCommand::DebugHudCommand(ServerNetworkHandler &handler)
 
 std::vector<CommandOverloadData> DebugHudCommand::getOverloads() const {
     CommandOverloadData overload;
-    overload.mParameters.push_back(makeEnumParameter("page", "DebugHudPage",
-                                                     {"performance", "generation", "network", "memory", "off"}));
+    overload.mParameters.push_back(
+            makeEnumParameter("page", "DebugHudPage", {"performance", "generation", "network", "memory", "off"}));
     return {overload};
 }
 

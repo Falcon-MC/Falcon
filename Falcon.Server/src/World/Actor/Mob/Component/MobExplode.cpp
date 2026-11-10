@@ -78,8 +78,8 @@ void MobExplode::_explode(ServerNetworkHandler &owner, MobActor &mob, const json
     mExploded = true;
     Level &level = owner.getLevelFor(mob);
     const json::Value *power = component.get("power");
-    Explosion explosion(owner, level, mob.getPosition(), power == nullptr ? DEFAULT_POWER : power->number(DEFAULT_POWER),
-                        &mob, false);
+    Explosion explosion(owner, level, mob.getPosition(),
+                        power == nullptr ? DEFAULT_POWER : power->number(DEFAULT_POWER), &mob, false);
     explosion.setIncendiary(flagIn(component, "causes_fire", false));
 
     const bool griefing = !flagIn(component, "destroy_affected_by_griefing", false)

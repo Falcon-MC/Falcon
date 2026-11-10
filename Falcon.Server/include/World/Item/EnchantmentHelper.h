@@ -30,8 +30,7 @@ namespace EnchantmentHelper {
     std::vector<EnchantmentInstance> enchantWithLevels(const std::string &identifier, int32_t levels,
                                                        bool allowTreasure, uint64_t seed);
 
-    std::vector<EnchantmentInstance> enchantRandomly(const std::string &identifier, bool allowTreasure,
-                                                     uint64_t seed);
+    std::vector<EnchantmentInstance> enchantRandomly(const std::string &identifier, bool allowTreasure, uint64_t seed);
 
     bool peekOptionCost(int32_t enchantNetId, int32_t &outConsumeCost);
 

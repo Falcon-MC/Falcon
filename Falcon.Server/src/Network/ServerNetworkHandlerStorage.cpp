@@ -250,8 +250,8 @@ void ServerNetworkHandler::autoSave(bool wait) {
             throw std::runtime_error("Could not save level: " + entry.first->getName());
     }
 
-    const long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - start).count();
+    const long long elapsed =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
     LOG_INFO(LogAreaID::Server, "Auto-saved the world in %lld ms", elapsed);
 }
 

@@ -59,8 +59,8 @@ SpearItem::SpearItem(const Item &base) : Item(base), mTierName(tierNameOf(base.g
 
 bool SpearItem::matches(const std::string &identifier) {
     static const std::string suffix = "_spear";
-    return identifier.size() > suffix.size() &&
-           identifier.compare(identifier.size() - suffix.size(), suffix.size(), suffix) == 0;
+    return identifier.size() > suffix.size()
+           && identifier.compare(identifier.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 float SpearItem::getKineticDamage(float speed) const {
@@ -198,7 +198,7 @@ void SpearItem::applySpearDamage(ServerNetworkHandler &owner, ServerPlayer &atta
     if (victim != nullptr) {
         owner.hurt(*victim, damage,
                    ActorDamageSource::attack("death.attack.player", victim->getName(), attacker, attacker.getName(),
-                                        attacker.getPosition())
+                                             attacker.getPosition())
                            .withoutArmor()
                            .withoutCooldown());
         return;
@@ -207,8 +207,8 @@ void SpearItem::applySpearDamage(ServerNetworkHandler &owner, ServerPlayer &atta
     ServerActor *actor = dynamic_cast<ServerActor *>(&target);
     if (actor != nullptr)
         owner.damageActor(*actor, damage,
-                          ActorDamageSource::attack("death.attack.player", actor->getName(), attacker, attacker.getName(),
-                                               attacker.getPosition())
+                          ActorDamageSource::attack("death.attack.player", actor->getName(), attacker,
+                                                    attacker.getName(), attacker.getPosition())
                                   .withoutArmor());
 }
 
@@ -225,8 +225,7 @@ bool SpearItem::getLungeImpulse(ServerNetworkHandler &owner, ServerPlayer &playe
         return false;
 
     const int32_t gameType = player.getGameType();
-    const bool finiteResources = gameType == (int32_t) GameType::Survival
-                                 || gameType == (int32_t) GameType::Adventure;
+    const bool finiteResources = gameType == (int32_t) GameType::Survival || gameType == (int32_t) GameType::Adventure;
     if (finiteResources && player.getFood() < MINIMUM_LUNGE_FOOD)
         return false;
 

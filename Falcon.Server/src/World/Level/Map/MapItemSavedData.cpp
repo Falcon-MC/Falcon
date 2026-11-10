@@ -94,8 +94,7 @@ void MapItemTrackingInfo::markDirty(uint32_t x, uint32_t y) {
     mMaxY = std::max(mMaxY, y);
 }
 
-MapItemSavedData::MapItemSavedData(int64_t mapId) : mMapId(mapId), mPixels((size_t) PIXEL_COUNT, 0) {
-}
+MapItemSavedData::MapItemSavedData(int64_t mapId) : mMapId(mapId), mPixels((size_t) PIXEL_COUNT, 0) {}
 
 void MapItemSavedData::markDirty() {
     mDirtyForSave = true;
@@ -295,13 +294,13 @@ void MapItemSavedData::load(const Tag &tag) {
     const Tag *colorsTag = tag.get("colors");
     const std::vector<int8_t> empty;
     const std::vector<int8_t> &colors = colorsTag != nullptr && colorsTag->getType() == Tag::Type::ByteArray
-                                        ? colorsTag->asByteArray() : empty;
+                                                ? colorsTag->asByteArray()
+                                                : empty;
     if (width == MAP_SIZE && height == MAP_SIZE) {
         std::fill(mPixels.begin(), mPixels.end(), 0);
         const size_t count = std::min(colors.size() / 4, mPixels.size());
         for (size_t index = 0; index < count; ++index) {
-            mPixels[index] = (uint32_t) (uint8_t) colors[index * 4]
-                             | ((uint32_t) (uint8_t) colors[index * 4 + 1] << 8)
+            mPixels[index] = (uint32_t) (uint8_t) colors[index * 4] | ((uint32_t) (uint8_t) colors[index * 4 + 1] << 8)
                              | ((uint32_t) (uint8_t) colors[index * 4 + 2] << 16)
                              | ((uint32_t) (uint8_t) colors[index * 4 + 3] << 24);
         }
@@ -428,10 +427,9 @@ void MapItemSavedData::addDecoration(MapDecorationType type, const MapItemTracke
 }
 
 void MapItemSavedData::removeDecoration(const MapItemTrackedActorKey &key) {
-    const auto removed = std::remove_if(mDecorations.begin(), mDecorations.end(),
-                                        [&key](const MapDecorationEntry &decoration) {
-                                            return decoration.mKey == key;
-                                        });
+    const auto removed = std::remove_if(
+            mDecorations.begin(), mDecorations.end(),
+            [&key](const MapDecorationEntry &decoration) { return decoration.mKey == key; });
     if (removed == mDecorations.end())
         return;
 
@@ -469,15 +467,12 @@ MapItemTrackingInfo &MapItemSavedData::addTracked(const MapItemTrackedActorKey &
 
 void MapItemSavedData::removeTracked(const MapItemTrackedActorKey &key) {
     mTracked.erase(std::remove_if(mTracked.begin(), mTracked.end(),
-                                  [&key](const MapItemTrackingInfo &tracking) {
-                                      return tracking.mKey == key;
-                                  }),
+                                  [&key](const MapItemTrackingInfo &tracking) { return tracking.mKey == key; }),
                    mTracked.end());
     removeDecoration(key);
 }
 
-ClientboundMapItemDataPacket MapItemSavedData::_buildPacket(int32_t x, int32_t y, int32_t width,
-                                                            int32_t height) const {
+ClientboundMapItemDataPacket MapItemSavedData::_buildPacket(int32_t x, int32_t y, int32_t width, int32_t height) const {
     ClientboundMapItemDataPacket packet;
     packet.mUniqueMapId = mMapId;
     packet.mDimensionId = mDimension;
@@ -491,7 +486,7 @@ ClientboundMapItemDataPacket MapItemSavedData::_buildPacket(int32_t x, int32_t y
     for (const MapDecorationEntry &decoration: mDecorations) {
         MapTrackedObject object;
         object.mType = decoration.mKey.mType == MapItemTrackedActorKey::Type::Block ? MapTrackedObjectType::Block
-                                                                                   : MapTrackedObjectType::Entity;
+                                                                                    : MapTrackedObjectType::Entity;
         object.mActorId = decoration.mKey.mActorId;
         object.mPosition = decoration.mKey.mPosition;
         packet.mTrackedObjects.push_back(object);

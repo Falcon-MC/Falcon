@@ -4,8 +4,8 @@
 
 namespace VanillaActorTable {
 
-const char *const *getIdentifiers();
+    const char *const *getIdentifiers();
 
-size_t getCount();
+    size_t getCount();
 
 }

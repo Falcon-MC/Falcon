@@ -12,10 +12,9 @@ bool ChorusPlantBlock::matches(const std::string &identifier) {
 
 BlockState ChorusPlantBlock::connectedState(const BlockState &state,
                                             const std::function<const BlockState *(int)> &neighbour) {
-    static const char *const properties[] = {
-        "minecraft:connection_down", "minecraft:connection_up", "minecraft:connection_north",
-        "minecraft:connection_south", "minecraft:connection_west", "minecraft:connection_east"
-    };
+    static const char *const properties[] = {"minecraft:connection_down",  "minecraft:connection_up",
+                                             "minecraft:connection_north", "minecraft:connection_south",
+                                             "minecraft:connection_west",  "minecraft:connection_east"};
     Tag states = state.mStates;
     for (int face = 0; face < 6; ++face) {
         const BlockState *other = neighbour(face);

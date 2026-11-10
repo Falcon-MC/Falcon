@@ -64,8 +64,8 @@ namespace {
     }
 
     bool isSameStack(const ItemStack &left, const ItemStack &right) {
-        return left.mDefinition == right.mDefinition && left.mCount == right.mCount
-               && left.mDamage == right.mDamage && left.mTag == right.mTag;
+        return left.mDefinition == right.mDefinition && left.mCount == right.mCount && left.mDamage == right.mDamage
+               && left.mTag == right.mTag;
     }
 
     int slotOfArmor(ArmorSlot slot) {

@@ -49,8 +49,8 @@ namespace {
         require(!MobAttack::attackEffect(spider, effect), "easy cave spider poisoned");
         spider.removeComponentGroup("minecraft:spider_poison_easy");
         spider.addComponentGroup("minecraft:spider_poison_normal");
-        require(MobAttack::attackEffect(spider, effect) && effect.mId == MobEffectId::Poison
-                && effect.mDuration == 140, "normal cave spider poison is not 7 s");
+        require(MobAttack::attackEffect(spider, effect) && effect.mId == MobEffectId::Poison && effect.mDuration == 140,
+                "normal cave spider poison is not 7 s");
         spider.removeComponentGroup("minecraft:spider_poison_normal");
         spider.addComponentGroup("minecraft:spider_poison_hard");
         require(MobAttack::attackEffect(spider, effect) && effect.mDuration == 300,
@@ -231,7 +231,8 @@ namespace {
 
 int main() {
     const std::filesystem::path originalRoot = ServerPaths::getRoot();
-    const std::filesystem::path directory = std::filesystem::temp_directory_path()
+    const std::filesystem::path directory =
+            std::filesystem::temp_directory_path()
             / ("falcon-melee-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     int result = 0;
     try {

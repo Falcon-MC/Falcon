@@ -9,11 +9,7 @@
 
 class PacketCodecContext;
 
-enum class FurnaceKind : uint8_t {
-    Furnace,
-    BlastFurnace,
-    Smoker
-};
+enum class FurnaceKind : uint8_t { Furnace, BlastFurnace, Smoker };
 
 class FurnaceInventory : public Container {
 public:
@@ -24,9 +20,13 @@ public:
 
     static int cookDuration(FurnaceKind kind);
 
-    static bool matches(const Vector3i &position, const Vector3i &other) { return position == other; }
+    static bool matches(const Vector3i &position, const Vector3i &other) {
+        return position == other;
+    }
 
-    int getContainerSize() const override { return SIZE; }
+    int getContainerSize() const override {
+        return SIZE;
+    }
 
     const ItemStack &getContainerItem(int slot) const override;
 

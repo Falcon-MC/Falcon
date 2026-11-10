@@ -21,8 +21,7 @@ public:
                              Actor *other = nullptr);
 
 private:
-    static bool _run(ServerNetworkHandler &owner, MobActor &mob, const json::Value &node, int32_t depth,
-                     Actor *other);
+    static bool _run(ServerNetworkHandler &owner, MobActor &mob, const json::Value &node, int32_t depth, Actor *other);
 
     static MobActor *_resolveTarget(ServerNetworkHandler &owner, MobActor &mob, const std::string &target,
                                     Actor *other);

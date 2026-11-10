@@ -150,8 +150,8 @@ void ServerNetworkHandler::_completeItemUse(ServerPlayer &player, int32_t itemId
     if (heldTicks < useDurationTicksFor(heldItem))
         return;
 
-    if (heldItem.isAir() || heldItem.mDefinition == nullptr ||
-        static_cast<uint16_t>(itemId) != static_cast<uint16_t>(heldItem.mDefinition->getRuntimeId()))
+    if (heldItem.isAir() || heldItem.mDefinition == nullptr
+        || static_cast<uint16_t>(itemId) != static_cast<uint16_t>(heldItem.mDefinition->getRuntimeId()))
         return;
 
     _consumeHeldItem(player);
@@ -206,13 +206,11 @@ bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &ite
     inventory.setItemInHand(std::move(worn));
 
     player.getInventoryManager().syncContents(InventoryManager::InventoryId::Armor);
-    player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                          inventory.getSelectedSlot());
+    player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     InventoryHandler::sendArmorContent(*this, player);
     InventoryHandler::sendHeldItem(*this, player);
 
-    playLevelSound(getLevelFor(player), LevelSoundEvent::ARMOR_EQUIP_GENERIC, player.getPosition(),
-                   "minecraft:player");
+    playLevelSound(getLevelFor(player), LevelSoundEvent::ARMOR_EQUIP_GENERIC, player.getPosition(), "minecraft:player");
     return true;
 }
 

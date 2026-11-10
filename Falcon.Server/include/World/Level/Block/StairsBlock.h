@@ -6,8 +6,7 @@
 
 class StairsBlock final : public Block {
 public:
-    explicit StairsBlock(const Block &block) : Block(block) {
-    }
+    explicit StairsBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

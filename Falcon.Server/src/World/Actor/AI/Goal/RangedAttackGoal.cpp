@@ -135,8 +135,9 @@ void RangedAttackGoal::_move(MobActor &mob, const Actor &target, float distanceS
         // radius_min + 0.5 away; the game feeds atan2(dz, dx) to sin for x and cos for z, axes swapped as it does
         const float distance = (radiusMin - std::sqrt(distanceSquared)) + BACK_AWAY_MARGIN;
         const float angle = std::atan2(position.z - targetPosition.z, position.x - targetPosition.x);
-        navigation.moveTo(Vector3f(position.x + std::sin(angle) * distance, position.y,
-                                   position.z + std::cos(angle) * distance), mSettings.mSpeed);
+        navigation.moveTo(
+                Vector3f(position.x + std::sin(angle) * distance, position.y, position.z + std::cos(angle) * distance),
+                mSettings.mSpeed);
         mHasPathTarget = false;
         return;
     }
@@ -202,8 +203,7 @@ void RangedAttackGoal::_tickBurst(ServerNetworkHandler &owner, MobActor &mob, Ac
 
     const float radius = mSettings.mAttackRadius;
     const float radiusMin = mSettings.mAttackRadiusMin;
-    if (distanceSquared > radius * radius || distanceSquared < radiusMin * radiusMin
-        || !_inFieldOfView(mob, target))
+    if (distanceSquared > radius * radius || distanceSquared < radiusMin * radiusMin || !_inFieldOfView(mob, target))
         return;
 
     MobShooter::shootAt(owner, mob, target);

@@ -14,43 +14,40 @@
 #include <unordered_set>
 
 namespace {
-    const char *FALLABLE_BLOCKS[] = {
-            "minecraft:sand",
-            "minecraft:red_sand",
-            "minecraft:gravel",
-            "minecraft:suspicious_sand",
-            "minecraft:suspicious_gravel",
-            "minecraft:anvil",
-            "minecraft:chipped_anvil",
-            "minecraft:damaged_anvil",
-            "minecraft:deprecated_anvil",
-            "minecraft:dragon_egg",
-            "minecraft:scaffolding",
-            "minecraft:pointed_dripstone",
-            "minecraft:icicle",
-            "minecraft:white_concrete_powder",
-            "minecraft:orange_concrete_powder",
-            "minecraft:magenta_concrete_powder",
-            "minecraft:light_blue_concrete_powder",
-            "minecraft:yellow_concrete_powder",
-            "minecraft:lime_concrete_powder",
-            "minecraft:pink_concrete_powder",
-            "minecraft:gray_concrete_powder",
-            "minecraft:light_gray_concrete_powder",
-            "minecraft:cyan_concrete_powder",
-            "minecraft:purple_concrete_powder",
-            "minecraft:blue_concrete_powder",
-            "minecraft:brown_concrete_powder",
-            "minecraft:green_concrete_powder",
-            "minecraft:red_concrete_powder",
-            "minecraft:black_concrete_powder"
-    };
+    const char *FALLABLE_BLOCKS[] = {"minecraft:sand",
+                                     "minecraft:red_sand",
+                                     "minecraft:gravel",
+                                     "minecraft:suspicious_sand",
+                                     "minecraft:suspicious_gravel",
+                                     "minecraft:anvil",
+                                     "minecraft:chipped_anvil",
+                                     "minecraft:damaged_anvil",
+                                     "minecraft:deprecated_anvil",
+                                     "minecraft:dragon_egg",
+                                     "minecraft:scaffolding",
+                                     "minecraft:pointed_dripstone",
+                                     "minecraft:icicle",
+                                     "minecraft:white_concrete_powder",
+                                     "minecraft:orange_concrete_powder",
+                                     "minecraft:magenta_concrete_powder",
+                                     "minecraft:light_blue_concrete_powder",
+                                     "minecraft:yellow_concrete_powder",
+                                     "minecraft:lime_concrete_powder",
+                                     "minecraft:pink_concrete_powder",
+                                     "minecraft:gray_concrete_powder",
+                                     "minecraft:light_gray_concrete_powder",
+                                     "minecraft:cyan_concrete_powder",
+                                     "minecraft:purple_concrete_powder",
+                                     "minecraft:blue_concrete_powder",
+                                     "minecraft:brown_concrete_powder",
+                                     "minecraft:green_concrete_powder",
+                                     "minecraft:red_concrete_powder",
+                                     "minecraft:black_concrete_powder"};
 
     const std::string CONCRETE_POWDER_SUFFIX = "_concrete_powder";
 
     const std::unordered_set<std::string> &fallableSet() {
-        static const std::unordered_set<std::string> blocks(std::begin(FALLABLE_BLOCKS),
-                                                            std::end(FALLABLE_BLOCKS));
+        static const std::unordered_set<std::string> blocks(std::begin(FALLABLE_BLOCKS), std::end(FALLABLE_BLOCKS));
         return blocks;
     }
 
@@ -75,14 +72,15 @@ bool FallingBlockSystem::breaksOnLava(const std::string &identifier) {
 }
 
 bool FallingBlockSystem::breaksOnGround(const std::string &identifier) {
-    return identifier == "minecraft:suspicious_sand" || identifier == "minecraft:suspicious_gravel" ||
-           identifier == "minecraft:pointed_dripstone";
+    return identifier == "minecraft:suspicious_sand" || identifier == "minecraft:suspicious_gravel"
+           || identifier == "minecraft:pointed_dripstone";
 }
 
 bool FallingBlockSystem::isConcretePowder(const std::string &identifier) {
-    return identifier.size() > CONCRETE_POWDER_SUFFIX.size() &&
-           identifier.compare(identifier.size() - CONCRETE_POWDER_SUFFIX.size(),
-                              CONCRETE_POWDER_SUFFIX.size(), CONCRETE_POWDER_SUFFIX) == 0;
+    return identifier.size() > CONCRETE_POWDER_SUFFIX.size()
+           && identifier.compare(identifier.size() - CONCRETE_POWDER_SUFFIX.size(), CONCRETE_POWDER_SUFFIX.size(),
+                                 CONCRETE_POWDER_SUFFIX)
+                      == 0;
 }
 
 std::string FallingBlockSystem::getConcreteFor(const std::string &identifier) {
@@ -138,13 +136,8 @@ bool FallingBlockSystem::canFallInto(Level &level, const Vector3i &position) {
 
 // every face but the bottom: powder resting on water stays powder
 bool FallingBlockSystem::isTouchingWater(Level &level, const Vector3i &position) {
-    static const Vector3i OFFSETS[] = {
-            Vector3i(0, 1, 0),
-            Vector3i(0, 0, -1),
-            Vector3i(0, 0, 1),
-            Vector3i(-1, 0, 0),
-            Vector3i(1, 0, 0)
-    };
+    static const Vector3i OFFSETS[] = {Vector3i(0, 1, 0), Vector3i(0, 0, -1), Vector3i(0, 0, 1), Vector3i(-1, 0, 0),
+                                       Vector3i(1, 0, 0)};
 
     for (const Vector3i &offset: OFFSETS) {
         const BlockState side = level.getBlockState(position.x + offset.x, position.y + offset.y,

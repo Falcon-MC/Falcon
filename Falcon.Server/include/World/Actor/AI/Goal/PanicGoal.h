@@ -18,10 +18,10 @@ public:
         bool mPreferWater = false;
         // the game's default when the definition lists none (xmmword_14F343708)
         std::vector<std::string> mDamageSources = {
-                "campfire", "fire", "fire_tick", "freezing", "lava", "lightning", "magma", "soul_campfire",
-                "temperature", "entity_attack", "entity_explosion", "fireworks", "magic", "projectile",
-                "ram_attack", "sonic_boom", "wither", "mace_smash"
-        };
+                "campfire",         "fire",      "fire_tick",     "freezing",    "lava",
+                "lightning",        "magma",     "soul_campfire", "temperature", "entity_attack",
+                "entity_explosion", "fireworks", "magic",         "projectile",  "ram_attack",
+                "sonic_boom",       "wither",    "mace_smash"};
     };
 
     explicit PanicGoal(Settings settings);

@@ -8,13 +8,7 @@ class ServerPlayer;
 // nothing measured while the page is off: no cost for players who never open it
 class DebugHud {
 public:
-    enum class Page {
-        Off,
-        Performance,
-        Generation,
-        Network,
-        Memory
-    };
+    enum class Page { Off, Performance, Generation, Network, Memory };
 
     void setPage(ServerPlayer &player, Page page);
 

@@ -41,8 +41,7 @@ namespace {
 
     class SeededRandom {
     public:
-        explicit SeededRandom(uint64_t seed) : mState(seed == 0 ? 0x9e3779b97f4a7c15ull : seed) {
-        }
+        explicit SeededRandom(uint64_t seed) : mState(seed == 0 ? 0x9e3779b97f4a7c15ull : seed) {}
 
         uint32_t nextBits() {
             mState ^= mState << 13;
@@ -251,11 +250,10 @@ int32_t EnchantmentHelper::getEnchantability(const std::string &identifier) {
 }
 
 bool EnchantmentHelper::isTreasure(int32_t enchantmentId) {
-    static const std::unordered_set<int32_t> treasure = {
-            EnchantmentIds::MENDING, EnchantmentIds::FROST_WALKER, EnchantmentIds::BINDING,
-            EnchantmentIds::VANISHING, EnchantmentIds::SOUL_SPEED, EnchantmentIds::SWIFT_SNEAK,
-            EnchantmentIds::WIND_BURST
-    };
+    static const std::unordered_set<int32_t> treasure = {EnchantmentIds::MENDING,    EnchantmentIds::FROST_WALKER,
+                                                         EnchantmentIds::BINDING,    EnchantmentIds::VANISHING,
+                                                         EnchantmentIds::SOUL_SPEED, EnchantmentIds::SWIFT_SNEAK,
+                                                         EnchantmentIds::WIND_BURST};
 
     return treasure.count(enchantmentId) != 0;
 }
@@ -426,8 +424,7 @@ std::vector<EnchantOptionData> EnchantmentHelper::getEnchantOptions(Level &level
     if (input.isAir() || !ItemEnchantments::read(input).empty())
         return options;
 
-    const std::string identifier = input.mDefinition == nullptr ? std::string()
-                                                                : input.mDefinition->getIdentifier();
+    const std::string identifier = input.mDefinition == nullptr ? std::string() : input.mDefinition->getIdentifier();
     if (identifier.empty())
         return options;
 
@@ -436,11 +433,9 @@ std::vector<EnchantOptionData> EnchantmentHelper::getEnchantOptions(Level &level
     const int32_t bookshelves = countBookshelves(level, tablePosition);
     const int32_t base = random.rangeInclusive(1, 8) + (bookshelves >> 1) + random.rangeInclusive(0, bookshelves);
 
-    const int32_t levels[3] = {
-            std::max(1, (int32_t) std::floor((double) base / 3.0)),
-            std::max(1, (int32_t) std::floor((double) base * 2.0 / 3.0 + 1.0)),
-            std::max(1, std::max(base, bookshelves * 2))
-    };
+    const int32_t levels[3] = {std::max(1, (int32_t) std::floor((double) base / 3.0)),
+                               std::max(1, (int32_t) std::floor((double) base * 2.0 / 3.0 + 1.0)),
+                               std::max(1, std::max(base, bookshelves * 2))};
 
     for (int32_t entry = 0; entry < 3; entry++) {
         const int32_t requiredLevel = levels[entry];

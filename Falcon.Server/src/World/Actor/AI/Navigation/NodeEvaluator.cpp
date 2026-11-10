@@ -187,8 +187,8 @@ bool NodeEvaluator::_isSampleOpen(const Vector3f &position) {
     const int32_t z = (int32_t) std::floor(position.z);
 
     if (mOptions->isVolumetric())
-        return isOpen(x, y, z, mOptions->mMode == NavigationMode::Swim) && isPassable(position.x, position.y,
-                                                                                         position.z);
+        return isOpen(x, y, z, mOptions->mMode == NavigationMode::Swim)
+               && isPassable(position.x, position.y, position.z);
 
     const bool supported = isStandable(x, (int32_t) std::floor(position.y - 1.0f), z)
                            || (mOptions->mMode == NavigationMode::Climb && canClimb(x, y, z))

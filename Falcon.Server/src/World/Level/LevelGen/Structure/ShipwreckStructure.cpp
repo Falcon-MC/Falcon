@@ -29,13 +29,26 @@ namespace {
     const int32_t CHEST_KEPT_RANGE = 10;
     const int32_t CHEST_KEPT_FROM = 5;
 
-    const std::array<const char *, PIECE_COUNT> PIECES = {
-            "swwithmast", "swwithmastdegraded", "swsidewaysfull", "swsidewaysfronthalf", "swsidewaysbackhalf",
-            "swsidewaysfulldegraded", "swsidewaysfronthalfdegraded", "swsidewaysbackhalfdegraded", "swrightsideupfull",
-            "swrightsideupfronthalf", "swrightsideupbackhalf", "swrightsideupfulldegraded",
-            "swrightsideupfronthalfdegraded", "swrightsideupbackhalfdegraded", "swupsidedownfull",
-            "swupsidedownfronthalf", "swupsidedownbackhalf", "swupsidedownfulldegraded",
-            "swupsidedownfronthalfdegraded", "swupsidedownbackhalfdegraded"};
+    const std::array<const char *, PIECE_COUNT> PIECES = {"swwithmast",
+                                                          "swwithmastdegraded",
+                                                          "swsidewaysfull",
+                                                          "swsidewaysfronthalf",
+                                                          "swsidewaysbackhalf",
+                                                          "swsidewaysfulldegraded",
+                                                          "swsidewaysfronthalfdegraded",
+                                                          "swsidewaysbackhalfdegraded",
+                                                          "swrightsideupfull",
+                                                          "swrightsideupfronthalf",
+                                                          "swrightsideupbackhalf",
+                                                          "swrightsideupfulldegraded",
+                                                          "swrightsideupfronthalfdegraded",
+                                                          "swrightsideupbackhalfdegraded",
+                                                          "swupsidedownfull",
+                                                          "swupsidedownfronthalf",
+                                                          "swupsidedownbackhalf",
+                                                          "swupsidedownfulldegraded",
+                                                          "swupsidedownfronthalfdegraded",
+                                                          "swupsidedownbackhalfdegraded"};
 
     const std::array<const char *, 6> SPECIES = {"oak", "spruce", "birch", "jungle", "acacia", "dark_oak"};
 
@@ -106,7 +119,8 @@ namespace {
                  const ShipwreckStructure::PlacedBlock &stair, const Direction &side) {
         const ShipwreckStructure::PlacedBlock *next = at(blocks, index, stair.x + side.mX, stair.y, stair.z + side.mZ);
         return !sameHalfStair(next, stair.mState)
-               || next->mState.mStates.getInt("weirdo_direction", 0) != stair.mState.mStates.getInt("weirdo_direction", 0);
+               || next->mState.mStates.getInt("weirdo_direction", 0)
+                          != stair.mState.mStates.getInt("weirdo_direction", 0);
     }
 
     std::string stairCorner(const std::vector<ShipwreckStructure::PlacedBlock> &blocks, const BlockIndex &index,
@@ -139,7 +153,7 @@ namespace {
             index[{blocks[i].x, blocks[i].y, blocks[i].z}] = i;
 
         std::vector<ShipwreckStructure::PlacedBlock> shaped = blocks;
-        for (ShipwreckStructure::PlacedBlock &block : shaped) {
+        for (ShipwreckStructure::PlacedBlock &block: shaped) {
             if (!isStair(block.mState))
                 continue;
 
@@ -178,7 +192,7 @@ namespace {
 }
 
 std::vector<ShipwreckStructure::PlacedBlock> ShipwreckStructure::build(const ChunkGenerator &generator, int32_t startX,
-                                                                      int32_t startZ) {
+                                                                       int32_t startZ) {
     const int32_t cornerX = startX * 16;
     const int32_t cornerZ = startZ * 16;
     const int32_t surface = generator.getPreliminarySurfaceLevel(startX * 4, startZ * 4);
@@ -198,8 +212,8 @@ std::vector<ShipwreckStructure::PlacedBlock> ShipwreckStructure::build(const Chu
     wood.mDarkOak = SPECIES[(size_t) pair.second];
 
     std::vector<PlacedBlock> blocks;
-    const std::shared_ptr<const StructureTemplate> shape =
-            StructureTemplate::load(std::string("shipwreck/") + PIECES[(size_t) piece] + ".nbt");
+    const std::shared_ptr<const StructureTemplate> shape = StructureTemplate::load(std::string("shipwreck/")
+                                                                                   + PIECES[(size_t) piece] + ".nbt");
     if (shape == nullptr)
         return blocks;
 
@@ -218,7 +232,7 @@ std::vector<ShipwreckStructure::PlacedBlock> ShipwreckStructure::build(const Chu
     const BlockState water = waterState();
     std::map<Position, size_t> chests;
     std::vector<StructureMarkers::Marker> markers;
-    for (const StructureTemplate::BlockEntry &entry : shape->getBlocks()) {
+    for (const StructureTemplate::BlockEntry &entry: shape->getBlocks()) {
         int32_t x = entry.x;
         int32_t z = entry.z;
         StructureTemplate::rotate(turns, x, z);
@@ -232,7 +246,8 @@ std::vector<ShipwreckStructure::PlacedBlock> ShipwreckStructure::build(const Chu
         }
 
         PlacedBlock block;
-        if (!StructureBlockTable::translate(shape->getPalette()[(size_t) entry.mPaletteIndex], turns, block.mState, wood))
+        if (!StructureBlockTable::translate(shape->getPalette()[(size_t) entry.mPaletteIndex], turns, block.mState,
+                                            wood))
             continue;
 
         block.x = x;
@@ -251,7 +266,7 @@ std::vector<ShipwreckStructure::PlacedBlock> ShipwreckStructure::build(const Chu
     }
 
     const BlockState air("minecraft:air");
-    for (const StructureMarkers::Marker &marker : StructureMarkers::inGameOrder(markers)) {
+    for (const StructureMarkers::Marker &marker: StructureMarkers::inGameOrder(markers)) {
         PlacedBlock cleared;
         cleared.x = marker.x;
         cleared.y = marker.y;
@@ -292,7 +307,7 @@ void ShipwreckStructure::place(const ChunkGenerator &generator, Level &level, Le
             if (!shipwreck->isStartChunk(generator, startX, startZ))
                 continue;
 
-            for (const PlacedBlock &block : build(generator, startX, startZ)) {
+            for (const PlacedBlock &block: build(generator, startX, startZ)) {
                 if ((block.x >> 4) != chunk.getX() || (block.z >> 4) != chunk.getZ() || block.y < LevelChunk::MIN_Y
                     || block.y > LevelChunk::MAX_Y)
                     continue;

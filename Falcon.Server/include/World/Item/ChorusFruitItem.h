@@ -27,5 +27,4 @@ private:
     static bool isLiquid(Level &level, int x, int y, int z);
 
     static bool findTeleportPosition(ServerNetworkHandler &owner, ServerPlayer &player, Vector3f &destination);
-
 };

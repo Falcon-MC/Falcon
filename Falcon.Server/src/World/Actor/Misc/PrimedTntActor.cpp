@@ -21,8 +21,7 @@ namespace {
     const char *TAG_FUSE = "Fuse";
 }
 
-PrimedTntActor::PrimedTntActor(uint64_t runtimeId, int32_t fuse)
-        : ServerActor(runtimeId, IDENTIFIER), mFuse(fuse) {
+PrimedTntActor::PrimedTntActor(uint64_t runtimeId, int32_t fuse) : ServerActor(runtimeId, IDENTIFIER), mFuse(fuse) {
     getFlags().set(ActorFlag::Ignited, true);
     getFlags().set(ActorFlag::HasGravity, true);
     getFlags().set(ActorFlag::HasCollision, true);
@@ -71,8 +70,8 @@ void PrimedTntActor::tick(ServerNetworkHandler &owner) {
     motion.y -= GRAVITY;
 
     const float halfWidth = SIZE * 0.5f;
-    AxisAlignedBB box(position.x - halfWidth, position.y, position.z - halfWidth,
-                      position.x + halfWidth, position.y + SIZE, position.z + halfWidth);
+    AxisAlignedBB box(position.x - halfWidth, position.y, position.z - halfWidth, position.x + halfWidth,
+                      position.y + SIZE, position.z + halfWidth);
     const AxisAlignedBB sweep = box.addCoord(motion.x, motion.y, motion.z);
     const std::vector<AxisAlignedBB> colliders = level.getCollisionBoxes(sweep, this);
 

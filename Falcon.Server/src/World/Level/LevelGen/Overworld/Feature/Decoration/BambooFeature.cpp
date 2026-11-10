@@ -10,20 +10,20 @@ namespace {
     const int32_t BAMBOO_SHOOTS_PER_FEATURE = 4;
 
     const BlockState &noLeavesState() {
-        static const BlockState state = DecorationSupport::withState(
-                VanillaBlocks::BAMBOO().toBlockState(), "bamboo_leaf_size", "no_leaves");
+        static const BlockState state = DecorationSupport::withState(VanillaBlocks::BAMBOO().toBlockState(),
+                                                                     "bamboo_leaf_size", "no_leaves");
         return state;
     }
 
     const BlockState &smallLeavesState() {
-        static const BlockState state = DecorationSupport::withState(
-                VanillaBlocks::BAMBOO().toBlockState(), "bamboo_leaf_size", "small_leaves");
+        static const BlockState state = DecorationSupport::withState(VanillaBlocks::BAMBOO().toBlockState(),
+                                                                     "bamboo_leaf_size", "small_leaves");
         return state;
     }
 
     const BlockState &largeLeavesState() {
-        static const BlockState state = DecorationSupport::withState(
-                VanillaBlocks::BAMBOO().toBlockState(), "bamboo_leaf_size", "large_leaves");
+        static const BlockState state = DecorationSupport::withState(VanillaBlocks::BAMBOO().toBlockState(),
+                                                                     "bamboo_leaf_size", "large_leaves");
         return state;
     }
 

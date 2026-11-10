@@ -15,8 +15,7 @@ void ChatHandler::broadcastChat(ServerNetworkHandler &owner, ServerPlayer &playe
 
     const std::string &finalMessage = before.mMessage;
 
-    LOG_INFO(LogAreaID::Server, "<%s> %s", player.getName().c_str(),
-             StringUtil::printable(finalMessage, 512).c_str());
+    LOG_INFO(LogAreaID::Server, "<%s> %s", player.getName().c_str(), StringUtil::printable(finalMessage, 512).c_str());
 
     TextPacket chat;
     chat.mType = TextPacket::Type::Chat;

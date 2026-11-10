@@ -22,8 +22,7 @@ bool ShelfMushroomBlock::canPlaceAt(Level &level, const Vector3i &position, int 
 }
 
 bool ShelfMushroomBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
-    const int facing = PlacementOrientation::faceFromName(
-            state.mStates.getString("minecraft:cardinal_direction", ""));
+    const int facing = PlacementOrientation::faceFromName(state.mStates.getString("minecraft:cardinal_direction", ""));
     if (facing < PlacementOrientation::FACE_NORTH)
         return true;
 

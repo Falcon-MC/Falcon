@@ -83,8 +83,8 @@ uint32_t ItemEnchantments::getItemTargets(const std::string &identifier) {
     if (identifier == "minecraft:shears") {
         return EnchantmentTargets::SHEARS;
     }
-    if (identifier == "minecraft:compass" || identifier == "minecraft:lodestone_compass" ||
-        identifier == "minecraft:recovery_compass") {
+    if (identifier == "minecraft:compass" || identifier == "minecraft:lodestone_compass"
+        || identifier == "minecraft:recovery_compass") {
         return EnchantmentTargets::COMPASS;
     }
     if (identifier == "minecraft:book" || identifier == "minecraft:enchanted_book") {

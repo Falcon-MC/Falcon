@@ -26,39 +26,71 @@ namespace {
     const char *STICKY_PISTON_ARM_COLLISION = "minecraft:sticky_piston_arm_collision";
     const char *AIR = "minecraft:air";
 
-    const std::unordered_set<std::string> UNPUSHABLE = {
-            "minecraft:bedrock", "minecraft:obsidian", "minecraft:crying_obsidian",
-            "minecraft:glowingobsidian", "minecraft:beacon", "minecraft:barrier",
-            "minecraft:allow", "minecraft:deny", "minecraft:border_block",
-            "minecraft:command_block", "minecraft:chain_command_block", "minecraft:repeating_command_block",
-            "minecraft:ender_chest", "minecraft:end_gateway", "minecraft:end_portal",
-            "minecraft:end_portal_frame", "minecraft:frog_spawn", "minecraft:invisible_bedrock",
-            "minecraft:jigsaw", "minecraft:lodestone", "minecraft:mob_spawner", "minecraft:moving_block",
-            "minecraft:pointed_dripstone", "minecraft:portal", "minecraft:respawn_anchor",
-            "minecraft:sculk_catalyst", "minecraft:sculk_shrieker", "minecraft:structure_block",
-            "minecraft:structure_void", "minecraft:trial_spawner", "minecraft:vault",
-            "minecraft:creaking_heart"
-    };
+    const std::unordered_set<std::string> UNPUSHABLE = {"minecraft:bedrock",
+                                                        "minecraft:obsidian",
+                                                        "minecraft:crying_obsidian",
+                                                        "minecraft:glowingobsidian",
+                                                        "minecraft:beacon",
+                                                        "minecraft:barrier",
+                                                        "minecraft:allow",
+                                                        "minecraft:deny",
+                                                        "minecraft:border_block",
+                                                        "minecraft:command_block",
+                                                        "minecraft:chain_command_block",
+                                                        "minecraft:repeating_command_block",
+                                                        "minecraft:ender_chest",
+                                                        "minecraft:end_gateway",
+                                                        "minecraft:end_portal",
+                                                        "minecraft:end_portal_frame",
+                                                        "minecraft:frog_spawn",
+                                                        "minecraft:invisible_bedrock",
+                                                        "minecraft:jigsaw",
+                                                        "minecraft:lodestone",
+                                                        "minecraft:mob_spawner",
+                                                        "minecraft:moving_block",
+                                                        "minecraft:pointed_dripstone",
+                                                        "minecraft:portal",
+                                                        "minecraft:respawn_anchor",
+                                                        "minecraft:sculk_catalyst",
+                                                        "minecraft:sculk_shrieker",
+                                                        "minecraft:structure_block",
+                                                        "minecraft:structure_void",
+                                                        "minecraft:trial_spawner",
+                                                        "minecraft:vault",
+                                                        "minecraft:creaking_heart"};
 
-    const std::unordered_set<std::string> UNPULLABLE_EXTRA = {
-            "minecraft:campfire", "minecraft:soul_campfire", "minecraft:heavy_core"
-    };
+    const std::unordered_set<std::string> UNPULLABLE_EXTRA = {"minecraft:campfire", "minecraft:soul_campfire",
+                                                              "minecraft:heavy_core"};
 
-    const std::unordered_set<std::string> BREAKS_WHEN_MOVED = {
-            "minecraft:bamboo", "minecraft:bed", "minecraft:budding_amethyst", "minecraft:cactus",
-            "minecraft:cake", "minecraft:campfire", "minecraft:soul_campfire", "minecraft:candle_cake",
-            "minecraft:chorus_flower", "minecraft:chorus_plant", "minecraft:cocoa", "minecraft:dragon_egg",
-            "minecraft:ladder", "minecraft:lever", "minecraft:glow_lichen", "minecraft:melon_block",
-            "minecraft:pumpkin", "minecraft:snow_layer", "minecraft:standing_banner",
-            "minecraft:wall_banner", "minecraft:undyed_shulker_box", "minecraft:vine",
-            "minecraft:frame", "minecraft:glow_frame"
-    };
+    const std::unordered_set<std::string> BREAKS_WHEN_MOVED = {"minecraft:bamboo",
+                                                               "minecraft:bed",
+                                                               "minecraft:budding_amethyst",
+                                                               "minecraft:cactus",
+                                                               "minecraft:cake",
+                                                               "minecraft:campfire",
+                                                               "minecraft:soul_campfire",
+                                                               "minecraft:candle_cake",
+                                                               "minecraft:chorus_flower",
+                                                               "minecraft:chorus_plant",
+                                                               "minecraft:cocoa",
+                                                               "minecraft:dragon_egg",
+                                                               "minecraft:ladder",
+                                                               "minecraft:lever",
+                                                               "minecraft:glow_lichen",
+                                                               "minecraft:melon_block",
+                                                               "minecraft:pumpkin",
+                                                               "minecraft:snow_layer",
+                                                               "minecraft:standing_banner",
+                                                               "minecraft:wall_banner",
+                                                               "minecraft:undyed_shulker_box",
+                                                               "minecraft:vine",
+                                                               "minecraft:frame",
+                                                               "minecraft:glow_frame"};
 
     const std::unordered_set<std::string> NEVER_BREAKS = {
-            "minecraft:rail", "minecraft:golden_rail", "minecraft:detector_rail", "minecraft:activator_rail",
-            "minecraft:sculk_sensor", "minecraft:calibrated_sculk_sensor", "minecraft:sculk_shrieker",
-            "minecraft:heavy_core"
-    };
+            "minecraft:rail",           "minecraft:golden_rail",  "minecraft:detector_rail",
+            "minecraft:activator_rail", "minecraft:sculk_sensor", "minecraft:calibrated_sculk_sensor",
+            "minecraft:sculk_shrieker", "minecraft:heavy_core"};
 
     struct PendingMove {
         Vector3i mPiston;
@@ -337,8 +369,8 @@ bool PistonSystem::_checkState(ServerNetworkHandler &owner, Level &level, const 
     return false;
 }
 
-bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                           const BlockState &state, bool extending) {
+bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                           bool extending) {
     const int face = getPistonFace(state);
     const bool sticky = isSticky(state.mName);
     const int moveDirection = extending ? face : RedstoneFace::opposite(face);

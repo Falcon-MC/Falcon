@@ -8,12 +8,10 @@
 #include <iterator>
 #include <utility>
 
-TerrainCache::TerrainCache(const ChunkGenerator &generator) : mGenerator(generator) {
-}
+TerrainCache::TerrainCache(const ChunkGenerator &generator) : mGenerator(generator) {}
 
 TerrainCache::DecorationArea::DecorationArea(TerrainCache &cache, int32_t chunkX, int32_t chunkZ, uint64_t sequence)
-        : mCache(cache), mChunkX(chunkX), mChunkZ(chunkZ), mSequence(sequence) {
-}
+        : mCache(cache), mChunkX(chunkX), mChunkZ(chunkZ), mSequence(sequence) {}
 
 TerrainCache::DecorationArea::~DecorationArea() {
     {
@@ -107,7 +105,8 @@ std::shared_ptr<const LevelChunk> TerrainCache::_stored(int32_t chunkX, int32_t 
     return shared;
 }
 
-std::shared_ptr<const LevelChunk> TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated, uint64_t *created) {
+std::shared_ptr<const LevelChunk> TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated,
+                                                     uint64_t *created) {
     const int64_t key = _packChunk(chunkX, chunkZ);
     if (decorated) {
         std::shared_ptr<const LevelChunk> stored = _stored(chunkX, chunkZ, created);

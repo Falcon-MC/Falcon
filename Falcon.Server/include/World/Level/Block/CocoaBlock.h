@@ -4,8 +4,7 @@
 
 class CocoaBlock : public Block {
 public:
-    explicit CocoaBlock(const Block &block) : Block(block) {
-    }
+    explicit CocoaBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

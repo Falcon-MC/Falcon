@@ -60,8 +60,7 @@ bool AllowListCommand::execute(CommandOrigin &sender, const std::vector<std::str
             names += name;
         }
 
-        sender.sendLocalized("falcon.commands.allowlist.list",
-                             {std::to_string(allowList.getNames().size()), names});
+        sender.sendLocalized("falcon.commands.allowlist.list", {std::to_string(allowList.getNames().size()), names});
         return true;
     }
 

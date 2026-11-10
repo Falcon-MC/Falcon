@@ -93,11 +93,7 @@ private:
     ClientAcceptanceThresholdsComponent mClientAcceptance;
     MovementTraceComponent mTrace;
     uint64_t mLastCorrectionTick = 0;
-    enum class CorrectionCheck : uint8_t {
-        None,
-        AwaitingAcknowledgement,
-        Acknowledged
-    };
+    enum class CorrectionCheck : uint8_t { None, AwaitingAcknowledgement, Acknowledged };
 
     CorrectionCheck mCorrectionCheck = CorrectionCheck::None;
     uint32_t mIgnoredCorrections = 0;

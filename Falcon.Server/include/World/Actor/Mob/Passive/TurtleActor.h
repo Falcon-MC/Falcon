@@ -8,7 +8,11 @@ public:
 
     using PassiveActor::PassiveActor;
 
-    ActorSize getSize() const override { return ActorSize{1.2f, 0.4f}; }
+    ActorSize getSize() const override {
+        return ActorSize{1.2f, 0.4f};
+    }
 
-    float getDefaultMaxHealth() const override { return 30.0f; }
+    float getDefaultMaxHealth() const override {
+        return 30.0f;
+    }
 };

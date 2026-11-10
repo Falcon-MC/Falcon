@@ -14,8 +14,7 @@ namespace {
 }
 
 GiveCommand::GiveCommand(ServerNetworkHandler &handler)
-        : Command("give", "commands.give.description", "/give <player> <item> [amount] [data]"),
-          mHandler(handler) {}
+        : Command("give", "commands.give.description", "/give <player> <item> [amount] [data]"), mHandler(handler) {}
 
 std::vector<CommandOverloadData> GiveCommand::getOverloads() const {
     const CommandParamData playerParameter = makePlayerParameter("player");
@@ -99,8 +98,7 @@ bool GiveCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
         return false;
     }
 
-    std::shared_ptr<ItemDefinition> definition =
-            mHandler.getItemDefinitions().getDefinition(item.getIdentifier());
+    std::shared_ptr<ItemDefinition> definition = mHandler.getItemDefinitions().getDefinition(item.getIdentifier());
 
     if (definition == nullptr) {
         sender.sendTranslation("commands.give.item.notFound", {arguments[1]});

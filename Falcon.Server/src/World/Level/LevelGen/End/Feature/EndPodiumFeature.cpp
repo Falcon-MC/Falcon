@@ -5,8 +5,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 
-EndPodiumFeature::EndPodiumFeature() {
-}
+EndPodiumFeature::EndPodiumFeature() {}
 
 const char *EndPodiumFeature::name() const {
     return "the_end_exit_portal";

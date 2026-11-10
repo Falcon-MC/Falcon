@@ -64,12 +64,12 @@ public:
     static std::vector<JigsawPiece> plan(const ChunkGenerator &generator, int32_t startX, int32_t startZ);
 
     // null when the chunk is no village start
-    static std::shared_ptr<const std::vector<JigsawPiece>> cachedPlan(const ChunkGenerator &generator,
-                                                                      int32_t startX, int32_t startZ);
+    static std::shared_ptr<const std::vector<JigsawPiece>> cachedPlan(const ChunkGenerator &generator, int32_t startX,
+                                                                      int32_t startZ);
 
     // the villages starting close enough to reach the chunk, by start x then z
     static std::vector<std::shared_ptr<const std::vector<JigsawPiece>>> plansNear(const ChunkGenerator &generator,
-                                                                                   int32_t chunkX, int32_t chunkZ);
+                                                                                  int32_t chunkX, int32_t chunkZ);
 
     // a block of a chunk already post-processed, null for a chunk the village has not reached yet
     using Neighbours = std::function<const BlockState *(int32_t x, int32_t y, int32_t z)>;

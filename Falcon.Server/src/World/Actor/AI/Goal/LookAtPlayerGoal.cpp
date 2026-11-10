@@ -15,8 +15,7 @@ namespace {
 
 LookAtPlayerGoal::LookAtPlayerGoal(float range, int32_t probability, int32_t total, int32_t duration,
                                    int32_t checkInterval)
-        : mRange(range), mProbability(probability), mTotal(total), mDuration(duration),
-          mCheckInterval(checkInterval) {
+        : mRange(range), mProbability(probability), mTotal(total), mDuration(duration), mCheckInterval(checkInterval) {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Look);
 }
 

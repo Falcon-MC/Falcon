@@ -135,8 +135,10 @@ CartographyResult CartographyRecipes::createResult(const ItemStack &input, const
         result.mAdditionalCost = 1;
     }
 
-    const bool renaming = name != nullptr && (*name != (AnvilRepair::hasCustomName(input) ? input.mTag.get("display")
-            ->getString("Name") : std::string()));
+    const bool renaming = name != nullptr
+                          && (*name
+                              != (AnvilRepair::hasCustomName(input) ? input.mTag.get("display")->getString("Name")
+                                                                    : std::string()));
     if (!crafted) {
         if (!renaming)
             return result;

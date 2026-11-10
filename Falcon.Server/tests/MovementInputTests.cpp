@@ -73,7 +73,8 @@ namespace {
         require(PropertiesSettings::getDefaultContents().find("\nsimulation=") == std::string::npos,
                 "Generated server.properties kept the former simulation name");
         require(defaults.getPlayerTickThrottledInputBatchSize() == -1
-                && defaults.getPlayerTickThrottledMaxTickCredits() == -1, "BDS tick policy defaults differ");
+                        && defaults.getPlayerTickThrottledMaxTickCredits() == -1,
+                "BDS tick policy defaults differ");
         ServerPlayerMovementComponent timeline;
         auto packet = input(100);
         packet.mInputData = {(int32_t) PlayerAuthInputData::StartJumping};
@@ -84,7 +85,8 @@ namespace {
         timeline.beginTick(1, -1, -1);
         const auto stored = timeline.takeNext();
         require(stored != nullptr && stored->mTick == 100
-                && stored->hasInputFlag((int32_t) PlayerAuthInputData::StartJumping), "Input was not owned by the queue");
+                        && stored->hasInputFlag((int32_t) PlayerAuthInputData::StartJumping),
+                "Input was not owned by the queue");
         require(timeline.credits() == 0 && timeline.lastProcessedTick() == 100, "Input did not consume one credit");
         timeline.beginTick(1, -1, -1);
         require(timeline.credits() == 0, "Same server tick minted credits twice");
@@ -127,10 +129,10 @@ namespace {
         full.beginTick(3, 1, 0);
         require(full.takeNext() == nullptr && full.pendingCount() == 0, "Zero-sized batch policy differs");
         require(ServerPlayerMovementComponent::catchupSteps(0) == 1
-                && ServerPlayerMovementComponent::catchupSteps(49.9) == 1
-                && ServerPlayerMovementComponent::catchupSteps(50) == 3
-                && ServerPlayerMovementComponent::catchupSteps(100) == 5
-                && ServerPlayerMovementComponent::catchupSteps(1000000) == 41,
+                        && ServerPlayerMovementComponent::catchupSteps(49.9) == 1
+                        && ServerPlayerMovementComponent::catchupSteps(50) == 3
+                        && ServerPlayerMovementComponent::catchupSteps(100) == 5
+                        && ServerPlayerMovementComponent::catchupSteps(1000000) == 41,
                 "BDS catchup budget differs");
         require(ServerPlayerMovementComponent::catchupSteps(std::numeric_limits<double>::infinity()) == 1,
                 "Nonfinite timing produced an unbounded catchup budget");
@@ -147,16 +149,14 @@ namespace {
         for (float speed: {0.1f, 0.14f, 0.07f}) {
             attributes.set("minecraft:movement", speed);
             const auto sprint = movement(attributes.getPlayerUpdate(true));
-            require(std::fabs(sprint.mValue - speed * 1.3f) < 0.000001f
-                    && sprint.mModifiers.size() == 1
-                    && sprint.mModifiers.front().mId == "d208fc00-42aa-4aad-9276-d5446530de43"
-                    && sprint.mModifiers.front().mOperation == AttributeOperation::MultiplyTotal
-                    && sprint.mModifiers.front().mOperand == 2
-                    && std::fabs(sprint.mModifiers.front().mAmount - 0.3f) < 0.000001f,
+            require(std::fabs(sprint.mValue - speed * 1.3f) < 0.000001f && sprint.mModifiers.size() == 1
+                            && sprint.mModifiers.front().mId == "d208fc00-42aa-4aad-9276-d5446530de43"
+                            && sprint.mModifiers.front().mOperation == AttributeOperation::MultiplyTotal
+                            && sprint.mModifiers.front().mOperand == 2
+                            && std::fabs(sprint.mModifiers.front().mAmount - 0.3f) < 0.000001f,
                     "Sprint update omitted the BDS movement modifier or effective speed");
             const auto walk = movement(attributes.getPlayerUpdate(false));
-            require(walk.mValue == speed && walk.mModifiers.empty()
-                    && attributes.get("minecraft:movement") == speed,
+            require(walk.mValue == speed && walk.mModifiers.empty() && attributes.get("minecraft:movement") == speed,
                     "Stopping sprint retained the client boost or changed the server base speed");
         }
     }
@@ -185,7 +185,7 @@ namespace {
             require(validator.reconcile(position, Vector3f(1, 0, 0), 6, 0.5f, strict),
                     "Large position error was not corrected in both modes");
             require(!validator.reconcile(position, Vector3f(1, 0, 0), 11, 0.5f, strict)
-                    && validator.reconcile(position, Vector3f(1, 0, 0), 12, 0.5f, strict),
+                            && validator.reconcile(position, Vector3f(1, 0, 0), 12, 0.5f, strict),
                     "Corrections did not respect the strict greater-than-five tick gate");
             validator.reset();
             require(!validator.reconcile(position, Vector3f(0.004f, 0, 0), 100, 0.5f, strict),
@@ -258,17 +258,17 @@ namespace {
         require(reported.x == 10.0f && reported.y == 80.0f && reported.z == 20.0f,
                 "Soft reconciliation moved the current physical position instead of steering velocity");
         require(std::fabs(player.getSimulatedVelocity().x - 0.103f) < 0.000005f
-                && std::fabs(player.getSimulatedVelocity().y - 0.204f) < 0.000005f
-                && player.getSimulatedVelocity().z == 0.3f,
+                        && std::fabs(player.getSimulatedVelocity().y - 0.204f) < 0.000005f
+                        && player.getSimulatedVelocity().z == 0.3f,
                 "BDS acceptPos displacement was not added to the next tick velocity");
         player.getMovementValidator().reset();
         reported = Vector3f(10.001f, 79.998f, 20.003f);
         context.state.velocity = Vector3f(0.1f, 0.2f, 0.3f);
         PlayerPredictionSystem::tick(context);
         require(reported.x == 10.0f && reported.y == 80.0f && reported.z == 20.0f
-                && std::fabs(player.getSimulatedVelocity().x - 0.101f) < 0.000005f
-                && std::fabs(player.getSimulatedVelocity().y - 0.198f) < 0.000005f
-                && std::fabs(player.getSimulatedVelocity().z - 0.303f) < 0.000005f,
+                        && std::fabs(player.getSimulatedVelocity().x - 0.101f) < 0.000005f
+                        && std::fabs(player.getSimulatedVelocity().y - 0.198f) < 0.000005f
+                        && std::fabs(player.getSimulatedVelocity().z - 0.303f) < 0.000005f,
                 "Fine-threshold adoption bypassed velocity feedback or lost a signed axis");
         player.getMovementValidator().reset();
         player.getMovementValidator().onMovementEffect(100);
@@ -315,27 +315,28 @@ namespace {
         MovementCorrectionDetails details;
         Vector3f position;
         require(validator.reconcile(position, Vector3f(1, 2, 3), 20, 0.5f, false, &details)
-                && std::string(details.reason) == "position_threshold"
-                && details.error.x == 1.0f && details.error.y == 2.0f && details.error.z == 3.0f
-                && details.distanceSquared == 14.0f && details.threshold == 0.5f
-                && details.previousCorrectionTick == 0,
+                        && std::string(details.reason) == "position_threshold" && details.error.x == 1.0f
+                        && details.error.y == 2.0f && details.error.z == 3.0f && details.distanceSquared == 14.0f
+                        && details.threshold == 0.5f && details.previousCorrectionTick == 0,
                 "Large-error diagnostics lost the actual comparison or axis error");
         require(!validator.reconcile(position, Vector3f(1, 2, 3), 21, 0.5f, false, &details)
-                && details.reason == nullptr, "Correction cooldown retained a stale reason");
+                        && details.reason == nullptr,
+                "Correction cooldown retained a stale reason");
         validator.reset();
         require(validator.reconcile(position, Vector3f(0.1f, 0, 0), 20, 0.5f, true, &details)
-                && std::string(details.reason) == "strict_mismatch"
-                && std::fabs(details.fineThreshold - 0.000025f) < 0.00000001f,
+                        && std::string(details.reason) == "strict_mismatch"
+                        && std::fabs(details.fineThreshold - 0.000025f) < 0.00000001f,
                 "Strict-mode diagnostics reported the broad threshold as the trigger");
         validator.reset();
         for (uint64_t tick = 20; tick < 30; ++tick) {
             position = Vector3f();
             require(!validator.reconcile(position, Vector3f(0.1f, 0, 0), tick, 0.5f, false, &details)
-                    && details.reason == nullptr, "Gradual adjustment was mislabeled as a correction");
+                            && details.reason == nullptr,
+                    "Gradual adjustment was mislabeled as a correction");
         }
         position = Vector3f();
         require(validator.reconcile(position, Vector3f(0.1f, 0, 0), 30, 0.5f, false, &details)
-                && std::string(details.reason) == "adjustment_limit" && details.adjustments == 10,
+                        && std::string(details.reason) == "adjustment_limit" && details.adjustments == 10,
                 "Accumulated-drift diagnostics did not identify the exhausted adjustment budget");
 
         class CorrectionLog final : public ILogEndPoint {
@@ -370,10 +371,10 @@ namespace {
         BedrockLog::flush();
         BedrockLog::removeEndPoint(log);
         require(log->messages.size() == 1, "A correction did not produce exactly one diagnostic record");
-        for (const char *field: {"player=CorrectionProbe", "reason=position_threshold", "tick=20 ",
-                                "error=(1,2,3)", "distance_squared=14", "reported=(135.5,252,5.5)",
-                                "predicted=(134.5,250,2.5)", "flags=0000000000000002:2000000000000000",
-                                "fly=1", "collision=(0,0,0)", "pending_inputs=0"})
+        for (const char *field:
+             {"player=CorrectionProbe", "reason=position_threshold", "tick=20 ", "error=(1,2,3)", "distance_squared=14",
+              "reported=(135.5,252,5.5)", "predicted=(134.5,250,2.5)", "flags=0000000000000002:2000000000000000",
+              "fly=1", "collision=(0,0,0)", "pending_inputs=0"})
             require(log->messages.front().find(field) != std::string::npos,
                     "Movement correction diagnostic omitted or overwrote a measured field");
     }
@@ -381,7 +382,7 @@ namespace {
     void checkStrictReplay(ServerNetworkHandler &owner) {
         const auto path = ServerPaths::getRoot() / "simulation.properties";
         std::ofstream(path) << "server-authoritative-movement-strict=true\n"
-                              "player-position-acceptance-threshold=0.000001\n";
+                               "player-position-acceptance-threshold=0.000001\n";
         owner.setProperties(PropertiesSettings(path.string()));
         NetworkIdentifier id;
         ServerPlayer immediate(id, 2002);
@@ -413,10 +414,11 @@ namespace {
         require(immediate.getSimulatedVelocity().y < 0.0f && immediate.getPosition().y < 250.0f,
                 "Replay equivalence fixture did not simulate falling");
         require(std::fabs(immediate.getPosition().y - delayed.getPosition().y) < 0.00001f
-                && std::fabs(immediate.getSimulatedVelocity().y - delayed.getSimulatedVelocity().y) < 0.00001f,
+                        && std::fabs(immediate.getSimulatedVelocity().y - delayed.getSimulatedVelocity().y) < 0.00001f,
                 "Delayed replay diverged from sequential strict simulation");
         require(immediate.isOnGround() && delayed.isOnGround(), "Replay did not preserve landing collision state");
-        require(delayed.getMovementInputs().lastProcessedTick() == 10, "Catchup used the server tick as the input tick");
+        require(delayed.getMovementInputs().lastProcessedTick() == 10,
+                "Catchup used the server tick as the input tick");
     }
 
     // jump 0x140EAFAF0, cooldown 0x140EB0DA0, ground/air travel and gravity
@@ -486,8 +488,8 @@ namespace {
                 require(player.isOnGround() == grounded,
                         "Ground handler overwrote the jump collision state with a block below the player");
                 require(std::fabs(player.getPosition().y - expected.y) < 0.00005f
-                        && std::fabs(player.getPosition().z - expected.z) < 0.00005f
-                        && std::fabs(player.getSimulatedVelocity().z - velocity.z) < 0.00001f,
+                                && std::fabs(player.getPosition().z - expected.z) < 0.00005f
+                                && std::fabs(player.getSimulatedVelocity().z - velocity.z) < 0.00001f,
                         "Held sprint-jump trajectory diverged from the BDS reference");
             }
             require(jumps >= 4, "Trajectory fixture failed to exercise held repeat jumps");
@@ -512,8 +514,8 @@ namespace {
         for (int x = 69; x <= 72; ++x)
             for (int z = 0; z < 64; ++z)
                 for (int y = 240; y <= 254; ++y)
-                    level.setBlockState(x, y, z, BlockState(y == 249 && (float) z < edgeZ ? "minecraft:stone"
-                                                                                        : "minecraft:air"));
+                    level.setBlockState(
+                            x, y, z, BlockState(y == 249 && (float) z < edgeZ ? "minecraft:stone" : "minecraft:air"));
         Vector3f expected(70.5f, 250.0f, 2.5f);
         Vector3f velocity;
         bool grounded = true;
@@ -567,7 +569,7 @@ namespace {
                 require(player.isOnGround(), "Skipped input dropped the ground kept by the Y-first collision");
             }
             require(std::fabs(player.getPosition().y - expected.y) < 0.00005f
-                    && std::fabs(player.getPosition().z - expected.z) < 0.00005f,
+                            && std::fabs(player.getPosition().z - expected.z) < 0.00005f,
                     "Sprint jump past an edge after a movement change diverged from the client");
         }
         require(edgeTick > 0, "Edge fixture never left the floor");
@@ -605,8 +607,8 @@ namespace {
                 if (ascend && descend)
                     velocity.y = 0.0f;
                 else
-                    velocity.y += (ascend ? 0.15f : 0.0f) + (jumping ? 0.05f : 0.0f)
-                                  - (descend ? 0.22f : 0.0f) - (sneaking ? 0.15f : 0.0f);
+                    velocity.y += (ascend ? 0.15f : 0.0f) + (jumping ? 0.05f : 0.0f) - (descend ? 0.22f : 0.0f)
+                                  - (sneaking ? 0.15f : 0.0f);
                 if (moving)
                     velocity.z += (sprinting ? 0.1f : 0.05f) * 0.98f;
                 expected.y += velocity.y;
@@ -632,8 +634,8 @@ namespace {
                 PlayerMovementSimulator::apply(owner, id, player, packet, feet, sprinting);
                 player.setPosition(feet);
                 require(std::fabs(feet.y - expected.y) < 0.00005f && std::fabs(feet.z - expected.z) < 0.00005f
-                        && std::fabs(player.getSimulatedVelocity().y - velocity.y) < 0.000002f
-                        && std::fabs(player.getSimulatedVelocity().z - velocity.z) < 0.000002f,
+                                && std::fabs(player.getSimulatedVelocity().y - velocity.y) < 0.000002f
+                                && std::fabs(player.getSimulatedVelocity().z - velocity.z) < 0.000002f,
                         "Creative flying trajectory differs from BDS vertical control, drag or idle friction");
             }
         }
@@ -650,7 +652,7 @@ namespace {
         Vector3f feet = grounded.getPosition();
         PlayerMovementSimulator::apply(owner, id, grounded, packet, feet, false);
         require(!grounded.isSimulatedOnGround() && feet.y == 250.0f
-                && std::fabs(grounded.getSimulatedVelocity().z - 0.026754f) < 0.000002f,
+                        && std::fabs(grounded.getSimulatedVelocity().z - 0.026754f) < 0.000002f,
                 "Flying player retained ground contact or ignored first-input surface friction");
         grounded.setPosition(feet);
         PlayerMovementSimulator::apply(owner, id, grounded, packet, feet, false);
@@ -701,18 +703,17 @@ namespace {
         MovementInputSystem::tick(context);
         // the wire vector is already pose-scaled: crouching only bounds each axis to 0.3
         require(std::fabs(context.input.sideways - 0.196f) < 0.000002f
-                && std::fabs(context.input.forward - 0.294f) < 0.000002f,
+                        && std::fabs(context.input.forward - 0.294f) < 0.000002f,
                 "Crouch slowdown scaled an already scaled move vector again");
         context.abilities.swimming = true;
         MovementInputSystem::tick(context);
         require(std::fabs(context.input.sideways - 0.196f) < 0.000002f
-                && std::fabs(context.input.forward - 0.392f) < 0.000002f,
+                        && std::fabs(context.input.forward - 0.392f) < 0.000002f,
                 "Swimming inherited the crouched input slowdown");
         packet.mRotation.x = -30.0f;
         context.state.velocity.y = 0.1f;
         SwimControlSystem::tick(context);
-        require(context.state.velocity.y == 0.1f,
-                "Swim control ran without BDS's required water contact");
+        require(context.state.velocity.y == 0.1f, "Swim control ran without BDS's required water contact");
         context.waterTravel.active = true;
         SwimControlSystem::tick(context);
         require(context.state.velocity.y == 0.0f,
@@ -720,8 +721,7 @@ namespace {
         context.input.jumpHeld = true;
         context.state.velocity.y = 0.1f;
         SwimControlSystem::tick(context);
-        require(context.state.velocity.y == 0.1f,
-                "Swim control ran despite the jumping exclusion");
+        require(context.state.velocity.y == 0.1f, "Swim control ran despite the jumping exclusion");
     }
 
     void checkConfinedSwimmingPose() {
@@ -753,11 +753,9 @@ namespace {
                 player.getMovementInputs().enqueue(packet);
                 MovementInputProbe::step(owner, player, tick);
                 require(player.getFlags().get(ActorFlag::Swimming) == wet
-                        && player.getFlags().get(ActorFlag::Crawling) == !wet
-                        && !player.isSimulatedSneaking(),
+                                && player.getFlags().get(ActorFlag::Crawling) == !wet && !player.isSimulatedSneaking(),
                         "StopSwimming expanded a confined swimmer instead of preserving a valid horizontal pose");
-                require(player.getPosition().y < 250.4f,
-                        "Changing pose moved the player through the ice ceiling");
+                require(player.getPosition().y < 250.4f, "Changing pose moved the player through the ice ceiling");
             }
             if (!wet) {
                 for (int x = 164; x <= 168; ++x)
@@ -803,9 +801,8 @@ namespace {
         reported = Vector3f(180.575f, 250.0f, 2.5f);
         budget.mBudget = 0.5f;
         ClientAcceptanceSystem::tick(context);
-        require(std::fabs(context.state.simulated.x - reported.x) < 0.00002f
-                && context.state.velocity.x == 0.012f && context.state.velocity.y == -0.08f
-                && std::fabs(budget.mBudget - 0.46f) < 0.00002f,
+        require(std::fabs(context.state.simulated.x - reported.x) < 0.00002f && context.state.velocity.x == 0.012f
+                        && context.state.velocity.y == -0.08f && std::fabs(budget.mBudget - 0.46f) < 0.00002f,
                 "BDS air acceptance did not spend/refill its budget independently of physical velocity");
         auto context2 = contextFor(Vector3f(180.5f, 250.0f, 2.5f));
         reported = Vector3f(182.5f, 249.5f, 2.5f);
@@ -818,8 +815,8 @@ namespace {
         budget.mBudget = 0.3f;
         ClientAcceptanceSystem::tick(context3);
         require(std::fabs(context3.state.simulated.y - reported.y) < 0.00002f
-                && std::fabs(context3.state.simulated.x - reported.x) < 0.00002f
-                && context3.state.simulated.z == 2.5f && budget.mBudget < 0.056f,
+                        && std::fabs(context3.state.simulated.x - reported.x) < 0.00002f
+                        && context3.state.simulated.z == 2.5f && budget.mBudget < 0.056f,
                 "Acceptance did not share its Manhattan budget in Y/X/Z order");
         for (int y = 250; y <= 252; ++y)
             level.setBlockState(181, y, 2, BlockState("minecraft:stone"));
@@ -847,7 +844,7 @@ namespace {
             validator.trace().record(frame);
         }
         require(validator.trace().size() == 32 && validator.trace().at(0).tick == 69
-                && validator.trace().at(31).tick == 100,
+                        && validator.trace().at(31).tick == 100,
                 "Movement diagnostics did not retain exactly the last 32 input ticks in order");
         validator.reset();
         require(validator.trace().size() == 0, "Movement reset retained a stale replay history");
@@ -866,8 +863,8 @@ namespace {
         packet.mMotionY = 1.0f;
         packet.mDelta.y = -0.1f;
         MovementHandler::handlePlayerAuthInput(owner, id, player, packet);
-        require(!player.hasSimulatedPosition() && !player.hasSimulatedVelocity()
-                && !player.hasPendingMove() && player.getPosition().y == 63.0f,
+        require(!player.hasSimulatedPosition() && !player.hasSimulatedVelocity() && !player.hasPendingMove()
+                        && player.getPosition().y == 63.0f,
                 "Loading-screen input started falling or changed the authoritative spawn position");
     }
 
@@ -898,11 +895,11 @@ namespace {
         player.getMovementInputs().enqueue(packet);
         MovementInputProbe::step(owner, player, 1);
         require(player.isFlying() && player.getPosition().y == 250.0f
-                && std::fabs(player.getSimulatedVelocity().y + 0.0784f) < 0.000002f,
+                        && std::fabs(player.getSimulatedVelocity().y + 0.0784f) < 0.000002f,
                 "Flight enabled retroactively for an older queued input");
         MovementInputProbe::step(owner, player, 2);
         require(std::fabs(player.getPosition().y - 250.0716f) < 0.00003f
-                && std::fabs(player.getSimulatedVelocity().y - 0.04296f) < 0.000002f,
+                        && std::fabs(player.getSimulatedVelocity().y - 0.04296f) < 0.000002f,
                 "Deferred flight did not apply to the next input boundary");
         packet.mTick = 102;
         packet.mPosition.y = 251.88456f;
@@ -917,18 +914,16 @@ namespace {
         timeline.enqueue(input(100));
         timeline.deferFlightRequest(true);
         bool flying = false;
-        require(!timeline.takeFlightRequest(100, false, flying)
-                && timeline.takeFlightRequest(101, false, flying) && flying,
+        require(!timeline.takeFlightRequest(100, false, flying) && timeline.takeFlightRequest(101, false, flying)
+                        && flying,
                 "Discarding an input boundary lost its deferred ability request");
         timeline.deferFlightRequest(true);
         timeline.deferFlightRequest(false);
-        require(timeline.takeFlightRequest(100, true, flying) && !flying
-                && !timeline.hasPendingFlightRequest(),
+        require(timeline.takeFlightRequest(100, true, flying) && !flying && !timeline.hasPendingFlightRequest(),
                 "Repeated ability requests at one input boundary were not coalesced");
         timeline.deferFlightRequest(true);
         timeline.clearPending();
-        require(!timeline.hasPendingFlightRequest(),
-                "Resetting pending movement retained an obsolete flight request");
+        require(!timeline.hasPendingFlightRequest(), "Resetting pending movement retained an obsolete flight request");
     }
 
     void checkFlightInputTransitions() {
@@ -949,8 +944,7 @@ namespace {
         level.getBlockActors().loadChunk(9, 0, {}, owner.getCodecContext());
         PlayerAuthInputPacket packet;
         packet.mTick = 99;
-        packet.mInputData = {(int32_t) PlayerAuthInputData::StartFlying,
-                             (int32_t) PlayerAuthInputData::WantUp,
+        packet.mInputData = {(int32_t) PlayerAuthInputData::StartFlying, (int32_t) PlayerAuthInputData::WantUp,
                              (int32_t) PlayerAuthInputData::Jumping};
         packet.mPosition = Vector3f(150.5f, 251.62f, 2.5f);
         player.getMovementInputs().enqueue(packet);
@@ -968,7 +962,7 @@ namespace {
         player.getMovementInputs().enqueue(packet);
         MovementInputProbe::step(owner, player, 2);
         require(player.isFlying() && std::fabs(player.getPosition().y - 250.15f) < 0.00003f
-                && std::fabs(player.getSimulatedVelocity().y - 0.09f) < 0.000002f,
+                        && std::fabs(player.getSimulatedVelocity().y - 0.09f) < 0.000002f,
                 "Flight controls did not apply on the input after StartFlying, or Jumping was confused with WantUpSlow");
         packet.mTick = 101;
         packet.mInputData = {(int32_t) PlayerAuthInputData::WantUp};
@@ -987,8 +981,7 @@ namespace {
         require(!player.isFlying() && std::fabs(player.getSimulatedVelocity().y - idleFlyingVelocity) < 0.000002f,
                 "AuthInput StopFlying did not keep flying travel on its own tick");
         packet.mTick = 103;
-        packet.mInputData = {(int32_t) PlayerAuthInputData::StartFlying,
-                             (int32_t) PlayerAuthInputData::WantUp};
+        packet.mInputData = {(int32_t) PlayerAuthInputData::StartFlying, (int32_t) PlayerAuthInputData::WantUp};
         player.getMovementInputs().enqueue(packet);
         packet.mTick = 104;
         packet.mInputData = {(int32_t) PlayerAuthInputData::StopFlying};
@@ -1015,8 +1008,10 @@ namespace {
             for (int x = 116; x <= 120; ++x)
                 for (int z = 0; z <= 12; ++z)
                     for (int y = 249; y <= 254; ++y)
-                        level.setBlockState(x, y, z, BlockState(y == 249 || (z >= 5 && y == 250)
-                                || (ceiling && y == 253) ? "minecraft:stone" : "minecraft:air"));
+                        level.setBlockState(x, y, z,
+                                            BlockState(y == 249 || (z >= 5 && y == 250) || (ceiling && y == 253)
+                                                               ? "minecraft:stone"
+                                                               : "minecraft:air"));
             for (int x = 116; x <= 120; ++x)
                 for (int z = 0; z < 5; ++z)
                     level.setBlockState(x, 250, z, WaterBlock::source());
@@ -1089,10 +1084,10 @@ namespace {
             player.setPosition(Vector3f(86.5f, feetY, 3.5f));
             player.setOnGround(true);
             require(MovementHandler::checkGroundState(level, player.getPosition())
-                    && !MovementHandler::checkGroundState(level, Vector3f(86.5f, feetY + 0.42f, 3.5f)),
+                            && !MovementHandler::checkGroundState(level, Vector3f(86.5f, feetY + 0.42f, 3.5f)),
                     "Ground probe ignored the actual stone/slab collision surface");
             require(LiquidBlocksFetch::at(level, player.getPosition()).water
-                    && !LiquidBlocksFetch::at(level, player.getPosition()).eyeSubmerged,
+                            && !LiquidBlocksFetch::at(level, player.getPosition()).eyeSubmerged,
                     "Shallow walking fixture did not have water below the head");
             float expectedZ = 3.5f;
             float velocityZ = 0.0f;
@@ -1107,8 +1102,8 @@ namespace {
                 player.getMovementInputs().enqueue(packet);
                 MovementInputProbe::step(owner, player, tick);
                 require(player.isOnGround() && std::fabs(player.getPosition().y - feetY) < 0.00002f
-                        && std::fabs(player.getPosition().z - expectedZ) < 0.00005f
-                        && std::fabs(player.getSimulatedVelocity().z - velocityZ) < 0.00001f,
+                                && std::fabs(player.getPosition().z - expectedZ) < 0.00005f
+                                && std::fabs(player.getSimulatedVelocity().z - velocityZ) < 0.00001f,
                         "Walking on stone or waterlogged slabs in shallow water diverged from BDS water travel");
             }
         }
@@ -1118,7 +1113,7 @@ namespace {
         ServerNetworkHandler owner("Travel replay regression", "", 2);
         const auto path = ServerPaths::getRoot() / "travel-replay.properties";
         std::ofstream(path) << "simulation=true\nserver-authoritative-movement-strict=true\n"
-                              "player-position-acceptance-threshold=0\n";
+                               "player-position-acceptance-threshold=0\n";
         owner.setProperties(PropertiesSettings(path.string()));
         NetworkIdentifier id;
         ServerPlayer locator(id, 4000);
@@ -1126,13 +1121,16 @@ namespace {
         level.getChunk(4, 0);
         level.getBlockActors().loadChunk(4, 0, {}, owner.getCodecContext());
         for (int scenario = 0; scenario < 5; ++scenario) {
-            const BlockState liquid(scenario == 2 ? "minecraft:water" : scenario == 3
-                                   ? "minecraft:lava" : "minecraft:air");
+            const BlockState liquid(scenario == 2   ? "minecraft:water"
+                                    : scenario == 3 ? "minecraft:lava"
+                                                    : "minecraft:air");
             for (int x = 64; x < 80; ++x)
                 for (int z = 0; z < 16; ++z)
                     for (int y = 248; y <= 256; ++y)
-                        level.setBlockState(x, y, z, y == 249 ? BlockState("minecraft:stone")
-                                                                            : y >= 250 ? liquid : BlockState("minecraft:air"));
+                        level.setBlockState(x, y, z,
+                                            y == 249   ? BlockState("minecraft:stone")
+                                            : y >= 250 ? liquid
+                                                       : BlockState("minecraft:air"));
             ServerPlayer immediate(id, 4001 + scenario * 2);
             ServerPlayer delayed(id, 4002 + scenario * 2);
             for (ServerPlayer *player: {&immediate, &delayed}) {
@@ -1188,13 +1186,13 @@ namespace {
                                          immediate.getSimulatedVelocity().y - delayed.getSimulatedVelocity().y,
                                          immediate.getSimulatedVelocity().z - delayed.getSimulatedVelocity().z);
             require(immediate.hasSimulatedPosition() && delayed.hasSimulatedPosition()
-                    && std::fabs(positionDelta.x) < 0.000001f && std::fabs(positionDelta.y) < 0.000001f
-                    && std::fabs(positionDelta.z) < 0.000001f && std::fabs(velocityDelta.x) < 0.000001f
-                    && std::fabs(velocityDelta.y) < 0.000001f && std::fabs(velocityDelta.z) < 0.000001f,
-                    ("Ground/jump/water/lava/flight catch-up diverged in scenario " + std::to_string(scenario)).c_str());
-            require(immediate.isOnGround() == delayed.isOnGround()
-                    && immediate.getJumpDelay() == delayed.getJumpDelay()
-                    && delayed.getMovementInputs().lastProcessedTick() == 24,
+                            && std::fabs(positionDelta.x) < 0.000001f && std::fabs(positionDelta.y) < 0.000001f
+                            && std::fabs(positionDelta.z) < 0.000001f && std::fabs(velocityDelta.x) < 0.000001f
+                            && std::fabs(velocityDelta.y) < 0.000001f && std::fabs(velocityDelta.z) < 0.000001f,
+                    ("Ground/jump/water/lava/flight catch-up diverged in scenario " + std::to_string(scenario))
+                            .c_str());
+            require(immediate.isOnGround() == delayed.isOnGround() && immediate.getJumpDelay() == delayed.getJumpDelay()
+                            && delayed.getMovementInputs().lastProcessedTick() == 24,
                     "Catch-up lost collision, jump cooldown or input timeline state");
         }
     }
@@ -1224,17 +1222,16 @@ namespace {
         for (int64_t tick = 103; tick <= 108; ++tick)
             MovementInputProbe::receive(owner, id, input(tick, (float) (tick - 98) + 0.5f));
         MovementInputProbe::step(owner, player, 13);
-        require(player.getMovementInputs().lastProcessedTick() == 104
-                && player.getMovementInputs().pendingCount() == 4, "Normal frame did not bound catchup work");
+        require(player.getMovementInputs().lastProcessedTick() == 104 && player.getMovementInputs().pendingCount() == 4,
+                "Normal frame did not bound catchup work");
         MovementInputProbe::step(owner, player, 14, 1000);
-        require(player.getMovementInputs().lastProcessedTick() == 108
-                && player.getMovementInputs().pendingCount() == 0, "Catchup did not consume accumulated credits");
+        require(player.getMovementInputs().lastProcessedTick() == 108 && player.getMovementInputs().pendingCount() == 0,
+                "Catchup did not consume accumulated credits");
         MovementInputProbe::receive(owner, id, input(109));
         MovementInputProbe::receive(owner, id, input(110));
         player._setVehicleId(9001);
         MovementInputProbe::step(owner, player, 15, 1000);
-        require(player.getMovementInputs().lastProcessedTick() == 109
-                && player.getMovementInputs().pendingCount() == 1,
+        require(player.getMovementInputs().lastProcessedTick() == 109 && player.getMovementInputs().pendingCount() == 1,
                 "Catchup consumed rider inputs before the vehicle could travel");
         player._setVehicleId(0);
         player.setSimulatedPosition(player.getPosition());
@@ -1244,7 +1241,8 @@ namespace {
         MovementInputProbe::receive(owner, id, input(111));
         player.setAwaitingDimensionAck(true);
         MovementInputProbe::receive(owner, id, input(112));
-        require(player.getMovementInputs().pendingCount() == 0, "Dimension transition accepted queued old-world movement");
+        require(player.getMovementInputs().pendingCount() == 0,
+                "Dimension transition accepted queued old-world movement");
         player.setAwaitingDimensionAck(false);
         MovementInputProbe::receive(owner, id, input(113));
         player.setDead(true);
@@ -1273,9 +1271,9 @@ namespace {
         require(!simulationFor("movement-simulation=false\nsimulation=true\n"
                                "server-authoritative-movement-strict=true\n"),
                 "movement-simulation did not take precedence over the settings it replaces");
-        for (const std::string configuration: {"", "movement-simulation=true\n",
-                                               "movement-simulation=true\nserver-authoritative-movement-strict=true\n",
-                                               "movement-simulation=false\nserver-authoritative-movement-strict=true\n"}) {
+        for (const std::string configuration:
+             {"", "movement-simulation=true\n", "movement-simulation=true\nserver-authoritative-movement-strict=true\n",
+              "movement-simulation=false\nserver-authoritative-movement-strict=true\n"}) {
             std::ofstream(path) << configuration;
             const PropertiesSettings settings(path.string());
             owner.setProperties(settings);
@@ -1306,19 +1304,17 @@ namespace {
             require(player.hasSimulatedPosition() && player.hasSimulatedVelocity(),
                     "Enabled simulation still depended on the strict setting");
             const float expectedFeedback = settings.getServerAuthoritativeMovementStrict() ? 0.0f : 0.005f;
-            require(feet.x == 66.5f,
-                    "Position reconciliation moved the physical result before the next tick");
+            require(feet.x == 66.5f, "Position reconciliation moved the physical result before the next tick");
             require(std::fabs(player.getSimulatedVelocity().x - expectedFeedback) < 0.00001f
-                    && player.getMotion().x == player.getSimulatedVelocity().x,
+                            && player.getMotion().x == player.getSimulatedVelocity().x,
                     "Velocity feedback ignored strict mode or trusted the client's delta");
             player.setSimulatedPosition(player.getPosition());
             player.setSimulatedVelocity(Vector3f(0, -0.0784f, 0));
             feet = Vector3f(66.502f, 250.0f, 2.5f);
             packet.mTick = 200;
             PlayerMovementSimulator::apply(owner, id, player, packet, feet, false);
-            require(feet.x == 66.5f
-                    && std::fabs(player.getSimulatedVelocity().x - (66.502f - 66.5f)) < 0.00001f
-                    && player.getMotion().x == player.getSimulatedVelocity().x,
+            require(feet.x == 66.5f && std::fabs(player.getSimulatedVelocity().x - (66.502f - 66.5f)) < 0.00001f
+                            && player.getMotion().x == player.getSimulatedVelocity().x,
                     "Fine acceptance did not steer velocity independently of client delta");
         }
     }
@@ -1329,7 +1325,7 @@ namespace {
         ServerNetworkHandler owner("Travel regression", "", 1);
         const auto path = ServerPaths::getRoot() / "travel.properties";
         std::ofstream(path) << "server-authoritative-movement-strict=true\n"
-                              "player-position-acceptance-threshold=0\n";
+                               "player-position-acceptance-threshold=0\n";
         owner.setProperties(PropertiesSettings(path.string()));
         NetworkIdentifier id;
         ServerPlayer locator(id, 3000);
@@ -1346,8 +1342,10 @@ namespace {
             for (int x = 49; x <= 52; ++x)
                 for (int z = 1; z <= 4; ++z)
                     for (int y = 247; y <= 254; ++y)
-                        level.setBlockState(x, y, z, y == 249 ? floor : y >= 250 && y <= 252
-                                                                      ? body : BlockState("minecraft:air"));
+                        level.setBlockState(x, y, z,
+                                            y == 249               ? floor
+                                            : y >= 250 && y <= 252 ? body
+                                                                   : BlockState("minecraft:air"));
         };
         const auto makePlayer = [&](bool grounded = true) {
             auto player = std::make_unique<ServerPlayer>(id, nextId++);
@@ -1373,8 +1371,8 @@ namespace {
         };
         const auto close = [&](float actual, float expected, const char *message) {
             if (std::fabs(actual - expected) >= 0.000002f)
-                throw std::runtime_error(std::string(message) + ": got " + std::to_string(actual)
-                                         + ", expected " + std::to_string(expected));
+                throw std::runtime_error(std::string(message) + ": got " + std::to_string(actual) + ", expected "
+                                         + std::to_string(expected));
         };
         const BlockState air("minecraft:air");
         const BlockState stone("minecraft:stone");
@@ -1389,11 +1387,10 @@ namespace {
         auto leavingSwim = makePlayer();
         leavingSwim->getSwimAmount().mCurrent = 0.5f;
         step(*leavingSwim, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
-        close(leavingSwim->getPosition().y, 250.0f,
-              "Ground jump ignored the remaining swim pose transition");
+        close(leavingSwim->getPosition().y, 250.0f, "Ground jump ignored the remaining swim pose transition");
         leavingSwim->getSwimAmount().mCurrent = 0.0f;
-        step(*leavingSwim, {(int32_t) PlayerAuthInputData::Jumping, (int32_t) PlayerAuthInputData::StartJumping},
-             false, 0.0f);
+        step(*leavingSwim, {(int32_t) PlayerAuthInputData::Jumping, (int32_t) PlayerAuthInputData::StartJumping}, false,
+             0.0f);
         close(leavingSwim->getPosition().y, 250.42f, "Ground jump remained blocked after the swim pose ended");
 
         auto stopped = makePlayer();
@@ -1456,7 +1453,7 @@ namespace {
                 for (int y = 251; y <= 252; ++y)
                     level.setBlockState(x, y, z, air);
         require(!LiquidBlocksFetch::at(level, shallowFeet).water
-                && LiquidBlocksFetch::at(level, Vector3f(50.5f, 250.59f, 2.5f)).water,
+                        && LiquidBlocksFetch::at(level, Vector3f(50.5f, 250.59f, 2.5f)).water,
                 "Shallow water still used the player's uncontracted collision box");
         auto shallow = makePlayer(false);
         shallow->setPosition(shallowFeet);
@@ -1464,12 +1461,11 @@ namespace {
         step(*shallow);
         close(shallow->getSimulatedVelocity().z, 0.017836f,
               "Player above shallow water received underwater acceleration and friction");
-        close(shallow->getSimulatedVelocity().y, -0.0784f,
-              "Player above shallow water received water gravity");
+        close(shallow->getSimulatedVelocity().y, -0.0784f, "Player above shallow water received water gravity");
         terrain(stone, air);
         level.setBlockState(51, 250, 2, WaterBlock::source());
         require(!LiquidBlocksFetch::at(level, Vector3f(50.7f, 250.0f, 2.5f)).water
-                && LiquidBlocksFetch::at(level, Vector3f(50.71f, 250.0f, 2.5f)).water,
+                        && LiquidBlocksFetch::at(level, Vector3f(50.71f, 250.0f, 2.5f)).water,
                 "Touching a water block boundary was treated as water travel");
         terrain(stone, WaterBlock::source());
         auto water = makePlayer(false);
@@ -1507,24 +1503,20 @@ namespace {
         }
         auto shallowDive = makePlayer(false);
         step(*shallowDive, swimFlags, false, 0.0f, 10.0f);
-        require(shallowDive->getSimulatedVelocity().y < -0.008f
-                && shallowDive->getSimulatedVelocity().y > -0.009f,
+        require(shallowDive->getSimulatedVelocity().y < -0.008f && shallowDive->getSimulatedVelocity().y > -0.009f,
                 "Shallow diving used the steep-dive steering coefficient");
         auto swimmingJump = makePlayer(false);
-        step(*swimmingJump, {(int32_t) PlayerAuthInputData::StartSwimming,
-                             (int32_t) PlayerAuthInputData::Jumping}, false, 0.0f, 90.0f);
-        close(swimmingJump->getSimulatedVelocity().y, 0.032f,
-              "Swim steering ran while MobIsJumping should exclude it");
+        step(*swimmingJump, {(int32_t) PlayerAuthInputData::StartSwimming, (int32_t) PlayerAuthInputData::Jumping},
+             false, 0.0f, 90.0f);
+        close(swimmingJump->getSimulatedVelocity().y, 0.032f, "Swim steering ran while MobIsJumping should exclude it");
         // recorded ticks 560..563 hold Y still until the ten-tick pose transition ends
         auto transition = makePlayer(false);
         step(*transition, {(int32_t) PlayerAuthInputData::StartSwimming}, false, 0.0f);
         transition->getFlags().set(ActorFlag::Swimming, true);
         for (int tick = 2; tick <= 10; ++tick) {
             step(*transition, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
-            close(transition->getSimulatedVelocity().y, 0.0f,
-                  "Water jump accelerated during the BDS swim transition");
-            close(transition->getPosition().y, 250.0f,
-                  "Swim transition accumulated the recorded vertical drift");
+            close(transition->getSimulatedVelocity().y, 0.0f, "Water jump accelerated during the BDS swim transition");
+            close(transition->getPosition().y, 250.0f, "Swim transition accumulated the recorded vertical drift");
         }
         close(transition->getSwimAmount().mCurrent, 1.0f, "Swim transition did not finish in ten inputs");
         step(*transition, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
@@ -1539,10 +1531,9 @@ namespace {
         close(transition->getSwimAmount().mCurrent, 0.8f,
               "Prediction reset restarted the independent swim pose transition");
         auto swimmingSink = makePlayer(false);
-        step(*swimmingSink, {(int32_t) PlayerAuthInputData::StartSwimming,
-                             (int32_t) PlayerAuthInputData::WantDownSlow}, false, 0.0f);
-        close(swimmingSink->getSimulatedVelocity().y, -0.03008f,
-              "Water sink input and swim steering order differs");
+        step(*swimmingSink, {(int32_t) PlayerAuthInputData::StartSwimming, (int32_t) PlayerAuthInputData::WantDownSlow},
+             false, 0.0f);
+        close(swimmingSink->getSimulatedVelocity().y, -0.03008f, "Water sink input and swim steering order differs");
         auto waterJump = makePlayer(false);
         step(*waterJump, {(int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
         close(waterJump->getSimulatedVelocity().y, 0.027f, "Standing water jump or sinking gravity differs");
@@ -1554,10 +1545,10 @@ namespace {
         level.setBlockState(50, 251, 2, WaterBlock::source());
         const Vector3f waterBelowCeiling(50.5f, 250.0f, 2.5f);
         require(LiquidBlocksFetch::at(level, Vector3f(50.5f, 249.7f, 2.5f)).water
-                && !LiquidBlocksFetch::at(level, Vector3f(50.5f, 249.7f, 2.5f), false, 1.49f).water,
+                        && !LiquidBlocksFetch::at(level, Vector3f(50.5f, 249.7f, 2.5f), false, 1.49f).water,
                 "Liquid sensing ignored the crouching collision height");
         require(LiquidBlocksFetch::at(level, waterBelowCeiling).water
-                && !LiquidBlocksFetch::at(level, waterBelowCeiling, true).water,
+                        && !LiquidBlocksFetch::at(level, waterBelowCeiling, true).water,
                 "Horizontal liquid sampling still included the standing body volume");
         terrain(stone, air);
         for (int x = 49; x <= 52; ++x)
@@ -1565,14 +1556,13 @@ namespace {
                 level.setBlockState(x, 250, z, WaterBlock::source());
         const LiquidContact horizontalWater = LiquidBlocksFetch::at(level, waterBelowCeiling, true);
         require(horizontalWater.eyeInWater && horizontalWater.swimProbeInWater
-                && !LiquidBlocksFetch::at(level, waterBelowCeiling).eyeInWater,
+                        && !LiquidBlocksFetch::at(level, waterBelowCeiling).eyeInWater,
                 "Swimming eyes or swim-control probe used standing offsets");
         const LiquidContact nearSurface = LiquidBlocksFetch::at(level, Vector3f(50.5f, 250.55f, 2.5f), true);
         require(nearSurface.eyeInWater && nearSurface.swimProbeInWater,
                 "Swim steering used a body-height probe above the head block");
         const LiquidContact crouched = LiquidBlocksFetch::at(level, Vector3f(50.5f, 249.5f, 2.5f), false, 1.49f);
-        require(crouched.eyeInWater,
-                "Crouched water sensing kept the standing eye height");
+        require(crouched.eyeInWater, "Crouched water sensing kept the standing eye height");
         auto surface = makePlayer(false);
         surface->setPosition(Vector3f(50.5f, 250.65f, 2.5f));
         surface->setSimulatedPosition(surface->getPosition());
@@ -1583,8 +1573,8 @@ namespace {
         surfaceJump->setPosition(Vector3f(50.5f, 250.65f, 2.5f));
         surfaceJump->setSimulatedPosition(surfaceJump->getPosition());
         surfaceJump->setSimulatedVelocity(Vector3f(0, 0.2f, 0));
-        step(*surfaceJump, {(int32_t) PlayerAuthInputData::StartSwimming,
-                           (int32_t) PlayerAuthInputData::Jumping}, false, 0.0f);
+        step(*surfaceJump, {(int32_t) PlayerAuthInputData::StartSwimming, (int32_t) PlayerAuthInputData::Jumping},
+             false, 0.0f);
         close(surfaceJump->getSimulatedVelocity().y, 0.0f, "Swimming jump escaped the head-out-water clamp");
         // a low tunnel must not hit the standing head while swimming
         terrain(stone, WaterBlock::source());
@@ -1595,9 +1585,8 @@ namespace {
 
         for (bool lavaCurrent: {false, true}) {
             terrain(air, air);
-            const BlockState falling = lavaCurrent
-                                       ? LavaBlock(BlockState("minecraft:lava")).makeState(0, true)
-                                       : WaterBlock(WaterBlock::source()).makeState(0, true);
+            const BlockState falling = lavaCurrent ? LavaBlock(BlockState("minecraft:lava")).makeState(0, true)
+                                                   : WaterBlock(WaterBlock::source()).makeState(0, true);
             for (int y = 250; y <= 252; ++y) {
                 level.setBlockState(50, y, 2, falling);
                 level.setBlockState(51, y, 2, stone);
@@ -1690,7 +1679,8 @@ namespace {
 int main() {
     const auto originalRoot = ServerPaths::getRoot();
     const auto directory = std::filesystem::temp_directory_path()
-            / ("falcon-input-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                           / ("falcon-input-"
+                              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     int result = 0;
     try {
         std::filesystem::create_directories(directory);

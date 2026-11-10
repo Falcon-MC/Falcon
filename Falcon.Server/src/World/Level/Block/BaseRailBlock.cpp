@@ -16,11 +16,7 @@ FALCON_REGISTER_BLOCK(BaseRailBlock, 140);
 #include <vector>
 
 namespace {
-    enum class RailShape {
-        Straight,
-        Ascending,
-        Curved
-    };
+    enum class RailShape { Straight, Ascending, Curved };
 
     struct RailOrientation {
         int mFirst;
@@ -30,16 +26,16 @@ namespace {
     };
 
     const RailOrientation ORIENTATIONS[10] = {
-            {RedstoneFace::NORTH, RedstoneFace::SOUTH, RedstoneFace::NONE,  RailShape::Straight},
-            {RedstoneFace::EAST,  RedstoneFace::WEST,  RedstoneFace::NONE,  RailShape::Straight},
-            {RedstoneFace::EAST,  RedstoneFace::WEST,  RedstoneFace::EAST,  RailShape::Ascending},
-            {RedstoneFace::EAST,  RedstoneFace::WEST,  RedstoneFace::WEST,  RailShape::Ascending},
+            {RedstoneFace::NORTH, RedstoneFace::SOUTH, RedstoneFace::NONE, RailShape::Straight},
+            {RedstoneFace::EAST, RedstoneFace::WEST, RedstoneFace::NONE, RailShape::Straight},
+            {RedstoneFace::EAST, RedstoneFace::WEST, RedstoneFace::EAST, RailShape::Ascending},
+            {RedstoneFace::EAST, RedstoneFace::WEST, RedstoneFace::WEST, RailShape::Ascending},
             {RedstoneFace::NORTH, RedstoneFace::SOUTH, RedstoneFace::NORTH, RailShape::Ascending},
             {RedstoneFace::NORTH, RedstoneFace::SOUTH, RedstoneFace::SOUTH, RailShape::Ascending},
-            {RedstoneFace::SOUTH, RedstoneFace::EAST,  RedstoneFace::NONE,  RailShape::Curved},
-            {RedstoneFace::SOUTH, RedstoneFace::WEST,  RedstoneFace::NONE,  RailShape::Curved},
-            {RedstoneFace::NORTH, RedstoneFace::WEST,  RedstoneFace::NONE,  RailShape::Curved},
-            {RedstoneFace::NORTH, RedstoneFace::EAST,  RedstoneFace::NONE,  RailShape::Curved},
+            {RedstoneFace::SOUTH, RedstoneFace::EAST, RedstoneFace::NONE, RailShape::Curved},
+            {RedstoneFace::SOUTH, RedstoneFace::WEST, RedstoneFace::NONE, RailShape::Curved},
+            {RedstoneFace::NORTH, RedstoneFace::WEST, RedstoneFace::NONE, RailShape::Curved},
+            {RedstoneFace::NORTH, RedstoneFace::EAST, RedstoneFace::NONE, RailShape::Curved},
     };
 
     const RailOrientation &orientationOf(int value) {
@@ -75,12 +71,8 @@ namespace {
     }
 
     int curvedOrientation(int first, int second) {
-        static const int CANDIDATES[4] = {
-                BaseRailBlock::CURVED_SOUTH_EAST,
-                BaseRailBlock::CURVED_SOUTH_WEST,
-                BaseRailBlock::CURVED_NORTH_WEST,
-                BaseRailBlock::CURVED_NORTH_EAST
-        };
+        static const int CANDIDATES[4] = {BaseRailBlock::CURVED_SOUTH_EAST, BaseRailBlock::CURVED_SOUTH_WEST,
+                                          BaseRailBlock::CURVED_NORTH_WEST, BaseRailBlock::CURVED_NORTH_EAST};
 
         for (int candidate: CANDIDATES) {
             if (connectsTo(candidate, first) && connectsTo(candidate, second))
@@ -91,14 +83,9 @@ namespace {
     }
 
     int straightOrCurvedOrientation(int first, int second) {
-        static const int CANDIDATES[6] = {
-                BaseRailBlock::STRAIGHT_NORTH_SOUTH,
-                BaseRailBlock::STRAIGHT_EAST_WEST,
-                BaseRailBlock::CURVED_SOUTH_EAST,
-                BaseRailBlock::CURVED_SOUTH_WEST,
-                BaseRailBlock::CURVED_NORTH_WEST,
-                BaseRailBlock::CURVED_NORTH_EAST
-        };
+        static const int CANDIDATES[6] = {BaseRailBlock::STRAIGHT_NORTH_SOUTH, BaseRailBlock::STRAIGHT_EAST_WEST,
+                                          BaseRailBlock::CURVED_SOUTH_EAST,    BaseRailBlock::CURVED_SOUTH_WEST,
+                                          BaseRailBlock::CURVED_NORTH_WEST,    BaseRailBlock::CURVED_NORTH_EAST};
 
         for (int candidate: CANDIDATES) {
             if (connectsTo(candidate, first) && connectsTo(candidate, second))
@@ -133,8 +120,7 @@ namespace {
         BlockActionHandler::broadcastBlockUpdate(owner, level, position, updated);
     }
 
-    std::vector<RailNeighbour> railsAround(Level &level, const Vector3i &position,
-                                           const std::vector<int> &faces) {
+    std::vector<RailNeighbour> railsAround(Level &level, const Vector3i &position, const std::vector<int> &faces) {
         std::vector<RailNeighbour> result;
 
         for (int face: faces) {
@@ -147,12 +133,10 @@ namespace {
                 if (!BaseRailBlock::matches(state.mName))
                     continue;
 
-                const bool known = std::any_of(result.begin(), result.end(),
-                                               [&candidate](const RailNeighbour &entry) {
-                                                   return entry.mPosition.x == candidate.x
-                                                          && entry.mPosition.y == candidate.y
-                                                          && entry.mPosition.z == candidate.z;
-                                               });
+                const bool known = std::any_of(result.begin(), result.end(), [&candidate](const RailNeighbour &entry) {
+                    return entry.mPosition.x == candidate.x && entry.mPosition.y == candidate.y
+                           && entry.mPosition.z == candidate.z;
+                });
                 if (known)
                     continue;
 
@@ -169,8 +153,8 @@ namespace {
     }
 
     const std::vector<int> &horizontalFaces() {
-        static const std::vector<int> FACES = {RedstoneFace::SOUTH, RedstoneFace::EAST,
-                                               RedstoneFace::WEST, RedstoneFace::NORTH};
+        static const std::vector<int> FACES = {RedstoneFace::SOUTH, RedstoneFace::EAST, RedstoneFace::WEST,
+                                               RedstoneFace::NORTH};
         return FACES;
     }
 
@@ -188,8 +172,8 @@ namespace {
         return connected;
     }
 
-    int connectSingle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                      const RailNeighbour &other, int face) {
+    int connectSingle(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const RailNeighbour &other,
+                      int face) {
         const int delta = position.y - other.mPosition.y;
         const int opposite = RedstoneFace::opposite(face);
         const std::vector<RailNeighbour> connected = railsConnected(level, other.mPosition,
@@ -229,8 +213,8 @@ namespace {
         return BaseRailBlock::STRAIGHT_NORTH_SOUTH;
     }
 
-    int connectPair(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                    const RailNeighbour &first, int firstFace, const RailNeighbour &second, int secondFace) {
+    int connectPair(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const RailNeighbour &first,
+                    int firstFace, const RailNeighbour &second, int secondFace) {
         connectSingle(owner, level, position, first, firstFace);
         connectSingle(owner, level, position, second, secondFace);
 
@@ -258,8 +242,7 @@ namespace {
     }
 }
 
-BaseRailBlock::BaseRailBlock(const Block &base) : Block(base) {
-}
+BaseRailBlock::BaseRailBlock(const Block &base) : Block(base) {}
 
 bool BaseRailBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
     (void) blockFace;

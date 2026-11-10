@@ -38,8 +38,7 @@ void SpreadingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
     if (RandomTickSystem::getFullLight(level, above) < MINIMUM_LIGHT_LEVEL)
         return;
 
-    const Vector3i target(position.x - 1 + RandomTickSystem::nextInt(3),
-                          position.y - 3 + RandomTickSystem::nextInt(5),
+    const Vector3i target(position.x - 1 + RandomTickSystem::nextInt(3), position.y - 3 + RandomTickSystem::nextInt(5),
                           position.z - 1 + RandomTickSystem::nextInt(3));
 
     // never loads chunks: a target in an unloaded chunk is skipped this tick

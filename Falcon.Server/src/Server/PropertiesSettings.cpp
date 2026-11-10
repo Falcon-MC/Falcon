@@ -139,8 +139,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"signaling-acme-directory", "https://acme-v02.api.letsencrypt.org/directory", PropertyKind::String, 0, 0,
              nullptr},
             // tls-alpn-01 answers on TCP 443, http-01 on TCP 80
-            {"signaling-acme-challenge", "tls-alpn-01", PropertyKind::Enum, 0, 0, "tls-alpn-01,http-01"}
-    };
+            {"signaling-acme-challenge", "tls-alpn-01", PropertyKind::Enum, 0, 0, "tls-alpn-01,http-01"}};
 
     return definitions;
 }
@@ -203,8 +202,7 @@ bool PropertiesSettings::_isValidValue(const PropertyDefinition &definition, con
         case PropertyKind::String:
             return true;
         case PropertyKind::Bool:
-            if (std::string(definition.mKey) == "movement-simulation"
-                || std::string(definition.mKey) == "simulation"
+            if (std::string(definition.mKey) == "movement-simulation" || std::string(definition.mKey) == "simulation"
                 || std::string(definition.mKey) == "server-authoritative-block-breaking"
                 || std::string(definition.mKey) == "disable-client-vibrant-visuals")
                 return value == "true" || value == "false";
@@ -460,8 +458,8 @@ bool PropertiesSettings::getBool(const char *key) const {
 float PropertiesSettings::getServerAuthoritativeBlockBreakingRangeScalar() const {
     // Falcon's spelling first; the BDS pick-range spelling stays for existing files
     const char *key = hasProperty("server-authoritative-block-breaking-range-scalar")
-                          ? "server-authoritative-block-breaking-range-scalar"
-                          : "server-authoritative-block-breaking-pick-range-scalar";
+                              ? "server-authoritative-block-breaking-range-scalar"
+                              : "server-authoritative-block-breaking-pick-range-scalar";
     const float scalar = getFloat(key);
     return std::isfinite(scalar) && scalar > 1.0f ? scalar : 1.5f;
 }

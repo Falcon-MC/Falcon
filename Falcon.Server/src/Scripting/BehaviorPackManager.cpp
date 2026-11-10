@@ -213,8 +213,7 @@ size_t BehaviorPackManager::pruneUnsatisfied(const std::vector<std::string> &ava
             continue;
         }
 
-        LOG_WARN(LogAreaID::Resource, "Skipping behavior pack %s: missing dependency pack",
-                 mPacks[i].mName.c_str());
+        LOG_WARN(LogAreaID::Resource, "Skipping behavior pack %s: missing dependency pack", mPacks[i].mName.c_str());
         mPacks.erase(mPacks.begin() + (long) i);
         removed++;
     }
@@ -228,7 +227,7 @@ void BehaviorPackManager::_scanRoot(const std::string &root) {
 
     if (!std::filesystem::exists(base / "manifest.json", error)) {
         for (const std::filesystem::directory_entry &entry:
-                     std::filesystem::recursive_directory_iterator(base, error)) {
+             std::filesystem::recursive_directory_iterator(base, error)) {
             if (entry.is_regular_file() && entry.path().filename() == "manifest.json")
                 _addPackFromManifest(entry.path().parent_path().string());
         }

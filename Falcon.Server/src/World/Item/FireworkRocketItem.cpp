@@ -2,13 +2,9 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
-FALCON_REGISTER_ITEM_CUSTOM(FireworkRocketItem, 50,
-                            [](const std::string &identifier) {
-                                return identifier == "minecraft:firework_rocket";
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<FireworkRocketItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        FireworkRocketItem, 50, [](const std::string &identifier) { return identifier == "minecraft:firework_rocket"; },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<FireworkRocketItem>(item); });
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -79,8 +75,7 @@ namespace {
     }
 }
 
-FireworkRocketItem::FireworkRocketItem(const Item &base) : Item(base) {
-}
+FireworkRocketItem::FireworkRocketItem(const Item &base) : Item(base) {}
 
 bool FireworkRocketItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     (void) item;
@@ -111,8 +106,7 @@ bool FireworkRocketItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player
         rocket->getProjectileData().mFireworkAttached = true;
     }
 
-    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::LAUNCH, player.getPosition(),
-                         "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::LAUNCH, player.getPosition(), "minecraft:player");
     player.consumeOneHeldItem();
     return true;
 }

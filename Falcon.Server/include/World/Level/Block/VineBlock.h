@@ -4,8 +4,7 @@
 
 class VineBlock : public ReplaceableBlock {
 public:
-    explicit VineBlock(const Block &block) : ReplaceableBlock(block) {
-    }
+    explicit VineBlock(const Block &block) : ReplaceableBlock(block) {}
 
     static bool matches(const std::string &identifier);
 
@@ -25,6 +24,5 @@ private:
 
     static void putVine(Level &level, const Vector3i &source, const Vector3i &position, int32_t bits);
 
-    static void putVineOnHorizontalFace(Level &level, const Vector3i &source, const Vector3i &position,
-                                        int32_t bits);
+    static void putVineOnHorizontalFace(Level &level, const Vector3i &source, const Vector3i &position, int32_t bits);
 };

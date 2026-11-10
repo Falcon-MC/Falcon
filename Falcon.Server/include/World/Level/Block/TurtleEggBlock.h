@@ -6,9 +6,7 @@
 
 class TurtleEggBlock : public Block {
 public:
-    explicit TurtleEggBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit TurtleEggBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 
@@ -19,8 +17,7 @@ public:
         return true;
     }
 
-    static void breakEgg(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                         const BlockState &state);
+    static void breakEgg(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state);
 
 private:
     static bool isHatchingTime(Level &level);

@@ -6,9 +6,7 @@
 
 class ObsidianBlock final : public Block {
 public:
-    explicit ObsidianBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit ObsidianBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

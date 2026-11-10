@@ -53,8 +53,7 @@ bool CushionItem::matches(const std::string &identifier) {
 }
 
 bool CushionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
-                               const Vector3i &blockPosition, int32_t face,
-                               const Vector3f &clickPosition) const {
+                               const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
     if (player.getGameType() == (int32_t) GameType::Spectator)
         return false;
 
@@ -97,8 +96,7 @@ bool CushionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player
 
         PlayerInventory &inventory = player.getInventory();
         inventory.setItemInHand(std::move(remaining));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     }
 
     return true;

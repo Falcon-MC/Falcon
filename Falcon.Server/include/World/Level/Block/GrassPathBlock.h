@@ -6,8 +6,7 @@
 
 class GrassPathBlock : public Block {
 public:
-    explicit GrassPathBlock(const Block &block) : Block(block) {
-    }
+    explicit GrassPathBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

@@ -86,8 +86,7 @@ void ServerNetworkHandler::setRaining(World &world, bool raining) {
 
 void ServerNetworkHandler::setThundering(World &world, bool thundering) {
     Level &level = world.getOverworld();
-    if (thundering != level.isThundering()
-        && !allowsWeatherChange(level, FALCON_EVENT_THUNDER_CHANGE, thundering))
+    if (thundering != level.isThundering() && !allowsWeatherChange(level, FALCON_EVENT_THUNDER_CHANGE, thundering))
         thundering = level.isThundering();
 
     if (thundering && !level.isRaining())
@@ -199,6 +198,6 @@ void ServerNetworkHandler::_tickWeather(World &world) {
         while (surfaceY > 0 && !level.isSolidAt(targetX, surfaceY, targetZ))
             --surfaceY;
 
-        strikeLightning(level,Vector3f((float) targetX + 0.5f, (float) (surfaceY + 1), (float) targetZ + 0.5f));
+        strikeLightning(level, Vector3f((float) targetX + 0.5f, (float) (surfaceY + 1), (float) targetZ + 0.5f));
     }
 }

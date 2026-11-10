@@ -20,11 +20,9 @@ public:
 
     static void sendHeldItem(ServerNetworkHandler &owner, ServerPlayer &player);
 
-    static void handleMobEquipment(ServerNetworkHandler &owner, ServerPlayer &player,
-                                   const MobEquipmentPacket &packet);
+    static void handleMobEquipment(ServerNetworkHandler &owner, ServerPlayer &player, const MobEquipmentPacket &packet);
 
-    static void handlePlayerHotbar(ServerNetworkHandler &owner, ServerPlayer &player,
-                                   const PlayerHotbarPacket &packet);
+    static void handlePlayerHotbar(ServerNetworkHandler &owner, ServerPlayer &player, const PlayerHotbarPacket &packet);
 
     static void handleOpenInventory(ServerNetworkHandler &owner, ServerPlayer &player);
 
@@ -39,7 +37,7 @@ public:
     static void resetInventory(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void handleCraftingEvent(ServerNetworkHandler &owner, ServerPlayer &player,
-                                     const CraftingEventPacket &packet);
+                                    const CraftingEventPacket &packet);
 
     static void _updateEnchantOptions(ServerNetworkHandler &owner, ServerPlayer &player);
 };

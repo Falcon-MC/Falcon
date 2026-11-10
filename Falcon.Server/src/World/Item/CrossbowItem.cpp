@@ -2,13 +2,9 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
-FALCON_REGISTER_ITEM_CUSTOM(CrossbowItem, 61,
-                            [](const std::string &identifier) {
-                                return identifier == "minecraft:crossbow";
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<CrossbowItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        CrossbowItem, 61, [](const std::string &identifier) { return identifier == "minecraft:crossbow"; },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<CrossbowItem>(item); });
 
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/ServerActor.h"
@@ -49,8 +45,7 @@ namespace {
     }
 }
 
-CrossbowItem::CrossbowItem(const Item &base) : Item(base) {
-}
+CrossbowItem::CrossbowItem(const Item &base) : Item(base) {}
 
 bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     if (!isCrossbowLoaded(item))
@@ -183,8 +178,8 @@ void CrossbowItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player
 
     owner.playLevelSound(owner.getLevelFor(player),
                          ItemEnchantments::getLevel(item, EnchantmentIds::QUICK_CHARGE) > 0
-                         ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_END
-                                         : LevelSoundEvent::CROSSBOW_LOADING_END,
+                                 ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_END
+                                 : LevelSoundEvent::CROSSBOW_LOADING_END,
                          player.getPosition(), "minecraft:player");
 }
 

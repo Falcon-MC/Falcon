@@ -6,24 +6,10 @@
 
 namespace {
 
-    const float GRADIENTS[16][3] = {
-            {1.0f,  1.0f,  0.0f},
-            {-1.0f, 1.0f,  0.0f},
-            {1.0f,  -1.0f, 0.0f},
-            {-1.0f, -1.0f, 0.0f},
-            {1.0f,  0.0f,  1.0f},
-            {-1.0f, 0.0f,  1.0f},
-            {1.0f,  0.0f,  -1.0f},
-            {-1.0f, 0.0f,  -1.0f},
-            {0.0f,  1.0f,  1.0f},
-            {0.0f,  -1.0f, 1.0f},
-            {0.0f,  1.0f,  -1.0f},
-            {0.0f,  -1.0f, -1.0f},
-            {1.0f,  1.0f,  0.0f},
-            {0.0f,  -1.0f, 1.0f},
-            {-1.0f, 1.0f,  0.0f},
-            {0.0f,  -1.0f, -1.0f}
-    };
+    const float GRADIENTS[16][3] = {{1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f},
+                                    {1.0f, 0.0f, 1.0f}, {-1.0f, 0.0f, 1.0f}, {1.0f, 0.0f, -1.0f}, {-1.0f, 0.0f, -1.0f},
+                                    {0.0f, 1.0f, 1.0f}, {0.0f, -1.0f, 1.0f}, {0.0f, 1.0f, -1.0f}, {0.0f, -1.0f, -1.0f},
+                                    {1.0f, 1.0f, 0.0f}, {0.0f, -1.0f, 1.0f}, {-1.0f, 1.0f, 0.0f}, {0.0f, -1.0f, -1.0f}};
 
     float gradient(int32_t hash, float x, float y, float z) {
         const float *g = GRADIENTS[hash & 15];
@@ -112,18 +98,14 @@ void LatticeNoise::addLattice(float *output, const float *start, int32_t countX,
                     const int32_t bb = _permutation(b + 1) + sectionZ;
                     const float gradientY1 = gradientY + -1.0f;
 
-                    const float low[4] = {
-                            gradient(_permutation(ab), localX, gradientY1, localZ),
-                            gradient(_permutation(aa + 1), localX, gradientY, localZ1),
-                            gradient(_permutation(aa), localX, gradientY, localZ),
-                            gradient(_permutation(ab + 1), localX, gradientY1, localZ1)
-                    };
-                    const float high[4] = {
-                            gradient(_permutation(bb), localX1, gradientY1, localZ),
-                            gradient(_permutation(ba + 1), localX1, gradientY, localZ1),
-                            gradient(_permutation(ba), localX1, gradientY, localZ),
-                            gradient(_permutation(bb + 1), localX1, gradientY1, localZ1)
-                    };
+                    const float low[4] = {gradient(_permutation(ab), localX, gradientY1, localZ),
+                                          gradient(_permutation(aa + 1), localX, gradientY, localZ1),
+                                          gradient(_permutation(aa), localX, gradientY, localZ),
+                                          gradient(_permutation(ab + 1), localX, gradientY1, localZ1)};
+                    const float high[4] = {gradient(_permutation(bb), localX1, gradientY1, localZ),
+                                           gradient(_permutation(ba + 1), localX1, gradientY, localZ1),
+                                           gradient(_permutation(ba), localX1, gradientY, localZ),
+                                           gradient(_permutation(bb + 1), localX1, gradientY1, localZ1)};
                     for (int32_t lane = 0; lane < 4; lane++)
                         corners[lane] = (high[lane] - low[lane]) * fadeX + low[lane];
 

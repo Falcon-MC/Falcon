@@ -4,8 +4,7 @@
 
 class PowderSnowBlock : public Block {
 public:
-    explicit PowderSnowBlock(const Block &block) : Block(block) {
-    }
+    explicit PowderSnowBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

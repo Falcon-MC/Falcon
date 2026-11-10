@@ -31,8 +31,8 @@ public:
     static bool give(ServerNetworkHandler &owner, ServerPlayer &player, int64_t mapId);
 
     // pixels holds width * height values; the changed area goes to every player who asked for the map
-    static bool update(ServerNetworkHandler &owner, World &world, int64_t mapId, int32_t x, int32_t y,
-                       int32_t width, int32_t height, const uint32_t *pixels, std::string &error);
+    static bool update(ServerNetworkHandler &owner, World &world, int64_t mapId, int32_t x, int32_t y, int32_t width,
+                       int32_t height, const uint32_t *pixels, std::string &error);
 
     static bool isImageMap(World &world, int64_t mapId);
 

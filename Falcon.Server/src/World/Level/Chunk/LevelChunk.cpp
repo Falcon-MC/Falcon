@@ -47,7 +47,8 @@ void LevelChunk::pack() {
     const uint32_t rawSize = (uint32_t) raw.size();
     std::memcpy(&packed[0], &rawSize, sizeof(rawSize));
     if (compress2((Bytef *) &packed[sizeof(uint32_t)], &size, (const Bytef *) raw.data(), (uLong) raw.size(),
-                  Z_BEST_SPEED) != Z_OK)
+                  Z_BEST_SPEED)
+        != Z_OK)
         return;
 
     packed.resize(sizeof(uint32_t) + size);
@@ -66,7 +67,9 @@ void LevelChunk::_unpack() const {
     std::string raw(rawSize, '\0');
     uLongf size = rawSize;
     if (uncompress((Bytef *) &raw[0], &size, (const Bytef *) mPackedData.data() + sizeof(uint32_t),
-                   (uLong) (mPackedData.size() - sizeof(uint32_t))) != Z_OK || size != rawSize)
+                   (uLong) (mPackedData.size() - sizeof(uint32_t)))
+                != Z_OK
+        || size != rawSize)
         throw std::logic_error("Packed chunk could not be unpacked");
 
     RawPack::Reader reader(raw.data(), raw.size());
@@ -221,7 +224,8 @@ void LevelChunk::setBlock(int x, int32_t y, int z, int layer, const BlockState &
     mDirty = true;
 }
 
-void LevelChunk::forEachBlock(const std::function<void(int32_t, int32_t, int32_t, const BlockState &)> &callback) const {
+void LevelChunk::forEachBlock(
+        const std::function<void(int32_t, int32_t, int32_t, const BlockState &)> &callback) const {
     for (int32_t y = MIN_Y; y <= MAX_Y; ++y) {
         for (int32_t x = 0; x < 16; ++x) {
             for (int32_t z = 0; z < 16; ++z)

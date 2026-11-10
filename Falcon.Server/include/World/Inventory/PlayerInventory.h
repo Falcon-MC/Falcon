@@ -41,9 +41,13 @@ public:
 
     static const ItemStack &getEmptyItem();
 
-    const std::vector<ItemStack> &getContents() const { return mItems; }
+    const std::vector<ItemStack> &getContents() const {
+        return mItems;
+    }
 
-    const std::vector<ItemStack> &getArmorContents() const { return mArmor; }
+    const std::vector<ItemStack> &getArmorContents() const {
+        return mArmor;
+    }
 
     const std::vector<ItemStack> &getCraftingContents() const {
         return mCrafting;
@@ -53,11 +57,17 @@ public:
 
     void setItem(int slot, ItemStack item);
 
-    int getContainerSize() const override { return CONTAINER_SIZE; }
+    int getContainerSize() const override {
+        return CONTAINER_SIZE;
+    }
 
-    const ItemStack &getContainerItem(int slot) const override { return getItem(slot); }
+    const ItemStack &getContainerItem(int slot) const override {
+        return getItem(slot);
+    }
 
-    void setContainerItem(int slot, ItemStack item) override { setItem(slot, std::move(item)); }
+    void setContainerItem(int slot, ItemStack item) override {
+        setItem(slot, std::move(item));
+    }
 
     const ItemStack &getArmor(int slot) const;
 
@@ -67,13 +77,17 @@ public:
 
     void setCraftingItem(int slot, ItemStack item);
 
-    const std::vector<ItemStack> &getCraftingTableContents() const { return mCraftingTable; }
+    const std::vector<ItemStack> &getCraftingTableContents() const {
+        return mCraftingTable;
+    }
 
     const ItemStack &getCraftingTableItem(int slot) const;
 
     void setCraftingTableItem(int slot, ItemStack item);
 
-    const std::vector<ItemStack> &getFurnaceContents() const { return mFurnace; }
+    const std::vector<ItemStack> &getFurnaceContents() const {
+        return mFurnace;
+    }
 
     const ItemStack &getFurnaceItem(int slot) const;
 
@@ -87,21 +101,31 @@ public:
 
     void setCartographyItem(int slot, ItemStack item);
 
-    const ItemStack &getOffhand() const { return mOffhand; }
+    const ItemStack &getOffhand() const {
+        return mOffhand;
+    }
 
     void setOffhand(ItemStack item);
 
-    const ItemStack &getCursor() const { return mCursor; }
+    const ItemStack &getCursor() const {
+        return mCursor;
+    }
 
     void setCursor(ItemStack item);
 
-    int getSelectedSlot() const { return mSelectedSlot; }
+    int getSelectedSlot() const {
+        return mSelectedSlot;
+    }
 
     void setSelectedSlot(int slot);
 
-    const ItemStack &getItemInHand() const { return getItem(mSelectedSlot); }
+    const ItemStack &getItemInHand() const {
+        return getItem(mSelectedSlot);
+    }
 
-    void setItemInHand(ItemStack item) { setItem(mSelectedSlot, std::move(item)); }
+    void setItemInHand(ItemStack item) {
+        setItem(mSelectedSlot, std::move(item));
+    }
 
     ItemStack *resolveSlot(ContainerSlotType container, int slot);
 

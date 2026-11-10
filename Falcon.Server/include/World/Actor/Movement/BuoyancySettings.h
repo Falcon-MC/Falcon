@@ -2,11 +2,7 @@
 
 #include <cstdint>
 
-enum class BuoyancyMovement : uint8_t {
-    None,
-    Waves,
-    Bobbing
-};
+enum class BuoyancyMovement : uint8_t { None, Waves, Bobbing };
 
 // minecraft:buoyant as read from the definition
 struct BuoyancySettings {

@@ -21,15 +21,11 @@ namespace {
     const char *BLOCK_FACE = "minecraft:block_face";
     const int32_t BUD_GROWTH_CHANCE = 5;
 
-    const char *BUD_TIERS[] = {
-            "minecraft:small_amethyst_bud", "minecraft:medium_amethyst_bud", "minecraft:large_amethyst_bud",
-            "minecraft:amethyst_cluster"
-    };
+    const char *BUD_TIERS[] = {"minecraft:small_amethyst_bud", "minecraft:medium_amethyst_bud",
+                               "minecraft:large_amethyst_bud", "minecraft:amethyst_cluster"};
 
-    const Vector3i FACE_OFFSETS[] = {
-            Vector3i(0, -1, 0), Vector3i(0, 1, 0), Vector3i(0, 0, -1),
-            Vector3i(0, 0, 1), Vector3i(-1, 0, 0), Vector3i(1, 0, 0)
-    };
+    const Vector3i FACE_OFFSETS[] = {Vector3i(0, -1, 0), Vector3i(0, 1, 0),  Vector3i(0, 0, -1),
+                                     Vector3i(0, 0, 1),  Vector3i(-1, 0, 0), Vector3i(1, 0, 0)};
 
     BlockState budOfTier(int32_t tier, int32_t face) {
         BlockState bud;

@@ -10,7 +10,7 @@
 FALCON_REGISTER_BLOCK(BubbleColumnBlock, 356);
 
 namespace {
-    template<typename T>
+    template <typename T>
     bool is(const BlockState &state) {
         return dynamic_cast<const T *>(VanillaBlocks::fromState(state)) != nullptr;
     }
@@ -25,18 +25,17 @@ namespace {
     }
 
     const BlockState &column(bool dragDown) {
-        static const BlockState columns[2] = {
-                BlockState(BubbleColumnBlock::IDENTIFIER, [] {
-                    Tag states = Tag::ofCompound();
-                    states.putByte("drag_down", 0);
-                    return states;
-                }()),
-                BlockState(BubbleColumnBlock::IDENTIFIER, [] {
-                    Tag states = Tag::ofCompound();
-                    states.putByte("drag_down", 1);
-                    return states;
-                }())
-        };
+        static const BlockState columns[2] = {BlockState(BubbleColumnBlock::IDENTIFIER,
+                                                         [] {
+                                                             Tag states = Tag::ofCompound();
+                                                             states.putByte("drag_down", 0);
+                                                             return states;
+                                                         }()),
+                                              BlockState(BubbleColumnBlock::IDENTIFIER, [] {
+                                                  Tag states = Tag::ofCompound();
+                                                  states.putByte("drag_down", 1);
+                                                  return states;
+                                              }())};
         return columns[dragDown ? 1 : 0];
     }
 
@@ -97,8 +96,7 @@ void BubbleColumnBlock::onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i 
 }
 
 // vfunc 976: magma under a pulling column, soul sand under a lifting one, or the same column
-bool BubbleColumnBlock::_isSupported(LiquidPhysicsSystem &ticks, const Vector3i &position,
-                                     const BlockState &state) {
+bool BubbleColumnBlock::_isSupported(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) {
     const BlockState &below = ticks.stateAt(Vector3i(position.x, position.y - 1, position.z));
     const bool dragDown = state.mStates.getBool("drag_down", false);
     if (is<MagmaBlock>(below))

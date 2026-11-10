@@ -4,7 +4,8 @@
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 
 BiomeRegistry::BiomeRegistry()
-    : mBiomes(BiomeChunkGenDataRegistry::getDefinitions()), mStrings(BiomeChunkGenDataRegistry::getDefinitionStrings()) {
+        : mBiomes(BiomeChunkGenDataRegistry::getDefinitions()),
+          mStrings(BiomeChunkGenDataRegistry::getDefinitionStrings()) {
     if (mBiomes.empty())
         LOG_WARN(LogAreaID::Server, "No biome definitions were loaded, clients will draw biomes with default colours");
 }

@@ -18,14 +18,7 @@ namespace {
 
     const int FACE_DOWN = 0;
 
-    const int32_t FACE_OFFSETS[6][3] = {
-            {0,  -1, 0},
-            {0,  1,  0},
-            {0,  0,  -1},
-            {0,  0,  1},
-            {-1, 0,  0},
-            {1,  0,  0}
-    };
+    const int32_t FACE_OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
     struct SlotRange {
         int mFirst = 0;
@@ -286,8 +279,7 @@ bool HopperBlockActor::_pullItems(ServerNetworkHandler &owner) {
     if (sourceContainer == nullptr)
         return _pickupItemActors(owner);
 
-    return moveOne(*sourceContainer, pullRange(*sourceActor, *sourceContainer), mInventory,
-                   fullRange(mInventory));
+    return moveOne(*sourceContainer, pullRange(*sourceActor, *sourceContainer), mInventory, fullRange(mInventory));
 }
 
 bool HopperBlockActor::_pickupItemActors(ServerNetworkHandler &owner) {
@@ -309,8 +301,8 @@ bool HopperBlockActor::_pickupItemActors(ServerNetworkHandler &owner) {
             continue;
 
         const Vector3f &position = actor.getPosition();
-        if (position.x < minX || position.x >= maxX || position.y < minY || position.y >= maxY
-            || position.z < minZ || position.z >= maxZ)
+        if (position.x < minX || position.x >= maxX || position.y < minY || position.y >= maxY || position.z < minZ
+            || position.z >= maxZ)
             continue;
 
         ItemStack remaining = actor.getItem();

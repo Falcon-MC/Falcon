@@ -21,6 +21,6 @@ private:
     static void _playKickSound(ServerNetworkHandler &owner, ServerActor &actor, const PushableByEntityPreset &preset,
                                const Vector3f &kick);
 
-    static void _accumulate(const AxisAlignedBB &self, const AxisAlignedBB &other, float &positiveX,
-                            float &negativeX, float &positiveZ, float &negativeZ);
+    static void _accumulate(const AxisAlignedBB &self, const AxisAlignedBB &other, float &positiveX, float &negativeX,
+                            float &positiveZ, float &negativeZ);
 };

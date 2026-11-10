@@ -23,15 +23,14 @@ namespace {
     public:
         ProfiledPlayerScope(Profiler &profiler, const ServerPlayer &player)
                 : mProfiler(profiler), mPlayer(player), mChunksBefore(player.getSentChunkCount()),
-                  mStart(std::chrono::steady_clock::now()) {
-        }
+                  mStart(std::chrono::steady_clock::now()) {}
 
         ~ProfiledPlayerScope() {
             if (!mProfiler.isActive())
                 return;
 
-            const double elapsed = std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - mStart).count();
+            const double elapsed =
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - mStart).count();
 
             mProfiler.recordPlayer(mPlayer.getName(), elapsed,
                                    (uint32_t) (mPlayer.getSentChunkCount() - mChunksBefore));
@@ -72,9 +71,9 @@ void ServerNetworkHandler::_applyPendingPlayerMove(ServerPlayer &player) {
             player.setPosition(player.getPendingMovePosition());
             player.setRotation(player.getPendingMoveRotation());
             player.setOnGround(player.hasSimulatedGround()
-                               ? player.isSimulatedOnGround()
-                               : MovementHandler::checkGroundState(getLevelFor(player), previous,
-                                                                   player.getPosition(), &player));
+                                       ? player.isSimulatedOnGround()
+                                       : MovementHandler::checkGroundState(getLevelFor(player), previous,
+                                                                           player.getPosition(), &player));
         }
         player.clearPendingMove();
     }
@@ -142,9 +141,8 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     if (player.getGameType() == (int32_t) GameType::Creative && player.getFireTicks() > 1)
         player.setFireTicks(1);
 
-    if (fireTickDamage && player.getGameType() != (int32_t) GameType::Creative &&
-        player.getGameType() != (int32_t) GameType::Spectator &&
-        !player.hasEffect(MobEffectId::FireResistance))
+    if (fireTickDamage && player.getGameType() != (int32_t) GameType::Creative
+        && player.getGameType() != (int32_t) GameType::Spectator && !player.hasEffect(MobEffectId::FireResistance))
         hurt(player, 1.0f, ActorDamageSource::environment("death.attack.inFire", player.getName()));
 
     if (wasOnFire != player.isOnFire())
@@ -183,8 +181,7 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     player.tickSpawnInvulnerability();
 
     const bool wasSprinting = player.getFlags().get(ActorFlag::Sprinting);
-    const bool naturalRegeneration = getWorldFor(player).getOverworld().getGameRules()
-            .getBool("naturalregeneration");
+    const bool naturalRegeneration = getWorldFor(player).getOverworld().getGameRules().getBool("naturalregeneration");
     const bool hungerChanged = player.isSpawned()
                                && player.tickHunger(1, (int) mProperties.getDifficulty(), naturalRegeneration);
     if (hungerChanged)

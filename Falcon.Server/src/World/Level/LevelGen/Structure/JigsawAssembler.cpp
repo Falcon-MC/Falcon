@@ -50,11 +50,11 @@ namespace {
         static const char *STYLES[] = {"plains", "savanna", "snowy", "taiga", "desert"};
         static const char *KINDS[] = {"streets", "houses", "decor"};
         const std::string processors = element.mProcessors == nullptr ? std::string() : element.mProcessors;
-        for (const char *style : STYLES) {
+        for (const char *style: STYLES) {
             if (processors.find(std::string("minecraft:") + style + "_abandoned_targets") == std::string::npos)
                 continue;
 
-            for (const char *kind : KINDS) {
+            for (const char *kind: KINDS) {
                 if (pool == std::string("minecraft:village/") + style + "/" + kind)
                     return std::string("minecraft:village/abandoned/") + style + "/" + kind;
             }
@@ -63,8 +63,9 @@ namespace {
     }
 }
 
-JigsawAssembler::JigsawAssembler(const ChunkGenerator &generator, std::mt19937 &random, int32_t maxDepth, int32_t seaLevel)
-    : mGenerator(generator), mRandom(random), mMaxDepth(maxDepth), mSeaLevel(seaLevel) {}
+JigsawAssembler::JigsawAssembler(const ChunkGenerator &generator, std::mt19937 &random, int32_t maxDepth,
+                                 int32_t seaLevel)
+        : mGenerator(generator), mRandom(random), mMaxDepth(maxDepth), mSeaLevel(seaLevel) {}
 
 template <typename T>
 void JigsawAssembler::_shuffle(std::vector<T> &values) {
@@ -104,7 +105,7 @@ std::vector<JigsawAssembler::Marker> JigsawAssembler::_markers(const JigsawEleme
     if (file == nullptr)
         return markers;
 
-    for (const StructureTemplate::BlockEntry &block : file->getBlocks()) {
+    for (const StructureTemplate::BlockEntry &block: file->getBlocks()) {
         const StructureTemplate::PaletteEntry &entry = file->getPalette()[(size_t) block.mPaletteIndex];
         if (entry.mName != "minecraft:jigsaw")
             continue;
@@ -181,7 +182,7 @@ void JigsawAssembler::_expand(size_t pieceIndex) {
     _shuffle(markers);
 
     std::vector<JigsawBox> inside;
-    for (const Marker &marker : markers) {
+    for (const Marker &marker: markers) {
         const JigsawPools::Pool *pool = JigsawPools::get(marker.mPool);
         if (pool == nullptr || pool->mSlots.empty())
             continue;
@@ -211,7 +212,7 @@ bool JigsawAssembler::_tryPool(size_t pieceIndex, const Marker &marker, const Ji
     std::iota(slots.begin(), slots.end(), (size_t) 0);
     _shuffle(slots);
 
-    for (const size_t slot : slots) {
+    for (const size_t slot: slots) {
         const JigsawElementData *element = pool.mSlots[slot];
         // the empty element is a valid end of the branch
         if (element == nullptr)
@@ -227,11 +228,11 @@ bool JigsawAssembler::_tryPool(size_t pieceIndex, const Marker &marker, const Ji
         if (fourth != 3)
             std::swap(turns[3], turns[fourth]);
 
-        for (const int32_t quarterTurns : turns) {
+        for (const int32_t quarterTurns: turns) {
             std::vector<Marker> candidates = _markers(*element, 0, 0, 0, quarterTurns);
             _shuffle(candidates);
 
-            for (const Marker &candidate : candidates) {
+            for (const Marker &candidate: candidates) {
                 // no joint in the village files: rollable, so a vertical pair never compares tops
                 // sub_143C7EB60, sub_145C262B0
                 if (candidate.mName != marker.mName || marker.mFacing != OPPOSITE[(size_t) candidate.mFacing])
@@ -248,12 +249,12 @@ bool JigsawAssembler::_tryPool(size_t pieceIndex, const Marker &marker, const Ji
                 JigsawBox box = _box(*element, placeX, minY, placeZ, quarterTurns);
                 bool free = true;
                 if (targetInside) {
-                    free = box.mMinX >= parentBox.mMinX && box.mMaxX <= parentBox.mMaxX
-                           && box.mMinZ >= parentBox.mMinZ && box.mMaxZ <= parentBox.mMaxZ;
-                    for (const JigsawBox &other : inside)
+                    free = box.mMinX >= parentBox.mMinX && box.mMaxX <= parentBox.mMaxX && box.mMinZ >= parentBox.mMinZ
+                           && box.mMaxZ <= parentBox.mMaxZ;
+                    for (const JigsawBox &other: inside)
                         free = free && !overlapsFlat(box, other);
                 } else {
-                    for (const JigsawPiece &other : mPieces)
+                    for (const JigsawPiece &other: mPieces)
                         free = free && !overlapsFlat(box, other.mBox);
                 }
 
@@ -273,7 +274,8 @@ bool JigsawAssembler::_tryPool(size_t pieceIndex, const Marker &marker, const Ji
                 piece.mBox = box;
                 // a rigid child keeps its parent's ground, a terrain matching one sits on it
                 if (!element->mTerrainMatching)
-                    piece.mGroundLevelDelta = parent.mGroundLevelDelta - (marker.y - parentBox.mMinY - candidate.y + step);
+                    piece.mGroundLevelDelta = parent.mGroundLevelDelta
+                                              - (marker.y - parentBox.mMinY - candidate.y + step);
                 mPieces.push_back(piece);
                 _expand(mPieces.size() - 1);
                 return true;

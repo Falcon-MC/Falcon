@@ -28,8 +28,7 @@ bool PluginPackets::onSend(PluginManager &manager, const NetworkIdentifier &id, 
     return _dispatch(manager, FALCON_EVENT_DATA_PACKET_SEND, id, data);
 }
 
-bool PluginPackets::_dispatch(PluginManager &manager, uint32_t type, const NetworkIdentifier &id,
-                              std::string &data) {
+bool PluginPackets::_dispatch(PluginManager &manager, uint32_t type, const NetworkIdentifier &id, std::string &data) {
     ReadOnlyBinaryStream stream(data);
     const uint32_t header = stream.getUnsignedVarInt();
     const size_t headerSize = stream.getOffset();

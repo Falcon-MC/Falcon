@@ -14,8 +14,8 @@ struct CraftingRecipeMatch {
 
 class CraftingManager {
 public:
-    static bool matchRecipe(const std::vector<ItemStack> &grid, int gridWidth,
-                            const CraftingRecipeData &recipe, CraftingRecipeMatch &match);
+    static bool matchRecipe(const std::vector<ItemStack> &grid, int gridWidth, const CraftingRecipeData &recipe,
+                            CraftingRecipeMatch &match);
 
     static bool matchNetworkRecipe(const std::vector<ItemStack> &grid, int gridWidth, int32_t networkId,
                                    const std::vector<ItemStack> &recipeOutputs,

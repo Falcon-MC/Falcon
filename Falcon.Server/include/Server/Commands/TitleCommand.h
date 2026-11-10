@@ -14,8 +14,7 @@ public:
     std::vector<CommandOverloadData> getOverloads() const override;
 
 private:
-    bool applyToTarget(ServerPlayer &target, const std::string &action,
-                       const std::vector<std::string> &arguments);
+    bool applyToTarget(ServerPlayer &target, const std::string &action, const std::vector<std::string> &arguments);
 
     ServerNetworkHandler &mHandler;
     bool mRaw;

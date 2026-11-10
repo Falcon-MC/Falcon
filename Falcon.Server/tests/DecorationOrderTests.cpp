@@ -137,8 +137,8 @@ namespace {
 
     // sub_1432CE930: a decoration writes into its generated neighbours at once, the next one reads it
     void writesReachNeighbours() {
-        const std::unique_ptr<ChunkGenerator> generator =
-                DimensionFactory::createGenerator(DimensionType::Overworld, 42);
+        const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(DimensionType::Overworld,
+                                                                                            42);
         TerrainCache cache(*generator);
         GeneratorChunkSource source(42, DimensionType::Overworld, cache);
 
@@ -169,7 +169,8 @@ namespace {
                     continue;
 
                 const LevelChunk target = cache.neighbour(change.mX >> 4, change.mZ >> 4);
-                require(target.getBlock(change.mX & 15, change.mY, change.mZ & 15).getHash() == change.mState->getHash(),
+                require(target.getBlock(change.mX & 15, change.mY, change.mZ & 15).getHash()
+                                == change.mState->getHash(),
                         "a neighbour's cached copy misses a block written into it");
                 checked++;
             }

@@ -10,8 +10,7 @@ struct LoadedPlugin;
 
 class PluginServices {
 public:
-    bool registerService(LoadedPlugin &plugin, const std::string &name, FalconServiceHandler handler,
-                         void *userData);
+    bool registerService(LoadedPlugin &plugin, const std::string &name, FalconServiceHandler handler, void *userData);
 
     void unregisterService(LoadedPlugin &plugin, const std::string &name);
 

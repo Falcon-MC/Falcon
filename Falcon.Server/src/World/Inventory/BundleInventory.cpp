@@ -182,8 +182,7 @@ bool BundleInventory::prepareBundleIds(Container &container) {
 }
 
 BundleInventory::BundleInventory(ItemStack &bundle, const PacketCodecContext &context)
-        : mBundle(bundle), mContext(context), mContents(readContents(bundle, context)) {
-}
+        : mBundle(bundle), mContext(context), mContents(readContents(bundle, context)) {}
 
 int BundleInventory::getContainerSize() const {
     return SIZE;

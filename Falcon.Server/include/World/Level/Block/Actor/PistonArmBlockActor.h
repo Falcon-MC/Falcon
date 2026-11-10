@@ -13,7 +13,9 @@ public:
     static const int8_t STATE_EXTENDED = 2;
     static const int8_t STATE_RETRACTING = 3;
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -21,7 +23,9 @@ public:
 
     Tag getSpawnCompound() const override;
 
-    bool isMoving() const { return !mFinished; }
+    bool isMoving() const {
+        return !mFinished;
+    }
 
     void beginMove(bool extending, std::vector<Vector3i> attachedBlocks);
 
@@ -29,17 +33,29 @@ public:
 
     void finish();
 
-    const std::vector<Vector3i> &getAttachedBlocks() const { return mAttachedBlocks; }
+    const std::vector<Vector3i> &getAttachedBlocks() const {
+        return mAttachedBlocks;
+    }
 
-    bool isExtending() const { return mExtending; }
+    bool isExtending() const {
+        return mExtending;
+    }
 
-    float getProgress() const { return mProgress; }
+    float getProgress() const {
+        return mProgress;
+    }
 
-    void setSticky(bool sticky) { mSticky = sticky; }
+    void setSticky(bool sticky) {
+        mSticky = sticky;
+    }
 
-    void setFacing(int facing) { mFacing = facing; }
+    void setFacing(int facing) {
+        mFacing = facing;
+    }
 
-    int getFacing() const { return mFacing; }
+    int getFacing() const {
+        return mFacing;
+    }
 
 private:
     std::vector<Vector3i> mAttachedBlocks;

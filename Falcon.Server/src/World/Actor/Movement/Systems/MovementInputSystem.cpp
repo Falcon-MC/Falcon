@@ -29,7 +29,9 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
     // the client already scales its move vector by the item-use slowdown (0.35 squared eating or drawing a bow):
     // don't apply it twice
     float maxImpulse = 1.0f;
-    const int32_t slowdownTicks = context.pose.mSneaking || context.pose.mCrawling ? context.player.getSlowdownTicks() + 1 : 0;
+    const int32_t slowdownTicks = context.pose.mSneaking || context.pose.mCrawling
+                                          ? context.player.getSlowdownTicks() + 1
+                                          : 0;
     context.player.setSlowdownTicks(slowdownTicks);
     if (!abilities.flying && !abilities.swimming && (context.pose.mSneaking || context.pose.mCrawling)) {
         float sneakMultiplier = SNEAK_INPUT;

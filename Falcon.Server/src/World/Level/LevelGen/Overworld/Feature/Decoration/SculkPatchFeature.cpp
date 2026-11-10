@@ -133,8 +133,7 @@ void SculkPatchFeature::apply(ChunkGenerateContext &context) {
 
             const BlockState neighbor = manager.getBlockAt(neighborX, neighborY, neighborZ);
             const bool freeSpot = DecorationSupport::isAir(neighbor) || isSculkVein(neighbor);
-            const bool carrierBlock = DecorationSupport::isSolid(neighbor)
-                                      && neighbor.mName != "minecraft:sculk"
+            const bool carrierBlock = DecorationSupport::isSolid(neighbor) && neighbor.mName != "minecraft:sculk"
                                       && !isSculkVein(neighbor);
 
             if (freeSpot) {
@@ -142,11 +141,9 @@ void SculkPatchFeature::apply(ChunkGenerateContext &context) {
 
                 for (int32_t supportIndex = 0; supportIndex < 6; supportIndex++) {
                     const DecorationSupport::FaceOffset &supportFace = DecorationSupport::ALL_FACES[supportIndex];
-                    const BlockState support = manager.getBlockAt(neighborX + supportFace.mX,
-                                                                  neighborY + supportFace.mY,
-                                                                  neighborZ + supportFace.mZ);
-                    if (!DecorationSupport::isSolid(support)
-                        || support.mName == "minecraft:sculk"
+                    const BlockState support = manager.getBlockAt(
+                            neighborX + supportFace.mX, neighborY + supportFace.mY, neighborZ + supportFace.mZ);
+                    if (!DecorationSupport::isSolid(support) || support.mName == "minecraft:sculk"
                         || isSculkVein(support))
                         continue;
 
@@ -193,9 +190,9 @@ void SculkPatchFeature::apply(ChunkGenerateContext &context) {
         if (mergedBits == 0)
             continue;
 
-        manager.setBlockStateAt(veinX, veinY, veinZ,
-                                DecorationSupport::withState(sculkVeinState(), "multi_face_direction_bits",
-                                                             mergedBits));
+        manager.setBlockStateAt(
+                veinX, veinY, veinZ,
+                DecorationSupport::withState(sculkVeinState(), "multi_face_direction_bits", mergedBits));
     }
 
     queueObject(manager);

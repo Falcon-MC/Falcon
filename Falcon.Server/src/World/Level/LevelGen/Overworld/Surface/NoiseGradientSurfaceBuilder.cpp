@@ -43,11 +43,10 @@ NoiseGradientSurfaceBuilder::NoiseGradientSurfaceBuilder(int64_t levelSeed, cons
 
 // biomes/sulfur_caves.biome.json: surface and subsurface builders are identical
 NoiseGradientSurfaceBuilder NoiseGradientSurfaceBuilder::sulfurCaves(int64_t levelSeed) {
-    return NoiseGradientSurfaceBuilder(levelSeed, "minecraft:sulfur_cave_gradient", -5, {1.0f, 0.0f, 1.0f},
-                                       {{-0.4f, -0.1f, &cinnabarState()},
-                                        {0.0f, 0.4f, &sulfurState()},
-                                        {0.4f, 1.0f, &cinnabarState()}},
-                                       {&bedrockState()});
+    return NoiseGradientSurfaceBuilder(
+            levelSeed, "minecraft:sulfur_cave_gradient", -5, {1.0f, 0.0f, 1.0f},
+            {{-0.4f, -0.1f, &cinnabarState()}, {0.0f, 0.4f, &sulfurState()}, {0.4f, 1.0f, &cinnabarState()}},
+            {&bedrockState()});
 }
 
 // sub_147132F40: clamped to [-1, 1], low bound excluded
@@ -72,9 +71,8 @@ void NoiseGradientSurfaceBuilder::build(LevelChunk &chunk, int32_t x, int32_t z,
         if (state.getHash() == airState().getHash() || DecorationSupport::isLiquid(state))
             continue;
 
-        const bool kept = std::any_of(mNonReplaceable.begin(), mNonReplaceable.end(), [&](const BlockState *block) {
-            return block->mName == state.mName;
-        });
+        const bool kept = std::any_of(mNonReplaceable.begin(), mNonReplaceable.end(),
+                                      [&](const BlockState *block) { return block->mName == state.mName; });
         if (kept)
             continue;
 

@@ -51,14 +51,8 @@ namespace {
         int32_t mBit;
     };
 
-    const ResinFace RESIN_FACES[] = {
-            {0, -1, 0, 1 << 1},
-            {0, 1, 0, 1 << 0},
-            {0, 0, -1, 1 << 2},
-            {0, 0, 1, 1 << 4},
-            {-1, 0, 0, 1 << 5},
-            {1, 0, 0, 1 << 3}
-    };
+    const ResinFace RESIN_FACES[] = {{0, -1, 0, 1 << 1}, {0, 1, 0, 1 << 0},  {0, 0, -1, 1 << 2},
+                                     {0, 0, 1, 1 << 4},  {-1, 0, 0, 1 << 5}, {1, 0, 0, 1 << 3}};
 
     std::mt19937 &heartRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -131,7 +125,8 @@ BlockState CreakingHeartBlock::refreshState(Level &level, const Vector3i &positi
                                             bool bound) {
     const std::string axis = state.mStates.getString(PILLAR_AXIS_STATE, DEFAULT_AXIS);
     const char *next = !bound && !hasRequiredLogs(level, position, axis) ? UPROOTED
-                                                                         : isNaturalNight(level) ? AWAKE : DORMANT;
+                       : isNaturalNight(level)                           ? AWAKE
+                                                                         : DORMANT;
     if (state.mStates.getString(HEART_STATE) == next)
         return state;
 
@@ -147,8 +142,7 @@ bool CreakingHeartBlock::canSpawnCreaking(ServerNetworkHandler &owner, Level &le
     if (state.mStates.getByte(NATURAL_STATE, 0) == 0 || state.mStates.getString(HEART_STATE) != AWAKE)
         return false;
 
-    if (!level.getGameRules().getBool("domobspawning")
-        || owner.getProperties().getDifficulty() == Difficulty::Peaceful)
+    if (!level.getGameRules().getBool("domobspawning") || owner.getProperties().getDifficulty() == Difficulty::Peaceful)
         return false;
 
     for (auto &entry: owner.getPlayers()) {

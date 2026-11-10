@@ -32,7 +32,8 @@ namespace {
                 blocks.insert(name->mString);
         }
         for (const auto &entry: states->mObject) {
-            std::unordered_set<std::string> &names = table.mTagsByState[(int32_t) std::strtoll(entry.first.c_str(), nullptr, 10)];
+            std::unordered_set<std::string> &names =
+                    table.mTagsByState[(int32_t) std::strtoll(entry.first.c_str(), nullptr, 10)];
             for (const std::unique_ptr<json::Value> &tag: entry.second->mArray)
                 names.insert(tag->mString);
         }

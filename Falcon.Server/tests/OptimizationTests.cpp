@@ -208,8 +208,7 @@ namespace {
     // answers the first packet at once, like a client on a fast link
     class AnsweringPeer : public FakePeer {
     public:
-        explicit AnsweringPeer(std::string reply) : mReply(std::move(reply)) {
-        }
+        explicit AnsweringPeer(std::string reply) : mReply(std::move(reply)) {}
 
         void sendPacket(const std::string &data, Reliability reliability, Compressibility compressibility) override {
             FakePeer::sendPacket(data, reliability, compressibility);
@@ -230,8 +229,7 @@ namespace {
             return true;
         }
 
-        void disconnect() override {
-        }
+        void disconnect() override {}
 
         void runEvents() override {
             std::vector<std::pair<NetworkIdentifier, std::shared_ptr<NetworkPeer>>> joining;
@@ -298,7 +296,7 @@ namespace {
         std::vector<std::string> mEvents;
     };
 
-    template<typename Predicate>
+    template <typename Predicate>
     void pumpUntil(NetworkHandler &network, Predicate done, const char *message) {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
         while (!done()) {
@@ -312,7 +310,8 @@ namespace {
 int main() {
     BedrockLog::addEndPoint(std::make_shared<ContentLogEndPoint>(false));
     const auto root = std::filesystem::temp_directory_path()
-            / ("falcon-optimization-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                      / ("falcon-optimization-"
+                         + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     const auto previousRoot = ServerPaths::getRoot();
     int failures = 0;
     const auto check = [&failures](const char *name, const std::function<void()> &run) {
@@ -333,9 +332,13 @@ int main() {
         options.bindAddress = "127.0.0.1";
         options.portOverride = 0;
         options.plugins = false;
-        options.properties = {{"level-name", "World"}, {"level-seed", "1"}, {"max-threads", "1"},
-                              {"online-mode", "false"}, {"network-encryption", "false"},
-                              {"view-distance", "4"}, {"tick-distance", "4"},
+        options.properties = {{"level-name", "World"},
+                              {"level-seed", "1"},
+                              {"max-threads", "1"},
+                              {"online-mode", "false"},
+                              {"network-encryption", "false"},
+                              {"view-distance", "4"},
+                              {"tick-distance", "4"},
                               {"auto-compaction-interval", "0"}};
         require(host.start(options), "Could not start host");
         auto &handler = host.getHandler();
@@ -359,7 +362,9 @@ int main() {
             require(handler.resolveActorTargets(origin, "@e[type=cow,c=1]").size() == 1,
                     "Player count consumed a cow-only selector limit");
             require(handler.resolveTargets(origin, "@e[c=2]").size()
-                    + handler.resolveActorTargets(origin, "@e[c=2]").size() == 2, "c=2 was not shared");
+                                    + handler.resolveActorTargets(origin, "@e[c=2]").size()
+                            == 2,
+                    "c=2 was not shared");
         });
         check("selector dimension context", [&]() {
             ExecuteCommandOrigin nether(origin, &player, Vector3f(), Vector3f(),
@@ -487,8 +492,9 @@ int main() {
                 for (;;) {
                     const auto tickStart = std::chrono::steady_clock::now();
                     const size_t batch = backlog.processGeneratedChanges();
-                    const double micros = std::chrono::duration<double, std::micro>(
-                            std::chrono::steady_clock::now() - tickStart).count();
+                    const double micros = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now()
+                                                                                    - tickStart)
+                                                  .count();
                     if (batch == 0)
                         break;
                     require(micros < 50000.0, "Generation processing overran a tick");
@@ -496,10 +502,10 @@ int main() {
                     processed += batch;
                 }
                 require(processed == (size_t) count, "Generation queue lost pending changes");
-                const double totalMicros = std::chrono::duration<double, std::micro>(
-                        std::chrono::steady_clock::now() - start).count();
-                LOG_INFO(LogAreaID::Server, "Queue-only backlog=%d total_us=%.1f max_batch_us=%.1f",
-                         count, totalMicros, maxMicros);
+                const double totalMicros =
+                        std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count();
+                LOG_INFO(LogAreaID::Server, "Queue-only backlog=%d total_us=%.1f max_batch_us=%.1f", count, totalMicros,
+                         maxMicros);
             }
         });
         check("pending changes persist off the tick path and precede synchronous loads", [&]() {
@@ -511,8 +517,8 @@ int main() {
             require(!LevelPersistenceProbe::writing(pending), "A few parked changes were written on a tick");
             const auto start = std::chrono::steady_clock::now();
             pending.saveAll(false);
-            const double queuedMicros = std::chrono::duration<double, std::micro>(
-                    std::chrono::steady_clock::now() - start).count();
+            const double queuedMicros =
+                    std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count();
             require(LevelPersistenceProbe::writing(pending), "Save did not hand persistence to a worker");
             require(pending.getBlockState(32 * 16, 140, 32 * 16).mName == "minecraft:diamond_block",
                     "Synchronous load missed the pending write");
@@ -559,7 +565,8 @@ int main() {
             const auto newest = std::find_if(saved.begin(), saved.end(), [](const GeneratedBlockChange &change) {
                 return change.mX == 33 * 16 && change.mY == 140 && change.mZ == 33 * 16;
             });
-            require(newest != saved.end() && newest->mState->mName == "minecraft:gold_block", "Retry overwrote a newer state");
+            require(newest != saved.end() && newest->mState->mName == "minecraft:gold_block",
+                    "Retry overwrote a newer state");
             LevelPersistenceProbe::stagePending(pending, 34, 34, 1024);
             pending.processGeneratedChanges();
             pending.closeStorage();
@@ -579,7 +586,8 @@ int main() {
             for (int x = 40; x < 64; ++x)
                 pressure.requestChunkAsync(x, 40);
             require(LevelPersistenceProbe::outstanding(pressure) == 0, "Generation ignored backlog pressure");
-            while (pressure.processGeneratedChanges() != 0) {}
+            while (pressure.processGeneratedChanges() != 0) {
+            }
             for (int x = 40; x < 64; ++x)
                 pressure.requestChunkAsync(x, 40);
             require(LevelPersistenceProbe::outstanding(pressure)
@@ -719,12 +727,12 @@ int main() {
             retry.closeStorage();
         });
         check("packed sub-chunk storage reads back for every palette width", [&]() {
-            const char *names[] = {"minecraft:stone", "minecraft:dirt", "minecraft:cobblestone", "minecraft:sand",
-                                   "minecraft:gravel", "minecraft:gold_ore", "minecraft:iron_ore", "minecraft:coal_ore",
-                                   "minecraft:glass", "minecraft:diamond_block", "minecraft:gold_block",
-                                   "minecraft:iron_block", "minecraft:bedrock", "minecraft:bookshelf",
-                                   "minecraft:obsidian", "minecraft:ice", "minecraft:clay", "minecraft:netherrack",
-                                   "minecraft:soul_sand", "minecraft:glowstone"};
+            const char *names[] = {
+                    "minecraft:stone",   "minecraft:dirt",          "minecraft:cobblestone", "minecraft:sand",
+                    "minecraft:gravel",  "minecraft:gold_ore",      "minecraft:iron_ore",    "minecraft:coal_ore",
+                    "minecraft:glass",   "minecraft:diamond_block", "minecraft:gold_block",  "minecraft:iron_block",
+                    "minecraft:bedrock", "minecraft:bookshelf",     "minecraft:obsidian",    "minecraft:ice",
+                    "minecraft:clay",    "minecraft:netherrack",    "minecraft:soul_sand",   "minecraft:glowstone"};
             std::mt19937 random(11);
             for (size_t kinds = 1; kinds <= sizeof(names) / sizeof(names[0]); ++kinds) {
                 SubChunk section(3);
@@ -745,16 +753,18 @@ int main() {
                 for (int index = 0; index < SubChunk::BLOCK_COUNT; ++index) {
                     const int x = index >> 8, y = index & 15, z = (index >> 4) & 15;
                     require(read.getBlock(x, y, z).getHash() == section.getBlock(x, y, z).getHash()
-                            && read.getBlock(x, y, z, 1).getHash() == section.getBlock(x, y, z, 1).getHash(),
+                                    && read.getBlock(x, y, z, 1).getHash() == section.getBlock(x, y, z, 1).getHash(),
                             "Packed section read back other blocks");
-                    require(read.getBiome(x, y, z) == section.getBiome(x, y, z), "Packed section read back other biomes");
+                    require(read.getBiome(x, y, z) == section.getBiome(x, y, z),
+                            "Packed section read back other biomes");
                 }
 
                 BinaryStream network;
                 section.writeNetwork(network);
                 ReadOnlyBinaryStream packet(network.getBuffer());
                 require(packet.getByte() == SubChunk::STORAGE_VERSION && packet.getByte() == SubChunk::LAYER_COUNT
-                        && packet.getByte() == 3, "Network section header changed");
+                                && packet.getByte() == 3,
+                        "Network section header changed");
                 const int bits = packet.getByte() >> 1;
                 const int perWord = 32 / bits;
                 std::vector<uint32_t> indices;
@@ -768,7 +778,7 @@ int main() {
                     entry = packet.getVarInt();
                 for (int index = 0; index < SubChunk::BLOCK_COUNT; ++index)
                     require(palette.at(indices[(size_t) index])
-                            == section.getBlock(index >> 8, index & 15, (index >> 4) & 15).getHash(),
+                                    == section.getBlock(index >> 8, index & 15, (index >> 4) & 15).getHash(),
                             "Network section indices point at other blocks");
             }
         });
@@ -863,8 +873,9 @@ int main() {
             pumpUntil(network, [&]() { return listener.mEvents.back() == "data:ping"; }, "Inbound packet never read");
             require(peer->mSentBytes.load() < packets * payload.size() / 2,
                     "Inbound packet waited for the outbound backlog");
-            pumpUntil(network, [&]() { return network.getPendingOutboundBytes(client) == 0; },
-                      "Queued bytes were never released");
+            pumpUntil(
+                    network, [&]() { return network.getPendingOutboundBytes(client) == 0; },
+                    "Queued bytes were never released");
             network.stopIoThread();
         });
         check("a reply is read in the state enabled right after the packet it answers", [&]() {

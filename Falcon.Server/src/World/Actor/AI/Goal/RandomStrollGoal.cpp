@@ -15,8 +15,7 @@ namespace {
     }
 }
 
-RandomStrollGoal::RandomStrollGoal(float speed, int32_t range, int32_t interval, bool avoidWater,
-                                   int32_t maxRetries)
+RandomStrollGoal::RandomStrollGoal(float speed, int32_t range, int32_t interval, bool avoidWater, int32_t maxRetries)
         : mSpeed(speed), mRange(range), mInterval(interval), mAvoidWater(avoidWater), mMaxRetries(maxRetries) {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move);
 }

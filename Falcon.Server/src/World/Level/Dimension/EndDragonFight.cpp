@@ -84,8 +84,7 @@ namespace {
     // places generated objects straight into the live level, sending each changed block
     class LiveBlockManager final : public BlockManager {
     public:
-        explicit LiveBlockManager(Level &level) : BlockManager(level) {
-        }
+        explicit LiveBlockManager(Level &level) : BlockManager(level) {}
 
         void setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockState &state) override {
             setIfChanged(getLevel(), x, y, z, state);
@@ -103,9 +102,7 @@ namespace {
     }
 
     EndGatewayExit::BlockReader levelReader(Level &level) {
-        return [&level](int32_t x, int32_t y, int32_t z) {
-            return level.peekBlockPtr(x, y, z);
-        };
+        return [&level](int32_t x, int32_t y, int32_t z) { return level.peekBlockPtr(x, y, z); };
     }
 
     Vector3f centerOf(const Vector3i &position) {
@@ -129,8 +126,7 @@ namespace {
 
 }
 
-EndDragonFight::EndDragonFight(int64_t seed) : mSeed(seed) {
-}
+EndDragonFight::EndDragonFight(int64_t seed) : mSeed(seed) {}
 
 EndDragonFight::RespawnStep EndDragonFight::stepRespawn(RespawnStage stage, int32_t ticks, size_t spikeCount) {
     RespawnStep step;
@@ -283,8 +279,7 @@ void EndDragonFight::save(Tag &dimensionData) const {
     fight.putByte(VERSION_TAG, (int8_t) mVersion);
 
     if (mExitPortalLocation.has_value()) {
-        fight.put(EXIT_PORTAL_TAG,
-                  intList({mExitPortalLocation->x, mExitPortalLocation->y, mExitPortalLocation->z}));
+        fight.put(EXIT_PORTAL_TAG, intList({mExitPortalLocation->x, mExitPortalLocation->y, mExitPortalLocation->z}));
     }
 
     fight.put(GATEWAYS_TAG, intList(mGateways.empty() ? createGatewayOrder(mSeed) : mGateways));
@@ -392,9 +387,7 @@ void EndDragonFight::_initializeDragon(ServerNetworkHandler &owner, Level &level
 
     ServerActor *spawned = owner.spawnActor(level, EnderDragon::IDENTIFIER,
                                             Vector3f((float) summon.x, (float) summon.y, (float) summon.z),
-                                            [yaw](ServerActor &actor) {
-                                                actor.setRotation(Vector3f(0.0f, yaw, yaw));
-                                            });
+                                            [yaw](ServerActor &actor) { actor.setRotation(Vector3f(0.0f, yaw, yaw)); });
     EnderDragon *dragon = dynamic_cast<EnderDragon *>(spawned);
     if (dragon != nullptr)
         _attachDragon(*dragon);
@@ -486,9 +479,8 @@ bool EndDragonFight::_loadGatewayEnds(Level &level, const GatewayRequest &reques
     return loaded;
 }
 
-std::vector<std::pair<int32_t, int32_t>> EndDragonFight::_loadGatewayBlockActors(ServerNetworkHandler &owner,
-                                                                                  Level &level,
-                                                                                  const GatewayRequest &request) {
+std::vector<std::pair<int32_t, int32_t>>
+EndDragonFight::_loadGatewayBlockActors(ServerNetworkHandler &owner, Level &level, const GatewayRequest &request) {
     std::vector<std::pair<int32_t, int32_t>> loaded;
     if (!level.isStorageOpen())
         return loaded;
@@ -608,8 +600,8 @@ void EndDragonFight::_findGatewayExit(ServerNetworkHandler &owner, Level &level,
         BlockActionHandler::broadcastBlockActorData(owner, level, *origin);
     }
 
-    back.setExit(EndGatewayExit::findSpawn(reader, request.mGateway, false, EndGatewayExit::RETURN_SEARCH_CHUNKS,
-                                           false, minY, maxY));
+    back.setExit(EndGatewayExit::findSpawn(reader, request.mGateway, false, EndGatewayExit::RETURN_SEARCH_CHUNKS, false,
+                                           minY, maxY));
     BlockActionHandler::broadcastBlockActorData(owner, level, back);
 }
 
@@ -699,15 +691,16 @@ void EndDragonFight::_updateCrystalCount(ServerNetworkHandler &owner, Level &lev
     for (const EndSpike &spike: EndSpikes::create((uint32_t) mSeed)) {
         const AxisAlignedBB area = spike.getCrystalArea();
         mCrystalsAlive += (int32_t) _findCrystals(owner, level, area.mMinX, area.mMinY, area.mMinZ, area.mMaxX,
-                                                  area.mMaxY, area.mMaxZ).size();
+                                                  area.mMaxY, area.mMaxZ)
+                                  .size();
     }
 }
 
 void EndDragonFight::_resetSpikeCrystals(ServerNetworkHandler &owner, Level &level) {
     for (const EndSpike &spike: EndSpikes::create((uint32_t) mSeed)) {
         const AxisAlignedBB area = spike.getCrystalArea();
-        for (EndCrystalActor *crystal: _findCrystals(owner, level, area.mMinX, area.mMinY, area.mMinZ, area.mMaxX,
-                                                     area.mMaxY, area.mMaxZ)) {
+        for (EndCrystalActor *crystal:
+             _findCrystals(owner, level, area.mMinX, area.mMinY, area.mMinZ, area.mMaxX, area.mMaxY, area.mMaxZ)) {
             crystal->setInvulnerable(false);
             crystal->setBeamTarget(owner, std::nullopt);
         }
@@ -726,15 +719,16 @@ void EndDragonFight::tryRespawn(ServerNetworkHandler &owner, Level &level) {
 
     // one crystal on each side of the exit portal (sub_1471687D0)
     const Vector3i portal = *mExitPortalLocation;
-    const int32_t sides[4][2] = {{0, RESPAWN_CRYSTAL_OFFSET}, {-RESPAWN_CRYSTAL_OFFSET, 0},
-                                 {0, -RESPAWN_CRYSTAL_OFFSET}, {RESPAWN_CRYSTAL_OFFSET, 0}};
+    const int32_t sides[4][2] = {{0, RESPAWN_CRYSTAL_OFFSET},
+                                 {-RESPAWN_CRYSTAL_OFFSET, 0},
+                                 {0, -RESPAWN_CRYSTAL_OFFSET},
+                                 {RESPAWN_CRYSTAL_OFFSET, 0}};
     std::vector<int64_t> crystals;
     for (const int32_t *side: sides) {
         const float x = (float) (portal.x + side[0]);
         const float z = (float) (portal.z + side[1]);
         const float y = (float) (portal.y + 1);
-        const std::vector<EndCrystalActor *> found = _findCrystals(owner, level, x, y, z, x + 1.0f, y + 1.0f,
-                                                                   z + 1.0f);
+        const std::vector<EndCrystalActor *> found = _findCrystals(owner, level, x, y, z, x + 1.0f, y + 1.0f, z + 1.0f);
         if (found.empty())
             return;
 

@@ -57,24 +57,36 @@ namespace {
     const char *const ON_TAKEOFF_TRIGGER = "minecraft:on_start_takeoff";
 
     // sub_14ACCE300: each node lists its neighbours as a bit mask over the 24 nodes
-    const uint32_t NODE_ADJACENCY[EnderDragon::NODE_COUNT] = {
-            6146, 8197, 8202, 16404, 32808, 32848, 65696, 131392, 131712, 263424, 526848, 525313,
-            1581057, 3166214, 2138120, 6373424, 4358208, 12910976, 9044480, 9706496, 15216640, 13688832,
-            11763712, 8257536};
+    const uint32_t NODE_ADJACENCY[EnderDragon::NODE_COUNT] = {6146,    8197,    8202,     16404,    32808,    32848,
+                                                              65696,   131392,  131712,   263424,   526848,   525313,
+                                                              1581057, 3166214, 2138120,  6373424,  4358208,  12910976,
+                                                              9044480, 9706496, 15216640, 13688832, 11763712, 8257536};
 
     // the half sizes of the head, neck, body, three tail parts and two wings (sub_14ACC9AC0)
-    const float PART_SIZES[(size_t) EnderDragon::Part::Count][2] = {
-            {1.0f, 1.0f}, {3.0f, 3.0f}, {5.0f, 3.0f}, {2.0f, 2.0f}, {2.0f, 2.0f}, {2.0f, 2.0f}, {4.0f, 3.0f},
-            {4.0f, 3.0f}};
+    const float PART_SIZES[(size_t) EnderDragon::Part::Count][2] = {{1.0f, 1.0f}, {3.0f, 3.0f}, {5.0f, 3.0f},
+                                                                    {2.0f, 2.0f}, {2.0f, 2.0f}, {2.0f, 2.0f},
+                                                                    {4.0f, 3.0f}, {4.0f, 3.0f}};
 
     // blocks the dragon cannot fly through (sub_14ACCCD70)
-    const char *const IMMUNE_BLOCKS[] = {
-            "minecraft:bedrock", "minecraft:obsidian", "minecraft:crying_obsidian", "minecraft:respawn_anchor",
-            "minecraft:end_stone", "minecraft:end_portal_frame", "minecraft:end_portal", "minecraft:end_gateway",
-            "minecraft:iron_bars", "minecraft:reinforced_deepslate", "minecraft:barrier", "minecraft:allow",
-            "minecraft:deny", "minecraft:border_block", "minecraft:command_block",
-            "minecraft:repeating_command_block", "minecraft:chain_command_block", "minecraft:structure_block",
-            "minecraft:jigsaw"};
+    const char *const IMMUNE_BLOCKS[] = {"minecraft:bedrock",
+                                         "minecraft:obsidian",
+                                         "minecraft:crying_obsidian",
+                                         "minecraft:respawn_anchor",
+                                         "minecraft:end_stone",
+                                         "minecraft:end_portal_frame",
+                                         "minecraft:end_portal",
+                                         "minecraft:end_gateway",
+                                         "minecraft:iron_bars",
+                                         "minecraft:reinforced_deepslate",
+                                         "minecraft:barrier",
+                                         "minecraft:allow",
+                                         "minecraft:deny",
+                                         "minecraft:border_block",
+                                         "minecraft:command_block",
+                                         "minecraft:repeating_command_block",
+                                         "minecraft:chain_command_block",
+                                         "minecraft:structure_block",
+                                         "minecraft:jigsaw"};
 
     float wrapDegrees(float degrees) {
         float wrapped = std::fmod(degrees + 180.0f, 360.0f);
@@ -121,8 +133,7 @@ namespace {
     // the binary heap the game orders open nodes with, ties included
     class NodeHeap {
     public:
-        explicit NodeHeap(std::vector<SearchNode> &nodes) : mNodes(nodes) {
-        }
+        explicit NodeHeap(std::vector<SearchNode> &nodes) : mNodes(nodes) {}
 
         bool isEmpty() const {
             return mHeap.empty();
@@ -213,8 +224,7 @@ namespace {
 }
 
 EnderDragon::EnderDragon(uint64_t runtimeId, const std::string &identifier)
-        : HostileActor(runtimeId, identifier), mRandom((uint32_t) runtimeId) {
-}
+        : HostileActor(runtimeId, identifier), mRandom((uint32_t) runtimeId) {}
 
 float EnderDragon::nextFloat() {
     return std::uniform_real_distribution<float>(0.0f, 1.0f)(mRandom);
@@ -329,14 +339,16 @@ bool EnderDragon::_ensureNodes(ServerNetworkHandler &owner) {
         }
     }
 
-    buildNodes([&level](int32_t x, int32_t z) {
-        for (int32_t y = level.getMaxY(); y >= level.getMinY(); --y) {
-            const BlockState *state = level.peekBlockPtr(x, y, z);
-            if (state != nullptr && state->mName != "minecraft:air")
-                return y + 1;
-        }
-        return level.getMinY();
-    }, END_SEA_LEVEL);
+    buildNodes(
+            [&level](int32_t x, int32_t z) {
+                for (int32_t y = level.getMaxY(); y >= level.getMinY(); --y) {
+                    const BlockState *state = level.peekBlockPtr(x, y, z);
+                    if (state != nullptr && state->mName != "minecraft:air")
+                        return y + 1;
+                }
+                return level.getMinY();
+            },
+            END_SEA_LEVEL);
     return true;
 }
 
@@ -392,8 +404,8 @@ std::unique_ptr<EnderDragon::Path> EnderDragon::findPath(int32_t from, int32_t t
             break;
         }
 
-        if (distance(mNodes[(size_t) closest], mNodes[(size_t) to]) > distance(mNodes[(size_t) node],
-                                                                                   mNodes[(size_t) to]))
+        if (distance(mNodes[(size_t) closest], mNodes[(size_t) to])
+            > distance(mNodes[(size_t) node], mNodes[(size_t) to]))
             closest = node;
 
         search[(size_t) node].mClosed = true;
@@ -479,8 +491,7 @@ void EnderDragon::_tickCrystals(ServerNetworkHandler &owner, Level &level) {
         return;
 
     const Vector3f position = getPosition();
-    const AxisAlignedBB area = ActorPushSystem::boundingBoxOf(*this).expand(CRYSTAL_SEARCH_RANGE,
-                                                                            CRYSTAL_SEARCH_RANGE,
+    const AxisAlignedBB area = ActorPushSystem::boundingBoxOf(*this).expand(CRYSTAL_SEARCH_RANGE, CRYSTAL_SEARCH_RANGE,
                                                                             CRYSTAL_SEARCH_RANGE);
     float best = CRYSTAL_SEARCH_RANGE * CRYSTAL_SEARCH_RANGE;
     int64_t nearest = -1;
@@ -527,18 +538,17 @@ void EnderDragon::_steer(ServerNetworkHandler &owner) {
                               50.0f);
 
     const float targetLength = std::sqrt(distanceSquared);
-    const Vector3f toTarget = targetLength < 0.0001f ? Vector3f(0.0f, 0.0f, 0.0f)
-                                                     : Vector3f(dx / targetLength, dy / targetLength,
-                                                                dz / targetLength);
+    const Vector3f toTarget = targetLength < 0.0001f
+                                      ? Vector3f(0.0f, 0.0f, 0.0f)
+                                      : Vector3f(dx / targetLength, dy / targetLength, dz / targetLength);
     const Vector3f facingRaw(std::sin(yaw), motion.y, -std::cos(yaw));
     const float facingLength = std::sqrt(facingRaw.x * facingRaw.x + facingRaw.y * facingRaw.y
                                          + facingRaw.z * facingRaw.z);
     const Vector3f facing = facingLength < 0.0001f ? Vector3f(0.0f, 0.0f, 0.0f)
-                                                   : Vector3f(facingRaw.x / facingLength,
-                                                              facingRaw.y / facingLength,
+                                                   : Vector3f(facingRaw.x / facingLength, facingRaw.y / facingLength,
                                                               facingRaw.z / facingLength);
-    const float alignment = std::max(0.0f, (facing.x * toTarget.x + facing.y * toTarget.y + facing.z * toTarget.z
-                                            + 0.5f) / 1.5f);
+    const float alignment = std::max(
+            0.0f, (facing.x * toTarget.x + facing.y * toTarget.y + facing.z * toTarget.z + 0.5f) / 1.5f);
 
     // sub_14ACCA850: a goal without its own turn speed turns at min(speed, 40) / speed
     const float speed = std::sqrt(motion.z * motion.z + motion.x * motion.x) + 1.0f;
@@ -555,8 +565,7 @@ void EnderDragon::_steer(ServerNetworkHandler &owner) {
     motion.z -= std::cos(turned) * acceleration;
 
     const float scale = mInWall ? 0.8f : 1.0f;
-    setPosition(Vector3f(position.x + motion.x * scale, position.y + motion.y * scale,
-                         position.z + motion.z * scale));
+    setPosition(Vector3f(position.x + motion.x * scale, position.y + motion.y * scale, position.z + motion.z * scale));
 
     const float motionLength = std::sqrt(motion.x * motion.x + motion.y * motion.y + motion.z * motion.z);
     float heading = 0.0f;
@@ -575,8 +584,8 @@ void EnderDragon::_steer(ServerNetworkHandler &owner) {
 void EnderDragon::_setPart(Part part, float x, float y, float z) {
     const float halfWidth = PART_SIZES[(size_t) part][0] * 0.5f;
     const float halfHeight = PART_SIZES[(size_t) part][1] * 0.5f;
-    mParts[(size_t) part] = AxisAlignedBB(x - halfWidth, y - halfHeight, z - halfWidth, x + halfWidth,
-                                          y + halfHeight, z + halfWidth);
+    mParts[(size_t) part] = AxisAlignedBB(x - halfWidth, y - halfHeight, z - halfWidth, x + halfWidth, y + halfHeight,
+                                          z + halfWidth);
 }
 
 void EnderDragon::_knockBack(ServerNetworkHandler &owner, Level &level, const AxisAlignedBB &area) {
@@ -705,8 +714,7 @@ void EnderDragon::_tickParts(ServerNetworkHandler &owner, Level &level) {
         const float tailSin = std::sin(tailYaw);
         const float tailCos = std::cos(tailYaw);
         const float length = (float) (i + 1) * 2.0f;
-        _setPart((Part) ((int32_t) Part::Tail1 + i),
-                 position.x - (yawSin * 1.5f + tailSin * length) * pitchCos,
+        _setPart((Part) ((int32_t) Part::Tail1 + i), position.x - (yawSin * 1.5f + tailSin * length) * pitchCos,
                  position.y + (tail.mY - five.mY) - (length + 1.5f) * pitchSin + 1.5f,
                  position.z + (yawCos * 1.5f + tailCos * length) * pitchCos);
     }
@@ -730,8 +738,8 @@ void EnderDragon::tickMovement(ServerNetworkHandler &owner) {
     if (isSitting()) {
         mFlapTime += 0.1f;
     } else {
-        float flap = std::exp2(motion.y) * (0.2f / (std::sqrt(motion.x * motion.x + motion.z * motion.z) * 10.0f
-                                                    + 1.0f));
+        float flap = std::exp2(motion.y)
+                     * (0.2f / (std::sqrt(motion.x * motion.x + motion.z * motion.z) * 10.0f + 1.0f));
         if (mInWall)
             flap *= 0.5f;
         mFlapTime += flap;
@@ -975,7 +983,7 @@ void EnderDragon::shootFireball(ServerNetworkHandler &owner, const Actor &target
 
     fireball->setProjectile(true);
     fireball->setOwnerUniqueId((int64_t) getRuntimeId());
-    fireball->setMotion(Vector3f(dx / length * FIREBALL_SPEED, dy / length * FIREBALL_SPEED,
-                                 dz / length * FIREBALL_SPEED));
+    fireball->setMotion(
+            Vector3f(dx / length * FIREBALL_SPEED, dy / length * FIREBALL_SPEED, dz / length * FIREBALL_SPEED));
     owner.allowProjectileLaunch(*fireball, this);
 }

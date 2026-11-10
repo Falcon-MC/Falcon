@@ -9,27 +9,22 @@ namespace {
     const char *UNLIT_REDSTONE_TORCH = "minecraft:unlit_redstone_torch";
 }
 
-bool RedstoneTorchBlock::matches(const std::string &identifier)
-{
+bool RedstoneTorchBlock::matches(const std::string &identifier) {
     return identifier == REDSTONE_TORCH || identifier == UNLIT_REDSTONE_TORCH;
 }
 
-bool RedstoneTorchBlock::isSignalSource() const
-{
+bool RedstoneTorchBlock::isSignalSource() const {
     return isLit();
 }
 
-bool RedstoneTorchBlock::isLit() const
-{
+bool RedstoneTorchBlock::isLit() const {
     return getIdentifier() == REDSTONE_TORCH;
 }
 
-BlockState RedstoneTorchBlock::getLitState(const BlockState &state)
-{
+BlockState RedstoneTorchBlock::getLitState(const BlockState &state) {
     return BlockState(REDSTONE_TORCH, state.mStates);
 }
 
-BlockState RedstoneTorchBlock::getUnlitState(const BlockState &state)
-{
+BlockState RedstoneTorchBlock::getUnlitState(const BlockState &state) {
     return BlockState(UNLIT_REDSTONE_TORCH, state.mStates);
 }

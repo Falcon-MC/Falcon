@@ -35,9 +35,7 @@ namespace {
 
     const int32_t LEVEL_EVENT_PARTICLE_TYPE = 0x4000;
 
-    const ParticleTypeEntry PARTICLE_TYPES[] = {
-            {"creakingcrumble", 94}
-    };
+    const ParticleTypeEntry PARTICLE_TYPES[] = {{"creakingcrumble", 94}};
 
     void emitParticle(ServerNetworkHandler &owner, MobActor &mob, const json::Value &options) {
         const json::Value *name = options.get("particle");
@@ -94,8 +92,7 @@ void EntityEvents::fireTrigger(ServerNetworkHandler &owner, MobActor &mob, const
         fire(owner, *receiver, event->string(), depth, receiver == &mob ? other : &mob);
 }
 
-void EntityEvents::fireTriggers(ServerNetworkHandler &owner, MobActor &mob, const json::Value *triggers,
-                                Actor *other) {
+void EntityEvents::fireTriggers(ServerNetworkHandler &owner, MobActor &mob, const json::Value *triggers, Actor *other) {
     if (triggers == nullptr)
         return;
 
@@ -211,8 +208,8 @@ bool EntityEvents::_run(ServerNetworkHandler &owner, MobActor &mob, const json::
 
     if (const json::Value *drop = node.get("drop_item")) {
         const json::Value *slot = drop->get("slot");
-        if (slot != nullptr && mob.getEquipment().dropSlot(owner, owner.getLevelFor(mob), mob.getPosition(),
-                                                            slot->string()))
+        if (slot != nullptr
+            && mob.getEquipment().dropSlot(owner, owner.getLevelFor(mob), mob.getPosition(), slot->string()))
             mob.getEquipment().broadcast(owner, mob);
     }
 

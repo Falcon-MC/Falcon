@@ -63,9 +63,7 @@ namespace {
         }
 
         EndSpikes::BlockSink sink() {
-            return [this](int32_t x, int32_t y, int32_t z, const BlockState &state) {
-                set(x, y, z, state);
-            };
+            return [this](int32_t x, int32_t y, int32_t z, const BlockState &state) { set(x, y, z, state); };
         }
 
     private:
@@ -99,11 +97,13 @@ namespace {
         require(exit != nullptr && exit->isList() && exit->getListType() == Tag::Type::Int && exit->size() == 3,
                 "The exit is saved as a list of three ints");
         require(exit->getList()[0].asInt() == 1010 && exit->getList()[1].asInt() == 70
-                && exit->getList()[2].asInt() == -3, "The exit list holds x, y and z");
+                        && exit->getList()[2].asInt() == -3,
+                "The exit list holds x, y and z");
         require(saved.getByte("EndGatewayBadPosChecked", 0) == 1, "Every save marks the exit as checked");
 
         const Tag spawn = gateway.getSpawnCompound();
-        require(spawn.getString("id", std::string()) == "EndGateway" && spawn.getInt("x", 0) == 96 && spawn.getInt("y", 0) == 75,
+        require(spawn.getString("id", std::string()) == "EndGateway" && spawn.getInt("x", 0) == 96
+                        && spawn.getInt("y", 0) == 75,
                 "The client gets the gateway's id and position");
         require(spawn.get("ExitPortal") != nullptr && spawn.getInt("Age", -1) == 5,
                 "The client gets the gateway with its saved data");
@@ -215,8 +215,8 @@ namespace {
         };
         const Vector3i diagonal = EndGatewayExit::findRoughExit(EndDragonFight::getGatewayPosition(3), outer);
         require(diagonal.y == 0 && outer(diagonal.x >> 4, diagonal.z >> 4)
-                && !outer((int32_t) std::floor((float) diagonal.x * 0.98f) >> 4,
-                          (int32_t) std::floor((float) diagonal.z * 0.98f) >> 4),
+                        && !outer((int32_t) std::floor((float) diagonal.x * 0.98f) >> 4,
+                                  (int32_t) std::floor((float) diagonal.z * 0.98f) >> 4),
                 "A gateway off the axes finds the edge of the land in its direction");
 
         TheEndGenerator generator(0);
@@ -243,7 +243,8 @@ namespace {
         BlockMap ledge;
         ledge.set(100, 60, 0, endStone());
         require(same(EndGatewayExit::findSpawn(ledge.reader(), Vector3i(105, 0, 0), true, 1, false, MIN_Y, MAX_Y),
-                     Vector3i(100, 60, 0)), "Without an enclosed top the closest top is kept");
+                     Vector3i(100, 60, 0)),
+                "Without an enclosed top the closest top is kept");
 
         BlockMap empty;
         require(EndGatewayExit::isZero(
@@ -262,13 +263,16 @@ namespace {
         map.set(102, 65, 1, endStone());
         map.set(101, 65, -1, endStone());
         require(same(EndGatewayExit::findTallestBlock(map.reader(), Vector3i(100, 60, 0), 16, true, false, MAX_Y + 1),
-                     Vector3i(101, 65, -1)), "The tallest block wins, the first column found keeps a tie");
+                     Vector3i(101, 65, -1)),
+                "The tallest block wins, the first column found keeps a tie");
 
         map.fill(100, 61, 0, 100, 80, 0, bedrock());
         require(same(EndGatewayExit::findTallestBlock(map.reader(), Vector3i(100, 60, 0), 16, true, false, MAX_Y + 1),
-                     Vector3i(100, 80, 0)), "The exit search counts bedrock");
+                     Vector3i(100, 80, 0)),
+                "The exit search counts bedrock");
         require(same(EndGatewayExit::findTallestBlock(map.reader(), Vector3i(100, 60, 0), 5, false, true, MAX_Y + 1),
-                     Vector3i(101, 65, -1)), "The landing search skips its centre and bedrock");
+                     Vector3i(101, 65, -1)),
+                "The landing search skips its centre and bedrock");
 
         BlockMap empty;
         require(EndGatewayExit::isZero(
@@ -290,20 +294,20 @@ namespace {
 
     void checkIsland() {
         require(EndGatewayExit::islandSeed(Vector3i(1000, 75, -20)) == 3033158844u
-                && EndGatewayExit::islandSeed(Vector3i(0, 0, 0)) == 1148853900u,
+                        && EndGatewayExit::islandSeed(Vector3i(0, 0, 0)) == 1148853900u,
                 "The island seed combines the hashes of x, y and z");
 
         BlockMap map;
         std::mt19937 random(EndGatewayExit::islandSeed(Vector3i(1000, 75, -20)));
         TheEndDecorationFeature::placeIsland(random, 1000, 75, -20, map.sink());
-        const Vector3i landing = EndGatewayExit::findSpawn(map.reader(), Vector3i(1000, 75, -20), true, 1, false,
-                                                           MIN_Y, MAX_Y);
+        const Vector3i landing = EndGatewayExit::findSpawn(map.reader(), Vector3i(1000, 75, -20), true, 1, false, MIN_Y,
+                                                           MAX_Y);
         require(same(landing, Vector3i(1000, 75, -20)), "A raised island gives the exit its landing");
     }
 
     std::filesystem::path storageDirectory(const std::string &name) {
         return std::filesystem::temp_directory_path()
-                / ("falcon-" + name + "-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+               / ("falcon-" + name + "-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     }
 
     // an End saved to disk with no player in it, so no column is loaded for actors
@@ -414,10 +418,10 @@ namespace {
                 "A new gateway no player stands by is saved with its exit");
 
         const std::vector<Tag> back = end.storedGateways(rough, 80);
-        require(back.size() == 1 && onLanding(storedExit(back.front())),
-                "The gateway back is saved and leads home");
+        require(back.size() == 1 && onLanding(storedExit(back.front())), "The gateway back is saved and leads home");
         require(end.mEnd.getBlockActors().find<EndGatewayBlockActor>(gateway) == nullptr
-                && end.mEnd.getBlockActors().find<EndGatewayBlockActor>(storedPosition(back.front())) == nullptr,
+                        && end.mEnd.getBlockActors().find<EndGatewayBlockActor>(storedPosition(back.front()))
+                                   == nullptr,
                 "Gateways in columns without a player are left on disk");
 
         bool chestKept = false;
@@ -463,7 +467,8 @@ namespace {
 
         portal.tick(end.mOwner);
         require(portal.getCooldown() > 0, "The cow goes through the gateway");
-        require(end.isStoredEntity(EndGatewayBlockActor::getTeleportTarget(portal.getExit()), "minecraft:cow", uniqueId),
+        require(end.isStoredEntity(EndGatewayBlockActor::getTeleportTarget(portal.getExit()), "minecraft:cow",
+                                   uniqueId),
                 "An entity sent to a column nothing loads waits in that column's saved entities");
     }
 
@@ -479,12 +484,14 @@ namespace {
                         | (uint32_t) ((int32_t) std::floor(target.z) >> 4));
 
         const ItemStack diamond = end.mOwner.createItemStack("minecraft:diamond", 1);
-        ItemActor *item = end.mOwner.dropItem(end.mEnd, Vector3f(96.5f, 75.1f, 0.5f), diamond, Vector3f(0.0f, 0.0f, 0.0f), 0);
+        ItemActor *item = end.mOwner.dropItem(end.mEnd, Vector3f(96.5f, 75.1f, 0.5f), diamond,
+                                              Vector3f(0.0f, 0.0f, 0.0f), 0);
         require(item != nullptr, "Could not drop the item");
 
         portal.tick(end.mOwner);
         require(portal.getCooldown() > 0 && item->getPosition().x == target.x && item->getPosition().y == target.y
-                && item->getPosition().z == target.z, "A dropped item goes through the gateway");
+                        && item->getPosition().z == target.z,
+                "A dropped item goes through the gateway");
 
         while (portal.getCooldown() > 0)
             portal.tick(end.mOwner);
@@ -499,7 +506,9 @@ namespace {
         bool kept = false;
         for (const std::unique_ptr<ItemActor> &entry: end.mOwner.getItemEntities())
             kept = kept || entry->getUniqueId() == uniqueId;
-        require(!kept && end.isStoredEntity(EndGatewayBlockActor::getTeleportTarget(unloaded), "minecraft:item", uniqueId),
+        require(!kept
+                        && end.isStoredEntity(EndGatewayBlockActor::getTeleportTarget(unloaded), "minecraft:item",
+                                              uniqueId),
                 "An item sent to a column nothing loads waits in that column's saved entities");
     }
 }

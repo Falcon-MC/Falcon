@@ -24,7 +24,8 @@ bool IcicleBlock::matches(const std::string &identifier) {
 bool IcicleBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
     if (blockFace != PlacementOrientation::FACE_UP && blockFace != PlacementOrientation::FACE_DOWN)
         return false;
-    const Vector3i support(position.x, position.y + (blockFace == PlacementOrientation::FACE_DOWN ? 1 : -1), position.z);
+    const Vector3i support(position.x, position.y + (blockFace == PlacementOrientation::FACE_DOWN ? 1 : -1),
+                           position.z);
     const BlockState *state = level.peekBlockPtr(support.x, support.y, support.z);
     if (state == nullptr)
         return false;

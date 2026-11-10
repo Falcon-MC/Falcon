@@ -17,8 +17,7 @@ namespace {
 }
 
 EndCrystalActor::EndCrystalActor(uint64_t runtimeId, const std::string &identifier)
-        : ServerActor(runtimeId, identifier) {
-}
+        : ServerActor(runtimeId, identifier) {}
 
 void EndCrystalActor::tick(ServerNetworkHandler &owner) {
     (void) owner;

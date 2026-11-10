@@ -48,29 +48,13 @@ struct BlockDrop {
     int32_t mCount;
 };
 
-enum class PlacementMergeResult {
-    None,
-    Merged,
-    Rejected
-};
+enum class PlacementMergeResult { None, Merged, Rejected };
 
-enum class BlockTraversal {
-    None,
-    Scaffolding,
-    PowderSnow
-};
+enum class BlockTraversal { None, Scaffolding, PowderSnow };
 
-enum class PathHazard {
-    None,
-    Damaging,
-    Portal
-};
+enum class PathHazard { None, Damaging, Portal };
 
-enum class PistonMoveReaction {
-    Normal,
-    Break,
-    PushOnly
-};
+enum class PistonMoveReaction { Normal, Break, PushOnly };
 
 class Block {
 public:
@@ -101,8 +85,8 @@ public:
         (void) state;
     }
 
-    virtual void onFallOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
-                          const BlockState &state, float fallDistance) const {
+    virtual void onFallOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position, const BlockState &state,
+                          float fallDistance) const {
         (void) owner;
         (void) actor;
         (void) position;
@@ -143,8 +127,8 @@ public:
         (void) state;
     }
 
-    virtual void onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position,
-                                        const BlockState &state, const Vector3i &changed) const {
+    virtual void onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state,
+                                        const Vector3i &changed) const {
         (void) ticks;
         (void) position;
         (void) state;
@@ -428,8 +412,7 @@ public:
         return PistonMoveReaction::Normal;
     }
 
-    virtual BlockState applyPlacementOrientation(const BlockState &state,
-                                                 const BlockPlacementContext &context) const;
+    virtual BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const;
 
     Block() : mTypeId(0), mIdentifier("minecraft:air"), mName("Air"), mStates(Tag::ofCompound()) {}
 
@@ -442,13 +425,21 @@ public:
     explicit Block(const BlockState &state)
             : mTypeId(0), mIdentifier(state.mName), mName(state.mName), mStates(state.mStates) {}
 
-    int32_t getTypeId() const { return mTypeId; }
+    int32_t getTypeId() const {
+        return mTypeId;
+    }
 
-    const std::string &getIdentifier() const { return mIdentifier; }
+    const std::string &getIdentifier() const {
+        return mIdentifier;
+    }
 
-    const std::string &getName() const { return mName; }
+    const std::string &getName() const {
+        return mName;
+    }
 
-    const Tag &getStates() const { return mStates; }
+    const Tag &getStates() const {
+        return mStates;
+    }
 
     const BlockData *getData() const;
 
@@ -462,9 +453,13 @@ public:
 
     float getFallDistanceMultiplier() const;
 
-    BlockState toBlockState() const { return BlockState(mIdentifier, mStates); }
+    BlockState toBlockState() const {
+        return BlockState(mIdentifier, mStates);
+    }
 
-    int32_t getNetworkHash() const { return BlockStateHasher::hash(mIdentifier, mStates); }
+    int32_t getNetworkHash() const {
+        return BlockStateHasher::hash(mIdentifier, mStates);
+    }
 
 private:
     int32_t mTypeId;

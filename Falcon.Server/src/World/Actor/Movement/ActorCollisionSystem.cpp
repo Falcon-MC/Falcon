@@ -43,15 +43,13 @@ ActorMoveResult ActorCollisionSystem::move(Level &level, AxisAlignedBB &box, con
     result.mCollidedY = moved.y != delta.y;
     result.mCollidedZ = moved.z != delta.z;
     // FinalizeMoveSystem (0x140C638A0) keeps the grounded state for a zero-Y move
-    result.mOnGround = (result.mCollidedY && delta.y < 0.0f)
-                       || (wasOnGround && !result.mCollidedY && delta.y == 0.0f);
+    result.mOnGround = (result.mCollidedY && delta.y < 0.0f) || (wasOnGround && !result.mCollidedY && delta.y == 0.0f);
     return result;
 }
 
-Vector3f ActorCollisionSystem::_resolve(Level &level, AxisAlignedBB &box, const Vector3f &delta,
-                                        const Actor *actor) {
-    const std::vector<AxisAlignedBB> obstacles =
-            level.getCollisionBoxes(box.addCoord(delta.x, delta.y, delta.z), actor);
+Vector3f ActorCollisionSystem::_resolve(Level &level, AxisAlignedBB &box, const Vector3f &delta, const Actor *actor) {
+    const std::vector<AxisAlignedBB> obstacles = level.getCollisionBoxes(box.addCoord(delta.x, delta.y, delta.z),
+                                                                         actor);
 
     // Y, X, Z order, each axis against the box moved on the previous ones: a corner move slides along the wall it misses
     float dy = delta.y;

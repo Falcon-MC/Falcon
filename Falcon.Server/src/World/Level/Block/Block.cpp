@@ -85,21 +85,20 @@ BlockState Block::applyPlacementOrientation(const BlockState &state, const Block
         states.putString("pillar_axis", pillarAxis(face));
 
     if (states.contains("upside_down_bit")) {
-        const bool upsideDown = face == FACE_DOWN
-                                || (face != FACE_UP && context.mClickPosition.y > 0.5f);
+        const bool upsideDown = face == FACE_DOWN || (face != FACE_UP && context.mClickPosition.y > 0.5f);
         states.putByte("upside_down_bit", upsideDown ? 1 : 0);
     }
 
     if (states.contains("minecraft:vertical_half")) {
-        const bool top = face == FACE_DOWN
-                         || (face != FACE_UP && context.mClickPosition.y > 0.5f);
+        const bool top = face == FACE_DOWN || (face != FACE_UP && context.mClickPosition.y > 0.5f);
         states.putString("minecraft:vertical_half", top ? "top" : "bottom");
     }
 
     if (states.contains("hanging")) {
         const bool hanging = face == FACE_DOWN
                              || (face != FACE_UP
-                                 && !isSolidNeighbour(context.mLevel, relativePosition(context.mBlockPosition, FACE_DOWN)));
+                                 && !isSolidNeighbour(context.mLevel,
+                                                      relativePosition(context.mBlockPosition, FACE_DOWN)));
         states.putByte("hanging", hanging ? 1 : 0);
     }
 
@@ -130,8 +129,7 @@ std::vector<BlockPlacementEntry> Block::getPlacementBlocks(Level &level, const V
     return {};
 }
 
-std::vector<Vector3i> Block::getAffectedBlocks(Level &level, const Vector3i &position,
-                                               const BlockState &state) const {
+std::vector<Vector3i> Block::getAffectedBlocks(Level &level, const Vector3i &position, const BlockState &state) const {
     (void) level;
     (void) position;
     (void) state;
@@ -154,8 +152,7 @@ int32_t Block::multifaceCount(const BlockState &state) {
     return count;
 }
 
-std::vector<BlockDrop> Block::grassDrops(const std::string &shearedItem, int32_t shearedCount,
-                                         const ItemStack &tool) {
+std::vector<BlockDrop> Block::grassDrops(const std::string &shearedItem, int32_t shearedCount, const ItemStack &tool) {
     std::vector<BlockDrop> drops;
     if (isShears(tool)) {
         drops.push_back({shearedItem, shearedCount});

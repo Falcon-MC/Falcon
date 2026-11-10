@@ -6,9 +6,7 @@
 
 class TorchBlock : public Block {
 public:
-    explicit TorchBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit TorchBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

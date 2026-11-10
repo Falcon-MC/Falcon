@@ -27,8 +27,7 @@ bool BellBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:bell";
 }
 
-BlockState BellBlock::applyPlacementOrientation(const BlockState &state,
-                                                           const BlockPlacementContext &context) const {
+BlockState BellBlock::applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const {
     using namespace PlacementOrientation;
 
     BlockState result = Block::applyPlacementOrientation(state, context);

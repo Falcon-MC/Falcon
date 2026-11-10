@@ -41,8 +41,8 @@ StructureTerrain::Chunk &StructureTerrain::_chunkAt(int32_t x, int32_t z) {
     Chunk &chunk = mChunks[{x >> 4, z >> 4}];
     if (chunk.mChunk == nullptr) {
         chunk.mChunk = mCache != nullptr
-                       ? mCache->sharedTerrain(x >> 4, z >> 4)
-                       : std::shared_ptr<const LevelChunk>(mGenerator.generateTerrain(x >> 4, z >> 4));
+                               ? mCache->sharedTerrain(x >> 4, z >> 4)
+                               : std::shared_ptr<const LevelChunk>(mGenerator.generateTerrain(x >> 4, z >> 4));
         chunk.mTops.fill(INT16_MIN);
     }
 

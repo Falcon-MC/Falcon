@@ -71,9 +71,13 @@ public:
         (void) owner;
     }
 
-    virtual ActorSize getSize() const { return ActorSize{DEFAULT_WIDTH, DEFAULT_HEIGHT}; }
+    virtual ActorSize getSize() const {
+        return ActorSize{DEFAULT_WIDTH, DEFAULT_HEIGHT};
+    }
 
-    virtual bool isExpired() const { return false; }
+    virtual bool isExpired() const {
+        return false;
+    }
 
     virtual bool onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) {
         (void) owner;
@@ -137,7 +141,9 @@ public:
         return false;
     }
 
-    virtual void fillSpawnMetadata(EntityDataMap &metadata) const { (void) metadata; }
+    virtual void fillSpawnMetadata(EntityDataMap &metadata) const {
+        (void) metadata;
+    }
 
     virtual void sendEquipmentTo(ServerNetworkHandler &owner, const ServerPlayer &player) const {
         (void) owner;
@@ -160,7 +166,8 @@ public:
     // a negative lootingLevel reads the source's held item: right for melee, not for a projectile (captured at launch)
     bool hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel = -1);
 
-    bool hurt(ServerNetworkHandler &owner, float amount, const ActorDamageSource &damageSource, int32_t lootingLevel = -1);
+    bool hurt(ServerNetworkHandler &owner, float amount, const ActorDamageSource &damageSource,
+              int32_t lootingLevel = -1);
 
     // only mobs take fall damage
     virtual void causeFallDamage(ServerNetworkHandler &owner, float distance) {
@@ -215,21 +222,37 @@ public:
 
     void markMovementSynced();
 
-    const char *getIdentifier() const override { return mIdentifier.c_str(); }
+    const char *getIdentifier() const override {
+        return mIdentifier.c_str();
+    }
 
-    const std::string &getTypeId() const { return mIdentifier; }
+    const std::string &getTypeId() const {
+        return mIdentifier;
+    }
 
-    void setDefinition(const CustomActorDefinition *definition) { mDefinition = definition; }
+    void setDefinition(const CustomActorDefinition *definition) {
+        mDefinition = definition;
+    }
 
-    const CustomActorDefinition *getDefinition() const { return mDefinition; }
+    const CustomActorDefinition *getDefinition() const {
+        return mDefinition;
+    }
 
-    void setIntProperty(const std::string &name, int32_t value) { mIntProperties[name] = value; }
+    void setIntProperty(const std::string &name, int32_t value) {
+        mIntProperties[name] = value;
+    }
 
-    void setFloatProperty(const std::string &name, float value) { mFloatProperties[name] = value; }
+    void setFloatProperty(const std::string &name, float value) {
+        mFloatProperties[name] = value;
+    }
 
-    bool hasIntProperty(const std::string &name) const { return mIntProperties.count(name) != 0; }
+    bool hasIntProperty(const std::string &name) const {
+        return mIntProperties.count(name) != 0;
+    }
 
-    bool hasFloatProperty(const std::string &name) const { return mFloatProperties.count(name) != 0; }
+    bool hasFloatProperty(const std::string &name) const {
+        return mFloatProperties.count(name) != 0;
+    }
 
     int32_t getIntProperty(const std::string &name, int32_t fallback = 0) const;
 
@@ -243,58 +266,102 @@ public:
 
     bool assignProperty(const ActorPropertyDescription &descriptor, const json::Value &value);
 
-    std::unordered_map<std::string, int32_t> &getIntProperties() { return mIntProperties; }
+    std::unordered_map<std::string, int32_t> &getIntProperties() {
+        return mIntProperties;
+    }
 
-    std::unordered_map<std::string, float> &getFloatProperties() { return mFloatProperties; }
+    std::unordered_map<std::string, float> &getFloatProperties() {
+        return mFloatProperties;
+    }
 
-    std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() { return mDynamicProperties; }
+    std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() {
+        return mDynamicProperties;
+    }
 
-    void setOwnerUniqueId(int64_t owner) { mOwnerUniqueId = owner; }
+    void setOwnerUniqueId(int64_t owner) {
+        mOwnerUniqueId = owner;
+    }
 
-    int64_t getOwnerUniqueId() const { return mOwnerUniqueId; }
+    int64_t getOwnerUniqueId() const {
+        return mOwnerUniqueId;
+    }
 
-    void setOwnerPlayerHandle(uint32_t handle) { mOwnerPlayerHandle = handle; }
+    void setOwnerPlayerHandle(uint32_t handle) {
+        mOwnerPlayerHandle = handle;
+    }
 
-    uint32_t getOwnerPlayerHandle() const { return mOwnerPlayerHandle; }
+    uint32_t getOwnerPlayerHandle() const {
+        return mOwnerPlayerHandle;
+    }
 
-    bool hasOwnerPlayer() const { return mOwnerPlayerHandle != 0xFFFFFFFF; }
+    bool hasOwnerPlayer() const {
+        return mOwnerPlayerHandle != 0xFFFFFFFF;
+    }
 
-    bool isProjectile() const { return mIsProjectile; }
+    bool isProjectile() const {
+        return mIsProjectile;
+    }
 
-    void setProjectile(bool value) { mIsProjectile = value; }
+    void setProjectile(bool value) {
+        mIsProjectile = value;
+    }
 
-    ProjectileData &getProjectileData() { return mProjectileData; }
+    ProjectileData &getProjectileData() {
+        return mProjectileData;
+    }
 
-    const ProjectileData &getProjectileData() const { return mProjectileData; }
+    const ProjectileData &getProjectileData() const {
+        return mProjectileData;
+    }
 
-    int32_t getLifetimeTicks() const { return mLifetimeTicks; }
+    int32_t getLifetimeTicks() const {
+        return mLifetimeTicks;
+    }
 
-    void addLifetimeTick() { mLifetimeTicks++; }
+    void addLifetimeTick() {
+        mLifetimeTicks++;
+    }
 
-    void setExperienceValue(int32_t value) { mExperienceValue = value; }
+    void setExperienceValue(int32_t value) {
+        mExperienceValue = value;
+    }
 
-    int32_t getExperienceValue() const { return mExperienceValue; }
+    int32_t getExperienceValue() const {
+        return mExperienceValue;
+    }
 
-    void setPickupDelay(int32_t delay) { mPickupDelay = delay; }
+    void setPickupDelay(int32_t delay) {
+        mPickupDelay = delay;
+    }
 
-    int32_t getPickupDelay() const { return mPickupDelay; }
+    int32_t getPickupDelay() const {
+        return mPickupDelay;
+    }
 
     void decrementPickupDelay() {
         if (mPickupDelay > 0)
             mPickupDelay--;
     }
 
-    int32_t getDeathTicks() const { return mDeathTicks; }
+    int32_t getDeathTicks() const {
+        return mDeathTicks;
+    }
 
-    void addDeathTick() { mDeathTicks++; }
+    void addDeathTick() {
+        mDeathTicks++;
+    }
 
-    const std::string &getNameTag() const { return mNameTag; }
+    const std::string &getNameTag() const {
+        return mNameTag;
+    }
 
     std::string getName() const override {
         return mNameTag.empty() ? Actor::getName() : mNameTag;
     }
 
-    void setNameTag(const std::string &nameTag) { mNameTag = nameTag; }
+    void setNameTag(const std::string &nameTag) {
+        mNameTag = nameTag;
+    }
 
     bool isPersistent() const {
         return mPersistent || !mNameTag.empty();
@@ -312,7 +379,9 @@ public:
         mFarFromPlayerTicks = ticks;
     }
 
-    std::vector<int64_t> &getPendingPassengers() { return mPendingPassengers; }
+    std::vector<int64_t> &getPendingPassengers() {
+        return mPendingPassengers;
+    }
 
     // the minecraft:buoyant wave phase
     double getBuoyancyTimer() const {
@@ -332,7 +401,9 @@ public:
         mPushSoundTick = tick;
     }
 
-    virtual bool shouldSave() const { return isAlive() && !mIsProjectile && !hasOwnerPlayer(); }
+    virtual bool shouldSave() const {
+        return isAlive() && !mIsProjectile && !hasOwnerPlayer();
+    }
 
     virtual Tag saveNbt() const;
 

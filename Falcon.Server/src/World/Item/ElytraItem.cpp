@@ -21,8 +21,8 @@ namespace {
 
 bool ElytraItem::isWearingElytra(const ServerPlayer &player) {
     const ItemStack &chestplate = player.getInventory().getArmor(PlayerInventory::ARMOR_TORSO);
-    return !chestplate.isAir() && chestplate.mDefinition != nullptr &&
-           chestplate.mDefinition->getIdentifier() == IDENTIFIER;
+    return !chestplate.isAir() && chestplate.mDefinition != nullptr
+           && chestplate.mDefinition->getIdentifier() == IDENTIFIER;
 }
 
 void ElytraItem::tickGliding(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -39,8 +39,7 @@ void ElytraItem::tickGliding(ServerNetworkHandler &owner, ServerPlayer &player) 
         return;
     }
 
-    if (std::fabs(player.getMotion().y) < GLIDE_FALL_RESET_SPEED &&
-        player.getRotation().x <= GLIDE_FALL_RESET_PITCH)
+    if (std::fabs(player.getMotion().y) < GLIDE_FALL_RESET_SPEED && player.getRotation().x <= GLIDE_FALL_RESET_PITCH)
         player.resetFallDistance();
 
     if (player.getGameType() == (int32_t) GameType::Creative)

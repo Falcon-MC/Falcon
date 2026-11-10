@@ -63,8 +63,8 @@ void PistonArmBlockActor::loadNbt(const Tag &data, const PacketCodecContext &con
 
     const std::vector<Tag> &values = blocks->getList();
     for (size_t index = 0; index + 2 < values.size(); index += 3) {
-        mAttachedBlocks.push_back(Vector3i(values[index].asInt(), values[index + 1].asInt(),
-                                           values[index + 2].asInt()));
+        mAttachedBlocks.push_back(
+                Vector3i(values[index].asInt(), values[index + 1].asInt(), values[index + 2].asInt()));
     }
 }
 

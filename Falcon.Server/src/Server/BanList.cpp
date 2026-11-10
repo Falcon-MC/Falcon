@@ -120,9 +120,8 @@ void BanList::add(const std::string &name, const std::string &reason, const std:
 
 bool BanList::remove(const std::string &name) {
     const std::string lowered = StringUtil::toLowerCase(name);
-    const auto found = std::find_if(mEntries.begin(), mEntries.end(), [&lowered](const BanEntry &entry) {
-        return entry.mName == lowered;
-    });
+    const auto found = std::find_if(mEntries.begin(), mEntries.end(),
+                                    [&lowered](const BanEntry &entry) { return entry.mName == lowered; });
     if (found == mEntries.end())
         return false;
 

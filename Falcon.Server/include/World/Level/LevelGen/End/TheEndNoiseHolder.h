@@ -11,13 +11,21 @@ class TheEndTerrainNoises {
 public:
     explicit TheEndTerrainNoises(int64_t seed);
 
-    const TheEndOctaveNoise &getRoughnessNoiseOctaves() const { return *mRoughnessNoiseOctaves; }
+    const TheEndOctaveNoise &getRoughnessNoiseOctaves() const {
+        return *mRoughnessNoiseOctaves;
+    }
 
-    const TheEndOctaveNoise &getRoughnessNoiseOctaves2() const { return *mRoughnessNoiseOctaves2; }
+    const TheEndOctaveNoise &getRoughnessNoiseOctaves2() const {
+        return *mRoughnessNoiseOctaves2;
+    }
 
-    const TheEndOctaveNoise &getDetailNoiseOctaves() const { return *mDetailNoiseOctaves; }
+    const TheEndOctaveNoise &getDetailNoiseOctaves() const {
+        return *mDetailNoiseOctaves;
+    }
 
-    const TheEndSimplexNoise &getIslandNoise() const { return *mIslandNoise; }
+    const TheEndSimplexNoise &getIslandNoise() const {
+        return *mIslandNoise;
+    }
 
 private:
     std::unique_ptr<TheEndOctaveNoise> mRoughnessNoiseOctaves;
@@ -30,9 +38,13 @@ class TheEndNoiseHolder {
 public:
     explicit TheEndNoiseHolder(int64_t seed);
 
-    const TheEndTerrainNoises &getTerrainNoises() const { return *mTerrainNoises; }
+    const TheEndTerrainNoises &getTerrainNoises() const {
+        return *mTerrainNoises;
+    }
 
-    const TheEndSimplexNoise &getDecorationIslandNoise() const { return mTerrainNoises->getIslandNoise(); }
+    const TheEndSimplexNoise &getDecorationIslandNoise() const {
+        return mTerrainNoises->getIslandNoise();
+    }
 
 private:
     std::unique_ptr<TheEndTerrainNoises> mTerrainNoises;

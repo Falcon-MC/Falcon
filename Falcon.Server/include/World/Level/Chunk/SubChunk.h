@@ -23,7 +23,9 @@ public:
     // palette without comparing
     static const BlockState *intern(const BlockState &state);
 
-    int8_t getY() const { return mY; }
+    int8_t getY() const {
+        return mY;
+    }
 
     const BlockState &getBlock(int x, int y, int z) const;
 
@@ -42,11 +44,7 @@ public:
     bool hasDynamicShapes() const;
 
     // cached palette questions; each always comes with the same test
-    enum class PaletteQuery : uint8_t {
-        RandomTick = 0,
-        Water = 1,
-        DynamicLiquid = 2
-    };
+    enum class PaletteQuery : uint8_t { RandomTick = 0, Water = 1, DynamicLiquid = 2 };
 
     // cached until a palette changes; a palette may keep unused states: true only means worth scanning
     bool paletteMatches(PaletteQuery query, bool (*matches)(const BlockState &)) const;
@@ -77,18 +75,19 @@ public:
     bool readPersistent(ReadOnlyBinaryStream &stream, bool *replacedUnknown = nullptr);
 
 private:
-    static int _index(int x, int y, int z) { return (x << 8) | (z << 4) | y; }
+    static int _index(int x, int y, int z) {
+        return (x << 8) | (z << 4) | y;
+    }
 
     static int _bitsPerBlock(size_t paletteSize);
 
-    void _writeStorage(BinaryStream &stream, bool persistent,
-                       const std::vector<const BlockState *> &palette,
+    void _writeStorage(BinaryStream &stream, bool persistent, const std::vector<const BlockState *> &palette,
                        const PaletteIndices &blocks, const BlockNetworkIdMap *blockIds) const;
 
     void _writeEmptyStorage(BinaryStream &stream, bool persistent, const BlockNetworkIdMap *blockIds) const;
 
-    bool _readStorage(ReadOnlyBinaryStream &stream, std::vector<const BlockState *> &palette,
-                      PaletteIndices &blocks, bool *replacedUnknown);
+    bool _readStorage(ReadOnlyBinaryStream &stream, std::vector<const BlockState *> &palette, PaletteIndices &blocks,
+                      bool *replacedUnknown);
 
     void _ensureLayer1();
 

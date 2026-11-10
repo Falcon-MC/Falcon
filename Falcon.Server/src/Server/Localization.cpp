@@ -100,8 +100,8 @@ std::string Localization::translate(const std::string &locale, const std::string
 std::string Localization::_inlineKey(const std::string &locale, const std::string &text, size_t start,
                                      size_t &end) const {
     end = start;
-    while (end < text.size() && (std::isalnum((unsigned char) text[end]) || text[end] == '.' || text[end] == '_'
-                                 || text[end] == '-'))
+    while (end < text.size()
+           && (std::isalnum((unsigned char) text[end]) || text[end] == '.' || text[end] == '_' || text[end] == '-'))
         ++end;
 
     while (end > start && text[end - 1] == '.')

@@ -20,7 +20,9 @@ public:
 
     virtual void apply(ChunkGenerateContext &context) = 0;
 
-    void setRoot(BlockManager *root) { mRoot = root; }
+    void setRoot(BlockManager *root) {
+        mRoot = root;
+    }
 
     static int32_t javaStringHash(const char *text);
 

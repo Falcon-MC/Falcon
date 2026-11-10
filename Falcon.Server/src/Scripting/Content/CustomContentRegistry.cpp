@@ -183,8 +183,8 @@ const CustomItemDefinition *CustomContentRegistry::registerItem(const CustomItem
 const CustomBlockDefinition *CustomContentRegistry::registerBlock(const CustomBlockDefinition &block,
                                                                   ItemDefinitionRegistry &items,
                                                                   BlockDefinitionRegistry &blocks) {
-    if (mFrozen || hasIdentifier(block.mIdentifier) || items.getDefinition(block.mIdentifier) != nullptr ||
-        blocks.getDefinition(block.mIdentifier) != nullptr)
+    if (mFrozen || hasIdentifier(block.mIdentifier) || items.getDefinition(block.mIdentifier) != nullptr
+        || blocks.getDefinition(block.mIdentifier) != nullptr)
         return nullptr;
 
     _registerBlock(block, items, blocks);
@@ -207,7 +207,6 @@ void CustomContentRegistry::load(const BehaviorPackManager &packs, ItemDefinitio
         _loadPackActors(pack.mPath);
         _loadPackRecipes(pack.mPath);
     }
-
 }
 
 namespace {
@@ -259,7 +258,7 @@ void CustomContentRegistry::_loadPackRecipes(const std::string &packPath) {
         return;
 
     for (const std::filesystem::directory_entry &entry:
-                 std::filesystem::recursive_directory_iterator(directory, error)) {
+         std::filesystem::recursive_directory_iterator(directory, error)) {
         if (!entry.is_regular_file() || entry.path().extension() != ".json")
             continue;
 
@@ -344,7 +343,7 @@ void CustomContentRegistry::_loadPackActors(const std::string &packPath) {
         return;
 
     for (const std::filesystem::directory_entry &entry:
-                 std::filesystem::recursive_directory_iterator(directory, error)) {
+         std::filesystem::recursive_directory_iterator(directory, error)) {
         if (!entry.is_regular_file() || entry.path().extension() != ".json")
             continue;
 
@@ -436,7 +435,7 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
         return;
 
     for (const std::filesystem::directory_entry &entry:
-                 std::filesystem::recursive_directory_iterator(directory, error)) {
+         std::filesystem::recursive_directory_iterator(directory, error)) {
         if (!entry.is_regular_file() || entry.path().extension() != ".json")
             continue;
 
@@ -514,7 +513,8 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
             // and a repair_amount: number or Molang expression
             const json::Value *repairable = components->get("minecraft:repairable");
             const json::Value *repairItems = repairable != nullptr && repairable->isObject()
-                                             ? repairable->get("repair_items") : nullptr;
+                                                     ? repairable->get("repair_items")
+                                                     : nullptr;
             if (repairItems != nullptr && repairItems->isArray()) {
                 for (const std::unique_ptr<json::Value> &entry: repairItems->mArray) {
                     if (!entry->isObject())
@@ -603,8 +603,8 @@ void CustomContentRegistry::_registerItem(const CustomItemDefinition &item, Item
     stored.mNetworkId = mNextItemNetworkId++;
 
     Tag componentData = _buildItemComponentData(stored, items);
-    items.registerDefinition(std::make_shared<ItemDefinition>(stored.mIdentifier, stored.mNetworkId, true,
-                                                              componentData));
+    items.registerDefinition(
+            std::make_shared<ItemDefinition>(stored.mIdentifier, stored.mNetworkId, true, componentData));
 
     const std::string identifier = stored.mIdentifier;
     const std::string name = stored.mDisplayName;
@@ -736,7 +736,7 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
         return;
 
     for (const std::filesystem::directory_entry &entry:
-                 std::filesystem::recursive_directory_iterator(directory, error)) {
+         std::filesystem::recursive_directory_iterator(directory, error)) {
         if (!entry.is_regular_file() || entry.path().extension() != ".json")
             continue;
 
@@ -796,15 +796,14 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
             }
 
             const json::Value *destructible = components->get("minecraft:destructible_by_mining");
-            if (destructible != nullptr && destructible->isObject() &&
-                destructible->get("seconds_to_destroy") != nullptr) {
+            if (destructible != nullptr && destructible->isObject()
+                && destructible->get("seconds_to_destroy") != nullptr) {
                 definition.mDestroyTime = (float) destructible->get("seconds_to_destroy")->number(0.5);
                 definition.mHasDestroyTime = true;
             }
 
             const json::Value *explosion = components->get("minecraft:destructible_by_explosion");
-            if (explosion != nullptr && explosion->isObject() &&
-                explosion->get("explosion_resistance") != nullptr) {
+            if (explosion != nullptr && explosion->isObject() && explosion->get("explosion_resistance") != nullptr) {
                 definition.mExplosionResistance = (float) explosion->get("explosion_resistance")->number(1.0);
                 definition.mHasExplosionResistance = true;
             }
@@ -893,8 +892,8 @@ void CustomContentRegistry::_registerBlock(const CustomBlockDefinition &block, I
     blockItemData.putInt("id", stored.mItemNetworkId);
     blockItemData.put("components", blockComponents);
 
-    items.registerDefinition(std::make_shared<ItemDefinition>(stored.mIdentifier, stored.mItemNetworkId, true,
-                                                              blockItemData));
+    items.registerDefinition(
+            std::make_shared<ItemDefinition>(stored.mIdentifier, stored.mItemNetworkId, true, blockItemData));
 
     BlockPropertyData property;
     property.mName = stored.mIdentifier;
@@ -939,12 +938,11 @@ namespace {
     Tag selectionBoxComponent(const CustomBlockBox &box) {
         Tag component = Tag::ofCompound();
         component.putByte("enabled", box.mEnabled ? 1 : 0);
-        component.put("origin", Tag::ofList(Tag::Type::Float,
-                                            {Tag::ofFloat(box.mOrigin[0]), Tag::ofFloat(box.mOrigin[1]),
-                                             Tag::ofFloat(box.mOrigin[2])}));
-        component.put("size", Tag::ofList(Tag::Type::Float,
-                                          {Tag::ofFloat(box.mSize[0]), Tag::ofFloat(box.mSize[1]),
-                                           Tag::ofFloat(box.mSize[2])}));
+        component.put("origin",
+                      Tag::ofList(Tag::Type::Float, {Tag::ofFloat(box.mOrigin[0]), Tag::ofFloat(box.mOrigin[1]),
+                                                     Tag::ofFloat(box.mOrigin[2])}));
+        component.put("size", Tag::ofList(Tag::Type::Float, {Tag::ofFloat(box.mSize[0]), Tag::ofFloat(box.mSize[1]),
+                                                             Tag::ofFloat(box.mSize[2])}));
         return component;
     }
 

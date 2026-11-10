@@ -67,8 +67,8 @@ public:
 
     std::vector<TickingArea> remove(World &world, const std::function<bool(const TickingArea &)> &match);
 
-    std::vector<TickingArea> setPreload(World &world,
-                                        const std::function<bool(const TickingArea &)> &match, bool preload);
+    std::vector<TickingArea> setPreload(World &world, const std::function<bool(const TickingArea &)> &match,
+                                        bool preload);
 
     void appendColumns(DimensionType dimension, std::vector<int64_t> &columns) const;
 

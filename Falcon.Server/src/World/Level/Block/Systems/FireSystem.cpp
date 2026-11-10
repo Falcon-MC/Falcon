@@ -45,30 +45,28 @@ namespace {
         return gSchedules[level.getDimensionId()];
     }
 
-    const char *UNBURNABLE_BLOCKS[] = {
-            "minecraft:crimson_button",
-            "minecraft:crimson_door",
-            "minecraft:crimson_double_slab",
-            "minecraft:crimson_fence",
-            "minecraft:crimson_fence_gate",
-            "minecraft:crimson_planks",
-            "minecraft:crimson_pressure_plate",
-            "minecraft:crimson_slab",
-            "minecraft:crimson_stairs",
-            "minecraft:crimson_trapdoor",
-            "minecraft:crimson_wall_sign",
-            "minecraft:warped_button",
-            "minecraft:warped_door",
-            "minecraft:warped_double_slab",
-            "minecraft:warped_fence",
-            "minecraft:warped_fence_gate",
-            "minecraft:warped_planks",
-            "minecraft:warped_pressure_plate",
-            "minecraft:warped_slab",
-            "minecraft:warped_stairs",
-            "minecraft:warped_trapdoor",
-            "minecraft:ice"
-    };
+    const char *UNBURNABLE_BLOCKS[] = {"minecraft:crimson_button",
+                                       "minecraft:crimson_door",
+                                       "minecraft:crimson_double_slab",
+                                       "minecraft:crimson_fence",
+                                       "minecraft:crimson_fence_gate",
+                                       "minecraft:crimson_planks",
+                                       "minecraft:crimson_pressure_plate",
+                                       "minecraft:crimson_slab",
+                                       "minecraft:crimson_stairs",
+                                       "minecraft:crimson_trapdoor",
+                                       "minecraft:crimson_wall_sign",
+                                       "minecraft:warped_button",
+                                       "minecraft:warped_door",
+                                       "minecraft:warped_double_slab",
+                                       "minecraft:warped_fence",
+                                       "minecraft:warped_fence_gate",
+                                       "minecraft:warped_planks",
+                                       "minecraft:warped_pressure_plate",
+                                       "minecraft:warped_slab",
+                                       "minecraft:warped_stairs",
+                                       "minecraft:warped_trapdoor",
+                                       "minecraft:ice"};
 
     const int NEIGHBOUR_BOUND_HORIZONTAL = 300;
     const int NEIGHBOUR_BOUND_VERTICAL = 250;
@@ -156,9 +154,7 @@ namespace {
     }
 
     bool canNeighbourBurn(Level &level, const Vector3i &position) {
-        static const int OFFSETS[6][3] = {
-                {0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}
-        };
+        static const int OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
         for (const auto &offset: OFFSETS) {
             const Vector3i side = relative(position, offset[0], offset[1], offset[2]);
@@ -237,8 +233,8 @@ namespace {
         return !fireEvent.mCancelled;
     }
 
-    void tryToCatchBlockOnFire(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int bound,
-                               int age, const Vector3i &source) {
+    void tryToCatchBlockOnFire(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int bound, int age,
+                               const Vector3i &source) {
         const BlockState state = stateAt(level, position);
         const int burnAbility = FireSystem::getBurnAbility(state.mName);
 
@@ -340,8 +336,7 @@ bool FireSystem::canBeIgnitedAgainst(const std::string &identifier) {
 }
 
 bool FireSystem::canSurviveAt(Level &level, const Vector3i &position) {
-    return isTopFacingSurfaceSolid(stateAt(level, relative(position, 0, -1, 0)))
-           || canNeighbourBurn(level, position);
+    return isTopFacingSurfaceSolid(stateAt(level, relative(position, 0, -1, 0))) || canNeighbourBurn(level, position);
 }
 
 bool FireSystem::ignite(ServerNetworkHandler &owner, Level &level, const Vector3i &position, bool canLightPortal) {
@@ -382,8 +377,8 @@ void FireSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &level, const
         return;
     }
 
-    if (isFireTickEnabled(owner, level) &&
-        scheduleOf(level).mScheduled.count(RedstoneSystem::packPosition(position)) == 0)
+    if (isFireTickEnabled(owner, level)
+        && scheduleOf(level).mScheduled.count(RedstoneSystem::packPosition(position)) == 0)
         scheduleUpdate(level, position, TICK_RATE);
 
     checkRain(owner, level, position);

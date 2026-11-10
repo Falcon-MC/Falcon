@@ -6,8 +6,7 @@
 
 class MagmaBlock final : public Block {
 public:
-    explicit MagmaBlock(const Block &block) : Block(block) {
-    }
+    explicit MagmaBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

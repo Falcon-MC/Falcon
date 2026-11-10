@@ -6,9 +6,7 @@
 
 class FlowerPotBlock final : public Block {
 public:
-    explicit FlowerPotBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit FlowerPotBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 };

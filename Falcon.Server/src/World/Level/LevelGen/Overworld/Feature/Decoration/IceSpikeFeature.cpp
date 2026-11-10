@@ -24,21 +24,13 @@ namespace {
     }
 
     bool canPlaceOn(const std::string &id) {
-        return id == "minecraft:snow"
-               || id == "minecraft:snow_layer"
-               || id == "minecraft:dirt"
-               || id == "minecraft:grass_block"
-               || id == "minecraft:ice"
-               || id == "minecraft:packed_ice";
+        return id == "minecraft:snow" || id == "minecraft:snow_layer" || id == "minecraft:dirt"
+               || id == "minecraft:grass_block" || id == "minecraft:ice" || id == "minecraft:packed_ice";
     }
 
     bool canReplace(const std::string &id) {
-        return id == "minecraft:snow"
-               || id == "minecraft:snow_layer"
-               || id == "minecraft:ice"
-               || id == "minecraft:air"
-               || id == "minecraft:dirt"
-               || id == "minecraft:grass_block";
+        return id == "minecraft:snow" || id == "minecraft:snow_layer" || id == "minecraft:ice" || id == "minecraft:air"
+               || id == "minecraft:dirt" || id == "minecraft:grass_block";
     }
 
 }

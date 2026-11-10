@@ -134,15 +134,13 @@ void SurfaceOverwriteBuilder::apply(LevelChunk &chunk) const {
 
 void SurfaceOverwriteBuilder::_erodedBadlandsExtension(LevelChunk &chunk, int32_t localX, int32_t localZ,
                                                        int32_t worldX, int32_t worldZ, int32_t height) const {
-    const double surfaceTerm = std::fabs(
-            mBadlandsSurfaceNoise->getValue((double) worldX, 0.0, (double) worldZ) * 8.25);
+    const double surfaceTerm = std::fabs(mBadlandsSurfaceNoise->getValue((double) worldX, 0.0, (double) worldZ) * 8.25);
     const double pillarTerm = mBadlandsPillarNoise->getValue(worldX * 0.2, 0.0, worldZ * 0.2) * 15.0;
     const double pillarBuffer = surfaceTerm < pillarTerm ? surfaceTerm : pillarTerm;
     if (pillarBuffer <= 0.0)
         return;
 
-    const double pillarFloor = std::fabs(
-            mBadlandsPillarRoofNoise->getValue(worldX * 0.75, 0.0, worldZ * 0.75) * 1.5);
+    const double pillarFloor = std::fabs(mBadlandsPillarRoofNoise->getValue(worldX * 0.75, 0.0, worldZ * 0.75) * 1.5);
     const double bodyTerm = pillarBuffer * pillarBuffer * 2.5;
     const double roofTerm = std::ceil(pillarFloor * 50.0) + 24.0;
     const double extensionTop = 64.0 + (bodyTerm < roofTerm ? bodyTerm : roofTerm);

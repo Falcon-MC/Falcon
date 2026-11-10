@@ -26,8 +26,7 @@ void SoulSandBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vec
         ticks.queueRandomTick(position, this, 2);
 }
 
-void SoulSandBlock::onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i &position,
-                                 const BlockState &state) const {
+void SoulSandBlock::onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
     (void) state;
     BubbleColumnBlock::growAbove(ticks, position);
 }

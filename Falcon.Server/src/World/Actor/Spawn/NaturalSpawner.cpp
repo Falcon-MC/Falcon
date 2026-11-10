@@ -20,16 +20,12 @@
 
 namespace {
     // pool indices of the 26.60 population_control parser (sub_142D9F9A0, switch at 0x142DA2D95)
-    const char *const POOLS[NaturalSpawner::POOL_COUNT] = {
-            "animal", "monster", "water_animal", "villager", "ambient", "cat", "pillager"
-    };
+    const char *const POOLS[NaturalSpawner::POOL_COUNT] = {"animal",  "monster", "water_animal", "villager",
+                                                           "ambient", "cat",     "pillager"};
 
     // written by the 26.60 Dimension constructor (sub_142930ED0, 0x142932480-0x1429324F0), read by the spawner at
     // 0x1432C21A8 (rows at Dimension+0x104 and +0x120); row 0 underground, row 1 surface
-    const int32_t POOL_CAPS[2][NaturalSpawner::POOL_COUNT] = {
-            {4, 16, 36, 0, 2, 0, 8},
-            {4, 8, 36, 0, 0, 4, 8}
-    };
+    const int32_t POOL_CAPS[2][NaturalSpawner::POOL_COUNT] = {{4, 16, 36, 0, 2, 0, 8}, {4, 8, 36, 0, 0, 4, 8}};
 
     const int32_t CHUNK_SPAWN_ROLL = 2000;
     const int32_t CHUNK_SPAWN_THRESHOLD = 10;
@@ -207,8 +203,7 @@ void NaturalSpawner::_tickChunk(ServerNetworkHandler &owner, Level &level, int32
     }
 }
 
-void NaturalSpawner::_count(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ,
-                            Counts &counts) {
+void NaturalSpawner::_count(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ, Counts &counts) {
     std::unordered_set<int64_t> alive;
     for (auto &entry: owner.getActors()) {
         const ServerActor &actor = *entry.second;
@@ -241,8 +236,8 @@ void NaturalSpawner::_count(ServerNetworkHandler &owner, Level &level, int32_t c
     }
 }
 
-void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, const SpawnSite &site,
-                                   int32_t difficulty, int32_t mobCount, Counts &counts) {
+void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, const SpawnSite &site, int32_t difficulty,
+                                   int32_t mobCount, Counts &counts) {
     struct Candidate {
         const SpawnRule *mRule;
         const SpawnCondition *mCondition;
@@ -406,8 +401,7 @@ bool NaturalSpawner::_makeSite(Level &level, const Vector3i &position, const std
     const int32_t blockLight = level.getBlockLightAt(position.x, position.y, position.z);
     const int32_t skyLight = level.getSkyLightAt(position.x, position.y, position.z);
     site.mLight = std::max(blockLight, skyLight - level.getSkyLightSubtracted());
-    site.mLightWithoutWeather = std::max(blockLight,
-                                         skyLight - LightSystem::calculateSkyLightSubtracted(level, false));
+    site.mLightWithoutWeather = std::max(blockLight, skyLight - LightSystem::calculateSkyLightSubtracted(level, false));
 
     float nearest = std::numeric_limits<float>::max();
     for (const Vector3f &player: players) {

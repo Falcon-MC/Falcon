@@ -106,8 +106,8 @@ bool resolveScriptModules(const std::string &packName, const std::string &module
         version.mImplemented = known->mImplemented;
         if (!matchVersion(*known, dependency.mVersion, version)) {
             error = "Plugin [" + packName + "] - module [" + moduleUuid + "] requested invalid version ["
-                    + dependency.mVersion + "] of [" + dependency.mName + "].\n\nAvailable versions:"
-                    + availableVersions(*known) + "\n";
+                    + dependency.mVersion + "] of [" + dependency.mName
+                    + "].\n\nAvailable versions:" + availableVersions(*known) + "\n";
             return false;
         }
 

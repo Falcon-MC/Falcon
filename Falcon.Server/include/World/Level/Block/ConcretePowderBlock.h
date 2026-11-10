@@ -7,8 +7,7 @@
 // the sixteen colours of concrete powder; falling is FallingBlockSystem's
 class ConcretePowderBlock : public Block {
 public:
-    explicit ConcretePowderBlock(const Block &block) : Block(block) {
-    }
+    explicit ConcretePowderBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

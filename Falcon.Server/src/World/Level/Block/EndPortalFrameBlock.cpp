@@ -90,16 +90,14 @@ bool EndPortalFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &
         else
             inventory.setItemInHand(std::move(updated));
 
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     }
 
     tryCompletePortal(level, position, &owner);
     return true;
 }
 
-bool EndPortalFrameBlock::tryCompletePortal(Level &level, const Vector3i &framePosition,
-                                            ServerNetworkHandler *owner) {
+bool EndPortalFrameBlock::tryCompletePortal(Level &level, const Vector3i &framePosition, ServerNetworkHandler *owner) {
     int32_t minX = 0;
     int32_t minZ = 0;
     bool hasFrame = false;

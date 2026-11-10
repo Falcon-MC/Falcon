@@ -129,11 +129,9 @@ void GriddedFeature::apply(ChunkGenerateContext &context) {
         for (int32_t z = 0; z < getSplit(); z++) {
             mRandom.setSeed(level.getSeed() ^ chunkHash(chunkX, chunkZ) ^ (x + z) ^ javaStringHash(name()));
 
-            const int32_t placeX = getDistanceToNextField()
-                                   + mRandom.nextInt(splitLength() - getDistanceToNextField())
+            const int32_t placeX = getDistanceToNextField() + mRandom.nextInt(splitLength() - getDistanceToNextField())
                                    + (x * splitLength()) + (chunkX << 4);
-            const int32_t placeZ = getDistanceToNextField()
-                                   + mRandom.nextInt(splitLength() - getDistanceToNextField())
+            const int32_t placeZ = getDistanceToNextField() + mRandom.nextInt(splitLength() - getDistanceToNextField())
                                    + (z * splitLength()) + (chunkZ << 4);
             const int32_t placeY = object.getHeightAt(placeX, placeZ);
             if (placeY < LevelChunk::MIN_Y)

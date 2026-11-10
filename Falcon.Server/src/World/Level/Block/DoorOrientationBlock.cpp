@@ -39,8 +39,8 @@ bool DoorOrientationBlock::canSurvive(Level &level, const Vector3i &position, co
 }
 
 std::vector<BlockPlacementEntry> DoorOrientationBlock::getPlacementBlocks(Level &level, const Vector3i &position,
-                                                                         const BlockState &state,
-                                                                         int playerFacing) const {
+                                                                          const BlockState &state,
+                                                                          int playerFacing) const {
     (void) level;
     (void) playerFacing;
 
@@ -50,8 +50,7 @@ std::vector<BlockPlacementEntry> DoorOrientationBlock::getPlacementBlocks(Level 
     Tag states = state.mStates;
     states.putByte("upper_block_bit", 1);
 
-    return {BlockPlacementEntry{Vector3i(position.x, position.y + 1, position.z),
-                                BlockState(state.mName, states)}};
+    return {BlockPlacementEntry{Vector3i(position.x, position.y + 1, position.z), BlockState(state.mName, states)}};
 }
 
 bool DoorOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
@@ -88,8 +87,7 @@ BlockState DoorOrientationBlock::applyPlacementOrientation(const BlockState &sta
     Tag states = result.mStates;
 
     if (states.contains("minecraft:cardinal_direction"))
-        states.putString("minecraft:cardinal_direction",
-                         cardinalName(RedstoneFace::rotateY(context.mPlayerFacing)));
+        states.putString("minecraft:cardinal_direction", cardinalName(RedstoneFace::rotateY(context.mPlayerFacing)));
 
     if (states.contains("door_hinge_bit")) {
         const bool rightHinged = DoorBlock::isRightHinged(context.mLevel, result.mName, context.mBlockPosition,
@@ -104,10 +102,14 @@ namespace {
     // south, west, north, east
     int32_t doorDirection(const BlockState &state) {
         const std::string cardinal = state.mStates.getString("minecraft:cardinal_direction", "");
-        if (cardinal == "south") return 0;
-        if (cardinal == "west") return 1;
-        if (cardinal == "north") return 2;
-        if (cardinal == "east") return 3;
+        if (cardinal == "south")
+            return 0;
+        if (cardinal == "west")
+            return 1;
+        if (cardinal == "north")
+            return 2;
+        if (cardinal == "east")
+            return 3;
         return state.mStates.getInt("direction", 0) & 3;
     }
 }

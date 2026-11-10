@@ -9,9 +9,7 @@ class RespawnAnchorBlock final : public Block {
 public:
     static constexpr int MAX_CHARGE = 4;
 
-    explicit RespawnAnchorBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit RespawnAnchorBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

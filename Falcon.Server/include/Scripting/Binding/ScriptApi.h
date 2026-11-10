@@ -25,11 +25,7 @@ class ServerPlayer;
 class ServerActor;
 
 // what the running script may touch: early execution before startup ends, restricted inside before events
-enum class ScriptPrivilege {
-    Normal,
-    Early,
-    Restricted
-};
+enum class ScriptPrivilege { Normal, Early, Restricted };
 
 // one behavior pack's scripts: its own context, module versions and official surface
 class ScriptApi {
@@ -86,7 +82,7 @@ public:
         mPrivilege = privilege;
     }
 
-    template<typename T>
+    template <typename T>
     T *native(JSValueConst value) const {
         return dynamic_cast<T *>((ScriptNative *) JS_GetOpaque(value, mNativeClassId));
     }
@@ -210,12 +206,7 @@ public:
     }
 
     struct Binding {
-        enum class Kind {
-            Function,
-            Getter,
-            Setter,
-            Constructor
-        };
+        enum class Kind { Function, Getter, Setter, Constructor };
 
         std::string mName;
         Kind mKind = Kind::Function;
@@ -240,14 +231,13 @@ public:
     // every signal has subscribe and unsubscribe, even where the definitions put them on a base interface
     void signalMethod(JSValueConst target, const char *cls, const char *name, JSCFunction *function);
 
-    bool methodMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *function,
-                     int length, int magic);
+    bool methodMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *function, int length,
+                     int magic);
 
     bool property(JSValueConst target, const char *cls, const char *name, JSCFunction *getter,
                   JSCFunction *setter = nullptr);
 
-    bool propertyMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *getter,
-                       int magic);
+    bool propertyMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *getter, int magic);
 
     // constructor and prototype of an official class; constructors throw unless a native constructor is given
     JSValue defineClass(const std::string &name, JSCFunction *constructor = nullptr, int length = 0);
@@ -300,8 +290,8 @@ private:
 
     JSValue _makeBlockEvent(const Level &level, const Vector3i &position);
 
-    void _fireComponents(std::unordered_map<std::string, JSValue> &handlers,
-                         const std::vector<std::string> *components, const char *hook, JSValue event);
+    void _fireComponents(std::unordered_map<std::string, JSValue> &handlers, const std::vector<std::string> *components,
+                         const char *hook, JSValue event);
 
     JSValue _makeSignalHolder(const char *className, const char *signalOwner, const char *keyPrefix);
 

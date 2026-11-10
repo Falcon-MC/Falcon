@@ -6,8 +6,7 @@
 #include <cmath>
 
 LegacyBigSpruceTree::LegacyBigSpruceTree(float leafStartHeightMultiplier, int32_t baseLeafRadius)
-        : mLeafStartHeightMultiplier(leafStartHeightMultiplier), mBaseLeafRadius(baseLeafRadius) {
-}
+        : mLeafStartHeightMultiplier(leafStartHeightMultiplier), mBaseLeafRadius(baseLeafRadius) {}
 
 void LegacyBigSpruceTree::setRandomTreeHeight(IRandom &random) {
     mTreeHeight = random.nextInt(15) + 20;

@@ -6,9 +6,7 @@
 
 class CandleBlock final : public Block {
 public:
-    explicit CandleBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit CandleBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

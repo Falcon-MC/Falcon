@@ -63,7 +63,7 @@ void LootEntry::roll(const LootContext &context, std::vector<LootDrop> &drops, i
         function->run(drop, context);
 
     const std::string named = drop.mIdentifier.find(':') == std::string::npos ? "minecraft:" + drop.mIdentifier
-                                                                               : drop.mIdentifier;
+                                                                              : drop.mIdentifier;
     const std::string resolved = LegacyItemMapper::getInstance().resolve(named, drop.mData);
     if (resolved != named)
         drop.mData = 0;

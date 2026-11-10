@@ -21,8 +21,7 @@ namespace {
             {"minecraft:infested_mossy_stone_bricks", "minecraft:mossy_stone_bricks"},
             {"minecraft:infested_cracked_stone_bricks", "minecraft:cracked_stone_bricks"},
             {"minecraft:infested_chiseled_stone_bricks", "minecraft:chiseled_stone_bricks"},
-            {"minecraft:infested_deepslate", "minecraft:deepslate"}
-    };
+            {"minecraft:infested_deepslate", "minecraft:deepslate"}};
 
     const EntityEventType SILVERFISH_SPAWN_ANIMATION = (EntityEventType) 27;
 }

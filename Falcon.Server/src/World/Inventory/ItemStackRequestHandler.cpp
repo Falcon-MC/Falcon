@@ -168,16 +168,13 @@ namespace {
             return (slot == 0 || slot == 50) ? &context.mCreatedOutput : nullptr;
         }
         if (container == ContainerSlotType::LevelEntity || container == ContainerSlotType::Barrel
-            || container == ContainerSlotType::ShulkerBox
-            || container == ContainerSlotType::CrafterBlockContainer) {
-            if (context.mOpenContainer == nullptr || slot < 0
-                || (size_t) slot >= context.mContainerSlots.size()) {
+            || container == ContainerSlotType::ShulkerBox || container == ContainerSlotType::CrafterBlockContainer) {
+            if (context.mOpenContainer == nullptr || slot < 0 || (size_t) slot >= context.mContainerSlots.size()) {
                 return nullptr;
             }
             return &context.mContainerSlots[(size_t) slot];
         }
-        if (container == ContainerSlotType::CraftingInput
-            && slot >= PlayerInventory::CRAFTING_TABLE_NETWORK_SLOT_FIRST
+        if (container == ContainerSlotType::CraftingInput && slot >= PlayerInventory::CRAFTING_TABLE_NETWORK_SLOT_FIRST
             && slot < PlayerInventory::CRAFTING_TABLE_NETWORK_SLOT_FIRST + PlayerInventory::CRAFTING_TABLE_SIZE
             && !context.mCraftingTableOpen) {
             return nullptr;
@@ -277,8 +274,8 @@ namespace {
         return BundleInventory::getTotalWeight(projected, *context.mCodecContext) <= BundleInventory::MAX_FILL;
     }
 
-    bool checkBundleCapacity(PlayerInventory &inventory, RequestContext &context,
-                             const FullContainerName &destination, int slot, const ItemStack &source, int count) {
+    bool checkBundleCapacity(PlayerInventory &inventory, RequestContext &context, const FullContainerName &destination,
+                             int slot, const ItemStack &source, int count) {
         if (destination.mContainer != ContainerSlotType::DynamicContainer) {
             return true;
         }
@@ -362,8 +359,7 @@ namespace {
 
     bool moveItems(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                    std::vector<TouchedSlot> &touched) {
-        ItemStack *source = resolveSlot(inventory, context, action.mSource.mContainerName,
-                                        action.mSource.mSlot);
+        ItemStack *source = resolveSlot(inventory, context, action.mSource.mContainerName, action.mSource.mSlot);
         ItemStack *destination = resolveSlot(inventory, context, action.mDestination.mContainerName,
                                              action.mDestination.mSlot);
 
@@ -430,8 +426,7 @@ namespace {
 
     bool swapItems(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                    std::vector<TouchedSlot> &touched) {
-        ItemStack *source = resolveSlot(inventory, context, action.mSource.mContainerName,
-                                        action.mSource.mSlot);
+        ItemStack *source = resolveSlot(inventory, context, action.mSource.mContainerName, action.mSource.mSlot);
         ItemStack *destination = resolveSlot(inventory, context, action.mDestination.mContainerName,
                                              action.mDestination.mSlot);
 
@@ -472,8 +467,7 @@ namespace {
 
     bool removeItems(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched, bool dropped = false) {
-        ItemStack *source = resolveSlot(inventory, context, action.mSource.mContainerName,
-                                        action.mSource.mSlot);
+        ItemStack *source = resolveSlot(inventory, context, action.mSource.mContainerName, action.mSource.mSlot);
         if (source == nullptr || source->isAir() || action.mCount <= 0 || action.mCount > source->mCount) {
             return false;
         }
@@ -483,11 +477,11 @@ namespace {
         }
 
         if (context.mCraftingActive && action.mType == ItemStackRequestActionType::Consume) {
-            const int gridSlot = craftingSlotIndex(action.mSource.mContainerName.mContainer,
-                                                   action.mSource.mSlot, context.mCraftingGridWidth);
+            const int gridSlot = craftingSlotIndex(action.mSource.mContainerName.mContainer, action.mSource.mSlot,
+                                                   context.mCraftingGridWidth);
             if (gridSlot < 0 || (size_t) gridSlot >= context.mCraftingRequired.size()
                 || context.mCraftingConsumed[(size_t) gridSlot] + action.mCount
-                   > context.mCraftingRequired[(size_t) gridSlot]) {
+                           > context.mCraftingRequired[(size_t) gridSlot]) {
                 return false;
             }
             context.mCraftingConsumed[(size_t) gridSlot] += action.mCount;
@@ -580,8 +574,8 @@ namespace {
         enchanted.mCount = 1;
         if (context.mCodecContext != nullptr && enchanted.mDefinition != nullptr
             && enchanted.mDefinition->getIdentifier() == "minecraft:book") {
-            std::shared_ptr<ItemDefinition> enchantedBook =
-                    context.mCodecContext->getItemDefinitions().getDefinition("minecraft:enchanted_book");
+            std::shared_ptr<ItemDefinition> enchantedBook = context.mCodecContext->getItemDefinitions().getDefinition(
+                    "minecraft:enchanted_book");
             if (enchantedBook != nullptr)
                 enchanted.mDefinition = std::move(enchantedBook);
         }
@@ -732,9 +726,8 @@ namespace {
 
         // the request doesn't say which grid: any item left in the 3x3 table grid means the table
         const int gridWidth = tableHasItems ? 3 : 2;
-        const std::vector<ItemStack> &grid = tableHasItems
-                                             ? inventory.getCraftingTableContents()
-                                             : inventory.getCraftingContents();
+        const std::vector<ItemStack> &grid = tableHasItems ? inventory.getCraftingTableContents()
+                                                           : inventory.getCraftingContents();
         CraftingRecipeMatch match;
         if (!CraftingManager::matchNetworkRecipe(grid, gridWidth, netId, *context.mRecipeOutputs,
                                                  *context.mRecipeSourceIndices, match)) {
@@ -866,8 +859,8 @@ namespace {
             case ItemStackRequestActionType::Swap:
                 if (rejectedByLock(inventory, context, action.mSource.mContainerName, action.mSource.mSlot,
                                    action.mDestination.mContainerName)
-                    || rejectedByLock(inventory, context, action.mDestination.mContainerName,
-                                      action.mDestination.mSlot, action.mSource.mContainerName))
+                    || rejectedByLock(inventory, context, action.mDestination.mContainerName, action.mDestination.mSlot,
+                                      action.mSource.mContainerName))
                     return false;
                 break;
 
@@ -928,24 +921,13 @@ namespace {
 
 }
 
-ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &inventory, const ItemStackRequest &request,
-                                                       const std::vector<CreativeItemData> &creativeItems,
-                                                       const std::vector<ItemStack> &recipeOutputs,
-                                                       const std::vector<uint32_t> &recipeSourceIndices,
-                                                       bool craftingTableOpen,
-                                                       bool furnaceOpen,
-                                                       Container *openContainer,
-                                                       std::vector<ItemStack> *outDroppedItems,
-                                                       const PacketCodecContext *codecContext,
-                                                       std::vector<BundleSyncData> *outBundles,
-                                                       int32_t playerXpLevel,
-                                                       bool creativeMode,
-                                                       int32_t *outEnchantLevelsConsumed,
-                                                       bool anvilOpen,
-                                                       int32_t *outAnvilLevelsConsumed,
-                                                       bool *outAnvilUsed,
-                                                       const CartographyRecipes::Maps *cartographyMaps,
-                                                       CartographyLock *outCartographyLock) {
+ItemStackResponseEntry ItemStackRequestHandler::execute(
+        PlayerInventory &inventory, const ItemStackRequest &request, const std::vector<CreativeItemData> &creativeItems,
+        const std::vector<ItemStack> &recipeOutputs, const std::vector<uint32_t> &recipeSourceIndices,
+        bool craftingTableOpen, bool furnaceOpen, Container *openContainer, std::vector<ItemStack> *outDroppedItems,
+        const PacketCodecContext *codecContext, std::vector<BundleSyncData> *outBundles, int32_t playerXpLevel,
+        bool creativeMode, int32_t *outEnchantLevelsConsumed, bool anvilOpen, int32_t *outAnvilLevelsConsumed,
+        bool *outAnvilUsed, const CartographyRecipes::Maps *cartographyMaps, CartographyLock *outCartographyLock) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -1105,8 +1087,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(PlayerInventory &invento
             || slot.mContainerName.mContainer == ContainerSlotType::Barrel
             || slot.mContainerName.mContainer == ContainerSlotType::ShulkerBox
             || slot.mContainerName.mContainer == ContainerSlotType::CrafterBlockContainer) {
-            if (openContainer == nullptr || slot.mSlot < 0
-                || (size_t) slot.mSlot >= context.mContainerSlots.size()) {
+            if (openContainer == nullptr || slot.mSlot < 0 || (size_t) slot.mSlot >= context.mContainerSlots.size()) {
                 continue;
             }
 

@@ -110,7 +110,8 @@ void SquidMovementGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     }
 
     if (!_tickFlee(owner, mob)) {
-        if (!mHasDirection || std::uniform_int_distribution<int32_t>(0, DIRECTION_CHANGE_CHANCE - 1)(squidRandom()) == 0)
+        if (!mHasDirection
+            || std::uniform_int_distribution<int32_t>(0, DIRECTION_CHANGE_CHANCE - 1)(squidRandom()) == 0)
             _pickDirection();
 
         const int32_t x = (int32_t) std::floor(position.x);

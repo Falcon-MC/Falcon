@@ -114,7 +114,7 @@ bool StructureFeature::isStartChunk(const ChunkGenerator &generator, int32_t chu
 }
 
 std::vector<StructureChunkPos> StructureFeature::getCandidatesIn(int64_t seed, int32_t minChunkX, int32_t minChunkZ,
-                                                                int32_t maxChunkX, int32_t maxChunkZ) const {
+                                                                 int32_t maxChunkX, int32_t maxChunkZ) const {
     std::vector<StructureChunkPos> candidates;
     for (int32_t regionX = floorDiv(minChunkX, mSpacing); regionX <= floorDiv(maxChunkX, mSpacing); ++regionX) {
         for (int32_t regionZ = floorDiv(minChunkZ, mSpacing); regionZ <= floorDiv(maxChunkZ, mSpacing); ++regionZ) {
@@ -189,7 +189,7 @@ const std::vector<const StructureFeature *> &StructureFeature::getAll() {
 }
 
 const StructureFeature *StructureFeature::get(const std::string &name) {
-    for (const StructureFeature *feature : _registry()) {
+    for (const StructureFeature *feature: _registry()) {
         if (feature->getName() == name)
             return feature;
     }

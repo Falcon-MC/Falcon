@@ -36,9 +36,8 @@ private:
 
     using Pools = std::tuple<Pool<StateVectorComponent>, Pool<MoveInputComponent>, Pool<MovementAbilitiesComponent>,
                              Pool<PlayerLiquidContactComponent>, Pool<PlayerPredictionComponent>,
-                             Pool<PlayerTravelComponent>, Pool<PlayerPoseComponent>,
-                             Pool<AutoClimbTravelFlagComponent>, Pool<WaterTravelFlagComponent>,
-                             Pool<LiquidTravelFlagComponent>>;
+                             Pool<PlayerTravelComponent>, Pool<PlayerPoseComponent>, Pool<AutoClimbTravelFlagComponent>,
+                             Pool<WaterTravelFlagComponent>, Pool<LiquidTravelFlagComponent>>;
 
     Pools mPools;
 };

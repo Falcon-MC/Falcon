@@ -2,11 +2,7 @@
 
 #include <cstdint>
 
-enum class DimensionType : int32_t {
-    Overworld = 0,
-    Nether = 1,
-    TheEnd = 2
-};
+enum class DimensionType : int32_t { Overworld = 0, Nether = 1, TheEnd = 2 };
 
 class Dimension {
 public:

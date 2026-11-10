@@ -202,11 +202,16 @@ namespace {
                     --mDepth;
                     return valid;
                 }
-                case '"': return parseString();
-                case 't': return parseLiteral("true");
-                case 'f': return parseLiteral("false");
-                case 'n': return parseLiteral("null");
-                default: return parseNumber();
+                case '"':
+                    return parseString();
+                case 't':
+                    return parseLiteral("true");
+                case 'f':
+                    return parseLiteral("false");
+                case 'n':
+                    return parseLiteral("null");
+                default:
+                    return parseNumber();
             }
         }
 
@@ -286,8 +291,8 @@ namespace {
                         if (!std::isxdigit((unsigned char) mValue[mPosition++]))
                             return false;
                     }
-                } else if (escape != '"' && escape != '\\' && escape != '/' && escape != 'b' &&
-                           escape != 'f' && escape != 'n' && escape != 'r' && escape != 't') {
+                } else if (escape != '"' && escape != '\\' && escape != '/' && escape != 'b' && escape != 'f'
+                           && escape != 'n' && escape != 'r' && escape != 't') {
                     return false;
                 }
             }
@@ -396,17 +401,16 @@ void ServerNetworkHandler::boundSkin(SerializedSkin &skin) {
     // a login is not refused over its cosmetics: an image that lies about its size is dropped
     if (!isValidSkinImage(skin.mCapeData))
         skin.mCapeData = SkinImageData();
-    skin.mAnimations.erase(std::remove_if(skin.mAnimations.begin(), skin.mAnimations.end(),
-                                          [](const SkinAnimationData &animation) {
-                                              return !isValidSkinImage(animation.mImage);
-                                          }), skin.mAnimations.end());
+    skin.mAnimations.erase(
+            std::remove_if(skin.mAnimations.begin(), skin.mAnimations.end(),
+                           [](const SkinAnimationData &animation) { return !isValidSkinImage(animation.mImage); }),
+            skin.mAnimations.end());
 }
 
 ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
                                            TransportLayer transport)
-        : mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers),
-          mIsListening(false), mNextRuntimeId(1),
-          mPlayerData(ServerPaths::file("players")), mOps(ServerPaths::file("ops.txt")),
+        : mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers), mIsListening(false),
+          mNextRuntimeId(1), mPlayerData(ServerPaths::file("players")), mOps(ServerPaths::file("ops.txt")),
           mAllowList(ServerPaths::file("allowlist.json")), mBanList(ServerPaths::file("banned-players.json")),
           mIpBanList(ServerPaths::file("banned-ips.json")) {
     mPlayerMovementRegistry = std::make_unique<PlayerMovementRegistry>();
@@ -421,9 +425,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
         mNetworkHandler.reset(new NetworkHandler(std::move(netherNet)));
         mNetworkHandler->setProfiler(&mProfiler);
         mNetworkHandler->addListener(this);
-        mNetworkHandler->setContextResolver([this](const NetworkIdentifier &id) {
-            return &getCodecContext(id);
-        });
+        mNetworkHandler->setContextResolver([this](const NetworkIdentifier &id) { return &getCodecContext(id); });
     }
 
     mAnnouncement.mServerName = serverName;
@@ -498,8 +500,11 @@ void ServerNetworkHandler::_registerVanillaDefinitions() {
 }
 
 ServerNetworkHandler::~ServerNetworkHandler() {
-    try { stopServerListening(); } catch (...) {
-        if (mNetworkHandler != nullptr) mNetworkHandler->disconnect();
+    try {
+        stopServerListening();
+    } catch (...) {
+        if (mNetworkHandler != nullptr)
+            mNetworkHandler->disconnect();
     }
 
     if (mNetworkHandler != nullptr)
@@ -583,8 +588,8 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     }
 
     const int64_t levelSeed = properties.getLevelSeed().empty()
-                              ? randomSeed()
-                              : OverworldGenerator::parseSeed(properties.getLevelSeed());
+                                      ? randomSeed()
+                                      : OverworldGenerator::parseSeed(properties.getLevelSeed());
 
     for (World *world: mWorlds.getWorlds())
         mWorlds.remove(world->getId());
@@ -671,8 +676,7 @@ void ServerNetworkHandler::_validatePackDependencies() {
         const std::vector<std::string> behaviorUuids = mBehaviorPacks.getLoadedUuids();
         available.insert(available.end(), behaviorUuids.begin(), behaviorUuids.end());
 
-        const size_t removed = mResourcePacks.pruneUnsatisfied(available)
-                               + mBehaviorPacks.pruneUnsatisfied(available);
+        const size_t removed = mResourcePacks.pruneUnsatisfied(available) + mBehaviorPacks.pruneUnsatisfied(available);
         if (removed == 0)
             break;
     }
@@ -703,7 +707,12 @@ void ServerNetworkHandler::stopServerListening() {
     mIsListening = false;
     struct DisconnectOnExit {
         NetworkHandler *handler;
-        ~DisconnectOnExit() { try { handler->disconnect(); } catch (...) {} }
+        ~DisconnectOnExit() {
+            try {
+                handler->disconnect();
+            } catch (...) {
+            }
+        }
     } disconnectOnExit{mNetworkHandler.get()};
 
     std::exception_ptr error;
@@ -725,7 +734,8 @@ void ServerNetworkHandler::stopServerListening() {
             ServerPlayer &player = entry.second;
 
             finish([this, &player]() {
-                if (!player.getName().empty()) _savePlayerData(player, true);
+                if (!player.getName().empty())
+                    _savePlayerData(player, true);
             });
             finish([this, &entry, &player]() {
                 _disconnect(entry.first, DisconnectReason::Shutdown, player.localize("falcon.disconnect.disconnected"));
@@ -749,7 +759,8 @@ void ServerNetworkHandler::stopServerListening() {
     finish([this]() { mNetworkHandler->disconnect(); });
 
     LOG_INFO(LogAreaID::Server, "Server stopped.");
-    if (error) std::rethrow_exception(error);
+    if (error)
+        std::rethrow_exception(error);
 }
 
 void ServerNetworkHandler::tick(bool paused) {
@@ -781,7 +792,8 @@ void ServerNetworkHandler::tick(bool paused) {
             std::lock_guard<std::mutex> lock(mMainThreadTaskMutex);
             tasks.swap(mMainThreadTasks);
         }
-        for (const auto &task: tasks) task();
+        for (const auto &task: tasks)
+            task();
         for (Level *level: getLevels()) {
             level->drainCompletedChunks();
             level->processGeneratedChanges();
@@ -958,8 +970,8 @@ void ServerNetworkHandler::tick(bool paused) {
     }
     mProfiler.endTick((uint32_t) mPlayers.size(), loadedChunks, pendingChunkTasks, fluidsProcessed, fluidsScheduled);
 
-    const double elapsedMs = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - tickStart).count();
+    const double elapsedMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tickStart).count();
 
     mTickDurationSamples.push_back(elapsedMs);
     if (mTickDurationSamples.size() > TICK_SAMPLE_COUNT)
@@ -1078,9 +1090,7 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
 
     ServerPlayer *player = _getPlayer(id);
     World *playerWorld = player != nullptr ? &getWorldFor(*player) : nullptr;
-    const std::string playerName = player != nullptr && !player->getName().empty()
-                                   ? player->getName()
-                                   : id.toString();
+    const std::string playerName = player != nullptr && !player->getName().empty() ? player->getName() : id.toString();
     if (player != nullptr && !player->getName().empty()) {
         stopSleep(*player);
         if (player->isRiding())
@@ -1114,16 +1124,14 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
 }
 
 int64_t ServerNetworkHandler::getUptimeSeconds() const {
-    return std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::steady_clock::now() - mStartTime).count();
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - mStartTime).count();
 }
 
 double ServerNetworkHandler::getTicksPerSecond() const {
     if (mTickStartSamples.size() < 2)
         return 20.0;
 
-    const double span = std::chrono::duration<double>(
-            mTickStartSamples.back() - mTickStartSamples.front()).count();
+    const double span = std::chrono::duration<double>(mTickStartSamples.back() - mTickStartSamples.front()).count();
     if (span <= 0.0)
         return 20.0;
 
@@ -1154,8 +1162,7 @@ double ServerNetworkHandler::getPeakMillisecondsPerTick() const {
 
 void ServerNetworkHandler::sendModalForm(ServerPlayer &player, uint32_t formId, const std::string &formData,
                                          ModalFormCallback callback) {
-    if (!player.isSpawned() || formData.empty() || formData.size() > 1024 * 1024 ||
-        !JsonValidator(formData).parse())
+    if (!player.isSpawned() || formData.empty() || formData.size() > 1024 * 1024 || !JsonValidator(formData).parse())
         return;
 
     auto &callbacks = mModalFormCallbacks[player.getNetworkIdentifier()];
@@ -1292,39 +1299,39 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
     // login/cache packets sent before a player exists, plus one entry per handle() override;
     // anything else is dropped before createPacket; _validateServerboundPackets() checks it at startup
     static const std::unordered_set<MinecraftPacketIds> allowed = {
-        MinecraftPacketIds::RequestNetworkSettings,
-        MinecraftPacketIds::Login,
-        MinecraftPacketIds::ClientToServerHandshake,
-        MinecraftPacketIds::ClientCacheStatus,
-        MinecraftPacketIds::ResourcePackClientResponse,
-        MinecraftPacketIds::ResourcePackChunkRequest,
-        MinecraftPacketIds::SetLocalPlayerAsInitialized,
-        MinecraftPacketIds::NetworkStackLatency,
-        MinecraftPacketIds::PlayerAuthInput,
-        MinecraftPacketIds::CompletedUsingItem,
-        MinecraftPacketIds::CommandRequest,
-        MinecraftPacketIds::Text,
-        MinecraftPacketIds::PacketViolationWarning,
-        MinecraftPacketIds::RequestChunkRadius,
-        MinecraftPacketIds::SubChunkRequest,
-        MinecraftPacketIds::RequestAbility,
-        MinecraftPacketIds::MobEquipment,
-        MinecraftPacketIds::PlayerHotbar,
-        MinecraftPacketIds::ItemStackRequest,
-        MinecraftPacketIds::CraftingEvent,
-        MinecraftPacketIds::InventoryTransaction,
-        MinecraftPacketIds::ContainerClose,
-        MinecraftPacketIds::Interact,
-        MinecraftPacketIds::PlayerAction,
-        MinecraftPacketIds::Respawn,
-        MinecraftPacketIds::SetPlayerGameType,
-        MinecraftPacketIds::BlockActorData,
-        MinecraftPacketIds::CommandBlockUpdate,
-        MinecraftPacketIds::BlockPickRequest,
-        MinecraftPacketIds::ActorPickRequest,
-        MinecraftPacketIds::Emote,
-        MinecraftPacketIds::ModalFormResponse,
-        MinecraftPacketIds::PlayerSkin,
+            MinecraftPacketIds::RequestNetworkSettings,
+            MinecraftPacketIds::Login,
+            MinecraftPacketIds::ClientToServerHandshake,
+            MinecraftPacketIds::ClientCacheStatus,
+            MinecraftPacketIds::ResourcePackClientResponse,
+            MinecraftPacketIds::ResourcePackChunkRequest,
+            MinecraftPacketIds::SetLocalPlayerAsInitialized,
+            MinecraftPacketIds::NetworkStackLatency,
+            MinecraftPacketIds::PlayerAuthInput,
+            MinecraftPacketIds::CompletedUsingItem,
+            MinecraftPacketIds::CommandRequest,
+            MinecraftPacketIds::Text,
+            MinecraftPacketIds::PacketViolationWarning,
+            MinecraftPacketIds::RequestChunkRadius,
+            MinecraftPacketIds::SubChunkRequest,
+            MinecraftPacketIds::RequestAbility,
+            MinecraftPacketIds::MobEquipment,
+            MinecraftPacketIds::PlayerHotbar,
+            MinecraftPacketIds::ItemStackRequest,
+            MinecraftPacketIds::CraftingEvent,
+            MinecraftPacketIds::InventoryTransaction,
+            MinecraftPacketIds::ContainerClose,
+            MinecraftPacketIds::Interact,
+            MinecraftPacketIds::PlayerAction,
+            MinecraftPacketIds::Respawn,
+            MinecraftPacketIds::SetPlayerGameType,
+            MinecraftPacketIds::BlockActorData,
+            MinecraftPacketIds::CommandBlockUpdate,
+            MinecraftPacketIds::BlockPickRequest,
+            MinecraftPacketIds::ActorPickRequest,
+            MinecraftPacketIds::Emote,
+            MinecraftPacketIds::ModalFormResponse,
+            MinecraftPacketIds::PlayerSkin,
     };
 
     return allowed;
@@ -1340,13 +1347,12 @@ void ServerNetworkHandler::_validateServerboundPackets() const {
     const ProtocolCodec &codec = mCodecContext.getCodec();
     for (const MinecraftPacketIds id: _serverboundPackets()) {
         if (!codec.supports(id))
-            LOG_ERROR(LogAreaID::Network, "Serverbound packet %d is in the allowlist but not in the codec",
-                      (int) id);
+            LOG_ERROR(LogAreaID::Network, "Serverbound packet %d is in the allowlist but not in the codec", (int) id);
     }
 }
 
 ServerNetworkHandler::LoginGate ServerNetworkHandler::_checkLoginState(const NetworkIdentifier &id,
-                                                                     MinecraftPacketIds packetId) {
+                                                                       MinecraftPacketIds packetId) {
     using LoginState = ServerPlayer::LoginState;
 
     if (packetId == MinecraftPacketIds::PacketViolationWarning)
@@ -1375,7 +1381,7 @@ ServerNetworkHandler::LoginGate ServerNetworkHandler::_checkLoginState(const Net
             break;
         default:
             return player != nullptr && player->getLoginState() >= LoginState::StartGameSent ? LoginGate::Accept
-                                                                                            : LoginGate::Ignore;
+                                                                                             : LoginGate::Ignore;
     }
     return expected ? LoginGate::Accept : LoginGate::Reject;
 }
@@ -1796,8 +1802,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SetPlayerGa
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const EmotePacket &packet) {
     ServerPlayer *player = _getPlayer(id);
-    if (player == nullptr || !player->isSpawned() || packet.mRuntimeActorId != player->getRuntimeId() ||
-        packet.mEmoteId.empty() || packet.mEmoteId.size() > 256)
+    if (player == nullptr || !player->isSpawned() || packet.mRuntimeActorId != player->getRuntimeId()
+        || packet.mEmoteId.empty() || packet.mEmoteId.size() > 256)
         return;
 
     EmotePacket emote = packet;
@@ -1823,8 +1829,9 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormRe
         return;
     if (cancelled && (int) packet.mCancelReason > (int) ModalFormResponsePacket::CancelReason::UserBusy)
         return;
-    if (!cancelled && (packet.mFormData.empty() || packet.mFormData.size() > 1024 * 1024 ||
-                       !JsonValidator(packet.mFormData).parse()))
+    if (!cancelled
+        && (packet.mFormData.empty() || packet.mFormData.size() > 1024 * 1024
+            || !JsonValidator(packet.mFormData).parse()))
         return;
 
     auto playerCallbacks = mModalFormCallbacks.find(id);
@@ -1863,8 +1870,9 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerSkinP
     normalizeSkin(skin);
 
     const SerializedSkin &currentSkin = player->getSkin();
-    if (currentSkin.mFullSkinId == skin.mFullSkinId && currentSkin.mSkinData.mWidth == skin.mSkinData.mWidth &&
-        currentSkin.mSkinData.mHeight == skin.mSkinData.mHeight && currentSkin.mSkinData.mData == skin.mSkinData.mData)
+    if (currentSkin.mFullSkinId == skin.mFullSkinId && currentSkin.mSkinData.mWidth == skin.mSkinData.mWidth
+        && currentSkin.mSkinData.mHeight == skin.mSkinData.mHeight
+        && currentSkin.mSkinData.mData == skin.mSkinData.mData)
         return;
 
     player->setSkin(skin);
@@ -1963,9 +1971,8 @@ namespace {
         if (player.getGameType() != (int32_t) GameType::Creative)
             return;
 
-        const int slot = hotbarSlot >= 0 && hotbarSlot < PlayerInventory::HOTBAR_SIZE
-                             ? hotbarSlot
-                             : inventory.getSelectedSlot();
+        const int slot = hotbarSlot >= 0 && hotbarSlot < PlayerInventory::HOTBAR_SIZE ? hotbarSlot
+                                                                                      : inventory.getSelectedSlot();
 
         item.mCount = 1;
         inventory.setItem(slot, std::move(item));
@@ -2079,8 +2086,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ActorPickRe
         return;
 
     for (const std::unique_ptr<ItemActor> &actor: mItemEntities) {
-        if (actor->isRemoved() || actor->getRuntimeId() != packet.mRuntimeActorId ||
-            !actor->sharesLevelWith(*player))
+        if (actor->isRemoved() || actor->getRuntimeId() != packet.mRuntimeActorId || !actor->sharesLevelWith(*player))
             continue;
 
         const Vector3f position = player->getPosition();
@@ -2136,8 +2142,7 @@ void ServerNetworkHandler::broadcastSystemMessage(const std::string &message) {
     }
 }
 
-void ServerNetworkHandler::broadcastTranslation(const std::string &key,
-                                                const std::vector<std::string> &parameters) {
+void ServerNetworkHandler::broadcastTranslation(const std::string &key, const std::vector<std::string> &parameters) {
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned())
             entry.second.sendTranslation(key, parameters);
@@ -2215,10 +2220,10 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerAuthI
     if (!_allowPacket(id, RateLimitedPacket::Movement))
         return;
 
-    if (!std::isfinite(packet.mPosition.x) || !std::isfinite(packet.mPosition.y) ||
-        !std::isfinite(packet.mPosition.z) || !std::isfinite(packet.mRotation.x) ||
-        !std::isfinite(packet.mRotation.y) || !std::isfinite(packet.mRotation.z) ||
-        !std::isfinite(packet.mDelta.x) || !std::isfinite(packet.mDelta.y) || !std::isfinite(packet.mDelta.z)) {
+    if (!std::isfinite(packet.mPosition.x) || !std::isfinite(packet.mPosition.y) || !std::isfinite(packet.mPosition.z)
+        || !std::isfinite(packet.mRotation.x) || !std::isfinite(packet.mRotation.y)
+        || !std::isfinite(packet.mRotation.z) || !std::isfinite(packet.mDelta.x) || !std::isfinite(packet.mDelta.y)
+        || !std::isfinite(packet.mDelta.z)) {
         return;
     }
 

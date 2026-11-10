@@ -15,16 +15,7 @@ class ServerPlayer;
 class PlayerBossBars {
 public:
     // wire values of the client's BossBarColor (0x147E1D5A0)
-    enum class Color : int32_t {
-        Pink,
-        Blue,
-        Red,
-        Green,
-        Yellow,
-        Purple,
-        RebeccaPurple,
-        White
-    };
+    enum class Color : int32_t { Pink, Blue, Red, Green, Yellow, Purple, RebeccaPurple, White };
 
     // the id of the new bar; plugins may call this from any thread
     uint32_t add(const std::string &title, float percent, Color color);

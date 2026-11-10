@@ -77,14 +77,13 @@ namespace {
 
         require(!PlayerDataProvider::isSafeName("../escape"), "a traversal passed as a name");
         require(!PlayerDataProvider::isSafeName("a/b") && !PlayerDataProvider::isSafeName("a\\b")
-                && !PlayerDataProvider::isSafeName("a:b") && !PlayerDataProvider::isSafeName(""),
+                        && !PlayerDataProvider::isSafeName("a:b") && !PlayerDataProvider::isSafeName(""),
                 "a path character passed as a name");
         require(!provider.saveData("../escape", data), "a traversal was saved");
         require(!std::filesystem::exists(directory / "escape.dat"), "a file was written outside the directory");
 
         Tag loaded;
-        require(!provider.loadData("../escape", loaded) && !provider.hasData("../escape"),
-                "a traversal was read");
+        require(!provider.loadData("../escape", loaded) && !provider.hasData("../escape"), "a traversal was read");
 
         require(provider.saveData("Alex Smith", data), "an ordinary name was refused");
         require(provider.loadData("alex smith", loaded) && loaded.getInt("Marker") == 7,
@@ -107,11 +106,14 @@ namespace {
         require(provider.saveData("Shared", second), "the second account could not save");
 
         require(provider.claimData("Shared", "4004") && provider.loadData("Shared", loaded)
-                && loaded.getInt("Marker") == 1, "the first account did not get its save back");
+                        && loaded.getInt("Marker") == 1,
+                "the first account did not get its save back");
         require(provider.claimData("Shared", "5005") && provider.loadData("Shared", loaded)
-                && loaded.getInt("Marker") == 2, "the second account did not get its save back");
+                        && loaded.getInt("Marker") == 2,
+                "the second account did not get its save back");
         require(provider.claimData("Shared", "4004") && provider.loadData("Shared", loaded)
-                && loaded.getInt("Marker") == 1, "a save was lost on the third change of hands");
+                        && loaded.getInt("Marker") == 1,
+                "a save was lost on the third change of hands");
     }
 }
 

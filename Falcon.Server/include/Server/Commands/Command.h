@@ -20,11 +20,15 @@ public:
 
     virtual bool execute(CommandOrigin &sender, const std::vector<std::string> &arguments) = 0;
 
-    virtual CommandPermission getRequiredPermission() const { return CommandPermission::GameDirectors; }
+    virtual CommandPermission getRequiredPermission() const {
+        return CommandPermission::GameDirectors;
+    }
 
     virtual std::vector<CommandOverloadData> getOverloads() const;
 
-    virtual size_t getRawArgumentIndex() const { return (size_t) -1; }
+    virtual size_t getRawArgumentIndex() const {
+        return (size_t) -1;
+    }
 
     static CommandParamData makePlayerParameter(const std::string &name);
 
@@ -41,16 +45,24 @@ public:
 
     static bool parseBlockCoordinate(const std::string &value, int32_t origin, int32_t &out);
 
-    static bool parseBlockPosition(const std::vector<std::string> &arguments, size_t first,
-                                   const Vector3i &origin, Vector3i &out);
+    static bool parseBlockPosition(const std::vector<std::string> &arguments, size_t first, const Vector3i &origin,
+                                   Vector3i &out);
 
-    const std::string &getName() const { return mName; }
+    const std::string &getName() const {
+        return mName;
+    }
 
-    const std::string &getDescription() const { return mDescription; }
+    const std::string &getDescription() const {
+        return mDescription;
+    }
 
-    const std::string &getUsage() const { return mUsage; }
+    const std::string &getUsage() const {
+        return mUsage;
+    }
 
-    const std::vector<std::string> &getAliases() const { return mAliases; }
+    const std::vector<std::string> &getAliases() const {
+        return mAliases;
+    }
 
 protected:
     std::string mName;

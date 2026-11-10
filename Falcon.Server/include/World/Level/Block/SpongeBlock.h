@@ -7,8 +7,7 @@
 // sponge and wet_sponge
 class SpongeBlock : public Block {
 public:
-    explicit SpongeBlock(const Block &block) : Block(block) {
-    }
+    explicit SpongeBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

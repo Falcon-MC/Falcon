@@ -67,7 +67,7 @@ namespace {
         JS_FreeValue(ctx, exception);
     }
 
-    template<typename T>
+    template <typename T>
     bool accepts(const ScriptNative *native) {
         return dynamic_cast<const T *>(native) != nullptr;
     }
@@ -212,8 +212,8 @@ namespace {
         if (argc < 1)
             return JS_UNDEFINED;
 
-        const std::vector<Tag> *permutations =
-                BlockPaletteRegistry::getInstance().getPermutations(toString(ctx, argv[0]));
+        const std::vector<Tag> *permutations = BlockPaletteRegistry::getInstance().getPermutations(
+                toString(ctx, argv[0]));
         if (permutations == nullptr)
             return JS_UNDEFINED;
 
@@ -312,9 +312,8 @@ namespace {
     int moduleInit(JSContext *ctx, JSModuleDef *module);
 
     const char *const SERVER_ENUMS[] = {
-            "EquipmentSlot", "GameMode", "InputPermissionCategory", "Direction", "PlayerInventoryType",
-            "EntityComponentTypes", "ItemComponentTypes", "BlockComponentTypes"
-    };
+            "EquipmentSlot",        "GameMode",           "InputPermissionCategory", "Direction", "PlayerInventoryType",
+            "EntityComponentTypes", "ItemComponentTypes", "BlockComponentTypes"};
 
     const char *const COMPONENT_IDS[][2] = {
             {"EntityInventoryComponent", "minecraft:inventory"},
@@ -359,8 +358,8 @@ ScriptApi::ScriptApi(JSContext *context, ServerNetworkHandler &host, PlayerHandl
           mTrack(moduleOrDefault(mModules, "@minecraft/server").mTrack),
           mSurface("@minecraft/server", moduleOrDefault(mModules, "@minecraft/server")),
           mUiSurface("@minecraft/server-ui", moduleOrDefault(mModules, "@minecraft/server-ui")),
-          mCommonSurface("@minecraft/common", moduleOrDefault(mModules, "@minecraft/common")),
-          mScheduler(context), mPlayers(players) {
+          mCommonSurface("@minecraft/common", moduleOrDefault(mModules, "@minecraft/common")), mScheduler(context),
+          mPlayers(players) {
     JS_SetContextOpaque(mContext, this);
 }
 
@@ -833,8 +832,8 @@ bool ScriptApi::setBlockType(Level &level, int32_t x, int32_t y, int32_t z, cons
     update.mRuntimeId = (uint32_t) BlockStateHasher::hash(state.mName, state.mStates);
     update.mFlags = UpdateBlockPacket::Flag::All;
     update.mDataLayer = 0;
-    BlockActionHandler::broadcastToViewers(mHost, level,
-                                           Vector3f((float) x + 0.5f, (float) y + 0.5f, (float) z + 0.5f), update);
+    BlockActionHandler::broadcastToViewers(mHost, level, Vector3f((float) x + 0.5f, (float) y + 0.5f, (float) z + 0.5f),
+                                           update);
     return true;
 }
 
@@ -972,8 +971,8 @@ void ScriptApi::fireHeldItemComponents(ServerPlayer &player, const char *hook, J
     const ItemStack &held = player.getInventory().getItemInHand();
     const std::vector<std::string> *components = nullptr;
     if (!held.isAir() && held.mDefinition != nullptr) {
-        const CustomItemDefinition *definition =
-                CustomContentRegistry::getInstance().findItem(held.mDefinition->getIdentifier());
+        const CustomItemDefinition *definition = CustomContentRegistry::getInstance().findItem(
+                held.mDefinition->getIdentifier());
         if (definition != nullptr)
             components = &definition->mCustomComponents;
     }
@@ -1018,12 +1017,32 @@ JSValue ScriptApi::_makeSignalHolder(const char *className, const char *signalOw
     JSValue holder = makeInstance(className, new ScriptNative());
     const std::string prefix = std::string(signalOwner) + ".";
 
-    for (const char *property: {"playerBreakBlock", "playerPlaceBlock", "playerSpawn", "playerJoin", "playerLeave",
-                                "chatSend", "entityHurt", "entityDie", "itemUse", "projectileHitBlock",
-                                "projectileHitEntity", "entityHitBlock", "entityHitEntity", "entityItemDrop",
-                                "playerHotbarSelectedSlotChange", "playerInventoryItemChange",
-                                "playerInteractWithBlock", "entitySpawn", "entityRemove", "entityLoad", "worldLoad",
-                                "worldInitialize", "effectAdd", "playerInteractWithEntity", "itemUseOn", "startup",
+    for (const char *property: {"playerBreakBlock",
+                                "playerPlaceBlock",
+                                "playerSpawn",
+                                "playerJoin",
+                                "playerLeave",
+                                "chatSend",
+                                "entityHurt",
+                                "entityDie",
+                                "itemUse",
+                                "projectileHitBlock",
+                                "projectileHitEntity",
+                                "entityHitBlock",
+                                "entityHitEntity",
+                                "entityItemDrop",
+                                "playerHotbarSelectedSlotChange",
+                                "playerInventoryItemChange",
+                                "playerInteractWithBlock",
+                                "entitySpawn",
+                                "entityRemove",
+                                "entityLoad",
+                                "worldLoad",
+                                "worldInitialize",
+                                "effectAdd",
+                                "playerInteractWithEntity",
+                                "itemUseOn",
+                                "startup",
                                 "shutdown"}) {
         const std::string key = prefix + property;
         const ScriptSignalEntry *signal = ScriptSurface::findSignal(key);
@@ -1096,8 +1115,8 @@ void ScriptApi::_installBootstraps() {
     addFunction(mContext, data, "permutations", palettePermutations, 1);
     addFunction(mContext, data, "itemTypeNames", itemTypeNames, 0);
     JSValue dataExports = runBootstrap(mContext, mPackName, ScriptBootstraps::data(), "<data>", data);
-    for (const char *name: {"BlockPermutation", "BlockType", "BlockTypes", "BlockStateType", "BlockStates",
-                            "ItemType", "ItemTypes"}) {
+    for (const char *name:
+         {"BlockPermutation", "BlockType", "BlockTypes", "BlockStateType", "BlockStates", "ItemType", "ItemTypes"}) {
         if (mSurface.has(name))
             mServerExports.emplace_back(name, JS_GetPropertyStr(mContext, dataExports, name));
     }

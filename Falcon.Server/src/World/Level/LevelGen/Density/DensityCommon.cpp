@@ -177,9 +177,8 @@ namespace {
 
         double compute(FunctionContext &context) override {
             double inputValue = mInput->compute(context);
-            return inputValue >= mMinInclusive && inputValue < mMaxExclusive
-                   ? mWhenInRange->compute(context)
-                   : mWhenOutOfRange->compute(context);
+            return inputValue >= mMinInclusive && inputValue < mMaxExclusive ? mWhenInRange->compute(context)
+                                                                             : mWhenOutOfRange->compute(context);
         }
 
         double minValue() const override {
@@ -206,8 +205,9 @@ namespace {
         double compute(FunctionContext &context) override {
             double inputValue = mInput->compute(context);
             double rarity = applyRarityMapper(mRarityValueMapper, inputValue);
-            return rarity * std::abs(mNoise.getValue(context.blockX() / rarity, context.blockY() / rarity,
-                                                     context.blockZ() / rarity));
+            return rarity
+                   * std::abs(mNoise.getValue(context.blockX() / rarity, context.blockY() / rarity,
+                                              context.blockZ() / rarity));
         }
 
         double minValue() const override {
@@ -391,8 +391,8 @@ namespace {
     public:
         ShiftedNoiseFunction(DensityFunctionPtr shiftX, DensityFunctionPtr shiftY, DensityFunctionPtr shiftZ,
                              double xzScale, double yScale, NoiseHolder noise)
-                : mShiftX(std::move(shiftX)), mShiftY(std::move(shiftY)), mShiftZ(std::move(shiftZ)),
-                  mXzScale(xzScale), mYScale(yScale), mNoise(std::move(noise)) {}
+                : mShiftX(std::move(shiftX)), mShiftY(std::move(shiftY)), mShiftZ(std::move(shiftZ)), mXzScale(xzScale),
+                  mYScale(yScale), mNoise(std::move(noise)) {}
 
         double compute(FunctionContext &context) override {
             double x = context.blockX() * mXzScale + mShiftX->compute(context);
@@ -457,10 +457,7 @@ namespace {
         double mMaxValue;
     };
 
-    enum class MulOrAddType {
-        MUL,
-        ADD
-    };
+    enum class MulOrAddType { MUL, ADD };
 
     class MulOrAddFunction : public DensityFunction {
     public:
@@ -529,8 +526,7 @@ namespace {
             Cache2DState *state = cache->getOrCreate<Cache2DState>(this);
             int32_t blockX = context.blockX();
             int32_t blockZ = context.blockZ();
-            int64_t pos2d = (static_cast<int64_t>(blockX) << 32) ^ static_cast<int64_t>(
-                    static_cast<uint32_t>(blockZ));
+            int64_t pos2d = (static_cast<int64_t>(blockX) << 32) ^ static_cast<int64_t>(static_cast<uint32_t>(blockZ));
             if (state->mLastPos2d == pos2d) {
                 return state->mLastValue;
             }
@@ -632,8 +628,8 @@ namespace {
             FlatCacheCell *cell = state->getOrCreateCell(chunkX, chunkZ);
             int32_t localX = blockX - cell->mFirstBlockX;
             int32_t localZ = blockZ - cell->mFirstBlockZ;
-            if (localX >= 0 && localX < FLAT_CACHE_CHUNK_SIZE_BLOCKS
-                && localZ >= 0 && localZ < FLAT_CACHE_CHUNK_SIZE_BLOCKS) {
+            if (localX >= 0 && localX < FLAT_CACHE_CHUNK_SIZE_BLOCKS && localZ >= 0
+                && localZ < FLAT_CACHE_CHUNK_SIZE_BLOCKS) {
                 int32_t index = localX + localZ * FLAT_CACHE_CHUNK_SIZE_BLOCKS;
                 int32_t word = static_cast<int32_t>(static_cast<uint32_t>(index) >> 6);
                 uint64_t mask = static_cast<uint64_t>(1) << (index & 63);
@@ -660,12 +656,11 @@ namespace {
     };
 
     int64_t packCellKey(int32_t cellX, int32_t cellY, int32_t cellZ) {
-        return ((static_cast<int64_t>(cellX) & 0x1FFFFF) << 42)
-               | ((static_cast<int64_t>(cellY) & 0x1FFFFF) << 21)
+        return ((static_cast<int64_t>(cellX) & 0x1FFFFF) << 42) | ((static_cast<int64_t>(cellY) & 0x1FFFFF) << 21)
                | (static_cast<int64_t>(cellZ) & 0x1FFFFF);
     }
 
-    template<typename ContextType>
+    template <typename ContextType>
     void fillAllInCell(CellValuesState &state, int32_t startX, int32_t startY, int32_t startZ,
                        const DensityFunctionPtr &wrapped, ContextType &context) {
         int32_t index = 0;
@@ -700,16 +695,14 @@ namespace {
                 double zTerm = zAlpha * (c001 + yAlpha * c011);
                 for (int32_t localX = 0; localX < CELL_SIZE_XZ; localX++) {
                     double xAlpha = localX * INV_CELL_SIZE_XZ;
-                    state.mValues[index++] = c000
-                                             + xAlpha * (c100 + yAlpha * c110 + zAlpha * c101 + yz * c111)
-                                             + yAlpha * c010
-                                             + zTerm;
+                    state.mValues[index++] = c000 + xAlpha * (c100 + yAlpha * c110 + zAlpha * c101 + yz * c111)
+                                             + yAlpha * c010 + zTerm;
                 }
             }
         }
     }
 
-    template<typename ContextType>
+    template <typename ContextType>
     void fillInterpolatedCell(CellValuesState &state, int32_t cellX, int32_t cellY, int32_t cellZ,
                               const DensityFunctionPtr &wrapped, ContextType &context) {
         int32_t nextX = cellX + CELL_SIZE_XZ;
@@ -751,9 +744,7 @@ namespace {
                 state->mLastKey = key;
             }
 
-            int32_t index = ((blockY & CELL_Y_MASK) << 4)
-                            | ((blockZ & CELL_XZ_MASK) << 2)
-                            | (blockX & CELL_XZ_MASK);
+            int32_t index = ((blockY & CELL_Y_MASK) << 4) | ((blockZ & CELL_XZ_MASK) << 2) | (blockX & CELL_XZ_MASK);
             return state->mValues[index];
         }
     };
@@ -785,9 +776,7 @@ namespace {
                 state->mLastKey = key;
             }
 
-            int32_t index = ((blockY & CELL_Y_MASK) << 4)
-                            | ((blockZ & CELL_XZ_MASK) << 2)
-                            | (blockX & CELL_XZ_MASK);
+            int32_t index = ((blockY & CELL_Y_MASK) << 4) | ((blockZ & CELL_XZ_MASK) << 2) | (blockX & CELL_XZ_MASK);
             return state->mValues[index];
         }
     };
@@ -808,8 +797,8 @@ DensityFunctionPtr TwoArgumentSimpleFunction::create(TwoArgumentType type, Densi
             break;
         case TwoArgumentType::MUL:
             minValue = min1 > 0.0 && min2 > 0.0
-                       ? min1 * min2
-                       : (max1 < 0.0 && max2 < 0.0 ? max1 * max2 : std::min(min1 * max2, max1 * min2));
+                               ? min1 * min2
+                               : (max1 < 0.0 && max2 < 0.0 ? max1 * max2 : std::min(min1 * max2, max1 * min2));
             break;
         case TwoArgumentType::MIN:
             minValue = std::min(min1, min2);
@@ -826,8 +815,8 @@ DensityFunctionPtr TwoArgumentSimpleFunction::create(TwoArgumentType type, Densi
             break;
         case TwoArgumentType::MUL:
             maxValue = min1 > 0.0 && min2 > 0.0
-                       ? max1 * max2
-                       : (max1 < 0.0 && max2 < 0.0 ? min1 * min2 : std::max(min1 * min2, max1 * max2));
+                               ? max1 * max2
+                               : (max1 < 0.0 && max2 < 0.0 ? min1 * min2 : std::max(min1 * min2, max1 * max2));
             break;
         case TwoArgumentType::MIN:
             maxValue = std::min(max1, max2);
@@ -840,18 +829,18 @@ DensityFunctionPtr TwoArgumentSimpleFunction::create(TwoArgumentType type, Densi
     if (type == TwoArgumentType::ADD || type == TwoArgumentType::MUL) {
         auto constant1 = std::dynamic_pointer_cast<ConstantFunction>(argument1);
         if (constant1 != nullptr) {
-            return std::make_shared<MulOrAddFunction>(
-                    type == TwoArgumentType::ADD ? MulOrAddType::ADD : MulOrAddType::MUL,
-                    std::move(argument2), minValue, maxValue, constant1->value());
+            return std::make_shared<MulOrAddFunction>(type == TwoArgumentType::ADD ? MulOrAddType::ADD
+                                                                                   : MulOrAddType::MUL,
+                                                      std::move(argument2), minValue, maxValue, constant1->value());
         }
     }
 
     if (type == TwoArgumentType::ADD || type == TwoArgumentType::MUL) {
         auto constant2 = std::dynamic_pointer_cast<ConstantFunction>(argument2);
         if (constant2 != nullptr) {
-            return std::make_shared<MulOrAddFunction>(
-                    type == TwoArgumentType::ADD ? MulOrAddType::ADD : MulOrAddType::MUL,
-                    std::move(argument1), minValue, maxValue, constant2->value());
+            return std::make_shared<MulOrAddFunction>(type == TwoArgumentType::ADD ? MulOrAddType::ADD
+                                                                                   : MulOrAddType::MUL,
+                                                      std::move(argument1), minValue, maxValue, constant2->value());
         }
     }
 
@@ -866,8 +855,7 @@ DensityFunctionPtr Mapped::create(MappedType type, DensityFunctionPtr input) {
 
     if (type == MappedType::INVERT) {
         if (min < 0.0 && max > 0.0) {
-            return std::make_shared<MappedFunction>(type, std::move(input),
-                                                    -std::numeric_limits<double>::infinity(),
+            return std::make_shared<MappedFunction>(type, std::move(input), -std::numeric_limits<double>::infinity(),
                                                     std::numeric_limits<double>::infinity());
         }
 

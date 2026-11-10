@@ -31,8 +31,8 @@ namespace ScriptValues {
         JSValue yValue = JS_GetPropertyStr(ctx, value, "y");
         JSValue zValue = JS_GetPropertyStr(ctx, value, "z");
 
-        const bool ok = JS_ToFloat64(ctx, &x, xValue) == 0 && JS_ToFloat64(ctx, &y, yValue) == 0 &&
-                        JS_ToFloat64(ctx, &z, zValue) == 0;
+        const bool ok = JS_ToFloat64(ctx, &x, xValue) == 0 && JS_ToFloat64(ctx, &y, yValue) == 0
+                        && JS_ToFloat64(ctx, &z, zValue) == 0;
 
         JS_FreeValue(ctx, xValue);
         JS_FreeValue(ctx, yValue);

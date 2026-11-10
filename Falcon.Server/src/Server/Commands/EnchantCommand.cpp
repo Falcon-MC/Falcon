@@ -7,8 +7,7 @@
 #include <cstdlib>
 
 EnchantCommand::EnchantCommand(ServerNetworkHandler &handler)
-        : Command("enchant", "commands.enchant.description",
-                  "/enchant <player> <enchantment> [level]"),
+        : Command("enchant", "commands.enchant.description", "/enchant <player> <enchantment> [level]"),
           mHandler(handler) {}
 
 bool EnchantCommand::_parseLevel(const std::string &value, int32_t &out) {
@@ -67,8 +66,8 @@ bool EnchantCommand::execute(CommandOrigin &sender, const std::vector<std::strin
         }
 
         if (item.mDefinition->getIdentifier() == "minecraft:book") {
-            std::shared_ptr<ItemDefinition> enchantedBook =
-                    mHandler.getItemDefinitions().getDefinition("minecraft:enchanted_book");
+            std::shared_ptr<ItemDefinition> enchantedBook = mHandler.getItemDefinitions().getDefinition(
+                    "minecraft:enchanted_book");
 
             if (enchantedBook != nullptr) {
                 item.mDefinition = enchantedBook;
@@ -94,8 +93,7 @@ bool EnchantCommand::execute(CommandOrigin &sender, const std::vector<std::strin
         }
 
         inventory.setItemInHand(item);
-        target->getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                               inventory.getSelectedSlot());
+        target->getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
 
         enchanted = true;
         sender.sendTranslation("commands.enchant.success", {target->getName()});

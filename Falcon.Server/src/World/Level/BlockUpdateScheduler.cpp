@@ -61,8 +61,7 @@ void BlockUpdateScheduler::activateColumn(int32_t chunkX, int32_t chunkZ) {
         schedule(Vector3i(position.x, position.y, position.z), 1);
 }
 
-void BlockUpdateScheduler::_deferRemaining(const std::vector<Position> &positions, size_t from,
-                                           int64_t bucketTick) {
+void BlockUpdateScheduler::_deferRemaining(const std::vector<Position> &positions, size_t from, int64_t bucketTick) {
     if (from >= positions.size())
         return;
 
@@ -70,8 +69,7 @@ void BlockUpdateScheduler::_deferRemaining(const std::vector<Position> &position
     target.insert(target.end(), positions.begin() + (long) from, positions.end());
 }
 
-void BlockUpdateScheduler::tick(const UpdateHandler &handler,
-                                const std::function<bool(int32_t, int32_t)> &isActive) {
+void BlockUpdateScheduler::tick(const UpdateHandler &handler, const std::function<bool(int32_t, int32_t)> &isActive) {
     ++mTick;
     mLastProcessed = 0;
 

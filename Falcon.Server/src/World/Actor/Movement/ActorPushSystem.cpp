@@ -66,8 +66,9 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
 
     const auto pushBy = [&](const Actor &pusher, const AxisAlignedBB &box, float width, const Vector3f &velocity) {
         const bool overlaps = box.intersectsWith(self);
-        const PushableByEntityPreset *preset = presets == nullptr ? nullptr
-                                               : PushableByEntity::findPreset(owner, *mob, *presets, pusher);
+        const PushableByEntityPreset *preset = presets == nullptr
+                                                       ? nullptr
+                                                       : PushableByEntity::findPreset(owner, *mob, *presets, pusher);
         // sub_143A0AF90: push_mode none leaves without pushing
         if (preset != nullptr && preset->mMode == PushMode::None)
             return;
@@ -79,8 +80,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
                 || !PushableByEntity::inReach(*preset, offsetX, offsetZ, width))
                 return;
 
-            const float speed = std::sqrt(velocity.x * velocity.x + velocity.y * velocity.y
-                                          + velocity.z * velocity.z);
+            const float speed = std::sqrt(velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z);
             const Vector3f added = PushableByEntity::kick(*preset, offsetX, offsetZ, speed, actor.isOnGround());
             kick = Vector3f(kick.x + added.x, kick.y + added.y, kick.z + added.z);
             _playKickSound(owner, actor, *preset, added);

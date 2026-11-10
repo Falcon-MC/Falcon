@@ -15,30 +15,9 @@ class BlockManager;
 // (VanillaTreeFeature, place sub_14A2C9A20); every draw comes from the placement twister it is given
 class OverworldTreePlacer {
 public:
-    enum class Trunk {
-        Simple,
-        Fancy,
-        Fallen,
-        Mega,
-        Acacia,
-        Mangrove,
-        Cherry,
-        Poplar
-    };
+    enum class Trunk { Simple, Fancy, Fallen, Mega, Acacia, Mangrove, Cherry, Poplar };
 
-    enum class Canopy {
-        None,
-        Simple,
-        Fancy,
-        Spruce,
-        Pine,
-        MegaPine,
-        Mega,
-        Roofed,
-        Acacia,
-        Mangrove,
-        Cherry
-    };
+    enum class Canopy { None, Simple, Fancy, Spruce, Pine, MegaPine, Mega, Roofed, Acacia, Mangrove, Cherry };
 
     // a range of the feature's JSON, its maximum excluded
     struct Range {
@@ -302,8 +281,8 @@ private:
     static void _decorateLog(BlockManager &blocks, uint32_t numerator, uint32_t denominator, int32_t x, int32_t y,
                              int32_t z, const bool sides[4], std::mt19937 &random);
 
-    static void _roofedCanopy(BlockManager &blocks, const Definition &tree, const Acacia &acacia, int32_t x,
-                              int32_t y, int32_t z, std::mt19937 &random);
+    static void _roofedCanopy(BlockManager &blocks, const Definition &tree, const Acacia &acacia, int32_t x, int32_t y,
+                              int32_t z, std::mt19937 &random);
 
     static void _acaciaCanopy(BlockManager &blocks, const Definition &tree, int32_t size, bool simplified, int32_t x,
                               int32_t y, int32_t z);

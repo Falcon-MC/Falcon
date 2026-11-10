@@ -36,14 +36,14 @@ namespace {
     }
 
     int32_t facingDirection(const std::string &facing) {
-        static const std::unordered_map<std::string, int32_t> values = {{"north", 2}, {"south", 3}, {"west", 4},
-                                                                        {"east", 5}};
+        static const std::unordered_map<std::string, int32_t> values = {
+                {"north", 2}, {"south", 3}, {"west", 4}, {"east", 5}};
         return values.at(facing);
     }
 
     int32_t weirdoDirection(const std::string &facing) {
-        static const std::unordered_map<std::string, int32_t> values = {{"east", 0}, {"west", 1}, {"south", 2},
-                                                                        {"north", 3}};
+        static const std::unordered_map<std::string, int32_t> values = {
+                {"east", 0}, {"west", 1}, {"south", 2}, {"north", 3}};
         return values.at(facing);
     }
 
@@ -107,7 +107,8 @@ namespace {
 
         if ((name == "minecraft:wooden_slab" || name == "minecraft:double_wooden_slab")
             && (variant == "oak" || variant == "dark_oak")) {
-            states.putString("minecraft:vertical_half", property(entry, "half").empty() ? "bottom" : property(entry, "half"));
+            states.putString("minecraft:vertical_half",
+                             property(entry, "half").empty() ? "bottom" : property(entry, "half"));
             out = BlockState(prefixed(species, name == "minecraft:wooden_slab" ? "_slab" : "_double_slab"), states);
             return true;
         }
@@ -263,7 +264,7 @@ namespace {
         }
 
         if (key == "level") {
-            for (const char *level : {"composter_fill_level", "liquid_depth"}) {
+            for (const char *level: {"composter_fill_level", "liquid_depth"}) {
                 if (states.contains(level)) {
                     states.putInt(level, std::atoi(value.c_str()));
                     return true;
@@ -324,7 +325,7 @@ namespace {
             return false;
 
         Tag states = *defaults;
-        for (const auto &kv : entry.mProperties)
+        for (const auto &kv: entry.mProperties)
             if (!applyProperty(states, kv.first, kv.second, quarterTurns))
                 return false;
 
@@ -521,7 +522,7 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
     }
 
     if (name == "minecraft:iron_bars") {
-        for (const char *side : {"east", "north", "south", "west"})
+        for (const char *side: {"east", "north", "south", "west"})
             states.putByte(std::string("minecraft:connection_") + side, property(entry, side) == "true" ? 1 : 0);
         out = BlockState(name, states);
         return true;
@@ -544,8 +545,10 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
             return false;
         // defaults first: palette key order
         states = *doorDefaults;
-        states.putString("minecraft:cardinal_direction",
-                         upper ? "south" : CARDINALS[(size_t) ((cardinalIndex(property(entry, "facing")) + quarterTurns + 1) & 3)]);
+        states.putString(
+                "minecraft:cardinal_direction",
+                upper ? "south"
+                      : CARDINALS[(size_t) ((cardinalIndex(property(entry, "facing")) + quarterTurns + 1) & 3)]);
         states.putByte("door_hinge_bit", upper && property(entry, "hinge") == "right" ? 1 : 0);
         states.putByte("open_bit", property(entry, "open") == "true" ? 1 : 0);
         states.putByte("upper_block_bit", upper ? 1 : 0);

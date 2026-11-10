@@ -31,8 +31,7 @@ namespace {
     };
 }
 
-SuspiciousStewItem::SuspiciousStewItem(const Item &base) : Item(base) {
-}
+SuspiciousStewItem::SuspiciousStewItem(const Item &base) : Item(base) {}
 
 bool SuspiciousStewItem::matches(const std::string &identifier) {
     return identifier == IDENTIFIER;

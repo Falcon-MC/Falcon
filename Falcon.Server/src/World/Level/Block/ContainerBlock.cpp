@@ -27,23 +27,28 @@ namespace {
     const char *TAG_ITEMS = "Items";
 
     const ContainerBlockDefinition DEFINITIONS[] = {
-            {ContainerBlockKind::Barrel,            BarrelBlockActor::BLOCK_ACTOR_ID,            ContainerType::Container,    true,  true},
-            {ContainerBlockKind::ShulkerBox,        ShulkerBoxBlockActor::BLOCK_ACTOR_ID,        ContainerType::Container,    true,  false},
-            {ContainerBlockKind::EnderChest,        EnderChestBlockActor::BLOCK_ACTOR_ID,        ContainerType::Container,    true,  false},
-            {ContainerBlockKind::Hopper,            HopperBlockActor::BLOCK_ACTOR_ID,            ContainerType::Hopper,       true,  true},
-            {ContainerBlockKind::Dispenser,         DispenserBlockActor::BLOCK_ACTOR_ID,         ContainerType::Dispenser,    true,  true},
-            {ContainerBlockKind::Dropper,           DropperBlockActor::BLOCK_ACTOR_ID,           ContainerType::Dropper,      true,  true},
-            {ContainerBlockKind::BrewingStand,      BrewingStandBlockActor::BLOCK_ACTOR_ID,      ContainerType::BrewingStand, true,  true},
-            {ContainerBlockKind::Beacon,            BeaconBlockActor::BLOCK_ACTOR_ID,            ContainerType::Beacon,       true,  true},
-            {ContainerBlockKind::EnchantTable,      EnchantTableBlockActor::BLOCK_ACTOR_ID,      ContainerType::Enchantment,  true,  true},
-            {ContainerBlockKind::Crafter,           CrafterBlockActor::BLOCK_ACTOR_ID,           ContainerType::Crafter,      true,  true},
-            {ContainerBlockKind::Campfire,          CampfireBlockActor::BLOCK_ACTOR_ID,          ContainerType::None,         false, true},
-            {ContainerBlockKind::Lectern,           LecternBlockActor::BLOCK_ACTOR_ID,           ContainerType::None,         false, true},
-            {ContainerBlockKind::ChiseledBookshelf, ChiseledBookshelfBlockActor::BLOCK_ACTOR_ID, ContainerType::None,         false, true},
-            {ContainerBlockKind::DecoratedPot,      DecoratedPotBlockActor::BLOCK_ACTOR_ID,      ContainerType::None,         false, true},
-            {ContainerBlockKind::Jukebox,           JukeboxBlockActor::BLOCK_ACTOR_ID,           ContainerType::None,         false, true},
-            {ContainerBlockKind::Shelf,             ShelfBlockActor::BLOCK_ACTOR_ID,             ContainerType::None,         false, true}
-    };
+            {ContainerBlockKind::Barrel, BarrelBlockActor::BLOCK_ACTOR_ID, ContainerType::Container, true, true},
+            {ContainerBlockKind::ShulkerBox, ShulkerBoxBlockActor::BLOCK_ACTOR_ID, ContainerType::Container, true,
+             false},
+            {ContainerBlockKind::EnderChest, EnderChestBlockActor::BLOCK_ACTOR_ID, ContainerType::Container, true,
+             false},
+            {ContainerBlockKind::Hopper, HopperBlockActor::BLOCK_ACTOR_ID, ContainerType::Hopper, true, true},
+            {ContainerBlockKind::Dispenser, DispenserBlockActor::BLOCK_ACTOR_ID, ContainerType::Dispenser, true, true},
+            {ContainerBlockKind::Dropper, DropperBlockActor::BLOCK_ACTOR_ID, ContainerType::Dropper, true, true},
+            {ContainerBlockKind::BrewingStand, BrewingStandBlockActor::BLOCK_ACTOR_ID, ContainerType::BrewingStand,
+             true, true},
+            {ContainerBlockKind::Beacon, BeaconBlockActor::BLOCK_ACTOR_ID, ContainerType::Beacon, true, true},
+            {ContainerBlockKind::EnchantTable, EnchantTableBlockActor::BLOCK_ACTOR_ID, ContainerType::Enchantment, true,
+             true},
+            {ContainerBlockKind::Crafter, CrafterBlockActor::BLOCK_ACTOR_ID, ContainerType::Crafter, true, true},
+            {ContainerBlockKind::Campfire, CampfireBlockActor::BLOCK_ACTOR_ID, ContainerType::None, false, true},
+            {ContainerBlockKind::Lectern, LecternBlockActor::BLOCK_ACTOR_ID, ContainerType::None, false, true},
+            {ContainerBlockKind::ChiseledBookshelf, ChiseledBookshelfBlockActor::BLOCK_ACTOR_ID, ContainerType::None,
+             false, true},
+            {ContainerBlockKind::DecoratedPot, DecoratedPotBlockActor::BLOCK_ACTOR_ID, ContainerType::None, false,
+             true},
+            {ContainerBlockKind::Jukebox, JukeboxBlockActor::BLOCK_ACTOR_ID, ContainerType::None, false, true},
+            {ContainerBlockKind::Shelf, ShelfBlockActor::BLOCK_ACTOR_ID, ContainerType::None, false, true}};
 
     const ContainerBlockDefinition &definitionOf(ContainerBlockKind kind) {
         for (const ContainerBlockDefinition &definition: DEFINITIONS) {
@@ -155,8 +160,7 @@ namespace {
     }
 }
 
-ContainerBlock::ContainerBlock(const Block &base) : Block(base) {
-}
+ContainerBlock::ContainerBlock(const Block &base) : Block(base) {}
 
 bool ContainerBlock::matches(const std::string &identifier) {
     ContainerBlockKind kind = ContainerBlockKind::Barrel;
@@ -269,9 +273,7 @@ void ContainerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
             if (blockFace >= 0 && blockFace <= 5)
                 shulker->setFacing((int8_t) blockFace);
 
-            const Tag *items = usedItem.mTag.getType() == Tag::Type::Compound
-                               ? usedItem.mTag.get(TAG_ITEMS)
-                               : nullptr;
+            const Tag *items = usedItem.mTag.getType() == Tag::Type::Compound ? usedItem.mTag.get(TAG_ITEMS) : nullptr;
             if (items != nullptr)
                 shulker->getInventory().loadItems(*items, owner.getCodecContext());
         }
@@ -297,8 +299,7 @@ void ContainerBlock::onBroken(ServerNetworkHandler &owner, Level &level, const V
             for (int slot = 0; slot < inventory.getContainerSize(); ++slot) {
                 const ItemStack &item = inventory.getContainerItem(slot);
                 if (!item.isAir() && item.mCount > 0) {
-                    ItemActorHandler::dropItem(owner, level, dropPosition, item,
-                                               ItemActorHandler::randomDropMotion(),
+                    ItemActorHandler::dropItem(owner, level, dropPosition, item, ItemActorHandler::randomDropMotion(),
                                                ItemActorHandler::DROP_PICKUP_DELAY);
                 }
             }
@@ -341,9 +342,8 @@ BlockState ContainerBlock::applyPlacementOrientation(const BlockState &state,
 
     switch (definition->mKind) {
         case ContainerBlockKind::Hopper: {
-            const int facing = context.mFace == FACE_DOWN
-                               ? FACE_DOWN
-                               : (context.mFace == FACE_UP ? FACE_DOWN : context.mFace ^ 1);
+            const int facing = context.mFace == FACE_DOWN ? FACE_DOWN
+                                                          : (context.mFace == FACE_UP ? FACE_DOWN : context.mFace ^ 1);
             if (hasIntFacing)
                 states.putInt("facing_direction", facing);
             if (hasStringFacing)
@@ -385,7 +385,9 @@ uint8_t ContainerBlock::getLiquidBlockedFaces(const BlockState &state) const {
         return 0;
 
     const std::string direction = state.mStates.getString("minecraft:cardinal_direction", "south");
-    const int face = direction == "east" ? LiquidFace::NORTH : direction == "north" ? LiquidFace::WEST
-                     : direction == "west" ? LiquidFace::DOWN : LiquidFace::UP;
+    const int face = direction == "east"    ? LiquidFace::NORTH
+                     : direction == "north" ? LiquidFace::WEST
+                     : direction == "west"  ? LiquidFace::DOWN
+                                            : LiquidFace::UP;
     return (uint8_t) (1 << face);
 }

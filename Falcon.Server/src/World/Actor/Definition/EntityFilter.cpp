@@ -56,8 +56,7 @@ namespace {
         return -1;
     }
 
-    const std::string NUMERIC_SUBJECTS[] = {"self", "other", "parent", "player", "target", "baby", "damager",
-                                            "block"};
+    const std::string NUMERIC_SUBJECTS[] = {"self", "other", "parent", "player", "target", "baby", "damager", "block"};
     const std::string NUMERIC_OPERATORS[] = {"==", "!=", "<", "<=", ">", ">="};
 
     const std::string &textOf(const json::Value &value) {
@@ -232,9 +231,8 @@ namespace {
         return passengers.empty() ? nullptr : RideSystem::resolve(owner, passengers.front());
     }
 
-    const char *const COLOR_NAMES[] = {"white", "orange", "magenta", "light_blue", "yellow", "lime", "pink",
-                                       "gray", "silver", "cyan", "purple", "blue", "brown", "green", "red",
-                                       "black"};
+    const char *const COLOR_NAMES[] = {"white",  "orange", "magenta", "light_blue", "yellow", "lime",  "pink", "gray",
+                                       "silver", "cyan",   "purple",  "blue",       "brown",  "green", "red",  "black"};
     const char *const RANGED_WEAPONS[] = {"minecraft:bow", "minecraft:crossbow"};
     const char *const HOT_BLOCK = "minecraft:magma";
     const char *const FATAL_DAMAGE = "fatal";
@@ -266,17 +264,19 @@ namespace {
             return false;
 
         LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
-        const ClimateAttributes *climate = chunk == nullptr ? nullptr
-                                           : ClimateAttributes::getForBiome(
-                        (int32_t) chunk->getBiomeAt(position.x & 15, position.y, position.z & 15));
+        const ClimateAttributes *climate = chunk == nullptr
+                                                   ? nullptr
+                                                   : ClimateAttributes::getForBiome((int32_t) chunk->getBiomeAt(
+                                                             position.x & 15, position.y, position.z & 15));
         return climate != nullptr && climate->mRain && !PrecipitationSystem::isCold(level, position);
     }
 
     float temperatureAt(Level &level, const Vector3i &position) {
         LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
-        const ClimateAttributes *climate = chunk == nullptr ? nullptr
-                                           : ClimateAttributes::getForBiome(
-                        (int32_t) chunk->getBiomeAt(position.x & 15, position.y, position.z & 15));
+        const ClimateAttributes *climate = chunk == nullptr
+                                                   ? nullptr
+                                                   : ClimateAttributes::getForBiome((int32_t) chunk->getBiomeAt(
+                                                             position.x & 15, position.y, position.z & 15));
         return climate == nullptr ? 0.5f : climate->mTemperature;
     }
 
@@ -284,7 +284,7 @@ namespace {
         int32_t strength = 0;
         for (int face = 0; face < RedstoneFace::COUNT; ++face) {
             strength = std::max(strength, RedstoneSystem::getRedstonePower(
-                    owner, level, RedstoneFace::relative(position, face), face));
+                                                  owner, level, RedstoneFace::relative(position, face), face));
         }
         return strength;
     }
@@ -444,8 +444,7 @@ bool EntityFilter::_testBlock(const std::string &test, const std::string &op, co
 
     if (test == "is_block") {
         const std::string expected = value == nullptr ? std::string() : value->string();
-        const bool result = !expected.empty()
-                            && (state->mName == expected || state->mName == "minecraft:" + expected);
+        const bool result = !expected.empty() && (state->mName == expected || state->mName == "minecraft:" + expected);
         return isNegation(op) ? !result : result;
     }
 
@@ -546,12 +545,12 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         return false;
 
     if (test == "actor_health")
-        return value != nullptr && compareNumbers((int64_t) std::ceil(target->getHealth()),
-                                                  (int64_t) value->number(0.0), op);
+        return value != nullptr
+               && compareNumbers((int64_t) std::ceil(target->getHealth()), (int64_t) value->number(0.0), op);
 
     if (test == "rider_count")
-        return value != nullptr && compareNumbers((int64_t) target->getPassengers().size(),
-                                                  (int64_t) value->number(0.0), op);
+        return value != nullptr
+               && compareNumbers((int64_t) target->getPassengers().size(), (int64_t) value->number(0.0), op);
 
     if (test == "has_nametag") {
         const ServerActor *named = dynamic_cast<const ServerActor *>(target);
@@ -578,8 +577,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
 
     if (test == "is_sitting") {
         const MobActor *mob = dynamic_cast<const MobActor *>(target);
-        return applyBoolean(mob != nullptr && (mob->isSitting() || mob->getFlags().get(ActorFlag::Sitting)), value,
-                            op);
+        return applyBoolean(mob != nullptr && (mob->isSitting() || mob->getFlags().get(ActorFlag::Sitting)), value, op);
     }
 
     if (test == "is_baby") {
@@ -589,19 +587,22 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
 
     if (test == "is_variant" || test == "is_mark_variant") {
         const MobActor *mob = dynamic_cast<const MobActor *>(target);
-        const json::Value *component = mob == nullptr ? nullptr
-                                       : mob->getComponent(test == "is_variant" ? "minecraft:variant"
-                                                                                : "minecraft:mark_variant");
+        const json::Value *component = mob == nullptr
+                                               ? nullptr
+                                               : mob->getComponent(test == "is_variant" ? "minecraft:variant"
+                                                                                        : "minecraft:mark_variant");
         const json::Value *current = component == nullptr ? nullptr : component->get("value");
-        return value != nullptr && compareNumbers((int64_t) (current == nullptr ? 0 : current->integer(0)),
-                                                  (int64_t) value->number(0.0), op);
+        return value != nullptr
+               && compareNumbers((int64_t) (current == nullptr ? 0 : current->integer(0)), (int64_t) value->number(0.0),
+                                 op);
     }
 
     if (test == "bool_property" || test == "enum_property" || test == "int_property" || test == "float_property") {
         const ServerActor *actor = dynamic_cast<const ServerActor *>(target);
         const json::Value *domain = filter.get("domain");
         const ActorPropertyDescription *descriptor = actor == nullptr || domain == nullptr
-                                                     ? nullptr : actor->findPropertyDescription(domain->string());
+                                                             ? nullptr
+                                                             : actor->findPropertyDescription(domain->string());
         if (descriptor == nullptr)
             return false;
 
@@ -617,11 +618,13 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         }
 
         if (test == "float_property")
-            return value != nullptr && compareFloats(actor->getFloatProperty(name, descriptor->mDefaultFloat),
-                                                     (float) value->number(0.0), op);
+            return value != nullptr
+                   && compareFloats(actor->getFloatProperty(name, descriptor->mDefaultFloat),
+                                    (float) value->number(0.0), op);
 
-        return value != nullptr && compareNumbers(actor->getIntProperty(name, descriptor->mDefaultInt),
-                                                  (int64_t) value->number(0.0), op);
+        return value != nullptr
+               && compareNumbers(actor->getIntProperty(name, descriptor->mDefaultInt), (int64_t) value->number(0.0),
+                                 op);
     }
 
     if (test == "home_distance") {
@@ -677,8 +680,10 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
 
     if (test == "has_silk_touch") {
         const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(target);
-        const bool result = player != nullptr && ItemEnchantments::getLevel(player->getInventory().getItemInHand(),
-                                                                            EnchantmentIds::SILK_TOUCH) > 0;
+        const bool result = player != nullptr
+                            && ItemEnchantments::getLevel(player->getInventory().getItemInHand(),
+                                                          EnchantmentIds::SILK_TOUCH)
+                                       > 0;
         return applyBoolean(result, value, op);
     }
 
@@ -701,9 +706,9 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
 
     if (test == "has_biome_tag") {
         LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
-        const int32_t biome = chunk == nullptr ? -1
-                                               : (int32_t) chunk->getBiomeAt(position.x & 15, position.y,
-                                                                              position.z & 15);
+        const int32_t biome = chunk == nullptr
+                                      ? -1
+                                      : (int32_t) chunk->getBiomeAt(position.x & 15, position.y, position.z & 15);
         const bool result = value != nullptr && BiomeChunkGenDataRegistry::hasTag(biome, value->string());
         return isNegation(op) ? !result : result;
     }
@@ -730,15 +735,13 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
 
     if (test == "has_equipment") {
         const json::Value *domain = filter.get("domain");
-        const bool result = value != nullptr
-                            && hasEquipmentIn(*target, equipmentDomain(domain), BehaviorItems(value));
+        const bool result = value != nullptr && hasEquipmentIn(*target, equipmentDomain(domain), BehaviorItems(value));
         return isNegation(op) ? !result : result;
     }
 
     if (test == "has_equipment_tag") {
         const json::Value *domain = filter.get("domain");
-        const bool result = value != nullptr
-                            && hasEquipmentTagIn(*target, equipmentDomain(domain), value->string());
+        const bool result = value != nullptr && hasEquipmentTagIn(*target, equipmentDomain(domain), value->string());
         return isNegation(op) ? !result : result;
     }
 
@@ -767,8 +770,8 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
 
     if (test == "is_moving") {
         const Vector3f motion = target->getMotion();
-        const bool moving = target->getFlags().get(ActorFlag::Moving) || motion.x * motion.x + motion.z * motion.z
-                                                                           > 1.0e-6f;
+        const bool moving = target->getFlags().get(ActorFlag::Moving)
+                            || motion.x * motion.x + motion.z * motion.z > 1.0e-6f;
         return applyBoolean(moving, value, op);
     }
 
@@ -831,8 +834,8 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     }
 
     if (test == "is_skin_id")
-        return value != nullptr && compareNumbers(componentValue(*target, "minecraft:skin_id"),
-                                                  (int64_t) value->number(0.0), op);
+        return value != nullptr
+               && compareNumbers(componentValue(*target, "minecraft:skin_id"), (int64_t) value->number(0.0), op);
 
     if (test == "has_ranged_weapon") {
         const std::vector<const ItemStack *> hand = equipmentOf(*target, "hand");
@@ -858,8 +861,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     }
 
     if (test == "actor_has_item_with_enchantment_in_slot") {
-        const EnchantmentData *enchantment = value == nullptr ? nullptr
-                                                              : EnchantmentTable::findByName(value->string());
+        const EnchantmentData *enchantment = value == nullptr ? nullptr : EnchantmentTable::findByName(value->string());
         bool result = false;
         if (enchantment != nullptr) {
             for (const ItemStack *item: equipmentOf(*target, equipmentDomain(filter.get("domain"))))
@@ -878,8 +880,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     }
 
     if (test == "distance_to_nearest_player")
-        return value != nullptr && compareFloats(nearestPlayerDistance(owner, *target), (float) value->number(0.0),
-                                                 op);
+        return value != nullptr && compareFloats(nearestPlayerDistance(owner, *target), (float) value->number(0.0), op);
 
     if (test == "in_lava" || test == "in_contact_with_water" || test == "in_water_or_rain") {
         const LiquidContact contact = LiquidBlocksFetch::at(level, target->getPosition());
@@ -908,9 +909,9 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
 
     if (test == "is_biome") {
         LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
-        const int32_t biome = chunk == nullptr ? -1
-                                               : (int32_t) chunk->getBiomeAt(position.x & 15, position.y,
-                                                                              position.z & 15);
+        const int32_t biome = chunk == nullptr
+                                      ? -1
+                                      : (int32_t) chunk->getBiomeAt(position.x & 15, position.y, position.z & 15);
         const bool result = value != nullptr && BiomeChunkGenDataRegistry::hasTag(biome, value->string());
         return isNegation(op) ? !result : result;
     }
@@ -939,8 +940,8 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     }
 
     if (test == "redstone_strength_at_position")
-        return value != nullptr && compareNumbers(redstoneStrengthAt(owner, level, position),
-                                                  (int64_t) value->number(0.0), op);
+        return value != nullptr
+               && compareNumbers(redstoneStrengthAt(owner, level, position), (int64_t) value->number(0.0), op);
 
     if (test == "in_caravan")
         return applyBoolean(FollowCaravanGoal::isInCaravan(target->getUniqueId()), value, op);
@@ -948,8 +949,8 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     if (test == "is_in_village") {
         if (target == nullptr)
             return false;
-        const std::shared_ptr<Village> village =
-                owner.getLevelFor(*target).getVillageManager().getClosestVillage(blockPosition(*target), 0);
+        const std::shared_ptr<Village> village = owner.getLevelFor(*target).getVillageManager().getClosestVillage(
+                blockPosition(*target), 0);
         return applyBoolean(village != nullptr, value, op);
     }
 

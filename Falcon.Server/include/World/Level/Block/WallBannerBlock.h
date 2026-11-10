@@ -6,9 +6,7 @@
 
 class WallBannerBlock final : public WallAttachedBlock {
 public:
-    explicit WallBannerBlock(const Block &block) : WallAttachedBlock(block)
-    {
-    }
+    explicit WallBannerBlock(const Block &block) : WallAttachedBlock(block) {}
 
     static bool matches(const std::string &identifier);
 };

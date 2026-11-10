@@ -30,8 +30,8 @@ int32_t FlowerForestFoliageFeature::getRandom() const {
     return 8;
 }
 
-void FlowerForestFoliageFeature::_populateFlower(int32_t flower, BlockManager &object, int32_t x, int32_t y,
-                                                 int32_t z, IRandom &random) {
+void FlowerForestFoliageFeature::_populateFlower(int32_t flower, BlockManager &object, int32_t x, int32_t y, int32_t z,
+                                                 IRandom &random) {
     switch (flower) {
         case 1:
             object.setBlockStateAt(x, y, z, VanillaBlocks::ALLIUM().toBlockState());
@@ -119,8 +119,7 @@ void FlowerForestFoliageFeature::populate(ChunkGenerateContext &context, IRandom
             int32_t depth = 0;
             const int32_t height = level.getHeightAt(x, z);
             const BlockState *topBlockState = level.peekBlockPtr(x, height, z);
-            while (topBlockState != nullptr
-                   && (isLeaves(*topBlockState) || DecorationSupport::isAir(*topBlockState))) {
+            while (topBlockState != nullptr && (isLeaves(*topBlockState) || DecorationSupport::isAir(*topBlockState))) {
                 depth++;
                 topBlockState = level.peekBlockPtr(x, height - depth, z);
             }

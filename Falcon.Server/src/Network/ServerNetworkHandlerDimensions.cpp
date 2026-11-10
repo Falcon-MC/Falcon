@@ -224,8 +224,7 @@ void ServerNetworkHandler::changePlayerDimension(ServerPlayer &player, Dimension
     changePlayerLevel(player, getWorldFor(player).getLevel(dimension), position);
 }
 
-void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destinationLevel,
-                                             const Vector3f &position) {
+void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destinationLevel, const Vector3f &position) {
     if (player.isIn(destinationLevel))
         return;
 
@@ -298,8 +297,9 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
     // another dimension and complete on the first ack
     if (sameDimension) {
         player.setPendingDimensionHop(true);
-        _sendDimensionChange(player, dimension == DimensionType::Overworld ? DimensionType::Nether
-                                                                          : DimensionType::Overworld, destination);
+        _sendDimensionChange(player,
+                             dimension == DimensionType::Overworld ? DimensionType::Nether : DimensionType::Overworld,
+                             destination);
         return;
     }
 

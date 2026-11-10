@@ -243,8 +243,8 @@ void ScriptApi::_subscribeGameEvents() {
         if (hasSubscribers("after.playerBreakBlock")) {
             JSValue object = makeEvent("WorldAfterEvents.playerBreakBlock");
             JS_SetPropertyStr(mContext, object, "player", makePlayer(event.mPlayer));
-            JS_SetPropertyStr(mContext, object, "block", makeBlock(level, event.mBlockPosition.x,
-                                                                    event.mBlockPosition.y, event.mBlockPosition.z));
+            JS_SetPropertyStr(mContext, object, "block",
+                              makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y, event.mBlockPosition.z));
             JS_SetPropertyStr(mContext, object, "dimension", makeDimension(level));
             JS_SetPropertyStr(mContext, object, "brokenBlockPermutation",
                               makePermutation(event.mBrokenBlockIdentifier));
@@ -253,15 +253,16 @@ void ScriptApi::_subscribeGameEvents() {
 
         JSValue mineEvent = JS_NewObject(mContext);
         JS_SetPropertyStr(mContext, mineEvent, "source", makePlayer(event.mPlayer));
-        JS_SetPropertyStr(mContext, mineEvent, "block", makeBlock(level, event.mBlockPosition.x,
-                                                                   event.mBlockPosition.y, event.mBlockPosition.z));
+        JS_SetPropertyStr(mContext, mineEvent, "block",
+                          makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y, event.mBlockPosition.z));
         JS_SetPropertyStr(mContext, mineEvent, "minedBlockPermutation", makePermutation(event.mBrokenBlockIdentifier));
         fireHeldItemComponents(event.mPlayer, "onMineBlock", mineEvent);
 
         // the hook was renamed with the 2.0 module
         JSValue breakEvent = _makeBlockEvent(level, event.mBlockPosition);
         JS_SetPropertyStr(mContext, breakEvent, "player", makePlayer(event.mPlayer));
-        JS_SetPropertyStr(mContext, breakEvent, "brokenBlockPermutation", makePermutation(event.mBrokenBlockIdentifier));
+        JS_SetPropertyStr(mContext, breakEvent, "brokenBlockPermutation",
+                          makePermutation(event.mBrokenBlockIdentifier));
         fireBlockComponents(event.mBrokenBlockIdentifier, isStable1() ? "onPlayerDestroy" : "onPlayerBreak",
                             breakEvent);
     });
@@ -271,8 +272,8 @@ void ScriptApi::_subscribeGameEvents() {
         if (hasSubscribers("after.playerPlaceBlock")) {
             JSValue object = makeEvent("WorldAfterEvents.playerPlaceBlock");
             JS_SetPropertyStr(mContext, object, "player", makePlayer(event.mPlayer));
-            JS_SetPropertyStr(mContext, object, "block", makeBlock(level, event.mBlockPosition.x,
-                                                                    event.mBlockPosition.y, event.mBlockPosition.z));
+            JS_SetPropertyStr(mContext, object, "block",
+                              makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y, event.mBlockPosition.z));
             JS_SetPropertyStr(mContext, object, "dimension", makeDimension(level));
             emit("after.playerPlaceBlock", object);
         }
@@ -365,8 +366,8 @@ void ScriptApi::_subscribeGameEvents() {
         Level &level = mHost.getLevelFor(event.mPlayer);
         JSValue object = makeEvent("WorldBeforeEvents.playerBreakBlock");
         JS_SetPropertyStr(mContext, object, "player", makePlayer(event.mPlayer));
-        JS_SetPropertyStr(mContext, object, "block", makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y,
-                                                                event.mBlockPosition.z));
+        JS_SetPropertyStr(mContext, object, "block",
+                          makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y, event.mBlockPosition.z));
         JS_SetPropertyStr(mContext, object, "dimension", makeDimension(level));
         JS_SetPropertyStr(mContext, object, "cancel", JS_FALSE);
         if (emit("before.playerBreakBlock", object))

@@ -32,8 +32,8 @@ void BlockActorStore::moveStateFrom(BlockActorStore &&other) {
 }
 
 int64_t BlockActorStore::packPosition(const Vector3i &position) {
-    return ((int64_t) position.x & 0x3ffffff) << 38 | ((int64_t) position.y & 0xfff) << 26 |
-           ((int64_t) position.z & 0x3ffffff);
+    return ((int64_t) position.x & 0x3ffffff) << 38 | ((int64_t) position.y & 0xfff) << 26
+           | ((int64_t) position.z & 0x3ffffff);
 }
 
 namespace {
@@ -209,8 +209,8 @@ namespace {
         return furnace;
     }
 
-    const BlockActorClassRegistry::Registration BLAST_FURNACE_REGISTRATION(
-            FurnaceBlockActor::BLAST_FURNACE_ID, &createFurnace<FurnaceKind::BlastFurnace>);
+    const BlockActorClassRegistry::Registration BLAST_FURNACE_REGISTRATION(FurnaceBlockActor::BLAST_FURNACE_ID,
+                                                                           &createFurnace<FurnaceKind::BlastFurnace>);
     const BlockActorClassRegistry::Registration SMOKER_REGISTRATION(FurnaceBlockActor::SMOKER_ID,
                                                                     &createFurnace<FurnaceKind::Smoker>);
 }

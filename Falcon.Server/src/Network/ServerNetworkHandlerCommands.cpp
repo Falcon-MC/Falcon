@@ -186,7 +186,8 @@ namespace {
                 filter.mNameNegated = negated;
                 filter.mName = value;
             } else if (key == "c") {
-                if (negated || value.empty() || value.size() > 9 || value.find_first_not_of("0123456789") != std::string::npos)
+                if (negated || value.empty() || value.size() > 9
+                    || value.find_first_not_of("0123456789") != std::string::npos)
                     return filter;
                 filter.mLimit = (size_t) std::stoul(value);
                 if (filter.mLimit == 0)
@@ -324,8 +325,7 @@ std::vector<std::string> ServerNetworkHandler::getPlayerNames() const {
     return names;
 }
 
-std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &sender,
-                                                                 const std::string &selector) {
+std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &sender, const std::string &selector) {
     std::vector<ServerPlayer *> targets;
 
     if (selector.empty() || selector[0] != '@') {
@@ -462,8 +462,7 @@ void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const Command
 }
 
 void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,
-                                             const std::string &key,
-                                             const std::vector<std::string> &parameters) {
+                                             const std::string &key, const std::vector<std::string> &parameters) {
     CommandOutputPacket output;
     output.mOrigin = origin;
     output.mType = CommandOutputType::AllOutput;

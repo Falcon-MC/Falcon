@@ -55,8 +55,7 @@ namespace {
     }
 }
 
-NetherCarvers::NetherCarvers(int64_t seed) : mSeed(static_cast<uint32_t>(seed)) {
-}
+NetherCarvers::NetherCarvers(int64_t seed) : mSeed(static_cast<uint32_t>(seed)) {}
 
 void NetherCarvers::carve(LevelChunk &chunk) const {
     // the feature rule seeds the chunk random with the level seed before placing (sub_14D226750)
@@ -66,8 +65,9 @@ void NetherCarvers::carve(LevelChunk &chunk) const {
 
     for (int32_t sourceX = chunk.getX() - RANGE; sourceX <= chunk.getX() + RANGE; sourceX++) {
         for (int32_t sourceZ = chunk.getZ() - RANGE; sourceZ <= chunk.getZ() + RANGE; sourceZ++) {
-            random.seed(mSeed ^ (multiplierX * static_cast<uint32_t>(sourceX)
-                                 + multiplierZ * static_cast<uint32_t>(sourceZ)));
+            random.seed(
+                    mSeed
+                    ^ (multiplierX * static_cast<uint32_t>(sourceX) + multiplierZ * static_cast<uint32_t>(sourceZ)));
             _addCaves(random, sourceX, sourceZ, chunk);
         }
     }

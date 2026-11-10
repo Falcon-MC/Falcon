@@ -10,9 +10,7 @@ class ServerPlayer;
 
 class LeverBlock final : public Block {
 public:
-    explicit LeverBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit LeverBlock(const Block &block) : Block(block) {}
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;

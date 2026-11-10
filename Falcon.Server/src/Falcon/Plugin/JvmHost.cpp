@@ -37,11 +37,7 @@ namespace {
     const char *const LOADER_SIGNATURE = "(JJJLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z";
     const char *const OPTIONS_VARIABLE = "FALCON_JAVA_OPTIONS";
 
-    enum class HostState {
-        Idle,
-        Running,
-        Failed
-    };
+    enum class HostState { Idle, Running, Failed };
 
     struct SdkVersion {
         uint32_t mMajor = 0;
@@ -60,15 +56,14 @@ namespace {
     JvmNative::Vm *gVm = nullptr;
     FalconServerApi gApi{};
 
-    template<typename Function>
+    template <typename Function>
     Function tableEntry(void *const *table, size_t index) {
         return reinterpret_cast<Function>(table[index]);
     }
 
     class Environment {
     public:
-        explicit Environment(JvmNative::Env *env) : mEnv(env) {
-        }
+        explicit Environment(JvmNative::Env *env) : mEnv(env) {}
 
         bool pushFrame() const {
             const auto push = entry<JvmNative::PushLocalFrameFunction>(JvmNative::EnvIndex::PUSH_LOCAL_FRAME);
@@ -147,7 +142,7 @@ namespace {
         }
 
     private:
-        template<typename Function>
+        template <typename Function>
         Function entry(size_t index) const {
             return tableEntry<Function>(mEnv->mFunctions, index);
         }
@@ -469,8 +464,8 @@ namespace {
         const fs::path sdk = findSdk(sdkDirectory);
         if (sdk.empty()) {
             error = "no " + std::string(SDK_PREFIX) + std::to_string(FALCON_API_VERSION_MAJOR) + ".x.jar for API "
-                    + std::to_string(FALCON_API_VERSION_MAJOR) + "." + std::to_string(FALCON_API_VERSION_MINOR)
-                    + " in " + sdkDirectory.string();
+                    + std::to_string(FALCON_API_VERSION_MAJOR) + "." + std::to_string(FALCON_API_VERSION_MINOR) + " in "
+                    + sdkDirectory.string();
             return false;
         }
 
@@ -505,8 +500,8 @@ namespace {
         const JvmNative::Int result = create(&gVm, &env, &arguments);
         if (result != JvmNative::RESULT_OK || gVm == nullptr) {
             gVm = nullptr;
-            error = "the Java virtual machine in " + home.string() + " failed to start (error "
-                    + std::to_string(result) + ")";
+            error = "the Java virtual machine in " + home.string() + " failed to start (error " + std::to_string(result)
+                    + ")";
             return false;
         }
 

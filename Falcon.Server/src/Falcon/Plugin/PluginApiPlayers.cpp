@@ -12,8 +12,8 @@ using namespace PluginApiHelpers;
 
 namespace {
     bool isValidGameMode(FalconGameMode gameMode) {
-        return gameMode == FALCON_GAME_MODE_SURVIVAL || gameMode == FALCON_GAME_MODE_CREATIVE ||
-               gameMode == FALCON_GAME_MODE_ADVENTURE || gameMode == FALCON_GAME_MODE_SPECTATOR;
+        return gameMode == FALCON_GAME_MODE_SURVIVAL || gameMode == FALCON_GAME_MODE_CREATIVE
+               || gameMode == FALCON_GAME_MODE_ADVENTURE || gameMode == FALCON_GAME_MODE_SPECTATOR;
     }
 
     FalconGameMode playerGameMode(FalconPlayer *target) {

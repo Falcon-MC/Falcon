@@ -38,15 +38,17 @@ BlockState FireBlock::updateShape(Level &level, const Vector3i &position, const 
             supported = PlacementHelpers::hasSolidFace(*block, PlacementOrientation::FACE_UP);
     }
 
-    static const char *const properties[] = {
-        "", "minecraft:connection_up", "minecraft:connection_north", "minecraft:connection_south",
-        "minecraft:connection_west", "minecraft:connection_east"
-    };
+    static const char *const properties[] = {"",
+                                             "minecraft:connection_up",
+                                             "minecraft:connection_north",
+                                             "minecraft:connection_south",
+                                             "minecraft:connection_west",
+                                             "minecraft:connection_east"};
     const BlockData *down = neighbours[0];
     const bool grounded = supported || (down != nullptr && down->mBurnChance > 0);
     Tag states = state.mStates;
     for (int face = 1; face < 6; ++face)
-        states.putByte(properties[face], !grounded && neighbours[face] != nullptr
-                                       && neighbours[face]->mBurnChance > 0 ? 1 : 0);
+        states.putByte(properties[face],
+                       !grounded && neighbours[face] != nullptr && neighbours[face]->mBurnChance > 0 ? 1 : 0);
     return BlockState(state.mName, states);
 }

@@ -96,8 +96,8 @@ void DebugHud::tick(ServerNetworkHandler &owner, ServerPlayer &player) {
     switch (mPage) {
         case Page::Performance: {
             const double ticksPerSecond = millisecondsPerTick <= 0.0
-                                          ? TICKS_PER_SECOND
-                                          : std::min(TICKS_PER_SECOND, 1000.0 / millisecondsPerTick);
+                                                  ? TICKS_PER_SECOND
+                                                  : std::min(TICKS_PER_SECOND, 1000.0 / millisecondsPerTick);
             title = format("TPS %.2f  MSPT %.2f  peak %.2f", ticksPerSecond, millisecondsPerTick,
                            owner.getPeakMillisecondsPerTick());
             load = (float) (millisecondsPerTick / tickBudget);

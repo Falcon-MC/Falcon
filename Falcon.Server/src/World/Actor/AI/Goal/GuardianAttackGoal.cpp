@@ -18,8 +18,8 @@ namespace {
     void hurtWithMagic(ServerNetworkHandler &owner, MobActor &mob, Actor &target) {
         const ActorDamageSource source = ActorDamageSource::attack(MAGIC_DEATH_MESSAGE, target.getName(), mob,
                                                                    mob.getName(), mob.getPosition())
-                .withoutArmor()
-                .withoutCooldown();
+                                                 .withoutArmor()
+                                                 .withoutCooldown();
         if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&target))
             owner.hurt(*player, MAGIC_DAMAGE, source);
         else if (ServerActor *actor = dynamic_cast<ServerActor *>(&target))

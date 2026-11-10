@@ -43,8 +43,8 @@ bool ScaffoldingBlock::canPlaceAt(Level &level, const Vector3i &position, int bl
 
     const BlockState clicked = stateAt(level, BlockSupport::supportOf(position, blockFace));
     const BlockState below = belowOf(level, position);
-    if (clicked.mName == getIdentifier() || below.mName == getIdentifier()
-        || DecorationSupport::isAir(below) || DecorationSupport::isSolid(below))
+    if (clicked.mName == getIdentifier() || below.mName == getIdentifier() || DecorationSupport::isAir(below)
+        || DecorationSupport::isSolid(below))
         return true;
 
     for (int side = FACE_NORTH; side <= FACE_EAST; ++side) {

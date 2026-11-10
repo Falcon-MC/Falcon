@@ -134,8 +134,7 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
                     continue;
 
                 Candidate candidate;
-                candidate.mPosition = Vector3i((chunkX << 4) + localX,
-                                               LevelChunk::MIN_Y + index * 16 + localY,
+                candidate.mPosition = Vector3i((chunkX << 4) + localX, LevelChunk::MIN_Y + index * 16 + localY,
                                                (chunkZ << 4) + localZ);
                 candidate.mBlock = block;
                 candidates.push_back(std::move(candidate));

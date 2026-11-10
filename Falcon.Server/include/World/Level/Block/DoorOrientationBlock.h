@@ -7,9 +7,7 @@
 
 class DoorOrientationBlock final : public Block {
 public:
-    explicit DoorOrientationBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit DoorOrientationBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 
@@ -22,11 +20,10 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
-    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position, const BlockState &state,
+                  const ItemStack &usedItem, int blockFace) const override;
 
-    std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position,
-                                                        const BlockState &state,
+    std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position, const BlockState &state,
                                                         int playerFacing) const override;
 
     std::vector<Vector3i> getAffectedBlocks(Level &level, const Vector3i &position,

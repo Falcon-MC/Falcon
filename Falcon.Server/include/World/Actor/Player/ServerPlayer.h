@@ -70,13 +70,21 @@ public:
     // applies it on the next input tick and replays from there, the simulation takes it on that tick, queue or not
     void applyServerMotion(ServerNetworkHandler &owner, const Vector3f &motion);
 
-    const char *getIdentifier() const override { return "minecraft:player"; }
+    const char *getIdentifier() const override {
+        return "minecraft:player";
+    }
 
-    const NetworkIdentifier &getNetworkIdentifier() const { return mId; }
+    const NetworkIdentifier &getNetworkIdentifier() const {
+        return mId;
+    }
 
-    LoginState getLoginState() const { return mLoginState; }
+    LoginState getLoginState() const {
+        return mLoginState;
+    }
 
-    void setLoginState(LoginState state) { mLoginState = state; }
+    void setLoginState(LoginState state) {
+        mLoginState = state;
+    }
 
     int64_t getLoggedInTick() const {
         return mLoggedInTick;
@@ -87,11 +95,17 @@ public:
     }
 
     // chosen from the announced version, fixed for the session
-    const std::shared_ptr<const ProtocolCodec> &getCodec() const { return mCodec; }
+    const std::shared_ptr<const ProtocolCodec> &getCodec() const {
+        return mCodec;
+    }
 
-    void setCodec(std::shared_ptr<const ProtocolCodec> codec) { mCodec = std::move(codec); }
+    void setCodec(std::shared_ptr<const ProtocolCodec> codec) {
+        mCodec = std::move(codec);
+    }
 
-    bool isSpawned() const { return mLoginState == LoginState::Spawned; }
+    bool isSpawned() const {
+        return mLoginState == LoginState::Spawned;
+    }
 
     std::string getName() const override {
         return mName;
@@ -101,27 +115,49 @@ public:
         return true;
     }
 
-    void setName(const std::string &name) { mName = name; }
+    void setName(const std::string &name) {
+        mName = name;
+    }
 
-    const std::string &getUuid() const { return mUuid; }
+    const std::string &getUuid() const {
+        return mUuid;
+    }
 
-    void setUuid(const std::string &uuid) { mUuid = uuid; }
+    void setUuid(const std::string &uuid) {
+        mUuid = uuid;
+    }
 
-    const std::string &getXuid() const { return mXuid; }
+    const std::string &getXuid() const {
+        return mXuid;
+    }
 
-    void setXuid(const std::string &xuid) { mXuid = xuid; }
+    void setXuid(const std::string &xuid) {
+        mXuid = xuid;
+    }
 
-    const std::string &getPlayFabId() const { return mPlayFabId; }
+    const std::string &getPlayFabId() const {
+        return mPlayFabId;
+    }
 
-    void setPlayFabId(const std::string &playFabId) { mPlayFabId = playFabId; }
+    void setPlayFabId(const std::string &playFabId) {
+        mPlayFabId = playFabId;
+    }
 
-    const SerializedSkin &getSkin() const { return mSkin; }
+    const SerializedSkin &getSkin() const {
+        return mSkin;
+    }
 
-    void setSkin(const SerializedSkin &skin) { mSkin = skin; }
+    void setSkin(const SerializedSkin &skin) {
+        mSkin = skin;
+    }
 
-    int getBuildPlatform() const { return mBuildPlatform; }
+    int getBuildPlatform() const {
+        return mBuildPlatform;
+    }
 
-    void setBuildPlatform(int platform) { mBuildPlatform = platform; }
+    void setBuildPlatform(int platform) {
+        mBuildPlatform = platform;
+    }
 
     // CompatibleWithClientSideChunkGen from the login client data (sub_1422AA4E0, ServerPlayer+3576).
     bool isClientSideGenerationCompatible() const {
@@ -150,15 +186,23 @@ public:
         return mMapRequests;
     }
 
-    const std::string &getLocale() const { return mLocale; }
+    const std::string &getLocale() const {
+        return mLocale;
+    }
 
-    void setLocale(const std::string &locale) { mLocale = locale; }
+    void setLocale(const std::string &locale) {
+        mLocale = locale;
+    }
 
     std::string localize(const std::string &key, const std::vector<std::string> &parameters = {}) const;
 
-    int32_t getGameType() const { return mGameType; }
+    int32_t getGameType() const {
+        return mGameType;
+    }
 
-    void setGameType(int32_t gameType) { mGameType = gameType; }
+    void setGameType(int32_t gameType) {
+        mGameType = gameType;
+    }
 
     int64_t getLastActiveTick() const {
         return mLastActiveTick;
@@ -179,26 +223,42 @@ public:
 
     Vector3f getLookDirection() const;
 
-    bool isOp() const { return mIsOp; }
+    bool isOp() const {
+        return mIsOp;
+    }
 
-    void setOp(bool isOp) { mIsOp = isOp; }
+    void setOp(bool isOp) {
+        mIsOp = isOp;
+    }
 
-    bool isFlying() const { return mFlying; }
+    bool isFlying() const {
+        return mFlying;
+    }
 
-    bool hasSimulatedVelocity() const { return mHasSimulatedVelocity; }
+    bool hasSimulatedVelocity() const {
+        return mHasSimulatedVelocity;
+    }
 
-    const Vector3f &getSimulatedVelocity() const { return mSimulatedVelocity; }
+    const Vector3f &getSimulatedVelocity() const {
+        return mSimulatedVelocity;
+    }
 
     void setSimulatedVelocity(const Vector3f &velocity) {
         mSimulatedVelocity = velocity;
         mHasSimulatedVelocity = true;
     }
 
-    void clearSimulatedVelocity() { mHasSimulatedVelocity = false; }
+    void clearSimulatedVelocity() {
+        mHasSimulatedVelocity = false;
+    }
 
-    bool hasSimulatedPosition() const { return mHasSimulatedPosition; }
+    bool hasSimulatedPosition() const {
+        return mHasSimulatedPosition;
+    }
 
-    const Vector3f &getSimulatedPosition() const { return mSimulatedPosition; }
+    const Vector3f &getSimulatedPosition() const {
+        return mSimulatedPosition;
+    }
 
     void setSimulatedPosition(const Vector3f &position) {
         mSimulatedPosition = position;
@@ -234,8 +294,7 @@ public:
 
     bool findSimulatedBox(const Vector3f &feet, float height, AxisAlignedBB &box) const {
         if (!mHasSimulatedBox || feet.x != mSimulatedBoxFeet.x || feet.y != mSimulatedBoxFeet.y
-            || feet.z != mSimulatedBoxFeet.z
-            || std::fabs(mSimulatedBox.mMaxY - mSimulatedBox.mMinY - height) > 1.0e-4f)
+            || feet.z != mSimulatedBoxFeet.z || std::fabs(mSimulatedBox.mMaxY - mSimulatedBox.mMinY - height) > 1.0e-4f)
             return false;
         box = mSimulatedBox;
         return true;
@@ -263,24 +322,38 @@ public:
         return mSwimAmount;
     }
 
-    bool hasSupportingBlock() const { return mHasSupportingBlock; }
+    bool hasSupportingBlock() const {
+        return mHasSupportingBlock;
+    }
 
-    const Vector3i &getSupportingBlock() const { return mSupportingBlock; }
+    const Vector3i &getSupportingBlock() const {
+        return mSupportingBlock;
+    }
 
     void setSupportingBlock(const Vector3i &position) {
         mSupportingBlock = position;
         mHasSupportingBlock = true;
     }
 
-    void clearSupportingBlock() { mHasSupportingBlock = false; }
+    void clearSupportingBlock() {
+        mHasSupportingBlock = false;
+    }
 
-    int32_t getSlowdownTicks() const { return mSlowdownTicks; }
+    int32_t getSlowdownTicks() const {
+        return mSlowdownTicks;
+    }
 
-    void setSlowdownTicks(int32_t ticks) { mSlowdownTicks = ticks; }
+    void setSlowdownTicks(int32_t ticks) {
+        mSlowdownTicks = ticks;
+    }
 
-    bool isSimulatedSneaking() const { return mSimulatedSneaking; }
+    bool isSimulatedSneaking() const {
+        return mSimulatedSneaking;
+    }
 
-    bool isSimulatedCrawling() const { return mSimulatedCrawling; }
+    bool isSimulatedCrawling() const {
+        return mSimulatedCrawling;
+    }
 
     bool isSimulatedSwimming() const {
         return mSimulatedSwimming;
@@ -295,9 +368,13 @@ public:
         mSimulatedCrawling = crawling;
     }
 
-    int32_t getJumpDelay() const { return mJumpDelay; }
+    int32_t getJumpDelay() const {
+        return mJumpDelay;
+    }
 
-    void setJumpDelay(int32_t ticks) { mJumpDelay = ticks; }
+    void setJumpDelay(int32_t ticks) {
+        mJumpDelay = ticks;
+    }
 
     void queueKnockback(const Vector3f &motion) {
         mPendingKnockback = motion;
@@ -312,7 +389,9 @@ public:
         return true;
     }
 
-    void clearPendingKnockback() { mHasPendingKnockback = false; }
+    void clearPendingKnockback() {
+        mHasPendingKnockback = false;
+    }
 
     // motion due on this input tick or an earlier one (applyServerMotion)
     bool takeServerMotion(int64_t inputTick, Vector3f &out) {
@@ -324,12 +403,12 @@ public:
     }
 
     void scheduleKnockback(const Vector3f &motion) {
-        mAcknowledgements.add([this, motion]() {
-            queueKnockback(motion);
-        });
+        mAcknowledgements.add([this, motion]() { queueKnockback(motion); });
     }
 
-    PlayerAcknowledgements &getAcknowledgements() { return mAcknowledgements; }
+    PlayerAcknowledgements &getAcknowledgements() {
+        return mAcknowledgements;
+    }
 
     void awaitMovementChange() {
         mPendingMovementChanges++;
@@ -339,7 +418,9 @@ public:
         });
     }
 
-    bool hasPendingMovementChange() const { return mPendingMovementChanges > 0; }
+    bool hasPendingMovementChange() const {
+        return mPendingMovementChanges > 0;
+    }
 
     // a client acks a movement change within a round trip; one holding the ack back would move unchecked until the
     // timeout: the simulation resumes after a bounded number of inputs
@@ -363,13 +444,21 @@ public:
         return mIsOp ? CommandPermission::GameDirectors : CommandPermission::Any;
     }
 
-    int64_t getFirstPlayed() const { return mFirstPlayed; }
+    int64_t getFirstPlayed() const {
+        return mFirstPlayed;
+    }
 
-    void setFirstPlayed(int64_t firstPlayed) { mFirstPlayed = firstPlayed; }
+    void setFirstPlayed(int64_t firstPlayed) {
+        mFirstPlayed = firstPlayed;
+    }
 
-    PlayerInventory &getInventory() { return mInventory; }
+    PlayerInventory &getInventory() {
+        return mInventory;
+    }
 
-    const PlayerInventory &getInventory() const { return mInventory; }
+    const PlayerInventory &getInventory() const {
+        return mInventory;
+    }
 
     void recordHurtBy(uint64_t runtimeId, int64_t tick) {
         mLastHurtByRuntimeId = runtimeId;
@@ -397,21 +486,33 @@ public:
         return mLastAttackedTick;
     }
 
-    std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() { return mDynamicProperties; }
+    std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() {
+        return mDynamicProperties;
+    }
 
-    int64_t getLastItemUseTick() const { return mLastItemUseTick; }
+    int64_t getLastItemUseTick() const {
+        return mLastItemUseTick;
+    }
 
-    void setLastItemUseTick(int64_t tick) { mLastItemUseTick = tick; }
+    void setLastItemUseTick(int64_t tick) {
+        mLastItemUseTick = tick;
+    }
 
-    InventoryManager &getInventoryManager() { return mInventoryManager; }
+    InventoryManager &getInventoryManager() {
+        return mInventoryManager;
+    }
 
     const InventoryManager &getInventoryManager() const {
         return mInventoryManager;
     }
 
-    PacketSender *getPacketSender() const { return mSender; }
+    PacketSender *getPacketSender() const {
+        return mSender;
+    }
 
-    void setEffectsNetworkReady(bool ready) { mEffectsNetworkReady = ready; }
+    void setEffectsNetworkReady(bool ready) {
+        mEffectsNetworkReady = ready;
+    }
 
     PlayerBossBars &getBossBars() {
         return mBossBars;
@@ -454,11 +555,17 @@ public:
 
     void resetTitle();
 
-    bool hasPendingMove() const { return mHasPendingMove; }
+    bool hasPendingMove() const {
+        return mHasPendingMove;
+    }
 
-    const Vector3f &getPendingMovePosition() const { return mPendingMovePosition; }
+    const Vector3f &getPendingMovePosition() const {
+        return mPendingMovePosition;
+    }
 
-    const Vector3f &getPendingMoveRotation() const { return mPendingMoveRotation; }
+    const Vector3f &getPendingMoveRotation() const {
+        return mPendingMoveRotation;
+    }
 
     void queueMove(const Vector3f &position, const Vector3f &rotation) {
         mPendingMovePosition = position;
@@ -466,15 +573,25 @@ public:
         mHasPendingMove = true;
     }
 
-    void clearPendingMove() { mHasPendingMove = false; }
+    void clearPendingMove() {
+        mHasPendingMove = false;
+    }
 
-    int64_t getItemUseStartTick() const { return mItemUseStartTick; }
+    int64_t getItemUseStartTick() const {
+        return mItemUseStartTick;
+    }
 
-    void setItemUseStartTick(int64_t tick) { mItemUseStartTick = tick; }
+    void setItemUseStartTick(int64_t tick) {
+        mItemUseStartTick = tick;
+    }
 
-    ChunkStreamState &getChunkStreamState() { return mChunkStreamState; }
+    ChunkStreamState &getChunkStreamState() {
+        return mChunkStreamState;
+    }
 
-    bool isAwaitingDimensionAck() const { return mAwaitingDimensionAck; }
+    bool isAwaitingDimensionAck() const {
+        return mAwaitingDimensionAck;
+    }
 
     void setAwaitingDimensionAck(bool awaiting) {
         if (awaiting) {
@@ -485,9 +602,13 @@ public:
     }
 
     // a world change inside one dimension sent an intermediate dimension; the real one follows the ack
-    bool hasPendingDimensionHop() const { return mPendingDimensionHop; }
+    bool hasPendingDimensionHop() const {
+        return mPendingDimensionHop;
+    }
 
-    void setPendingDimensionHop(bool pending) { mPendingDimensionHop = pending; }
+    void setPendingDimensionHop(bool pending) {
+        mPendingDimensionHop = pending;
+    }
 
     void consumeOneHeldItem();
 
@@ -571,7 +692,9 @@ public:
         mHasSpawnPoint = false;
     }
 
-    int32_t getTicksSinceInAir() const { return mTicksSinceInAir; }
+    int32_t getTicksSinceInAir() const {
+        return mTicksSinceInAir;
+    }
 
     void tickGroundTracking() {
         if (isOnGround())
@@ -580,21 +703,33 @@ public:
             mTicksSinceInAir = 0;
     }
 
-    bool isSpinAttacking() const { return mSpinAttackTicks > 0; }
+    bool isSpinAttacking() const {
+        return mSpinAttackTicks > 0;
+    }
 
     void startSpinAttack(ServerNetworkHandler &owner, int32_t ticks);
 
     void tickSpinAttack(ServerNetworkHandler &owner);
 
-    bool isAwaitingConsumableRelease() const { return mAwaitingConsumableRelease; }
+    bool isAwaitingConsumableRelease() const {
+        return mAwaitingConsumableRelease;
+    }
 
-    void setAwaitingConsumableRelease() { mAwaitingConsumableRelease = true; }
+    void setAwaitingConsumableRelease() {
+        mAwaitingConsumableRelease = true;
+    }
 
-    void clearAwaitingConsumableRelease() { mAwaitingConsumableRelease = false; }
+    void clearAwaitingConsumableRelease() {
+        mAwaitingConsumableRelease = false;
+    }
 
-    int64_t getLastEarlyConsumableReleaseTick() const { return mLastEarlyConsumableReleaseTick; }
+    int64_t getLastEarlyConsumableReleaseTick() const {
+        return mLastEarlyConsumableReleaseTick;
+    }
 
-    void setLastEarlyConsumableReleaseTick(int64_t tick) { mLastEarlyConsumableReleaseTick = tick; }
+    void setLastEarlyConsumableReleaseTick(int64_t tick) {
+        mLastEarlyConsumableReleaseTick = tick;
+    }
 
     bool hasItemCooldown(const ItemStack &item, int64_t currentTick) const;
 
@@ -604,17 +739,29 @@ public:
 
     void tickItemCooldowns(int64_t currentTick);
 
-    bool hasLastRightClick() const { return mHasLastRightClick; }
+    bool hasLastRightClick() const {
+        return mHasLastRightClick;
+    }
 
-    const Vector3i &getLastRightClickBlockPosition() const { return mLastRightClickBlockPosition; }
+    const Vector3i &getLastRightClickBlockPosition() const {
+        return mLastRightClickBlockPosition;
+    }
 
-    int32_t getLastRightClickFace() const { return mLastRightClickFace; }
+    int32_t getLastRightClickFace() const {
+        return mLastRightClickFace;
+    }
 
-    const Vector3f &getLastRightClickPlayerPosition() const { return mLastRightClickPlayerPosition; }
+    const Vector3f &getLastRightClickPlayerPosition() const {
+        return mLastRightClickPlayerPosition;
+    }
 
-    const Vector3f &getLastRightClickPosition() const { return mLastRightClickPosition; }
+    const Vector3f &getLastRightClickPosition() const {
+        return mLastRightClickPosition;
+    }
 
-    uint64_t getLastRightClickTimeMicros() const { return mLastRightClickTimeMicros; }
+    uint64_t getLastRightClickTimeMicros() const {
+        return mLastRightClickTimeMicros;
+    }
 
     void recordRightClick(const Vector3i &blockPosition, int32_t face, const Vector3f &playerPosition,
                           const Vector3f &clickPosition, uint64_t timeMicros) {
@@ -663,44 +810,78 @@ public:
         return std::chrono::steady_clock::now() - mLastTeleport < POST_TELEPORT_GRACE;
     }
 
-    int getAirSupply() const { return mAirSupply; }
+    int getAirSupply() const {
+        return mAirSupply;
+    }
 
-    void setAirSupply(int airSupply) { mAirSupply = airSupply; }
+    void setAirSupply(int airSupply) {
+        mAirSupply = airSupply;
+    }
 
-    void resetAirSupply() { mAirSupply = MAX_AIR_SUPPLY; }
+    void resetAirSupply() {
+        mAirSupply = MAX_AIR_SUPPLY;
+    }
 
-    int getTurtleHelmetTicks() const { return mTurtleHelmetTicks; }
+    int getTurtleHelmetTicks() const {
+        return mTurtleHelmetTicks;
+    }
 
-    void setTurtleHelmetTicks(int ticks) { mTurtleHelmetTicks = ticks; }
+    void setTurtleHelmetTicks(int ticks) {
+        mTurtleHelmetTicks = ticks;
+    }
 
-    bool isBreakingBlock() const { return mIsBreakingBlock; }
+    bool isBreakingBlock() const {
+        return mIsBreakingBlock;
+    }
 
-    const Vector3i &getBreakingBlockPosition() const { return mBreakingBlockPosition; }
+    const Vector3i &getBreakingBlockPosition() const {
+        return mBreakingBlockPosition;
+    }
 
-    int32_t getBreakingFace() const { return mBreakingFace; }
+    int32_t getBreakingFace() const {
+        return mBreakingFace;
+    }
 
-    void setBreakingFace(int32_t face) { mBreakingFace = face; }
+    void setBreakingFace(int32_t face) {
+        mBreakingFace = face;
+    }
 
-    bool hasLastBlockAttacked() const { return mHasLastBlockAttacked; }
+    bool hasLastBlockAttacked() const {
+        return mHasLastBlockAttacked;
+    }
 
-    const Vector3i &getLastBlockAttacked() const { return mLastBlockAttacked; }
+    const Vector3i &getLastBlockAttacked() const {
+        return mLastBlockAttacked;
+    }
 
     void setLastBlockAttacked(const Vector3i &position) {
         mHasLastBlockAttacked = true;
         mLastBlockAttacked = position;
     }
 
-    void clearLastBlockAttacked() { mHasLastBlockAttacked = false; }
+    void clearLastBlockAttacked() {
+        mHasLastBlockAttacked = false;
+    }
 
-    double getBreakProgress() const { return mBreakProgress; }
+    double getBreakProgress() const {
+        return mBreakProgress;
+    }
 
-    double getBreakSpeed() const { return mBreakSpeed; }
+    double getBreakSpeed() const {
+        return mBreakSpeed;
+    }
 
-    int64_t getBreakStartTick() const { return mBreakStartTick; }
+    int64_t getBreakStartTick() const {
+        return mBreakStartTick;
+    }
 
-    void addBreakProgress(double amount) { mBreakProgress += amount; }
+    void addBreakProgress(double amount) {
+        mBreakProgress += amount;
+    }
 
-    void setBreakSpeed(double speed) { mBreakSpeed = speed; }
+    void setBreakSpeed(double speed) {
+        mBreakSpeed = speed;
+    }
 
     void startBreakingBlock(const Vector3i &position, int32_t face, double speed, int64_t startTick = 0) {
         mIsBreakingBlock = true;
@@ -719,22 +900,34 @@ public:
         mBreakStartTick = 0;
     }
 
-    int getBreakingFxTicker() { return mBreakingFxTicker++; }
+    int getBreakingFxTicker() {
+        return mBreakingFxTicker++;
+    }
 
     ServerPlayerMovementComponent &getMovementInputs() {
         return mMovementInputs;
     }
 
-    bool hasSeenNonZeroClientTick() const { return mSawNonZeroClientTick; }
+    bool hasSeenNonZeroClientTick() const {
+        return mSawNonZeroClientTick;
+    }
 
-    void markNonZeroClientTickSeen() { mSawNonZeroClientTick = true; }
+    void markNonZeroClientTickSeen() {
+        mSawNonZeroClientTick = true;
+    }
 
-    std::unordered_set<int64_t> &getSentChunks() { return mSentChunks; }
+    std::unordered_set<int64_t> &getSentChunks() {
+        return mSentChunks;
+    }
 
-    std::unordered_set<uint64_t> &getVisibleActors() { return mVisibleActors; }
+    std::unordered_set<uint64_t> &getVisibleActors() {
+        return mVisibleActors;
+    }
 
     // the other players this client has spawned
-    std::unordered_set<uint64_t> &getVisiblePlayers() { return mVisiblePlayers; }
+    std::unordered_set<uint64_t> &getVisiblePlayers() {
+        return mVisiblePlayers;
+    }
 
     bool hasMovedSinceBroadcast() const {
         return mPosition != mBroadcastPosition || mRotation != mBroadcastRotation;
@@ -745,19 +938,33 @@ public:
         mBroadcastRotation = mRotation;
     }
 
-    size_t getSentChunkCount() const { return mSentChunkCount; }
+    size_t getSentChunkCount() const {
+        return mSentChunkCount;
+    }
 
-    void addSentChunkCount(size_t count) { mSentChunkCount += count; }
+    void addSentChunkCount(size_t count) {
+        mSentChunkCount += count;
+    }
 
-    bool hasSpawnChunksReady() const { return mSpawnChunksReady; }
+    bool hasSpawnChunksReady() const {
+        return mSpawnChunksReady;
+    }
 
-    void setSpawnChunksReady(bool ready) { mSpawnChunksReady = ready; }
+    void setSpawnChunksReady(bool ready) {
+        mSpawnChunksReady = ready;
+    }
 
-    bool hasChunkPosition() const { return mHasChunkPosition; }
+    bool hasChunkPosition() const {
+        return mHasChunkPosition;
+    }
 
-    int32_t getLastChunkX() const { return mLastChunkX; }
+    int32_t getLastChunkX() const {
+        return mLastChunkX;
+    }
 
-    int32_t getLastChunkZ() const { return mLastChunkZ; }
+    int32_t getLastChunkZ() const {
+        return mLastChunkZ;
+    }
 
     void setLastChunkPosition(int32_t chunkX, int32_t chunkZ) {
         mLastChunkX = chunkX;

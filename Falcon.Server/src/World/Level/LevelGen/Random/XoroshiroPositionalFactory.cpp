@@ -4,13 +4,13 @@
 
 namespace {
 
-int64_t readBigEndian(const unsigned char *bytes) {
-    uint64_t value = 0;
-    for (int32_t i = 0; i < 8; ++i) {
-        value = (value << 8) | bytes[i];
+    int64_t readBigEndian(const unsigned char *bytes) {
+        uint64_t value = 0;
+        for (int32_t i = 0; i < 8; ++i) {
+            value = (value << 8) | bytes[i];
+        }
+        return static_cast<int64_t>(value);
     }
-    return static_cast<int64_t>(value);
-}
 
 }
 

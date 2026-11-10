@@ -13,24 +13,30 @@
 #include <map>
 
 namespace {
-    const char *const UNDEAD_ACTORS[] = {
-            "minecraft:bogged", "minecraft:drowned", "minecraft:husk", "minecraft:parched",
-            "minecraft:phantom", "minecraft:skeleton", "minecraft:stray", "minecraft:wither",
-            "minecraft:wither_skeleton", "minecraft:zombie", "minecraft:zombie_horse",
-            "minecraft:zombie_pigman", "minecraft:zombie_villager", "minecraft:zombie_villager_v2"
-    };
+    const char *const UNDEAD_ACTORS[] = {"minecraft:bogged",
+                                         "minecraft:drowned",
+                                         "minecraft:husk",
+                                         "minecraft:parched",
+                                         "minecraft:phantom",
+                                         "minecraft:skeleton",
+                                         "minecraft:stray",
+                                         "minecraft:wither",
+                                         "minecraft:wither_skeleton",
+                                         "minecraft:zombie",
+                                         "minecraft:zombie_horse",
+                                         "minecraft:zombie_pigman",
+                                         "minecraft:zombie_villager",
+                                         "minecraft:zombie_villager_v2"};
 
-    const char *const ARTHROPOD_ACTORS[] = {
-            "minecraft:spider", "minecraft:cave_spider", "minecraft:silverfish", "minecraft:endermite"
-    };
+    const char *const ARTHROPOD_ACTORS[] = {"minecraft:spider", "minecraft:cave_spider", "minecraft:silverfish",
+                                            "minecraft:endermite"};
 
     const char *const FIRE_IMMUNE_ACTORS[] = {
-            "minecraft:blaze", "minecraft:ender_dragon", "minecraft:ghast", "minecraft:magma_cube",
-            "minecraft:strider", "minecraft:wither", "minecraft:wither_skeleton", "minecraft:zoglin",
-            "minecraft:zombie_pigman"
-    };
+            "minecraft:blaze",           "minecraft:ender_dragon", "minecraft:ghast",
+            "minecraft:magma_cube",      "minecraft:strider",      "minecraft:wither",
+            "minecraft:wither_skeleton", "minecraft:zoglin",       "minecraft:zombie_pigman"};
 
-    template<size_t N>
+    template <size_t N>
     bool containsIdentifier(const char *const (&identifiers)[N], const char *identifier) {
         for (const char *candidate: identifiers) {
             if (std::strcmp(candidate, identifier) == 0)
@@ -386,8 +392,7 @@ void Actor::exhaust(float amount) {
 }
 
 void Actor::_changeFood(float food) {
-    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FOOD_CHANGE)
-                                        : nullptr;
+    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FOOD_CHANGE) : nullptr;
     if (plugins != nullptr) {
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_FOOD_CHANGE;
@@ -460,8 +465,7 @@ bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
         } else if (food <= 0.0f) {
             const float health = getHealth();
             const bool starve = (difficulty == DIFFICULTY_EASY && health > 10.0f)
-                                || (difficulty == DIFFICULTY_NORMAL && health > 1.0f)
-                                || difficulty == DIFFICULTY_HARD;
+                                || (difficulty == DIFFICULTY_NORMAL && health > 1.0f) || difficulty == DIFFICULTY_HARD;
 
             if (starve)
                 mPendingStarveDamage = true;
@@ -471,9 +475,7 @@ bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
     if (!canSprint())
         mFlags.set(ActorFlag::Sprinting, false);
 
-    return getFood() != previousFood
-           || getSaturation() != previousSaturation
-           || getExhaustion() != previousExhaustion
+    return getFood() != previousFood || getSaturation() != previousSaturation || getExhaustion() != previousExhaustion
            || getHealth() != previousHealth;
 }
 

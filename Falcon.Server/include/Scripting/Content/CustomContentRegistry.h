@@ -111,15 +111,25 @@ class CustomContentRegistry {
 public:
     void load(const BehaviorPackManager &packs, ItemDefinitionRegistry &items, BlockDefinitionRegistry &blocks);
 
-    const std::vector<BlockPropertyData> &getBlockProperties() const { return mBlockProperties; }
+    const std::vector<BlockPropertyData> &getBlockProperties() const {
+        return mBlockProperties;
+    }
 
-    const std::vector<CustomItemDefinition> &getItems() const { return mItems; }
+    const std::vector<CustomItemDefinition> &getItems() const {
+        return mItems;
+    }
 
-    const std::vector<CustomBlockDefinition> &getBlocks() const { return mBlocks; }
+    const std::vector<CustomBlockDefinition> &getBlocks() const {
+        return mBlocks;
+    }
 
-    const std::vector<CustomActorDefinition> &getActors() const { return mActors; }
+    const std::vector<CustomActorDefinition> &getActors() const {
+        return mActors;
+    }
 
-    const std::vector<CustomRecipe> &getRecipes() const { return mRecipes; }
+    const std::vector<CustomRecipe> &getRecipes() const {
+        return mRecipes;
+    }
 
     const CustomActorDefinition *getActorDefinition(const std::string &identifier) const;
 

@@ -9,18 +9,14 @@
 
 float ArmorProtection::apply(const ItemStack *armor, size_t count, float amount, const std::string &deathMessageKey,
                              float efficiency) {
-    const bool fireDamage = deathMessageKey == "death.attack.lava"
-                            || deathMessageKey == "death.attack.onFire"
+    const bool fireDamage = deathMessageKey == "death.attack.lava" || deathMessageKey == "death.attack.onFire"
                             || deathMessageKey == "death.attack.inFire";
     const bool fallDamage = deathMessageKey == "death.fell.accident.generic";
     const bool explosionDamage = deathMessageKey == "death.attack.explosion";
     const bool projectileDamage = deathMessageKey == "death.attack.arrow";
-    const bool armorDamage = deathMessageKey != "death.attack.inFire"
-                             && deathMessageKey != "death.attack.drown"
-                             && !fallDamage
-                             && deathMessageKey != "death.attack.outOfWorld"
-                             && deathMessageKey != "death.attack.thorns"
-                             && deathMessageKey != "death.attack.suicide";
+    const bool armorDamage = deathMessageKey != "death.attack.inFire" && deathMessageKey != "death.attack.drown"
+                             && !fallDamage && deathMessageKey != "death.attack.outOfWorld"
+                             && deathMessageKey != "death.attack.thorns" && deathMessageKey != "death.attack.suicide";
 
     int armorPoints = 0;
     int enchantmentProtectionFactor = 0;
@@ -33,8 +29,8 @@ float ArmorProtection::apply(const ItemStack *armor, size_t count, float amount,
         if (data != nullptr)
             armorPoints += data->mArmorPoints;
 
-        enchantmentProtectionFactor += _protectionFactor(
-                ItemEnchantments::getLevel(piece, EnchantmentIds::PROTECTION), 0.75f);
+        enchantmentProtectionFactor += _protectionFactor(ItemEnchantments::getLevel(piece, EnchantmentIds::PROTECTION),
+                                                         0.75f);
         if (fireDamage)
             enchantmentProtectionFactor += _protectionFactor(
                     ItemEnchantments::getLevel(piece, EnchantmentIds::FIRE_PROTECTION), 1.25f);
@@ -58,8 +54,7 @@ float ArmorProtection::apply(const ItemStack *armor, size_t count, float amount,
 
     if (effectiveFactor > 0.0f) {
         const int scaledProtection = std::min(
-                (int) std::ceil(std::min(effectiveFactor, 25.0f) *
-                                (50.0f + (float) (rand() % 51)) / 100.0f), 20);
+                (int) std::ceil(std::min(effectiveFactor, 25.0f) * (50.0f + (float) (rand() % 51)) / 100.0f), 20);
         amount *= std::max(0.0f, 1.0f - (float) scaledProtection * 0.04f);
     }
 

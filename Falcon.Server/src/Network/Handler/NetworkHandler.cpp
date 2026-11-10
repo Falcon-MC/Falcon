@@ -31,8 +31,7 @@ NetworkHandler::Connection::Connection(const NetworkIdentifier &id, std::shared_
     mBatchedPeer = std::make_shared<BatchedNetworkPeer>(mCompressedPeer);
 }
 
-NetworkHandler::NetworkHandler(std::unique_ptr<Connector> connector)
-        : mIoRunning(false), mConnectionCount(0) {
+NetworkHandler::NetworkHandler(std::unique_ptr<Connector> connector) : mIoRunning(false), mConnectionCount(0) {
     const size_t shards = ioShardCount();
     for (size_t index = 0; index < shards; ++index)
         mShards.push_back(std::unique_ptr<Shard>(new Shard()));
@@ -222,9 +221,8 @@ NetworkPeer::Reliability NetworkHandler::_toPeerReliability(const Packet &packet
 }
 
 Compressibility NetworkHandler::_toPeerCompressibility(const Packet &packet) {
-    return packet.mCompressible == Packet::Compressibility::Incompressible
-           ? Compressibility::Incompressible
-           : Compressibility::Compressible;
+    return packet.mCompressible == Packet::Compressibility::Incompressible ? Compressibility::Incompressible
+                                                                           : Compressibility::Compressible;
 }
 
 void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, const PacketCodecContext &context) {
@@ -362,8 +360,7 @@ void NetworkHandler::_applyOutbound(Shard &shard, OutboundCommand &command) {
         if (command.mShared != nullptr)
             it->second->getBatchedPeer()->sendShared(*command.mShared, command.mReliability);
         else
-            it->second->getBatchedPeer()->sendPacket(command.mData, command.mReliability,
-                                                     command.mCompressibility);
+            it->second->getBatchedPeer()->sendPacket(command.mData, command.mReliability, command.mCompressibility);
         return;
     }
 
@@ -454,8 +451,8 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
     shard.mBacklog.insert(shard.mBacklog.end(), std::make_move_iterator(commands.begin()),
                           std::make_move_iterator(commands.end()));
 
-    const std::chrono::steady_clock::time_point deadline =
-            std::chrono::steady_clock::now() + MAX_OUTBOUND_TIME_PER_PASS;
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now()
+                                                           + MAX_OUTBOUND_TIME_PER_PASS;
     size_t bytes = 0;
     while (!shard.mBacklog.empty()) {
         // only data waits for the next pass; a flush and its compression/encryption switch go out together,

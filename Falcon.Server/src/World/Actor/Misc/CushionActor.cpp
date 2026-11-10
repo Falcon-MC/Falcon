@@ -30,8 +30,7 @@ namespace {
     constexpr float SUPPORT_PROBE_DEPTH = 0.015625f;
 }
 
-CushionActor::CushionActor(uint64_t runtimeId, const std::string &identifier)
-        : ServerActor(runtimeId, identifier) {
+CushionActor::CushionActor(uint64_t runtimeId, const std::string &identifier) : ServerActor(runtimeId, identifier) {
     getFlags().set(ActorFlag::HasGravity, false);
 }
 

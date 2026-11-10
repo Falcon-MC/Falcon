@@ -37,8 +37,7 @@ void IceCavesSurfaceFeature::apply(ChunkGenerateContext &context) {
         const int32_t worldX = (chunk.getX() << 4) + localX;
         for (int32_t localZ = 0; localZ < 16; localZ++) {
             const int32_t worldZ = (chunk.getZ() << 4) + localZ;
-            for (int32_t y = std::min(MAX_SURFACE_Y, chunk.getHeight(localX, localZ)); y > LevelChunk::MIN_Y + 1;
-                 y--) {
+            for (int32_t y = std::min(MAX_SURFACE_Y, chunk.getHeight(localX, localZ)); y > LevelChunk::MIN_Y + 1; y--) {
                 if (!IceCavesSupport::isIceCaves(chunk, worldX, y, worldZ))
                     continue;
 
@@ -48,8 +47,8 @@ void IceCavesSurfaceFeature::apply(ChunkGenerateContext &context) {
                 if (!isExposed(manager, worldX, y, worldZ))
                     continue;
 
-                const BlockState *state =
-                        IceCavesSupport::gradientState(gradient->getValue((double) worldX, (double) y, (double) worldZ));
+                const BlockState *state = IceCavesSupport::gradientState(
+                        gradient->getValue((double) worldX, (double) y, (double) worldZ));
                 if (state != nullptr)
                     manager.setBlockStateAt(worldX, y, worldZ, *state);
             }

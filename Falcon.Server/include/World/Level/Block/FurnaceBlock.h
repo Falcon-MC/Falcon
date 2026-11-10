@@ -12,8 +12,7 @@ class ServerPlayer;
 
 class FurnaceBlock final : public Block {
 public:
-    FurnaceBlock()
-          : Block(BlockTypeIds::FURNACE, "minecraft:furnace", "Furnace") {}
+    FurnaceBlock() : Block(BlockTypeIds::FURNACE, "minecraft:furnace", "Furnace") {}
 
     explicit FurnaceBlock(const Block &block) : Block(block) {}
 
@@ -25,11 +24,13 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
-    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position, const BlockState &state,
+                  const ItemStack &usedItem, int blockFace) const override;
 
     void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                   const BlockState &state) const override;
 
-    int getFuelTime() const { return 0; }
+    int getFuelTime() const {
+        return 0;
+    }
 };

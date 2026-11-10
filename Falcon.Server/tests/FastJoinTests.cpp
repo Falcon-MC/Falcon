@@ -80,9 +80,7 @@ namespace {
     void cacheDropsStaleRevision() {
         LevelChunk chunk(0, 0);
         ChunkPacketCache cache;
-        const auto encode = []() {
-            return std::string("chunk");
-        };
+        const auto encode = []() { return std::string("chunk"); };
         const ChunkPacketCache::Key key{&cache, 7, nullptr};
 
         const std::shared_ptr<const SharedPacket> first = cache.get(key, stampOf(chunk), 1, encode);
@@ -101,9 +99,7 @@ namespace {
     void cacheExpires() {
         LevelChunk chunk(0, 0);
         ChunkPacketCache cache;
-        const auto encode = []() {
-            return std::string("chunk");
-        };
+        const auto encode = []() { return std::string("chunk"); };
         cache.get({&cache, 1, nullptr}, stampOf(chunk), 10, encode);
         cache.get({&cache, 2, nullptr}, stampOf(chunk), 10 + ChunkPacketCache::EXPIRY_TICKS, encode);
 
@@ -164,10 +160,10 @@ namespace {
                 return;
 
             mAnnounced = true;
-            mCallbacks->onNewIncomingConnection(mFirst, std::make_shared<QueuedPeer>(
-                    std::vector<std::string>{"login", "handshake"}));
-            mCallbacks->onNewIncomingConnection(mSecond, std::make_shared<QueuedPeer>(
-                    std::vector<std::string>{"move"}));
+            mCallbacks->onNewIncomingConnection(
+                    mFirst, std::make_shared<QueuedPeer>(std::vector<std::string>{"login", "handshake"}));
+            mCallbacks->onNewIncomingConnection(mSecond,
+                                                std::make_shared<QueuedPeer>(std::vector<std::string>{"move"}));
         }
 
         std::shared_ptr<NetworkPeer> getPeerForUser(const NetworkIdentifier &) override {
@@ -213,9 +209,7 @@ namespace {
         network.addListener(&listener);
         network.startIoThread();
 
-        const auto admit = [&joining](const NetworkIdentifier &id) {
-            return id == joining;
-        };
+        const auto admit = [&joining](const NetworkIdentifier &id) { return id == joining; };
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
         while (listener.mEvents.size() < 3 && std::chrono::steady_clock::now() < deadline) {
             network.runEventsFor(admit);

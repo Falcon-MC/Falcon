@@ -74,8 +74,7 @@ MobActor *FollowParentGoal::_findParent(ServerNetworkHandler &owner, const MobAc
     owner.forEachActorNear(position, SEARCH_HORIZONTAL, [&](ServerActor &actor) {
         MobActor *candidate = dynamic_cast<MobActor *>(&actor);
         if (candidate == nullptr || candidate == &mob || !candidate->isAlive() || isBaby(*candidate)
-            || !candidate->sharesLevelWith(mob)
-            || std::strcmp(candidate->getIdentifier(), mob.getIdentifier()) != 0)
+            || !candidate->sharesLevelWith(mob) || std::strcmp(candidate->getIdentifier(), mob.getIdentifier()) != 0)
             return;
 
         const Vector3f other = candidate->getPosition();

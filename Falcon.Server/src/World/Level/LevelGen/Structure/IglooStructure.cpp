@@ -72,7 +72,7 @@ namespace {
         if (piece == nullptr)
             return;
 
-        for (const StructureTemplate::BlockEntry &entry : piece->getBlocks()) {
+        for (const StructureTemplate::BlockEntry &entry: piece->getBlocks()) {
             IglooStructure::PlacedBlock block;
             if (!StructureBlockTable::translate(piece->getPalette()[(size_t) entry.mPaletteIndex], quarterTurns,
                                                 block.mState))
@@ -92,19 +92,19 @@ namespace {
     void connectBars(std::vector<IglooStructure::PlacedBlock> &blocks, StructureTerrain &terrain, int32_t originX,
                      int32_t originY, int32_t originZ) {
         std::map<std::tuple<int32_t, int32_t, int32_t>, BlockState> placed;
-        for (const IglooStructure::PlacedBlock &block : blocks)
+        for (const IglooStructure::PlacedBlock &block: blocks)
             placed[{block.x, block.y, block.z}] = block.mState;
 
         const auto connects = [&](const IglooStructure::PlacedBlock &bar, int32_t sideX, int32_t sideZ) {
             const auto found = placed.find({bar.x + sideX, bar.y, bar.z + sideZ});
             return StructureConnections::connects(
-                    found != placed.end() ? found->second
-                                          : terrain.getBlock(originX + bar.x + sideX, originY + bar.y,
-                                                             originZ + bar.z + sideZ),
+                    found != placed.end()
+                            ? found->second
+                            : terrain.getBlock(originX + bar.x + sideX, originY + bar.y, originZ + bar.z + sideZ),
                     sideX, sideZ);
         };
 
-        for (IglooStructure::PlacedBlock &block : blocks) {
+        for (IglooStructure::PlacedBlock &block: blocks) {
             if (barStates().contains(block.mState))
                 block.mState = StructureConnections::connected(block.mState, connects(block, 1, 0),
                                                                connects(block, 0, -1), connects(block, 0, 1),
@@ -124,8 +124,7 @@ namespace {
         return mob;
     }
 
-    void placeData(Level &level, const IglooStructure::PlacedBlock &block, const Vector3i &position,
-                   int32_t lootSeed) {
+    void placeData(Level &level, const IglooStructure::PlacedBlock &block, const Vector3i &position, int32_t lootSeed) {
         BlockActorStore &actors = level.getBlockActors();
         if (block.mBlockActor == "minecraft:chest") {
             actors.getOrCreate<ChestBlockActor>(position).setLootTable(IGLOO_LOOT_TABLE, lootSeed);
@@ -142,14 +141,13 @@ namespace {
     }
 
     bool isIglooBiome(int32_t biomeId) {
-        return biomeId == BiomeIds::ICE_PLAINS || biomeId == BiomeIds::COLD_TAIGA
-               || biomeId == BiomeIds::SNOWY_SLOPES;
+        return biomeId == BiomeIds::ICE_PLAINS || biomeId == BiomeIds::COLD_TAIGA || biomeId == BiomeIds::SNOWY_SLOPES;
     }
 }
 
 std::vector<IglooStructure::PlacedBlock> IglooStructure::build(int32_t quarterTurns, int32_t shaftPieces,
-                                                                 StructureTerrain &terrain, int32_t originX,
-                                                                 int32_t originY, int32_t originZ) {
+                                                               StructureTerrain &terrain, int32_t originX,
+                                                               int32_t originY, int32_t originZ) {
     std::vector<PlacedBlock> blocks;
     addPiece(blocks, shaftPieces > 0 ? "igloo/igloo_top_trapdoor.nbt" : "igloo/igloo_top_no_trapdoor.nbt", 0, 0, 0,
              quarterTurns);
@@ -183,7 +181,7 @@ void IglooStructure::place(const ChunkGenerator &generator, Level &level, LevelC
             const int32_t floorY = generator.getGeneratedSolidHeight(cornerX, cornerZ) - 1;
             const IglooChoice choice = drawChoice(generator.getSeed(), startX, startZ);
             StructureTerrain terrain(generator);
-            for (const PlacedBlock &block :
+            for (const PlacedBlock &block:
                  build(choice.mQuarterTurns, choice.mShaftPieces, terrain, cornerX, floorY, cornerZ)) {
                 const int32_t x = cornerX + block.x;
                 const int32_t z = cornerZ + block.z;

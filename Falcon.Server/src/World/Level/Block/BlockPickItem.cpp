@@ -54,19 +54,17 @@ namespace {
                 {"minecraft:standing_sign", "minecraft:oak_sign"},
                 {"minecraft:wall_sign", "minecraft:oak_sign"},
                 {"minecraft:darkoak_standing_sign", "minecraft:dark_oak_sign"},
-                {"minecraft:darkoak_wall_sign", "minecraft:dark_oak_sign"}
-        };
+                {"minecraft:darkoak_wall_sign", "minecraft:dark_oak_sign"}};
         return ITEMS;
     }
 
     bool isUnpickable(std::string_view identifier) {
-        return BlockIdentifier::equalsAny(identifier, {
-                "minecraft:air", "minecraft:fire", "minecraft:soul_fire", "minecraft:portal",
-                "minecraft:end_portal", "minecraft:end_gateway", "minecraft:bubble_column",
-                "minecraft:frosted_ice", "minecraft:invisible_bedrock", "minecraft:moving_block",
-                "minecraft:piston_arm_collision", "minecraft:sticky_piston_arm_collision",
-                "minecraft:water", "minecraft:flowing_water", "minecraft:lava", "minecraft:flowing_lava"
-        });
+        return BlockIdentifier::equalsAny(
+                identifier, {"minecraft:air", "minecraft:fire", "minecraft:soul_fire", "minecraft:portal",
+                             "minecraft:end_portal", "minecraft:end_gateway", "minecraft:bubble_column",
+                             "minecraft:frosted_ice", "minecraft:invisible_bedrock", "minecraft:moving_block",
+                             "minecraft:piston_arm_collision", "minecraft:sticky_piston_arm_collision",
+                             "minecraft:water", "minecraft:flowing_water", "minecraft:lava", "minecraft:flowing_lava"});
     }
 
     std::string replaceSuffix(const std::string &identifier, std::string_view suffix, std::string_view replacement) {

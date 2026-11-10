@@ -28,17 +28,25 @@ public:
 
     OverworldGenerator &operator=(const OverworldGenerator &) = delete;
 
-    DimensionType getDimensionType() const override { return DimensionType::Overworld; }
+    DimensionType getDimensionType() const override {
+        return DimensionType::Overworld;
+    }
 
     void generate(LevelChunk &chunk) const override;
 
     void decorate(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const override;
 
-    int64_t getSeed() const override { return mSeed; }
+    int64_t getSeed() const override {
+        return mSeed;
+    }
 
-    int getSpawnY() const override { return OverworldGeneratorConstants::SEA_LEVEL + 1; }
+    int getSpawnY() const override {
+        return OverworldGeneratorConstants::SEA_LEVEL + 1;
+    }
 
-    int32_t getAirHash() const override { return mAirHash; }
+    int32_t getAirHash() const override {
+        return mAirHash;
+    }
 
     int32_t pickBiome(int32_t x, int32_t y, int32_t z) const override;
 
@@ -53,8 +61,7 @@ public:
     static int64_t parseSeed(const std::string &value);
 
 private:
-    void _generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random,
-                          OverworldAquifer &aquifer) const;
+    void _generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random, OverworldAquifer &aquifer) const;
 
     void _generateBiomeMap(LevelChunk &chunk) const;
 

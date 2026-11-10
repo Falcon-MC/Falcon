@@ -40,8 +40,7 @@ namespace {
     }
 }
 
-OverworldGenerator::OverworldGenerator(int64_t seed)
-        : mSeed(seed), mAirHash(BlockStateHasher::hash("minecraft:air")) {
+OverworldGenerator::OverworldGenerator(int64_t seed) : mSeed(seed), mAirHash(BlockStateHasher::hash("minecraft:air")) {
     mNoiseHolder = std::make_unique<OverworldNoiseHolder>(seed);
 
     mSurfaceOverwriteBuilder = std::make_unique<SurfaceOverwriteBuilder>(mNoiseHolder->getNoiseFactory(), seed);
@@ -122,8 +121,7 @@ int32_t OverworldGenerator::getPreliminarySurfaceLevel(int32_t quartX, int32_t q
     return mClimate->preliminarySurfaceLevel(quartX, quartZ);
 }
 
-void OverworldGenerator::decorate(Level &level, LevelChunk &chunk,
-                                 std::vector<GeneratedBlockChange> *overflow) const {
+void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const {
     // structures go first: the game post processes them before any feature runs
     IglooStructure::place(*this, level, chunk);
     ShipwreckStructure::place(*this, level, chunk);

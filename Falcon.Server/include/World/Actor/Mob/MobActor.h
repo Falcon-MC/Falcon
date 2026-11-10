@@ -73,7 +73,9 @@ public:
 
     virtual float getDefaultMaxHealth() const = 0;
 
-    virtual int getExperienceDrop() const { return 0; }
+    virtual int getExperienceDrop() const {
+        return 0;
+    }
 
     // a class with its own contact attack, explosion or rolled health keeps it over the definition component
     virtual bool hasOwnAreaAttack() const {
@@ -107,8 +109,7 @@ public:
 
     virtual float resolveMaxHealth(Difficulty difficulty) const;
 
-    virtual void finalizeSpawn() {
-    }
+    virtual void finalizeSpawn() {}
 
     void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0) override;
 

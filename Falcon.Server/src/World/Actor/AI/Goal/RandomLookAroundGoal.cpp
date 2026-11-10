@@ -47,6 +47,6 @@ void RandomLookAroundGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     mLookTime--;
 
     const Vector3f position = mob.getPosition();
-    mob.getLookControl().setLookAt(Vector3f(position.x + mOffsetX, position.y + mob.getSize().mHeight * 0.85f,
-                                            position.z + mOffsetZ));
+    mob.getLookControl().setLookAt(
+            Vector3f(position.x + mOffsetX, position.y + mob.getSize().mHeight * 0.85f, position.z + mOffsetZ));
 }

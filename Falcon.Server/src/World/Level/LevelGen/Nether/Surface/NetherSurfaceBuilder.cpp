@@ -171,8 +171,7 @@ LayeredNetherSurface::LayeredNetherSurface(const std::vector<SurfaceSimplexNoise
                                            const BlockState &top, const BlockState &mid, const BlockState &seaFloor,
                                            int32_t seaFloorDepth, std::vector<Adjustment> adjustments)
         : mAdjustmentNoise(adjustmentNoise), mTop(&top), mMid(&mid), mSeaFloor(&seaFloor),
-          mSeaFloorDepth(seaFloorDepth), mAdjustments(std::move(adjustments)) {
-}
+          mSeaFloorDepth(seaFloorDepth), mAdjustments(std::move(adjustments)) {}
 
 float LayeredNetherSurface::_adjustmentValue(float frequency, int32_t worldX, int32_t worldZ) const {
     const float x = (float) worldX * frequency;

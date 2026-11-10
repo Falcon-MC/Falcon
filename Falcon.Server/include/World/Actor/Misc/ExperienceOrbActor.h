@@ -5,8 +5,7 @@
 class ExperienceOrbActor final : public SizedActor {
 public:
     ExperienceOrbActor(uint64_t runtimeId, const std::string &identifier)
-            : SizedActor(runtimeId, identifier, ActorSize{0.25f, 0.25f}, false) {
-    }
+            : SizedActor(runtimeId, identifier, ActorSize{0.25f, 0.25f}, false) {}
 
     bool isPushable() const override {
         return false;

@@ -4,8 +4,7 @@
 #include "Network/ServerNetworkHandler.h"
 
 TellCommand::TellCommand(ServerNetworkHandler &handler)
-        : Command("tell", "commands.tell.description", "/tell <target> <message>", {"msg", "w"}),
-          mHandler(handler) {}
+        : Command("tell", "commands.tell.description", "/tell <target> <message>", {"msg", "w"}), mHandler(handler) {}
 
 CommandPermission TellCommand::getRequiredPermission() const {
     return CommandPermission::Any;

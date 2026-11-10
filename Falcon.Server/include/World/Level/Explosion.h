@@ -41,8 +41,8 @@ public:
 
     static float getBlockDensity(Level &level, const Vector3f &source, const AxisAlignedBB &boundingBox);
 
-    static bool isRayCollidingWithBlocks(Level &level, double srcX, double srcY, double srcZ, double dstX,
-                                         double dstY, double dstZ, double stepSize);
+    static bool isRayCollidingWithBlocks(Level &level, double srcX, double srcY, double srcZ, double dstX, double dstY,
+                                         double dstZ, double stepSize);
 
 private:
     static int64_t _key(const Vector3i &position);

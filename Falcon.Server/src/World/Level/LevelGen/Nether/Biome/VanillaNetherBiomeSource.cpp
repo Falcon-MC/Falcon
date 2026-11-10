@@ -23,13 +23,11 @@ namespace {
         float mOffset;
     };
 
-    const ClimatePoint CLIMATE_POINTS[] = {
-            {NetherBiomeIds::BASALT_DELTAS,   -0.5f, 0.0f,  0.0f, 0.0f, 0.175f},
-            {NetherBiomeIds::CRIMSON_FOREST,  0.4f,  0.0f,  0.0f, 0.0f, 0.0f},
-            {NetherBiomeIds::HELL,            0.0f,  0.0f,  0.0f, 0.0f, 0.0f},
-            {NetherBiomeIds::SOULSAND_VALLEY, 0.0f,  -0.5f, 0.0f, 0.0f, 0.0f},
-            {NetherBiomeIds::WARPED_FOREST,   0.0f,  0.5f,  0.0f, 0.0f, 0.375f}
-    };
+    const ClimatePoint CLIMATE_POINTS[] = {{NetherBiomeIds::BASALT_DELTAS, -0.5f, 0.0f, 0.0f, 0.0f, 0.175f},
+                                           {NetherBiomeIds::CRIMSON_FOREST, 0.4f, 0.0f, 0.0f, 0.0f, 0.0f},
+                                           {NetherBiomeIds::HELL, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+                                           {NetherBiomeIds::SOULSAND_VALLEY, 0.0f, -0.5f, 0.0f, 0.0f, 0.0f},
+                                           {NetherBiomeIds::WARPED_FOREST, 0.0f, 0.5f, 0.0f, 0.0f, 0.375f}};
 
     uint64_t step(uint64_t value) {
         return value * (LCG_MULTIPLIER * value + LCG_INCREMENT);
@@ -41,13 +39,10 @@ namespace {
     }
 }
 
-VanillaNetherBiomeSource::ClimateNoise::ClimateNoise(std::mt19937 random)
-        : ClimateNoise(random, CLIMATE_OCTAVES) {
-}
+VanillaNetherBiomeSource::ClimateNoise::ClimateNoise(std::mt19937 random) : ClimateNoise(random, CLIMATE_OCTAVES) {}
 
 VanillaNetherBiomeSource::ClimateNoise::ClimateNoise(std::mt19937 &random, int32_t octaves)
-        : mFirst(random, octaves), mSecond(random, octaves) {
-}
+        : mFirst(random, octaves), mSecond(random, octaves) {}
 
 float VanillaNetherBiomeSource::ClimateNoise::getValue(int32_t gridX, int32_t gridZ) const {
     const float x = (float) gridX;

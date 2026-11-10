@@ -23,16 +23,14 @@ namespace {
     const char *const ENCHANTED_BOOK = "minecraft:enchanted_book";
 
     // Tier::getTierItem (sub_144743010): these planks for the wooden tier, these three blocks for stone
-    const char *const PLANKS[] = {
-            "minecraft:oak_planks", "minecraft:spruce_planks", "minecraft:birch_planks", "minecraft:jungle_planks",
-            "minecraft:acacia_planks", "minecraft:dark_oak_planks", "minecraft:mangrove_planks",
-            "minecraft:cherry_planks", "minecraft:bamboo_planks", "minecraft:crimson_planks",
-            "minecraft:warped_planks", "minecraft:pale_oak_planks", "minecraft:poplar_planks"
-    };
+    const char *const PLANKS[] = {"minecraft:oak_planks",      "minecraft:spruce_planks", "minecraft:birch_planks",
+                                  "minecraft:jungle_planks",   "minecraft:acacia_planks", "minecraft:dark_oak_planks",
+                                  "minecraft:mangrove_planks", "minecraft:cherry_planks", "minecraft:bamboo_planks",
+                                  "minecraft:crimson_planks",  "minecraft:warped_planks", "minecraft:pale_oak_planks",
+                                  "minecraft:poplar_planks"};
 
-    const char *const STONE_TOOL_MATERIALS[] = {
-            "minecraft:cobblestone", "minecraft:cobbled_deepslate", "minecraft:blackstone"
-    };
+    const char *const STONE_TOOL_MATERIALS[] = {"minecraft:cobblestone", "minecraft:cobbled_deepslate",
+                                                "minecraft:blackstone"};
 
     const std::string &identifierOf(const ItemStack &item) {
         static const std::string empty;
@@ -44,7 +42,7 @@ namespace {
         return value.size() >= tail.size() && value.compare(value.size() - tail.size(), tail.size(), tail) == 0;
     }
 
-    template<size_t N>
+    template <size_t N>
     bool isOneOf(const std::string &identifier, const char *const (&list)[N]) {
         for (const char *entry: list) {
             if (identifier == entry)
@@ -76,8 +74,7 @@ namespace {
     class RepairAmountParser {
     public:
         RepairAmountParser(const std::string &text, const ItemStack &item, const ItemStack &other)
-                : mText(text), mItem(item), mOther(other) {
-        }
+                : mText(text), mItem(item), mOther(other) {}
 
         bool parse(double &out) {
             out = _sum();
@@ -458,7 +455,7 @@ int32_t AnvilRepair::mergeEnchantments(const ItemStack &input, const ItemStack &
             if (existing.mId == incoming.mId) {
                 if (existing.mLevel < data->mMaxLevel) {
                     existing.mLevel = existing.mLevel == incoming.mLevel ? existing.mLevel + 1
-                                                                          : std::max(existing.mLevel, incoming.mLevel);
+                                                                         : std::max(existing.mLevel, incoming.mLevel);
                     ++changed;
                 }
                 handled = true;
@@ -578,8 +575,9 @@ AnvilResult AnvilRepair::createResult(const ItemStack &input, const ItemStack &m
                 cost = repairWith(result, material.mCount, quarter);
                 outcome.mMaterialCost = cost;
             } else {
-                if (!book && (identifierOf(input) != identifierOf(material) || isUnmergeable(material)
-                              || !isDamageable(result)))
+                if (!book
+                    && (identifierOf(input) != identifierOf(material) || isUnmergeable(material)
+                        || !isDamageable(result)))
                     return outcome;
 
                 int32_t durabilityCost = 0;

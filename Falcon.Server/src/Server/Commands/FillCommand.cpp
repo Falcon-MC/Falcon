@@ -18,8 +18,7 @@ namespace {
     const std::vector<std::string> MODES = {"replace", "destroy", "keep", "hollow", "outline"};
 
     bool isShell(const Vector3i &position, const Vector3i &minimum, const Vector3i &maximum) {
-        return position.x == minimum.x || position.x == maximum.x
-               || position.y == minimum.y || position.y == maximum.y
+        return position.x == minimum.x || position.x == maximum.x || position.y == minimum.y || position.y == maximum.y
                || position.z == minimum.z || position.z == maximum.z;
     }
 }
@@ -107,8 +106,7 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     const int64_t volume = width * height * depth;
 
     if (volume > MAX_BLOCKS) {
-        sender.sendTranslation("commands.fill.tooManyBlocks",
-                               {std::to_string(volume), std::to_string(MAX_BLOCKS)});
+        sender.sendTranslation("commands.fill.tooManyBlocks", {std::to_string(volume), std::to_string(MAX_BLOCKS)});
         return false;
     }
 

@@ -40,7 +40,7 @@ public:
 
     // one chunk's turn in a level tick, columns taken in z then x order; `handler(position, block)` per tick
     // due, at most 100; false when none ran (sub_14381B7E0)
-    template<typename Handler, typename Loaded>
+    template <typename Handler, typename Loaded>
     bool tickColumn(int64_t levelTick, int64_t column, Handler &&handler, Loaded &&isLoaded);
 
     // a level tick starts or ends: chunks not yet reached lag one tick behind
@@ -121,7 +121,7 @@ private:
     size_t mLastProcessed = 0;
 };
 
-template<typename Handler, typename Loaded>
+template <typename Handler, typename Loaded>
 bool BlockTickingQueue::tickColumn(int64_t levelTick, int64_t key, Handler &&handler, Loaded &&isLoaded) {
     mCurrentColumn = key;
     auto found = mQueues.find(key);

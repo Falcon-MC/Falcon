@@ -12,9 +12,13 @@ public:
 
     std::string getSenderName() const override;
 
-    bool isPlayer() const override { return true; }
+    bool isPlayer() const override {
+        return true;
+    }
 
-    ServerPlayer *asPlayer() override { return &mPlayer; }
+    ServerPlayer *asPlayer() override {
+        return &mPlayer;
+    }
 
     void sendMessage(const std::string &message) override;
 

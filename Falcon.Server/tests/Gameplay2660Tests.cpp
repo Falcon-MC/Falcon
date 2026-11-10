@@ -119,9 +119,11 @@ namespace {
         for (int tick = 1; tick <= 139; ++tick)
             require(player.getEffects().advanceFreezing(RISE) == 0.0f, "freezing damaged before warmup");
         require(player.getEffects().advanceFreezing(RISE) == 1.5f, "freezing did not damage at full freeze");
-        require(std::abs(PlayerMovementSimulator::groundAcceleration(player, friction, false) - walk * 0.5f) < 0.000001f,
+        require(std::abs(PlayerMovementSimulator::groundAcceleration(player, friction, false) - walk * 0.5f)
+                        < 0.000001f,
                 "server walking simulation ignored freezing");
-        require(std::abs(PlayerMovementSimulator::groundAcceleration(player, friction, true) - sprint * 0.5f) < 0.000001f,
+        require(std::abs(PlayerMovementSimulator::groundAcceleration(player, friction, true) - sprint * 0.5f)
+                        < 0.000001f,
                 "server sprint simulation ignored freezing");
         for (int tick = 1; tick <= 39; ++tick)
             require(player.getEffects().advanceFreezing(RISE) == 0.0f, "freezing damage interval too short");
@@ -183,10 +185,11 @@ namespace {
         require(player.getEffects().getFreezingTicks() == 0 && player.getMovementSpeedMultiplier() == 1.0f,
                 "a dead player kept its freeze");
         require(VanillaBlocks::fromIdentifier("minecraft:fire")->suppressesFreezing()
-                && VanillaBlocks::fromIdentifier("minecraft:lava")->suppressesFreezing()
-                && !VanillaBlocks::fromIdentifier("minecraft:stone")->suppressesFreezing(), "heat block protection incorrect");
+                        && VanillaBlocks::fromIdentifier("minecraft:lava")->suppressesFreezing()
+                        && !VanillaBlocks::fromIdentifier("minecraft:stone")->suppressesFreezing(),
+                "heat block protection incorrect");
         for (const char *name: {"minecraft:zombie", "minecraft:drowned", "minecraft:husk", "minecraft:wither",
-                               "minecraft:ender_dragon", "minecraft:frostbite"}) {
+                                "minecraft:ender_dragon", "minecraft:frostbite"}) {
             auto actor = ActorClassRegistry::create(100, name);
             require(!actor->addEffect(effect), "immune actor accepted freezing");
         }
@@ -199,7 +202,8 @@ namespace {
                 damage = actor->getEffects().advanceFreezing(RISE);
             require(damage == 7.5f, "vulnerable freezing damage incorrect");
         }
-        for (const char *name: {"minecraft:polar_bear", "minecraft:snow_golem", "minecraft:skeleton", "minecraft:stray"}) {
+        for (const char *name:
+             {"minecraft:polar_bear", "minecraft:snow_golem", "minecraft:skeleton", "minecraft:stray"}) {
             auto actor = ActorClassRegistry::create(100, name);
             require(FreezingMobEffect::isProtected(*actor), "unfreezable mob lost immunity");
         }
@@ -246,19 +250,25 @@ namespace {
         Tag connected = block("minecraft:chorus_plant").mStates;
         connected.putByte("minecraft:connection_east", 1);
         require(BlockStateUpgrades::upgrade(BlockStateData("minecraft:chorus_plant", connected, 18168865))
-                    .getStates().getBool("minecraft:connection_east"), "migration erased an existing connection");
-        require(BlockStateUpgrades::upgrade(BlockStateData("minecraft:fire", Tag::ofCompound(), 0)).getStates()
-                    .contains("minecraft:connection_up"), "old-version migration missed new states");
+                        .getStates()
+                        .getBool("minecraft:connection_east"),
+                "migration erased an existing connection");
+        require(BlockStateUpgrades::upgrade(BlockStateData("minecraft:fire", Tag::ofCompound(), 0))
+                        .getStates()
+                        .contains("minecraft:connection_up"),
+                "old-version migration missed new states");
         require(BlockStateUpgrades::upgrade(BlockStateData("minecraft:fire", Tag::ofCompound(), 18168866)).getStates()
-                    == Tag::ofCompound(), "migration rewrote a future state");
+                        == Tag::ofCompound(),
+                "migration rewrote a future state");
     }
 
     void gameplay() {
         require(findPotionId("minecraft:freezing") == 47, "missing freezing potion");
         require(findPotionId("long_freezing") == 48, "missing long freezing potion");
         require(getPotionEffects(47).front().mId == MobEffectId::Freezing
-                && getPotionEffects(47).front().mDuration == 900
-                && getPotionEffects(48).front().mDuration == 1800, "incorrect freezing potion durations");
+                        && getPotionEffects(47).front().mDuration == 900
+                        && getPotionEffects(48).front().mDuration == 1800,
+                "incorrect freezing potion durations");
         for (const char *potion: {"minecraft:potion", "minecraft:splash_potion", "minecraft:lingering_potion"}) {
             const BrewingMixData *mix = CraftingRecipeTable::findBrewingMix(potion, 4, "minecraft:ice_ball", 0);
             require(mix != nullptr && mix->mOutputMeta == 47, "missing freezing brewing recipe");
@@ -283,9 +293,11 @@ namespace {
         const Vector3i position(8, 20, 8);
         level.setBlock(Vector3i(8, 19, 8), block("minecraft:stone"), false);
         const auto *icicle = dynamic_cast<const IcicleBlock *>(VanillaBlocks::fromIdentifier("minecraft:icicle"));
-        const auto *crystal = dynamic_cast<const IceCrystalBlock *>(VanillaBlocks::fromIdentifier("minecraft:ice_crystal"));
+        const auto *crystal = dynamic_cast<const IceCrystalBlock *>(
+                VanillaBlocks::fromIdentifier("minecraft:ice_crystal"));
         require(icicle != nullptr && crystal != nullptr, "missing ice block classes");
-        require(icicle->canPlaceAt(level, position, 1) && !icicle->canPlaceAt(level, position, 2), "invalid icicle placement");
+        require(icicle->canPlaceAt(level, position, 1) && !icicle->canPlaceAt(level, position, 2),
+                "invalid icicle placement");
         require(crystal->canPlaceAt(level, position, 1), "crystal cannot attach to stone");
         for (int face = 0; face < 6; ++face) {
             const Vector3i support = PlacementOrientation::relativePosition(position, face ^ 1);
@@ -321,30 +333,37 @@ namespace {
         level.setBlock(Vector3i(9, 20, 8), powered, false);
         shape = wire->updateShape(level, position, shape);
         require(shape.mStates.getString("redstone_north") == "none"
-                && shape.mStates.getString("redstone_west") == "side", "wire straight line shape incorrect");
+                        && shape.mStates.getString("redstone_west") == "side",
+                "wire straight line shape incorrect");
         level.setBlock(Vector3i(9, 20, 8), block("minecraft:stone"), false);
         level.setBlock(Vector3i(9, 21, 8), powered, false);
-        require(wire->updateShape(level, position, shape).mStates.getString("redstone_east") == "up", "wire cannot climb");
+        require(wire->updateShape(level, position, shape).mStates.getString("redstone_east") == "up",
+                "wire cannot climb");
 
         level.setBlock(Vector3i(7, 20, 8), block("minecraft:oak_planks"), false);
         level.setBlock(position, block("minecraft:fire"), false);
-        require(level.getBlockState(8, 20, 8).mStates.getBool("minecraft:connection_west"), "wall fire missing connection");
+        require(level.getBlockState(8, 20, 8).mStates.getBool("minecraft:connection_west"),
+                "wall fire missing connection");
         level.setBlock(Vector3i(8, 19, 8), block("minecraft:stone"), false);
         level.setBlock(position, block("minecraft:fire"), false);
-        require(!level.getBlockState(8, 20, 8).mStates.getBool("minecraft:connection_west"), "ground fire kept wall shape");
+        require(!level.getBlockState(8, 20, 8).mStates.getBool("minecraft:connection_west"),
+                "ground fire kept wall shape");
 
         level.setBlock(Vector3i(15, 30, 8), block("minecraft:chorus_plant"), false);
         LevelChunk neighbour(1, 0);
         neighbour.setBlock(0, 30, 8, block("minecraft:chorus_plant"));
         level.insertChunk(std::move(neighbour));
         require(level.getBlockState(15, 30, 8).mStates.getBool("minecraft:connection_east")
-                && level.getBlockState(16, 30, 8).mStates.getBool("minecraft:connection_west"), "chunk border shapes not refreshed");
+                        && level.getBlockState(16, 30, 8).mStates.getBool("minecraft:connection_west"),
+                "chunk border shapes not refreshed");
         Tag edgeStates = block("minecraft:chorus_plant").mStates;
         edgeStates.putByte("minecraft:connection_north", 1);
         level.setBlock(Vector3i(8, 30, 0), BlockState("minecraft:chorus_plant", edgeStates), false);
-        require(level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"), "unloaded neighbour erased saved shape");
+        require(level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"),
+                "unloaded neighbour erased saved shape");
         level.insertChunk(LevelChunk(0, -1));
-        require(!level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"), "loaded empty neighbour kept stale connection");
+        require(!level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"),
+                "loaded empty neighbour kept stale connection");
     }
 
     // piston at (8, 100, 8) facing up, powered by a redstone block beside it
@@ -394,7 +413,7 @@ namespace {
                 fixture.set(8, y, 8, "minecraft:stone");
             fixture.power(true);
             require(fixture.at(8, 101, 8) == "minecraft:piston_arm_collision"
-                    && fixture.at(8, 113, 8) == "minecraft:stone" && fixture.at(8, 102, 8) == "minecraft:stone",
+                            && fixture.at(8, 113, 8) == "minecraft:stone" && fixture.at(8, 102, 8) == "minecraft:stone",
                     "a piston did not push a line of twelve blocks");
         }
         {
@@ -422,12 +441,12 @@ namespace {
             fixture.set(7, 101, 8, "minecraft:honey_block");
             fixture.power(true);
             require(fixture.at(8, 102, 8) == "minecraft:slime" && fixture.at(9, 102, 8) == "minecraft:stone"
-                    && fixture.at(9, 101, 8) == "minecraft:air",
+                            && fixture.at(9, 101, 8) == "minecraft:air",
                     "slime did not carry the block stuck to its side");
             require(fixture.at(7, 101, 8) == "minecraft:honey_block", "slime carried a honey block along");
             fixture.power(false);
             require(fixture.at(8, 101, 8) == "minecraft:slime" && fixture.at(9, 101, 8) == "minecraft:stone"
-                    && fixture.at(8, 102, 8) == "minecraft:air" && fixture.at(9, 102, 8) == "minecraft:air",
+                            && fixture.at(8, 102, 8) == "minecraft:air" && fixture.at(9, 102, 8) == "minecraft:air",
                     "a sticky piston did not pull back its slime structure");
         }
         {
@@ -457,7 +476,7 @@ namespace {
             fixture.set(9, 101, 8, "minecraft:obsidian");
             fixture.power(false);
             require(fixture.at(8, 101, 8) == "minecraft:air" && fixture.at(8, 102, 8) == "minecraft:slime"
-                    && fixture.at(9, 102, 8) == "minecraft:stone",
+                            && fixture.at(9, 102, 8) == "minecraft:stone",
                     "a sticky piston that cannot pull its structure did not retract empty-handed");
         }
     }

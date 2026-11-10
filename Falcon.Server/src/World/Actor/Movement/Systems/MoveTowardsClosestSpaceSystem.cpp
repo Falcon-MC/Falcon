@@ -11,41 +11,40 @@
 using namespace MovementPhysics;
 
 namespace {
-constexpr float EPSILON = 1.1920929e-07f;
-constexpr float MIN_LENGTH = 1.0e-4f;
-constexpr float PUSH_SPEED = 0.1f;
+    constexpr float EPSILON = 1.1920929e-07f;
+    constexpr float MIN_LENGTH = 1.0e-4f;
+    constexpr float PUSH_SPEED = 0.1f;
 
-float sign(float value) {
-    return value > 0.0f ? 1.0f : value < 0.0f ? -1.0f : 0.0f;
-}
-
-bool overlapsAny(const std::vector<AxisAlignedBB> &boxes, float minX, float maxX, float minY, float maxY,
-                 float minZ, float maxZ) {
-    for (const AxisAlignedBB &box: boxes) {
-        if (box.mMinX < maxX && minX < box.mMaxX && box.mMinY < maxY && minY < box.mMaxY && box.mMinZ < maxZ
-            && minZ < box.mMaxZ)
-            return true;
+    float sign(float value) {
+        return value > 0.0f ? 1.0f : value < 0.0f ? -1.0f : 0.0f;
     }
-    return false;
-}
 
-// the box grown by one block toward the push; blocked both ways: no push on that axis
-float freeDirection(float push, float min, float max,
-                    const std::function<bool(float, float)> &overlaps) {
-    const float step = sign(push);
-    if (!overlaps(step < 0.0f ? min + step : min, step > 0.0f ? max + step : max))
-        return push;
-    if (overlaps(step > 0.0f ? min - step : min, step < 0.0f ? max - step : max))
-        return 0.0f;
-    return -push;
-}
+    bool overlapsAny(const std::vector<AxisAlignedBB> &boxes, float minX, float maxX, float minY, float maxY,
+                     float minZ, float maxZ) {
+        for (const AxisAlignedBB &box: boxes) {
+            if (box.mMinX < maxX && minX < box.mMaxX && box.mMinY < maxY && minY < box.mMaxY && box.mMinZ < maxZ
+                && minZ < box.mMaxZ)
+                return true;
+        }
+        return false;
+    }
 
-void steer(float &velocity, float push) {
-    const float limit = std::fabs(push);
-    if (limit <= std::fabs(velocity))
-        return;
-    velocity = std::max(std::min(velocity + push, limit), -limit);
-}
+    // the box grown by one block toward the push; blocked both ways: no push on that axis
+    float freeDirection(float push, float min, float max, const std::function<bool(float, float)> &overlaps) {
+        const float step = sign(push);
+        if (!overlaps(step < 0.0f ? min + step : min, step > 0.0f ? max + step : max))
+            return push;
+        if (overlaps(step > 0.0f ? min - step : min, step < 0.0f ? max - step : max))
+            return 0.0f;
+        return -push;
+    }
+
+    void steer(float &velocity, float push) {
+        const float limit = std::fabs(push);
+        if (limit <= std::fabs(velocity))
+            return;
+        velocity = std::max(std::min(velocity + push, limit), -limit);
+    }
 } // namespace
 
 // MoveTowardsClosestSpaceSystemFromActor per actor (sub_1436273E0)
@@ -96,12 +95,10 @@ void MoveTowardsClosestSpaceSystem::tick(PlayerMovementContext &context) {
     const float minY = std::min(body.mMinY, body.mMaxY);
     const float maxY = std::max(body.mMinY, body.mMaxY);
 
-    pushX = freeDirection(pushX, minX, maxX, [&](float low, float high) {
-        return overlapsAny(boxes, low, high, minY, maxY, minZ, maxZ);
-    });
-    pushZ = freeDirection(pushZ, minZ, maxZ, [&](float low, float high) {
-        return overlapsAny(boxes, minX, maxX, minY, maxY, low, high);
-    });
+    pushX = freeDirection(pushX, minX, maxX,
+                          [&](float low, float high) { return overlapsAny(boxes, low, high, minY, maxY, minZ, maxZ); });
+    pushZ = freeDirection(pushZ, minZ, maxZ,
+                          [&](float low, float high) { return overlapsAny(boxes, minX, maxX, minY, maxY, low, high); });
 
     if (std::fabs(pushX) < EPSILON && std::fabs(pushZ) < EPSILON)
         return;

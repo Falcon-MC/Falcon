@@ -14,11 +14,7 @@ class LootPool;
 
 class LootEntry {
 public:
-    enum class Type {
-        Item,
-        Table,
-        Empty
-    };
+    enum class Type { Item, Table, Empty };
 
     explicit LootEntry(const json::Value &definition);
 

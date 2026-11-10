@@ -12,8 +12,7 @@ PluginCommand::PluginCommand(LoadedPlugin &plugin, const std::string &name, cons
         : Command(name, orEmpty(descriptor.description), orEmpty(descriptor.usage)), mPlugin(plugin),
           mHandler(descriptor.handler), mUserData(descriptor.userData),
           mPermission(descriptor.permission == FALCON_PERMISSION_ANY ? CommandPermission::Any
-                                                                     : CommandPermission::GameDirectors) {
-}
+                                                                     : CommandPermission::GameDirectors) {}
 
 bool PluginCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (!mPlugin.mEnabled || mHandler == nullptr)
@@ -26,7 +25,8 @@ bool PluginCommand::execute(CommandOrigin &sender, const std::vector<std::string
 
     try {
         return mHandler(reinterpret_cast<FalconCommandSender *>(&sender), values.data(), (uint32_t) values.size(),
-                        mUserData) != 0;
+                        mUserData)
+               != 0;
     } catch (...) {
         LOG_ERROR(LogAreaID::Server, "[%s] A command handler threw an exception", mPlugin.mDescription.mName.c_str());
         return false;

@@ -27,13 +27,11 @@ namespace {
         const char *mHead;
     };
 
-    const HeadDrop HEAD_DROPS[] = {
-            {"minecraft:zombie", "minecraft:zombie_head"},
-            {"minecraft:skeleton", "minecraft:skeleton_skull"},
-            {"minecraft:creeper", "minecraft:creeper_head"},
-            {"minecraft:wither_skeleton", "minecraft:wither_skeleton_skull"},
-            {"minecraft:piglin", "minecraft:piglin_head"}
-    };
+    const HeadDrop HEAD_DROPS[] = {{"minecraft:zombie", "minecraft:zombie_head"},
+                                   {"minecraft:skeleton", "minecraft:skeleton_skull"},
+                                   {"minecraft:creeper", "minecraft:creeper_head"},
+                                   {"minecraft:wither_skeleton", "minecraft:wither_skeleton_skull"},
+                                   {"minecraft:piglin", "minecraft:piglin_head"}};
 
     const char *headOf(const std::string &identifier) {
         for (const HeadDrop &drop: HEAD_DROPS) {
@@ -123,8 +121,7 @@ void CreeperActor::_dropChargedHead(ServerNetworkHandler &owner, const std::vect
 
 bool CreeperActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack &held = player.getInventory().getItemInHand();
-    if (mIgnited || held.isAir() || held.mDefinition == nullptr
-        || held.mDefinition->getIdentifier() != FLINT_AND_STEEL)
+    if (mIgnited || held.isAir() || held.mDefinition == nullptr || held.mDefinition->getIdentifier() != FLINT_AND_STEEL)
         return HostileActor::onInteract(owner, player);
 
     mIgnited = true;

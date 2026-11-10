@@ -32,7 +32,7 @@ namespace {
 ItemStack LootItems::toItemStack(ServerNetworkHandler &owner, const LootDrop &drop) {
     const bool enchantedBook = drop.mIdentifier == BOOK && !drop.mEnchantments.empty();
     const std::string qualified = drop.mIdentifier.find(':') == std::string::npos ? "minecraft:" + drop.mIdentifier
-                                                                                   : drop.mIdentifier;
+                                                                                  : drop.mIdentifier;
     const std::string resolved = LegacyItemMapper::getInstance().resolve(qualified, drop.mData);
     const bool remapped = resolved != qualified;
     ItemStack stack = owner.createItemStack(enchantedBook ? ENCHANTED_BOOK : resolved, drop.mCount);
@@ -100,8 +100,7 @@ std::vector<LootItems::PlacedDrop> LootItems::distribute(std::vector<LootDrop> d
         --remaining;
     }
 
-    items.insert(items.begin(), std::make_move_iterator(splittable.begin()),
-                 std::make_move_iterator(splittable.end()));
+    items.insert(items.begin(), std::make_move_iterator(splittable.begin()), std::make_move_iterator(splittable.end()));
     shuffle(items, random);
 
     std::vector<PlacedDrop> placed;

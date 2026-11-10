@@ -55,8 +55,8 @@ public:
 
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
 
-    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position, const BlockState &state,
+                  const ItemStack &usedItem, int blockFace) const override;
 
     void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                   const BlockState &state) const override;

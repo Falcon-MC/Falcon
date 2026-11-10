@@ -26,8 +26,8 @@ void Level::setBlock(const Vector3i &position, const BlockState &state, bool upd
         return;
 
     const Block *block = VanillaBlocks::fromIdentifier(state.mName);
-    const BlockState placed = block != nullptr && block->hasDynamicShape()
-                              ? block->updateShape(*this, position, state) : state;
+    const BlockState placed = block != nullptr && block->hasDynamicShape() ? block->updateShape(*this, position, state)
+                                                                           : state;
     setBlockState(position.x, position.y, position.z, placed);
 
     if (mOwner != nullptr)
@@ -100,10 +100,10 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vecto
             const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(current.mName);
             if (custom != nullptr && !custom->mPlacementFilter.survives(*this, position))
                 BlockActionHandler::destroyBlock(owner, *this, position, current, true, ItemStack::air());
-        }
-        else if (block != nullptr)
+        } else if (block != nullptr)
             block->onScheduledUpdate(owner, *this, position, current);
-        else if (type == BlockUpdateType::Scheduled && CustomContentRegistry::getInstance().isCustomBlock(current.mName))
+        else if (type == BlockUpdateType::Scheduled
+                 && CustomContentRegistry::getInstance().isCustomBlock(current.mName))
             owner.getScriptEngine().onCustomBlockTick(*this, current.mName, position);
     }
 
@@ -123,12 +123,8 @@ void Level::cancelUpdate(const Vector3i &position) {
 }
 
 void Level::tickBlockUpdates() {
-    mBlockUpdates.tick([this](const Vector3i &position) {
-                           updateAt(position, BlockUpdateType::Scheduled);
-                       },
-                       [this](int32_t chunkX, int32_t chunkZ) {
-                           return isColumnActive(chunkX, chunkZ);
-                       });
+    mBlockUpdates.tick([this](const Vector3i &position) { updateAt(position, BlockUpdateType::Scheduled); },
+                       [this](int32_t chunkX, int32_t chunkZ) { return isColumnActive(chunkX, chunkZ); });
 }
 
 void Level::onBlockPlaced(const Vector3i &position, const BlockState &state) {

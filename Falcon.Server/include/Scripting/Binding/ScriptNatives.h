@@ -17,11 +17,7 @@ struct ScriptNative {
 };
 
 struct ScriptEntityRef : ScriptNative {
-    enum class Kind {
-        Player,
-        Actor,
-        Item
-    };
+    enum class Kind { Player, Actor, Item };
 
     Kind mKind = Kind::Actor;
     // player handle, actor unique id or item entity runtime id

@@ -11,13 +11,19 @@ public:
 
     FishingHookActor(uint64_t runtimeId, const std::string &identifier);
 
-    ActorSize getSize() const override { return ActorSize{0.15f, 0.15f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.15f, 0.15f};
+    }
 
     void tick(ServerNetworkHandler &owner) override;
 
-    bool isExpired() const override { return mExpired; }
+    bool isExpired() const override {
+        return mExpired;
+    }
 
-    bool shouldSave() const override { return false; }
+    bool shouldSave() const override {
+        return false;
+    }
 
     void fillSpawnMetadata(EntityDataMap &metadata) const override;
 

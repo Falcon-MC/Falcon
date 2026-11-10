@@ -20,8 +20,8 @@ bool BedOrientationBlock::matches(const std::string &identifier) {
 }
 
 std::vector<BlockPlacementEntry> BedOrientationBlock::getPlacementBlocks(Level &level, const Vector3i &position,
-                                                                        const BlockState &state,
-                                                                        int playerFacing) const {
+                                                                         const BlockState &state,
+                                                                         int playerFacing) const {
     (void) level;
 
     if (!state.mStates.contains("head_piece_bit") || playerFacing < PlacementOrientation::FACE_NORTH)

@@ -8,7 +8,6 @@ struct LiquidContact;
 
 class PostMoveTravelVelocitySystem {
 public:
-    static void apply(ServerActor &actor, const PhysicsComponent &physics, const AxisAlignedBB &box,
-                      Vector3f motion, const ActorMoveResult &result, const LiquidContact &feet,
-                      float &landingFallDistance);
+    static void apply(ServerActor &actor, const PhysicsComponent &physics, const AxisAlignedBB &box, Vector3f motion,
+                      const ActorMoveResult &result, const LiquidContact &feet, float &landingFallDistance);
 };

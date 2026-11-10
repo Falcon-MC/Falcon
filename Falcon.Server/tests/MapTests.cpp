@@ -44,8 +44,7 @@ namespace {
 
     class FlatSource final : public MapRenderSource {
     public:
-        FlatSource(const char *surface, int32_t surfaceY) : mSurface(surface), mSurfaceY(surfaceY) {
-        }
+        FlatSource(const char *surface, int32_t surfaceY) : mSurface(surface), mSurfaceY(surfaceY) {}
 
         bool hasChunk(int32_t chunkX, int32_t chunkZ) override {
             (void) chunkZ;
@@ -122,7 +121,8 @@ namespace {
         require(tag.getShort("width") == 128 && tag.getShort("height") == 128, "width and height are shorts of 128");
         require(tag.get("colors")->asByteArray().size() == 65536, "colours keep four bytes per pixel");
         require(tag.getByte("mapLocked") == 1 && tag.contains("unlimitedTracking", Tag::Type::Byte)
-                && tag.contains("fullyExplored", Tag::Type::Byte), "flags are bytes");
+                        && tag.contains("fullyExplored", Tag::Type::Byte),
+                "flags are bytes");
         require(!tag.contains("previewIncomplete"), "a complete preview writes no flag");
         const std::vector<Tag> &decorations = tag.get("decorations")->getList();
         require(decorations.size() == 1, "player markers are not saved");
@@ -163,9 +163,8 @@ namespace {
     void scaleChain() {
         MapDataManager maps;
         int64_t next = 100;
-        MapItemSavedData &map = maps.createMapSavedData([&next]() {
-            return next++;
-        }, Vector3f(10.0f, 64.0f, 10.0f), 0, 0);
+        MapItemSavedData &map = maps.createMapSavedData([&next]() { return next++; }, Vector3f(10.0f, 64.0f, 10.0f), 0,
+                                                        0);
         require(map.getMapId() == 100 && map.getScale() == 0, "the requested scale is returned");
 
         MapItemSavedData *parent = maps.findLoaded(map.getParentMapId());
@@ -291,7 +290,7 @@ namespace {
         map.setPixel(10, 20, 0xff000001u);
         map.setPixel(12, 21, 0xff000002u);
         require(map.buildUpdatePacket(tracking, packet) && packet.mXOffset == 10 && packet.mYOffset == 20
-                && packet.mWidth == 3 && packet.mHeight == 2 && packet.mColors.size() == 6,
+                        && packet.mWidth == 3 && packet.mHeight == 2 && packet.mColors.size() == 6,
                 "a change sends the area it covers");
         require(packet.mColors[0] == (int32_t) 0xff000001u && packet.mColors[5] == (int32_t) 0xff000002u,
                 "the area is sent row by row");
@@ -304,17 +303,11 @@ namespace {
     void cartography() {
         MapDataManager maps;
         int64_t next = 50;
-        maps.createMapSavedData([&next]() {
-            return next++;
-        }, Vector3f(0.0f, 0.0f, 0.0f), 0, 0);
+        maps.createMapSavedData([&next]() { return next++; }, Vector3f(0.0f, 0.0f, 0.0f), 0, 0);
 
         CartographyRecipes::Maps access;
-        access.mGetMap = [&maps](int64_t mapId) {
-            return maps.findLoaded(mapId);
-        };
-        access.mExpand = [&maps](int64_t mapId, bool scaled) {
-            return maps.expandMap(nullptr, mapId, scaled);
-        };
+        access.mGetMap = [&maps](int64_t mapId) { return maps.findLoaded(mapId); };
+        access.mExpand = [&maps](int64_t mapId, bool scaled) { return maps.expandMap(nullptr, mapId, scaled); };
         access.mAllocateLockId = [](int64_t mapId) {
             (void) mapId;
             return (int64_t) 900;
@@ -331,7 +324,8 @@ namespace {
                 "paper zooms out to the parent");
         require(zoom.mAdditionalCost == 1, "zooming takes one paper");
         require(CartographyRecipes::createResult(filledMap(54), stack("minecraft:paper"), nullptr, access)
-                        .mResult.isAir(), "the widest scale cannot zoom");
+                        .mResult.isAir(),
+                "the widest scale cannot zoom");
 
         CartographyResult locked = CartographyRecipes::createResult(map, stack("minecraft:glass_pane"), nullptr,
                                                                     access);
@@ -344,13 +338,15 @@ namespace {
         require(CartographyRecipes::isLocking(map, stack("minecraft:glass_pane"), 50),
                 "the client lock packet matches a map and a glass pane");
         require(!CartographyRecipes::isLocking(map, stack("minecraft:paper"), 50)
-                && !CartographyRecipes::isLocking(map, stack("minecraft:glass_pane"), 51)
-                && !CartographyRecipes::isLocking(filledMap(900, 6), stack("minecraft:glass_pane"), 900),
+                        && !CartographyRecipes::isLocking(map, stack("minecraft:glass_pane"), 51)
+                        && !CartographyRecipes::isLocking(filledMap(900, 6), stack("minecraft:glass_pane"), 900),
                 "the client lock packet needs the table about to lock that map");
         require(CartographyRecipes::createResult(filledMap(900, 6), stack("minecraft:glass_pane"), nullptr, access)
-                        .mResult.isAir(), "a locked map cannot lock again");
+                        .mResult.isAir(),
+                "a locked map cannot lock again");
         require(CartographyRecipes::createResult(filledMap(900, 6), stack("minecraft:paper"), nullptr, access)
-                        .mResult.isAir(), "a locked map cannot zoom");
+                        .mResult.isAir(),
+                "a locked map cannot zoom");
 
         CartographyResult locator = CartographyRecipes::createResult(map, stack("minecraft:compass"), nullptr, access);
         require(MapItem::displaysPlayers(locator.mResult), "a compass turns a map into a locator map");
@@ -366,7 +362,8 @@ namespace {
         require(CartographyRecipes::createResult(map, ItemStack::air(), nullptr, access).mResult.isAir(),
                 "a lone map makes nothing");
         require(CartographyRecipes::createResult(stack("minecraft:stone"), stack("minecraft:paper"), nullptr, access)
-                        .mResult.isAir(), "only maps go in the table");
+                        .mResult.isAir(),
+                "only maps go in the table");
     }
 
     void requestQueue() {
@@ -414,9 +411,8 @@ namespace {
         map.addDecoration(MapDecorationType::MarkerWhite, gone, Vector3f(1.0f, 0.0f, 1.0f), "", white, 0);
         map.addDecoration(MapDecorationType::MarkerGreen, frame, Vector3f(2.0f, 0.0f, 2.0f), "", white, 0);
 
-        map.refreshTracked([](MapItemTrackingInfo &tracking) {
-            return tracking.mKey == MapItemTrackedActorKey::entity(6);
-        });
+        map.refreshTracked(
+                [](MapItemTrackingInfo &tracking) { return tracking.mKey == MapItemTrackedActorKey::entity(6); });
         require(map.findTracked(gone) == nullptr && map.findTracked(MapItemTrackedActorKey::entity(6)) != nullptr,
                 "an actor gone from the world stops being tracked");
         require(map.findTracked(frame) != nullptr, "a frame stays tracked");

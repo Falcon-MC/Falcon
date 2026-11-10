@@ -48,8 +48,7 @@ public:
     static bool inventoryTick(ServerNetworkHandler &owner, ServerPlayer &player, ItemStack &item, bool selected);
 
     // MapItemSavedData::tickCarriedBy (sub_1483EF870)
-    static void tickCarriedBy(ServerNetworkHandler &owner, World &world, MapItemSavedData &data,
-                              const ItemStack *item);
+    static void tickCarriedBy(ServerNetworkHandler &owner, World &world, MapItemSavedData &data, const ItemStack *item);
 
     // sub_1483EFCF0: refreshes every tracked decoration and drops those of actors gone
     static void updateTrackedDecorations(ServerNetworkHandler &owner, World &world, MapItemSavedData &data);

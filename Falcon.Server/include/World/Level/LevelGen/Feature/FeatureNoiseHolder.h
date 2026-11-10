@@ -12,11 +12,17 @@ public:
 
     static const FeatureNoiseHolder *get();
 
-    const SimplexF &getMossSnapToCeiling() const { return *mMossSnapToCeiling; }
+    const SimplexF &getMossSnapToCeiling() const {
+        return *mMossSnapToCeiling;
+    }
 
-    const SimplexF &getSculkPatch() const { return *mSculkPatch; }
+    const SimplexF &getSculkPatch() const {
+        return *mSculkPatch;
+    }
 
-    const SimplexNoise &getKelp() const { return *mKelp; }
+    const SimplexNoise &getKelp() const {
+        return *mKelp;
+    }
 
     const SimplexNoise &getIceCaveGradient() const {
         return *mIceCaveGradient;

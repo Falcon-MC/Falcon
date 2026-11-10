@@ -6,8 +6,7 @@
 #include <memory>
 
 ChestContainerManagerModel::ChestContainerManagerModel()
-        : ContainerManagerModel(ContainerType::Container,
-                                std::make_unique<ChestContainerScreenValidator>()) {}
+        : ContainerManagerModel(ContainerType::Container, std::make_unique<ChestContainerScreenValidator>()) {}
 
 bool ChestContainerManagerModel::openWindow(ServerNetworkHandler &owner, ServerPlayer &player,
                                             const Vector3i &position) {

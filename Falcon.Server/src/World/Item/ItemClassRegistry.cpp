@@ -79,7 +79,7 @@ void ItemClassRegistry::remove(const void *owner) {
         return;
 
     std::vector<Entry> &registered = entries();
-    registered.erase(std::remove_if(registered.begin(), registered.end(), [owner](const Entry &entry) {
-        return entry.mOwner == owner;
-    }), registered.end());
+    registered.erase(std::remove_if(registered.begin(), registered.end(),
+                                    [owner](const Entry &entry) { return entry.mOwner == owner; }),
+                     registered.end());
 }

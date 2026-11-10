@@ -72,7 +72,7 @@ namespace {
             return *mob;
         }
 
-        template<typename T>
+        template <typename T>
         std::vector<T *> all() {
             std::vector<T *> found;
             for (auto &entry: mOwner.getActors()) {
@@ -176,14 +176,14 @@ namespace {
                                         {"components", "minecraft:shooter", "aux_val"});
         require(stray.integer() == 19, "stray shoots slowness arrows");
 
-        const json::Value &bogged = path(EntityDefinitions::find("minecraft:bogged"),
-                                         {"component_groups", "minecraft:ranged_attack", "minecraft:shooter",
-                                          "aux_val"});
+        const json::Value &bogged = path(
+                EntityDefinitions::find("minecraft:bogged"),
+                {"component_groups", "minecraft:ranged_attack", "minecraft:shooter", "aux_val"});
         require(bogged.integer() == 26, "bogged shoots poison arrows");
 
-        const json::Value &pillager = path(EntityDefinitions::find("minecraft:pillager"),
-                                           {"component_groups", "minecraft:ranged_attack",
-                                            "minecraft:behavior.ranged_attack", "attack_radius"});
+        const json::Value &pillager = path(
+                EntityDefinitions::find("minecraft:pillager"),
+                {"component_groups", "minecraft:ranged_attack", "minecraft:behavior.ranged_attack", "attack_radius"});
         require(pillager.integer() == 8, "pillager attack radius");
     }
 }

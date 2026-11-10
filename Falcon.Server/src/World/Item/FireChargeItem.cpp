@@ -2,13 +2,9 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
-FALCON_REGISTER_ITEM_CUSTOM(FireChargeItem, 41,
-                            [](const std::string &identifier) {
-                                return identifier == "minecraft:fire_charge";
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<FireChargeItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        FireChargeItem, 41, [](const std::string &identifier) { return identifier == "minecraft:fire_charge"; },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<FireChargeItem>(item); });
 
 #include "World/Level/Block/Systems/FireSystem.h"
 #include "World/Inventory/InventoryManager.h"
@@ -24,8 +20,7 @@ using namespace FireStarterHelpers;
 FireChargeItem::FireChargeItem(const Item &base) : Item(base) {}
 
 bool FireChargeItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
-                                  const Vector3i &blockPosition, int32_t face,
-                                  const Vector3f &clickPosition) const {
+                                  const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
     (void) item;
     (void) clickPosition;
 

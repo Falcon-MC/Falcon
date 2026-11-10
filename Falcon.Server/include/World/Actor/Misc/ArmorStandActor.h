@@ -72,14 +72,7 @@ public:
     static bool exchange(ItemStack &slot, ItemStack &held, bool creative);
 
 private:
-    enum class HitKind {
-        Attack,
-        Explosion,
-        Fire,
-        Void,
-        Fall,
-        Other
-    };
+    enum class HitKind { Attack, Explosion, Fire, Void, Fall, Other };
 
     void _setPose(ServerNetworkHandler &owner, int32_t poseIndex);
 

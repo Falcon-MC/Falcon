@@ -49,8 +49,8 @@ namespace {
         if (name == nullptr)
             return nullptr;
 
-        const std::optional<std::string> response =
-                PluginManager::getInstance().getServices().call(name, request == nullptr ? "" : request);
+        const std::optional<std::string> response = PluginManager::getInstance().getServices().call(
+                name, request == nullptr ? "" : request);
         if (!response.has_value())
             return nullptr;
 

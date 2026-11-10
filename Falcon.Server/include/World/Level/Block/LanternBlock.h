@@ -6,9 +6,7 @@
 
 class LanternBlock final : public Block {
 public:
-    explicit LanternBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit LanternBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 };

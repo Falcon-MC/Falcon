@@ -49,17 +49,13 @@ void StringToItemParser::registerItem(const std::string &alias, const std::funct
 }
 
 void StringToItemParser::registerBlock(const std::string &alias, const std::function<Block()> &factory) {
-    mFactories[_normalize(alias)] = [factory]() {
-        return Item(factory());
-    };
+    mFactories[_normalize(alias)] = [factory]() { return Item(factory()); };
 }
 
 void StringToItemParser::_registerDefaults() {
     for (size_t index = 0; index < BlockDataTable::getCount(); ++index) {
         const BlockData &data = BlockDataTable::getEntries()[index];
-        registerBlock(data.mIdentifier, [&data]() {
-            return VanillaBlocks::fromData(data);
-        });
+        registerBlock(data.mIdentifier, [&data]() { return VanillaBlocks::fromData(data); });
     }
 
     registerBlock("air", VanillaBlocks::AIR);
@@ -67,9 +63,7 @@ void StringToItemParser::_registerDefaults() {
 
     for (size_t i = 0; i < ItemDataTable::getCount(); ++i) {
         const ItemData &data = ItemDataTable::at(i);
-        registerItem(data.mIdentifier, [&data]() {
-            return Item(data);
-        });
+        registerItem(data.mIdentifier, [&data]() { return Item(data); });
     }
 }
 

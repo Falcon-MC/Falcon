@@ -158,9 +158,7 @@ namespace {
     }
 
     void removeActorLater(ServerNetworkHandler &host, int64_t uniqueId) {
-        host.postToMainThread([&host, uniqueId] {
-            host.removeActor(uniqueId);
-        });
+        host.postToMainThread([&host, uniqueId] { host.removeActor(uniqueId); });
     }
 
     JSValue entityRemove(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -368,7 +366,8 @@ namespace {
             return JS_UNDEFINED;
 
         JSValue object = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, object, "typeId", string(ctx, "minecraft:" + std::string(getMobEffectName(effect->mId))));
+        JS_SetPropertyStr(ctx, object, "typeId",
+                          string(ctx, "minecraft:" + std::string(getMobEffectName(effect->mId))));
         JS_SetPropertyStr(ctx, object, "amplifier", JS_NewInt32(ctx, effect->mAmplifier));
         JS_SetPropertyStr(ctx, object, "duration", JS_NewInt32(ctx, effect->mDuration));
         return object;
@@ -562,8 +561,8 @@ namespace {
             ScriptPlayerPart *part = new ScriptPlayerPart();
             part->mHandle = (uint32_t) target.mRef->mId;
             part->mComponentId = id;
-            return api->makeInstance(id == "minecraft:inventory" ? "EntityInventoryComponent"
-                                                                 : "EntityEquippableComponent", part);
+            return api->makeInstance(
+                    id == "minecraft:inventory" ? "EntityInventoryComponent" : "EntityEquippableComponent", part);
         }
 
         const bool living = target.mPlayer != nullptr || target.mServerActor != nullptr;
@@ -930,8 +929,8 @@ namespace {
         ServerPlayer *player = partOwner(ctx, thisVal);
         if (player == nullptr || argc < 1)
             return JS_UNDEFINED;
-        return itemFromStack(ScriptApi::fromContext(ctx), equipmentStack(player->getInventory(),
-                                                                          toString(ctx, argv[0])));
+        return itemFromStack(ScriptApi::fromContext(ctx),
+                             equipmentStack(player->getInventory(), toString(ctx, argv[0])));
     }
 
     void setEquipment(JSContext *ctx, ServerPlayer &player, const std::string &slot, JSValueConst value) {
@@ -941,8 +940,8 @@ namespace {
             api->host().setPlayerEquipment(player, slot, std::string(), 0, 0, Tag::ofCompound());
             return;
         }
-        api->host().setPlayerEquipment(player, slot, item->mItem->mTypeId, item->mItem->mAmount,
-                                       item->mItem->mDamage, serializeDynamicProperties(item->mItem->mDynamicProperties));
+        api->host().setPlayerEquipment(player, slot, item->mItem->mTypeId, item->mItem->mAmount, item->mItem->mDamage,
+                                       serializeDynamicProperties(item->mItem->mDynamicProperties));
     }
 
     JSValue equippableSetEquipment(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {

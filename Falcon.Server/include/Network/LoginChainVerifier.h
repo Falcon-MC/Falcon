@@ -8,19 +8,33 @@ class LoginChainVerifier {
 public:
     bool verify(const std::string &authJwt, const std::string &clientJwt);
 
-    bool isSigned() const { return mSigned; }
+    bool isSigned() const {
+        return mSigned;
+    }
 
-    const std::string &getIdentity() const { return mIdentity; }
+    const std::string &getIdentity() const {
+        return mIdentity;
+    }
 
-    const std::string &getXuid() const { return mXuid; }
+    const std::string &getXuid() const {
+        return mXuid;
+    }
 
-    const std::string &getDisplayName() const { return mDisplayName; }
+    const std::string &getDisplayName() const {
+        return mDisplayName;
+    }
 
-    const std::string &getTitleId() const { return mTitleId; }
+    const std::string &getTitleId() const {
+        return mTitleId;
+    }
 
-    const std::string &getIdentityPublicKey() const { return mIdentityPublicKey; }
+    const std::string &getIdentityPublicKey() const {
+        return mIdentityPublicKey;
+    }
 
-    const std::string &getFailureReason() const { return mFailureReason; }
+    const std::string &getFailureReason() const {
+        return mFailureReason;
+    }
 
 private:
     static std::vector<std::string> _extractChain(const std::string &authJwt);

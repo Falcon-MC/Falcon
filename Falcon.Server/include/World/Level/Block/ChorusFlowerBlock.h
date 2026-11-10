@@ -4,8 +4,7 @@
 
 class ChorusFlowerBlock : public Block {
 public:
-    explicit ChorusFlowerBlock(const Block &block) : Block(block) {
-    }
+    explicit ChorusFlowerBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

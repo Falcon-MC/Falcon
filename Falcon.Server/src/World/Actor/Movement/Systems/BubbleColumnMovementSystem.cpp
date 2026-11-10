@@ -24,7 +24,8 @@ void BubbleColumnMovementSystem::tick(PlayerMovementContext &context) {
                     continue;
                 const bool surface = BlockQuery::isAirAt(context.level, Vector3i(x, y + 1, z));
                 state.velocity.y = info.dragDown ? std::max(surface ? -0.9f : -0.3f, state.velocity.y - 0.03f)
-                                                 : std::min(surface ? 1.8f : 0.7f, state.velocity.y + (surface ? 0.1f : 0.06f));
+                                                 : std::min(surface ? 1.8f : 0.7f,
+                                                            state.velocity.y + (surface ? 0.1f : 0.06f));
             }
         }
     }

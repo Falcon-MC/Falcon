@@ -8,11 +8,9 @@ FALCON_REGISTER_BLOCK(CartographyTableBlock, 10);
 #include "World/Level/Block/BlockTypeIds.h"
 
 CartographyTableBlock::CartographyTableBlock()
-        : Block(BlockTypeIds::CARTOGRAPHY_TABLE, IDENTIFIER, "Cartography Table") {
-}
+        : Block(BlockTypeIds::CARTOGRAPHY_TABLE, IDENTIFIER, "Cartography Table") {}
 
-CartographyTableBlock::CartographyTableBlock(const Block &block) : Block(block) {
-}
+CartographyTableBlock::CartographyTableBlock(const Block &block) : Block(block) {}
 
 bool CartographyTableBlock::matches(const std::string &identifier) {
     return identifier == IDENTIFIER;

@@ -1,7 +1,6 @@
 #include "World/Level/LevelGen/Noise/Noise.h"
 
-Noise::Noise(IRandom &rand)
-    : mOriginX(0.0), mOriginY(0.0), mOriginZ(0.0), mPermutations() {
+Noise::Noise(IRandom &rand) : mOriginX(0.0), mOriginY(0.0), mOriginZ(0.0), mPermutations() {
     mOriginX = rand.nextDouble() * 256.0;
     mOriginY = rand.nextDouble() * 256.0;
     mOriginZ = rand.nextDouble() * 256.0;
@@ -18,8 +17,7 @@ Noise::Noise(IRandom &rand)
     }
 }
 
-Noise::Noise(std::mt19937 &random)
-    : mOriginX(0.0), mOriginY(0.0), mOriginZ(0.0), mPermutations() {
+Noise::Noise(std::mt19937 &random) : mOriginX(0.0), mOriginY(0.0), mOriginZ(0.0), mPermutations() {
     mOriginX = static_cast<double>(random()) * 2.3283064365386963e-10 * 256.0;
     mOriginY = static_cast<double>(random()) * 2.3283064365386963e-10 * 256.0;
     mOriginZ = static_cast<double>(random()) * 2.3283064365386963e-10 * 256.0;

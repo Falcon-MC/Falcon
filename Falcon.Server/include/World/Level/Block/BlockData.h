@@ -25,11 +25,7 @@ enum class BlockToolTier : uint8_t {
     Netherite = 7
 };
 
-enum class BlockDropKind : uint8_t {
-    Nothing = 0,
-    Self = 1,
-    Other = 2
-};
+enum class BlockDropKind : uint8_t { Nothing = 0, Self = 1, Other = 2 };
 
 // sub_145C617E0; set for about 190 blocks (sub_14CE9AD30) and air (sub_1431FA960), every other block
 // obstructs, like the explicit obstruct_rain of ice, packed ice and grass path

@@ -18,12 +18,10 @@ namespace {
     constexpr size_t CHILDREN_PER_NODE = 6;
 
     // biome tables as the game stores them from xmmword_14F49ABC8, with the tables it picks for new worlds
-    const int32_t OCEANS[2][5] = {
-            {BiomeIds::DEEP_FROZEN_OCEAN, BiomeIds::DEEP_COLD_OCEAN, BiomeIds::DEEP_OCEAN,
-             BiomeIds::DEEP_LUKEWARM_OCEAN, BiomeIds::WARM_OCEAN},
-            {BiomeIds::FROZEN_OCEAN, BiomeIds::COLD_OCEAN, BiomeIds::OCEAN, BiomeIds::LUKEWARM_OCEAN,
-             BiomeIds::WARM_OCEAN}
-    };
+    const int32_t OCEANS[2][5] = {{BiomeIds::DEEP_FROZEN_OCEAN, BiomeIds::DEEP_COLD_OCEAN, BiomeIds::DEEP_OCEAN,
+                                   BiomeIds::DEEP_LUKEWARM_OCEAN, BiomeIds::WARM_OCEAN},
+                                  {BiomeIds::FROZEN_OCEAN, BiomeIds::COLD_OCEAN, BiomeIds::OCEAN,
+                                   BiomeIds::LUKEWARM_OCEAN, BiomeIds::WARM_OCEAN}};
 
     const int32_t MIDDLE_BIOMES[5][5] = {
             {BiomeIds::ICE_PLAINS, BiomeIds::ICE_PLAINS, BiomeIds::ICE_PLAINS, BiomeIds::COLD_TAIGA, BiomeIds::TAIGA},
@@ -31,16 +29,14 @@ namespace {
             {BiomeIds::FLOWER_FOREST, BiomeIds::PLAINS, BiomeIds::FOREST, BiomeIds::BIRCH_FOREST,
              BiomeIds::ROOFED_FOREST},
             {BiomeIds::SAVANNA, BiomeIds::SAVANNA, BiomeIds::FOREST, BiomeIds::JUNGLE, BiomeIds::JUNGLE},
-            {BiomeIds::DESERT, BiomeIds::DESERT, BiomeIds::DESERT, BiomeIds::DESERT, BiomeIds::DESERT}
-    };
+            {BiomeIds::DESERT, BiomeIds::DESERT, BiomeIds::DESERT, BiomeIds::DESERT, BiomeIds::DESERT}};
 
     const int32_t MIDDLE_BIOMES_VARIANT[5][5] = {
             {BiomeIds::ICE_PLAINS_SPIKES, NONE, BiomeIds::COLD_TAIGA, NONE, NONE},
             {BiomeIds::DAPPLED_FOREST, NONE, NONE, NONE, BiomeIds::MEGA_TAIGA},
             {BiomeIds::SUNFLOWER_PLAINS, NONE, NONE, BiomeIds::BIRCH_FOREST_MUTATED, NONE},
             {NONE, NONE, BiomeIds::PLAINS, BiomeIds::JUNGLE_EDGE, BiomeIds::BAMBOO_JUNGLE},
-            {NONE, NONE, NONE, NONE, NONE}
-    };
+            {NONE, NONE, NONE, NONE, NONE}};
 
     // the pale garden table, chosen for worlds newer than the gate in sub_14CDB0CB0
     const int32_t PLATEAU_BIOMES[5][5] = {
@@ -51,16 +47,14 @@ namespace {
             {BiomeIds::SAVANNA_PLATEAU, BiomeIds::SAVANNA_PLATEAU, BiomeIds::FOREST, BiomeIds::FOREST,
              BiomeIds::JUNGLE},
             {BiomeIds::MESA, BiomeIds::MESA, BiomeIds::MESA, BiomeIds::MESA_PLATEAU_STONE,
-             BiomeIds::MESA_PLATEAU_STONE}
-    };
+             BiomeIds::MESA_PLATEAU_STONE}};
 
     const int32_t PLATEAU_BIOMES_VARIANT[5][5] = {
             {BiomeIds::ICE_PLAINS_SPIKES, NONE, NONE, NONE, NONE},
             {BiomeIds::CHERRY_GROVE, NONE, BiomeIds::MEADOW, BiomeIds::MEADOW, BiomeIds::MEGA_TAIGA},
             {BiomeIds::CHERRY_GROVE, BiomeIds::CHERRY_GROVE, BiomeIds::FOREST, BiomeIds::BIRCH_FOREST, NONE},
             {NONE, NONE, NONE, NONE, NONE},
-            {BiomeIds::MESA_BRYCE, BiomeIds::MESA_BRYCE, NONE, NONE, NONE}
-    };
+            {BiomeIds::MESA_BRYCE, BiomeIds::MESA_BRYCE, NONE, NONE, NONE}};
 
     const int32_t SHATTERED_BIOMES[5][5] = {
             {BiomeIds::EXTREME_HILLS_MUTATED, BiomeIds::EXTREME_HILLS_MUTATED, BiomeIds::EXTREME_HILLS,
@@ -70,8 +64,7 @@ namespace {
             {BiomeIds::EXTREME_HILLS, BiomeIds::EXTREME_HILLS, BiomeIds::EXTREME_HILLS,
              BiomeIds::EXTREME_HILLS_PLUS_TREES, BiomeIds::EXTREME_HILLS_PLUS_TREES},
             {NONE, NONE, NONE, NONE, NONE},
-            {NONE, NONE, NONE, NONE, NONE}
-    };
+            {NONE, NONE, NONE, NONE, NONE}};
 
     Parameter span(float min, float max) {
         return Parameter{OverworldBiomeParameters::quantize(min), OverworldBiomeParameters::quantize(max)};
@@ -87,12 +80,12 @@ namespace {
 
     // ranges from the static initializers next to sub_14718E740
     const Parameter FULL_RANGE = span(-1.0f, 1.0f);
-    const Parameter TEMPERATURES[5] = {span(-1.0f, -0.45f), span(-0.45f, -0.15f), span(-0.15f, 0.2f),
-                                       span(0.2f, 0.55f), span(0.55f, 1.0f)};
-    const Parameter HUMIDITIES[5] = {span(-1.0f, -0.35f), span(-0.35f, -0.1f), span(-0.1f, 0.1f),
-                                     span(0.1f, 0.3f), span(0.3f, 1.0f)};
-    const Parameter EROSIONS[7] = {span(-1.0f, -0.78f), span(-0.78f, -0.375f), span(-0.375f, -0.2225f),
-                                   span(-0.2225f, 0.05f), span(0.05f, 0.45f), span(0.45f, 0.55f),
+    const Parameter TEMPERATURES[5] = {span(-1.0f, -0.45f), span(-0.45f, -0.15f), span(-0.15f, 0.2f), span(0.2f, 0.55f),
+                                       span(0.55f, 1.0f)};
+    const Parameter HUMIDITIES[5] = {span(-1.0f, -0.35f), span(-0.35f, -0.1f), span(-0.1f, 0.1f), span(0.1f, 0.3f),
+                                     span(0.3f, 1.0f)};
+    const Parameter EROSIONS[7] = {span(-1.0f, -0.78f),   span(-0.78f, -0.375f), span(-0.375f, -0.2225f),
+                                   span(-0.2225f, 0.05f), span(0.05f, 0.45f),    span(0.45f, 0.55f),
                                    span(0.55f, 1.0f)};
     const Parameter FROZEN_RANGE = TEMPERATURES[0];
     const Parameter UNFROZEN_RANGE = span(TEMPERATURES[1], TEMPERATURES[4]);
@@ -162,21 +155,22 @@ namespace {
             return std::move(nodes.front());
 
         if (nodes.size() <= CHILDREN_PER_NODE) {
-            std::stable_sort(nodes.begin(), nodes.end(), [](const std::unique_ptr<Node> &a, const std::unique_ptr<Node> &b) {
-                int64_t first = 0;
-                int64_t second = 0;
-                for (int32_t i = 0; i < OverworldBiomeParameters::DIMENSIONS; i++) {
-                    first += std::llabs(middle(a->mSpace[(size_t) i]));
-                    second += std::llabs(middle(b->mSpace[(size_t) i]));
-                }
+            std::stable_sort(nodes.begin(), nodes.end(),
+                             [](const std::unique_ptr<Node> &a, const std::unique_ptr<Node> &b) {
+                                 int64_t first = 0;
+                                 int64_t second = 0;
+                                 for (int32_t i = 0; i < OverworldBiomeParameters::DIMENSIONS; i++) {
+                                     first += std::llabs(middle(a->mSpace[(size_t) i]));
+                                     second += std::llabs(middle(b->mSpace[(size_t) i]));
+                                 }
 
-                return first < second;
-            });
+                                 return first < second;
+                             });
             return subtree(std::move(nodes));
         }
 
-        const size_t bucketSize = (size_t) std::pow(6.0, std::floor(std::log((double) nodes.size() - 0.01)
-                                                                     / std::log(6.0)));
+        const size_t bucketSize = (size_t) std::pow(6.0,
+                                                    std::floor(std::log((double) nodes.size() - 0.01) / std::log(6.0)));
         int64_t bestCost = std::numeric_limits<int64_t>::max();
         int32_t bestDimension = -1;
         std::vector<Node *> bestOrder;
@@ -328,15 +322,16 @@ namespace {
                     const Parameter &h = HUMIDITIES[j];
                     const int32_t middleBiome = _pickMiddleBiome(i, j, weirdness);
                     const int32_t middleOrBadlands = _pickMiddleBiomeOrBadlandsIfHot(i, j, weirdness);
-                    const int32_t middleOrBadlandsOrSlope = _pickMiddleBiomeOrBadlandsIfHotOrSlopeIfCold(i, j, weirdness);
+                    const int32_t middleOrBadlandsOrSlope = _pickMiddleBiomeOrBadlandsIfHotOrSlopeIfCold(i, j,
+                                                                                                         weirdness);
                     const int32_t plateau = _pickPlateauBiome(i, j, weirdness);
                     const int32_t shattered = _pickShatteredBiome(i, j, weirdness);
                     const int32_t shatteredSavanna = _maybePickWindsweptSavannaBiome(i, j, weirdness, shattered);
                     const int32_t peak = _pickPeakBiome(i, j, weirdness);
                     _addSurface(t, h, span(COAST_CONTINENTALNESS, FAR_INLAND_CONTINENTALNESS), EROSIONS[0], weirdness,
                                 peak);
-                    _addSurface(t, h, span(COAST_CONTINENTALNESS, NEAR_INLAND_CONTINENTALNESS), EROSIONS[1],
-                                weirdness, middleOrBadlandsOrSlope);
+                    _addSurface(t, h, span(COAST_CONTINENTALNESS, NEAR_INLAND_CONTINENTALNESS), EROSIONS[1], weirdness,
+                                middleOrBadlandsOrSlope);
                     _addSurface(t, h, span(MID_INLAND_CONTINENTALNESS, FAR_INLAND_CONTINENTALNESS), EROSIONS[1],
                                 weirdness, peak);
                     _addSurface(t, h, span(COAST_CONTINENTALNESS, NEAR_INLAND_CONTINENTALNESS),
@@ -347,8 +342,8 @@ namespace {
                     _addSurface(t, h, FAR_INLAND_CONTINENTALNESS, EROSIONS[3], weirdness, plateau);
                     _addSurface(t, h, span(COAST_CONTINENTALNESS, FAR_INLAND_CONTINENTALNESS), EROSIONS[4], weirdness,
                                 middleBiome);
-                    _addSurface(t, h, span(COAST_CONTINENTALNESS, NEAR_INLAND_CONTINENTALNESS), EROSIONS[5],
-                                weirdness, shatteredSavanna);
+                    _addSurface(t, h, span(COAST_CONTINENTALNESS, NEAR_INLAND_CONTINENTALNESS), EROSIONS[5], weirdness,
+                                shatteredSavanna);
                     _addSurface(t, h, span(MID_INLAND_CONTINENTALNESS, FAR_INLAND_CONTINENTALNESS), EROSIONS[5],
                                 weirdness, shattered);
                     _addSurface(t, h, span(COAST_CONTINENTALNESS, FAR_INLAND_CONTINENTALNESS), EROSIONS[6], weirdness,
@@ -364,7 +359,8 @@ namespace {
                     const Parameter &h = HUMIDITIES[j];
                     const int32_t middleBiome = _pickMiddleBiome(i, j, weirdness);
                     const int32_t middleOrBadlands = _pickMiddleBiomeOrBadlandsIfHot(i, j, weirdness);
-                    const int32_t middleOrBadlandsOrSlope = _pickMiddleBiomeOrBadlandsIfHotOrSlopeIfCold(i, j, weirdness);
+                    const int32_t middleOrBadlandsOrSlope = _pickMiddleBiomeOrBadlandsIfHotOrSlopeIfCold(i, j,
+                                                                                                         weirdness);
                     const int32_t plateau = _pickPlateauBiome(i, j, weirdness);
                     const int32_t shattered = _pickShatteredBiome(i, j, weirdness);
                     const int32_t middleSavanna = _maybePickWindsweptSavannaBiome(i, j, weirdness, middleBiome);
@@ -385,8 +381,8 @@ namespace {
                     _addSurface(t, h, FAR_INLAND_CONTINENTALNESS, EROSIONS[3], weirdness, plateau);
                     _addSurface(t, h, span(COAST_CONTINENTALNESS, FAR_INLAND_CONTINENTALNESS), EROSIONS[4], weirdness,
                                 middleBiome);
-                    _addSurface(t, h, span(COAST_CONTINENTALNESS, NEAR_INLAND_CONTINENTALNESS), EROSIONS[5],
-                                weirdness, middleSavanna);
+                    _addSurface(t, h, span(COAST_CONTINENTALNESS, NEAR_INLAND_CONTINENTALNESS), EROSIONS[5], weirdness,
+                                middleSavanna);
                     _addSurface(t, h, span(MID_INLAND_CONTINENTALNESS, FAR_INLAND_CONTINENTALNESS), EROSIONS[5],
                                 weirdness, shattered);
                     _addSurface(t, h, span(COAST_CONTINENTALNESS, FAR_INLAND_CONTINENTALNESS), EROSIONS[6], weirdness,
@@ -405,7 +401,8 @@ namespace {
                     const Parameter &h = HUMIDITIES[j];
                     const int32_t middleBiome = _pickMiddleBiome(i, j, weirdness);
                     const int32_t middleOrBadlands = _pickMiddleBiomeOrBadlandsIfHot(i, j, weirdness);
-                    const int32_t middleOrBadlandsOrSlope = _pickMiddleBiomeOrBadlandsIfHotOrSlopeIfCold(i, j, weirdness);
+                    const int32_t middleOrBadlandsOrSlope = _pickMiddleBiomeOrBadlandsIfHotOrSlopeIfCold(i, j,
+                                                                                                         weirdness);
                     const int32_t shattered = _pickShatteredBiome(i, j, weirdness);
                     const int32_t plateau = _pickPlateauBiome(i, j, weirdness);
                     const int32_t beach = _pickBeachBiome(i, j);
@@ -420,8 +417,8 @@ namespace {
                     _addSurface(t, h, NEAR_INLAND_CONTINENTALNESS, EROSIONS[2], weirdness, middleBiome);
                     _addSurface(t, h, MID_INLAND_CONTINENTALNESS, EROSIONS[2], weirdness, middleOrBadlands);
                     _addSurface(t, h, FAR_INLAND_CONTINENTALNESS, EROSIONS[2], weirdness, plateau);
-                    _addSurface(t, h, span(COAST_CONTINENTALNESS, NEAR_INLAND_CONTINENTALNESS), EROSIONS[3],
-                                weirdness, middleBiome);
+                    _addSurface(t, h, span(COAST_CONTINENTALNESS, NEAR_INLAND_CONTINENTALNESS), EROSIONS[3], weirdness,
+                                middleBiome);
                     _addSurface(t, h, span(MID_INLAND_CONTINENTALNESS, FAR_INLAND_CONTINENTALNESS), EROSIONS[3],
                                 weirdness, middleOrBadlands);
                     if (weirdness.mMax < 0) {
@@ -457,7 +454,8 @@ namespace {
                     const Parameter &h = HUMIDITIES[j];
                     const int32_t middleBiome = _pickMiddleBiome(i, j, weirdness);
                     const int32_t middleOrBadlands = _pickMiddleBiomeOrBadlandsIfHot(i, j, weirdness);
-                    const int32_t middleOrBadlandsOrSlope = _pickMiddleBiomeOrBadlandsIfHotOrSlopeIfCold(i, j, weirdness);
+                    const int32_t middleOrBadlandsOrSlope = _pickMiddleBiomeOrBadlandsIfHotOrSlopeIfCold(i, j,
+                                                                                                         weirdness);
                     const int32_t beach = _pickBeachBiome(i, j);
                     const int32_t middleSavanna = _maybePickWindsweptSavannaBiome(i, j, weirdness, middleBiome);
                     const int32_t shatteredCoast = _pickShatteredCoastBiome(i, j, weirdness);
@@ -527,8 +525,8 @@ namespace {
                             BiomeIds::LUSH_CAVES);
             _addUnderground(FULL_RANGE, span(-1.0f, 0.7f), span(COAST_CONTINENTALNESS, INLAND_CONTINENTALNESS),
                             span(EROSIONS[5], EROSIONS[6]), caveDepth, span(-1.1f, -0.85f), BiomeIds::SULFUR_CAVES);
-            _addUnderground(FULL_RANGE, FULL_RANGE, FULL_RANGE, span(EROSIONS[0], EROSIONS[1]), point(1.1f),
-                            FULL_RANGE, BiomeIds::DEEP_DARK);
+            _addUnderground(FULL_RANGE, FULL_RANGE, FULL_RANGE, span(EROSIONS[0], EROSIONS[1]), point(1.1f), FULL_RANGE,
+                            BiomeIds::DEEP_DARK);
         }
 
         int32_t _pickMiddleBiome(int32_t temperature, int32_t humidity, const Parameter &weirdness) const {
@@ -617,14 +615,17 @@ int64_t OverworldBiomeParameters::quantize(float value) {
 OverworldBiomeParameters::Target OverworldBiomeParameters::target(float temperature, float humidity,
                                                                   float continentalness, float erosion, float depth,
                                                                   float weirdness) {
-    return Target{quantize(temperature), quantize(humidity), quantize(continentalness), quantize(erosion),
-                  quantize(depth), quantize(weirdness), 0};
+    return Target{quantize(temperature),
+                  quantize(humidity),
+                  quantize(continentalness),
+                  quantize(erosion),
+                  quantize(depth),
+                  quantize(weirdness),
+                  0};
 }
 
 OverworldBiomeParameters::OverworldBiomeParameters() {
-    Builder builder([this](const Space &space, int32_t biome) {
-        _addEntry(space, biome);
-    });
+    Builder builder([this](const Space &space, int32_t biome) { _addEntry(space, biome); });
     builder.addBiomes();
     mRoot = build(std::move(mLeaves));
 }

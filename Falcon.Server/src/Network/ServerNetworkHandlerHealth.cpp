@@ -213,8 +213,8 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (amount <= 0.0f)
         return DamageResult::Ignored;
 
-    if (player.getHealth() - amount < 1.0f && key != "death.attack.outOfWorld" &&
-        key != "death.attack.suicide" && TotemItem::consume(*this, player))
+    if (player.getHealth() - amount < 1.0f && key != "death.attack.outOfWorld" && key != "death.attack.suicide"
+        && TotemItem::consume(*this, player))
         return DamageResult::Dealt;
 
     const float health = player.reduceHealth(amount);
@@ -275,8 +275,8 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
 
     const std::string key = deathMessageKey.empty() ? "death.attack.generic" : deathMessageKey;
     const std::vector<std::string> parameters = deathMessageParameters.empty()
-                                                ? std::vector<std::string>{player.getName()}
-                                                : deathMessageParameters;
+                                                        ? std::vector<std::string>{player.getName()}
+                                                        : deathMessageParameters;
 
     std::string deathMessage = key;
     PluginEvent deathEvent;
@@ -321,8 +321,7 @@ void ServerNetworkHandler::_throwItem(ServerPlayer &player, const ItemStack &ite
     const float yaw = player.getRotation().y * MathConstants::PI_F / 180.0f;
     const float pitch = player.getRotation().x * MathConstants::PI_F / 180.0f;
 
-    const Vector3f motion(-std::sin(yaw) * std::cos(pitch) * THROW_SPEED,
-                          -std::sin(pitch) * THROW_SPEED + 0.1f,
+    const Vector3f motion(-std::sin(yaw) * std::cos(pitch) * THROW_SPEED, -std::sin(pitch) * THROW_SPEED + 0.1f,
                           std::cos(yaw) * std::cos(pitch) * THROW_SPEED);
 
     ItemActor *dropped = dropItem(getLevelFor(player), dropPosition, item, motion, THROW_PICKUP_DELAY);
@@ -404,8 +403,8 @@ Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player, Level *
 
     if (player.getSpawnDimension() == DimensionType::Nether) {
         Level &nether = world.getLevel(DimensionType::Nether);
-        const std::optional<Vector3f> respawn = RespawnAnchorBlock::findRespawnPosition(
-                nether, player.getSpawnPoint(), player.getSpawnStandPosition());
+        const std::optional<Vector3f> respawn = RespawnAnchorBlock::findRespawnPosition(nether, player.getSpawnPoint(),
+                                                                                        player.getSpawnStandPosition());
         if (respawn.has_value()) {
             destination = &nether;
             anchor = player.getSpawnPoint();
@@ -486,6 +485,5 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     sendActorsTo(player);
     _sendChunks(player);
 
-    LOG_INFO(LogAreaID::Server, "%s respawned at %.2f %.2f %.2f", player.getName().c_str(), spawn.x, spawn.y,
-             spawn.z);
+    LOG_INFO(LogAreaID::Server, "%s respawned at %.2f %.2f %.2f", player.getName().c_str(), spawn.x, spawn.y, spawn.z);
 }

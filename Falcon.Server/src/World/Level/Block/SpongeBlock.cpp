@@ -51,14 +51,14 @@ void SpongeBlock::onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i &positi
 
     ticks.write(position, 0, drySponge());
     if (ServerNetworkHandler *owner = level.getOwner())
-        owner->broadcastLevelEvent(level, SPONGE_DRY,
-                                   Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                            (float) position.z + 0.5f), 0);
+        owner->broadcastLevelEvent(
+                level, SPONGE_DRY,
+                Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f), 0);
 }
 
 // sub_148F9A1C0: a dry sponge absorbs on a tick one later
-void SpongeBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position,
-                                         const BlockState &state, const Vector3i &changed) const {
+void SpongeBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state,
+                                         const Vector3i &changed) const {
     (void) changed;
     if (!_isWet(state))
         ticks.queueTick(position, this, 1);

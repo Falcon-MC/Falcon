@@ -34,12 +34,17 @@ namespace {
         const std::string module = "00000000-0000-4000-9000-" + std::to_string(100000000000 + serial);
         writeFile(root / name / "manifest.json",
                   "{\"format_version\": 2,\n"
-                  " \"header\": {\"name\": \"" + name + "\", \"uuid\": \"" + header + "\", \"version\": [1, 0, 0],"
-                  " \"min_engine_version\": [1, 21, 0]},\n"
-                  " // comments are allowed in manifests\n"
-                  " \"modules\": [{\"type\": \"script\", \"language\": \"javascript\", \"uuid\": \"" + module + "\","
-                  " \"entry\": \"scripts/main.js\", \"version\": [1, 0, 0]}],\n"
-                  " \"dependencies\": [" + dependencies + "]}\n");
+                  " \"header\": {\"name\": \""
+                          + name + "\", \"uuid\": \"" + header
+                          + "\", \"version\": [1, 0, 0],"
+                            " \"min_engine_version\": [1, 21, 0]},\n"
+                            " // comments are allowed in manifests\n"
+                            " \"modules\": [{\"type\": \"script\", \"language\": \"javascript\", \"uuid\": \""
+                          + module
+                          + "\","
+                            " \"entry\": \"scripts/main.js\", \"version\": [1, 0, 0]}],\n"
+                            " \"dependencies\": ["
+                          + dependencies + "]}\n");
         writeFile(root / name / "scripts" / "main.js", script);
     }
 
@@ -207,15 +212,16 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                   std::string(PRELUDE) + STABLE2);
         writePack(packs, "stable1", "{\"module_name\": \"@minecraft/server\", \"version\": \"1.19.0\"}",
                   std::string(PRELUDE) + STABLE1);
-        writePack(packs, "beta", "{\"module_name\": \"@minecraft/server\", \"version\": \"beta\"},"
-                                 " {\"module_name\": \"@minecraft/server-ui\", \"version\": \"2.4.0-beta\"}",
+        writePack(packs, "beta",
+                  "{\"module_name\": \"@minecraft/server\", \"version\": \"beta\"},"
+                  " {\"module_name\": \"@minecraft/server-ui\", \"version\": \"2.4.0-beta\"}",
                   std::string(PRELUDE) + BETA);
         writePack(packs, "undeclared", server2, UNDECLARED);
         writePack(packs, "net", server2 + ", {\"module_name\": \"@minecraft/server-net\", \"version\": \"1.0.0-beta\"}",
                   NOT_IMPLEMENTED);
         writePack(packs, "badversion", "{\"module_name\": \"@minecraft/server\", \"version\": \"2.99.0\"}", NEVER_RUNS);
-        writePack(packs, "unknown", server2 + ", {\"module_name\": \"@minecraft/server-unknown\", \"version\": \"1.0.0\"}",
-                  NEVER_RUNS);
+        writePack(packs, "unknown",
+                  server2 + ", {\"module_name\": \"@minecraft/server-unknown\", \"version\": \"1.0.0\"}", NEVER_RUNS);
         writeFile(packs / "outside.js", "export const x = 1;\n");
 
         ServerNetworkHandler owner("Script API", "", 1);
@@ -269,8 +275,9 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*stable2, "startupEarly",
                "ReferenceError: Native function [World::getAllPlayers] cannot be used in early execution.");
         expect(*stable2, "register", "ok");
-        expect(*stable2, "lateRegister", "CustomComponentInvalidRegistryError: Cannot register custom component "
-                                         "outside of the ModuleStartup event.");
+        expect(*stable2, "lateRegister",
+               "CustomComponentInvalidRegistryError: Cannot register custom component "
+               "outside of the ModuleStartup event.");
         expect(*stable2, "normal", "ok");
         expect(*stable2, "item", "true");
         expect(*stable2, "dimension", "true");
@@ -282,8 +289,9 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*stable2, "player", "true");
         expect(*stable2, "same", "true");
         expect(*stable2, "escape", "blocked");
-        expect(*stable2, "invalid", "InvalidEntityError: Failed to get property 'location' due to Entity being "
-                                    "invalid (has the Entity been removed?).");
+        expect(*stable2, "invalid",
+               "InvalidEntityError: Failed to get property 'location' due to Entity being "
+               "invalid (has the Entity been removed?).");
         expect(*stable2, "invalidClass", "true");
         expect(*stable2, "isValid", "false");
 
@@ -312,7 +320,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
 int main() {
     const auto originalRoot = ServerPaths::getRoot();
     const auto directory = std::filesystem::temp_directory_path()
-            / ("falcon-scripts-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                           / ("falcon-scripts-"
+                              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     int result = 0;
     try {
         std::filesystem::create_directories(directory);

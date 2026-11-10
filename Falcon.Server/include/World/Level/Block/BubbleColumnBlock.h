@@ -7,8 +7,7 @@
 // bubble_column on layer 0 over its water on layer 1
 class BubbleColumnBlock : public Block {
 public:
-    explicit BubbleColumnBlock(const Block &block) : Block(block) {
-    }
+    explicit BubbleColumnBlock(const Block &block) : Block(block) {}
 
     static constexpr const char *IDENTIFIER = "minecraft:bubble_column";
 

@@ -16,9 +16,13 @@ public:
         return true;
     }
 
-    ActorSize getSize() const override { return ActorSize{0.6f, 1.8f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.6f, 1.8f};
+    }
 
-    float getDefaultMaxHealth() const override { return 20.0f; }
+    float getDefaultMaxHealth() const override {
+        return 20.0f;
+    }
 
     void tick(ServerNetworkHandler &owner) override;
 

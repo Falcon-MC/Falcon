@@ -115,7 +115,7 @@ namespace {
         fixture.place(1);
         require(fixture.use(), "setting the spawn was not handled");
         require(fixture.mPlayer.hasSpawnPoint() && fixture.mPlayer.getSpawnPoint() == ANCHOR
-                && fixture.mPlayer.getSpawnDimension() == DimensionType::Nether,
+                        && fixture.mPlayer.getSpawnDimension() == DimensionType::Nether,
                 "the anchor did not become the spawn point");
         require(fixture.mPlayer.getSpawnStandPosition() == Vector3i(10, 64, 8),
                 "the player position was not kept with the spawn point");
@@ -162,7 +162,7 @@ namespace {
             require(fixture.use() && fixture.at(ANCHOR.x, ANCHOR.y, ANCHOR.z) == "minecraft:air",
                     "the anchor in water was not removed");
             require(fixture.at(ANCHOR.x + 1, ANCHOR.y, ANCHOR.z) == "minecraft:stone"
-                    && fixture.at(ANCHOR.x, ANCHOR.y - 1, ANCHOR.z) == "minecraft:stone",
+                            && fixture.at(ANCHOR.x, ANCHOR.y - 1, ANCHOR.z) == "minecraft:stone",
                     "the blast in water broke blocks");
         }
         {
@@ -187,11 +187,13 @@ namespace {
 
         fixture.mLevel.setBlockState(12, 63, 7, VanillaBlocks::STONE().toBlockState());
         fixture.mLevel.setBlockState(9, 63, 10, VanillaBlocks::STONE().toBlockState());
-        require(RespawnAnchorBlock::findStandUpPosition(fixture.mLevel, stand) == std::optional<Vector3i>(Vector3i(9, 64, 10)),
+        require(RespawnAnchorBlock::findStandUpPosition(fixture.mLevel, stand)
+                        == std::optional<Vector3i>(Vector3i(9, 64, 10)),
                 "the search did not run x first, then z");
 
         fixture.mLevel.setBlockState(9, 65, 10, VanillaBlocks::STONE().toBlockState());
-        require(RespawnAnchorBlock::findStandUpPosition(fixture.mLevel, stand) == std::optional<Vector3i>(Vector3i(12, 64, 7)),
+        require(RespawnAnchorBlock::findStandUpPosition(fixture.mLevel, stand)
+                        == std::optional<Vector3i>(Vector3i(12, 64, 7)),
                 "a spot without head room was taken");
 
         fixture.mLevel.setBlockState(13, 63, 8, VanillaBlocks::STONE().toBlockState());
@@ -242,13 +244,15 @@ namespace {
         player.setSpawnPoint(ANCHOR, Vector3i(10, 64, 8), DimensionType::Nether, "world");
         const Tag saved = player.saveNbt("world");
         require(saved.getInt("SpawnBlockPositionX", 0) == ANCHOR.x && saved.getInt("SpawnDimension", 0) == 1
-                && saved.getInt("SpawnX", 0) == 10, "the spawn point was not saved like the game");
+                        && saved.getInt("SpawnX", 0) == 10,
+                "the spawn point was not saved like the game");
 
         ServerPlayer loaded{NetworkIdentifier{}, 102};
         loaded.loadNbt(saved, owner.getCodecContext());
         require(loaded.hasSpawnPoint() && loaded.getSpawnPoint() == ANCHOR
-                && loaded.getSpawnStandPosition() == Vector3i(10, 64, 8)
-                && loaded.getSpawnDimension() == DimensionType::Nether, "the spawn point did not load back");
+                        && loaded.getSpawnStandPosition() == Vector3i(10, 64, 8)
+                        && loaded.getSpawnDimension() == DimensionType::Nether,
+                "the spawn point did not load back");
 
         Tag legacy = saved;
         legacy.remove("SpawnBlockPositionX");
@@ -256,7 +260,8 @@ namespace {
         ServerPlayer old{NetworkIdentifier{}, 103};
         old.loadNbt(legacy, owner.getCodecContext());
         require(old.hasSpawnPoint() && old.getSpawnPoint() == Vector3i(10, 64, 8)
-                && old.getSpawnDimension() == DimensionType::Overworld, "an older bed spawn did not load");
+                        && old.getSpawnDimension() == DimensionType::Overworld,
+                "an older bed spawn did not load");
 
         Tag unset = saved;
         unset.putInt("SpawnBlockPositionX", std::numeric_limits<int32_t>::min());
@@ -269,12 +274,14 @@ namespace {
         commanded.setSpawnPosition(Vector3i(3, 70, -4), DimensionType::Nether, "world");
         const Tag command = commanded.saveNbt("world");
         require(command.getInt("SpawnBlockPositionX", 0) == std::numeric_limits<int32_t>::min()
-                && command.getInt("SpawnX", 0) == 3, "a command spawn was saved with a block");
+                        && command.getInt("SpawnX", 0) == 3,
+                "a command spawn was saved with a block");
         ServerPlayer reloaded{NetworkIdentifier{}, 106};
         reloaded.loadNbt(command, owner.getCodecContext());
         require(reloaded.hasSpawnPoint() && !reloaded.hasSpawnBlock()
-                && reloaded.getSpawnStandPosition() == Vector3i(3, 70, -4)
-                && reloaded.getSpawnDimension() == DimensionType::Nether, "a command spawn did not load back");
+                        && reloaded.getSpawnStandPosition() == Vector3i(3, 70, -4)
+                        && reloaded.getSpawnDimension() == DimensionType::Nether,
+                "a command spawn did not load back");
     }
 }
 

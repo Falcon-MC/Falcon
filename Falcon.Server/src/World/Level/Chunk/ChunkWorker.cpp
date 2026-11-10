@@ -208,8 +208,8 @@ bool ChunkWorker::requestPopulate(std::unique_ptr<LevelChunk> chunk) {
     return true;
 }
 
-std::future<std::vector<GeneratedBlockChange>> ChunkWorker::requestPersistChanges(
-        int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes) {
+std::future<std::vector<GeneratedBlockChange>>
+ChunkWorker::requestPersistChanges(int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes) {
     ChunkTask task;
     task.mKind = ChunkTask::Kind::PersistChanges;
     task.mX = chunkX;
@@ -321,7 +321,7 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
         if (generated) {
             uint64_t base = 0;
             const uint64_t own = mSources[sourceIndex]->populateGenerated(*chunk, spilled, overflow, blockActors,
-                                                                           entities, base);
+                                                                          entities, base);
             chunk->setDecorationSequence(base, own);
         } else {
             applySpilled();

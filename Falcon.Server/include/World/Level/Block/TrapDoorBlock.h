@@ -6,9 +6,7 @@
 
 class TrapDoorBlock final : public Block {
 public:
-    explicit TrapDoorBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit TrapDoorBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 
@@ -17,6 +15,6 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
-    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position, const BlockState &state,
+                  const ItemStack &usedItem, int blockFace) const override;
 };

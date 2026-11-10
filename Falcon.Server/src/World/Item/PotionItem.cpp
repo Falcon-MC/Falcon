@@ -5,8 +5,7 @@
 
 FALCON_REGISTER_ITEM(PotionItem, 100);
 
-PotionItem::PotionItem(const Item &base) : Item(base) {
-}
+PotionItem::PotionItem(const Item &base) : Item(base) {}
 
 bool PotionItem::matches(const std::string &identifier) {
     return identifier == "minecraft:potion";

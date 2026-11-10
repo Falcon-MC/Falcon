@@ -6,9 +6,7 @@
 
 class SlabBlock final : public Block {
 public:
-    explicit SlabBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit SlabBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

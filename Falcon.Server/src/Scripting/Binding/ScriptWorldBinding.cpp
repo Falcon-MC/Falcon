@@ -223,13 +223,26 @@ namespace {
 
         int32_t x = block->mX, y = block->mY, z = block->mZ;
         switch (magic) {
-            case 0: y += steps; break;
-            case 1: y -= steps; break;
-            case 2: z -= steps; break;
-            case 3: z += steps; break;
-            case 4: x += steps; break;
-            case 5: x -= steps; break;
-            default: break;
+            case 0:
+                y += steps;
+                break;
+            case 1:
+                y -= steps;
+                break;
+            case 2:
+                z -= steps;
+                break;
+            case 3:
+                z += steps;
+                break;
+            case 4:
+                x += steps;
+                break;
+            case 5:
+                x -= steps;
+                break;
+            default:
+                break;
         }
         return ScriptApi::fromContext(ctx)->makeBlock(blockLevel(ctx, *block), x, y, z);
     }
@@ -568,8 +581,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    bool withinDistance(const Vector3f &position, double centerX, double centerY, double centerZ,
-                        double maxDistance) {
+    bool withinDistance(const Vector3f &position, double centerX, double centerY, double centerZ, double maxDistance) {
         if (maxDistance < 0.0)
             return true;
         const double dx = position.x - centerX;

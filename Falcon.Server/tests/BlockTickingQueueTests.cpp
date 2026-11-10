@@ -27,11 +27,9 @@ namespace {
         std::vector<Vector3i> fired;
         queue.beginTick(tick);
         for (int64_t column: columns) {
-            queue.tickColumn(tick, column, [&](const Vector3i &position, const Block *) {
-                fired.push_back(position);
-            }, [](int32_t, int32_t) {
-                return true;
-            });
+            queue.tickColumn(
+                    tick, column, [&](const Vector3i &position, const Block *) { fired.push_back(position); },
+                    [](int32_t, int32_t) { return true; });
         }
         queue.endTick();
         return fired;
@@ -76,16 +74,14 @@ namespace {
         const int64_t second = BlockTickingQueue::column(1, 0);
         queue.add(Vector3i(0, 64, 0), water(), 1);
         queue.beginTick(1);
-        queue.tickColumn(1, first, [&](const Vector3i &, const Block *) {
-            // a chunk later in the order has not had its turn: its clock still reads the last tick
-            queue.add(Vector3i(16, 64, 0), water(), 5);
-        }, [](int32_t, int32_t) {
-            return true;
-        });
-        queue.tickColumn(1, second, [](const Vector3i &, const Block *) {
-        }, [](int32_t, int32_t) {
-            return true;
-        });
+        queue.tickColumn(
+                1, first,
+                [&](const Vector3i &, const Block *) {
+                    // a chunk later in the order has not had its turn: its clock still reads the last tick
+                    queue.add(Vector3i(16, 64, 0), water(), 5);
+                },
+                [](int32_t, int32_t) { return true; });
+        queue.tickColumn(1, second, [](const Vector3i &, const Block *) {}, [](int32_t, int32_t) { return true; });
         queue.endTick();
         require(runTick(queue, 5, {first, second}).size() == 1, "the waiting chunk counts from the last tick");
     }
@@ -97,11 +93,9 @@ namespace {
         const auto runAt = [&](int64_t tick, int32_t speed) {
             size_t fired = 0;
             queue.beginTick(tick, speed);
-            queue.tickColumn(tick, first, [&](const Vector3i &, const Block *) {
-                ++fired;
-            }, [](int32_t, int32_t) {
-                return true;
-            });
+            queue.tickColumn(
+                    tick, first, [&](const Vector3i &, const Block *) { ++fired; },
+                    [](int32_t, int32_t) { return true; });
             queue.endTick();
             return fired;
         };

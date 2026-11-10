@@ -95,8 +95,7 @@ private:
     struct LiquidCache {
         LiquidCache() = default;
 
-        LiquidCache(const LiquidCache &) {
-        }
+        LiquidCache(const LiquidCache &) {}
 
         LiquidCache &operator=(const LiquidCache &) {
             mValue.store(0, std::memory_order_relaxed);

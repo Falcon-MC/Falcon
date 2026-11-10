@@ -27,7 +27,7 @@ namespace BlockShape {
     void appendShapesAt(const BlockState &state, int32_t x, int32_t y, int32_t z, const Actor *actor,
                         const Neighbours &neighbours, std::vector<AxisAlignedBB> &out);
 
-    bool isPositionInside(const BlockState &state, int32_t blockX, int32_t blockY, int32_t blockZ,
-                          float x, float y, float z, const Actor *actor = nullptr);
+    bool isPositionInside(const BlockState &state, int32_t blockX, int32_t blockY, int32_t blockZ, float x, float y,
+                          float z, const Actor *actor = nullptr);
 
 }

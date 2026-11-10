@@ -98,12 +98,11 @@ private:
 
         bool isSet() const {
             return mSeagrass != nullptr || mScatter != nullptr || mSingleBlock != nullptr || mWeighted != nullptr
-                   || mAggregate != nullptr || mTree != nullptr || mLeafLitter || mMushroom != nullptr
-                   || mBeehiveSearch || mHugeMushroom || mThreshold != nullptr || mSnap != nullptr || mBlob != nullptr
+                   || mAggregate != nullptr || mTree != nullptr || mLeafLitter || mMushroom != nullptr || mBeehiveSearch
+                   || mHugeMushroom || mThreshold != nullptr || mSnap != nullptr || mBlob != nullptr
                    || mMultiface != nullptr || mDripstoneCluster != nullptr || mPointedDripstone != nullptr
-                   || mLargeDripstone
-                   || mLegacyFlower != nullptr || mVegetationPatch != nullptr || mGrowingPlant != nullptr
-                   || mSequence != nullptr || mFunction != nullptr;
+                   || mLargeDripstone || mLegacyFlower != nullptr || mVegetationPatch != nullptr
+                   || mGrowingPlant != nullptr || mSequence != nullptr || mFunction != nullptr;
         }
     };
 
@@ -125,9 +124,8 @@ private:
         const FossilDefinition *mFossil = nullptr;
 
         bool isPorted() const {
-            return mOre != nullptr || mDisk != nullptr || mGeode != nullptr || mLegacyTree != nullptr
-                   || mPlaced.isSet() || mKelp || mForestFoliage || mForestRock || mSprings || mLegacyIce
-                   || mFossil != nullptr;
+            return mOre != nullptr || mDisk != nullptr || mGeode != nullptr || mLegacyTree != nullptr || mPlaced.isSet()
+                   || mKelp || mForestFoliage || mForestRock || mSprings || mLegacyIce || mFossil != nullptr;
         }
     };
 
@@ -252,6 +250,5 @@ private:
 
     static bool _placeSulfurPool(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 
-    static bool _placePotentSulfurSearch(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
-                                         std::mt19937 &random);
+    static bool _placePotentSulfurSearch(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 };

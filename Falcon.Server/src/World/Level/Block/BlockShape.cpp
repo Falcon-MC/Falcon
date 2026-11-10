@@ -32,8 +32,8 @@ bool BlockShape::hasCollision(const BlockState &state, const Actor *actor) {
 bool BlockShape::isFullCube(const BlockState &state) {
     const AxisAlignedBB shape = getRelativeShape(state);
 
-    return shape.mMinX <= 0.0f && shape.mMinY <= 0.0f && shape.mMinZ <= 0.0f
-           && shape.mMaxX >= 1.0f && shape.mMaxY >= 1.0f && shape.mMaxZ >= 1.0f;
+    return shape.mMinX <= 0.0f && shape.mMinY <= 0.0f && shape.mMinZ <= 0.0f && shape.mMaxX >= 1.0f
+           && shape.mMaxY >= 1.0f && shape.mMaxZ >= 1.0f;
 }
 
 namespace {
@@ -117,8 +117,8 @@ AxisAlignedBB BlockShape::getShapeAt(const BlockState &state, int32_t x, int32_t
     return shape.offset((float) x, (float) y, (float) z);
 }
 
-bool BlockShape::isPositionInside(const BlockState &state, int32_t blockX, int32_t blockY, int32_t blockZ,
-                                  float x, float y, float z, const Actor *actor) {
+bool BlockShape::isPositionInside(const BlockState &state, int32_t blockX, int32_t blockY, int32_t blockZ, float x,
+                                  float y, float z, const Actor *actor) {
     const AxisAlignedBB shape = getShapeAt(state, blockX, blockY, blockZ, actor);
     if (shape.isEmpty())
         return false;

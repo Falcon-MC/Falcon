@@ -4,8 +4,7 @@
 
 class CobwebBlock : public Block {
 public:
-    explicit CobwebBlock(const Block &block) : Block(block) {
-    }
+    explicit CobwebBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

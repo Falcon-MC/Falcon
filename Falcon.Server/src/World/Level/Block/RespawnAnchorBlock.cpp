@@ -24,14 +24,7 @@ namespace {
     const double EXPLOSION_RADIUS = 5.0;
     const int WATER_SIDES_TO_SHIELD = 2;
 
-    const int NEIGHBOURS[6][3] = {
-            {0,  -1, 0},
-            {0,  1,  0},
-            {0,  0,  -1},
-            {0,  0,  1},
-            {-1, 0,  0},
-            {1,  0,  0}
-    };
+    const int NEIGHBOURS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
     Vector3f centerOf(const Vector3i &position) {
         return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);

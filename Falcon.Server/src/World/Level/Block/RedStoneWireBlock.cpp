@@ -53,7 +53,8 @@ BlockState RedStoneWireBlock::updateShape(Level &level, const Vector3i &position
             sides[index] = solid ? "up" : "side";
         } else if (RedstoneSystem::canConnectWireTo(level, other, face)
                    || (!RedstoneSystem::isNormalBlock(*neighbour)
-                       && RedstoneSystem::canConnectWireTo(level, Vector3i(other.x, other.y - 1, other.z), RedstoneFace::NONE))) {
+                       && RedstoneSystem::canConnectWireTo(level, Vector3i(other.x, other.y - 1, other.z),
+                                                           RedstoneFace::NONE))) {
             sides[index] = "side";
         } else {
             sides[index] = "none";

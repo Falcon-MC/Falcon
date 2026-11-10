@@ -30,14 +30,14 @@ namespace {
     }
 
     const std::unordered_set<std::string> &hiddenItems() {
-        static const std::unordered_set<std::string> items =
-                loadNames(FalconCommandData::kCommandHiddenItemsJson, "items", "items");
+        static const std::unordered_set<std::string> items = loadNames(FalconCommandData::kCommandHiddenItemsJson,
+                                                                       "items", "items");
         return items;
     }
 
     const std::unordered_set<std::string> &hiddenBlocks() {
-        static const std::unordered_set<std::string> blocks =
-                loadNames(FalconCommandData::kCommandHiddenBlocksJson, "blocks", "blocks");
+        static const std::unordered_set<std::string> blocks = loadNames(FalconCommandData::kCommandHiddenBlocksJson,
+                                                                        "blocks", "blocks");
         return blocks;
     }
 
