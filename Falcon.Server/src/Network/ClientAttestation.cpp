@@ -1,19 +1,84 @@
 #include "Network/ClientAttestation.h"
 
 #include "Network/Http/HttpClient.h"
+#include "Network/NetherNet/NetherNetConnection.h"
 #include "Network/TransportTranscript.h"
 
 #include <cstdlib>
+#include <cstring>
 
 namespace {
-    const char *const SERVICE = "https://api.falcon-mc.workers.dev";
-    const char *const TRANSPORT_PATH = "/v1/transport";
+    const char *const SERVICE = "https://api.falcon-mc.workers.dev/v1/client";
 
     // an answer that is late says nothing: the client stays
     const int TIMEOUT_MS = 4000;
-    const size_t MAX_EVIDENCE = 16 * 1024;
+    const size_t MAX_TRANSCRIPT = 16 * 1024;
+    const size_t MAX_OFFER = 12 * 1024;
     // a flood of connections must not grow a queue of questions
     const size_t MAX_QUESTIONS = 256;
+
+    // evidence is a run of sections: what it is, three bytes of length, the bytes
+    enum class Section : unsigned char { TransportTranscript = 1, Offer = 2 };
+
+    void append(std::string &evidence, Section section, const std::string &bytes) {
+        evidence.push_back((char) section);
+        evidence.push_back((char) ((bytes.size() >> 16) & 255));
+        evidence.push_back((char) ((bytes.size() >> 8) & 255));
+        evidence.push_back((char) (bytes.size() & 255));
+        evidence += bytes;
+    }
+
+    bool startsWith(const std::string &line, const char *prefix) {
+        return line.compare(0, std::strlen(prefix), prefix) == 0;
+    }
+
+    // the offer as the client wrote it, without what belongs to the player: the identity assertion
+    // carries their account token and the candidates their addresses
+    std::string withoutPersonalData(const std::string &offer) {
+        std::string out;
+        size_t start = 0;
+        while (start < offer.size()) {
+            size_t end = offer.find('\n', start);
+            if (end == std::string::npos)
+                end = offer.size();
+            std::string line = offer.substr(start, end - start);
+            start = end + 1;
+            if (!line.empty() && line.back() == '\r')
+                line.pop_back();
+
+            if (startsWith(line, "a=identity:")) {
+                line = "a=identity:-";
+            } else if (startsWith(line, "c=")) {
+                line = "c=-";
+            } else if (startsWith(line, "a=candidate:")) {
+                // foundation, component, protocol, priority, address, port, then pairs
+                std::string masked;
+                size_t index = 0;
+                size_t token = 0;
+                bool afterRelated = false;
+                while (index <= line.size()) {
+                    size_t space = line.find(' ', index);
+                    if (space == std::string::npos)
+                        space = line.size();
+                    const std::string word = line.substr(index, space - index);
+                    const bool address = token == 4 || afterRelated;
+                    if (!masked.empty())
+                        masked.push_back(' ');
+                    masked += address ? (word.find(':') != std::string::npos ? "v6" : "v4") : word;
+                    afterRelated = word == "raddr";
+                    token++;
+                    index = space + 1;
+                }
+                line = masked;
+            }
+
+            if (out.size() + line.size() + 1 > MAX_OFFER)
+                break;
+            out += line;
+            out.push_back('\n');
+        }
+        return out;
+    }
 }
 
 ClientAttestation &ClientAttestation::getInstance() {
@@ -31,19 +96,20 @@ ClientAttestation::~ClientAttestation() {
         mWorker.join();
 }
 
-void ClientAttestation::inspectTransport(const std::string &fingerprint, const NetworkIdentifier &id) {
-    std::string evidence(MAX_EVIDENCE, '\0');
-    const size_t length = falcon_transport_take(fingerprint.c_str(), reinterpret_cast<unsigned char *>(&evidence[0]),
-                                                evidence.size());
-    if (length == 0)
-        return;
-    evidence.resize(length);
+void ClientAttestation::inspect(const nethernet::Connection &connection) {
+    std::string transcript(MAX_TRANSCRIPT, '\0');
+    transcript.resize(falcon_transport_take(connection.getRemoteFingerprint().c_str(),
+                                            reinterpret_cast<unsigned char *>(&transcript[0]), transcript.size()));
+
+    std::string evidence;
+    append(evidence, Section::TransportTranscript, transcript);
+    append(evidence, Section::Offer, withoutPersonalData(connection.getRemoteOffer()));
 
     {
         std::lock_guard<std::mutex> lock(mMutex);
         if (mStopping || mQuestions.size() >= MAX_QUESTIONS)
             return;
-        mQuestions.push_back(Question{id, TRANSPORT_PATH, std::move(evidence)});
+        mQuestions.push_back(Question{connection.getNetworkIdentifier(), std::move(evidence)});
         if (!mWorker.joinable())
             mWorker = std::thread([this]() { _run(); });
     }
@@ -73,8 +139,7 @@ void ClientAttestation::_run() {
         HttpResponse response;
         std::string error;
         const HttpClient::Headers headers = {{"Content-Type", "application/octet-stream"}};
-        if (!HttpClient::post(std::string(SERVICE) + question.mPath, headers, question.mEvidence, response, error,
-                              TIMEOUT_MS)
+        if (!HttpClient::post(SERVICE, headers, question.mEvidence, response, error, TIMEOUT_MS)
             || response.mStatus != 200 || response.mBody.empty() || response.mBody.size() > 8)
             continue;
 

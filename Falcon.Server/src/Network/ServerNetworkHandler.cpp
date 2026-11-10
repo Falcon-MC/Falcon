@@ -540,9 +540,8 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     if (mNetherNetInstance != nullptr) {
         mNetherNetInstance->setUnofficialClientsAllowed(mProperties.getAllowUnofficialClients());
         // the verdict comes back later, see the tick: the connection is not held for it
-        mNetherNetInstance->setConnectionObserver([](const std::string &fingerprint, const NetworkIdentifier &id) {
-            ClientAttestation::getInstance().inspectTransport(fingerprint, id);
-        });
+        mNetherNetInstance->setConnectionObserver(
+                [](const nethernet::Connection &connection) { ClientAttestation::getInstance().inspect(connection); });
         mNetherNetInstance->setServerDataProvider([this]() {
             nethernet::ServerData data;
             data.mServerName = mProperties.getServerName();

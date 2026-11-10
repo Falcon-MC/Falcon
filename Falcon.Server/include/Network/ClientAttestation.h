@@ -2,6 +2,10 @@
 
 #include "Network/NetworkIdentifier.h"
 
+namespace nethernet {
+    class Connection;
+}
+
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -19,8 +23,8 @@ public:
 
     ~ClientAttestation();
 
-    // the peer is named by the certificate fingerprint of its offer; never blocks
-    void inspectTransport(const std::string &fingerprint, const NetworkIdentifier &id);
+    // gathers what was observed of a NetherNet client while it connected and asks; never blocks
+    void inspect(const nethernet::Connection &connection);
 
     // verdicts that came back since the last call
     std::vector<std::pair<NetworkIdentifier, int>> takeVerdicts();
@@ -28,7 +32,6 @@ public:
 private:
     struct Question {
         NetworkIdentifier mId;
-        std::string mPath;
         std::string mEvidence;
     };
 
