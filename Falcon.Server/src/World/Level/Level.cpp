@@ -1,4 +1,5 @@
 #include "World/Level/Level.h"
+#include "World/Level/Storage/LegacyWorldImporter.h"
 
 #include "World/Level/Biome/BiomeRegistry.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
@@ -108,6 +109,9 @@ void Level::addParticle(const Particle &particle) {
 }
 
 bool Level::openStorage(const std::string &worldsDirectory) {
+    if (mDimension == DimensionType::Overworld)
+        LegacyWorldImporter::importIfNeeded(worldsDirectory, mName);
+
     if (!mStorage.open(worldsDirectory, mName, getDimensionId()))
         return false;
 

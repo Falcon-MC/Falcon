@@ -1,0 +1,11 @@
+#pragma once
+
+#include <cstddef>
+
+namespace FalconLegacyBlockData {
+    // defined in the generated LegacyBlockTables.cpp, from the block state updater's Legacy directory
+    extern const char kIdMap[];
+    extern const size_t kIdMapSize;
+    extern const unsigned char kIdMeta[];
+    extern const size_t kIdMetaSize;
+}
