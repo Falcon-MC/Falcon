@@ -973,20 +973,39 @@ void ServerNetworkHandler::tick(bool paused) {
     for (const NetworkIdentifier &entry: idle)
         _disconnect(entry, DisconnectReason::KickedForIdle, IDLE_MESSAGE);
     for (const auto &entry: unanswered) {
+        const ServerPlayer *refused = _getPlayer(entry.first);
         ServerTelemetry::getInstance().countCheck(entry.second);
+        ServerTelemetry::getInstance().countRefusal(entry.second, refused != nullptr ? refused->getBuildPlatform() : 0);
         _rejectBadPacket(entry.first, "client check " + std::to_string(entry.second));
     }
 
     if (!unofficialClientsAllowed) {
+        // a second or so: the verdict often comes back before the login that names the platform
+        static const int64_t REMOVAL_WAIT_TICKS = 40;
+
         for (const auto &verdict: ClientAttestation::getInstance().takeVerdicts()) {
             if (verdict.second > 0) {
-                ServerTelemetry::getInstance().countCheck(100 + verdict.second);
-                _rejectBadPacket(verdict.first, "client check " + std::to_string(100 + verdict.second));
+                mPendingRemovals.push_back({verdict.first, 100 + verdict.second, mCurrentTick + REMOVAL_WAIT_TICKS});
             } else {
                 ServerTelemetry::getInstance().countCheck(1000 - verdict.second);
                 LOG_INFO(LogAreaID::Network, "Client note %d for %s", 100 - verdict.second,
                          verdict.first.getAddress().c_str());
             }
+        }
+
+        for (size_t index = 0; index < mPendingRemovals.size();) {
+            const PendingRemoval removal = mPendingRemovals[index];
+            const ServerPlayer *refused = _getPlayer(removal.mId);
+            const bool named = refused != nullptr && refused->getLoggedInTick() != 0;
+            if (!named && mCurrentTick < removal.mDeadline) {
+                index++;
+                continue;
+            }
+
+            mPendingRemovals.erase(mPendingRemovals.begin() + (long) index);
+            ServerTelemetry::getInstance().countCheck(removal.mCheck);
+            ServerTelemetry::getInstance().countRefusal(removal.mCheck, named ? refused->getBuildPlatform() : 0);
+            _rejectBadPacket(removal.mId, "client check " + std::to_string(removal.mCheck));
         }
     }
 
@@ -1124,6 +1143,12 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
 
     mRateLimiters.erase(id);
     mClientProbes.forget(id);
+    for (size_t index = 0; index < mPendingRemovals.size();) {
+        if (mPendingRemovals[index].mId == id)
+            mPendingRemovals.erase(mPendingRemovals.begin() + (long) index);
+        else
+            index++;
+    }
 
     ServerPlayer *player = _getPlayer(id);
     World *playerWorld = player != nullptr ? &getWorldFor(*player) : nullptr;

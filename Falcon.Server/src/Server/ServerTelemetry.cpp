@@ -13,6 +13,7 @@ namespace {
     // the service refuses a report naming more checks than this
     const size_t MAX_CHECKS = 32;
     const size_t MAX_FAILURES = 48;
+    const size_t MAX_REFUSALS = 64;
 
 #if defined(_WIN32)
     const char *const SYSTEM = "windows";
@@ -78,6 +79,18 @@ void ServerTelemetry::countFailure(FailureStage stage, int reason) {
         mFailures[key]++;
 }
 
+void ServerTelemetry::countRefusal(int code, int platform) {
+    if (code <= 0 || code > 9999)
+        return;
+    if (platform < 0 || platform > 99)
+        platform = 0;
+
+    const std::string key = std::to_string(code) + ":" + std::to_string(platform);
+    std::lock_guard<std::mutex> lock(mMutex);
+    if (mRefusals.count(key) != 0 || mRefusals.size() < MAX_REFUSALS)
+        mRefusals[key]++;
+}
+
 void ServerTelemetry::recordTick(double milliseconds) {
     if (!(milliseconds >= 0.0))
         return;
@@ -107,6 +120,7 @@ void ServerTelemetry::_run() {
 void ServerTelemetry::_send(const char *event, int timeoutMs) {
     std::map<int, long long> checks;
     std::map<std::string, long long> failures;
+    std::map<std::string, long long> refusals;
     std::string transport;
     int maxPlayers = 0;
     long long uptime = 0;
@@ -114,6 +128,7 @@ void ServerTelemetry::_send(const char *event, int timeoutMs) {
         std::lock_guard<std::mutex> lock(mMutex);
         checks.swap(mChecks);
         failures.swap(mFailures);
+        refusals.swap(mRefusals);
         transport = mTransport;
         maxPlayers = mMaxPlayers;
         uptime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - mStarted).count();
@@ -148,6 +163,14 @@ void ServerTelemetry::_send(const char *event, int timeoutMs) {
             report.push_back(',');
         first = false;
         report += "\"" + failure.first + "\":" + std::to_string(failure.second);
+    }
+    report += "},\"refusals\":{";
+    first = true;
+    for (const auto &refusal: refusals) {
+        if (!first)
+            report.push_back(',');
+        first = false;
+        report += "\"" + refusal.first + "\":" + std::to_string(refusal.second);
     }
     report += "}";
 

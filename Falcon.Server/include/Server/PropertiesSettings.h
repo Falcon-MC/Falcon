@@ -182,7 +182,13 @@ public:
     }
 
     // false: only the newest protocol may join
+    // client checks are only known for the newest version: other versions are let in only when the
+    // checks are off, whatever the file says
     bool getAnyVersion() const {
+        return isAnyVersionRequested() && getAllowUnofficialClients();
+    }
+
+    bool isAnyVersionRequested() const {
         return getBool("any-version");
     }
 

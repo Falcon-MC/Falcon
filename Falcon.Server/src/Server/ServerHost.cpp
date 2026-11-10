@@ -242,6 +242,17 @@ namespace {
         LOG_WARN(LogAreaID::Server, "=======================================================");
     }
 
+    void logAnyVersionIgnored() {
+        LOG_ERROR(LogAreaID::Server, "================ ANY VERSION IGNORED ==================");
+        LOG_ERROR(LogAreaID::Server, "any-version is on, but it is ignored: only the newest version can join.");
+        LOG_ERROR(LogAreaID::Server, "The server removes clients that do not behave as the game does, and what the "
+                                     "game does is only known for the newest version. An older client would be "
+                                     "taken for a fake one.");
+        LOG_ERROR(LogAreaID::Server, "To accept older versions, set allow-unofficial-clients=true: this turns the "
+                                     "client checks off.");
+        LOG_ERROR(LogAreaID::Server, "=======================================================");
+    }
+
     void logAnyVersionWarning() {
         LOG_WARN(LogAreaID::Server, "================ ANY VERSION WARNING ==================");
         LOG_WARN(LogAreaID::Server, "any-version is enabled: clients of older protocol versions can join.");
@@ -385,7 +396,9 @@ bool ServerHost::start(const ServerHostOptions &options) {
     if (properties.getAllowList() && mHandler->getAllowList().isEmpty())
         logAllowListWarning();
 
-    if (properties.getAnyVersion())
+    if (properties.isAnyVersionRequested() && !properties.getAllowUnofficialClients())
+        logAnyVersionIgnored();
+    else if (properties.getAnyVersion())
         logAnyVersionWarning();
 
     unsigned short port = properties.isLoaded() ? properties.getServerPort() : options.port;

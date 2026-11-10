@@ -82,9 +82,10 @@ does, and the server removes it if not. No player name or identifier is sent. If
 the client stays. Set `allow-unofficial-clients=true` to turn every client check off, including this one.
 
 **Telemetry**, off by default. With `emit-server-telemetry=true` the server reports, at start, every half
-hour and at stop: its version, system, architecture, transport, player count, player limit, uptime, and how
-often each client check fired. Nothing in a report names the server, its world or a player, and the service
-keeps no address.
+hour and at stop: its version, system, architecture, transport, player count, player limit, uptime, how long
+ticks took, how often each client check fired and on what platform the removed client said it was, and why
+connections failed. Nothing in a report names the server, its world or a player, and the service keeps no
+address.
 
 ## Related repositories
 
