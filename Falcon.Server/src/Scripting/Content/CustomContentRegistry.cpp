@@ -962,6 +962,7 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
             definition.mCustomComponents = readCustomComponents(*components);
 
             const json::Value *consumer = components->get("minecraft:redstone_consumer");
+            // sub_147A9F440, sub_145C7C0F0: both descriptions start zeroed, min_power 0, min_fall_distance 0
             if (consumer != nullptr && consumer->isObject()) {
                 definition.mRedstoneConsumer = true;
                 if (consumer->get("min_power") != nullptr)
