@@ -39,6 +39,10 @@ public:
         return mEntity;
     }
 
+    bool canUseCommandsWithoutCheats() const override {
+        return true;
+    }
+
     // the last translated key the command sent, empty when it sent none
     const std::string &getLastKey() const {
         return mLastKey;

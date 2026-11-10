@@ -44,6 +44,14 @@ public:
         return mBase.getSourceBlock(level, position);
     }
 
+    bool canUseCommandsWithoutCheats() const override {
+        return mBase.canUseCommandsWithoutCheats();
+    }
+
+    void sendError(const std::string &message) override {
+        mBase.sendError(message);
+    }
+
     void setPosition(const Vector3f &position) {
         mPosition = position;
     }

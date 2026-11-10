@@ -42,4 +42,12 @@ public:
 
     // command blocks: false for any other origin
     virtual bool getSourceBlock(Level *&level, Vector3i &position);
+
+    // sub_14576E1A0: the dedicated server, scripts, automation and tests run cheat commands without cheats
+    virtual bool canUseCommandsWithoutCheats() const {
+        return false;
+    }
+
+    // error output: the client shows it red
+    virtual void sendError(const std::string &message);
 };

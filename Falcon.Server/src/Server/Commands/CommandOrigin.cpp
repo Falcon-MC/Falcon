@@ -32,3 +32,7 @@ Actor *CommandOrigin::getEntity() {
 bool CommandOrigin::getSourceBlock(Level *&, Vector3i &) {
     return false;
 }
+
+void CommandOrigin::sendError(const std::string &message) {
+    sendMessage("\u00a7c" + message);
+}

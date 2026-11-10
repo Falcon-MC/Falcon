@@ -97,7 +97,7 @@ bool Command::parsePosition(const std::vector<std::string> &arguments, size_t fi
             return false;
     }
 
-    // TODO: local axes not checked in IDA, the look vector of ServerPlayer::getLookDirection and its up and left
+    // axes of the view vector ServerPlayer::getLookDirection: forward, up a quarter turn above, left = up x forward
     const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
     const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
     const Vector3f forward(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));

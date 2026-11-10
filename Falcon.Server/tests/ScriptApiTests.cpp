@@ -1237,6 +1237,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
 
     DimensionDefinition sentDimension;
 
+    bool fromBlockCheats(Level &level);
+
     // a command block's origin, as CommandBlockSystem builds it
     class BlockOrigin final : public CommandOrigin {
     public:
@@ -1272,6 +1274,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         Level &mLevel;
         Vector3i mPosition;
     };
+
+    bool fromBlockCheats(Level &level) {
+        BlockOrigin origin(level, Vector3i(0, 0, 0));
+        return origin.canUseCommandsWithoutCheats();
+    }
 
     void run(const std::filesystem::path &directory) {
         const std::filesystem::path packs = directory / "packs";
@@ -1574,6 +1581,9 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         serverProperties.setProperty("allow-cheats", "false");
         player.setOp(true);
         require(commands.dispatch(console, "cmd:give"), "the console could not run a cheat command");
+        ScriptCommandOrigin scriptNoCheats(world.getOverworld(), nullptr);
+        require(commands.dispatch(scriptNoCheats, "cmd:give"), "a script origin could not run a cheat command");
+        require(!fromBlockCheats(world.getOverworld()), "a command block ran a cheat command without cheats");
         require(dynamic_cast<ScriptCustomCommand *>(commands.getCommand("cmd:give"))->requiresCheats(),
                 "cheatsRequired does not default to true");
         require(!commands.dispatch(playerOrigin, "cmd:give"), "a cheat command ran without cheats");

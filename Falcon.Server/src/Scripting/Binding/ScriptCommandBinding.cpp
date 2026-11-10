@@ -212,7 +212,8 @@ ScriptCustomCommand::~ScriptCustomCommand() {
 std::vector<CommandOverloadData> ScriptCustomCommand::getOverloads() const {
     CommandOverloadData overload;
     for (const ScriptCommandParameter &parameter: mParameters) {
-        // TODO: wire types of the custom parameter types not verified against the game
+        // sub_14BD0DB00 orders the types, sub_14BD18040 maps each to the vanilla typeid: bool, int, float, string,
+        // actor and player selectors, float position, then the block, entity and item enums
         CommandParamData data;
         if (parameter.mType == "Integer")
             data = makeTypedParameter(parameter.mName, CommandParamType::Int, parameter.mOptional);
@@ -248,9 +249,7 @@ std::vector<CommandOverloadData> ScriptCustomCommand::getOverloads() const {
 }
 
 bool ScriptCustomCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
-    // TODO: whether the console and scripts skip cheatsRequired not verified
-    if (mCheatsRequired && sender.getCommandPermission() != CommandPermission::Internal
-        && !mApi.host().getProperties().getAllowCheats()) {
+    if (mCheatsRequired && !sender.canUseCommandsWithoutCheats() && !mApi.host().getProperties().getAllowCheats()) {
         sender.sendTranslation("commands.generic.disabled", {});
         return false;
     }
@@ -295,7 +294,7 @@ JSValue ScriptApi::registerCustomCommand(JSValueConst definition, JSValueConst c
     if (JS_IsException(invalid))
         return invalid;
 
-    // TODO: namespace mismatch message of a command not verified, the enum one for now
+    // sub_14BD1B5A0: commands and enums share the check and its enum wording
     const std::string space = namespaceOf(name);
     if (!mCommandNamespace.empty() && mCommandNamespace != space)
         return throwCommandError(*this, "NamespaceMismatch",
@@ -320,7 +319,7 @@ JSValue ScriptApi::registerCustomCommand(JSValueConst definition, JSValueConst c
         if (parameter.mType == ENUM_TYPE && mHost.getScriptEngine().findCommandEnum(parameter.mEnum) == nullptr)
             missing += (missing.empty() ? "" : ", ") + parameter.mEnum;
     }
-    // TODO: separator of the unknown enum list not verified
+    // sub_14BD77D00: names joined with ", "
     if (!missing.empty())
         return throwCommandError(*this, "EnumDependencyMissing",
                                  "Custom Command depends on one or more unknown enums [" + missing + "].");
@@ -465,7 +464,7 @@ bool ScriptApi::runCustomCommand(const ScriptCustomCommand &command, CommandOrig
     callArgs.push_back(origin);
     callArgs.insert(callArgs.end(), args.begin(), args.end());
 
-    // TODO: restricted execution of the callback not verified in the game
+    // runs read-only like a before event: the game expects world changes deferred with system.run
     const ScriptPrivilege previous = mPrivilege;
     mPrivilege = ScriptPrivilege::Restricted;
     JSValue result = JS_Call(mContext, command.getCallback(), JS_UNDEFINED, (int) callArgs.size(), callArgs.data());
@@ -474,9 +473,15 @@ bool ScriptApi::runCustomCommand(const ScriptCustomCommand &command, CommandOrig
     release();
 
     if (JS_IsException(result)) {
+        // sub_14BD03A90: the thrown error's message is the command's error output
+        JSValue exception = JS_GetException(mContext);
+        JSValue messageValue = JS_GetPropertyStr(mContext, exception, "message");
+        const std::string exceptionText = JS_IsString(messageValue) ? toString(mContext, messageValue)
+                                                                    : toString(mContext, exception);
+        JS_FreeValue(mContext, messageValue);
+        JS_Throw(mContext, exception);
         logPendingException("custom command " + command.getName());
-        // TODO: what the game reports for a throwing callback not verified
-        sender.sendTranslation("commands.generic.exception", {});
+        sender.sendError(exceptionText);
         return false;
     }
 
@@ -489,9 +494,12 @@ bool ScriptApi::runCustomCommand(const ScriptCustomCommand &command, CommandOrig
         JS_ToInt32(mContext, &code, status);
         success = code == 0;
         if (JS_IsString(message)) {
-            // TODO: failure output style not verified, red like the game's command errors
+            // sub_14BD03A90: a Failure message goes out as error output (sub_145576240 type 1)
             const std::string text = toString(mContext, message);
-            sender.sendMessage(success ? text : "§c" + text);
+            if (success)
+                sender.sendMessage(text);
+            else
+                sender.sendError(text);
         }
         JS_FreeValue(mContext, status);
         JS_FreeValue(mContext, message);
