@@ -965,8 +965,16 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
             // sub_147A9F440, sub_145C7C0F0: both descriptions start zeroed, min_power 0, min_fall_distance 0
             if (consumer != nullptr && consumer->isObject()) {
                 definition.mRedstoneConsumer = true;
-                if (consumer->get("min_power") != nullptr)
-                    definition.mRedstoneMinPower = (int32_t) consumer->get("min_power")->integer(0);
+                if (consumer->get("min_power") != nullptr) {
+                    // sub_142A6A5A0: outside 0-15 is error 64; the block loader's mask (sub_1431DD4C0) drops the block
+                    const double power = consumer->get("min_power")->number(0.0);
+                    if (power < 0.0 || power > 15.0) {
+                        LOG_WARN(LogAreaID::Script, "Skipping custom block %s: min_power outside 0-15",
+                                 definition.mIdentifier.c_str());
+                        continue;
+                    }
+                    definition.mRedstoneMinPower = (int32_t) power;
+                }
             }
 
             const json::Value *fallOn = components->get("minecraft:entity_fall_on");
