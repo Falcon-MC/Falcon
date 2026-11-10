@@ -1473,6 +1473,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                 owner.removeActor(copy->getUniqueId());
             }
         }
+        // the player is erased below: later checks keep its id, never the reference
+        const int64_t playerUniqueId = player.getUniqueId();
         engine.beforePlayerLeave(player);
         owner.getPlayers().erase(id);
         for (int64_t tick = 4; tick <= 8; ++tick)
@@ -1572,7 +1574,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                             && board.getDisplay("belowname") != nullptr
                             && board.getDisplay("belowname")->mObjective == "test:kills",
                     "the script scoreboard did not reach the server scoreboard");
-            const ScoreboardIdentity *scripted = board.findActor(player.getUniqueId());
+            const ScoreboardIdentity *scripted = board.findActor(playerUniqueId);
             require(scripted != nullptr && scripted->mType == ScoreboardIdentityType::Player
                             && *kills->find(scripted->mId) == 7,
                     "the player's script score is not the server's");
