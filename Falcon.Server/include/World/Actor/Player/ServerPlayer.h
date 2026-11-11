@@ -587,6 +587,13 @@ public:
     // Player::setHudVisibility (sub_141030B10): no elements means all of them
     void setHudVisibility(bool hidden, const std::vector<int32_t> *elements = nullptr);
 
+    // ClientInputLocks: one bit per InputPermissionCategory value, set when locked
+    void setInputLocked(int32_t category, bool locked);
+
+    bool isInputLocked(int32_t category) const {
+        return category >= 0 && category < 32 && (mInputLocks & (1u << category)) != 0;
+    }
+
     bool isHudElementHidden(int32_t element) const {
         return element >= 0 && element < HUD_ELEMENT_COUNT && mHiddenHudElements[element];
     }
@@ -1160,6 +1167,7 @@ private:
     PlayerRaidState mRaidState;
     PlayerBossBars mBossBars;
     bool mHiddenHudElements[HUD_ELEMENT_COUNT] = {};
+    uint32_t mInputLocks = 0;
     DebugHud mDebugHud;
     std::unordered_map<std::string, int64_t> mItemCooldowns;
     int32_t mShieldTransitionTicks = 0;

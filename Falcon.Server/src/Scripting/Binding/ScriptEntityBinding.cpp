@@ -2199,13 +2199,49 @@ namespace {
         return JS_NewBool(ctx, partOwner(ctx, thisVal) != nullptr);
     }
 
-    // TODO: camera splines, input permissions and the locator bar do nothing yet
+    // TODO: camera splines and the locator bar do nothing yet
     JSValue partNoop(JSContext *, JSValueConst, int, JSValueConst *) {
         return JS_UNDEFINED;
     }
 
-    JSValue inputPermissionEnabled(JSContext *, JSValueConst, int, JSValueConst *) {
-        return JS_TRUE;
+    // InputPermissionCategory values from the typings: 1 to 12, 3 unused
+    bool readInputCategory(JSContext *ctx, JSValueConst value, int32_t &category) {
+        return JS_IsNumber(value) && JS_ToInt32(ctx, &category, value) == 0 && category >= 1 && category <= 12
+               && category != 3;
+    }
+
+    JSValue inputPermissionEnabled(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        int32_t category = 0;
+        if (argc < 1 || !readInputCategory(ctx, argv[0], category))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        return JS_NewBool(ctx, player == nullptr || !player->isInputLocked(category));
+    }
+
+    template <int32_t CATEGORY>
+    JSValue inputCategoryGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        return JS_NewBool(ctx, player == nullptr || !player->isInputLocked(CATEGORY));
+    }
+
+    template <int32_t CATEGORY>
+    JSValue inputCategorySet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        if (argc < 1 || !JS_IsBool(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        if (player != nullptr)
+            player->setInputLocked(CATEGORY, !JS_ToBool(ctx, argv[0]));
+        return JS_UNDEFINED;
+    }
+
+    JSValue inputPermissionSet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        int32_t category = 0;
+        if (argc < 2 || !readInputCategory(ctx, argv[0], category) || !JS_IsBool(argv[1]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        if (player != nullptr)
+            player->setInputLocked(category, !JS_ToBool(ctx, argv[1]));
+        return JS_UNDEFINED;
     }
 
     // a property of an options bag, undefined when the bag or the property is missing
@@ -2976,7 +3012,10 @@ void ScriptApi::_bindPlayer() {
     method(camera, "Camera", "stopShaking", cameraStopShaking, 0);
 
     JSValue permissions = defineClass("PlayerInputPermissions");
-    method(permissions, "PlayerInputPermissions", "setPermissionCategory", partNoop, 2);
+    method(permissions, "PlayerInputPermissions", "setPermissionCategory", inputPermissionSet, 2);
+    // the 1.x properties: InputPermissionCategory.Camera and Movement
+    property(permissions, "PlayerInputPermissions", "cameraEnabled", inputCategoryGet<1>, inputCategorySet<1>);
+    property(permissions, "PlayerInputPermissions", "movementEnabled", inputCategoryGet<2>, inputCategorySet<2>);
     method(permissions, "PlayerInputPermissions", "isPermissionCategoryEnabled", inputPermissionEnabled, 1);
 
     JSValue locator = defineClass("LocatorBar");
