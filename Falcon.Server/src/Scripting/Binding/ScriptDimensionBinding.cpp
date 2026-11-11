@@ -9,6 +9,7 @@
 #include "World/Level/Biome/BiomeRegistry.h"
 #include "World/Level/Block/Actor/BlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/BlockLightProperties.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Explosion.h"
 #include "World/Level/Level.h"
@@ -149,7 +150,10 @@ namespace {
         const int sky = level.getSkyLightAt(at.x, at.y, at.z);
         if (magic == 1)
             return JS_NewInt32(ctx, sky);
-        // TODO: same combination as Block.getLightLevel, unverified
+        // BlockSource::getRawBrightness (sub_1432D1500), as Block.getLightLevel
+        const BlockState *state = level.peekBlockPtr(at.x, at.y, at.z);
+        if (state != nullptr && BlockLightProperties::lightFilter(BlockLightProperties::packed(*state)) >= 15)
+            return JS_NewInt32(ctx, 0);
         return JS_NewInt32(ctx, std::max(level.getBlockLightAt(at.x, at.y, at.z),
                                          std::max(sky - level.getSkyLightSubtracted(), 0)));
     }
