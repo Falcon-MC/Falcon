@@ -713,14 +713,76 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // "item." + description id + ".name": sub_148EE72C0
-    // TODO: description ids differ from identifiers (item.horsearmorleather.name); set in sub_144997DC0
+    // description ids set by the item virtual +0x18 after registration in sub_144744830; others keep the name
+    const std::pair<const char *, const char *> ITEM_DESCRIPTION_IDS[] = {
+            {"minecraft:carrot_on_a_stick", "carrotOnAStick"},
+            {"minecraft:cod", "fish"},
+            {"minecraft:cooked_cod", "cooked_fish"},
+            {"minecraft:cooked_mutton", "muttonCooked"},
+            {"minecraft:dark_oak_sign", "darkoak_sign"},
+            {"minecraft:diamond_horse_armor", "horsearmordiamond"},
+            {"minecraft:empty_map", "emptymap"},
+            {"minecraft:enchanted_golden_apple", "appleEnchanted"},
+            {"minecraft:filled_map", "map"},
+            {"minecraft:fire_charge", "fireball"},
+            {"minecraft:firework_rocket", "fireworks"},
+            {"minecraft:firework_star", "fireworksCharge"},
+            {"minecraft:glistering_melon_slice", "speckled_melon"},
+            {"minecraft:golden_horse_armor", "horsearmorgold"},
+            {"minecraft:iron_horse_armor", "horsearmoriron"},
+            {"minecraft:leather_horse_armor", "horsearmorleather"},
+            {"minecraft:lodestone_compass", "lodestonecompass"},
+            {"minecraft:melon_slice", "melon"},
+            {"minecraft:music_disc_11", "record_11"},
+            {"minecraft:music_disc_13", "record_13"},
+            {"minecraft:music_disc_5", "record_5"},
+            {"minecraft:music_disc_blocks", "record_blocks"},
+            {"minecraft:music_disc_bounce", "record_bounce"},
+            {"minecraft:music_disc_cat", "record_cat"},
+            {"minecraft:music_disc_chirp", "record_chirp"},
+            {"minecraft:music_disc_creator", "record_creator"},
+            {"minecraft:music_disc_creator_music_box", "record_creator_music_box"},
+            {"minecraft:music_disc_far", "record_far"},
+            {"minecraft:music_disc_lava_chicken", "record_lava_chicken"},
+            {"minecraft:music_disc_mall", "record_mall"},
+            {"minecraft:music_disc_mellohi", "record_mellohi"},
+            {"minecraft:music_disc_otherside", "record_otherside"},
+            {"minecraft:music_disc_pigstep", "record_pigstep"},
+            {"minecraft:music_disc_precipice", "record_precipice"},
+            {"minecraft:music_disc_relic", "record_relic"},
+            {"minecraft:music_disc_stal", "record_stal"},
+            {"minecraft:music_disc_strad", "record_strad"},
+            {"minecraft:music_disc_tears", "record_tears"},
+            {"minecraft:music_disc_wait", "record_wait"},
+            {"minecraft:music_disc_ward", "record_ward"},
+            {"minecraft:mutton", "muttonRaw"},
+            {"minecraft:nether_star", "netherStar"},
+            {"minecraft:oak_sign", "sign"},
+            {"minecraft:photo_item", "photo"},
+            {"minecraft:popped_chorus_fruit", "chorus_fruit_popped"},
+            {"minecraft:sugar_cane", "reeds"},
+            {"minecraft:totem_of_undying", "totem"},
+            {"minecraft:tropical_fish", "clownfish"},
+            {"minecraft:turtle_scute", "turtle_shell_piece"},
+    };
+
+    std::string descriptionIdOf(const std::string &identifier) {
+        for (const auto &entry: ITEM_DESCRIPTION_IDS) {
+            if (identifier == entry.first)
+                return entry.second;
+        }
+        return withoutNamespace(identifier);
+    }
+
+    // "item." + description id + ".name"
+    // TODO: block description ids and per-class overrides (buckets by content, sub_148EE72C0) not mapped yet
     JSValue itemGetLocalizationKey(JSContext *ctx, ScriptApi &api, ScriptItemData &data, int, JSValueConst *) {
         if (const Tag *name = vanillaComponent(data.mTypeId, "minecraft:display_name"))
             return string(ctx, name->getString("value"));
         ItemStack stack;
         const bool block = gameStack(api, data, stack) && stack.mBlockDefinition != nullptr;
-        return string(ctx, std::string(block ? "tile." : "item.") + withoutNamespace(data.mTypeId) + ".name");
+        return string(ctx, block ? "tile." + withoutNamespace(data.mTypeId) + ".name"
+                                 : "item." + descriptionIdOf(data.mTypeId) + ".name");
     }
 
     JSValue itemGetWeight(JSContext *ctx, ScriptApi &api, ScriptItemData &data, int, JSValueConst *) {
