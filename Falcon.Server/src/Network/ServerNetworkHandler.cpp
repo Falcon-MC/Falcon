@@ -1430,6 +1430,8 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
             MinecraftPacketIds::ModalFormResponse,
             MinecraftPacketIds::ServerboundDataStore,
             MinecraftPacketIds::ServerboundDataDrivenScreenClosed,
+            MinecraftPacketIds::MapInfoRequest,
+            MinecraftPacketIds::MapCreateLockedCopy,
             MinecraftPacketIds::PlayerSkin,
     };
 
