@@ -176,6 +176,12 @@ void ServerNetworkHandler::_completeItemUse(ServerPlayer &player, int32_t itemId
     _consumeHeldItem(player);
 }
 
+int32_t ServerNetworkHandler::getItemUseTicksLeft(const ServerPlayer &player) const {
+    const int64_t left = useDurationTicksFor(player.getInventory().getItemInHand())
+                         - (mCurrentTick - player.getItemUseStartTick());
+    return left > 0 ? (int32_t) left : 0;
+}
+
 void ServerNetworkHandler::emitItemUse(ServerPlayer &player) {
     const ItemStack &heldItem = player.getInventory().getItemInHand();
     if (heldItem.isAir() || heldItem.mDefinition == nullptr)
@@ -261,6 +267,9 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
             player.getFlags().set(ActorFlag::UsingItem, true);
             player.setItemUseStartTick(mCurrentTick);
             _sendEntityData(player);
+            const int32_t duration = itemType->getUseDuration();
+            mScriptEngine.onItemStartUse(player, heldItem,
+                                         duration > 0 ? duration : (int32_t) useDurationTicksFor(heldItem));
             return;
         }
     }
@@ -287,6 +296,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
         if (usingItem) {
             player.getFlags().set(ActorFlag::UsingItem, false);
             _sendEntityData(player);
+            mScriptEngine.onItemStopUse(player, heldItem, getItemUseTicksLeft(player), false);
         }
         return;
     }
@@ -303,6 +313,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
                                      (int32_t) useDurationTicksFor(heldItem));
         mEventBus.after().mItemStartUse.emit(event);
     }
+    mScriptEngine.onItemStartUse(player, heldItem, (int32_t) useDurationTicksFor(heldItem));
 }
 
 void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
@@ -323,6 +334,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
     if (wasUsing) {
         player.getFlags().set(ActorFlag::UsingItem, false);
         _sendEntityData(player);
+        mScriptEngine.onItemStopUse(player, heldItem, getItemUseTicksLeft(player), false);
     }
 
     if (!consumable)
@@ -369,6 +381,11 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
     }
 
     applyFood(player, usedItem);
+
+    // both ride publisher_use_time_depleted (sub_14483F960): food at priority 0 eats and fires onConsume,
+    // custom onCompleteUse at priority 3 runs after (sub_143EBF6E0, sub_14A7F6070)
+    mScriptEngine.onItemConsume(player, usedItem);
+    mScriptEngine.onItemCompleteUse(player, usedItem);
 
     if (itemType != nullptr)
         itemType->onConsumed(*this, player, usedItem);

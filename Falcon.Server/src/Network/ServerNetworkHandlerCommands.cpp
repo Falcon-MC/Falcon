@@ -34,6 +34,7 @@
 #include "Server/Commands/PlaySoundCommand.h"
 #include "Server/Commands/ProfilerCommand.h"
 #include "Server/Commands/SaveCommand.h"
+#include "Server/Commands/ScoreboardCommand.h"
 #include "Server/Commands/SayCommand.h"
 #include "Server/Commands/ScriptEventCommand.h"
 #include "Server/Commands/SeedCommand.h"
@@ -69,6 +70,8 @@
 #include "Protocol/Packets/SetPlayerGameTypePacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
+#include <climits>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <utility>
@@ -84,6 +87,13 @@ namespace {
         return lowered;
     }
 
+    struct ScoreFilter {
+        std::string mObjective;
+        int32_t mMin = INT32_MIN;
+        int32_t mMax = INT32_MAX;
+        bool mNegated = false;
+    };
+
     struct SelectorFilter {
         bool mValid = false;
         char mKind = 0;
@@ -92,6 +102,7 @@ namespace {
         bool mHasName = false;
         bool mNameNegated = false;
         size_t mLimit = 0;
+        std::vector<ScoreFilter> mScores;
     };
 
     std::string normalizeTypeId(const std::string &type) {
@@ -109,7 +120,76 @@ namespace {
         return value.substr(begin, end - begin);
     }
 
-    // "@k" and "@k[key=value,...]"; only type, name and c: an unknown argument invalidates the selector
+    bool parseScoreBound(const std::string &value, int32_t &out) {
+        if (value.empty() || value.size() > 11)
+            return false;
+        char *end = nullptr;
+        const long long parsed = std::strtoll(value.c_str(), &end, 10);
+        if (*end != '\0' || parsed < INT32_MIN || parsed > INT32_MAX)
+            return false;
+        out = (int32_t) parsed;
+        return true;
+    }
+
+    // {objective=5,other=1..3,last=!..0}: a range is n, n.., ..n or n..m, both ends included
+    bool parseScores(const std::string &value, std::vector<ScoreFilter> &out) {
+        if (value.size() < 2 || value.front() != '{' || value.back() != '}')
+            return false;
+        const std::string body = value.substr(1, value.size() - 2);
+        size_t start = 0;
+        while (start < body.size()) {
+            size_t comma = body.find(',', start);
+            if (comma == std::string::npos)
+                comma = body.size();
+            const std::string entry = trimCopy(body.substr(start, comma - start));
+            start = comma + 1;
+            const size_t equals = entry.find('=');
+            if (equals == std::string::npos)
+                return false;
+            ScoreFilter filter;
+            filter.mObjective = trimCopy(entry.substr(0, equals));
+            std::string range = trimCopy(entry.substr(equals + 1));
+            if (!range.empty() && range[0] == '!') {
+                filter.mNegated = true;
+                range = trimCopy(range.substr(1));
+            }
+            const size_t dots = range.find("..");
+            if (filter.mObjective.empty() || range.empty())
+                return false;
+            if (dots == std::string::npos) {
+                if (!parseScoreBound(range, filter.mMin))
+                    return false;
+                filter.mMax = filter.mMin;
+            } else {
+                const std::string low = range.substr(0, dots);
+                const std::string high = range.substr(dots + 2);
+                if ((low.empty() && high.empty()) || (!low.empty() && !parseScoreBound(low, filter.mMin))
+                    || (!high.empty() && !parseScoreBound(high, filter.mMax)))
+                    return false;
+            }
+            out.push_back(filter);
+        }
+        return !out.empty();
+    }
+
+    // sub_1455ECBD0: a target without a score fails, negated or not
+    bool matchesScores(const SelectorFilter &filter, Scoreboard &scoreboard, const Actor &actor) {
+        if (filter.mScores.empty())
+            return true;
+        const ScoreboardIdentity *identity = scoreboard.findActor(actor.getUniqueId());
+        for (const ScoreFilter &score: filter.mScores) {
+            const ScoreboardObjective *objective = scoreboard.getObjective(score.mObjective);
+            const int32_t *value = identity == nullptr || objective == nullptr ? nullptr
+                                                                               : objective->find(identity->mId);
+            if (value == nullptr)
+                return false;
+            if ((*value >= score.mMin && *value <= score.mMax) == score.mNegated)
+                return false;
+        }
+        return true;
+    }
+
+    // "@k" and "@k[key=value,...]"; only type, name, c and scores: an unknown argument invalidates the selector
     // instead of widening it to every target
     SelectorFilter parseSelector(const std::string &selector) {
         SelectorFilter filter;
@@ -131,6 +211,7 @@ namespace {
             size_t comma = start;
             bool quoted = false;
             bool escaped = false;
+            int braces = 0;
             for (; comma < body.size(); ++comma) {
                 const char character = body[comma];
                 if (escaped)
@@ -139,10 +220,14 @@ namespace {
                     escaped = true;
                 else if (character == '"')
                     quoted = !quoted;
-                else if (!quoted && character == ',')
+                else if (!quoted && character == '{')
+                    ++braces;
+                else if (!quoted && character == '}' && braces > 0)
+                    --braces;
+                else if (!quoted && braces == 0 && character == ',')
                     break;
             }
-            if (quoted || escaped)
+            if (quoted || escaped || braces != 0)
                 return filter;
 
             const std::string entry = trimCopy(body.substr(start, comma - start));
@@ -192,6 +277,9 @@ namespace {
                     return filter;
                 filter.mLimit = (size_t) std::stoul(value);
                 if (filter.mLimit == 0)
+                    return filter;
+            } else if (key == "scores") {
+                if (negated || !parseScores(value, filter.mScores))
                     return filter;
             } else {
                 return filter;
@@ -284,6 +372,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<TestForBlockCommand>());
     mCommands.registerCommand(std::make_shared<TestForBlocksCommand>());
     mCommands.registerCommand(std::make_shared<TagCommand>(*this));
+    mCommands.registerCommand(std::make_shared<ScoreboardCommand>(*this));
     mCommands.registerCommand(std::make_shared<TickingAreaCommand>(*this));
 }
 
@@ -343,7 +432,7 @@ std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &
 
     if (filter.mKind == 's' || filter.mKind == 'p') {
         ServerPlayer *self = sender.asPlayer();
-        if (self != nullptr && matchesName(filter, self->getName()))
+        if (self != nullptr && matchesName(filter, self->getName()) && matchesScores(filter, mScoreboard, *self))
             targets.push_back(self);
         return targets;
     }
@@ -358,7 +447,8 @@ std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &
 
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || !matchesName(filter, player.getName()))
+        if (!player.isSpawned() || !matchesName(filter, player.getName())
+            || !matchesScores(filter, mScoreboard, player))
             continue;
         if (filter.mKind == 'e' && !player.isIn(*contextLevel))
             continue;
@@ -376,6 +466,14 @@ std::vector<ServerActor *> ServerNetworkHandler::resolveActorTargets(CommandOrig
     std::vector<ServerActor *> targets;
 
     const SelectorFilter filter = parseSelector(selector);
+    // @s of an entity that is not a player: the executing actor itself
+    if (filter.mValid && filter.mKind == 's') {
+        ServerActor *self = dynamic_cast<ServerActor *>(sender.getEntity());
+        if (self != nullptr && !self->isDead() && matchesType(filter, self->getTypeId())
+            && matchesName(filter, self->getName()))
+            targets.push_back(self);
+        return targets;
+    }
     if (!filter.mValid || filter.mKind != 'e')
         return targets;
 
@@ -394,7 +492,8 @@ std::vector<ServerActor *> ServerNetworkHandler::resolveActorTargets(CommandOrig
         ServerActor *actor = entry.second.get();
         if (actor == nullptr || actor->isDead() || !actor->isIn(*contextLevel))
             continue;
-        if (!matchesType(filter, actor->getTypeId()) || !matchesName(filter, actor->getName()))
+        if (!matchesType(filter, actor->getTypeId()) || !matchesName(filter, actor->getName())
+            || !matchesScores(filter, mScoreboard, *actor))
             continue;
 
         targets.push_back(actor);
@@ -452,14 +551,15 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
 }
 
 void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,
-                                             const std::string &message) {
+                                             const std::string &message, bool success) {
     CommandOutputPacket output;
     output.mOrigin = origin;
     output.mType = CommandOutputType::AllOutput;
-    output.mSuccessCount = 1;
+    output.mSuccessCount = success ? 1 : 0;
 
+    // sub_147EFA4B0: the per-message bool is "Successful?", the client shows a failed one as an error
     CommandOutputMessage line;
-    line.mInternal = false;
+    line.mInternal = success;
     line.mMessageId = message;
     output.mMessages.push_back(line);
 
@@ -474,7 +574,7 @@ void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const Command
     output.mSuccessCount = 1;
 
     CommandOutputMessage line;
-    line.mInternal = false;
+    line.mInternal = true;
     line.mMessageId = key;
     line.mParameters = parameters;
     output.mMessages.push_back(std::move(line));

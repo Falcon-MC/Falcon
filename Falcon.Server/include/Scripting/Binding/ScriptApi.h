@@ -29,6 +29,8 @@ class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
 class ServerActor;
+class CommandOrigin;
+class ScriptCustomCommand;
 
 // what the running script may touch: early execution before startup ends, restricted inside before events
 enum class ScriptPrivilege { Normal, Early, Restricted };
@@ -126,6 +128,14 @@ public:
 
     std::vector<std::string> entityComponentIds(Actor &actor);
 
+    // inventory, equippable, ender_inventory and cursor_inventory: undefined when the entity lacks it
+    JSValue makeContainerComponent(Actor &actor, const ScriptEntityRef &ref, const std::string &componentId);
+
+    static std::vector<std::string> containerComponentIds();
+
+    // the Container of a block actor's inventory: chest, barrel, furnace, hopper
+    JSValue makeBlockContainer(Level &level, const Vector3i &position);
+
     // minecraft:type_family of the active definition
     static std::vector<std::string> entityFamilies(Actor &actor);
 
@@ -140,6 +150,9 @@ public:
     Actor *resolveEntity(const ScriptEntityRef &ref);
 
     JSValue makeItem(const ItemStack &item);
+
+    // the script view of a game stack; dynamic properties come out of the NBT
+    static void readItemStack(const ItemStack &item, ScriptItemData &data);
 
     // the effect's name as scripts see it, without namespace
     static std::string effectTypeId(MobEffectId id);
@@ -188,9 +201,6 @@ public:
     // undefined when the block lacks the component or the pack's version lacks its class
     JSValue makeBlockComponent(Level &level, const Vector3i &position, const std::string &componentId);
 
-    // TODO(V4): BlockInventoryComponent.container; the Container class over a block actor comes with V4
-    JSValue makeBlockContainer(Level &level, const Vector3i &position);
-
     // a Structure object of the shared registry
     JSValue makeStructure(const std::string &identifier);
 
@@ -212,9 +222,24 @@ public:
 
     bool setBlockType(Level &level, int32_t x, int32_t y, int32_t z, const std::string &typeId);
 
-    int32_t runCommandAsPlayer(ServerPlayer &player, const std::string &commandLine);
+    // a CommandResult, or throws CommandError for a command that does not parse; entity null: the dimension runs it
+    JSValue runCommand(Level &level, Actor *entity, const std::string &commandLine);
 
-    int32_t runCommandAsConsole(const std::string &commandLine);
+    // CustomCommandRegistry.registerCommand and registerEnum: throw the official errors when refused
+    JSValue registerCustomCommand(JSValueConst definition, JSValueConst callback);
+
+    JSValue registerCommandEnum(const std::string &name, std::vector<std::string> values);
+
+    const std::vector<std::string> *findCommandEnum(const std::string &name) const;
+
+    // parses the arguments as the command's parameters and calls its callback; false when it failed
+    bool runCustomCommand(const ScriptCustomCommand &command, CommandOrigin &sender,
+                          const std::vector<std::string> &arguments);
+
+    void unregisterCustomCommands();
+
+    // logs and clears the context's pending exception
+    void logPendingException(const std::string &where);
 
     JSValue showForm(JSValueConst playerValue, const std::string &formData);
 
@@ -241,6 +266,15 @@ public:
 
     // before events run restricted, startup early; true when a subscriber set cancel
     bool emit(const std::string &key, JSValue eventObject);
+
+    // signals whose subscribe options decide, per callback, which events it gets
+    static bool keepsSubscribeOptions(const std::string &key);
+
+    void keepSubscribeOptions(JSValueConst callback, JSValueConst options);
+
+    // emit skipping the callbacks whose kept options accepts refuses
+    bool emitFiltered(const std::string &key, JSValue eventObject,
+                      const std::function<bool(JSValueConst options)> &accepts);
 
     // throws the official error and returns JS_EXCEPTION when the registration is refused
     JSValue registerCustomComponent(bool blocks, const std::string &name, JSValueConst handlers);
@@ -289,7 +323,7 @@ public:
         return mPackSettings;
     }
 
-    void forgetEntity(int64_t uniqueId);
+    void forgetEntity(uint64_t runtimeId);
 
     void forgetPlayer(ServerPlayer &player);
 
@@ -303,6 +337,9 @@ public:
     bool hasSteppingActors() const {
         return !mStepping.empty();
     }
+
+    // EntityQueryOptions.scoreOptions: every option must hold
+    bool scoresMatch(const Actor &actor, JSValueConst options);
 
     JSValue moduleScoreboard() const {
         return mScoreboard;
@@ -435,6 +472,8 @@ private:
 
     void _bindItemStack();
 
+    void _bindContainers();
+
     void _bindDimension();
 
     void _bindEvents();
@@ -451,6 +490,8 @@ private:
 
     void _emitInventoryChanges();
 
+    void _emitCursorChanges();
+
     void _resolveForm(uint32_t formId, const std::string &response, bool cancelled);
 
     void _fireStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position,
@@ -463,6 +504,10 @@ private:
     bool _acceptsClockEvent(JSValueConst callback) const;
 
     void _bindClocks();
+
+    void _bindScoreboard();
+
+    void _bindCommands();
 
     JSContext *mContext;
     ServerNetworkHandler &mHost;
@@ -521,16 +566,24 @@ private:
     std::unordered_map<std::string, std::vector<JSValue>> mSubscribers;
     std::unordered_map<void *, std::vector<std::string>> mScriptEventNamespaces;
     std::unordered_map<void *, std::pair<std::string, std::string>> mClockFilters;
+    std::unordered_map<void *, JSValue> mSubscribeOptions;
+    const std::function<bool(JSValueConst)> *mEmitAccepts = nullptr;
     std::string mEmitClock;
     std::string mEmitMarker;
     std::unordered_map<std::string, JSValue> mClockObjects;
     JSValue mClockRegistry = JS_UNDEFINED;
     JSValue mDimensionRegistry = JS_UNDEFINED;
     std::vector<std::string> mPendingDimensions;
+    JSValue mCommandRegistry = JS_UNDEFINED;
+    // one namespace per pack for its commands and enums
+    std::string mCommandNamespace;
+    std::unordered_map<std::string, std::vector<std::string>> mCommandEnums;
+    std::vector<std::string> mCustomCommands;
     std::unordered_map<std::string, JSValue> mBlockComponents;
     std::unordered_map<std::string, JSValue> mItemComponents;
     bool mRegistrationOpen = false;
     std::unordered_map<uint64_t, std::vector<ItemStack>> mInventorySnapshots;
+    std::unordered_map<uint64_t, ItemStack> mCursorSnapshots;
 
     uint32_t mNextFormId = 1;
     std::unordered_map<uint32_t, JSValue> mFormResolvers;

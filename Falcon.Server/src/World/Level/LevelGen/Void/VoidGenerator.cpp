@@ -1,11 +1,12 @@
 #include "World/Level/LevelGen/Void/VoidGenerator.h"
 
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "Protocol/BlockStateHasher.h"
 
 namespace {
-    // TODO: the void generator's biome, plains for now
-    const int32_t VOID_BIOME = 1;
+    // sub_14C703FD0: a script dimension's default biome is minecraft:ocean
+    const int32_t VOID_BIOME = BiomeIds::OCEAN;
 }
 
 VoidGenerator::VoidGenerator(DimensionType dimension, int64_t seed)

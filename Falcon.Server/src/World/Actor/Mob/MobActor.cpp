@@ -56,6 +56,7 @@ namespace {
     const char *const TAG_DEFINITIONS = "definitions";
     const std::string DEFINITION_ADDED_PREFIX = "+";
     const char *const TAG_AGE = "AgeTicks";
+    const char *const TAG_ACTOR_VERSION = "ActorVersion";
     const char *const TAG_BREED_COOLDOWN = "BreedCooldown";
     const char *const TAG_TAMED_BY = "TamedBy";
     const char *const TAG_OWNER = "OwnerNew";
@@ -298,6 +299,10 @@ void MobActor::startDefinition(ServerNetworkHandler &owner) {
         if (!mEquipmentInherited)
             mEquipment.equipFromTable(owner, *this);
     }
+}
+
+void MobActor::upgradeDefinition(ServerNetworkHandler &owner, bool loaded) {
+    mActorVersion = EntityEvents::upgrade(owner, *this, loaded ? mActorVersion : INT32_MAX);
 }
 
 void MobActor::tick(ServerNetworkHandler &owner) {
@@ -1043,6 +1048,17 @@ const MobActor::DefinitionPhysics &MobActor::_getDefinitionPhysics() const {
 const PushableByEntityPresets &MobActor::getPushPresets() const {
     mPushPresets.refresh(getComponent(PUSHABLE_BY_ENTITY_COMPONENT));
     return mPushPresets;
+}
+
+// mount windows and their saddle, armor and chest slots are not checked against the game
+Container *MobActor::getEntityContainer() {
+    const json::Value *inventory = getComponent(INVENTORY_COMPONENT);
+    const json::Value *type = inventory == nullptr ? nullptr : inventory->get("container_type");
+    if (type == nullptr || type->mType != json::Value::Type::String || type->mString != "horse" || !isTamed()
+        || getInventoryCapacity() <= 0)
+        return nullptr;
+    mEquipment.ensureInventorySize(getInventoryCapacity());
+    return &mInventoryView;
 }
 
 int MobActor::getInventoryCapacity() const {
@@ -1972,15 +1988,22 @@ void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
 }
 
 void MobActor::fillSpawnMetadata(EntityDataMap &metadata) const {
-    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID};
-    const int64_t flagValues[] = {getFlags().getLowBits(), getFlags().getHighBits()};
-    for (int index = 0; index < 2; index++) {
+    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID, ActorFlags::FLAGS_3_DATA_ID};
+    const int64_t flagValues[] = {getFlags().getLowBits(), getFlags().getHighBits(),
+                                   getFlags().getExtendedBits()};
+    for (int index = 0; index < 3; index++) {
         EntityDataEntry entry;
         entry.mId = flagIds[index];
         entry.mFormat = EntityDataFormat::Long;
         entry.mLongValue = flagValues[index];
         metadata.mEntries.push_back(entry);
     }
+
+    EntityDataEntry nameplateDistance;
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+    nameplateDistance.mFloatValue = getNameplateRenderDistance();
+    metadata.mEntries.push_back(nameplateDistance);
 
     EntityDataEntry scale;
     scale.mId = ActorFlags::SCALE_DATA_ID;
@@ -2233,6 +2256,9 @@ Tag MobActor::saveNbt() const {
         definitions.push_back(Tag::ofString(DEFINITION_ADDED_PREFIX + group));
     data.put(TAG_DEFINITIONS, Tag::ofList(Tag::Type::String, std::move(definitions)));
     data.putInt(TAG_AGE, mAgeTicks);
+    // written only when set (sub_140BB77E0)
+    if (mActorVersion != 0)
+        data.putInt(TAG_ACTOR_VERSION, mActorVersion);
     data.putInt(TAG_BREED_COOLDOWN, mBreedCooldown);
     data.putLong(TAG_OWNER, mOwnerId);
     if (!mLegacyOwnerName.empty())
@@ -2278,6 +2304,7 @@ void MobActor::loadNbt(const Tag &data) {
     mSpawnEvent = data.getString(TAG_SPAWN_EVENT, mSpawnEvent);
 
     mAgeTicks = data.getInt(TAG_AGE, 0);
+    mActorVersion = data.getInt(TAG_ACTOR_VERSION, 0);
     mBreedCooldown = data.getInt(TAG_BREED_COOLDOWN, 0);
     mOwnerId = data.getLong(TAG_OWNER, NO_OWNER);
     mLegacyOwnerName = mOwnerId == NO_OWNER ? data.getString(TAG_TAMED_BY, std::string()) : std::string();

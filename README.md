@@ -20,100 +20,63 @@
 
 ## What is this?
 
-Falcon is a Minecraft: Bedrock Edition server built from the ground up in C++17. It does not derive
-from any existing server: the protocol, world storage, inventory, movement and gameplay systems are
-all reimplemented by hand, with vanilla behavior as the reference.
+Falcon is a Minecraft: Bedrock Edition server written from scratch in C++17. Protocol, world storage,
+inventories, movement and gameplay are reimplemented by hand, with vanilla behavior as the reference.
 
-- **Native** - no runtime to install, the server ships as a single self-contained executable
-- **Vanilla worlds** - Bedrock world format, so worlds move between Falcon and the game unchanged
-- **Behavior packs** - custom content and a JavaScript scripting API loaded from packs
+- **Native** - one self-contained executable, no runtime to install
+- **Vanilla worlds** - the game's world format, including worlds from before 0.9
+- **Behavior packs** - custom content and the official JavaScript scripting API
+- **Plugins** - WebAssembly, native C and Java
 
 ## Getting started
 
-Download the latest Windows, Linux or macOS build from the [releases](https://github.com/Falcon-MC/Falcon/releases),
-check it against its `.sha256` file and run it. On the first start, a setup wizard in the console writes
-`server.properties`.
+Download the build for your system from the [releases](https://github.com/Falcon-MC/Falcon/releases), check it
+against its `.sha256` file and run it. On the first start, a setup wizard writes `server.properties`.
 
-## Movement simulation
-
-By default the server accepts the position a client reports once the packet passes its validity checks: finite
-values, coordinates within the world limits, advancing input ticks and the packet rate limit. These checks are
-always on.
-
-Set `movement-simulation=true` to also replay player movement on the server and correct clients that diverge from
-it. `server-authoritative-movement-strict=true` then corrects every mismatch instead of absorbing small ones, and
-has no effect while `movement-simulation=false`. A `server.properties` without `movement-simulation` keeps its
-former `simulation` value, or enables the simulation when strict mode is on.
+Every setting is described on the [website](https://falcon-mc.github.io).
 
 ## Supported versions
 
-| Minecraft | Protocol |
-|-----------|----------|
-| 1.26.60   | 2225     |
-| 1.26.52   | 2193     |
-| 1.26.45   | 2169     |
-| 1.26.40   | 2168     |
-
-Only the newest version can join by default. Set `any-version=true` in `server.properties` to let every
-supported version join.
+Falcon speaks Minecraft **1.26.60** (protocol 2225). 1.26.52, 1.26.45 and 1.26.40 can join with
+`any-version=true`.
 
 ## Plugins
 
-| Runtime  | Use it for                                                                               |
-|----------|------------------------------------------------------------------------------------------|
-| `wasm`   | New plugins: sandboxed WebAssembly, in any language with WIT bindings for core modules   |
-| `native` | Raw performance, through the C API of [PluginAPI](https://github.com/Falcon-MC/PluginAPI) |
-| `java`   | Java plugins                                                                             |
+| Runtime  | Use it for                                                    |
+|----------|---------------------------------------------------------------|
+| `wasm`   | New plugins, sandboxed, in any language with WIT bindings     |
+| `native` | Raw performance through the C API                             |
+| `java`   | Java plugins                                                  |
 
-The Wasm API is defined once in [`wasm/falcon.wit`](https://github.com/Falcon-MC/PluginAPI/tree/main/wasm) in
-PluginAPI and mirrors the C API. [HelloWasm](https://github.com/Falcon-MC/PluginAPI/tree/main/examples/wasm/HelloWasm)
-is a complete plugin written with its small C helper. A Wasm plugin has no file system or network access, at
-most `wasm-plugin-memory-mb` of memory and `wasm-plugin-fuel` units of fuel per server call. A plugin that runs
-out of fuel or traps is stopped.
+The API lives in [PluginAPI](https://github.com/Falcon-MC/PluginAPI), with a complete
+[example](https://github.com/Falcon-MC/PluginAPI/tree/main/examples/wasm/HelloWasm).
 
-## What the server sends out
+## Privacy
 
-A Falcon server talks to one outside service, `api.falcon-mc.workers.dev`, for two things.
+To tell the game's client from unofficial ones, the server asks `api.falcon-mc.workers.dev` about each NetherNet
+connection. It sends no player name, identifier or address. `allow-unofficial-clients=true` turns this off.
+Telemetry is off unless you set `emit-server-telemetry=true`, and it names no server, world or player.
 
-**Client attestation**, on by default. When a client connects over NetherNet, the server sends what it
-observed of the connection being set up: the handshake of the secure session, the client's offer and the headers of its join
-request, without the player's account token and without any address, the server's own included. The service answers whether the client behaves as the game
-does, and the server removes it if not. No player name or identifier is sent. If the service does not answer,
-the client stays. Set `allow-unofficial-clients=true` to turn every client check off, including this one.
-
-**Telemetry**, off by default. With `emit-server-telemetry=true` the server reports, at start, every half
-hour and at stop: its version, system, architecture, transport, player count, player limit, uptime, how long
-ticks took, how often each client check fired and on what platform the removed client said it was, and why
-connections failed. Nothing in a report names the server, its world or a player, and the service keeps no
-address.
-
-## Related repositories
-
-- [Protocol](https://github.com/Falcon-MC/Protocol) - packets and network types
-- [Network](https://github.com/Falcon-MC/Network) - RakNet and NetherNet transport
-- [NBT](https://github.com/Falcon-MC/NBT) - NBT tags and binary streams
-- [BedrockData](https://github.com/Falcon-MC/BedrockData) - game data files, versioned by protocol
-- [BlockStateUpdater](https://github.com/Falcon-MC/BlockStateUpdater) - block state upgrade schemas
-- [leveldb](https://github.com/Falcon-MC/leveldb) - LevelDB with the zlib compression used by Bedrock worlds
 ## Building
 
-Falcon needs CMake 3.16+, a C++17 compiler, zlib and OpenSSL. On Windows the reference toolchain is
-MSYS2 UCRT64.
+You need CMake 3.16+, a C++17 compiler, zlib and OpenSSL. On Windows, use MSYS2 UCRT64.
 
 ```
 cmake -B build -G Ninja
 cmake --build build
 ```
 
-## Give a star if this project helped you
+Protocol, transport, NBT and game data live in their own repositories under
+[Falcon-MC](https://github.com/Falcon-MC).
+
+## Contributing
+
+Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and report vulnerabilities as
+[SECURITY.md](SECURITY.md) describes.
 
 [![Contributors](https://contrib.rocks/image?repo=Falcon-MC/Falcon)](https://github.com/Falcon-MC/Falcon/graphs/contributors)
 
-## Licensing information
+## License
 
-Falcon is licensed under the [GNU Lesser General Public License v3.0](LICENSE), which supplements the
-[GNU General Public License v3.0](COPYING). You may use, modify and redistribute it, as long as changes to
-Falcon itself stay under the same license.
-
-Falcon is not affiliated with Mojang. All brands and trademarks belong to their respective owners.
-Falcon is not a Mojang-approved software, nor is it associated with Mojang.
+Falcon is licensed under the [GNU LGPL v3.0](LICENSE), which supplements the [GNU GPL v3.0](COPYING).
+Falcon is not affiliated with or approved by Mojang. All trademarks belong to their owners.

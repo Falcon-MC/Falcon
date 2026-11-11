@@ -108,8 +108,11 @@ void PickupItemsGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
 void PickupItemsGoal::_pickUp(ServerNetworkHandler &owner, MobActor &mob, ItemActor &item) {
     ItemStack single = item.getItem();
     single.mCount = 1;
+    if (owner.getScriptEngine().beforeEntityItemPickup(mob, item, single))
+        return;
     if (!MobShareables::take(owner, mob, single))
         return;
+    owner.getScriptEngine().onEntityItemPickup(mob, single);
 
     ItemStack &remaining = item.getItem();
     remaining.mCount -= 1;

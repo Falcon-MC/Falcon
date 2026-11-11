@@ -60,7 +60,17 @@ public:
         std::function<void(const WorldClock &, const WorldClockMarker &, bool added)> mMarkerChanged;
     };
 
+    // sub_140B49930, sub_145D09A00: the level's day time is the overworld clock
+    struct LevelTime {
+        std::function<int64_t()> mGet;
+        std::function<void(int64_t)> mSet;
+        std::function<void(bool)> mSetPaused;
+    };
+
     WorldClockSystem();
+
+    // the overworld clock follows the level's time from then on
+    void bindOverworld(LevelTime time);
 
     void setListener(Listener listener) {
         mListener = std::move(listener);
@@ -115,7 +125,12 @@ private:
 
     void _restore(WorldClock &clock) const;
 
+    bool _isBound(const WorldClock &clock) const;
+
+    void _tickBound(WorldClock &clock);
+
     std::vector<WorldClock> mClocks;
     Listener mListener;
+    LevelTime mLevelTime;
     Tag mSaved = Tag::ofCompound();
 };

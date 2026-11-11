@@ -7,6 +7,7 @@
 #include "Scripting/WorldClockSystem.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <random>
 #include <string>
@@ -123,8 +124,26 @@ public:
 
     void onItemUse(ServerPlayer &player);
 
-    // the used stack, read before the game decrements it
-    void onItemCompleteUse(ServerPlayer &player, const ItemStack &used);
+    // the used stack, read before the game decrements it; useDuration: ticks left of the charge
+    void onItemCompleteUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration = 0);
+
+    void onItemStartUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration);
+
+    // release: the player let go of a charged item; every end of a use also fires itemStopUse
+    void onItemStopUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration, bool released);
+
+    // true when a script cancelled the pickup
+    bool beforeEntityItemPickup(Actor &collector, Actor &item, const ItemStack &picked);
+
+    void onEntityItemPickup(Actor &collector, const ItemStack &picked);
+
+    // container: the entity whose inventory window opened, source: who opened it
+    void onEntityContainerOpened(Actor &container, Actor &source);
+
+    void onEntityContainerClosed(Actor &container, Actor &source);
+
+    // food only, before onCompleteUse: the food component fires it once eaten
+    void onItemConsume(ServerPlayer &player, const ItemStack &used);
 
     // onBeforeDurabilityDamage then onHitEntity; returns the durability damage scripts settled on
     int32_t onItemHitEntity(ServerPlayer &attacker, Actor &target, bool hadEffect, int32_t durabilityDamage);
@@ -133,6 +152,12 @@ public:
     bool isCustomComponentRegistered(bool blocks, const std::string &name) const;
 
     bool isDimensionPending(const std::string &name) const;
+
+    // a custom command enum any pack registered; null when none did
+    const std::vector<std::string> *findCommandEnum(const std::string &name) const;
+
+    // a call into scripts from outside: arms the watchdog, then runs the microtasks; nested calls only run
+    void runGuarded(const std::function<void()> &call);
 
     // after startup: ids from DimensionNameIdTable, a level in every world, the table saved back
     void createCustomDimensions();
@@ -169,6 +194,9 @@ public:
     bool beforeEntityTamed(Actor &entity, Actor &tamer);
 
     void onEntityTamed(Actor &entity, Actor &tamer);
+
+    void onEntityUpgrade(MobActor &entity, const std::string &upgradeId, const std::vector<std::string> &added,
+                         const std::vector<std::string> &removed);
 
     void onDataDrivenEntityTrigger(MobActor &entity, const std::string &eventId, const std::vector<std::string> &added,
                                    const std::vector<std::string> &removed);
@@ -272,6 +300,10 @@ private:
     template <typename Fill>
     bool _emit(const char *key, const char *signal, bool cancellable, Fill fill);
 
+    // entityContainerOpened and entityContainerClosed: sourceField is openSource or closeSource
+    void _emitContainerAccess(const char *key, const char *signal, const char *sourceField, Actor &container,
+                              Actor &source);
+
     void _onHealthChanged(Actor &entity, float oldValue, float newValue);
 
     void _onHeal(Actor &entity, float amount, int32_t cause);
@@ -309,4 +341,5 @@ private:
     // last power each redstone consumer custom block received, per level
     std::unordered_map<const Level *, std::unordered_map<int64_t, int32_t>> mRedstonePower;
     int64_t mExecutionDeadlineMs;
+    int32_t mGuardDepth = 0;
 };

@@ -5,7 +5,14 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/ScriptEngine.h"
 #include "Server/Commands/PlayerCommandOrigin.h"
+#include "Scripting/Binding/ScriptCustomCommand.h"
+#include "Server/Commands/CommandMap.h"
+#include "Server/Commands/ScriptCommandOrigin.h"
+#include "Server/Commands/ExecuteCommandOrigin.h"
+#include "Server/Localization.h"
 #include "Server/Commands/ScriptEventCommand.h"
+#include "Protocol/Packets/AvailableCommandsPacket.h"
+#include "Protocol/Packets/CommandOutputPacket.h"
 #include "Server/Commands/ServerCommandOrigin.h"
 #include "Server/ServerPaths.h"
 #include "World/Level/GameRules.h"
@@ -28,8 +35,15 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Misc/ItemActor.h"
+#include "World/Actor/Vehicle/ChestVehicleActor.h"
+#include "World/Inventory/InventoryManager.h"
+#include "Protocol/Packets/ContainerOpenPacket.h"
+#include "Network/Handler/ItemActorHandler.h"
+#include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -262,6 +276,8 @@ import { world, system, Entity, Player, Effect, EffectTypes, ItemStack, BlockPer
          EntityTypeFamilyComponent, EntityDamageCause, EntityInitializationCause, EntityHealCause, InputButton,
          ButtonState, InputMode, EntitySwingSource, CommandPermissionLevel, PlayerPermissionLevel,
          TickingAreaManager, EntityComponent } from "@minecraft/server";
+import { Scoreboard, ScoreboardObjective, ScoreboardIdentity, ScoreboardScoreInfo, DisplaySlotId, ObjectiveSortOrder,
+         ScoreboardIdentityType } from "@minecraft/server";
 
 const log = (line) => { r.events = (r.events || "") + line + ";"; };
 world.afterEvents.entitySpawn.subscribe((e) => log("spawn:" + e.entity.typeId + ":" + e.cause));
@@ -297,8 +313,16 @@ world.beforeEvents.playerGameModeChange.subscribe((e) => {
         e.toGameMode = "Creative";
 });
 world.afterEvents.playerGameModeChange.subscribe((e) => log("gm:" + e.fromGameMode + ">" + e.toGameMode));
-world.afterEvents.playerEmote.subscribe((e) => log("emote:" + e.personaPieceId));
-world.afterEvents.playerButtonInput.subscribe((e) => log("button:" + e.button + ":" + e.newButtonState));
+let emotePlayer;
+world.afterEvents.playerEmote.subscribe((e) => {
+    log("emote:" + e.personaPieceId);
+    emotePlayer = e.player;
+    r.idBefore = e.player.id;
+});
+world.afterEvents.playerButtonInput.subscribe((e) => {
+    log("button:" + e.button + ":" + e.newButtonState);
+    r.idAfter = (e.player === emotePlayer) + ":" + e.player.id;
+});
 world.afterEvents.playerInputModeChange.subscribe((e) => log("mode:" + e.previousInputModeUsed + ">"
     + e.newInputModeUsed));
 world.afterEvents.playerSwingStart.subscribe((e) => log("swing:" + e.swingSource));
@@ -346,6 +370,8 @@ system.runTimeout(() => {
         + "," + (EffectTypes.get("nope") === undefined);
     const added = cow.addEffect("speed", 200, { amplifier: 1 });
     r.addEffect = (added instanceof Effect) + ":" + added.amplifier + ":" + added.duration + ":" + added.isValid;
+    r.effectName = added.displayName + "|" + cow.addEffect("haste", 200).displayName;
+    cow.removeEffect("haste");
     r.cancelledEffect = cow.addEffect(EffectTypes.get("poison"), 100) === undefined;
     r.effects = cow.getEffects().map((effect) => effect.typeId).join(",");
     cow.removeEffect("speed");
@@ -440,12 +466,294 @@ system.runTimeout(() => {
   } catch (e) { r.error = e.name + ":" + e.message + ":" + e.stack; }
     world.setDynamicProperty("entities", JSON.stringify(r));
 }, 2);
+system.runTimeout(() => {
+  try {
+    const sb = world.scoreboard;
+    const overworld = world.getDimension("overworld");
+    const player = world.getPlayers()[0];
+    const calf = overworld.getEntities({ type: "minecraft:cow" })[0];
+    r.sbClasses = (sb instanceof Scoreboard) + "," + (sb === world.scoreboard) + ","
+        + capture(() => new ScoreboardObjective());
+    r.sbNone = player.scoreboardIdentity === undefined;
+    const obj = sb.addObjective("test:kills", "Kills");
+    r.sbObjective = obj.id + "," + obj.displayName + "," + obj.isValid + "," + sb.getObjective("test:kills").id + ","
+        + sb.getObjective("nope");
+    r.sbDuplicate = capture(() => sb.addObjective("test:kills"));
+    obj.setScore(player, 5);
+    r.sbAdd = obj.addScore(player, 2) + "," + obj.addScore("fake", 3) + "," + obj.addScore(calf, -1);
+    const id = player.scoreboardIdentity;
+    r.sbIdentity = (id instanceof ScoreboardIdentity) + "," + id.type + "," + id.displayName + "," + id.isValid + ","
+        + (id.getEntity() === player) + "," + typeof id.id;
+    r.sbCalf = calf.scoreboardIdentity.type + "," + JSON.stringify(calf.scoreboardIdentity.displayName);
+    r.sbScores = obj.getScores().map((s) => (s instanceof ScoreboardScoreInfo) + ":" + s.participant.type + "="
+        + s.score).join(";");
+    r.sbGet = obj.getScore(id) + "," + obj.getScore("nobody") + "," + obj.hasParticipant("fake") + ","
+        + obj.hasParticipant(player);
+    r.sbOverflow = capture(() => obj.addScore("fake", 2147483647));
+    r.sbQuery = [overworld.getEntities({ scoreOptions: [{ objective: "test:kills", minScore: 0 }] }).length,
+                 overworld.getEntities({ scoreOptions: [{ objective: "test:kills", maxScore: 0 }] }).length,
+                 overworld.getEntities({ scoreOptions: [{ objective: "test:kills", minScore: 0, maxScore: 10,
+                                                          exclude: true }] }).length,
+                 world.getPlayers({ scoreOptions: [{ objective: "test:kills", minScore: 7, maxScore: 7 }] }).length,
+                 overworld.getEntities({ scoreOptions: [{ objective: "test:none" }] }).length].join(",");
+    const previous = sb.setObjectiveAtDisplaySlot(DisplaySlotId.Sidebar,
+                                                  { objective: obj, sortOrder: ObjectiveSortOrder.Ascending });
+    const shown = sb.getObjectiveAtDisplaySlot(DisplaySlotId.Sidebar);
+    r.sbDisplay = (previous === undefined) + "," + shown.objective.id + "," + shown.sortOrder;
+    r.sbParticipants = sb.getParticipants().length + "," + obj.getParticipants().length;
+    r.sbRemoveParticipant = obj.removeParticipant("fake") + "," + obj.removeParticipant("fake");
+    r.sbBadSlot = capture(() => sb.getObjectiveAtDisplaySlot("Feet"));
+    r.sbClear = sb.clearObjectiveAtDisplaySlot(DisplaySlotId.Sidebar).id + ","
+        + (sb.getObjectiveAtDisplaySlot(DisplaySlotId.Sidebar) === undefined);
+    const other = sb.addObjective("test:other");
+    r.sbRemove = sb.removeObjective(other) + "," + other.isValid + "," + capture(() => other.id) + ","
+        + sb.removeObjective("nope");
+    r.sbStale = capture(() => sb.setObjectiveAtDisplaySlot(DisplaySlotId.List, { objective: other }));
+    sb.addObjective("test:other");
+    r.sbReAdded = other.isValid;
+    r.sbEnums = [DisplaySlotId.BelowName, ObjectiveSortOrder.Descending, ScoreboardIdentityType.FakePlayer].join(",");
+    sb.setObjectiveAtDisplaySlot(DisplaySlotId.BelowName, { objective: obj });
+    obj.setScore("kept", 42);
+  } catch (e) { r.sbError = e.name + ":" + e.message + ":" + e.stack; }
+}, 3);
 system.runTimeout(() => world.setDynamicProperty("entities", JSON.stringify(r)), 7);
+)JS";
+
+    const char *const ITEMS = R"JS(
+import { world, system, ItemStack, ItemType, ItemTypes, Container, ContainerSlot, EnchantmentType, EnchantmentTypes,
+         EnchantmentSlot, ItemLockMode, Potions, PotionEffectType, ItemDurabilityComponent, ItemEnchantableComponent,
+         ItemFoodComponent, ItemBookComponent, ItemPotionComponent, ItemInventoryComponent, ItemCooldownComponent,
+         EntityInventoryComponent, EntityEquippableComponent, EntityEnderInventoryComponent,
+         PlayerCursorInventoryComponent, BlockTypes, BlockPermutation } from "@minecraft/server";
+
+const log = (line) => { r.events = (r.events || "") + line + ";"; };
+const fail = (f) => { try { f(); return "ok"; } catch (e) { return e.name; } };
+world.afterEvents.itemStartUse.subscribe((e) => log("start:" + e.itemStack.typeId + ":" + e.useDuration));
+world.afterEvents.itemStopUse.subscribe((e) => log("stop:" + e.itemStack.typeId + ":" + e.useDuration));
+world.afterEvents.itemReleaseUse.subscribe((e) => log("release:" + e.itemStack.typeId + ":" + e.useDuration));
+world.afterEvents.itemCompleteUse.subscribe((e) => log("complete:" + e.itemStack.typeId + ":" + e.source.name));
+world.beforeEvents.entityItemPickup.subscribe((e) => {
+    log("beforePickup:" + e.entity.typeId + ":" + e.item.typeId);
+    if (e.entity.typeId === "minecraft:piglin")
+        e.cancel = true;
+});
+world.afterEvents.entityItemPickup.subscribe((e) => log("pickup:" + e.entity.typeId + ":"
+    + e.items.map((i) => i.typeId + "x" + i.amount).join(",")), { itemFilter: { includeTypes: ["diamond"] } });
+world.afterEvents.entityItemPickup.subscribe((e) => log("filteredPickup"), { itemFilter: { includeTypes: ["stone"] } });
+world.afterEvents.playerInventoryItemChange.subscribe((e) => log("change:" + e.slot + ":" + e.inventoryType + ":"
+    + (e.beforeItemStack ? e.beforeItemStack.typeId : "-") + ">" + (e.itemStack ? e.itemStack.typeId : "-")),
+    { includeItems: ["minecraft:diamond"] });
+world.afterEvents.entityContainerOpened.subscribe((e) => log("opened:" + e.entity.typeId + ":"
+    + e.openSource.entity.typeId), { entityFilter: { type: "minecraft:chest_minecart" } });
+world.afterEvents.entityContainerOpened.subscribe((e) => log("wrongOpened"), { entityFilter: { type: "minecraft:cow" } });
+world.afterEvents.entityContainerClosed.subscribe((e) => log("closed:" + e.entity.typeId + ":"
+    + e.closeSource.entity.typeId), { accessSourceFilter: { entityFilter: { type: "minecraft:player" } } });
+world.afterEvents.playerInventoryItemChange.subscribe((e) => log("hotbar:" + e.slot),
+    { inventoryType: "Hotbar", allowedSlots: [3] });
+
+system.runTimeout(() => {
+  try {
+    const player = world.getPlayers()[0];
+    const sword = new ItemStack("diamond_sword");
+    r.constructed = sword.typeId + ":" + sword.amount + ":" + sword.maxAmount + ":" + sword.isStackable + ":"
+        + (sword.type instanceof ItemType) + ":" + sword.type.id;
+    r.badType = fail(() => new ItemStack("minecraft:nope"));
+    r.badAmount = fail(() => new ItemStack("stone", 256));
+    r.clamped = new ItemStack("ender_pearl", 40).amount;
+    sword.nameTag = "Blade";
+    sword.setLore(["first", { rawtext: [{ text: "second" }] }]);
+    sword.keepOnDeath = true;
+    sword.lockMode = ItemLockMode.slot;
+    r.meta = sword.nameTag + ":" + sword.getLore().length + ":" + sword.getRawLore()[1].rawtext[0].text + ":"
+        + sword.getRawLore()[0].text + ":" + sword.keepOnDeath + ":" + sword.lockMode;
+    r.loreBounds = fail(() => sword.setLore(["x".repeat(51)]));
+    sword.setCanDestroy(["stone"]);
+    r.canDestroy = sword.getCanDestroy().join(",") + ":" + fail(() => sword.setCanDestroy(["nope:block"]));
+    sword.setDynamicProperty("test:owner", "me");
+    r.dynamic = sword.getDynamicProperty("test:owner") + ":" + fail(() => new ItemStack("stone").setDynamicProperty("a", 1));
+    const copy = sword.clone();
+    copy.nameTag = undefined;
+    r.clone = copy.getLore().length + ":" + (copy.nameTag === undefined) + ":" + sword.nameTag + ":"
+        + copy.getDynamicProperty("test:owner");
+    r.stackable = new ItemStack("stone").isStackableWith(new ItemStack("stone", 5)) + ":"
+        + sword.isStackableWith(copy) + ":" + new ItemStack("stone").matches("stone");
+
+    const durability = sword.getComponent("durability");
+    durability.damage = 10;
+    r.durability = (durability instanceof ItemDurabilityComponent) + ":" + durability.maxDurability + ":"
+        + sword.getComponent(ItemDurabilityComponent.componentId).damage + ":" + fail(() => { durability.damage = 99999; })
+        + ":" + fail(() => durability.getDamageChance(4));
+    const enchantable = sword.getComponent("minecraft:enchantable");
+    enchantable.addEnchantment({ type: new EnchantmentType("sharpness"), level: 3 });
+    r.enchant = (enchantable instanceof ItemEnchantableComponent) + ":" + enchantable.getEnchantments().length + ":"
+        + enchantable.getEnchantment("minecraft:sharpness").level + ":" + enchantable.hasEnchantment("unbreaking") + ":"
+        + enchantable.slots.join("|");
+    r.enchantErrors = [fail(() => enchantable.addEnchantment({ type: "nope", level: 1 })),
+        fail(() => enchantable.addEnchantment({ type: "sharpness", level: 9 })),
+        fail(() => enchantable.addEnchantment({ type: "power", level: 1 })),
+        enchantable.canAddEnchantment({ type: "smite", level: 1 }),
+        enchantable.canAddEnchantment({ type: "unbreaking", level: 1 })].join(",");
+    r.enchantTypes = EnchantmentTypes.get("minecraft:flame").id + ":" + EnchantmentTypes.get("flame").maxLevel + ":"
+        + (EnchantmentTypes.getAll().length > 30) + ":" + (EnchantmentTypes.get("nope") === undefined) + ":"
+        + EnchantmentSlot.Sword;
+    r.components = sword.getComponents().map((c) => c.typeId).sort().join(",");
+
+    const apple = new ItemStack("apple");
+    const food = apple.getComponent("food");
+    r.food = (food instanceof ItemFoodComponent) + ":" + food.nutrition + ":" + food.saturationModifier.toFixed(1)
+        + ":" + food.canAlwaysEat + ":" + (apple.getComponent("durability") === undefined);
+    const pearl = new ItemStack("ender_pearl").getComponent("cooldown");
+    r.cooldown = (pearl instanceof ItemCooldownComponent) + ":" + pearl.cooldownCategory + ":"
+        + pearl.isCooldownCategory(pearl.cooldownCategory);
+
+    const potion = Potions.resolve("minecraft:swiftness", "ThrownSplash");
+    const potionComponent = potion.getComponent("potion");
+    r.potion = potion.typeId + ":" + (potionComponent instanceof ItemPotionComponent) + ":"
+        + potionComponent.potionEffectType.id + ":" + potionComponent.potionDeliveryType.id + ":"
+        + Potions.getEffectType("minecraft:swiftness").durationTicks + ":"
+        + (Potions.getEffectType("minecraft:healing").durationTicks === undefined) + ":"
+        + Potions.getAllDeliveryTypes().length + ":" + fail(() => Potions.resolve("nope", "Consume"));
+
+    const book = new ItemStack("writable_book");
+    const pages = book.getComponent("book");
+    pages.setContents(["one", "two"]);
+    pages.insertPage(1, "inserted");
+    pages.setPageContent(4, { rawtext: [{ text: "raw" }] });
+    r.bookBefore = (pages instanceof ItemBookComponent) + ":" + pages.pageCount + ":" + pages.getPageContent(1) + ":"
+        + (pages.getPageContent(4) === undefined) + ":" + pages.getRawPageContent(4).rawtext[0].text + ":"
+        + pages.isSigned + ":" + fail(() => pages.setPageContent(0, "x".repeat(257)));
+    r.bookTitle = (() => { try { pages.signBook("x".repeat(17), "me"); return "ok"; } catch (e) { return e.name + ":" + e.reason; } })();
+    pages.signBook("Story", "ScriptPlayer");
+    r.bookSigned = book.typeId + ":" + pages.isSigned + ":" + pages.title + ":" + pages.author;
+
+    const bundle = new ItemStack("bundle");
+    const storage = bundle.getComponent("inventory");
+    storage.container.addItem(new ItemStack("stone", 3));
+    r.bundle = (storage instanceof ItemInventoryComponent) + ":" + storage.container.getItem(0).amount + ":"
+        + bundle.getComponent("inventory").container.firstEmptySlot() + ":" + storage.container.weight + ":"
+        + storage.container.containerRules.bannedItems.length;
+
+    const inventory = player.getComponent("inventory");
+    const container = inventory.container;
+    container.clearAll();
+    r.inventory = (inventory instanceof EntityInventoryComponent) + ":" + (container instanceof Container) + ":"
+        + container.size + ":" + container.emptySlotsCount + ":" + inventory.inventorySize;
+    const rest = container.addItem(new ItemStack("ender_pearl", 16));
+    container.setItem(5, sword);
+    container.setItem(3, new ItemStack("diamond", 2));
+    container.setItem(12, new ItemStack("diamond", 1));
+    r.container = (rest === undefined) + ":" + container.getItem(5).nameTag + ":" + container.firstItem() + ":"
+        + container.find(new ItemStack("diamond", 1)) + ":" + container.findLast(new ItemStack("diamond", 2)) + ":"
+        + container.contains(new ItemStack("diamond", 2)) + ":" + fail(() => container.getItem(36));
+    const slot = container.getSlot(5);
+    slot.nameTag = "Renamed";
+    slot.amount = 1;
+    r.slot = (slot instanceof ContainerSlot) + ":" + slot.hasItem() + ":" + container.getItem(5).nameTag + ":"
+        + slot.typeId + ":" + slot.getComponent + ":" + slot.isValid + ":" + slot.getLore().length;
+    container.swapItems(3, 12, container);
+    container.moveItem(12, 20, container);
+    r.moved = container.getItem(3).amount + ":" + (container.getItem(12) === undefined) + ":" + container.getItem(20).amount;
+    const transferred = container.transferItem(20, bundle.getComponent("inventory").container);
+    r.transferred = (transferred === undefined) + ":" + (container.getItem(20) === undefined);
+
+    const equipment = player.getComponent("equippable");
+    equipment.setEquipment("Head", new ItemStack("diamond_helmet"));
+    equipment.setEquipment("Offhand", new ItemStack("shield"));
+    r.equipment = (equipment instanceof EntityEquippableComponent) + ":" + equipment.getEquipment("Head").typeId + ":"
+        + equipment.getEquipmentSlot("Offhand").typeId + ":" + equipment.totalArmor + ":" + equipment.totalToughness;
+    const ender = player.getComponent("minecraft:ender_inventory");
+    ender.container.setItem(0, new ItemStack("emerald", 4));
+    r.ender = (ender instanceof EntityEnderInventoryComponent) + ":" + ender.container.size + ":"
+        + player.getComponent("ender_inventory").container.getItem(0).amount;
+    const cursor = player.getComponent("cursor_inventory");
+    r.cursor = (cursor instanceof PlayerCursorInventoryComponent) + ":" + (cursor.item === undefined);
+    r.playerComponents = player.getComponents().map((c) => c.typeId).filter((id) => id.endsWith("inventory")
+        || id === "minecraft:equippable").sort().join(",");
+
+    const piglin = world.getDimension("overworld").getEntities({ type: "minecraft:piglin" })[0];
+    const mobInventory = piglin.getComponent("inventory");
+    mobInventory.container.setItem(1, new ItemStack("gold_ingot", 3));
+    piglin.getComponent("equippable").setEquipment("Mainhand", new ItemStack("golden_sword"));
+    r.mob = mobInventory.inventorySize + ":" + mobInventory.containerType + ":" + mobInventory.private + ":"
+        + mobInventory.container.getItem(1).amount + ":" + piglin.getComponent("equippable").getEquipment("Mainhand").typeId
+        + ":" + (world.getDimension("overworld").getEntities({ type: "minecraft:cow" })[0].getComponent("inventory") === undefined);
+    r.itemTypes = (ItemTypes.get("apple") === new ItemStack("apple").type) + ":" + new ItemStack("apple").localizationKey;
+
+    const tool = new ItemStack("iron_pickaxe");
+    tool.setDynamicProperties({ "test:a": 1, "test:b": "two" });
+    r.dynamicMore = tool.getDynamicPropertyIds().sort().join(",") + ":" + (tool.getDynamicPropertyTotalByteCount() > 0);
+    tool.clearDynamicProperties();
+    tool.setCanPlaceOn(["minecraft:dirt"]);
+    const toolDurability = tool.getComponent("durability");
+    toolDurability.unbreakable = true;
+    r.toolMore = tool.getDynamicPropertyIds().length + ":" + tool.getCanPlaceOn().join(",") + ":"
+        + toolDurability.unbreakable + ":" + JSON.stringify(toolDurability.getDamageChanceRange()) + ":"
+        + toolDurability.getDamageChance(1) + ":" + tool.matches("minecraft:iron_pickaxe") + ":" + tool.matches("stone");
+    const toolEnchant = tool.getComponent("enchantable");
+    toolEnchant.addEnchantments([{ type: "efficiency", level: 2 }, { type: "unbreaking", level: 1 }]);
+    toolEnchant.removeEnchantment("efficiency");
+    r.enchantMore = toolEnchant.getEnchantments().map((e) => e.type.id + e.level).join(",");
+    toolEnchant.removeAllEnchantments();
+    r.enchantCleared = toolEnchant.getEnchantments().length + ":" + toolEnchant.slots.join("|");
+    const leather = new ItemStack("leather_helmet").getComponent("dyeable");
+    leather.color = { red: 1, green: 0, blue: 0.5 };
+    r.dye = Math.round(leather.color.red * 255) + "," + Math.round(leather.color.blue * 255) + ":"
+        + (leather.defaultColor === undefined) + ":" + (new ItemStack("stone").getComponent("dyeable") === undefined);
+    r.compost = new ItemStack("red_shrub").getComponent("compostable").compostingChance;
+    const quill = new ItemStack("writable_book").getComponent("book");
+    quill.setContents(["a", { rawtext: [{ text: "b" }] }, "c"]);
+    quill.removePage(2);
+    r.bookMore = quill.contents.map((page) => page === undefined ? "~" : page).join(",") + ":"
+        + quill.rawContents.map((page) => page === undefined ? "~" : page.rawtext[0].text).join(",") + ":"
+        + (quill.title === undefined) + ":" + (quill.author === undefined);
+    r.potionsMore = Potions.getAllEffectTypes().length + ":" + Potions.getDeliveryType("Consume").id + ":"
+        + (Potions.getDeliveryType("nope") === undefined) + ":" + Potions.resolve("minecraft:healing", "Consume").typeId;
+    const pearl2 = new ItemStack("ender_pearl").getComponent("cooldown");
+    pearl2.startCooldown(player);
+    r.cooldownMore = pearl2.cooldownTicks + ":" + (pearl2.getCooldownTicksRemaining(player) > 0);
+    const playerInventory = player.getComponent("inventory");
+    r.inventoryMore = playerInventory.containerType + ":" + playerInventory.private + ":"
+        + playerInventory.canBeSiphonedFrom + ":" + playerInventory.restrictToOwner + ":"
+        + playerInventory.additionalSlotsPerStrength + ":" + (playerInventory.container.containerRules === undefined);
+    r.rules = (() => { try { new ItemStack("bundle").getComponent("inventory").container.addItem(new ItemStack("shulker_box"));
+        return "ok"; } catch (e) { return e.name + ":" + e.reason; } })();
+    const cart = world.getDimension("overworld").getEntities({ type: "minecraft:chest_minecart" })[0];
+    const cartInventory = cart.getComponent("inventory");
+    cartInventory.container.setItem(4, new ItemStack("diamond", 7));
+    r.cart = cartInventory.inventorySize + ":" + cartInventory.containerType + ":" + cartInventory.canBeSiphonedFrom
+        + ":" + cartInventory.container.size + ":" + cartInventory.container.getItem(4).amount + ":"
+        + (cart.getComponent("equippable") === undefined);
+    const chestItem = new ItemStack("chest");
+    const blockProperties = chestItem.getComponent("minecraft:block_actor_dynamic_properties");
+    blockProperties.set("test:key", 5);
+    r.blockProperties = blockProperties.get("test:key") + ":" + (blockProperties.totalByteCount() > 0) + ":"
+        + chestItem.clone().getComponent("block_actor_dynamic_properties").get("test:key") + ":"
+        + (new ItemStack("apple").getComponent("block_actor_dynamic_properties") === undefined);
+    blockProperties.set("test:key", undefined);
+    r.blockPropertiesCleared = String(blockProperties.get("test:key"));
+    const log = new ItemStack("oak_log");
+    r.stateMatches = log.matches("oak_log", { pillar_axis: "y" }) + ":" + log.matches("oak_log", { pillar_axis: "x" })
+        + ":" + log.matches("oak_log", { nope: 1 }) + ":" + new ItemStack("apple").matches("apple", { pillar_axis: "y" });
+    const stoneBlock = world.getDimension("overworld").getBlock({ x: 0, y: 101, z: 8 });
+    r.blockType = stoneBlock.type.id + ":" + (stoneBlock.type === BlockTypes.get("stone")) + ":"
+        + (BlockPermutation.resolve("stone").type === BlockTypes.get("minecraft:stone"));
+    const cursorComponent = player.getComponent("cursor_inventory");
+    r.cursorMore = fail(() => cursorComponent.clear()) + ":" + (cursorComponent.item === undefined) + ":"
+        + cursorComponent.isValid + ":" + (cursorComponent.entity === player);
+  } catch (e) { r.error = e.name + ":" + e.message + ":" + e.stack; }
+    world.setDynamicProperty("items", JSON.stringify(r));
+}, 2);
+system.runTimeout(() => world.setDynamicProperty("items", JSON.stringify(r)), 7);
 )JS";
 
     const char *const BETA_ENTITIES = R"JS(
 import { world, system, Entity, Player, ItemStack } from "@minecraft/server";
 r.target = "target" in Entity.prototype;
+world.afterEvents.playerCursorItemGrab.subscribe((e) => { r.cursor = (r.cursor || "") + "grab:" + e.item.typeId + ";"; });
+world.afterEvents.playerCursorItemRelease.subscribe((e) => {
+    r.cursor = (r.cursor || "") + "release:" + e.item.typeId + ":" + e.player.name + ";";
+    world.setDynamicProperty("betaEntities", JSON.stringify(r));
+});
 r.betaPlayer = ["chatDisplayName", "chatNamePrefix", "eatItem", "postClientMessage", "stopSound", "stopAllSounds"]
     .every((key) => key in Player.prototype);
 system.runTimeout(() => {
@@ -480,6 +788,8 @@ r.worldLoad = "worldLoad" in world.afterEvents;
 r.systemBefore = "beforeEvents" in system;
 r.early = capture(() => world.getAllPlayers());
 r.startupEvent = "StartupEvent" in server;
+r.sbValidMethod = typeof server.ScoreboardObjective.prototype.isValid + ","
+    + typeof server.ScoreboardIdentity.prototype.isValid;
 world.beforeEvents.worldInitialize.subscribe((event) => {
     r.register = capture(() => event.blockComponentRegistry.registerCustomComponent("legacy:comp", {
         onPlayerInteract(...args) {
@@ -584,8 +894,14 @@ system.beforeEvents.startup.subscribe((event) => {
                 + (event instanceof ItemComponentUseOnEvent) + (event instanceof ItemUseOnEvent);
             save();
         },
-        onCompleteUse: log("onCompleteUse"),
-        onConsume: log("onConsume"),
+        onCompleteUse(event, params) {
+            r.useOrder = (r.useOrder || "") + event.itemStack.typeId + ":complete;";
+            log("onCompleteUse")(event, params);
+        },
+        onConsume(event, params) {
+            r.useOrder = (r.useOrder || "") + event.itemStack.typeId + ":consume;";
+            log("onConsume")(event, params);
+        },
         onHitEntity(event, params) {
             r.itemOrder = (r.itemOrder || "") + "hit;";
             log("onHitEntity")(event, params);
@@ -702,6 +1018,122 @@ system.runTimeout(() => {
 }, 8);
 )JS";
 
+    const char *const COMMANDS = R"JS(
+import { world, system, CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, CustomCommandSource,
+         CustomCommandOrigin, CustomCommandRegistry, CustomCommandErrorReason, CommandResult } from "@minecraft/server";
+const save = () => world.setDynamicProperty("commands", JSON.stringify(r));
+const reason = (f) => {
+    try {
+        f();
+    } catch (e) {
+        return e.name + "," + e.reason + "," + e.message;
+    }
+    return "ok";
+};
+const describe = (origin, args) => [origin instanceof CustomCommandOrigin, origin.sourceType,
+    origin.sourceEntity ? origin.sourceEntity.typeId : "none", origin.sourceBlock ? "block" : "none",
+    ...args.map((a) => a === undefined ? "undefined" : Array.isArray(a) ? a.map((e) => e.typeId).join("+")
+        : typeof a === "object" ? (a.id || (a.x + "/" + a.y + "/" + a.z)) : String(a))].join(",");
+let late;
+r.enums = [CustomCommandParamType.PlayerSelector, CustomCommandStatus.Failure, CustomCommandSource.Server,
+           CustomCommandErrorReason.EnumDependencyMissing, CommandPermissionLevel.Admin].join(",");
+system.beforeEvents.startup.subscribe((event) => {
+    const registry = event.customCommandRegistry;
+    late = registry;
+    r.registry = registry instanceof CustomCommandRegistry;
+    r.enumAdd = capture(() => registry.registerEnum("cmd:color", ["red", "blue"]));
+    r.enumDuplicate = reason(() => registry.registerEnum("cmd:color", ["x"]));
+    r.enumNoNamespace = reason(() => registry.registerEnum("color", []));
+    r.enumMismatch = reason(() => registry.registerEnum("other:color", []));
+    r.register = capture(() => registry.registerCommand({
+        name: "cmd:echo", description: "echo", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false,
+        mandatoryParameters: [{ name: "count", type: CustomCommandParamType.Integer },
+                              { name: "cmd:color", type: CustomCommandParamType.Enum }],
+        optionalParameters: [{ name: "where", type: CustomCommandParamType.Location },
+                             { name: "flag", type: CustomCommandParamType.Boolean },
+                             { name: "who", type: CustomCommandParamType.EntitySelector },
+                             { name: "block", type: CustomCommandParamType.BlockType }],
+    }, (origin, ...args) => {
+        r.calls = (r.calls || 0) + 1;
+        r.last = describe(origin, args);
+        r.restricted = capture(() => world.getDimension("overworld").runCommand("say restricted")) !== "ok";
+        system.run(save);
+        return args[0] < 0 ? { status: CustomCommandStatus.Failure, message: "negative" }
+            : { status: CustomCommandStatus.Success, message: "echo " + args[0] };
+    }));
+    r.duplicate = reason(() => registry.registerCommand({ name: "cmd:echo", description: "",
+        permissionLevel: CommandPermissionLevel.Any }, () => {}));
+    r.noNamespace = reason(() => registry.registerCommand({ name: "echo2", description: "",
+        permissionLevel: CommandPermissionLevel.Any }, () => {}));
+    r.mismatch = reason(() => registry.registerCommand({ name: "other:echo", description: "",
+        permissionLevel: CommandPermissionLevel.Any }, () => {}));
+    r.missingEnum = reason(() => registry.registerCommand({ name: "cmd:missing", description: "",
+        permissionLevel: CommandPermissionLevel.Any,
+        mandatoryParameters: [{ name: "cmd:nope", type: CustomCommandParamType.Enum }] }, () => {}));
+    r.badType = capture(() => registry.registerCommand({ name: "cmd:bad", description: "",
+        permissionLevel: CommandPermissionLevel.Any, mandatoryParameters: [{ name: "x", type: "Nope" }] }, () => {}));
+    const nine = [];
+    for (let index = 0; index < 9; index++)
+        nine.push({ name: "p" + index, type: CustomCommandParamType.Integer });
+    r.limit = reason(() => registry.registerCommand({ name: "cmd:nine", description: "",
+        permissionLevel: CommandPermissionLevel.Any, mandatoryParameters: nine.slice(0, 5),
+        optionalParameters: nine.slice(5) }, () => {}));
+    r.eight = capture(() => registry.registerCommand({ name: "cmd:eight", description: "",
+        permissionLevel: CommandPermissionLevel.Any, mandatoryParameters: nine.slice(1) }, () => {}));
+    r.admin = capture(() => registry.registerCommand({ name: "cmd:admin", description: "",
+        permissionLevel: CommandPermissionLevel.Admin, cheatsRequired: false }, () => {}));
+    r.give = capture(() => registry.registerCommand({ name: "cmd:give", description: "shadowed",
+        permissionLevel: CommandPermissionLevel.GameDirectors }, (origin) => {
+        r.secret = describe(origin, []);
+        system.run(save);
+    }));
+    save();
+});
+
+world.afterEvents.worldLoad.subscribe(() => {
+    r.late = reason(() => late.registerCommand({ name: "cmd:late", description: "",
+        permissionLevel: CommandPermissionLevel.Any }, () => {}));
+    r.lateEnum = reason(() => late.registerEnum("cmd:late", []));
+    const overworld = world.getDimension("overworld");
+    const result = overworld.runCommand("cmd:echo 4 red 1 ~2 3");
+    r.dimension = (result instanceof CommandResult) + "," + result.successCount + "|" + r.last;
+    r.failed = overworld.runCommand("echo -1 blue").successCount;
+    r.unknown = capture(() => overworld.runCommand("nosuchcommand"));
+    r.parse = capture(() => overworld.runCommand("echo x red"));
+    save();
+});
+
+system.runTimeout(() => {
+    const player = world.getAllPlayers()[0];
+    r.playerRun = player.runCommand("echo 6 blue 5 6 7 true @s").successCount + "|" + r.last;
+    r.adminDenied = capture(() => player.runCommand("cmd:admin"));
+    save();
+}, 2);
+)JS";
+
+    const char *const BETA_COMMANDS = R"JS(
+import { world, system, CommandPermissionLevel, CustomCommandParamType } from "@minecraft/server";
+system.beforeEvents.startup.subscribe((event) => {
+    const registry = event.customCommandRegistry;
+    registry.registerEnum("beta:mode", ["on", "off"]);
+    r.named = capture(() => registry.registerCommand({ name: "beta:toggle", description: "",
+        permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false,
+        mandatoryParameters: [{ name: "state", type: CustomCommandParamType.Enum, enumName: "beta:mode" }] },
+        (origin, state) => {
+            r.state = state;
+            system.run(() => world.setDynamicProperty("betacommands", JSON.stringify(r)));
+        }));
+    try {
+        registry.registerCommand({ name: "beta:wrong", description: "", permissionLevel: CommandPermissionLevel.Any,
+            mandatoryParameters: [{ name: "n", type: CustomCommandParamType.Integer, enumName: "beta:mode" }] },
+            () => {});
+    } catch (e) {
+        r.unexpected = e.name + "," + e.reason + "," + e.message;
+    }
+    world.setDynamicProperty("betacommands", JSON.stringify(r));
+});
+)JS";
+
     const char *const COMPONENT_BLOCK = R"JSON({
   "format_version": "1.21.90",
   "minecraft:block": {
@@ -720,6 +1152,14 @@ system.runTimeout(() => {
   "minecraft:item": {
     "description": { "identifier": "test:wand" },
     "components": { "test:wand": {} }
+  }
+})JSON";
+
+    const char *const COMPONENT_FOOD = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:snack" },
+    "components": { "minecraft:food": { "nutrition": 2 }, "minecraft:use_duration": 1.6, "test:wand": {} }
   }
 })JSON";
 
@@ -799,6 +1239,49 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
 
     DimensionDefinition sentDimension;
 
+    bool fromBlockCheats(Level &level);
+
+    // a command block's origin, as CommandBlockSystem builds it
+    class BlockOrigin final : public CommandOrigin {
+    public:
+        BlockOrigin(Level &level, const Vector3i &position) : mLevel(level), mPosition(position) {}
+
+        std::string getSenderName() const override {
+            return "@";
+        }
+
+        bool isPlayer() const override {
+            return false;
+        }
+
+        ServerPlayer *asPlayer() override {
+            return nullptr;
+        }
+
+        void sendMessage(const std::string &) override {}
+
+        void sendTranslation(const std::string &, const std::vector<std::string> &) override {}
+
+        CommandPermission getCommandPermission() const override {
+            return CommandPermission::Internal;
+        }
+
+        bool getSourceBlock(Level *&level, Vector3i &position) override {
+            level = &mLevel;
+            position = mPosition;
+            return true;
+        }
+
+    private:
+        Level &mLevel;
+        Vector3i mPosition;
+    };
+
+    bool fromBlockCheats(Level &level) {
+        BlockOrigin origin(level, Vector3i(0, 0, 0));
+        return origin.canUseCommandsWithoutCheats();
+    }
+
     void run(const std::filesystem::path &directory) {
         const std::filesystem::path packs = directory / "packs";
         const std::string server2 = "{\"module_name\": \"@minecraft/server\", \"version\": \"2.11.0\"}";
@@ -822,6 +1305,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                   "{\"module_name\": \"@minecraft/server\", \"version\": \"beta\"},"
                   " {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
                   std::string(PRELUDE) + BETA_ENTITIES);
+        writePack(packs, "items", server2 + ", {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
+                  std::string(PRELUDE) + ITEMS);
         writePack(packs, "undeclared", server2, UNDECLARED);
         writePack(packs, "net", server2 + ", {\"module_name\": \"@minecraft/server-net\", \"version\": \"1.0.0-beta\"}",
                   NOT_IMPLEMENTED);
@@ -830,8 +1315,12 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                   server2 + ", {\"module_name\": \"@minecraft/server-unknown\", \"version\": \"1.0.0\"}", NEVER_RUNS);
         writeFile(packs / "outside.js", "export const x = 1;\n");
         writePack(packs, "components", server2, std::string(PRELUDE) + COMPONENTS);
+        writePack(packs, "commands", server2, std::string(PRELUDE) + COMMANDS);
+        writePack(packs, "betacommands", "{\"module_name\": \"@minecraft/server\", \"version\": \"beta\"}",
+                  std::string(PRELUDE) + BETA_COMMANDS);
         writeFile(packs / "components" / "blocks" / "block.json", COMPONENT_BLOCK);
         writeFile(packs / "components" / "items" / "wand.json", COMPONENT_ITEM);
+        writeFile(packs / "components" / "items" / "snack.json", COMPONENT_FOOD);
         writeFile(packs / "components" / "blocks" / "stateful.json", STATEFUL_BLOCK);
         writeFile(packs / "stable1" / "blocks" / "legacy.json", LEGACY_BLOCK);
 
@@ -866,7 +1355,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             const Tag *states = property.mProperties.get("properties");
             require(states != nullptr && states->getList().size() == 2, "states not sent");
         }
-        require(engine.loadPacks(manager.getPacks()) == 7, "only the seven valid packs start");
+        require(engine.loadPacks(manager.getPacks()) == 10, "only the ten valid packs start");
 
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
@@ -898,11 +1387,21 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         ServerActor *horse = owner.spawnActor(world.getOverworld(), "minecraft:horse", Vector3f(-8.5f, 100.0f, 8.5f));
         require(dynamic_cast<MobActor *>(horse) != nullptr, "no fixture horse");
         static_cast<MobActor *>(horse)->startDefinition(owner);
+        ServerActor *piglin = owner.spawnActor(world.getOverworld(), "minecraft:piglin",
+                                               Vector3f(14.5f, 100.0f, 14.5f));
+        MobActor *piglinMob = dynamic_cast<MobActor *>(piglin);
+        require(piglinMob != nullptr, "no fixture piglin");
+        piglinMob->startDefinition(owner);
+        ServerActor *minecart = owner.spawnActor(world.getOverworld(), "minecraft:chest_minecart",
+                                                 Vector3f(-14.5f, 100.0f, -14.5f));
+        require(minecart != nullptr && minecart->getEntityContainer() != nullptr, "no fixture chest minecart");
         player.setHealth(10.0f);
         engine.tick(0);
         player.heal(5.0f, HealCause::Regeneration);
         owner.hurt(player, 1.0f, ActorDamageSource::environment("death.attack.magic", player.getName()));
         engine.onPlayerEmote(player, "emote:wave");
+        const int64_t loadedId = player.getUniqueId() + 77;
+        player.setUniqueId(loadedId);
         engine.onPlayerButtonInput(player, "Jump", true);
         engine.onPlayerInputModeChange(player, "KeyboardAndMouse", "Touch");
         engine.onPlayerSwingStart(player, "Attack");
@@ -950,6 +1449,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(dimensionData.mDefinitions.size() == 1 && dimensionData.mDefinitions[0].mId == "test:void",
                 "DimensionDataPacket does not carry the custom dimension");
         sentDimension = dimensionData.mDefinitions[0];
+        require(sentDimension.mMinimumHeight == -64 && sentDimension.mMaximumHeight == 384
+                        && sentDimension.mGeneratorType == 5 && sentDimension.mCloudHeight == 128
+                        && !sentDimension.mRenderClouds,
+                "DimensionDataPacket does not carry the game's script dimension definition");
 
         sent.clear();
         owner.changePlayerLevel(player, defaultWorld.getLevel(voidDimension), Vector3f(0.5f, 80.0f, 0.5f));
@@ -965,12 +1468,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             changed = decoded.mDimension == Dimension::FIRST_CUSTOM_ID;
         }
         require(changed, "no ChangeDimensionPacket named the custom dimension");
-        // back where the entities pack expects the player
-        owner.changePlayerLevel(player, defaultWorld.getOverworld(), Vector3f(0.5f, 100.0f, 0.5f));
-        owner.onPlayerDimensionChangeAck(player);
-        // sendStartGame took the player back to StartGameSent
-        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        owner.changePlayerLevel(player, defaultWorld.getOverworld(), Vector3f(0.5f, 80.0f, 0.5f));
         owner.getNetworkHandler().setOutboundFilter(nullptr);
+        // back where the entities pack expects a spawned player
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.setPosition(Vector3f(0.5f, 100.0f, 0.5f));
         require(defaultWorld.hasLevel(voidDimension)
                         && defaultWorld.getLevel(voidDimension).getDimensionType() == voidDimension
                         && &defaultWorld.getLevel(voidDimension) != &defaultWorld.getOverworld(),
@@ -1009,7 +1511,14 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         player.getInventory().setItemInHand(wand);
         engine.onItemUse(player);
         engine.onItemUseOnBlock(player, at, 1, Vector3f(0.5f, 1.0f, 0.5f));
+        engine.onItemConsume(player, wand);
         engine.onItemCompleteUse(player, wand);
+        ItemStack snack;
+        snack.mDefinition = owner.getItemDefinitions().getDefinition("test:snack");
+        snack.mCount = 1;
+        require(snack.mDefinition != nullptr, "the custom food was not registered");
+        engine.onItemConsume(player, snack);
+        engine.onItemCompleteUse(player, snack);
         require(engine.onItemHitEntity(player, player, true, 2) == 7, "onBeforeDurabilityDamage was not applied");
         PlayerBreakBlockAfterEvent broken(player, at, "test:block");
         owner.getEventBus().after().mPlayerBreakBlock.emit(broken);
@@ -1035,10 +1544,222 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         scriptEvent.execute(playerOrigin, {"other:pong"});
         require(!scriptEvent.execute(console, {"minecraft:nope", "x"}), "a minecraft namespace was accepted");
         require(!scriptEvent.execute(console, {"nonamespace"}), "an id without namespace was accepted");
+        ItemStack apple = owner.createItemStack("minecraft:apple", 1);
+        engine.onItemStartUse(player, apple, 32);
+        engine.onItemStopUse(player, owner.createItemStack("minecraft:bow", 1), 5, true);
+        engine.onItemCompleteUse(player, apple, 0);
+        ItemStack diamonds = owner.createItemStack("minecraft:diamond", 2);
+        ItemActor *dropped = ItemActorHandler::dropItem(owner, world.getOverworld(), Vector3f(0.5f, 100.0f, 1.5f),
+                                                        diamonds, Vector3f(0.0f, 0.0f, 0.0f), 0);
+        require(dropped != nullptr, "no fixture item entity");
+        require(!engine.beforeEntityItemPickup(player, *dropped, diamonds), "a player pickup was cancelled");
+        engine.onEntityItemPickup(player, diamonds);
+        require(engine.beforeEntityItemPickup(*piglin, *dropped, diamonds), "entityItemPickup did not cancel");
+        player.getInventory().setCursor(owner.createItemStack("minecraft:diamond", 1));
+        // the items pack clears it at tick 2: a grab then a release
         for (int64_t tick = 1; tick <= 3; ++tick)
             engine.tick(tick);
 
+        // custom commands: in the command map under both names, parsed from a player and gated by cheats
+        CommandMap &commands = owner.getCommands();
+        Command *echo = commands.getCommand("cmd:echo");
+        require(echo != nullptr && commands.getCommand("echo") == echo, "cmd:echo is not reachable by its alias");
+        require(commands.getCommand("cmd:give") != nullptr
+                        && commands.getCommand("give") != commands.getCommand("cmd:give"),
+                "a custom command took a vanilla name");
+        require(commands.getCommand("cmd:bad") == nullptr && commands.getCommand("cmd:late") == nullptr,
+                "a refused custom command was registered");
+        require(commands.dispatch(playerOrigin, "echo 2 blue 1 2 3 false @s minecraft:stone"),
+                "a player could not run cmd:echo");
+        require(!commands.dispatch(playerOrigin, "cmd:echo 1.5 red"), "an integer parameter took a float");
+        require(!commands.dispatch(playerOrigin, "cmd:echo 1 green"), "an enum parameter took an unknown value");
+        require(!commands.dispatch(playerOrigin, "cmd:echo 1"), "a mandatory parameter was skipped");
+        std::vector<std::string> outputs;
+        owner.getNetworkHandler().setOutboundFilter([&outputs](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            if (Packet::peekId(header, sender, client) == MinecraftPacketIds::CommandOutput)
+                outputs.push_back(data);
+            return false;
+        });
+        require(!commands.dispatch(playerOrigin, "cmd:echo -3 red"), "a Failure status counted as success");
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        require(outputs.size() == 1, "a Failure message was not sent as command output");
+        ReadOnlyBinaryStream outputBody(outputs[0]);
+        CommandOutputPacket failure;
+        failure.readHeader(outputBody);
+        failure.read(outputBody, owner.getCodecContext());
+        require(failure.mSuccessCount == 0 && failure.mMessages.size() == 1
+                        && failure.mMessages[0].mMessageId == "negative" && !failure.mMessages[0].mInternal,
+                "a Failure message was not sent as unsuccessful output");
+        const bool wasOp = player.getCommandPermission() != CommandPermission::Any;
+        player.setOp(false);
+        require(!commands.dispatch(playerOrigin, "cmd:give"), "a non-operator ran a GameDirectors custom command");
+        // setProperties reopens the worlds: flip the one key in place
+        PropertiesSettings &serverProperties = const_cast<PropertiesSettings &>(owner.getProperties());
+        serverProperties.setProperty("allow-cheats", "false");
+        player.setOp(true);
+        require(commands.dispatch(console, "cmd:give"), "the console could not run a cheat command");
+        ScriptCommandOrigin scriptNoCheats(world.getOverworld(), nullptr);
+        require(commands.dispatch(scriptNoCheats, "cmd:give"), "a script origin could not run a cheat command");
+        require(!fromBlockCheats(world.getOverworld()), "a command block ran a cheat command without cheats");
+        require(dynamic_cast<ScriptCustomCommand *>(commands.getCommand("cmd:give"))->requiresCheats(),
+                "cheatsRequired does not default to true");
+        require(!commands.dispatch(playerOrigin, "cmd:give"), "a cheat command ran without cheats");
+        require(commands.dispatch(playerOrigin, "echo 7 red"), "cheatsRequired false was refused without cheats");
+        serverProperties.setProperty("allow-cheats", "true");
+        player.setOp(false);
+        BlockOrigin fromBlock(world.getOverworld(), Vector3i(0, 101, 8));
+        require(commands.dispatch(fromBlock, "echo 8 red"), "a command block could not run cmd:echo");
+
+        // the commands reach the client with their aliases, parameter types and enums
+        std::vector<std::string> advertised;
+        owner.getNetworkHandler().setOutboundFilter([&advertised](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            if (Packet::peekId(header, sender, client) == MinecraftPacketIds::AvailableCommands)
+                advertised.push_back(data);
+            return false;
+        });
+        LoginHandler::sendAvailableCommands(owner, player);
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        require(advertised.size() == 1, "no AvailableCommandsPacket");
+        ReadOnlyBinaryStream commandsBody(advertised[0]);
+        AvailableCommandsPacket available;
+        available.readHeader(commandsBody);
+        available.read(commandsBody, owner.getCodecContext());
+        const CommandData *echoData = nullptr;
+        bool adminSent = false;
+        for (const CommandData &data: available.mCommands) {
+            if (data.mName == "cmd:echo")
+                echoData = &data;
+            adminSent = adminSent || data.mName == "cmd:give";
+        }
+        require(echoData != nullptr && !adminSent, "custom commands were not filtered by permission");
+        require(echoData->mDescription == "echo" && echoData->mHasAliases
+                        && echoData->mAliases.mValues == std::vector<std::string>({"cmd:echo", "echo"}),
+                "cmd:echo was sent without its alias");
+        require(echoData->mOverloads.size() == 1 && echoData->mOverloads[0].mParameters.size() == 6,
+                "cmd:echo was sent without its parameters");
+        const std::vector<CommandParamData> &sentParameters = echoData->mOverloads[0].mParameters;
+        require(sentParameters[0].mType == CommandParamType::Int && !sentParameters[0].mOptional,
+                "the Integer parameter was not sent as an int");
+        require(sentParameters[1].mHasEnumData && sentParameters[1].mEnumData.mName == "cmd:color"
+                        && sentParameters[1].mEnumData.mValues == std::vector<std::string>({"red", "blue"}),
+                "the script enum was not sent");
+        require(sentParameters[2].mType == CommandParamType::Position && sentParameters[2].mOptional,
+                "the Location parameter was not sent as a position");
+        require(sentParameters[3].mHasEnumData && sentParameters[3].mEnumData.mName == "Boolean",
+                "the Boolean parameter was not sent as the Boolean enum");
+        require(sentParameters[4].mType == CommandParamType::Target, "the selector was not sent as a target");
+        require(sentParameters[5].mHasEnumData && sentParameters[5].mEnumData.mName == "Block",
+                "the BlockType parameter was not sent as the Block enum");
+        // the script origin: permission level 1, its own name, one count per output
+        ScriptCommandOrigin fromScript(world.getOverworld(), nullptr);
+        require(fromScript.getCommandPermission() == CommandPermission::GameDirectors,
+                "the script origin does not run at level 1");
+        require(fromScript.getSenderName() == "Script Engine", "the script origin is not named Script Engine");
+        fromScript.sendTranslation("commands.kill.successful", {"a"});
+        fromScript.sendTranslation("commands.kill.successful", {"b"});
+        fromScript.sendTranslation("commands.generic.noTargetMatch", {});
+        require(fromScript.getOutputCount() == 2, "an error output counted as a success");
+        Vector3f local;
+        require(Command::parsePosition({"^", "^", "^2"}, 0, Vector3f(1.0f, 2.0f, 3.0f), Vector3f(0.0f, 0.0f, 0.0f),
+                                       local)
+                        && std::fabs(local.x - 1.0f) < 0.001f && std::fabs(local.z - 5.0f) < 0.001f,
+                "^ ^ ^2 did not move forward along +z");
+        require(Command::parsePosition({"^1", "^", "^"}, 0, Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 90.0f, 0.0f),
+                                       local)
+                        && std::fabs(local.z - 1.0f) < 0.001f && std::fabs(local.x) < 0.001f,
+                "^1 is not to the left facing west");
+        require(Command::parsePosition({"^", "^1", "^"}, 0, Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 0.0f, 0.0f),
+                                       local)
+                        && std::fabs(local.y - 1.0f) < 0.001f,
+                "^ ^1 ^ did not move up");
+        require(!Command::parsePosition({"^", "~", "^"}, 0, Vector3f(), Vector3f(), local), "^ mixed with ~ parsed");
+        ScriptCommandOrigin fromCow(world.getOverworld(), cow);
+        const std::vector<ServerActor *> selfTargets = owner.resolveActorTargets(fromCow, "@s");
+        require(selfTargets.size() == 1 && selfTargets[0] == cow, "@s of a cow did not resolve to it");
+        require(owner.resolveActorTargets(fromCow, "@s[type=minecraft:pig]").empty(), "@s ignored its type filter");
+        ExecuteCommandOrigin executedFromCow(fromCow, nullptr, cow->getPosition(), cow->getRotation(),
+                                             &world.getOverworld());
+        const std::vector<ServerActor *> executedTargets = owner.resolveActorTargets(executedFromCow, "@s");
+        require(executedTargets.size() == 1 && executedTargets[0] == cow, "execute lost the cow running it");
+        require(commands.dispatch(playerOrigin, "beta:toggle off"), "an enumName parameter did not parse");
+        player.setOp(wasOp);
+
+        // an entity container opens with the actor's id, saves as ChestItems and loads back
+        std::vector<ContainerOpenPacket> opened;
+        owner.getNetworkHandler().setOutboundFilter([&opened, &owner](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            if (Packet::peekId(header, sender, client) == MinecraftPacketIds::ContainerOpen) {
+                ReadOnlyBinaryStream body(data);
+                ContainerOpenPacket packet;
+                packet.readHeader(body);
+                packet.read(body, owner.getCodecContext());
+                opened.push_back(packet);
+            }
+            return false;
+        });
+        InventoryManager &windows = player.getInventoryManager();
+        require(windows.openEntityContainer(*minecart, ContainerType::MinecartChest),
+                "the chest minecart did not open");
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        require(opened.size() == 1 && opened.front().mUniqueActorId == minecart->getUniqueId()
+                        && opened.front().mType == ContainerType::MinecartChest,
+                "ContainerOpenPacket does not name the minecart");
+        require(windows.getContainer() == minecart->getEntityContainer()
+                        && windows.getContainer()->getContainerItem(4).mCount == 7,
+                "the open window does not reach the minecart inventory");
+        require(!windows.openEntityContainer(*cow, ContainerType::Horse), "a cow opened an inventory");
+        windows.onClientRemoveWindow(windows.getContainerWindowId());
+        require(windows.getContainerActorId() == -1 && !windows.isContainerOpen(), "the window did not close");
+        const Tag savedCart = minecart->saveNbt();
+        const Tag *chestItems = savedCart.get("ChestItems");
+        require(chestItems != nullptr && chestItems->getList().size() == 1
+                        && chestItems->getList().front().getByte("Slot") == 4,
+                "the minecart items were not saved as ChestItems");
+        ChestVehicleActor reloaded(9999, "minecraft:chest_minecart", ActorSize{0.98f, 0.7f});
+        Tag legacy = Tag::ofCompound();
+        legacy.put("Items", *chestItems);
+        reloaded.loadEquipment(legacy, owner.getCodecContext());
+        require(reloaded.getEntityContainer()->getContainerItem(4).mCount == 7, "Items did not load");
+
+        // the script edits land in the game's NBT, as the game saves them
+        const ItemStack &edited = player.getInventory().getItem(5);
+        require(edited.mDefinition != nullptr && edited.mDefinition->getIdentifier() == "minecraft:diamond_sword"
+                        && edited.mDamage == 10,
+                "the scripted sword did not reach the inventory");
+        const Tag *display = edited.mTag.get("display");
+        require(display != nullptr && display->getString("Name") == "Renamed"
+                        && display->get("Lore")->getList().size() == 2,
+                "the name tag and lore were not written to display");
+        const Tag *enchantments = edited.mTag.get("ench");
+        require(enchantments != nullptr && enchantments->getList().size() == 1
+                        && enchantments->getList().front().getShort("id") == 9
+                        && enchantments->getList().front().getShort("lvl") == 3,
+                "the enchantment was not written to ench");
+        require(edited.mTag.getByte("minecraft:keep_on_death") == 1 && edited.mTag.getByte("minecraft:item_lock") == 1
+                        && edited.mCanBreak.size() == 1 && edited.mCanBreak.front() == "minecraft:stone"
+                        && edited.mTag.get("DynamicProperties") != nullptr,
+                "keepOnDeath, lockMode, canDestroy or dynamic properties were lost");
+        require(player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD).mDefinition->getIdentifier()
+                                == "minecraft:diamond_helmet"
+                        && player.getInventory().getOffhand().mDefinition->getIdentifier() == "minecraft:shield",
+                "setEquipment did not reach the armor and offhand");
+        require(EnderChestInventoryStore::getInstance().get(player.getUniqueId()).getContainerItem(0).mCount == 4,
+                "the ender inventory was not written");
+        require(piglinMob->getEquipment().getSlot(MobEquipment::MAINHAND).mDefinition->getIdentifier()
+                                == "minecraft:golden_sword"
+                        && piglinMob->getEquipment().getInventoryItem(1).mCount == 3,
+                "the piglin equipment or inventory was not written");
+
+        require(wolfMob->getEntityContainer() == nullptr, "a wolf opens an inventory");
         if (static_cast<MobActor *>(horse)->isTamed()) {
+            Container *saddleBags = horse->getEntityContainer();
+            require(saddleBags != nullptr && saddleBags->getContainerSize() == 2,
+                    "a tamed horse has no two slot inventory to open");
             {
                 ServerActor *copy = owner.spawnActor(world.getOverworld(), "minecraft:horse",
                                                      Vector3f(-8.5f, 100.0f, 4.5f));
@@ -1050,6 +1771,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                 owner.removeActor(copy->getUniqueId());
             }
         }
+        // the player is erased below: later checks keep its id, never the reference
+        const int64_t playerUniqueId = player.getUniqueId();
         engine.beforePlayerLeave(player);
         owner.getPlayers().erase(id);
         for (int64_t tick = 4; tick <= 8; ++tick)
@@ -1087,16 +1810,73 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(restored.registerClock("test:clock", {}, markerError) == WorldClockError::None
                         && restored.find("test:clock")->mTime == 5 && restored.find("test:clock")->mPaused,
                 "a registered clock did not take its saved state");
+        int64_t levelTime = 1000;
+        bool levelPaused = false;
+        WorldClockSystem::LevelTime binding;
+        binding.mGet = [&levelTime]() { return levelTime; };
+        binding.mSet = [&levelTime](int64_t value) { levelTime = value; };
+        binding.mSetPaused = [&levelPaused](bool paused) { levelPaused = paused; };
+        restored.bindOverworld(binding);
+        WorldClock *overworldClock = restored.find("minecraft:overworld");
+        require(overworldClock->mTime == 1000, "the overworld clock does not start at the level's time");
+        levelTime = 1001;
+        restored.tick();
+        require(overworldClock->mTime == 1001, "the overworld clock does not follow the level's time");
+        restored.setTime(*overworldClock, 6000);
+        require(levelTime == 6000, "setting the overworld clock does not set the level's time");
+        restored.setPaused(*overworldClock, true);
+        require(levelPaused, "pausing the overworld clock does not stop the level's day");
+        restored.setPaused(*overworldClock, false);
         SyncWorldClocksPacket states;
         restored.writeStates(states);
         require(states.mType == SyncWorldClocksType::SyncState && states.mClockStates.size() == 2
                         && states.mClockStates.front().mClockId == 0x63D7EDE73C38F916ull,
                 "the periodic sync does not carry every clock under its hashed id");
+
         const std::unique_ptr<json::Value> entities = result(owner, "entities");
         const json::Value &e = *entities;
         if (e.get("error") != nullptr)
             require(false, "the entities pack threw: " + text(e, "error"));
+        expect(e, "idBefore", std::to_string(loadedId - 77));
+        expect(e, "idAfter", "true:" + std::to_string(loadedId));
         expect(e, "enums", "void,entityAttack,Born,SelfHeal,Jump,Pressed,Touch,Attack,2,2");
+        if (e.get("sbError") != nullptr)
+            require(false, "the scoreboard part threw: " + text(e, "sbError"));
+        expect(e, "sbClasses", "true,true,ReferenceError: No constructor for native class 'ScoreboardObjective'.");
+        expect(e, "sbNone", "true");
+        expect(e, "sbObjective", "test:kills,Kills,true,test:kills,undefined");
+        expect(e, "sbDuplicate", "Error: Failed to add objective 'test:kills' as it is already being tracked.");
+        expect(e, "sbAdd", "7,3,-1");
+        expect(e, "sbIdentity", "true,Player,ScriptPlayer,true,true,number");
+        expect(e, "sbCalf", "Entity,\"\"");
+        expect(e, "sbScores", "true:Player=7;true:FakePlayer=3;true:Entity=-1");
+        expect(e, "sbGet", "7,undefined,true,true");
+        expect(e, "sbOverflow",
+               "Error: Encountered an integer overflow when trying to modify objective score for "
+               "participant 'fake'.");
+        expect(e, "sbQuery", "1,1,1,1,0");
+        expect(e, "sbDisplay", "true,test:kills,0");
+        expect(e, "sbParticipants", "3,3");
+        expect(e, "sbRemoveParticipant", "true,false");
+        expect(e, "sbBadSlot", "TypeError: Native type conversion failed.");
+        expect(e, "sbClear", "test:kills,true");
+        expect(e, "sbRemove", "true,false,Error: Failed to find objective 'test:other'.,false");
+        expect(e, "sbStale", "Error: Failed to set invalid objective at DisplaySlot.");
+        expect(e, "sbReAdded", "false");
+        expect(e, "sbEnums", "BelowName,1,FakePlayer");
+        {
+            Scoreboard &board = owner.getScoreboard();
+            const ScoreboardObjective *kills = board.getObjective("test:kills");
+            const ScoreboardIdentity *kept = board.findFakePlayer("kept");
+            require(kills != nullptr && kept != nullptr && *kills->find(kept->mId) == 42
+                            && board.getDisplay("belowname") != nullptr
+                            && board.getDisplay("belowname")->mObjective == "test:kills",
+                    "the script scoreboard did not reach the server scoreboard");
+            const ScoreboardIdentity *scripted = board.findActor(playerUniqueId);
+            require(scripted != nullptr && scripted->mType == ScoreboardIdentityType::Player
+                            && *kills->find(scripted->mId) == 7,
+                    "the player's script score is not the server's");
+        }
         expect(e, "componentIds", "minecraft:health,minecraft:type_family,minecraft:movement");
         expect(e, "componentChain", "true");
         expect(e, "typesConstructor", "ReferenceError");
@@ -1111,6 +1891,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "navigation", "true:undefined");
         expect(e, "localization", "entity.cow.name,entity.cow.name,minecraft:cow,true,true");
         expect(e, "effectTypes", "speed,true,true");
+        expect(e, "effectName", "Speed II|potion.digSpeed");
         expect(e, "addEffect", "true:1:40:true");
         expect(e, "cancelledEffect", "true");
         expect(e, "effects", "speed");
@@ -1121,7 +1902,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "projectileOption", "TypeError");
         expect(e, "rotation", "10,20");
         expect(e, "lookAt", "0");
-        expect(e, "entityRay", "2:false:5.03:0:1");
+        expect(e, "entityRay", "2:false:5.74:0:1");
         expect(e, "blockRay", "true");
         expect(e, "shapeRay", "minecraft:oak_fence:North:0.375");
         expect(e, "filterRay", "8:8:true:true");
@@ -1132,7 +1913,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "pending", "rejected");
         expect(e, "blockedTeleport", "false");
         expect(e, "teleport", "true:200:90");
-        expect(e, "teleportBounds", "LocationOutOfWorldBoundariesError");
+        expect(e, "teleportBounds", "ok");
         expect(e, "entityDynamic", "two:true");
         expect(e, "resetProperty", "function");
         expect(e, "matchesLevel", "true,false,false,true");
@@ -1152,18 +1933,85 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "killed", "true");
         expect(e, "events",
                "spawn:minecraft:cow:Spawned;spawn:minecraft:cow:Born;spawn:minecraft:wolf:Spawned;"
-               "beforeTame:minecraft:wolf;tamed:minecraft:wolf:true;spawn:minecraft:horse:Spawned;health:20>10;"
+               "beforeTame:minecraft:wolf;tamed:minecraft:wolf:true;spawn:minecraft:horse:Spawned;spawn:minecraft:piglin:Spawned;spawn:minecraft:chest_minecart:Spawned;health:20>10;"
                "health:10>12;heal:2:Regeneration;health:12>11;hurt:minecraft:player:1:magic:false;emote:emote:wave;button:Jump:Pressed;"
                "mode:KeyboardAndMouse>Touch;swing:Attack;sneak:minecraft:player;unsneak:minecraft:player;"
                "interact:minecraft:cow;dimension:minecraft:overworld>minecraft:nether;effect:speed:40:true;"
-               "dimension:minecraft:overworld>test:void;dimension:test:void>minecraft:overworld;"
-               "effect:speed:40:true;hurt:minecraft:cow:3:fall:true;"
+               "effect:speed:40:true;effect:haste:200:true;hurt:minecraft:cow:3:fall:true;"
                "trigger:minecraft:ageable_grow_up:[{\"addedComponentGroups\":[\"minecraft:cow_adult\"],"
                "\"removedComponentGroups\":[\"minecraft:cow_baby\"]}];"
                "gm:Survival>Creative;die:minecraft:cow:override;spawn:minecraft:horse:Spawned;"
                "beforeRemove:minecraft:horse;remove:minecraft:horse;leaving:true;");
 
+        const std::unique_ptr<json::Value> items = result(owner, "items");
+        const json::Value &it = *items;
+        if (it.get("error") != nullptr)
+            require(false, "the items pack threw: " + text(it, "error"));
+        expect(it, "constructed", "minecraft:diamond_sword:1:1:false:true:minecraft:diamond_sword");
+        expect(it, "badType", "TypeError");
+        expect(it, "badAmount", "ArgumentOutOfBoundsError");
+        expect(it, "clamped", "16");
+        expect(it, "meta", "Blade:2:second:first:true:slot");
+        expect(it, "loreBounds", "ArgumentOutOfBoundsError");
+        expect(it, "canDestroy", "minecraft:stone:TypeError");
+        expect(it, "dynamic", "me:TypeError");
+        expect(it, "clone", "2:true:Blade:me");
+        expect(it, "stackable", "true:false:true");
+        expect(it, "durability", "true:1562:10:ArgumentOutOfBoundsError:ArgumentOutOfBoundsError");
+        expect(it, "enchant", "true:1:3:false:Sword");
+        expect(it, "enchantErrors",
+               "EnchantmentTypeUnknownIdError,EnchantmentLevelOutOfBoundsError,"
+               "EnchantmentTypeNotCompatibleError,false,true");
+        expect(it, "enchantTypes", "minecraft:flame:1:true:true:Sword");
+        expect(it, "components", "minecraft:durability,minecraft:enchantable");
+        expect(it, "food", "true:4:0.3:false:true");
+        expect(it, "cooldown", "true:minecraft:ender_pearl:true");
+        expect(it, "potion",
+               "minecraft:splash_potion:true:minecraft:swiftness:ThrownSplash:3600:true:3:"
+               "InvalidPotionEffectTypeError");
+        expect(it, "bookBefore", "true:5:inserted:true:raw:false:BookPageContentError");
+        expect(it, "bookTitle", "BookError:ExceedsTitleLength");
+        expect(it, "bookSigned", "minecraft:written_book:true:Story:ScriptPlayer");
+        expect(it, "bundle", "true:3:1:3:2");
+        expect(it, "inventory", "true:true:36:36:36");
+        expect(it, "container", "true:Blade:0:12:3:true:ArgumentOutOfBoundsError");
+        expect(it, "slot", "true:true:Renamed:minecraft:diamond_sword:undefined:true:2");
+        expect(it, "moved", "1:true:2");
+        expect(it, "transferred", "true:true");
+        expect(it, "equipment", "true:minecraft:diamond_helmet:minecraft:shield:3:2");
+        expect(it, "ender", "true:27:4");
+        expect(it, "cursor", "true:false");
+        expect(it, "playerComponents",
+               "minecraft:cursor_inventory,minecraft:ender_inventory,minecraft:equippable,"
+               "minecraft:inventory");
+        expect(it, "mob", "8:none:false:3:minecraft:golden_sword:true");
+        expect(it, "itemTypes", "true:item.apple.name");
+        expect(it, "dynamicMore", "test:a,test:b:true");
+        expect(it, "toolMore", "0:minecraft:dirt:true:{\"min\":100,\"max\":100}:50:true:false");
+        expect(it, "enchantMore", "minecraft:unbreaking1");
+        expect(it, "enchantCleared", "0:Pickaxe");
+        expect(it, "dye", "255,128:true:true");
+        expect(it, "compost", "30");
+        expect(it, "bookMore", "a,~:~,b:true:true");
+        expect(it, "potionsMore", "49:Consume:true:minecraft:potion");
+        expect(it, "cooldownMore", "20:true");
+        expect(it, "inventoryMore", "inventory:false:false:false:0:true");
+        expect(it, "cursorMore", "ok:true:true:true");
+        expect(it, "rules", "ContainerRulesError:BannedItem");
+        expect(it, "cart", "27:minecart_chest:true:27:7:true");
+        expect(it, "blockProperties", "5:true:5:true");
+        expect(it, "blockPropertiesCleared", "undefined");
+        expect(it, "stateMatches", "true:false:false:false");
+        expect(it, "blockType", "minecraft:stone:true:true");
+        expect(it, "events",
+               "complete:test:wand:ScriptPlayer;start:minecraft:apple:32;release:minecraft:bow:5;stop:minecraft:bow:5;"
+               "complete:minecraft:apple:ScriptPlayer;beforePickup:minecraft:player:minecraft:item;"
+               "pickup:minecraft:player:minecraft:diamondx2;beforePickup:minecraft:piglin:minecraft:item;"
+               "change:3:Hotbar:->minecraft:diamond;hotbar:3;opened:minecraft:chest_minecart:minecraft:player;"
+               "closed:minecraft:chest_minecart:minecraft:player;");
+
         const std::unique_ptr<json::Value> betaEntities = result(owner, "betaEntities");
+        expect(*betaEntities, "cursor", "grab:minecraft:diamond;release:minecraft:diamond:ScriptPlayer;");
         expect(*betaEntities, "target", "true");
         expect(*betaEntities, "betaPlayer", "true");
         expect(*betaEntities, "chat", "[A] ScriptPlayer!:§a");
@@ -1306,6 +2154,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                "truetrue");
         expect(c, "onCompleteUse", "ItemComponentCompleteUseEvent|itemStack+source|{}");
         expect(c, "onConsume", "ItemComponentConsumeEvent|itemStack+source|{}");
+        // onConsume needs minecraft:food and runs before onCompleteUse
+        expect(c, "useOrder", "test:wand:complete;test:snack:consume;test:snack:complete;");
         expect(c, "onHitEntity", "ItemComponentHitEntityEvent|attackingEntity+hadEffect+hitEntity+itemStack|{}");
         expect(c, "onBeforeDurabilityDamage",
                "ItemComponentBeforeDurabilityDamageEvent|attackingEntity+durabilityDamage+hitEntity+itemStack|{}|2");
@@ -1346,7 +2196,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(c, "overworld",
                "minecraft:day@1000/24000,minecraft:noon@6000/24000,minecraft:sunset@12000/24000,"
                "minecraft:night@13000/24000,minecraft:midnight@18000/24000,minecraft:sunrise@23000/24000");
-        expect(c, "clockTime", "9");
+        expect(c, "clockTime", "8");
         expect(c, "rewind", "ok@7");
         expect(c, "skip", "ok@7");
         expect(c, "setMarker", "ok@2");
@@ -1377,6 +2227,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*stable1, "systemBefore", "false");
         expect(*stable1, "early", "ok");
         expect(*stable1, "startupEvent", "false");
+        expect(*stable1, "sbValidMethod", "function,function");
         expect(*stable1, "register", "ok");
         expect(*stable1, "legacyName", "CustomComponentNameError,1");
         expect(*stable1, "legacyInteract", "1|BlockComponentPlayerInteractEvent");
@@ -1387,6 +2238,60 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*beta, "alone", "true");
         expect(*beta, "chatSend", "true");
         expect(*beta, "form", "true");
+
+        const std::unique_ptr<json::Value> custom = result(owner, "commands");
+        expect(*custom, "enums", "PlayerSelector,1,Server,EnumDependencyMissing,2");
+        expect(*custom, "registry", "true");
+        expect(*custom, "enumAdd", "ok");
+        expect(*custom, "enumDuplicate",
+               "CustomCommandError,AlreadyRegistered,Custom Command Enum 'cmd:color' was already registered.");
+        expect(*custom, "enumNoNamespace", "NamespaceNameError,NoNamespace,");
+        expect(*custom, "enumMismatch",
+               "CustomCommandError,NamespaceMismatch,Custom Command Enum namespaces must match. Namespace 'other' does not "
+               "match existing namespace 'cmd'.");
+        expect(*custom, "register", "ok");
+        expect(*custom, "duplicate",
+               "CustomCommandError,AlreadyRegistered,Custom Command 'cmd:echo' was already registered.");
+        expect(*custom, "noNamespace", "NamespaceNameError,NoNamespace,");
+        expect(*custom, "mismatch",
+               "CustomCommandError,NamespaceMismatch,Custom Command Enum namespaces must match. Namespace 'other' does not "
+               "match existing namespace 'cmd'.");
+        expect(*custom, "missingEnum",
+               "CustomCommandError,EnumDependencyMissing,Custom Command depends on one or more unknown enums [cmd:nope].");
+        expect(*custom, "badType", "TypeError: Native type conversion failed.");
+        expect(*custom, "give", "ok");
+        expect(*custom, "limit",
+               "CustomCommandError,ParameterLimit,Custom Command 'cmd:nine' has '9' parameters, the limit is '8'.");
+        expect(*custom, "eight", "ok");
+        expect(*custom, "admin", "ok");
+        expect(*custom, "adminDenied",
+               "CommandError: "
+                       + Localization::getInstance().translate("commands.generic.error.permissions",
+                                                               std::vector<std::string>{"cmd:admin"}));
+        expect(*custom, "late",
+               "CustomCommandError,RegistryInvalid,Custom Command registration failed outside of the ModuleStartup event.");
+        expect(*custom, "lateEnum",
+               "CustomCommandError,RegistryInvalid,Custom Command Enum registration failed outside of the ModuleStartup "
+               "event.");
+        expect(*custom, "dimension", "true,1|true,Server,none,none,4,red,1/2/3,undefined,undefined,undefined");
+        expect(*custom, "failed", "0");
+        expect(*custom, "unknown",
+               "CommandError: Unknown command: nosuchcommand. Please check that the command exists "
+               "and that you have permission to use it.");
+        expect(*custom, "parse", "CommandError: 'x' is not a valid number");
+        expect(*custom, "playerRun",
+               "1|true,Entity,minecraft:player,none,6,blue,5/6/7,true,minecraft:player,undefined");
+        expect(*custom, "restricted", "true");
+        expect(*custom, "last", "true,Block,none,block,8,red,undefined,undefined,undefined,undefined");
+        expect(*custom, "secret", "true,Server,none,none");
+        expect(*custom, "calls", "7");
+
+        const std::unique_ptr<json::Value> betaCommands = result(owner, "betacommands");
+        expect(*betaCommands, "named", "ok");
+        expect(*betaCommands, "state", "off");
+        expect(*betaCommands, "unexpected",
+               "CustomCommandError,UnexpectedEnumName,Custom Command parameter 'n' using enumName 'beta:mode' but is not "
+               "an Enum type.");
 
         const auto &properties = owner.getWorldDynamicProperties();
         require(properties.find("undeclared") == properties.end(), "an undeclared module was importable");
@@ -1404,6 +2309,9 @@ int main() {
     try {
         std::filesystem::create_directories(directory);
         ServerPaths::setRoot(directory);
+        // the game's file: tab comments, crlf; haste is left out to check the key comes back
+        writeFile(directory / "resource_packs" / "vanilla" / "texts" / "en_US.lang",
+                  "## effects\npotion.moveSpeed=Speed\t#\r\npotion.potency.1=II\n");
         run(directory);
     } catch (const std::exception &error) {
         std::clog << "Script API regression failed: " << error.what() << '\n';

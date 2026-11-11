@@ -1,5 +1,6 @@
 #include "Server/Commands/Command.h"
 
+#include "Core/Math/MathConstants.h"
 #include "World/Actor/Player/ServerPlayer.h"
 
 #include <cerrno>
@@ -70,6 +71,44 @@ bool Command::parseCoordinate(const std::string &value, float origin, float &out
     }
 
     out = relative ? origin + parsed : parsed;
+    return true;
+}
+
+bool Command::parsePosition(const std::vector<std::string> &arguments, size_t first, const Vector3f &origin,
+                            const Vector3f &rotation, Vector3f &out) {
+    if (arguments.size() < first + 3)
+        return false;
+
+    size_t local = 0;
+    for (size_t index = first; index < first + 3; ++index)
+        local += !arguments[index].empty() && arguments[index][0] == '^' ? 1 : 0;
+    if (local == 0)
+        return parseCoordinate(arguments[first], origin.x, out.x)
+               && parseCoordinate(arguments[first + 1], origin.y, out.y)
+               && parseCoordinate(arguments[first + 2], origin.z, out.z);
+    // ^ cannot mix with world coordinates
+    if (local != 3)
+        return false;
+
+    float offsets[3];
+    for (size_t index = 0; index < 3; ++index) {
+        const std::string number = arguments[first + index].substr(1);
+        if (!parseCoordinate(number.empty() ? "~" : "~" + number, 0.0f, offsets[index]))
+            return false;
+    }
+
+    // sub_145565640: forward is the view vector, up the pitch less 90 degrees, left (cos yaw, 0, sin yaw) = up x forward
+    const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
+    const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
+    const Vector3f forward(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
+    const float upPitch = pitch - MathConstants::PI_F / 2.0f;
+    const Vector3f up(-std::sin(yaw) * std::cos(upPitch), -std::sin(upPitch), std::cos(yaw) * std::cos(upPitch));
+    // left = up x forward
+    const Vector3f left(up.y * forward.z - up.z * forward.y, up.z * forward.x - up.x * forward.z,
+                        up.x * forward.y - up.y * forward.x);
+    out = Vector3f(origin.x + left.x * offsets[0] + up.x * offsets[1] + forward.x * offsets[2],
+                   origin.y + left.y * offsets[0] + up.y * offsets[1] + forward.y * offsets[2],
+                   origin.z + left.z * offsets[0] + up.z * offsets[1] + forward.z * offsets[2]);
     return true;
 }
 

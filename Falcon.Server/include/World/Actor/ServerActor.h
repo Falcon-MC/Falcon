@@ -20,6 +20,7 @@
 #include <vector>
 
 struct CustomActorDefinition;
+class Container;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -153,6 +154,11 @@ public:
     virtual void loadEquipment(const Tag &data, const PacketCodecContext &context) {
         (void) data;
         (void) context;
+    }
+
+    // the minecraft:inventory a player can open: chest vehicles, chested and tamed mounts
+    virtual Container *getEntityContainer() {
+        return nullptr;
     }
 
     virtual int32_t getDeathDuration() const {

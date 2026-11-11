@@ -22,12 +22,14 @@
 #include "World/Level/World.h"
 #include "World/Level/WorldManager.h"
 #include "Scripting/Content/CustomContentRegistry.h"
+#include "Scripting/VanillaTexts.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <unordered_map>
 
 using namespace ScriptValues;
 
@@ -265,7 +267,8 @@ namespace {
         if (hasMax && (target.mPlayer == nullptr || playerLevelOf(target) > level))
             return false;
 
-        return rotationMatches(ctx, target, options) && propertiesMatch(ctx, target, options);
+        return rotationMatches(ctx, target, options) && propertiesMatch(ctx, target, options)
+               && target.mApi->scoresMatch(*target.mActor, options);
     }
 
     JSValue entityGetTypeId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -372,7 +375,7 @@ namespace {
         }
         if (target.mServerActor != nullptr)
             return target.mServerActor->getSize();
-        // TODO: the item entity box is unverified
+        // the item entity's setSize(0.25, 0.25): sub_1438CA890
         return ActorSize{0.25f, 0.25f};
     }
 
@@ -526,17 +529,95 @@ namespace {
         return array;
     }
 
-    Vector3f headOf(const EntityTarget &target) {
-        const Vector3f &position = target.mActor->getPosition();
-        // TODO: the game's eye height of mobs is unverified; 1.62 for a standing player, 0.85 of the box otherwise
-        const float eyes = target.mPlayer != nullptr && sizeOf(target).mHeight == MovementPhysics::PLAYER_HEIGHT
-                                   ? 1.62f
-                                   : sizeOf(target).mHeight * 0.85f;
-        return Vector3f(position.x, position.y + eyes, position.z);
+    // relative head offsets: up times the box height, forward times the box width (sub_14297BAA0 callers)
+    struct HeadOffset {
+        const char *mIdentifier;
+        float mForward;
+        float mUp;
+    };
+
+    const HeadOffset HEAD_OFFSETS[] = {
+            {"minecraft:armadillo", 0.6f, 0.84f},
+            {"minecraft:axolotl", 0.85f, 0.85f},
+            {"minecraft:bee", 0.85f, 0.85f},
+            {"minecraft:breeze", 0.0f, 0.7f},
+            {"minecraft:camel", 0.85f, 0.85f},
+            {"minecraft:camel_husk", 0.85f, 0.85f},
+            {"minecraft:cat", 0.85f, 0.85f},
+            {"minecraft:chicken", 0.85f, 0.85f},
+            {"minecraft:cow", 0.85f, 0.85f},
+            {"minecraft:ender_dragon", -0.4375f, 0.25f},
+            {"minecraft:ghast", 0.0f, 0.5f},
+            {"minecraft:goat", 0.85f, 0.85f},
+            {"minecraft:happy_ghast", 0.0f, 0.5f},
+            {"minecraft:horse", 0.85f, 0.85f},
+            {"minecraft:llama", 0.85f, 0.85f},
+            {"minecraft:mooshroom", 0.85f, 0.85f},
+            {"minecraft:nautilus", -0.6f, 0.25f},
+            {"minecraft:ocelot", 0.85f, 0.85f},
+            {"minecraft:panda", 0.85f, 0.95f},
+            {"minecraft:parrot", 0.85f, 0.85f},
+            {"minecraft:pig", 0.85f, 0.85f},
+            {"minecraft:polar_bear", 0.85f, 0.85f},
+            // its constructor leaves the head unset (sub_14616A9B0)
+            {"minecraft:pufferfish", 0.0f, 0.0f},
+            {"minecraft:rabbit", 0.85f, 0.85f},
+            {"minecraft:sheep", 0.85f, 0.85f},
+            {"minecraft:sniffer", 0.85f, 0.85f},
+            {"minecraft:strider", 0.85f, 0.85f},
+            {"minecraft:turtle", 0.85f, 0.85f},
+            {"minecraft:wolf", 0.85f, 0.85f},
+    };
+
+    // player position sits 1.62001 above the feet, lowered when sneaking (0.35), lying (0.4) or asleep (0.2);
+    // the head is 0.1 below it (sub_142CED370, sub_1402B5670)
+    float playerEyeHeight(const ServerPlayer &player) {
+        const ActorFlags &flags = player.getFlags();
+        if (flags.get(ActorFlag::Swimming) || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling))
+            return 0.4f;
+        if (flags.get(ActorFlag::Sneaking))
+            return 1.62001f - 0.35f;
+        if (flags.get(ActorFlag::Sleeping))
+            return 0.2f;
+        return 1.62001f;
     }
 
+    Vector3f headOf(const EntityTarget &target) {
+        const Vector3f &position = target.mActor->getPosition();
+        if (target.mPlayer != nullptr)
+            return Vector3f(position.x, position.y + playerEyeHeight(*target.mPlayer) - 0.1f, position.z);
+        // only mobs get head offsets; other actors keep theirs at the feet
+        if (dynamic_cast<const MobActor *>(target.mActor) == nullptr)
+            return position;
+
+        // the mob default: straight up, 0.85 of the box height (sub_142C1F350)
+        float forward = 0.0f, up = 0.85f;
+        const std::string &identifier = target.mRef->mTypeId;
+        for (const HeadOffset &offset: HEAD_OFFSETS) {
+            if (identifier == offset.mIdentifier) {
+                forward = offset.mForward;
+                up = offset.mUp;
+                break;
+            }
+        }
+        const ActorSize size = sizeOf(target);
+        // turned by the head yaw: sub_1437DB6A0 mode 3
+        const float yaw = target.mActor->getRotation().z * 0.017453292f;
+        const float ahead = forward * size.mWidth;
+        return Vector3f(position.x - ahead * std::sin(yaw), position.y + up * size.mHeight,
+                        position.z + ahead * std::cos(yaw));
+    }
+
+    float wrapDegrees(float angle) {
+        float wrapped = std::fmod(angle + 180.0f, 360.0f);
+        if (wrapped < 0.0f)
+            wrapped += 360.0f;
+        return wrapped - 180.0f;
+    }
+
+    // both angles wrapped to [-180, 180), never clamped (sub_14C351740)
     void applyRotation(const EntityTarget &target, float pitch, float yaw) {
-        target.mActor->setRotation(Vector3f(pitch, yaw, 0.0f));
+        target.mActor->setRotation(Vector3f(wrapDegrees(pitch), wrapDegrees(yaw), 0.0f));
         if (target.mPlayer != nullptr)
             target.mPlayer->teleport(target.mApi->host(), target.mPlayer->getPosition());
         else if (target.mServerActor != nullptr)
@@ -555,8 +636,17 @@ namespace {
         double x = 0.0, y = 0.0, z = 0.0;
         if (argc < 1 || !readVector3(ctx, argv[0], x, y, z))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        float pitch = 0.0f, yaw = 0.0f;
-        rotationTowards(headOf(target), Vector3f((float) x, (float) y, (float) z), pitch, yaw);
+        // from the state position: the eyes of a player, the feet of anything else; a zero direction gives 0
+        // (sub_14C359D90)
+        Vector3f from = target.mActor->getPosition();
+        if (target.mPlayer != nullptr)
+            from.y += playerEyeHeight(*target.mPlayer);
+        const float dx = (float) x - from.x, dy = (float) y - from.y, dz = (float) z - from.z;
+        const float epsilon = 0.00000011920929f;
+        const float yaw = std::fabs(dx) > epsilon || std::fabs(dz) > epsilon ? std::atan2(dx, dz) * -57.295776f : 0.0f;
+        const float pitch = dx * dx + dy * dy + dz * dz > epsilon
+                                    ? std::atan2(dy, std::sqrt(dz * dz + dx * dx)) * -57.295776f
+                                    : 0.0f;
         applyRotation(target, pitch, yaw);
         return JS_UNDEFINED;
     }
@@ -586,15 +676,95 @@ namespace {
 
     JSValue entityGetBlockFromViewDirection(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
-        return ScriptRayQueries::blockFromRay(ctx, target.mApi->host().getLevelFor(*target.mActor), headOf(target),
-                                              viewDirectionOf(*target.mActor), argc >= 1 ? argv[0] : JS_UNDEFINED);
+        JSValueConst options = argc >= 1 ? argv[0] : JS_UNDEFINED;
+        ScriptRaycast::BlockOptions ray;
+        if (!readRayDistance(ctx, options, ray.mMaxDistance))
+            return JS_UNDEFINED;
+        ray.mIncludeLiquids = readFlag(ctx, options, "includeLiquidBlocks");
+        ray.mIncludePassable = readFlag(ctx, options, "includePassableBlocks");
+        ray.mAccepts = [ctx, options](const BlockState &state) { return blockStatePassesFilter(ctx, state, options); };
+
+        Level &level = target.mApi->host().getLevelFor(*target.mActor);
+        ScriptRaycast::BlockHit hit;
+        if (!ScriptRaycast::castBlocks(level, headOf(target), viewDirectionOf(*target.mActor), ray, hit))
+            return JS_UNDEFINED;
+
+        JSValue result = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, result, "block",
+                          target.mApi->makeBlock(level, hit.mBlock.x, hit.mBlock.y, hit.mBlock.z));
+        JS_SetPropertyStr(ctx, result, "face", JS_NewString(ctx, hit.mFace));
+        JS_SetPropertyStr(ctx, result, "faceLocation",
+                          vector3(ctx, hit.mFaceLocation.x, hit.mFaceLocation.y, hit.mFaceLocation.z));
+        return result;
     }
 
     JSValue entityGetEntitiesFromViewDirection(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
-        return ScriptRayQueries::entitiesFromRay(ctx, target.mApi->host().getLevelFor(*target.mActor), headOf(target),
-                                                 viewDirectionOf(*target.mActor), argc >= 1 ? argv[0] : JS_UNDEFINED,
-                                                 target.mActor);
+        JSValueConst options = argc >= 1 ? argv[0] : JS_UNDEFINED;
+        JSValue array = JS_NewArray(ctx);
+        float distance = 0.0f;
+        if (!readRayDistance(ctx, options, distance))
+            return array;
+
+        ServerNetworkHandler &host = target.mApi->host();
+        Level &level = host.getLevelFor(*target.mActor);
+        const Vector3f origin = headOf(target);
+        const Vector3f direction = viewDirectionOf(*target.mActor);
+
+        // blocks stop the ray unless ignoreBlockCollision
+        if (!readFlag(ctx, options, "ignoreBlockCollision")) {
+            ScriptRaycast::BlockOptions ray;
+            ray.mMaxDistance = distance;
+            ray.mIncludeLiquids = readFlag(ctx, options, "includeLiquidBlocks");
+            ray.mIncludePassable = readFlag(ctx, options, "includePassableBlocks");
+            ScriptRaycast::BlockHit hit;
+            if (ScriptRaycast::castBlocks(level, origin, direction, ray, hit))
+                distance = std::min(distance, hit.mDistance);
+        }
+
+        std::vector<std::pair<float, JSValue>> hits;
+        const auto consider = [&](Actor &candidate, JSValue value) {
+            EntityTarget other;
+            other.mApi = target.mApi;
+            other.mRef = target.mApi->native<ScriptEntityRef>(value);
+            other.mActor = &candidate;
+            other.mPlayer = dynamic_cast<ServerPlayer *>(&candidate);
+            other.mServerActor = dynamic_cast<ServerActor *>(&candidate);
+            const ActorSize size = sizeOf(other);
+            const Vector3f &position = candidate.getPosition();
+            const float half = size.mWidth / 2.0f;
+            const float at = ScriptRaycast::intersectBox(
+                    origin, direction, Vector3f(position.x - half, position.y, position.z - half),
+                    Vector3f(position.x + half, position.y + size.mHeight, position.z + half));
+            if (at < 0.0f || at > distance || other.mRef == nullptr || !matchesQuery(ctx, other, options)) {
+                JS_FreeValue(ctx, value);
+                return;
+            }
+            hits.emplace_back(at, value);
+        };
+        for (auto &entry: host.getActors()) {
+            ServerActor &actor = *entry.second;
+            if (&actor != target.mActor && actor.isAlive() && actor.isIn(level))
+                consider(actor, target.mApi->makeActor(actor));
+        }
+        for (auto &entry: host.getPlayers()) {
+            ServerPlayer &player = entry.second;
+            if (&player != target.mActor && player.isSpawned() && player.isIn(level))
+                consider(player, target.mApi->makePlayer(player));
+        }
+
+        std::stable_sort(hits.begin(), hits.end(),
+                         [](const std::pair<float, JSValue> &left, const std::pair<float, JSValue> &right) {
+                             return left.first < right.first;
+                         });
+        uint32_t index = 0;
+        for (const auto &found: hits) {
+            JSValue entry = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, entry, "distance", JS_NewFloat64(ctx, found.first));
+            JS_SetPropertyStr(ctx, entry, "entity", found.second);
+            JS_SetPropertyUint32(ctx, array, index++, entry);
+        }
+        return array;
     }
 
     JSValue entityGetViewDirection(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -630,6 +800,49 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    void syncEntityData(const EntityTarget &target) {
+        if (target.mPlayer != nullptr)
+            target.mApi->host()._sendEntityData(*target.mPlayer);
+        else if (target.mServerActor != nullptr)
+            target.mApi->host().syncActorFlags(*target.mServerActor);
+    }
+
+    // actor flag 129 (sub_14C35A6F0, sub_14C35A770)
+    JSValue entityGetNameplateDepthTested(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        return JS_NewBool(ctx, entityOf(ctx, thisVal).mActor->getFlags().get(ActorFlag::NameplateDepthTested));
+    }
+
+    JSValue entitySetNameplateDepthTested(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const EntityTarget target = entityOf(ctx, thisVal);
+        if (argc < 1 || !JS_IsBool(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const bool tested = JS_ToBool(ctx, argv[0]) == 1;
+        if (target.mActor->getFlags().get(ActorFlag::NameplateDepthTested) == tested)
+            return JS_UNDEFINED;
+
+        target.mActor->getFlags().set(ActorFlag::NameplateDepthTested, tested);
+        syncEntityData(target);
+        return JS_UNDEFINED;
+    }
+
+    // float data 140 (sub_14C356570, sub_14C356640)
+    JSValue entityGetNameplateRenderDistance(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        return JS_NewFloat64(ctx, entityOf(ctx, thisVal).mActor->getNameplateRenderDistance());
+    }
+
+    JSValue entitySetNameplateRenderDistance(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const EntityTarget target = entityOf(ctx, thisVal);
+        double distance = 0.0;
+        if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToFloat64(ctx, &distance, argv[0]) != 0)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (target.mActor->getNameplateRenderDistance() == (float) distance)
+            return JS_UNDEFINED;
+
+        target.mActor->setNameplateRenderDistance((float) distance);
+        syncEntityData(target);
+        return JS_UNDEFINED;
+    }
+
     void removeActorLater(ServerNetworkHandler &host, int64_t uniqueId) {
         host.postToMainThread([&host, uniqueId] { host.removeActor(uniqueId); });
     }
@@ -645,8 +858,10 @@ namespace {
     }
 
     // a solid block inside the collision box at the destination
-    bool destinationBlocked(Level &level, const Vector3f &position, const ActorSize &size) {
+    // 2 for an unloaded chunk, 1 for a solid block, 0 when clear, like sub_14BE1B5A0
+    int destinationBlocked(Level &level, const Vector3f &position, const ActorSize &size) {
         const float half = size.mWidth / 2.0f;
+        int result = 0;
         for (int32_t x = (int32_t) std::floor(position.x - half); x <= (int32_t) std::floor(position.x + half); ++x) {
             for (int32_t y = (int32_t) std::floor(position.y); y <= (int32_t) std::floor(position.y + size.mHeight);
                  ++y) {
@@ -654,14 +869,14 @@ namespace {
                      ++z) {
                     const BlockState *state = level.peekBlockPtr(x, y, z);
                     if (state == nullptr)
-                        return true;
+                        return 2;
                     const BlockData *data = BlockDataTable::find(state->mName.c_str());
                     if (data != nullptr && data->mSolid)
-                        return true;
+                        result = 1;
                 }
             }
         }
-        return false;
+        return result;
     }
 
     // false when checkForBlocks found the destination blocked; throws on a malformed call
@@ -675,7 +890,7 @@ namespace {
         const Vector3f position((float) x, (float) y, (float) z);
         Level *destination = &target.mApi->host().getLevelFor(*target.mActor);
         Vector3f rotation = target.mActor->getRotation();
-        bool rotate = false, keepVelocity = false, checkForBlocks = trying;
+        bool rotate = false, keepVelocity = false, checkForBlocks = false;
         JSValueConst options = argc >= 2 ? argv[1] : JS_UNDEFINED;
         if (JS_IsObject(options)) {
             JSValue dimension = JS_GetPropertyStr(ctx, options, "dimension");
@@ -687,7 +902,8 @@ namespace {
             double pitch = 0.0, yaw = 0.0;
             if (JS_IsObject(rotationValue) && readNumber(ctx, rotationValue, "x", pitch)
                 && readNumber(ctx, rotationValue, "y", yaw)) {
-                rotation = Vector3f((float) pitch, (float) yaw, 0.0f);
+                // pitch clamped to 89 and yaw wrapped to [-180, 180) (sub_14BE16000)
+                rotation = Vector3f(std::clamp((float) pitch, -89.0f, 89.0f), wrapDegrees((float) yaw), 0.0f);
                 rotate = true;
             }
             JS_FreeValue(ctx, rotationValue);
@@ -695,10 +911,9 @@ namespace {
             JSValue facing = JS_GetPropertyStr(ctx, options, "facingLocation");
             double fx = 0.0, fy = 0.0, fz = 0.0;
             if (JS_IsObject(facing) && readVector3(ctx, facing, fx, fy, fz)) {
-                const Vector3f head = headOf(target);
-                const Vector3f eyes(position.x, position.y + (head.y - target.mActor->getPosition().y), position.z);
+                // aimed from the destination itself, not the eyes (sub_14BE16000)
                 float pitch2 = 0.0f, yaw2 = 0.0f;
-                rotationTowards(eyes, Vector3f((float) fx, (float) fy, (float) fz), pitch2, yaw2);
+                rotationTowards(position, Vector3f((float) fx, (float) fy, (float) fz), pitch2, yaw2);
                 rotation = Vector3f(pitch2, yaw2, 0.0f);
                 rotate = true;
             }
@@ -713,12 +928,24 @@ namespace {
             JS_FreeValue(ctx, check);
         }
 
-        if (position.y < (float) destination->getMinY() - 64.0f || position.y > (float) destination->getMaxY() + 64.0f)
-            return target.mApi->throwError("LocationOutOfWorldBoundariesError", "");
-        if (checkForBlocks && destinationBlocked(*destination, position, sizeOf(target))) {
-            if (trying)
+        // the game has no height check here (sub_14C35A800)
+        if (keepVelocity && target.mPlayer != nullptr)
+            return target.mApi->throwError("InvalidArgumentError",
+                                           "keepVelocity is not supported for player teleportation.");
+        // name tag then id, like sub_14C35A800
+        if (!target.mActor->isIn(*destination) && target.mActor->hasPassengers()) {
+            const std::string name = target.mPlayer != nullptr        ? target.mPlayer->getName()
+                                     : target.mServerActor != nullptr ? target.mServerActor->getNameTag()
+                                                                      : std::string();
+            return target.mApi->throwError("Error", "Entity '" + name + "' (ID: " + target.mRef->mEntityId
+                                                            + ") needs to dismount passengers before teleporting "
+                                                              "to a different dimension!");
+        }
+        // only tryTeleport looks: an unloaded chunk always fails, blocks only when checkForBlocks is set
+        if (trying) {
+            const int blocked = destinationBlocked(*destination, position, sizeOf(target));
+            if (blocked == 2 || (blocked == 1 && checkForBlocks))
                 return JS_FALSE;
-            return JS_UNDEFINED;
         }
 
         ServerNetworkHandler &host = target.mApi->host();
@@ -1049,12 +1276,7 @@ namespace {
     JSValue entityRunCommand(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
         const std::string line = argc >= 1 ? toString(ctx, argv[0]) : std::string();
-        const int32_t success = target.mPlayer != nullptr ? target.mApi->runCommandAsPlayer(*target.mPlayer, line)
-                                                          : target.mApi->runCommandAsConsole(line);
-
-        JSValue result = target.mApi->makeInstance("CommandResult", new ScriptNative());
-        JS_DefinePropertyValueStr(ctx, result, "successCount", JS_NewInt32(ctx, success), JS_PROP_ENUMERABLE);
-        return result;
+        return target.mApi->runCommand(target.mApi->host().getLevelFor(*target.mActor), target.mActor, line);
     }
 
     JSValue entityAddTag(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -1215,16 +1437,12 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // the player's inventory and equipment come from its own inventory, every other component from the entity
+    // inventories and equipment are read from the game's containers, every other component from the definition
     JSValue makeEntityComponent(const EntityTarget &target, const std::string &requested) {
         const std::string id = requested.find(':') == std::string::npos ? "minecraft:" + requested : requested;
-        if (target.mPlayer != nullptr && (id == "minecraft:inventory" || id == "minecraft:equippable")) {
-            ScriptPlayerPart *part = new ScriptPlayerPart();
-            part->mHandle = (uint32_t) target.mRef->mId;
-            part->mComponentId = id;
-            return target.mApi->makeInstance(
-                    id == "minecraft:inventory" ? "EntityInventoryComponent" : "EntityEquippableComponent", part);
-        }
+        JSValue container = target.mApi->makeContainerComponent(*target.mActor, *target.mRef, id);
+        if (!JS_IsUndefined(container))
+            return container;
         return target.mApi->makeEntityComponent(*target.mActor, *target.mRef, id);
     }
 
@@ -1245,11 +1463,7 @@ namespace {
 
     JSValue entityGetComponents(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const EntityTarget target = entityOf(ctx, thisVal);
-        std::vector<std::string> ids;
-        if (target.mPlayer != nullptr) {
-            ids.emplace_back("minecraft:inventory");
-            ids.emplace_back("minecraft:equippable");
-        }
+        std::vector<std::string> ids = ScriptApi::containerComponentIds();
         for (const std::string &id: target.mApi->entityComponentIds(*target.mActor))
             ids.push_back(id);
 
@@ -1269,6 +1483,11 @@ namespace {
 
     JSValue playerGetName(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         return string(ctx, playerOf(ctx, thisVal)->getName());
+    }
+
+    // the identity component's playfab id, the "pfid" of the spawn log (sub_14D5F0110, sub_141EC1280)
+    JSValue playerGetPersistentId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        return string(ctx, playerOf(ctx, thisVal)->getPlayFabId());
     }
 
     JSValue playerSendMessage(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -1552,7 +1771,62 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    enum class EffectField { TypeId, Amplifier, Duration };
+    enum class EffectField { TypeId, Amplifier, Duration, DisplayName };
+
+    // sub_1435541B0: the description id each effect registers with
+    const char *effectDescriptionId(const std::string &name) {
+        static const std::unordered_map<std::string, const char *> ids = {
+                {"speed", "potion.moveSpeed"},
+                {"slowness", "potion.moveSlowdown"},
+                {"haste", "potion.digSpeed"},
+                {"mining_fatigue", "potion.digSlowDown"},
+                {"strength", "potion.damageBoost"},
+                {"instant_health", "potion.heal"},
+                {"instant_damage", "potion.harm"},
+                {"jump_boost", "potion.jump"},
+                {"nausea", "potion.confusion"},
+                {"regeneration", "potion.regeneration"},
+                {"resistance", "potion.resistance"},
+                {"fire_resistance", "potion.fireResistance"},
+                {"water_breathing", "potion.waterBreathing"},
+                {"invisibility", "potion.invisibility"},
+                {"blindness", "potion.blindness"},
+                {"night_vision", "potion.nightVision"},
+                {"hunger", "potion.hunger"},
+                {"weakness", "potion.weakness"},
+                {"poison", "potion.poison"},
+                {"wither", "potion.wither"},
+                {"health_boost", "potion.healthBoost"},
+                {"absorption", "potion.absorption"},
+                {"saturation", "potion.saturation"},
+                {"levitation", "potion.levitation"},
+                {"fatal_poison", "potion.poison"},
+                {"conduit_power", "potion.conduitPower"},
+                {"slow_falling", "potion.slowFalling"},
+                {"bad_omen", "effect.badOmen"},
+                {"village_hero", "effect.villageHero"},
+                {"darkness", "effect.darkness"},
+                {"trial_omen", "effect.trial_omen"},
+                {"wind_charged", "effect.wind_charged"},
+                {"weaving", "effect.weaving"},
+                {"oozing", "effect.oozing"},
+                {"infested", "effect.infested"},
+                {"raid_omen", "effect.raid_omen"},
+                {"breath_of_the_nautilus", "effect.customNautilus"},
+                {"freezing", "effect.freezing"},
+        };
+        const auto found = ids.find(name);
+        return found == ids.end() ? "" : found->second;
+    }
+
+    // sub_14355CDA0: the translated name, then the translated potency for amplifiers 1 to 5
+    std::string effectDisplayName(const MobEffectInstance &effect) {
+        const VanillaTexts &texts = VanillaTexts::getInstance();
+        std::string name = texts.translate(effectDescriptionId(ScriptApi::effectTypeId(effect.mId)));
+        if (effect.mAmplifier >= 1 && effect.mAmplifier <= 5)
+            name += " " + texts.translate("potion.potency." + std::to_string(effect.mAmplifier));
+        return name;
+    }
 
     JSValue effectGetField(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
         const MobEffectInstance *effect = nullptr;
@@ -1566,6 +1840,8 @@ namespace {
                 return JS_NewInt32(ctx, effect->mAmplifier);
             case EffectField::Duration:
                 return JS_NewInt32(ctx, effect->mInfinite ? -1 : effect->mDuration);
+            case EffectField::DisplayName:
+                return string(ctx, effectDisplayName(*effect));
         }
         return JS_UNDEFINED;
     }
@@ -1798,157 +2074,6 @@ namespace {
         ServerPlayer *player = partOwner(ctx, thisVal);
         if (player != nullptr)
             ScriptApi::fromContext(ctx)->host().clearPlayerCamera(*player);
-        return JS_UNDEFINED;
-    }
-
-    JSValue containerGetSize(JSContext *ctx, JSValueConst, int, JSValueConst *) {
-        return JS_NewInt32(ctx, PlayerInventory::CONTAINER_SIZE);
-    }
-
-    JSValue containerAddItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        const ScriptItemRef *item = argc >= 1 ? api->native<ScriptItemRef>(argv[0]) : nullptr;
-        if (item == nullptr)
-            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        if (player != nullptr)
-            api->giveItem(*player, item->mItem->mTypeId, item->mItem->mAmount);
-        return JS_UNDEFINED;
-    }
-
-    JSValue itemFromStack(ScriptApi *api, const ItemStack &stack) {
-        if (stack.isAir() || stack.mDefinition == nullptr)
-            return JS_UNDEFINED;
-
-        JSValue jsItem = api->makeItemStack(stack.mDefinition->getIdentifier(), stack.mCount);
-        const ScriptItemRef *ref = api->native<ScriptItemRef>(jsItem);
-        ref->mItem->mDamage = stack.mDamage;
-        if (stack.mTag.isCompound()) {
-            const Tag *dynamicProperties = stack.mTag.get("DynamicProperties");
-            if (dynamicProperties != nullptr)
-                deserializeDynamicProperties(*dynamicProperties, ref->mItem->mDynamicProperties);
-        }
-        return jsItem;
-    }
-
-    JSValue containerGetItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        int32_t slot = 0;
-        if (player == nullptr || argc < 1 || JS_ToInt32(ctx, &slot, argv[0]) != 0)
-            return JS_UNDEFINED;
-        if (slot < 0 || slot >= PlayerInventory::CONTAINER_SIZE)
-            return JS_UNDEFINED;
-        return itemFromStack(api, player->getInventory().getItem(slot));
-    }
-
-    JSValue containerSetItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        int32_t slot = 0;
-        if (player == nullptr || argc < 1 || JS_ToInt32(ctx, &slot, argv[0]) != 0)
-            return JS_UNDEFINED;
-
-        const ScriptItemRef *item = argc >= 2 ? api->native<ScriptItemRef>(argv[1]) : nullptr;
-        if (item == nullptr) {
-            api->host().setContainerSlot(*player, slot, std::string(), 0, Tag::ofCompound());
-            return JS_UNDEFINED;
-        }
-        api->host().setContainerSlot(*player, slot, item->mItem->mTypeId, item->mItem->mAmount,
-                                     serializeDynamicProperties(item->mItem->mDynamicProperties));
-        return JS_UNDEFINED;
-    }
-
-    JSValue containerGetEmptySlotsCount(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        int32_t empty = 0;
-        for (int slot = 0; player != nullptr && slot < PlayerInventory::CONTAINER_SIZE; ++slot) {
-            if (player->getInventory().getItem(slot).isAir())
-                empty++;
-        }
-        return JS_NewInt32(ctx, empty);
-    }
-
-    JSValue inventoryGetContainer(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        const ScriptPlayerPart *part = api->native<ScriptPlayerPart>(thisVal);
-        ScriptPlayerPart *container = new ScriptPlayerPart();
-        container->mHandle = part->mHandle;
-        return api->makeInstance("Container", container);
-    }
-
-    const ItemStack &equipmentStack(const PlayerInventory &inventory, const std::string &slot) {
-        if (slot == "Head")
-            return inventory.getArmor(PlayerInventory::ARMOR_HEAD);
-        if (slot == "Chest")
-            return inventory.getArmor(PlayerInventory::ARMOR_TORSO);
-        if (slot == "Legs")
-            return inventory.getArmor(PlayerInventory::ARMOR_LEGS);
-        if (slot == "Feet")
-            return inventory.getArmor(PlayerInventory::ARMOR_FEET);
-        if (slot == "Offhand")
-            return inventory.getOffhand();
-        return inventory.getItemInHand();
-    }
-
-    JSValue equippableGetEquipment(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        if (player == nullptr || argc < 1)
-            return JS_UNDEFINED;
-        return itemFromStack(ScriptApi::fromContext(ctx),
-                             equipmentStack(player->getInventory(), toString(ctx, argv[0])));
-    }
-
-    void setEquipment(JSContext *ctx, ServerPlayer &player, const std::string &slot, JSValueConst value) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        const ScriptItemRef *item = api->native<ScriptItemRef>(value);
-        if (item == nullptr) {
-            api->host().setPlayerEquipment(player, slot, std::string(), 0, 0, Tag::ofCompound());
-            return;
-        }
-        api->host().setPlayerEquipment(player, slot, item->mItem->mTypeId, item->mItem->mAmount, item->mItem->mDamage,
-                                       serializeDynamicProperties(item->mItem->mDynamicProperties));
-    }
-
-    JSValue equippableSetEquipment(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        if (player == nullptr || argc < 1)
-            return JS_FALSE;
-        setEquipment(ctx, *player, toString(ctx, argv[0]), argc >= 2 ? argv[1] : JS_UNDEFINED);
-        return JS_TRUE;
-    }
-
-    JSValue equippableGetEquipmentSlot(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        const ScriptPlayerPart *part = api->native<ScriptPlayerPart>(thisVal);
-        ScriptPlayerPart *slot = new ScriptPlayerPart();
-        slot->mHandle = part->mHandle;
-        slot->mSlot = argc >= 1 ? toString(ctx, argv[0]) : std::string("Mainhand");
-        return api->makeInstance("ContainerSlot", slot);
-    }
-
-    JSValue slotGetItem(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const ScriptPlayerPart *part = nullptr;
-        ServerPlayer *player = partOwner(ctx, thisVal, &part);
-        if (player == nullptr)
-            return JS_UNDEFINED;
-        return itemFromStack(ScriptApi::fromContext(ctx), equipmentStack(player->getInventory(), part->mSlot));
-    }
-
-    JSValue slotHasItem(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const ScriptPlayerPart *part = nullptr;
-        ServerPlayer *player = partOwner(ctx, thisVal, &part);
-        if (player == nullptr)
-            return JS_FALSE;
-        const ItemStack &stack = equipmentStack(player->getInventory(), part->mSlot);
-        return JS_NewBool(ctx, !stack.isAir() && stack.mDefinition != nullptr);
-    }
-
-    JSValue slotSetItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        const ScriptPlayerPart *part = nullptr;
-        ServerPlayer *player = partOwner(ctx, thisVal, &part);
-        if (player != nullptr)
-            setEquipment(ctx, *player, part->mSlot, argc >= 1 ? argv[0] : JS_UNDEFINED);
         return JS_UNDEFINED;
     }
 
@@ -2195,6 +2320,9 @@ void ScriptApi::_bindEntity() {
     property(entity, "Entity", "location", entityGetLocation);
     property(entity, "Entity", "dimension", entityGetDimension);
     property(entity, "Entity", "nameTag", entityGetNameTag, entitySetNameTag);
+    property(entity, "Entity", "nameplateDepthTested", entityGetNameplateDepthTested, entitySetNameplateDepthTested);
+    property(entity, "Entity", "nameplateRenderDistance", entityGetNameplateRenderDistance,
+             entitySetNameplateRenderDistance);
     property(entity, "Entity", "localizationKey", entityGetLocalizationKey);
     property(entity, "Entity", "target", entityGetTarget);
     propertyMagic(entity, "Entity", "isSneaking", entityGetFlag, (int) EntityState::Sneaking,
@@ -2261,6 +2389,7 @@ void ScriptApi::_bindEntity() {
     propertyMagic(effect, "Effect", "typeId", effectGetField, (int) EffectField::TypeId);
     propertyMagic(effect, "Effect", "amplifier", effectGetField, (int) EffectField::Amplifier);
     propertyMagic(effect, "Effect", "duration", effectGetField, (int) EffectField::Duration);
+    propertyMagic(effect, "Effect", "displayName", effectGetField, (int) EffectField::DisplayName);
     property(effect, "Effect", "isValid", effectGetIsValid);
 
     JSValue effectType = defineClass("EffectType");
@@ -2290,6 +2419,7 @@ void ScriptApi::_bindEntity() {
 void ScriptApi::_bindPlayer() {
     JSValue player = defineClass("Player");
     property(player, "Player", "name", playerGetName);
+    property(player, "Player", "persistentId", playerGetPersistentId);
     property(player, "Player", "level", playerGetLevel);
     property(player, "Player", "selectedSlotIndex", playerGetSelectedSlot, playerSetSelectedSlot);
     propertyMagic(player, "Player", "isFlying", playerGetState, (int) PlayerState::Flying);
@@ -2358,26 +2488,4 @@ void ScriptApi::_bindComponents() {
     JSValue component = defineClass("Component");
     property(component, "Component", "typeId", componentGetTypeId);
     property(component, "Component", "isValid", componentGetIsValid);
-
-    JSValue inventory = defineClass("EntityInventoryComponent");
-    property(inventory, "EntityInventoryComponent", "container", inventoryGetContainer);
-
-    JSValue container = defineClass("Container");
-    property(container, "Container", "size", containerGetSize);
-    property(container, "Container", "emptySlotsCount", containerGetEmptySlotsCount);
-    property(container, "Container", "isValid", partGetIsValid);
-    method(container, "Container", "addItem", containerAddItem, 1);
-    method(container, "Container", "getItem", containerGetItem, 1);
-    method(container, "Container", "setItem", containerSetItem, 2);
-
-    JSValue equippable = defineClass("EntityEquippableComponent");
-    method(equippable, "EntityEquippableComponent", "getEquipment", equippableGetEquipment, 1);
-    method(equippable, "EntityEquippableComponent", "setEquipment", equippableSetEquipment, 2);
-    method(equippable, "EntityEquippableComponent", "getEquipmentSlot", equippableGetEquipmentSlot, 1);
-
-    JSValue slot = defineClass("ContainerSlot");
-    property(slot, "ContainerSlot", "isValid", partGetIsValid);
-    method(slot, "ContainerSlot", "getItem", slotGetItem, 0);
-    method(slot, "ContainerSlot", "hasItem", slotHasItem, 0);
-    method(slot, "ContainerSlot", "setItem", slotSetItem, 1);
 }

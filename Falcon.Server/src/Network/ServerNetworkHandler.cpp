@@ -439,6 +439,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mAnnouncement.mMaxPlayers = maxPlayers;
 
     _registerCommands();
+    _bindScoreboard();
 
     mResourcePacks.loadFromDirectory(ServerPaths::file("resource_packs"));
     mResourcePacks.loadBundledAddonsFrom(ServerPaths::file("behavior_packs"));
@@ -542,6 +543,7 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
 
     if (mNetherNetInstance != nullptr) {
         mNetherNetInstance->setUnofficialClientsAllowed(mProperties.getAllowUnofficialClients());
+        mNetherNetInstance->setAnonymousLanClientsAllowed(mProperties.getAllowLanWithoutIdentity());
         // the verdict comes back later, see the tick: the connection is not held for it
         mNetherNetInstance->setNegotiationFailureObserver([](int errorCode, int clientCheck) {
             if (clientCheck != 0)
@@ -608,6 +610,7 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     for (World *world: mWorlds.getWorlds())
         mWorlds.remove(world->getId());
     _openWorld(properties.getLevelName(), levelSeed);
+    loadScoreboard();
 
     for (const std::string &name: properties.getAutoloadWorlds()) {
         if (mWorlds.find(name) == nullptr && WorldManager::isValidName(name))
@@ -761,6 +764,7 @@ void ServerNetworkHandler::stopServerListening() {
     }
 
     finish([this]() { saveWorldDynamicProperties(true); });
+    finish([this]() { saveScoreboard(true); });
     finish([this]() { saveAllActors(); });
 
     for (World *world: mWorlds.getWorlds()) {
@@ -1638,6 +1642,27 @@ EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {
     flags2.mLongValue = player.getFlags().getHighBits();
     metadata.mEntries.push_back(flags2);
 
+
+    EntityDataEntry flags3;
+
+    flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+    flags3.mFormat = EntityDataFormat::Long;
+
+    flags3.mLongValue = player.getFlags().getExtendedBits();
+metadata.mEntries.push_back(flags3);
+
+
+    EntityDataEntry nameplateDistance;
+
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+
+    nameplateDistance.mFloatValue = player.getNameplateRenderDistance();
+
+    metadata.mEntries.push_back(nameplateDistance);
+
     EntityDataEntry playerFlags;
     playerFlags.mId = ActorFlags::PLAYER_FLAGS_DATA_ID;
     playerFlags.mFormat = EntityDataFormat::Byte;
@@ -2487,6 +2512,16 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const InteractPac
     }
 
     if (packet.mAction != InteractPacket::Action::OpenInventory)
+        return;
+
+    // riding a tamed mount, the inventory key opens the mount's window
+    // the mount or the player: both accepted, which one the client sends is not checked
+    ServerActor *mount = player->isRiding()
+                                 ? dynamic_cast<ServerActor *>(RideSystem::resolve(*this, player->getVehicleId()))
+                                 : nullptr;
+    if (mount != nullptr && mount->getEntityContainer() != nullptr
+        && (packet.mRuntimeActorId == player->getRuntimeId() || packet.mRuntimeActorId == mount->getRuntimeId())
+        && player->getInventoryManager().openEntityContainer(*mount, ContainerType::Horse))
         return;
 
     if (packet.mRuntimeActorId != player->getRuntimeId())

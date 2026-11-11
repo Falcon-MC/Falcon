@@ -40,6 +40,21 @@ public:
         return mLevel;
     }
 
+    // execute as only sets players: without one, the base origin's entity keeps running it
+    Actor *getEntity() override;
+
+    bool getSourceBlock(Level *&level, Vector3i &position) override {
+        return mBase.getSourceBlock(level, position);
+    }
+
+    bool canUseCommandsWithoutCheats() const override {
+        return mBase.canUseCommandsWithoutCheats();
+    }
+
+    void sendError(const std::string &message) override {
+        mBase.sendError(message);
+    }
+
     void setPosition(const Vector3f &position) {
         mPosition = position;
     }

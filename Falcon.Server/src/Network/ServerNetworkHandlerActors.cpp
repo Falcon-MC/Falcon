@@ -30,11 +30,8 @@
 #include "Protocol/Packets/CameraInstructionPacket.h"
 #include "Protocol/Packets/MobEffectPacket.h"
 #include "Protocol/Packets/PlayerStartItemCooldownPacket.h"
-#include "Protocol/Packets/RemoveObjectivePacket.h"
-#include "Protocol/Packets/SetDisplayObjectivePacket.h"
 #include "Protocol/Packets/SetPlayerGameTypePacket.h"
 #include "Protocol/Packets/TakeItemActorPacket.h"
-#include "Protocol/Packets/SetScorePacket.h"
 #include "Protocol/Packets/SetTitlePacket.h"
 #include "Protocol/Packets/TextPacket.h"
 #include "World/Item/Item.h"
@@ -188,7 +185,8 @@ namespace {
 ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                                               const std::function<void(ServerActor &)> &configure) {
     // taken first: configure may spawn another actor
-    const char *cause = mSpawnCause == nullptr ? "Spawned" : mSpawnCause;
+    const bool spawned = mSpawnCause == nullptr;
+    const char *cause = spawned ? "Spawned" : mSpawnCause;
     mSpawnCause = nullptr;
     const uint64_t runtimeId = allocateRuntimeId();
 
@@ -205,6 +203,10 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
 
     if (configure)
         configure(*actor);
+
+    // an identifier carrying its own spawn event makes the cause Event (sub_143708AF0)
+    if (spawned && mob != nullptr && !mob->getSpawnEvent().empty())
+        cause = "Event";
 
     if (mob != nullptr)
         mob->applyDefaults(mProperties.getDifficulty());
@@ -235,6 +237,8 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     ServerActor *result = _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
+    if (mob != nullptr)
+        mob->upgradeDefinition(*this, false);
     mScriptEngine.onEntitySpawn(*result, cause);
     return result;
 }
@@ -252,9 +256,10 @@ ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::strin
     baby->getFlags().set(ActorFlag::Baby, true);
 
     EntityDataMap metadata;
-    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID};
-    const int64_t flagValues[] = {baby->getFlags().getLowBits(), baby->getFlags().getHighBits()};
-    for (int index = 0; index < 2; index++) {
+    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID, ActorFlags::FLAGS_3_DATA_ID};
+    const int64_t flagValues[] = {baby->getFlags().getLowBits(), baby->getFlags().getHighBits(),
+                                  baby->getFlags().getExtendedBits()};
+    for (int index = 0; index < 3; index++) {
         EntityDataEntry entry;
         entry.mId = flagIds[index];
         entry.mFormat = EntityDataFormat::Long;
@@ -980,6 +985,14 @@ void ServerNetworkHandler::refreshContainerViewers(const Vector3i &position, con
     }
 }
 
+void ServerNetworkHandler::refreshEntityContainerViewers(int64_t actorId, const ServerPlayer *except) {
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (&player != except && player.isSpawned())
+            player.getInventoryManager().refreshEntityContainer(actorId);
+    }
+}
+
 void ServerNetworkHandler::broadcastActorSpawn(ServerActor &actor) {
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
@@ -1126,6 +1139,27 @@ void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {
     flags2.mFormat = EntityDataFormat::Long;
     flags2.mLongValue = actor.getFlags().getHighBits();
     packet.mMetadata.mEntries.push_back(flags2);
+
+
+    EntityDataEntry flags3;
+
+    flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+    flags3.mFormat = EntityDataFormat::Long;
+
+    flags3.mLongValue = actor.getFlags().getExtendedBits();
+    packet.mMetadata.mEntries.push_back(flags3);
+
+
+    EntityDataEntry nameplateDistance;
+
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+
+    nameplateDistance.mFloatValue = actor.getNameplateRenderDistance();
+
+    packet.mMetadata.mEntries.push_back(nameplateDistance);
 
     EntityDataEntry visibleEffects;
     visibleEffects.mId = ActorFlags::VISIBLE_MOB_EFFECTS_DATA_ID;
@@ -1438,90 +1472,6 @@ void ServerNetworkHandler::clearPlayerCamera(ServerPlayer &player) {
 
 void ServerNetworkHandler::syncPlayerAttributes(ServerPlayer &player) {
     _sendAttributes(player);
-}
-
-void ServerNetworkHandler::displayScoreboardObjective(const std::string &slot, const std::string &objectiveId,
-                                                      const std::string &displayName) {
-    SetDisplayObjectivePacket packet;
-    packet.mDisplaySlot = slot;
-    packet.mObjectiveId = objectiveId;
-    packet.mDisplayName = displayName.empty() ? objectiveId : displayName;
-    packet.mCriteria = "dummy";
-    packet.mSortOrder = 0;
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::clearScoreboardDisplay(const std::string &slot) {
-    SetDisplayObjectivePacket packet;
-    packet.mDisplaySlot = slot;
-    packet.mObjectiveId = "";
-    packet.mDisplayName = "";
-    packet.mCriteria = "dummy";
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::setScoreboardScore(const std::string &objectiveId, const std::string &participant,
-                                              int32_t score) {
-    const std::string key = objectiveId + "\x1f" + participant;
-    auto it = mScoreboardIds.find(key);
-    if (it == mScoreboardIds.end())
-        it = mScoreboardIds.emplace(key, mNextScoreboardId++).first;
-
-    ScoreInfoEntry info;
-    info.mScoreboardId = it->second;
-    info.mObjectiveId = objectiveId;
-    info.mScore = score;
-    info.mType = ScorerType::Fake;
-    info.mName = participant;
-
-    SetScorePacket packet;
-    packet.mAction = SetScorePacket::Action::Change;
-    packet.mInfos.push_back(info);
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::removeScoreboardScore(const std::string &objectiveId, const std::string &participant) {
-    const std::string key = objectiveId + "\x1f" + participant;
-    auto it = mScoreboardIds.find(key);
-    if (it == mScoreboardIds.end())
-        return;
-
-    ScoreInfoEntry info;
-    info.mScoreboardId = it->second;
-    info.mObjectiveId = objectiveId;
-    info.mType = ScorerType::Invalid;
-    info.mName = participant;
-
-    SetScorePacket packet;
-    packet.mInfos.push_back(info);
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-    mScoreboardIds.erase(it);
-}
-
-void ServerNetworkHandler::removeScoreboardObjective(const std::string &objectiveId) {
-    RemoveObjectivePacket packet;
-    packet.mObjectiveId = objectiveId;
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
 }
 
 void ServerNetworkHandler::sendJsonMessage(ServerPlayer &player, const std::string &json) {

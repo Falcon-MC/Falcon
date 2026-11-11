@@ -1065,13 +1065,6 @@ JSValue ScriptApi::makeBlockComponent(Level &level, const Vector3i &position, co
     return makeInstance(cls, part);
 }
 
-// TODO(V4): the Container class over a block actor comes with the items wave; undefined until then
-JSValue ScriptApi::makeBlockContainer(Level &level, const Vector3i &position) {
-    (void) level;
-    (void) position;
-    return JS_UNDEFINED;
-}
-
 void ScriptApi::_bindBlockSurface() {
     JSValue block = prototypeOf("Block");
     property(block, "Block", "permutation", blockGetPermutation);

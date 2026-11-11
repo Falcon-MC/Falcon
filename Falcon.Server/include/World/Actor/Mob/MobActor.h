@@ -25,6 +25,7 @@
 #include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/Movement/RideControlSystem.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Inventory/Container.h"
 #include "World/Level/Block/BlockState.h"
 #include "Core/Json/Json.h"
 #include "Core/Math/Vector3i.h"
@@ -118,6 +119,9 @@ public:
 
     void applyDefaults(Difficulty difficulty);
 
+    // only a loaded actor runs its pending upgrades; any other cause takes the current version (sub_140B938D0)
+    void upgradeDefinition(ServerNetworkHandler &owner, bool loaded);
+
     static int randomRange(int minimum, int maximum);
 
     void dropLoot(ServerNetworkHandler &owner, Level &level, const ServerPlayer *killer, int32_t lootingLevel) const;
@@ -205,6 +209,10 @@ public:
 
     void setSpawnEvent(const std::string &event) {
         mSpawnEvent = event;
+    }
+
+    const std::string &getSpawnEvent() const {
+        return mSpawnEvent;
     }
 
     void setHomePosition(const Vector3f &position) {
@@ -395,6 +403,9 @@ public:
 
     int getInventoryCapacity() const;
 
+    // a tamed mount with a horse container_type: its saddle, armor and chest slots
+    Container *getEntityContainer() override;
+
     std::vector<ItemStack> rollLoot(ServerNetworkHandler &owner, const std::string &path);
 
     void onKilledActor(ServerNetworkHandler &owner, Actor &victim);
@@ -449,6 +460,27 @@ protected:
     void tickControls(ServerNetworkHandler &owner);
 
 private:
+    // the minecraft:inventory slots of the mob's equipment, as a container the UI can show
+    class InventoryView : public Container {
+    public:
+        explicit InventoryView(MobActor &mob) : mMob(mob) {}
+
+        int getContainerSize() const override {
+            return mMob.getInventoryCapacity();
+        }
+
+        const ItemStack &getContainerItem(int slot) const override {
+            return mMob.mEquipment.getInventoryItem(slot);
+        }
+
+        void setContainerItem(int slot, ItemStack item) override {
+            mMob.mEquipment.setInventoryItem(slot, std::move(item));
+        }
+
+    private:
+        MobActor &mMob;
+    };
+
     friend class RideControlSystem;
     friend class RideControlProbe;
 
@@ -607,6 +639,7 @@ private:
     float mScale = 1.0f;
     bool mDefinitionStarted = false;
     bool mBorn = false;
+    int32_t mActorVersion = 0;
     std::string mSpawnEvent;
     bool mEquipmentInherited = false;
     const json::Value *mSpellEffectsComponent = nullptr;
@@ -659,6 +692,7 @@ private:
     JumpControl mJumpControl;
     BodyControl mBodyControl;
     MobEquipment mEquipment;
+    InventoryView mInventoryView{*this};
     MobEntitySpawner mEntitySpawner;
     std::vector<int32_t> mEntitySensorCooldowns;
     int32_t mTemper = 0;
