@@ -18,6 +18,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AnimatePacket.h"
 #include "Protocol/Packets/SetHudPacket.h"
+#include "Protocol/Packets/UpdateClientInputLocksPacket.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
 #include "Protocol/Packets/PlayerStartItemCooldownPacket.h"
@@ -903,6 +904,18 @@ void ServerPlayer::clearTitle() {
     SetTitlePacket packet;
     packet.mType = SetTitlePacket::Type::Clear;
     mSender->sendPacketTo(mId, packet);
+}
+
+void ServerPlayer::setInputLocked(int32_t category, bool locked) {
+    if (category < 0 || category >= 32)
+        return;
+    const uint32_t bit = 1u << category;
+    mInputLocks = locked ? (mInputLocks | bit) : (mInputLocks & ~bit);
+
+    UpdateClientInputLocksPacket packet;
+    packet.mLockComponentData = (int32_t) mInputLocks;
+    if (mSender != nullptr)
+        mSender->sendPacketTo(mId, packet);
 }
 
 void ServerPlayer::setHudVisibility(bool hidden, const std::vector<int32_t> *elements) {
