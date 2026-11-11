@@ -55,14 +55,61 @@ namespace {
 
 void EntityEvents::fire(ServerNetworkHandler &owner, MobActor &mob, const std::string &event, int32_t depth,
                         Actor *other) {
+    Modifiers modifiers;
+    _fire(owner, mob, event, depth, other, modifiers);
+}
+
+bool EntityEvents::_fire(ServerNetworkHandler &owner, MobActor &mob, const std::string &event, int32_t depth,
+                         Actor *other, Modifiers &modifiers) {
     const json::Value *definition = mob.getDefinition();
     const json::Value *events = definition == nullptr ? nullptr : definition->get("events");
     const json::Value *node = events == nullptr ? nullptr : events->get(event);
     if (node == nullptr)
-        return;
+        return false;
 
+    // a trigger inside fires its own event: each fire reports only the groups its own nodes changed
+    Modifiers *outer = sModifiers;
+    sModifiers = &modifiers;
     _run(owner, mob, *node, depth, other);
+    sModifiers = outer;
     mob.spawnPendingRiders(owner);
+    owner.getScriptEngine().onDataDrivenEntityTrigger(mob, event, modifiers.mAdded, modifiers.mRemoved);
+    return true;
+}
+
+int32_t EntityEvents::upgrade(ServerNetworkHandler &owner, MobActor &mob, int32_t version) {
+    const json::Value *definition = mob.getDefinition();
+    if (definition == nullptr)
+        return version;
+
+    const json::Value *description = definition->get("description");
+    const json::Value *entityVersion = description == nullptr ? nullptr : description->get("entity_version");
+    const json::Value *upgrades = entityVersion == nullptr ? nullptr : entityVersion->get("upgrades");
+    if (upgrades == nullptr || !upgrades->isArray())
+        return 0;
+
+    // upgrade_to must run 1, 2, 3...: any gap or duplicate drops the whole list (sub_1436D0080)
+    std::vector<std::pair<int32_t, std::string>> entries;
+    for (const std::unique_ptr<json::Value> &entry: upgrades->mArray) {
+        const json::Value *to = entry->get("upgrade_to");
+        const json::Value *name = entry->get("name");
+        if (to == nullptr || name == nullptr || to->integer(0) == 0 || name->string().empty())
+            return 0;
+        entries.emplace_back(to->integer(0), name->string());
+    }
+    std::sort(entries.begin(), entries.end());
+    for (size_t index = 0; index < entries.size(); ++index) {
+        if (entries[index].first != (int32_t) index + 1)
+            return 0;
+    }
+
+    // sub_140B938D0: the events from the saved version on, then the version jumps to the count
+    for (size_t index = (size_t) std::max(version, 0); index < entries.size(); ++index) {
+        Modifiers modifiers;
+        if (_fire(owner, mob, entries[index].second, 0, nullptr, modifiers))
+            owner.getScriptEngine().onEntityUpgrade(mob, entries[index].second, modifiers.mAdded, modifiers.mRemoved);
+    }
+    return (int32_t) entries.size();
 }
 
 void EntityEvents::fireTrigger(ServerNetworkHandler &owner, MobActor &mob, const json::Value *trigger, Actor *other,
@@ -134,6 +181,8 @@ void EntityEvents::_applyGroups(MobActor &mob, const json::Value &change, bool a
             mob.addComponentGroup(group->string());
         else
             mob.removeComponentGroup(group->string());
+        if (sModifiers != nullptr)
+            (add ? sModifiers->mAdded : sModifiers->mRemoved).push_back(group->string());
     }
 }
 

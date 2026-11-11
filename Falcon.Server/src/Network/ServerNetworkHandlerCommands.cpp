@@ -418,6 +418,8 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
         mPluginManager->dispatch(gameModeEvent);
         if (gameModeEvent.mCancelled)
             return;
+        if (mScriptEngine.beforePlayerGameModeChange(player, previousGameMode, gameMode))
+            return;
     }
 
     player.setGameType(gameMode);
@@ -445,6 +447,7 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
     if (previousGameMode != gameMode) {
         PlayerGameModeChangeAfterEvent event(player, previousGameMode, gameMode);
         mEventBus.after().mPlayerGameModeChange.emit(event);
+        mScriptEngine.onPlayerGameModeChange(player, previousGameMode, gameMode);
     }
 }
 

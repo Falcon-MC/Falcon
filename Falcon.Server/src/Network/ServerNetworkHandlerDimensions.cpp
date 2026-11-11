@@ -271,6 +271,7 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
 
     Level &previous = getLevelFor(player);
     World &previousWorld = getWorldFor(player);
+    const Vector3f fromLocation = player.getPosition();
     previous.unregisterAllChunkLoaders(player.getRuntimeId());
 
     player.moveToLevel(destinationLevel);
@@ -305,6 +306,7 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
 
     _sendDimensionChange(player, dimension, destination);
     ChunkStreamHandler::handleTeleport(*this, player);
+    mScriptEngine.onPlayerDimensionChange(player, previous, fromLocation, destinationLevel, destination);
 }
 
 void ServerNetworkHandler::_sendDimensionChange(ServerPlayer &player, DimensionType dimension,

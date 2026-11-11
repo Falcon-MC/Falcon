@@ -21,10 +21,10 @@ struct ScriptEntityRef : ScriptNative {
     enum class Kind { Player, Actor, Item };
 
     Kind mKind = Kind::Actor;
-    // player handle, actor unique id or item entity runtime id
+    // player handle or runtime id: a unique id can still change once the object exists
     int64_t mId = 0;
-    // kept for InvalidEntityError once the entity is gone
-    std::string mEntityId;
+    // refreshed on every resolve, kept for InvalidEntityError once the entity is gone
+    mutable std::string mEntityId;
     std::string mTypeId;
 };
 
@@ -68,6 +68,20 @@ struct ScriptDimensionRef : ScriptNative {
     uint32_t mWorldId = 0;
 };
 
+struct ScriptEffectRef : ScriptNative {
+    ScriptEntityRef mEntity;
+    int32_t mEffectId = 0;
+};
+
+// EffectType, EntityType and EntityHealSource: one name each
+struct ScriptNamedRef : ScriptNative {
+    std::string mName;
+};
+
+struct ScriptInputInfoRef : ScriptNative {
+    uint32_t mHandle = 0;
+};
+
 struct ScriptSignalRef : ScriptNative {
     std::string mKey;
 };
@@ -100,6 +114,12 @@ namespace ScriptValues {
                             const std::string &id, JSValueConst value);
 
     JSValue dynamicPropertyIds(JSContext *ctx, const std::unordered_map<std::string, DynamicPropertyValue> &store);
+
+    // setDynamicProperties: false with a pending exception
+    bool dynamicPropertySetAll(JSContext *ctx, std::unordered_map<std::string, DynamicPropertyValue> &store,
+                               JSValueConst values);
+
+    int64_t dynamicPropertyByteCount(const std::unordered_map<std::string, DynamicPropertyValue> &store);
 
     bool arrayContainsString(JSContext *ctx, JSValueConst array, const std::string &needle);
 

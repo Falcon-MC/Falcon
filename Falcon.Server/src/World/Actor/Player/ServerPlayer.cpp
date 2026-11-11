@@ -286,6 +286,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             if (!_isFacing(owner, target.getPosition(), size.mWidth, size.mHeight))
                 return false;
 
+            owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");
             owner.getScriptEngine().onEntityHitEntity(*this, target);
             if (!target.isAlive())
                 return false;
@@ -352,6 +353,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (!_isFacing(owner, victim->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
         return false;
 
+    owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");
     owner.getScriptEngine().onEntityHitEntity(*this, *victim);
     if (victim->isDead())
         return false;

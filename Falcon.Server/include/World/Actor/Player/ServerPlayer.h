@@ -235,6 +235,35 @@ public:
         return mFlying;
     }
 
+    // what the last PlayerAuthInput reported: held buttons, the movement vector and the input device
+    struct InputState {
+        int32_t mInputMode = 0;
+        bool mJumpHeld = false;
+        bool mSneakHeld = false;
+        bool mJumping = false;
+        float mMoveX = 0.0f;
+        float mMoveY = 0.0f;
+    };
+
+    InputState &getInputState() {
+        return mInputState;
+    }
+
+    // the script chat decorations: name prefix and suffix around the author, a prefix before the message
+    struct ChatStyle {
+        std::string mNamePrefix;
+        std::string mNameSuffix;
+        std::string mMessagePrefix;
+    };
+
+    ChatStyle &getChatStyle() {
+        return mChatStyle;
+    }
+
+    const InputState &getInputState() const {
+        return mInputState;
+    }
+
     bool hasSimulatedVelocity() const {
         return mHasSimulatedVelocity;
     }
@@ -1081,6 +1110,8 @@ private:
     int64_t mFirstPlayed = 0;
     bool mIsOp = false;
     bool mFlying = false;
+    InputState mInputState;
+    ChatStyle mChatStyle;
     bool mHasSimulatedVelocity = false;
     Vector3f mSimulatedVelocity;
     bool mHasSimulatedPosition = false;

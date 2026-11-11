@@ -20,9 +20,11 @@ struct MobEffectInstance;
 struct CustomComponentUse;
 class BlockState;
 class Actor;
+class ActorDamageSource;
 class ItemActor;
 class ItemStack;
 class Level;
+class MobActor;
 class ScriptApi;
 class SyncWorldClocksPacket;
 class ServerNetworkHandler;
@@ -137,7 +139,10 @@ public:
     // after startup: ids from DimensionNameIdTable, a level in every world, the table saved back
     void createCustomDimensions();
 
-    void onEntitySpawn(ServerActor &entity);
+    // cause: an EntityInitializationCause value
+    void onEntitySpawn(ServerActor &entity, const char *cause = "Spawned");
+
+    void beforeEntityRemove(ServerActor &entity);
 
     void onEntityRemove(ServerActor &entity);
 
@@ -145,11 +150,54 @@ public:
 
     bool beforePlayerInteractWithBlock(ServerPlayer &player, const Vector3i &position, int32_t face);
 
-    bool beforeEntityHurt(Actor &hurtEntity, float damage, const std::string &cause, const Actor *attacker);
+    // scripts may lower or raise damage; true when cancelled
+    bool beforeEntityHurt(Actor &hurtEntity, float &damage, const ActorDamageSource &source);
 
-    bool beforeEffectAdd(Actor &entity, const MobEffectInstance &effect);
+    void onEntityHurt(Actor &hurtEntity, float damage, const ActorDamageSource &source);
+
+    void onEntityDie(Actor &deadEntity, const ActorDamageSource &source);
+
+    // scripts may rewrite the duration; true when cancelled
+    bool beforeEffectAdd(Actor &entity, MobEffectInstance &effect);
+
+    void onEffectAdd(Actor &entity, const MobEffectInstance &effect);
 
     bool beforePlayerInteractWithEntity(ServerPlayer &player, Actor &target);
+
+    void onPlayerInteractWithEntity(ServerPlayer &player, Actor &target, const ItemStack &before);
+
+    void onEntitySneak(Actor &entity, bool started);
+
+    bool beforeEntityTamed(Actor &entity, Actor &tamer);
+
+    void onEntityTamed(Actor &entity, Actor &tamer);
+
+    void onEntityUpgrade(MobActor &entity, const std::string &upgradeId, const std::vector<std::string> &added,
+                         const std::vector<std::string> &removed);
+
+    void onDataDrivenEntityTrigger(MobActor &entity, const std::string &eventId, const std::vector<std::string> &added,
+                                   const std::vector<std::string> &removed);
+
+    // game types as on the wire; scripts may pick another mode; true when cancelled
+    bool beforePlayerGameModeChange(ServerPlayer &player, int32_t fromGameMode, int32_t &toGameMode);
+
+    void onPlayerGameModeChange(ServerPlayer &player, int32_t fromGameMode, int32_t toGameMode);
+
+    void onPlayerDimensionChange(ServerPlayer &player, const Level &from, const Vector3f &fromLocation, const Level &to,
+                                 const Vector3f &toLocation);
+
+    void onPlayerEmote(ServerPlayer &player, const std::string &personaPieceId);
+
+    // InputMode values
+    void onPlayerInputModeChange(ServerPlayer &player, const char *previous, const char *current);
+
+    // InputButton and ButtonState values
+    void onPlayerButtonInput(ServerPlayer &player, const char *button, bool pressed);
+
+    // EntitySwingSource value
+    void onPlayerSwingStart(ServerPlayer &player, const char *source);
+
+    void beforePlayerLeave(ServerPlayer &player);
 
     bool beforeItemUse(ServerPlayer &player);
 
@@ -199,6 +247,12 @@ private:
     // calls fill(api, event) for each pack with subscribers; true when one cancelled
     template <typename Fill>
     bool _emit(const char *key, const char *signal, bool cancellable, Fill fill);
+
+    void _onHealthChanged(Actor &entity, float oldValue, float newValue);
+
+    void _onHeal(Actor &entity, float amount, int32_t cause);
+
+    bool _beforeHeal(Actor &entity, float &amount, int32_t cause);
 
     void _scheduleBlockTick(Level &level, const std::string &blockId, const Vector3i &position);
 

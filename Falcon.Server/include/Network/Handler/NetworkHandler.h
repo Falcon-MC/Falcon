@@ -9,10 +9,12 @@
 #include "Server/Profiler.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <deque>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -193,6 +195,9 @@ public:
         return mConnectionCount.load();
     }
 
+    // the transport's average round trip in milliseconds, refreshed about once a second; -1 when unknown
+    int getAveragePing(const NetworkIdentifier &id) const;
+
     Connector &getConnector() {
         return *mConnectors.front();
     }
@@ -230,6 +235,10 @@ private:
         std::deque<OutboundCommand> mBacklog;
         std::unordered_map<NetworkIdentifier, std::unique_ptr<Connection>, NetworkIdentifier::Hasher> mConnections;
         std::thread mThread;
+        // written by the shard's io thread, read by the game thread
+        mutable std::mutex mPingMutex;
+        std::unordered_map<NetworkIdentifier, int, NetworkIdentifier::Hasher> mPings;
+        std::chrono::steady_clock::time_point mPingRefresh;
     };
 
     Shard &_shardFor(const NetworkIdentifier &id);

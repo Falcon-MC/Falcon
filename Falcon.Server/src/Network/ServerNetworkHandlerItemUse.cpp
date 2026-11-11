@@ -112,6 +112,25 @@ void ServerNetworkHandler::addEffect(Actor &actor, MobEffectId effect, int32_t a
     mEventBus.after().mEffectAdd.emit(event);
 }
 
+bool ServerNetworkHandler::applyFood(ServerPlayer &player, const ItemStack &item) {
+    const FoodItemComponent *food = findFoodComponent(item);
+    if (food == nullptr)
+        return false;
+
+    player.consumeFood(food->getNutrition(), food->getSaturation());
+    for (const FoodEffect &effect: food->getEffects())
+        addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
+
+    // cured effects (poison for the honey bottle) come only from the vanilla components
+    const Tag *vanilla = vanillaFood(item);
+    const Tag *removed = vanilla == nullptr ? nullptr : vanilla->get("remove_effects");
+    if (removed != nullptr && removed->isList()) {
+        for (const Tag &effect: removed->getList())
+            player.removeEffect((MobEffectId) effect.asInt());
+    }
+    return true;
+}
+
 void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
     if (!player.isSpawned() || !player.getFlags().get(ActorFlag::UsingItem))
         return;
@@ -348,19 +367,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         mEventBus.after().mItemCompleteUse.emit(completeEvent);
     }
 
-    if (food != nullptr) {
-        player.consumeFood(food->getNutrition(), food->getSaturation());
-        for (const FoodEffect &effect: food->getEffects())
-            addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
-
-        // cured effects (poison for the honey bottle) come only from the vanilla components
-        const Tag *vanilla = vanillaFood(usedItem);
-        const Tag *removed = vanilla == nullptr ? nullptr : vanilla->get("remove_effects");
-        if (removed != nullptr && removed->isList()) {
-            for (const Tag &effect: removed->getList())
-                player.removeEffect((MobEffectId) effect.asInt());
-        }
-    }
+    applyFood(player, usedItem);
 
     // both ride publisher_use_time_depleted (sub_14483F960): food at priority 0 eats and fires onConsume,
     // custom onCompleteUse at priority 3 runs after (sub_143EBF6E0, sub_14A7F6070)

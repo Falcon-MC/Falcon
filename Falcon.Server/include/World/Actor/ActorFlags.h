@@ -46,6 +46,8 @@ enum class ActorFlag : int {
     BlockedUsingDamagedShield = 75,
     Sleeping = 76,
     FacingTargetToRangeAttack = 88,
+    // read by Player.isEmoting (sub_14D53E890)
+    Emoting = 92,
     Celebrating = 93,
     Admiring = 94,
     CelebratingSpecial = 95,
@@ -63,13 +65,16 @@ enum class ActorFlag : int {
     BodyRotationAlwaysFollowsHead = 124,
     CanUseVerticalMovementAction = 125,
     UsesLegacyFriction = 127,
+    NameplateDepthTested = 129,
 };
 
 class ActorFlags {
 public:
+    // the three flag words: data ids 0, 92 and 139 (sub_142C6F4D0)
     static const int32_t FLAGS_DATA_ID = 0;
-    // sub_142C6F4D0: the flag words go out as data 0 and 92
+    // sub_142C6F4D0: the flag words go out as data 0, 92 and 139
     static const int32_t FLAGS_2_DATA_ID = 92;
+    static const int32_t FLAGS_3_DATA_ID = 139;
     static const int32_t VARIANT_DATA_ID = 2;
     static const int32_t COLOR_DATA_ID = 3;
     static const int32_t OWNER_DATA_ID = 5;
@@ -83,6 +88,7 @@ public:
     static const int32_t AIR_SUPPLY_DATA_ID = 7;
     static const int32_t AIR_SUPPLY_MAX_DATA_ID = 42;
     static const int32_t VISIBLE_MOB_EFFECTS_DATA_ID = 131;
+    static const int32_t NAMEPLATE_RENDER_DISTANCE_DATA_ID = 140;
     static const int8_t PLAYER_FLAG_SLEEP = 0x2;
 
     void set(ActorFlag flag, bool value);
@@ -90,16 +96,19 @@ public:
     bool get(ActorFlag flag) const;
 
     int64_t getLowBits() const {
-        return mLow;
+        return mBits[0];
     }
 
     int64_t getHighBits() const {
-        return mHigh;
+        return mBits[1];
+    }
+
+    int64_t getExtendedBits() const {
+        return mBits[2];
     }
 
     void applyPlayerDefaults();
 
 private:
-    int64_t mLow = 0;
-    int64_t mHigh = 0;
+    int64_t mBits[3] = {0, 0, 0};
 };
