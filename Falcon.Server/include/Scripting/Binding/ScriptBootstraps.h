@@ -11,7 +11,4 @@ namespace ScriptBootstraps {
 
     // (native) => { ActionFormData, MessageFormData, ModalFormData }
     const char *ui();
-
-    // (native) => { Scoreboard, ScoreboardObjective, TickingAreaManager, scoreboard, tickingAreaManager }
-    const char *world();
 }

@@ -6,6 +6,7 @@
 #include "World/Level/TickingAreaManager.h"
 #include "World/Level/World.h"
 #include "World/Level/WorldManager.h"
+#include "World/Scores/Scoreboard.h"
 #include "Network/ChunkPacketCache.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/RakPeerHelper.h"
@@ -470,16 +471,27 @@ public:
 
     void clearPlayerCamera(ServerPlayer &player);
 
-    void displayScoreboardObjective(const std::string &slot, const std::string &objectiveId,
-                                    const std::string &displayName);
+    Scoreboard &getScoreboard() {
+        return mScoreboard;
+    }
 
-    void clearScoreboardDisplay(const std::string &slot);
+    void loadScoreboard();
 
-    void setScoreboardScore(const std::string &objectiveId, const std::string &participant, int32_t score);
+    void saveScoreboard(bool checked);
 
-    void removeScoreboardScore(const std::string &objectiveId, const std::string &participant);
+    // the display slots, their scores and the player identities, for a player joining
+    void sendScoreboard(ServerPlayer &player);
 
-    void removeScoreboardObjective(const std::string &objectiveId);
+    // a player's name, an entity's name tag or the fake player's own name; script: no offline placeholder
+    std::string getScoreboardName(const ScoreboardIdentity &identity, bool script = false);
+
+    // the online player or loaded entity of an identity; null for a fake player
+    Actor *findScoreboardActor(const ScoreboardIdentity &identity);
+
+    // null while the actor has no score
+    const ScoreboardIdentity *findScoreboardIdentity(const Actor &actor) const;
+
+    int64_t createScoreboardIdentity(const Actor &actor);
 
     void syncPlayerAttributes(ServerPlayer &player);
 
@@ -957,6 +969,8 @@ private:
 
     void _registerCommands();
 
+    void _bindScoreboard();
+
     void onReceiveIPSupport(RakPeerHelper::IPSupport support) override;
 
     void _updateServerAnnouncement();
@@ -1073,8 +1087,7 @@ private:
     std::unordered_map<int64_t, LingeringCloud> mLingeringClouds;
     std::vector<int64_t> mDetachedActors;
     std::unordered_map<std::string, DynamicPropertyValue> mWorldDynamicProperties;
-    std::unordered_map<std::string, int64_t> mScoreboardIds;
-    int64_t mNextScoreboardId = 1;
+    Scoreboard mScoreboard;
     std::unordered_map<NetworkIdentifier, std::unordered_map<uint32_t, ModalFormCallback>, NetworkIdentifier::Hasher>
             mModalFormCallbacks;
     std::vector<std::unique_ptr<ItemActor>> mItemEntities;

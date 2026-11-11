@@ -439,6 +439,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mAnnouncement.mMaxPlayers = maxPlayers;
 
     _registerCommands();
+    _bindScoreboard();
 
     mResourcePacks.loadFromDirectory(ServerPaths::file("resource_packs"));
     mResourcePacks.loadBundledAddonsFrom(ServerPaths::file("behavior_packs"));
@@ -609,6 +610,7 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     for (World *world: mWorlds.getWorlds())
         mWorlds.remove(world->getId());
     _openWorld(properties.getLevelName(), levelSeed);
+    loadScoreboard();
 
     for (const std::string &name: properties.getAutoloadWorlds()) {
         if (mWorlds.find(name) == nullptr && WorldManager::isValidName(name))
@@ -762,6 +764,7 @@ void ServerNetworkHandler::stopServerListening() {
     }
 
     finish([this]() { saveWorldDynamicProperties(true); });
+    finish([this]() { saveScoreboard(true); });
     finish([this]() { saveAllActors(); });
 
     for (World *world: mWorlds.getWorlds()) {

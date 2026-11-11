@@ -266,7 +266,8 @@ namespace {
         if (hasMax && (target.mPlayer == nullptr || playerLevelOf(target) > level))
             return false;
 
-        return rotationMatches(ctx, target, options) && propertiesMatch(ctx, target, options);
+        return rotationMatches(ctx, target, options) && propertiesMatch(ctx, target, options)
+               && target.mApi->scoresMatch(*target.mActor, options);
     }
 
     JSValue entityGetTypeId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {

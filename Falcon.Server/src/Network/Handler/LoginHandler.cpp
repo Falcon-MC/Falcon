@@ -649,6 +649,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     sendItemComponents(owner, player);
     // sub_1422AA6C0: the clock registry follows the item registry
     owner.getScriptEngine().sendWorldClocks(player);
+    owner.sendScoreboard(player);
     sendActorIdentifiers(owner, player);
     sendCameraPresets(owner, player);
     sendSharedLoginPacket(

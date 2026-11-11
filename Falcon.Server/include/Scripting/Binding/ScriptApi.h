@@ -304,6 +304,9 @@ public:
         return !mStepping.empty();
     }
 
+    // EntityQueryOptions.scoreOptions: every option must hold
+    bool scoresMatch(const Actor &actor, JSValueConst options);
+
     JSValue moduleScoreboard() const {
         return mScoreboard;
     }
@@ -457,6 +460,8 @@ private:
     bool _acceptsClockEvent(JSValueConst callback) const;
 
     void _bindClocks();
+
+    void _bindScoreboard();
 
     JSContext *mContext;
     ServerNetworkHandler &mHost;

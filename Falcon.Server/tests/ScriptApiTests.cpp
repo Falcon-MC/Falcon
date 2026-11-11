@@ -268,6 +268,8 @@ import { world, system, Entity, Player, Effect, EffectTypes, ItemStack, BlockPer
          EntityTypeFamilyComponent, EntityDamageCause, EntityInitializationCause, EntityHealCause, InputButton,
          ButtonState, InputMode, EntitySwingSource, CommandPermissionLevel, PlayerPermissionLevel,
          TickingAreaManager, EntityComponent } from "@minecraft/server";
+import { Scoreboard, ScoreboardObjective, ScoreboardIdentity, ScoreboardScoreInfo, DisplaySlotId, ObjectiveSortOrder,
+         ScoreboardIdentityType } from "@minecraft/server";
 
 const log = (line) => { r.events = (r.events || "") + line + ";"; };
 world.afterEvents.entitySpawn.subscribe((e) => log("spawn:" + e.entity.typeId + ":" + e.cause));
@@ -456,6 +458,56 @@ system.runTimeout(() => {
   } catch (e) { r.error = e.name + ":" + e.message + ":" + e.stack; }
     world.setDynamicProperty("entities", JSON.stringify(r));
 }, 2);
+system.runTimeout(() => {
+  try {
+    const sb = world.scoreboard;
+    const overworld = world.getDimension("overworld");
+    const player = world.getPlayers()[0];
+    const calf = overworld.getEntities({ type: "minecraft:cow" })[0];
+    r.sbClasses = (sb instanceof Scoreboard) + "," + (sb === world.scoreboard) + ","
+        + capture(() => new ScoreboardObjective());
+    r.sbNone = player.scoreboardIdentity === undefined;
+    const obj = sb.addObjective("test:kills", "Kills");
+    r.sbObjective = obj.id + "," + obj.displayName + "," + obj.isValid + "," + sb.getObjective("test:kills").id + ","
+        + sb.getObjective("nope");
+    r.sbDuplicate = capture(() => sb.addObjective("test:kills"));
+    obj.setScore(player, 5);
+    r.sbAdd = obj.addScore(player, 2) + "," + obj.addScore("fake", 3) + "," + obj.addScore(calf, -1);
+    const id = player.scoreboardIdentity;
+    r.sbIdentity = (id instanceof ScoreboardIdentity) + "," + id.type + "," + id.displayName + "," + id.isValid + ","
+        + (id.getEntity() === player) + "," + typeof id.id;
+    r.sbCalf = calf.scoreboardIdentity.type + "," + JSON.stringify(calf.scoreboardIdentity.displayName);
+    r.sbScores = obj.getScores().map((s) => (s instanceof ScoreboardScoreInfo) + ":" + s.participant.type + "="
+        + s.score).join(";");
+    r.sbGet = obj.getScore(id) + "," + obj.getScore("nobody") + "," + obj.hasParticipant("fake") + ","
+        + obj.hasParticipant(player);
+    r.sbOverflow = capture(() => obj.addScore("fake", 2147483647));
+    r.sbQuery = [overworld.getEntities({ scoreOptions: [{ objective: "test:kills", minScore: 0 }] }).length,
+                 overworld.getEntities({ scoreOptions: [{ objective: "test:kills", maxScore: 0 }] }).length,
+                 overworld.getEntities({ scoreOptions: [{ objective: "test:kills", minScore: 0, maxScore: 10,
+                                                          exclude: true }] }).length,
+                 world.getPlayers({ scoreOptions: [{ objective: "test:kills", minScore: 7, maxScore: 7 }] }).length,
+                 overworld.getEntities({ scoreOptions: [{ objective: "test:none" }] }).length].join(",");
+    const previous = sb.setObjectiveAtDisplaySlot(DisplaySlotId.Sidebar,
+                                                  { objective: obj, sortOrder: ObjectiveSortOrder.Ascending });
+    const shown = sb.getObjectiveAtDisplaySlot(DisplaySlotId.Sidebar);
+    r.sbDisplay = (previous === undefined) + "," + shown.objective.id + "," + shown.sortOrder;
+    r.sbParticipants = sb.getParticipants().length + "," + obj.getParticipants().length;
+    r.sbRemoveParticipant = obj.removeParticipant("fake") + "," + obj.removeParticipant("fake");
+    r.sbBadSlot = capture(() => sb.getObjectiveAtDisplaySlot("Feet"));
+    r.sbClear = sb.clearObjectiveAtDisplaySlot(DisplaySlotId.Sidebar).id + ","
+        + (sb.getObjectiveAtDisplaySlot(DisplaySlotId.Sidebar) === undefined);
+    const other = sb.addObjective("test:other");
+    r.sbRemove = sb.removeObjective(other) + "," + other.isValid + "," + capture(() => other.id) + ","
+        + sb.removeObjective("nope");
+    r.sbStale = capture(() => sb.setObjectiveAtDisplaySlot(DisplaySlotId.List, { objective: other }));
+    sb.addObjective("test:other");
+    r.sbReAdded = other.isValid;
+    r.sbEnums = [DisplaySlotId.BelowName, ObjectiveSortOrder.Descending, ScoreboardIdentityType.FakePlayer].join(",");
+    sb.setObjectiveAtDisplaySlot(DisplaySlotId.BelowName, { objective: obj });
+    obj.setScore("kept", 42);
+  } catch (e) { r.sbError = e.name + ":" + e.message + ":" + e.stack; }
+}, 3);
 system.runTimeout(() => world.setDynamicProperty("entities", JSON.stringify(r)), 7);
 )JS";
 
@@ -728,6 +780,8 @@ r.worldLoad = "worldLoad" in world.afterEvents;
 r.systemBefore = "beforeEvents" in system;
 r.early = capture(() => world.getAllPlayers());
 r.startupEvent = "StartupEvent" in server;
+r.sbValidMethod = typeof server.ScoreboardObjective.prototype.isValid + ","
+    + typeof server.ScoreboardIdentity.prototype.isValid;
 world.beforeEvents.worldInitialize.subscribe((event) => {
     r.register = capture(() => event.blockComponentRegistry.registerCustomComponent("legacy:comp", {
         onPlayerInteract(...args) {
@@ -1419,6 +1473,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                 owner.removeActor(copy->getUniqueId());
             }
         }
+        // the player is erased below: later checks keep its id, never the reference
+        const int64_t playerUniqueId = player.getUniqueId();
         engine.beforePlayerLeave(player);
         owner.getPlayers().erase(id);
         for (int64_t tick = 4; tick <= 8; ++tick)
@@ -1486,6 +1542,43 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "idBefore", std::to_string(loadedId - 77));
         expect(e, "idAfter", "true:" + std::to_string(loadedId));
         expect(e, "enums", "void,entityAttack,Born,SelfHeal,Jump,Pressed,Touch,Attack,2,2");
+        if (e.get("sbError") != nullptr)
+            require(false, "the scoreboard part threw: " + text(e, "sbError"));
+        expect(e, "sbClasses", "true,true,ReferenceError: No constructor for native class 'ScoreboardObjective'.");
+        expect(e, "sbNone", "true");
+        expect(e, "sbObjective", "test:kills,Kills,true,test:kills,undefined");
+        expect(e, "sbDuplicate", "Error: Failed to add objective 'test:kills' as it is already being tracked.");
+        expect(e, "sbAdd", "7,3,-1");
+        expect(e, "sbIdentity", "true,Player,ScriptPlayer,true,true,number");
+        expect(e, "sbCalf", "Entity,\"\"");
+        expect(e, "sbScores", "true:Player=7;true:FakePlayer=3;true:Entity=-1");
+        expect(e, "sbGet", "7,undefined,true,true");
+        expect(e, "sbOverflow",
+               "Error: Encountered an integer overflow when trying to modify objective score for "
+               "participant 'fake'.");
+        expect(e, "sbQuery", "1,1,1,1,0");
+        expect(e, "sbDisplay", "true,test:kills,0");
+        expect(e, "sbParticipants", "3,3");
+        expect(e, "sbRemoveParticipant", "true,false");
+        expect(e, "sbBadSlot", "TypeError: Native type conversion failed.");
+        expect(e, "sbClear", "test:kills,true");
+        expect(e, "sbRemove", "true,false,Error: Failed to find objective 'test:other'.,false");
+        expect(e, "sbStale", "Error: Failed to set invalid objective at DisplaySlot.");
+        expect(e, "sbReAdded", "false");
+        expect(e, "sbEnums", "BelowName,1,FakePlayer");
+        {
+            Scoreboard &board = owner.getScoreboard();
+            const ScoreboardObjective *kills = board.getObjective("test:kills");
+            const ScoreboardIdentity *kept = board.findFakePlayer("kept");
+            require(kills != nullptr && kept != nullptr && *kills->find(kept->mId) == 42
+                            && board.getDisplay("belowname") != nullptr
+                            && board.getDisplay("belowname")->mObjective == "test:kills",
+                    "the script scoreboard did not reach the server scoreboard");
+            const ScoreboardIdentity *scripted = board.findActor(playerUniqueId);
+            require(scripted != nullptr && scripted->mType == ScoreboardIdentityType::Player
+                            && *kills->find(scripted->mId) == 7,
+                    "the player's script score is not the server's");
+        }
         expect(e, "componentIds", "minecraft:health,minecraft:type_family,minecraft:movement");
         expect(e, "componentChain", "true");
         expect(e, "typesConstructor", "ReferenceError");
@@ -1836,6 +1929,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*stable1, "systemBefore", "false");
         expect(*stable1, "early", "ok");
         expect(*stable1, "startupEvent", "false");
+        expect(*stable1, "sbValidMethod", "function,function");
         expect(*stable1, "register", "ok");
         expect(*stable1, "legacyName", "CustomComponentNameError,1");
         expect(*stable1, "legacyInteract", "1|BlockComponentPlayerInteractEvent");

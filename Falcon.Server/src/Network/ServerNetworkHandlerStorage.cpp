@@ -244,6 +244,7 @@ void ServerNetworkHandler::autoSave(bool wait) {
     }
 
     saveWorldDynamicProperties(wait);
+    saveScoreboard(wait);
     mScriptEngine.saveWorldClocks();
     saveAllActors();
 
