@@ -212,14 +212,28 @@ namespace ScriptValues {
         return true;
     }
 
-    // sub_149B64100: 28 bytes a value, 37 plus its length for a string; the key is not counted
+    // entity, world and item getters all read the collection total (sub_1432AD970), recomputed on load: key + 1,
+    // then 8 for a double, 1 for a bool, length + 1 for a string, 12 for a vector (sub_143D41120)
     int64_t dynamicPropertyByteCount(const std::unordered_map<std::string, DynamicPropertyValue> &store) {
         int64_t total = 0;
         for (const auto &entry: store) {
-            if (entry.second.mType == DynamicPropertyValue::Type::String)
-                total += 37 + (int64_t) entry.second.mString.size();
-            else
-                total += 28;
+            total += (int64_t) entry.first.size() + 1;
+            switch (entry.second.mType) {
+                case DynamicPropertyValue::Type::Number:
+                    total += 8;
+                    break;
+                case DynamicPropertyValue::Type::Boolean:
+                    total += 1;
+                    break;
+                case DynamicPropertyValue::Type::String:
+                    total += (int64_t) entry.second.mString.size() + 1;
+                    break;
+                case DynamicPropertyValue::Type::Vector:
+                    total += 12;
+                    break;
+                default:
+                    break;
+            }
         }
         return total;
     }
