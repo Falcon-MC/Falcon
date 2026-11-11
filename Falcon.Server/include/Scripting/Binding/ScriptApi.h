@@ -354,6 +354,10 @@ public:
 
     Uuid nextWaypointHandle();
 
+    JSValue lootTableManager() const {
+        return mLootTableManager;
+    }
+
     void emitProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z);
 
     void emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, int32_t z);
@@ -540,6 +544,11 @@ private:
 
     void _tickLocatorBars();
 
+    // the natives the loot bootstrap reads its tables and rolls through; takes itemTypes
+    JSValue _lootNatives(JSValue itemTypes);
+
+    void _bindLootTableManager();
+
     JSContext *mContext;
     ServerNetworkHandler &mHost;
     JSClassID mNativeClassId;
@@ -597,6 +606,7 @@ private:
     JSValue mItemRegistry = JS_UNDEFINED;
     JSValue mStructureManager = JS_UNDEFINED;
     JSValue mListVolume = JS_UNDEFINED;
+    JSValue mLootTableManager = JS_UNDEFINED;
 
     std::unordered_map<std::string, std::vector<JSValue>> mSubscribers;
     std::unordered_map<void *, std::vector<std::string>> mScriptEventNamespaces;

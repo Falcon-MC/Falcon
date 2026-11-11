@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -14,6 +15,7 @@ class ItemUseTransaction;
 class Level;
 class Packet;
 class BlockState;
+struct BlockData;
 class BlockActor;
 class PacketCodecContext;
 class PlayerAuthInputPacket;
@@ -55,6 +57,13 @@ public:
 
     static void spawnBlockDrops(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                 const BlockState &brokenState, const ItemStack &tool);
+
+    // the stacks the block drops when broken with tool; level null: nothing read from a block actor
+    static std::vector<ItemStack> blockDrops(ServerNetworkHandler &owner, Level *level, const Vector3i &position,
+                                             const BlockState &brokenState, const ItemStack &tool);
+
+    // the tool is right for the block, or the block needs none
+    static bool canHarvest(const BlockData &block, const ItemStack &tool);
 
     static void startBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                    int32_t face);

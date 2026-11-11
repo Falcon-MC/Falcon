@@ -17,4 +17,6 @@ namespace ScriptBootstraps {
 
     // (native: send, isBiome, isPlayer, errors) => the four biome setting classes and their getters
     const char *graphics();
+    // (native: definition, ItemTypes, isItemStack, from*) => the loot classes and their LootTableManager, manager
+    const char *loot();
 }
