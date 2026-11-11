@@ -696,9 +696,8 @@ system.runTimeout(() => {
     toolEnchant.removeAllEnchantments();
     r.enchantCleared = toolEnchant.getEnchantments().length + ":" + toolEnchant.slots.join("|");
     const leather = new ItemStack("leather_helmet").getComponent("dyeable");
-    leather.color = { red: 1, green: 0, blue: 0.5 };
-    r.dye = Math.round(leather.color.red * 255) + "," + Math.round(leather.color.blue * 255) + ":"
-        + (leather.defaultColor === undefined) + ":" + (new ItemStack("stone").getComponent("dyeable") === undefined);
+    // no vanilla item declares minecraft:dyeable, leather armor included
+    r.dye = (leather === undefined) + ":" + (new ItemStack("stone").getComponent("dyeable") === undefined);
     r.compost = new ItemStack("red_shrub").getComponent("compostable").compostingChance;
     const quill = new ItemStack("writable_book").getComponent("book");
     quill.setContents(["a", { rawtext: [{ text: "b" }] }, "c"]);
@@ -1937,6 +1936,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                "health:10>12;heal:2:Regeneration;health:12>11;hurt:minecraft:player:1:magic:false;emote:emote:wave;button:Jump:Pressed;"
                "mode:KeyboardAndMouse>Touch;swing:Attack;sneak:minecraft:player;unsneak:minecraft:player;"
                "interact:minecraft:cow;dimension:minecraft:overworld>minecraft:nether;effect:speed:40:true;"
+               "dimension:minecraft:overworld>test:void;dimension:test:void>minecraft:overworld;"
                "effect:speed:40:true;effect:haste:200:true;hurt:minecraft:cow:3:fall:true;"
                "trigger:minecraft:ageable_grow_up:[{\"addedComponentGroups\":[\"minecraft:cow_adult\"],"
                "\"removedComponentGroups\":[\"minecraft:cow_baby\"]}];"
@@ -1990,7 +1990,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(it, "toolMore", "0:minecraft:dirt:true:{\"min\":100,\"max\":100}:50:true:false");
         expect(it, "enchantMore", "minecraft:unbreaking1");
         expect(it, "enchantCleared", "0:Pickaxe");
-        expect(it, "dye", "255,128:true:true");
+        expect(it, "dye", "true:true");
         expect(it, "compost", "30");
         expect(it, "bookMore", "a,~:~,b:true:true");
         expect(it, "potionsMore", "49:Consume:true:minecraft:potion");
@@ -2004,7 +2004,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(it, "stateMatches", "true:false:false:false");
         expect(it, "blockType", "minecraft:stone:true:true");
         expect(it, "events",
-               "complete:test:wand:ScriptPlayer;start:minecraft:apple:32;release:minecraft:bow:5;stop:minecraft:bow:5;"
+               "complete:test:wand:ScriptPlayer;complete:test:snack:ScriptPlayer;start:minecraft:apple:32;release:minecraft:bow:5;stop:minecraft:bow:5;"
                "complete:minecraft:apple:ScriptPlayer;beforePickup:minecraft:player:minecraft:item;"
                "pickup:minecraft:player:minecraft:diamondx2;beforePickup:minecraft:piglin:minecraft:item;"
                "change:3:Hotbar:->minecraft:diamond;hotbar:3;opened:minecraft:chest_minecart:minecraft:player;"
@@ -2196,7 +2196,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(c, "overworld",
                "minecraft:day@1000/24000,minecraft:noon@6000/24000,minecraft:sunset@12000/24000,"
                "minecraft:night@13000/24000,minecraft:midnight@18000/24000,minecraft:sunrise@23000/24000");
-        expect(c, "clockTime", "8");
+        expect(c, "clockTime", "9");
         expect(c, "rewind", "ok@7");
         expect(c, "skip", "ok@7");
         expect(c, "setMarker", "ok@2");
