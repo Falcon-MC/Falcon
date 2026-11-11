@@ -902,6 +902,8 @@ private:
 
     void handle(const NetworkIdentifier &id, const EmotePacket &packet) override;
 
+    void handle(const NetworkIdentifier &id, const PlayerToggleArmorVisibilityRequestPacket &packet) override;
+
     void handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const PlayerSkinPacket &packet) override;

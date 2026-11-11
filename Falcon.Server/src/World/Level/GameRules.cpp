@@ -45,6 +45,7 @@ GameRules::GameRules() {
     _addBool("firedamage", true);
     _addBool("freezedamage", true);
     _addInt("functioncommandlimit", 10000);
+    _addBool("invisiblearmor", false);
     _addBool("keepinventory", false);
     _addInt("maxcommandchainlength", 65535);
     _addBool("mobgriefing", true);

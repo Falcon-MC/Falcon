@@ -1,4 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
+#include "Network/Handler/InventoryHandler.h"
 
 #include "World/Actor/Player/ArmorProtection.h"
 #include "World/Actor/RideSystem.h"
@@ -218,6 +219,7 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
         return DamageResult::Dealt;
 
     const float health = player.reduceHealth(amount);
+    InventoryHandler::revealHiddenArmor(*this, player);
 
     EntityHurtAfterEvent hurtEvent(player, amount, key);
     mEventBus.after().mEntityHurt.emit(hurtEvent);

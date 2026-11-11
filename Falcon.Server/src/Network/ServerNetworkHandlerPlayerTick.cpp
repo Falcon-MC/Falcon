@@ -1,4 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
+#include "Network/Handler/InventoryHandler.h"
 
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -126,6 +127,7 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     player.tickItemCooldowns(mCurrentTick);
     player.tickShield(*this);
     player.tickSpinAttack(*this);
+    InventoryHandler::tickHiddenArmor(*this, player);
     ElytraItem::tickGliding(*this, player);
     FurnaceSystem::tick(*this, player);
 

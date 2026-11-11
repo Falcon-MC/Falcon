@@ -103,6 +103,7 @@
 #include "Protocol/Packets/BlockPickRequestPacket.h"
 #include "Protocol/Packets/ActorPickRequestPacket.h"
 #include "Protocol/Packets/EmotePacket.h"
+#include "Protocol/Packets/PlayerToggleArmorVisibilityRequestPacket.h"
 #include "Protocol/Packets/ModalFormRequestPacket.h"
 #include "Protocol/Packets/ModalFormResponsePacket.h"
 #include "Protocol/Packets/PlayerSkinPacket.h"
@@ -1403,6 +1404,7 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
             MinecraftPacketIds::Emote,
             MinecraftPacketIds::ModalFormResponse,
             MinecraftPacketIds::PlayerSkin,
+            MinecraftPacketIds::PlayerToggleArmorVisibilityRequest,
     };
 
     return allowed;
@@ -1915,6 +1917,14 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const EmotePacket
     }
 }
 
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerToggleArmorVisibilityRequestPacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr || !player->isSpawned())
+        return;
+
+    InventoryHandler::setArmorHidden(*this, *player, packet.mHideArmor);
+}
+
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr || !player->isSpawned() || packet.mHasFormData == packet.mHasCancelReason)
@@ -2272,6 +2282,12 @@ bool ServerNetworkHandler::changeGameRule(World &world, const std::string &name,
     }
 
     overworld.saveGameRules();
+    if (rule->mName == "invisiblearmor") {
+        for (auto &entry: mPlayers) {
+            if (entry.second.isSpawned() && entry.second.getWorldId() == world.getId())
+                InventoryHandler::sendArmorContent(*this, entry.second);
+        }
+    }
     mScriptEngine.onGameRuleChange(rule->mName, rule->mType == GameRuleData::Type::Bool, rule->mBoolValue,
                                    rule->mIntValue);
     return true;

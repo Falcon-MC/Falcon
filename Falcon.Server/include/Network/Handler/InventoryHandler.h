@@ -9,12 +9,22 @@ class ItemStackRequestPacket;
 class InventoryTransactionPacket;
 class ContainerClosePacket;
 class CraftingEventPacket;
+class MobArmorEquipmentPacket;
 
 class InventoryHandler {
 public:
     static void sendInventory(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void sendArmorContent(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    // the armor other players see: hidden pieces go out as air
+    static void fillArmorEquipment(ServerNetworkHandler &owner, ServerPlayer &player, MobArmorEquipmentPacket &packet);
+
+    static void setArmorHidden(ServerNetworkHandler &owner, ServerPlayer &player, bool hidden);
+
+    static void revealHiddenArmor(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    static void tickHiddenArmor(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void sendOffhandContent(ServerNetworkHandler &owner, ServerPlayer &player);
 

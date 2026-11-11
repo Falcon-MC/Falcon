@@ -740,6 +740,23 @@ public:
 
     void tickSpinAttack(ServerNetworkHandler &owner);
 
+    bool isArmorHidden() const {
+        return mArmorHidden;
+    }
+
+    void setArmorHidden(bool hidden) {
+        mArmorHidden = hidden;
+    }
+
+    // 0 when the hidden armor is not shown after a hit
+    int64_t getArmorRevealEndTick() const {
+        return mArmorRevealEndTick;
+    }
+
+    void setArmorRevealEndTick(int64_t tick) {
+        mArmorRevealEndTick = tick;
+    }
+
     bool isAwaitingConsumableRelease() const {
         return mAwaitingConsumableRelease;
     }
@@ -1066,6 +1083,8 @@ private:
     int32_t mTicksSinceInAir = 0;
     bool mAwaitingConsumableRelease = false;
     int64_t mLastEarlyConsumableReleaseTick = 0;
+    bool mArmorHidden = false;
+    int64_t mArmorRevealEndTick = 0;
     bool mHasLastRightClick = false;
     Vector3i mLastRightClickBlockPosition;
     int32_t mLastRightClickFace = 0;

@@ -11,10 +11,12 @@
 #include "World/Inventory/BundleInventory.h"
 #include "World/Inventory/ItemStackRequestHandler.h"
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Item/ItemData.h"
 #include "World/Item/MapItem.h"
 #include "World/Level/Block/AnvilBlock.h"
 #include "World/Level/Block/CartographyTableBlock.h"
 #include "World/Level/Level.h"
+#include "World/Level/World.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "Protocol/Packets/PlayerEnchantOptionsPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -277,16 +279,68 @@ void InventoryHandler::sendInventory(ServerNetworkHandler &owner, ServerPlayer &
     sendHeldItem(owner, player);
 }
 
-void InventoryHandler::sendArmorContent(ServerNetworkHandler &owner, ServerPlayer &player) {
-    const PlayerInventory &inventory = player.getInventory();
+namespace {
+    // hidden armor reappears this long after a hit
+    const int64_t ARMOR_REVEAL_TICKS = 100;
 
+    bool isArmorShown(ServerNetworkHandler &owner, const ServerPlayer &player) {
+        return !player.isArmorHidden() || player.getArmorRevealEndTick() != 0
+               || !owner.getWorldFor(player).getOverworld().getGameRules().getBool("invisiblearmor");
+    }
+
+    // elytra, heads and carved pumpkins give no armor points: they stay visible
+    ItemStack shownArmorPiece(const ItemStack &item, bool armorShown) {
+        if (armorShown || item.isAir() || item.mDefinition == nullptr)
+            return item;
+        const ItemData *data = ItemDataTable::find(item.mDefinition->getIdentifier());
+        return data != nullptr && data->mArmorPoints > 0 ? ItemStack::air() : item;
+    }
+}
+
+void InventoryHandler::fillArmorEquipment(ServerNetworkHandler &owner, ServerPlayer &player,
+                                          MobArmorEquipmentPacket &packet) {
+    const PlayerInventory &inventory = player.getInventory();
+    const bool shown = isArmorShown(owner, player);
+
+    packet.mRuntimeActorId = (int64_t) player.getRuntimeId();
+    packet.mHelmet = shownArmorPiece(inventory.getArmor(PlayerInventory::ARMOR_HEAD), shown);
+    packet.mChestplate = shownArmorPiece(inventory.getArmor(PlayerInventory::ARMOR_TORSO), shown);
+    packet.mLeggings = shownArmorPiece(inventory.getArmor(PlayerInventory::ARMOR_LEGS), shown);
+    packet.mBoots = shownArmorPiece(inventory.getArmor(PlayerInventory::ARMOR_FEET), shown);
+    packet.mBody = ItemStack::air();
+}
+
+void InventoryHandler::setArmorHidden(ServerNetworkHandler &owner, ServerPlayer &player, bool hidden) {
+    if (player.isArmorHidden() == hidden)
+        return;
+
+    player.setArmorHidden(hidden);
+    player.setArmorRevealEndTick(0);
+    sendArmorContent(owner, player);
+}
+
+void InventoryHandler::revealHiddenArmor(ServerNetworkHandler &owner, ServerPlayer &player) {
+    const bool wasShown = isArmorShown(owner, player);
+    if (!player.isArmorHidden())
+        return;
+
+    player.setArmorRevealEndTick(owner.getCurrentTick() + ARMOR_REVEAL_TICKS);
+    if (!wasShown)
+        sendArmorContent(owner, player);
+}
+
+void InventoryHandler::tickHiddenArmor(ServerNetworkHandler &owner, ServerPlayer &player) {
+    const int64_t end = player.getArmorRevealEndTick();
+    if (end == 0 || owner.getCurrentTick() < end)
+        return;
+
+    player.setArmorRevealEndTick(0);
+    sendArmorContent(owner, player);
+}
+
+void InventoryHandler::sendArmorContent(ServerNetworkHandler &owner, ServerPlayer &player) {
     MobArmorEquipmentPacket equipment;
-    equipment.mRuntimeActorId = (int64_t) player.getRuntimeId();
-    equipment.mHelmet = inventory.getArmor(PlayerInventory::ARMOR_HEAD);
-    equipment.mChestplate = inventory.getArmor(PlayerInventory::ARMOR_TORSO);
-    equipment.mLeggings = inventory.getArmor(PlayerInventory::ARMOR_LEGS);
-    equipment.mBoots = inventory.getArmor(PlayerInventory::ARMOR_FEET);
-    equipment.mBody = ItemStack::air();
+    fillArmorEquipment(owner, player, equipment);
 
     for (auto &entry: owner.getPlayers()) {
         if (entry.second.isSpawned() && &entry.second != &player)

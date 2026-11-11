@@ -3,6 +3,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "Network/Handler/ChunkStreamHandler.h"
+#include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/LoginHandler.h"
 #include "Protocol/Packets/AddPlayerPacket.h"
 #include "Protocol/Packets/MobArmorEquipmentPacket.h"
@@ -49,12 +50,7 @@ void ServerNetworkHandler::_sendPlayerSpawn(ServerPlayer &viewer, ServerPlayer &
     mNetworkHandler->send(viewer.getNetworkIdentifier(), add, mCodecContext);
 
     MobArmorEquipmentPacket armor;
-    armor.mRuntimeActorId = (int64_t) target.getRuntimeId();
-    armor.mHelmet = inventory.getArmor(PlayerInventory::ARMOR_HEAD);
-    armor.mChestplate = inventory.getArmor(PlayerInventory::ARMOR_TORSO);
-    armor.mLeggings = inventory.getArmor(PlayerInventory::ARMOR_LEGS);
-    armor.mBoots = inventory.getArmor(PlayerInventory::ARMOR_FEET);
-    armor.mBody = ItemStack::air();
+    InventoryHandler::fillArmorEquipment(*this, target, armor);
     mNetworkHandler->send(viewer.getNetworkIdentifier(), armor, mCodecContext);
 
     MobEquipmentPacket offhand;
