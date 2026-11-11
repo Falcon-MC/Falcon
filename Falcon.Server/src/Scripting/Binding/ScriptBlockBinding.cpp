@@ -220,9 +220,9 @@ namespace {
         if (argc < 1 || !JS_IsBool(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         const bool waterlogged = JS_ToBool(ctx, argv[0]) == 1;
-        // TODO: the game's error for a block that cannot hold water is unverified
+        // sub_14A754340: only setting true checks the block type
         if (waterlogged && !liquidAnswers(at.state()).mCanContain)
-            return at.mApi->throwError("Error", "Block can not be waterlogged.");
+            return at.mApi->throwError("Error", "Block type cannot be waterlogged.");
 
         BlockState overlay = BlockState("minecraft:air");
         if (waterlogged) {
