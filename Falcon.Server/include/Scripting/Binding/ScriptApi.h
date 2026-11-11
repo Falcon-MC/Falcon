@@ -195,7 +195,10 @@ public:
 
     int32_t runCommandAsConsole(const std::string &commandLine);
 
+    // resolves { status, value }: status is Answered, UserClosed, UserBusy, PlayerQuit or ServerShutdown
     JSValue showForm(JSValueConst playerValue, const std::string &formData);
+
+    void closeAllForms(JSValueConst playerValue);
 
     void addSubscriber(const std::string &key, JSValue callback);
 
@@ -420,7 +423,7 @@ private:
 
     void _emitInventoryChanges();
 
-    void _resolveForm(uint32_t formId, const std::string &response, bool cancelled);
+    void _resolveForm(uint32_t formId, const std::string &response, const char *status);
 
     void _fireStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position,
                    const char *hook, const char *eventClass);

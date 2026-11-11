@@ -43,9 +43,7 @@ BOUND = {
         'EntityNavigationComponent', 'EntityRideableComponent', 'EntityRidingComponent', 'PaletteColor',
         'EntityHealSource',
     },
-    'server-ui': {
-        'ActionFormData', 'MessageFormData', 'ModalFormData',
-    },
+    'server-ui': None,
     'common': None,
 }
 

@@ -62,6 +62,7 @@
 #include "Protocol/Packets/RequestChunkRadiusPacket.h"
 #include "Protocol/Packets/RequestAbilityPacket.h"
 #include "Protocol/Packets/ChunkRadiusUpdatedPacket.h"
+#include "Protocol/Packets/ClientboundCloseFormPacket.h"
 #include "Protocol/Packets/RequestNetworkSettingsPacket.h"
 #include "Protocol/Packets/ResourcePackClientResponsePacket.h"
 #include "Protocol/Packets/ResourcePackStackPacket.h"
@@ -1186,7 +1187,15 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
         getLevelFor(*player).unregisterAllChunkLoaders(player->getRuntimeId());
     }
 
-    mModalFormCallbacks.erase(id);
+    auto pendingForms = mModalFormCallbacks.find(id);
+    if (pendingForms != mModalFormCallbacks.end()) {
+        auto callbacks = std::move(pendingForms->second);
+        mModalFormCallbacks.erase(pendingForms);
+        if (player != nullptr) {
+            for (auto &entry: callbacks)
+                entry.second(*player, std::string(), ModalFormOutcome::PlayerQuit);
+        }
+    }
     erasePlayer(id);
     // an awake player leaving can bring the remaining sleepers up to the threshold
     if (playerWorld != nullptr)
@@ -1246,6 +1255,14 @@ void ServerNetworkHandler::sendModalForm(ServerPlayer &player, uint32_t formId, 
     request.mFormId = formId;
     request.mFormData = formData;
     mNetworkHandler->send(player.getNetworkIdentifier(), request, mCodecContext);
+}
+
+void ServerNetworkHandler::closeAllForms(ServerPlayer &player) {
+    if (!player.isSpawned())
+        return;
+
+    ClientboundCloseFormPacket packet;
+    mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
 }
 
 void ServerNetworkHandler::setMaxPlayers(int maxPlayers) {
@@ -1947,7 +1964,11 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormRe
         mModalFormCallbacks.erase(playerCallbacks);
 
     if (callback)
-        callback(*player, cancelled ? std::string() : packet.mFormData, cancelled);
+        callback(*player, cancelled ? std::string() : packet.mFormData,
+                 !cancelled ? ModalFormOutcome::Answered
+                 : packet.mCancelReason == ModalFormResponsePacket::CancelReason::UserBusy
+                         ? ModalFormOutcome::UserBusy
+                         : ModalFormOutcome::UserClosed);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerSkinPacket &packet) {

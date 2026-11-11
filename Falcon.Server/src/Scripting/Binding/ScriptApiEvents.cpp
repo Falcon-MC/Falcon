@@ -56,30 +56,44 @@ JSValue ScriptApi::showForm(JSValueConst playerValue, const std::string &formDat
     JSValue resolvingFuncs[2];
     JSValue promise = JS_NewPromiseCapability(mContext, resolvingFuncs);
 
-    ServerPlayer *player = resolvePlayer(playerValue);
-    if (player == nullptr) {
-        JSValue result = JS_NewObject(mContext);
-        JS_SetPropertyStr(mContext, result, "canceled", JS_NewBool(mContext, true));
-        JSValue callResult = JS_Call(mContext, resolvingFuncs[0], JS_UNDEFINED, 1, &result);
-        JS_FreeValue(mContext, callResult);
-        JS_FreeValue(mContext, result);
-        JS_FreeValue(mContext, resolvingFuncs[0]);
-        JS_FreeValue(mContext, resolvingFuncs[1]);
-        return promise;
-    }
-
     const uint32_t formId = mNextFormId++;
     mFormResolvers[formId] = resolvingFuncs[0];
     JS_FreeValue(mContext, resolvingFuncs[1]);
 
+    ServerPlayer *player = resolvePlayer(playerValue);
+    if (player == nullptr) {
+        _resolveForm(formId, std::string(), "PlayerQuit");
+        return promise;
+    }
+
     mHost.sendModalForm(*player, formId, formData,
-                        [this, formId](ServerPlayer &, const std::string &response, bool cancelled) {
-                            _resolveForm(formId, response, cancelled);
+                        [this, formId](ServerPlayer &, const std::string &response,
+                                       ServerNetworkHandler::ModalFormOutcome outcome) {
+                            switch (outcome) {
+                                case ServerNetworkHandler::ModalFormOutcome::Answered:
+                                    _resolveForm(formId, response, "Answered");
+                                    break;
+                                case ServerNetworkHandler::ModalFormOutcome::UserClosed:
+                                    _resolveForm(formId, response, "UserClosed");
+                                    break;
+                                case ServerNetworkHandler::ModalFormOutcome::UserBusy:
+                                    _resolveForm(formId, response, "UserBusy");
+                                    break;
+                                case ServerNetworkHandler::ModalFormOutcome::PlayerQuit:
+                                    _resolveForm(formId, response, "PlayerQuit");
+                                    break;
+                            }
                         });
     return promise;
 }
 
-void ScriptApi::_resolveForm(uint32_t formId, const std::string &response, bool cancelled) {
+void ScriptApi::closeAllForms(JSValueConst playerValue) {
+    ServerPlayer *player = resolvePlayer(playerValue);
+    if (player != nullptr)
+        mHost.closeAllForms(*player);
+}
+
+void ScriptApi::_resolveForm(uint32_t formId, const std::string &response, const char *status) {
     auto it = mFormResolvers.find(formId);
     if (it == mFormResolvers.end())
         return;
@@ -88,10 +102,10 @@ void ScriptApi::_resolveForm(uint32_t formId, const std::string &response, bool 
     mFormResolvers.erase(it);
 
     JSValue result = JS_NewObject(mContext);
-    JS_SetPropertyStr(mContext, result, "canceled", JS_NewBool(mContext, cancelled));
+    JS_SetPropertyStr(mContext, result, "status", JS_NewString(mContext, status));
 
     JSValue value = JS_NULL;
-    if (!cancelled && !response.empty()) {
+    if (!response.empty()) {
         value = JS_ParseJSON(mContext, response.c_str(), response.size(), "<form-response>");
         if (JS_IsException(value)) {
             JS_FreeValue(mContext, JS_GetException(mContext));

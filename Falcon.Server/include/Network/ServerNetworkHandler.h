@@ -85,7 +85,9 @@ class ServerNetworkHandler : public NetworkHandler::Listener,
                              public RakPeerHelper::IPSupportInterface,
                              public PacketSender {
 public:
-    using ModalFormCallback = std::function<void(ServerPlayer &, const std::string &, bool)>;
+    enum class ModalFormOutcome { Answered, UserClosed, UserBusy, PlayerQuit };
+    // the response is empty unless answered
+    using ModalFormCallback = std::function<void(ServerPlayer &, const std::string &, ModalFormOutcome)>;
 
     ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
                          TransportLayer transport = TransportLayer::NetherNet);
@@ -823,6 +825,7 @@ public:
 
     void sendModalForm(ServerPlayer &player, uint32_t formId, const std::string &formData,
                        ModalFormCallback callback = {});
+    void closeAllForms(ServerPlayer &player);
 
 private:
     friend class MovementInputProbe;

@@ -16,6 +16,8 @@
 #include "Network/Handler/LoginHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Protocol/Packets/ChangeDimensionPacket.h"
+#include "Protocol/Packets/ModalFormRequestPacket.h"
+#include "Protocol/Packets/ModalFormResponsePacket.h"
 #include "Protocol/Packets/DimensionDataPacket.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -772,13 +774,49 @@ system.runTimeout(() => {
 })JSON";
 
     const char *const BETA = R"JS(
-import { world } from "@minecraft/server";
-import { ActionFormData } from "@minecraft/server-ui";
+import { world, system } from "@minecraft/server";
+import { ActionFormData, MessageFormData, ModalFormData, FormResponse, ActionFormResponse, MessageFormResponse,
+         ModalFormResponse, FormRejectError, FormRejectReason, FormCancelationReason, UIManager,
+         uiManager } from "@minecraft/server-ui";
 
 r.chatSend = ("chatSend" in world.afterEvents) && ("chatSend" in world.beforeEvents);
 r.form = typeof ActionFormData === "function"
     && Object.getOwnPropertyNames(new ActionFormData()).length === 0;
 world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("beta", JSON.stringify(r)));
+
+const ui = {};
+const save = () => world.setDynamicProperty("ui", JSON.stringify(ui));
+system.afterEvents.scriptEventReceive.subscribe((event) => {
+    if (event.id !== "ui:forms") return;
+    const p = world.getAllPlayers()[0];
+    new ActionFormData().title("t").body("b").header("h").label("l").divider().button("one").button("two", "textures/x")
+        .show(p).then((res) => {
+            ui.action = [res instanceof ActionFormResponse, res instanceof FormResponse, res.canceled, res.selection].join("|");
+            save();
+        });
+    new MessageFormData().body("m").button1("yes").button2("no").show(p).then((res) => {
+        ui.message = [res instanceof MessageFormResponse, res.canceled, res.cancelationReason, res.selection].join("|");
+        save();
+    });
+    new ModalFormData().label("l").toggle("t", { defaultValue: true, tooltip: "tip" }).slider("s", 0, 5, { valueStep: 1 })
+        .textField("f", "ph").show(p).then((res) => {
+            ui.modal = [res instanceof ModalFormResponse, JSON.stringify(res.formValues), res.formValues[0] === undefined].join("|");
+            save();
+        });
+    new ActionFormData().button("x").show(p).catch((e) => {
+        ui.malformed = [e instanceof FormRejectError, e.reason].join("|");
+        save();
+    });
+    uiManager.closeAllForms(p);
+    ui.enums = [FormRejectReason.PlayerQuit, FormCancelationReason.UserBusy, uiManager instanceof UIManager].join("|");
+    try {
+        new ActionFormResponse();
+        ui.sealed = "constructed";
+    } catch (e) {
+        ui.sealed = e.constructor.name;
+    }
+    save();
+});
 )JS";
 
     const char *const UNDECLARED = R"JS(
@@ -1071,6 +1109,68 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(!scriptEvent.execute(console, {"nonamespace"}), "an id without namespace was accepted");
         for (int64_t tick = 1; tick <= 3; ++tick)
             engine.tick(tick);
+
+        // forms: the requests carry the 26.60 JSON, the answers come back as typed responses
+        sent.clear();
+        owner.getNetworkHandler().setOutboundFilter([&sent](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            sent.emplace_back(Packet::peekId(header, sender, client), data);
+            return false;
+        });
+        scriptEvent.execute(console, {"ui:forms"});
+        engine.tick(4);
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        std::vector<ModalFormRequestPacket> requests;
+        bool closed = false;
+        for (const auto &packet: sent) {
+            closed = closed || packet.first == MinecraftPacketIds::ClientboundCloseForm;
+            if (packet.first != MinecraftPacketIds::ModalFormRequest)
+                continue;
+            ReadOnlyBinaryStream body(packet.second);
+            ModalFormRequestPacket request;
+            request.readHeader(body);
+            request.read(body, owner.getCodecContext());
+            requests.push_back(request);
+        }
+        require(requests.size() == 4, "the forms were not all sent");
+        require(closed, "closeAllForms sent no ClientboundCloseFormPacket");
+        const std::unique_ptr<json::Value> action = json::parse(requests[0].mFormData);
+        const json::Value *elements = action->get("elements");
+        require(action->get("buttons") == nullptr && elements != nullptr && elements->mArray.size() == 5,
+                "the action form does not list its elements");
+        const char *const kinds[] = {"header", "label", "divider", "button", "button"};
+        for (size_t index = 0; index < 5; ++index)
+            require(elements->mArray[index]->get("type")->string() == kinds[index],
+                    "an action form element has the wrong type");
+        require(elements->mArray[4]->get("image")->get("data")->string() == "textures/x", "the button icon was lost");
+        const std::unique_ptr<json::Value> modal = json::parse(requests[2].mFormData);
+        require(modal->get("content")->mArray[1]->get("tooltip")->string() == "tip", "the toggle tooltip was not sent");
+
+        const auto answer = [&](const ModalFormRequestPacket &request, const char *data, bool busy) {
+            ModalFormResponsePacket response;
+            response.mFormId = request.mFormId;
+            response.mHasFormData = data != nullptr;
+            response.mFormData = data != nullptr ? data : "";
+            response.mHasCancelReason = data == nullptr;
+            response.mCancelReason = busy ? ModalFormResponsePacket::CancelReason::UserBusy
+                                          : ModalFormResponsePacket::CancelReason::UserClosed;
+            BinaryStream stream;
+            response.writeWithHeader(stream, owner.getCodecContext());
+            static_cast<NetworkHandler::Listener &>(owner).onDataReceived(id, stream.getBuffer());
+        };
+        answer(requests[0], "1", false);
+        answer(requests[1], nullptr, true);
+        answer(requests[2], "[null,true,3,\"hi\"]", false);
+        answer(requests[3], "\"x\"", false);
+        engine.tick(5);
+        const std::unique_ptr<json::Value> forms = result(owner, "ui");
+        expect(*forms, "action", "true|true|false|1");
+        expect(*forms, "message", "true|true|UserBusy|");
+        expect(*forms, "modal", "true|[null,true,3,\"hi\"]|true");
+        expect(*forms, "malformed", "true|MalformedResponse");
+        expect(*forms, "enums", "PlayerQuit|UserBusy|true");
+        expect(*forms, "sealed", "ReferenceError");
 
         if (static_cast<MobActor *>(horse)->isTamed()) {
             {

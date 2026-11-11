@@ -9,7 +9,7 @@ namespace ScriptBootstraps {
     // (native) => { BlockPermutation, BlockType, BlockTypes, BlockStates, ItemType, ItemTypes, installJobs }
     const char *data();
 
-    // (native) => { ActionFormData, MessageFormData, ModalFormData }
+    // (native: showForm, closeAllForms, errors) => the classic form classes, responses and uiManager
     const char *ui();
 
     // (native) => { Scoreboard, ScoreboardObjective, TickingAreaManager, scoreboard, tickingAreaManager }

@@ -305,9 +305,55 @@ namespace {
     const char *UI = R"JS(
 (function (native) {
     const ft = (v) => (v !== null && typeof v === "object") ? (v.rawtext ? v : { rawtext: [v] }) : String(v);
+    const token = Symbol();
+    const sealed = (name) => {
+        throw new ReferenceError("No constructor for native class '" + name + "'.");
+    };
+    const field = (target, key, value) => Object.defineProperty(target, key, { value, enumerable: true });
+    const reject = (reason) => native.errors.make("FormRejectError", "", { reason });
 
+    class FormResponse {
+        constructor(key, canceled, reason) {
+            if (key !== token) sealed(new.target === undefined ? "FormResponse" : new.target.name);
+            field(this, "canceled", canceled);
+            if (reason !== undefined) field(this, "cancelationReason", reason);
+        }
+    }
+    class ActionFormResponse extends FormResponse {
+        constructor(key, canceled, reason, selection) {
+            super(key, canceled, reason);
+            if (selection !== undefined) field(this, "selection", selection);
+        }
+    }
+    class MessageFormResponse extends FormResponse {
+        constructor(key, canceled, reason, selection) {
+            super(key, canceled, reason);
+            if (selection !== undefined) field(this, "selection", selection);
+        }
+    }
+    class ModalFormResponse extends FormResponse {
+        constructor(key, canceled, reason, formValues) {
+            super(key, canceled, reason);
+            if (formValues !== undefined) field(this, "formValues", formValues);
+        }
+    }
+
+    // UserClosed and UserBusy cancel; a player leaving or the server stopping rejects
+    const settle = async (player, data, Response, read) => {
+        const r = await native.showForm(player, JSON.stringify(data));
+        if (r.status === "UserClosed" || r.status === "UserBusy")
+            return new Response(token, true, r.status);
+        if (r.status !== "Answered")
+            throw reject(r.status);
+        const value = read(r.value);
+        if (value === undefined)
+            throw reject("MalformedResponse");
+        return new Response(token, false, undefined, value);
+    };
+
+    // 26.60 action forms list buttons and text in one elements array
     class ActionFormData {
-        #data = { type: "form", title: "", content: "", buttons: [] };
+        #data = { type: "form", title: "", content: "", elements: [] };
         title(text) {
             this.#data.title = ft(text);
             return this;
@@ -317,24 +363,26 @@ namespace {
             return this;
         }
         button(text, icon) {
-            const entry = { text: ft(text) };
+            const entry = { type: "button", text: ft(text) };
             if (icon !== undefined) entry.image = { type: "path", data: String(icon) };
-            this.#data.buttons.push(entry);
+            this.#data.elements.push(entry);
             return this;
         }
         header(text) {
+            this.#data.elements.push({ type: "header", text: ft(text) });
             return this;
         }
         label(text) {
+            this.#data.elements.push({ type: "label", text: ft(text) });
             return this;
         }
         divider() {
+            this.#data.elements.push({ type: "divider", text: "" });
             return this;
         }
-        async show(player) {
-            const r = await native.showForm(player, JSON.stringify(this.#data));
-            if (r.canceled || r.value === null) return { canceled: true, cancelationReason: "UserClosed" };
-            return { canceled: false, selection: r.value };
+        show(player) {
+            return settle(player, this.#data, ActionFormResponse,
+                (v) => Number.isInteger(v) && v >= 0 ? v : undefined);
         }
     }
 
@@ -356,12 +404,17 @@ namespace {
             this.#data.button2 = ft(text);
             return this;
         }
-        async show(player) {
-            const r = await native.showForm(player, JSON.stringify(this.#data));
-            if (r.canceled || r.value === null) return { canceled: true, cancelationReason: "UserClosed" };
-            return { canceled: false, selection: r.value === true ? 0 : 1 };
+        show(player) {
+            return settle(player, this.#data, MessageFormResponse,
+                (v) => typeof v === "boolean" ? (v ? 0 : 1) : undefined);
         }
     }
+
+    const options = (value, key) => (value !== null && typeof value === "object") ? value : { [key]: value };
+    const tooltip = (entry, source) => {
+        if (source.tooltip !== undefined) entry.tooltip = ft(source.tooltip);
+        return entry;
+    };
 
     class ModalFormData {
         #data = { type: "custom_form", title: "", content: [] };
@@ -369,53 +422,66 @@ namespace {
             this.#data.title = ft(text);
             return this;
         }
-        textField(label, placeholder, defaultValue) {
-            this.#data.content.push({ type: "input", text: ft(label), placeholder: String(placeholder || ""), default: defaultValue === undefined ? "" : String(defaultValue) });
+        textField(label, placeholder, textFieldOptions) {
+            const o = options(textFieldOptions, "defaultValue");
+            const def = o.defaultValue === undefined ? "" : (typeof o.defaultValue === "object" ? ft(o.defaultValue) : String(o.defaultValue));
+            this.#data.content.push(tooltip({ type: "input", text: ft(label), placeholder: placeholder === undefined ? "" : ft(placeholder), default: def }, o));
             return this;
         }
-        toggle(label, defaultValue) {
-            const options = (defaultValue !== null && typeof defaultValue === "object") ? defaultValue : { defaultValue };
-            this.#data.content.push({ type: "toggle", text: ft(label), default: options.defaultValue === true });
+        toggle(label, toggleOptions) {
+            const o = options(toggleOptions, "defaultValue");
+            this.#data.content.push(tooltip({ type: "toggle", text: ft(label), default: o.defaultValue === true }, o));
             return this;
         }
-        slider(label, min, max, step, defaultValue) {
-            let valueStep = 1;
-            let def = Number(min);
-            if (step !== null && typeof step === "object") {
-                if (step.valueStep !== undefined) valueStep = Number(step.valueStep);
-                if (step.defaultValue !== undefined) def = Number(step.defaultValue);
-            } else {
-                if (step !== undefined) valueStep = Number(step);
-                if (defaultValue !== undefined) def = Number(defaultValue);
-            }
-            this.#data.content.push({ type: "slider", text: ft(label), min: Number(min), max: Number(max), step: valueStep, default: def });
+        slider(label, min, max, sliderOptions, defaultValue) {
+            let o = {};
+            if (sliderOptions !== null && typeof sliderOptions === "object") o = sliderOptions;
+            else o = { valueStep: sliderOptions, defaultValue };
+            const step = o.valueStep === undefined ? 1 : Number(o.valueStep);
+            const def = o.defaultValue === undefined ? Number(min) : Number(o.defaultValue);
+            this.#data.content.push(tooltip({ type: "slider", text: ft(label), min: Number(min), max: Number(max), step, default: def }, o));
             return this;
         }
-        dropdown(label, options, defaultIndex) {
-            let def = 0;
-            if (defaultIndex !== null && typeof defaultIndex === "object") {
-                if (defaultIndex.defaultValueIndex !== undefined) def = Number(defaultIndex.defaultValueIndex);
-            } else if (defaultIndex !== undefined) {
-                def = Number(defaultIndex);
-            }
-            this.#data.content.push({ type: "dropdown", text: ft(label), options: options.map(ft), default: def });
+        dropdown(label, items, dropdownOptions) {
+            const o = options(dropdownOptions, "defaultValueIndex");
+            const def = o.defaultValueIndex === undefined ? 0 : Number(o.defaultValueIndex);
+            this.#data.content.push(tooltip({ type: "dropdown", text: ft(label), options: items.map(ft), default: def }, o));
             return this;
         }
-        label(text) { this.#data.content.push({ type: "label", text: ft(text) }); return this; }
-        header(text) { this.#data.content.push({ type: "header", text: ft(text) }); return this; }
-        divider() { this.#data.content.push({ type: "divider" }); return this; }
+        label(text) {
+            this.#data.content.push({ type: "label", text: ft(text) });
+            return this;
+        }
+        header(text) {
+            this.#data.content.push({ type: "header", text: ft(text) });
+            return this;
+        }
+        divider() {
+            this.#data.content.push({ type: "divider", text: "" });
+            return this;
+        }
         submitButton(text) {
             this.#data.submit = ft(text);
             return this;
         }
-        async show(player) {
-            const r = await native.showForm(player, JSON.stringify(this.#data));
-            if (r.canceled || r.value === null) return { canceled: true, cancelationReason: "UserClosed" };
-            return { canceled: false, formValues: r.value };
+        show(player) {
+            return settle(player, this.#data, ModalFormResponse,
+                (v) => Array.isArray(v) ? v.map((x) => x === null ? undefined : x) : undefined);
         }
     }
 
-    return { ActionFormData, MessageFormData, ModalFormData };
+    class UIManager {
+        constructor(key) {
+            if (key !== token) sealed("UIManager");
+        }
+        closeAllForms(player) {
+            native.closeAllForms(player);
+        }
+    }
+    const uiManager = new UIManager(token);
+
+    return { ActionFormData, MessageFormData, ModalFormData, FormResponse, ActionFormResponse, MessageFormResponse,
+        ModalFormResponse, UIManager, uiManager };
 })
 )JS";
 
