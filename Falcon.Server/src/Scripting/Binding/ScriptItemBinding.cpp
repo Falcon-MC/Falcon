@@ -64,7 +64,8 @@ namespace {
                                                 {"ThrownLingering", "minecraft:lingering_potion"}};
 
     // EnchantmentTargets bits as EnchantmentSlot values
-    // TODO: trident as Spear and the mask as CosmeticHead are unverified (IDA unavailable)
+    // EnchantSlot names: sub_149C81280; the data-driven spears carry melee_spear
+    // TODO: trident as Spear and the mask as CosmeticHead: their item constructors are only reached from sub_144997DC0
     const std::pair<uint32_t, const char *> ENCHANTMENT_SLOTS[] = {
             {EnchantmentTargets::HELMET, "ArmorHead"},
             {EnchantmentTargets::CHESTPLATE, "ArmorTorso"},
@@ -183,7 +184,8 @@ namespace {
         return identifier == WRITABLE_BOOK || identifier == WRITTEN_BOOK;
     }
 
-    // TODO: the dyeable item list is unverified (IDA unavailable): leather armor pieces and wolf armor
+    // dyeable means carrying minecraft:dyeable: sub_142C33160; the component comes from item json, sub_143F0F5E0
+    // TODO: the vanilla item json is not in the binary nor the bundled data; leather armor and wolf armor for now
     bool isDyeable(const std::string &identifier) {
         return identifier == "minecraft:leather_helmet" || identifier == "minecraft:leather_chestplate"
                || identifier == "minecraft:leather_leggings" || identifier == "minecraft:leather_boots"
@@ -711,7 +713,8 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // TODO: the key of items without a minecraft:display_name is unverified (IDA unavailable)
+    // "item." + description id + ".name": sub_148EE72C0
+    // TODO: description ids differ from identifiers (item.horsearmorleather.name); set in sub_144997DC0
     JSValue itemGetLocalizationKey(JSContext *ctx, ScriptApi &api, ScriptItemData &data, int, JSValueConst *) {
         if (const Tag *name = vanillaComponent(data.mTypeId, "minecraft:display_name"))
             return string(ctx, name->getString("value"));
@@ -1256,7 +1259,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // TODO: the default leather color is unverified (IDA unavailable)
+    // TODO: default_color comes from the vanilla item json (sub_143EB7290 schema), not in the binary
     JSValue dyeableGetDefaultColor(JSContext *, JSValueConst, int, JSValueConst *) {
         return JS_UNDEFINED;
     }
