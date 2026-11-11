@@ -363,6 +363,9 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         }
     }
 
+    // completeUsingItem sends the complete use event before useTimeDepleted eats (sub_1402C33D0)
+    mScriptEngine.onItemConsume(player, usedItem);
+
     if (itemType != nullptr)
         itemType->onConsumed(*this, player, usedItem);
 

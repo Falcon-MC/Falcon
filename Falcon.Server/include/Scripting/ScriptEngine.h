@@ -123,6 +123,9 @@ public:
     // the used stack, read before the game decrements it
     void onItemCompleteUse(ServerPlayer &player, const ItemStack &used);
 
+    // food only, after onCompleteUse: the food component fires it once eaten
+    void onItemConsume(ServerPlayer &player, const ItemStack &used);
+
     // onBeforeDurabilityDamage then onHitEntity; returns the durability damage scripts settled on
     int32_t onItemHitEntity(ServerPlayer &attacker, Actor &target, bool hadEffect, int32_t durabilityDamage);
 

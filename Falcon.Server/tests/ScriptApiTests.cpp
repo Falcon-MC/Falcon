@@ -364,8 +364,14 @@ system.beforeEvents.startup.subscribe((event) => {
                 + (event instanceof ItemComponentUseOnEvent) + (event instanceof ItemUseOnEvent);
             save();
         },
-        onCompleteUse: log("onCompleteUse"),
-        onConsume: log("onConsume"),
+        onCompleteUse(event, params) {
+            r.useOrder = (r.useOrder || "") + event.itemStack.typeId + ":complete;";
+            log("onCompleteUse")(event, params);
+        },
+        onConsume(event, params) {
+            r.useOrder = (r.useOrder || "") + event.itemStack.typeId + ":consume;";
+            log("onConsume")(event, params);
+        },
         onHitEntity(event, params) {
             r.itemOrder = (r.itemOrder || "") + "hit;";
             log("onHitEntity")(event, params);
@@ -503,6 +509,14 @@ system.runTimeout(() => {
   }
 })JSON";
 
+    const char *const COMPONENT_FOOD = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:snack" },
+    "components": { "minecraft:food": { "nutrition": 2 }, "minecraft:use_duration": 1.6, "test:wand": {} }
+  }
+})JSON";
+
     const char *const STATEFUL_BLOCK = R"JSON({
   "format_version": "1.21.90",
   "minecraft:block": {
@@ -606,6 +620,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writePack(packs, "components", server2, std::string(PRELUDE) + COMPONENTS);
         writeFile(packs / "components" / "blocks" / "block.json", COMPONENT_BLOCK);
         writeFile(packs / "components" / "items" / "wand.json", COMPONENT_ITEM);
+        writeFile(packs / "components" / "items" / "snack.json", COMPONENT_FOOD);
         writeFile(packs / "components" / "blocks" / "stateful.json", STATEFUL_BLOCK);
         writeFile(packs / "stable1" / "blocks" / "legacy.json", LEGACY_BLOCK);
 
@@ -740,6 +755,13 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         engine.onItemUse(player);
         engine.onItemUseOnBlock(player, at, 1, Vector3f(0.5f, 1.0f, 0.5f));
         engine.onItemCompleteUse(player, wand);
+        engine.onItemConsume(player, wand);
+        ItemStack snack;
+        snack.mDefinition = owner.getItemDefinitions().getDefinition("test:snack");
+        snack.mCount = 1;
+        require(snack.mDefinition != nullptr, "the custom food was not registered");
+        engine.onItemCompleteUse(player, snack);
+        engine.onItemConsume(player, snack);
         require(engine.onItemHitEntity(player, player, true, 2) == 7, "onBeforeDurabilityDamage was not applied");
         PlayerBreakBlockAfterEvent broken(player, at, "test:block");
         owner.getEventBus().after().mPlayerBreakBlock.emit(broken);
@@ -962,6 +984,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                "truetrue");
         expect(c, "onCompleteUse", "ItemComponentCompleteUseEvent|itemStack+source|{}");
         expect(c, "onConsume", "ItemComponentConsumeEvent|itemStack+source|{}");
+        // onConsume needs minecraft:food and follows onCompleteUse
+        expect(c, "useOrder", "test:wand:complete;test:snack:complete;test:snack:consume;");
         expect(c, "onHitEntity", "ItemComponentHitEntityEvent|attackingEntity+hadEffect+hitEntity+itemStack|{}");
         expect(c, "onBeforeDurabilityDamage",
                "ItemComponentBeforeDurabilityDamageEvent|attackingEntity+durabilityDamage+hitEntity+itemStack|{}|2");

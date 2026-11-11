@@ -911,7 +911,21 @@ void ScriptEngine::onItemCompleteUse(ServerPlayer &player, const ItemStack &used
         JS_SetPropertyStr(api.context(), event, "itemStack", api.makeItem(used));
     };
     _fireComponent(false, item->mCustomComponents, "onCompleteUse", "ItemComponentCompleteUseEvent", fill);
-    _fireComponent(false, item->mCustomComponents, "onConsume", "ItemComponentConsumeEvent", fill);
+}
+
+void ScriptEngine::onItemConsume(ServerPlayer &player, const ItemStack &used) {
+    if (used.isAir() || used.mDefinition == nullptr)
+        return;
+    const CustomItemDefinition *item = CustomContentRegistry::getInstance().findItem(used.mDefinition->getIdentifier());
+    // the game subscribes onConsume to the food component's signal only (sub_14A7F6070)
+    if (item == nullptr || !item->mIsFood)
+        return;
+
+    _fireComponent(false, item->mCustomComponents, "onConsume", "ItemComponentConsumeEvent",
+                   [&](ScriptApi &api, JSValue event) {
+                       JS_SetPropertyStr(api.context(), event, "source", api.makePlayer(player));
+                       JS_SetPropertyStr(api.context(), event, "itemStack", api.makeItem(used));
+                   });
 }
 
 int32_t ScriptEngine::onItemHitEntity(ServerPlayer &attacker, Actor &target, bool hadEffect, int32_t durabilityDamage) {
