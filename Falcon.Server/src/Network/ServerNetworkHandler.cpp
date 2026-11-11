@@ -542,6 +542,7 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
 
     if (mNetherNetInstance != nullptr) {
         mNetherNetInstance->setUnofficialClientsAllowed(mProperties.getAllowUnofficialClients());
+        mNetherNetInstance->setAnonymousLanClientsAllowed(mProperties.getAllowLanWithoutIdentity());
         // the verdict comes back later, see the tick: the connection is not held for it
         mNetherNetInstance->setNegotiationFailureObserver([](int errorCode, int clientCheck) {
             if (clientCheck != 0)

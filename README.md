@@ -83,6 +83,12 @@ request, without the player's account token and without any address, the server'
 does, and the server removes it if not. No player name or identifier is sent. If the service does not answer,
 the client stays. Set `allow-unofficial-clients=true` to turn every client check off, including this one.
 
+**LAN games.** In a LAN game the client sends its connection offer without the identity assertion it sends
+otherwise, so by default these players can't join. Set `allow-lan-without-identity=true` to let them in. Only
+offers that arrive through LAN discovery from a private address (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12,
+192.168.0.0/16, link local or IPv6 unique local) are accepted without the assertion, and the client checks still
+apply to them. Keep it off on a public server: the LAN port answers anyone who can reach it.
+
 **Telemetry**, off by default. With `emit-server-telemetry=true` the server reports, at start, every half
 hour and at stop: its version, system, architecture, transport, player count, player limit, uptime, how long
 ticks took, how often each client check fired and on what platform the removed client said it was, and why
