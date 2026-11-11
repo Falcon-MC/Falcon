@@ -260,17 +260,30 @@ McStructure McStructure::capture(ServerNetworkHandler &owner, Level &level, cons
     return structure;
 }
 
+// sub_147772E00: a cell stays when the integrity percent beats a draw from a twister seeded with its index plus the
+// seed
+bool McStructure::_kept(size_t index, float integrity, uint32_t seed) {
+    if (integrity == 0.0f)
+        return false;
+    if (integrity >= 100.0f)
+        return true;
+    std::mt19937 random((uint32_t) index + seed);
+    const float draw = (float) ((double) random() * 2.3283064365386963e-10);
+    return integrity > (float) (draw * 100.0);
+}
+
 Vector3i McStructure::rotatedSize(int32_t rotation) const {
     return (rotation & 1) != 0 ? Vector3i(mSize.z, mSize.y, mSize.x) : mSize;
 }
 
-// TODO: mirror then rotate, as the structure block shows it; the game's order and its state rotation unverified
+// StructureTemplate::_placeNextBlockSegmentInWorld (sub_146986070): mirror then rotate about the pivot, the script's
+// pivot being (size - 1) / 2 (sub_14B860340); mirror X flips z, Z flips x
 Vector3i McStructure::transform(const Vector3i &local, const PlaceOptions &options) const {
     int32_t x = local.x, z = local.z;
     if (options.mMirror == Mirror::X || options.mMirror == Mirror::XZ)
-        x = mSize.x - 1 - x;
-    if (options.mMirror == Mirror::Z || options.mMirror == Mirror::XZ)
         z = mSize.z - 1 - z;
+    if (options.mMirror == Mirror::Z || options.mMirror == Mirror::XZ)
+        x = mSize.x - 1 - x;
     switch (options.mRotation & 3) {
         case 1:
             return Vector3i(mSize.z - 1 - z, local.y, x);
@@ -285,19 +298,15 @@ Vector3i McStructure::transform(const Vector3i &local, const PlaceOptions &optio
 
 void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3i &at,
                         const PlaceOptions &options) const {
-    // TODO: integrity draws from the game's random, std::mt19937 stands in
-    std::mt19937 random((uint32_t) options.mSeed);
-    std::uniform_real_distribution<float> chance(0.0f, 1.0f);
+    const float integrity = std::min(options.mIntegrity * 100.0f, 100.0f);
 
     if (options.mBlocks) {
-        for (int32_t x = 0; x < mSize.x; ++x) {
-            for (int32_t y = 0; y < mSize.y; ++y) {
+        for (int32_t y = 0; y < mSize.y; ++y) {
+            for (int32_t x = 0; x < mSize.x; ++x) {
                 for (int32_t z = 0; z < mSize.z; ++z) {
                     const Vector3i local(x, y, z);
                     const BlockState *state = getBlock(local);
-                    if (state == nullptr)
-                        continue;
-                    if (options.mIntegrity < 1.0f && chance(random) > options.mIntegrity)
+                    if (state == nullptr || !_kept(_index(local), integrity, options.mSeed))
                         continue;
                     const Vector3i offset = transform(local, options);
                     const Vector3i target(at.x + offset.x, at.y + offset.y, at.z + offset.z);

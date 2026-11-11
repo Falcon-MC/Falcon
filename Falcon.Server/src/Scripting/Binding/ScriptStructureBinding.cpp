@@ -7,8 +7,10 @@
 #include "World/Level/World.h"
 #include "World/Level/WorldManager.h"
 
+#include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <functional>
 
 using namespace ScriptValues;
@@ -179,6 +181,34 @@ namespace {
         return true;
     }
 
+    // sub_141EC6740: trimmed, a whole base 10 integer as is, else a 31 hash over the code points; empty reads none
+    bool readIntegritySeed(const std::string &text, uint32_t &seed) {
+        const char *const blanks = "\t\n\v\f\r ";
+        const size_t first = text.find_first_not_of(blanks);
+        if (first == std::string::npos)
+            return false;
+        const std::string trimmed = text.substr(first, text.find_last_not_of(blanks) - first + 1);
+        errno = 0;
+        char *end = nullptr;
+        const long long value = std::strtoll(trimmed.c_str(), &end, 10);
+        if (end == trimmed.c_str() + trimmed.size() && errno != ERANGE) {
+            seed = (uint32_t) value;
+            return true;
+        }
+        int32_t hash = 0;
+        for (size_t at = 0; at < trimmed.size();) {
+            const unsigned char lead = (unsigned char) trimmed[at];
+            const size_t length = lead < 0x80 ? 1 : lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4;
+            uint32_t point = length == 1 ? lead : lead & (0x7F >> length);
+            for (size_t index = 1; index < length && at + index < trimmed.size(); ++index)
+                point = (point << 6) | ((unsigned char) trimmed[at + index] & 0x3F);
+            hash = (int32_t) ((uint32_t) point + 31u * (uint32_t) hash);
+            at += length;
+        }
+        seed = (uint32_t) hash;
+        return true;
+    }
+
     JSValue managerPlace(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         std::string id;
@@ -204,15 +234,16 @@ namespace {
         double share = 1.0;
         if (valid && !JS_IsUndefined(integrity))
             valid = JS_ToFloat64(ctx, &share, integrity) == 0 && std::isfinite(share);
-        // TODO: the game hashes integritySeed its own way, std::hash stands in
-        if (!JS_IsUndefined(seed))
-            place.mSeed = (int64_t) std::hash<std::string>()(toString(ctx, seed));
+        const bool hasSeed = !JS_IsUndefined(seed);
+        const std::string seedText = hasSeed ? toString(ctx, seed) : std::string();
         for (JSValue value: {rotation, mirror, integrity, seed})
             JS_FreeValue(ctx, value);
         if (!valid)
             return typeError(ctx);
         if (share < 0.0 || share > 1.0)
             return api->throwError("ArgumentOutOfBoundsError", "");
+        if (hasSeed && !readIntegritySeed(seedText, place.mSeed))
+            return api->throwError("InvalidArgumentError", "Invalid integrity seed.");
         place.mIntegrity = (float) share;
 
         Level &level = api->levelOf(argv[1]);

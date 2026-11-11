@@ -30,7 +30,7 @@ public:
         bool mWaterlogged = false;
         // the share of blocks kept, 1 keeps all
         float mIntegrity = 1.0f;
-        int64_t mSeed = 0;
+        uint32_t mSeed = 0;
         // called with each block before it is set: may change it, false skips the cell
         std::function<bool(const Vector3i &target, BlockState &state)> mFilter;
     };
@@ -94,6 +94,8 @@ public:
 
 private:
     size_t _index(const Vector3i &local) const;
+
+    static bool _kept(size_t index, float integrity, uint32_t seed);
 
     int32_t _paletteIndex(const BlockState &state);
 

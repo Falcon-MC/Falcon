@@ -416,7 +416,8 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
                 "a quarter turn moved the corner wrong");
         options.mRotation = 0;
         options.mMirror = McStructure::Mirror::X;
-        require(structure.transform(Vector3i(0, 0, 0), options).x == 1, "the x mirror did not flip x");
+        const Vector3i mirrored = structure.transform(Vector3i(0, 0, 0), options);
+        require(mirrored.x == 0 && mirrored.z == 2, "the x mirror did not flip z");
     }
 
     void run(const std::filesystem::path &directory) {
