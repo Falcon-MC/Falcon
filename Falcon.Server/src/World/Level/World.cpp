@@ -50,6 +50,7 @@ bool World::open(const std::string &worldsDirectory, size_t workerThreads, const
     }
 
     mTickingAreas.load(*this);
+    mPositionTracking.load(*mOverworld);
     return opened;
 }
 
