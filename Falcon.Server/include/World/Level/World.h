@@ -3,6 +3,7 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Dimension/EndDragonFight.h"
 #include "World/Level/Level.h"
+#include "World/Level/PositionTrackingDB.h"
 #include "World/Level/TickingAreaManager.h"
 
 #include <unordered_map>
@@ -67,6 +68,10 @@ public:
         return *mDragonFight;
     }
 
+    PositionTrackingDB &getPositionTracking() {
+        return mPositionTracking;
+    }
+
     std::unordered_set<int64_t> &getActorLoadedChunks(DimensionType dimension) {
         return mActorLoadedChunks[Dimension::toId(dimension)];
     }
@@ -92,5 +97,6 @@ private:
     // kept whole: fields the server ignores are written back unchanged
     Tag mTheEndData = Tag::ofCompound();
     TickingAreaManager mTickingAreas;
+    PositionTrackingDB mPositionTracking;
     std::unordered_map<int32_t, std::unordered_set<int64_t>> mActorLoadedChunks;
 };
