@@ -438,6 +438,8 @@ namespace {
                                         "Difficulty",
                                         "TimeOfDay",
                                         "MoonPhase",
+                                        "HudElement",
+                                        "HudVisibility",
                                         "WeatherType",
                                         "ScriptEventSource",
                                         "GameRule",
@@ -1603,6 +1605,13 @@ void ScriptApi::_defineEnums() {
             JS_DefinePropertyValueStr(mContext, object, value.first.c_str(), member, JS_PROP_ENUMERABLE);
         }
         mServerExports.emplace_back(name, object);
+    }
+
+    // the typings declare these as plain constants
+    for (const auto &constant: {std::make_pair("HudElementsCount", ServerPlayer::HUD_ELEMENT_COUNT),
+                                std::make_pair("HudVisibilityCount", 2)}) {
+        if (mSurface.has(constant.first))
+            mServerExports.emplace_back(constant.first, JS_NewInt32(mContext, constant.second));
     }
 
     if (mCommonSurface.has("InvalidArgumentErrorType")) {

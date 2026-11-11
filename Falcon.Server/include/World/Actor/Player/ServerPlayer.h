@@ -582,6 +582,15 @@ public:
 
     void clearTitle();
 
+    static const int HUD_ELEMENT_COUNT = 13;
+
+    // Player::setHudVisibility (sub_141030B10): no elements means all of them
+    void setHudVisibility(bool hidden, const std::vector<int32_t> *elements = nullptr);
+
+    bool isHudElementHidden(int32_t element) const {
+        return element >= 0 && element < HUD_ELEMENT_COUNT && mHiddenHudElements[element];
+    }
+
     void resetTitle();
 
     bool hasPendingMove() const {
@@ -1150,6 +1159,7 @@ private:
     bool mEffectsNetworkReady = false;
     PlayerRaidState mRaidState;
     PlayerBossBars mBossBars;
+    bool mHiddenHudElements[HUD_ELEMENT_COUNT] = {};
     DebugHud mDebugHud;
     std::unordered_map<std::string, int64_t> mItemCooldowns;
     int32_t mShieldTransitionTicks = 0;

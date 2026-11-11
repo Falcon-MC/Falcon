@@ -56,6 +56,7 @@ BOUND = {
         'PotionDeliveryType', 'Potions', 'BookErrorReason', 'ContainerRulesErrorReason',
         'ItemBlockDynamicPropertiesComponent', 'CustomCommandRegistry', 'CustomCommandOrigin', 'CustomCommandSource',
         'CustomCommandParamType', 'CustomCommandStatus', 'CustomCommandErrorReason',
+        'HudElement', 'HudVisibility', 'HudElementsCount', 'HudVisibilityCount',
     },
     'server-ui': None,
     'common': None,

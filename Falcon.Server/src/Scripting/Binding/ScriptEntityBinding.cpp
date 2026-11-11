@@ -2047,21 +2047,155 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    void sendSubtitle(JSContext *ctx, ServerPlayer &player, JSValueConst subtitle) {
+        bool isJson = false;
+        const std::string text = messageToRawText(ctx, subtitle, isJson);
+        player.sendSubtitle(text, isJson);
+    }
+
+    // ScriptScreenDisplay::setTitle (sub_14B9171E0): the times first, 10/70/20 without options, then the
+    // subtitle and the title; an empty title string clears it
     JSValue screenSetTitle(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ServerPlayer *player = partOwner(ctx, thisVal);
-        if (player != nullptr && argc >= 1) {
-            bool isJson = false;
-            const std::string text = messageToRawText(ctx, argv[0], isJson);
-            ScriptApi::fromContext(ctx)->host().sendTitle(*player, text, isJson);
+        if (player == nullptr || argc < 1)
+            return JS_UNDEFINED;
+
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const bool hasOptions = argc >= 2 && JS_IsObject(argv[1]);
+        if (hasOptions) {
+            int32_t durations[3] = {0, 0, 0};
+            const char *const keys[3] = {"fadeInDuration", "stayDuration", "fadeOutDuration"};
+            for (int i = 0; i < 3; ++i) {
+                JSValue value = JS_GetPropertyStr(ctx, argv[1], keys[i]);
+                const bool converted = JS_IsNumber(value) && JS_ToInt32(ctx, &durations[i], value) == 0;
+                JS_FreeValue(ctx, value);
+                if (!converted)
+                    return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+                if (durations[i] < 0)
+                    return api->throwError("ArgumentOutOfBoundsError", "");
+            }
+            player->setTitleTimes(durations[0], durations[1], durations[2]);
+
+            JSValue subtitle = JS_GetPropertyStr(ctx, argv[1], "subtitle");
+            if (!JS_IsUndefined(subtitle))
+                sendSubtitle(ctx, *player, subtitle);
+            JS_FreeValue(ctx, subtitle);
+        } else {
+            player->setTitleTimes(10, 70, 20);
         }
+
+        bool isJson = false;
+        const std::string text = messageToRawText(ctx, argv[0], isJson);
+        if (!isJson && text.empty())
+            player->clearTitle();
+        else
+            api->host().sendTitle(*player, text, isJson);
         return JS_UNDEFINED;
+    }
+
+    JSValue screenUpdateSubtitle(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        if (player != nullptr && argc >= 1)
+            sendSubtitle(ctx, *player, argv[0]);
+        return JS_UNDEFINED;
+    }
+
+    bool readHudElement(JSContext *ctx, JSValueConst value, int32_t &element) {
+        return JS_IsNumber(value) && JS_ToInt32(ctx, &element, value) == 0 && element >= 0
+               && element < ServerPlayer::HUD_ELEMENT_COUNT;
+    }
+
+    // undefined means every element
+    bool readHudElements(JSContext *ctx, JSValueConst value, bool &all, std::vector<int32_t> &elements) {
+        all = JS_IsUndefined(value);
+        if (all)
+            return true;
+        if (!JS_IsArray(value))
+            return false;
+
+        JSValue lengthValue = JS_GetPropertyStr(ctx, value, "length");
+        uint32_t length = 0;
+        JS_ToUint32(ctx, &length, lengthValue);
+        JS_FreeValue(ctx, lengthValue);
+        for (uint32_t index = 0; index < length; ++index) {
+            JSValue item = JS_GetPropertyUint32(ctx, value, index);
+            int32_t element = 0;
+            const bool valid = readHudElement(ctx, item, element);
+            JS_FreeValue(ctx, item);
+            if (!valid)
+                return false;
+            elements.push_back(element);
+        }
+        return true;
+    }
+
+    JSValue screenSetHudVisibility(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        int32_t visibility = 0;
+        bool all = true;
+        std::vector<int32_t> elements;
+        if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToInt32(ctx, &visibility, argv[0]) != 0 || visibility < 0
+            || visibility > 1 || !readHudElements(ctx, argc >= 2 ? argv[1] : JS_UNDEFINED, all, elements))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (player != nullptr)
+            player->setHudVisibility(visibility == 0, all ? nullptr : &elements);
+        return JS_UNDEFINED;
+    }
+
+    // sub_141031010: everything but the listed elements is hidden; those keep their state
+    JSValue screenHideAllExcept(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        bool all = true;
+        std::vector<int32_t> kept;
+        if (!readHudElements(ctx, argc >= 1 ? argv[0] : JS_UNDEFINED, all, kept))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (player == nullptr)
+            return JS_UNDEFINED;
+        if (all) {
+            player->setHudVisibility(true);
+            return JS_UNDEFINED;
+        }
+
+        std::vector<int32_t> hidden;
+        for (int32_t element = 0; element < ServerPlayer::HUD_ELEMENT_COUNT; ++element) {
+            if (std::find(kept.begin(), kept.end(), element) == kept.end())
+                hidden.push_back(element);
+        }
+        player->setHudVisibility(true, &hidden);
+        return JS_UNDEFINED;
+    }
+
+    JSValue screenResetHudElementsVisibility(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        if (player != nullptr)
+            player->setHudVisibility(false);
+        return JS_UNDEFINED;
+    }
+
+    JSValue screenIsForcedHidden(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        int32_t element = 0;
+        if (argc < 1 || !readHudElement(ctx, argv[0], element))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        return JS_NewBool(ctx, player != nullptr && player->isHudElementHidden(element));
+    }
+
+    JSValue screenGetHiddenHudElements(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        JSValue result = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (int32_t element = 0; player != nullptr && element < ServerPlayer::HUD_ELEMENT_COUNT; ++element) {
+            if (player->isHudElementHidden(element))
+                JS_SetPropertyUint32(ctx, result, index++, JS_NewInt32(ctx, element));
+        }
+        return result;
     }
 
     JSValue partGetIsValid(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         return JS_NewBool(ctx, partOwner(ctx, thisVal) != nullptr);
     }
 
-    // TODO: subtitle, camera presets and fades, input permissions and the locator bar do nothing yet
+    // TODO: camera presets and fades, input permissions and the locator bar do nothing yet
     JSValue partNoop(JSContext *, JSValueConst, int, JSValueConst *) {
         return JS_UNDEFINED;
     }
@@ -2466,7 +2600,13 @@ void ScriptApi::_bindPlayer() {
     property(screen, "ScreenDisplay", "isValid", partGetIsValid);
     method(screen, "ScreenDisplay", "setActionBar", screenSetActionBar, 1);
     method(screen, "ScreenDisplay", "setTitle", screenSetTitle, 2);
-    method(screen, "ScreenDisplay", "updateSubtitle", partNoop, 1);
+    method(screen, "ScreenDisplay", "updateSubtitle", screenUpdateSubtitle, 1);
+    method(screen, "ScreenDisplay", "setHudVisibility", screenSetHudVisibility, 2);
+    method(screen, "ScreenDisplay", "hideAllExcept", screenHideAllExcept, 1);
+    method(screen, "ScreenDisplay", "resetHudElementsVisibility", screenResetHudElementsVisibility, 0);
+    method(screen, "ScreenDisplay", "resetHudElements", screenResetHudElementsVisibility, 0);
+    method(screen, "ScreenDisplay", "isForcedHidden", screenIsForcedHidden, 1);
+    method(screen, "ScreenDisplay", "getHiddenHudElements", screenGetHiddenHudElements, 0);
 
     JSValue camera = defineClass("Camera");
     property(camera, "Camera", "isValid", partGetIsValid);
