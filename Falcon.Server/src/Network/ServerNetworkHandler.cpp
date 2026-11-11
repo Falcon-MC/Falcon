@@ -103,7 +103,10 @@
 #include "Protocol/Packets/BlockActorDataPacket.h"
 #include "Protocol/Packets/BlockPickRequestPacket.h"
 #include "Protocol/Packets/ActorPickRequestPacket.h"
+#include "Protocol/Packets/AnimatePacket.h"
 #include "Protocol/Packets/EmotePacket.h"
+#include "Protocol/Packets/RequestPermissionsPacket.h"
+#include "Protocol/Packets/SetDefaultGameTypePacket.h"
 #include "Protocol/Packets/ModalFormRequestPacket.h"
 #include "Protocol/Packets/ModalFormResponsePacket.h"
 #include "Protocol/Packets/ClientboundDataDrivenUICloseScreenPacket.h"
@@ -131,7 +134,6 @@
 #include "Protocol/Packets/CommandBlockUpdatePacket.h"
 #include "World/Level/Block/BedBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
-#include "Protocol/Packets/AnimatePacket.h"
 #include "World/Item/CraftingRecipeTable.h"
 #include "World/Item/ItemNetworkIdTable.h"
 #include "World/Item/ItemData.h"
@@ -1432,6 +1434,12 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
             MinecraftPacketIds::ServerboundDataDrivenScreenClosed,
             MinecraftPacketIds::MapInfoRequest,
             MinecraftPacketIds::MapCreateLockedCopy,
+            MinecraftPacketIds::Animate,
+            MinecraftPacketIds::LevelSoundEvent,
+            MinecraftPacketIds::SetDefaultGameType,
+            MinecraftPacketIds::SetDifficulty,
+            MinecraftPacketIds::RequestPermissions,
+            MinecraftPacketIds::BookEdit,
             MinecraftPacketIds::PlayerSkin,
     };
 
@@ -1943,6 +1951,71 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const EmotePacket
         if (entry.second.isSpawned() && entry.second.getNetworkIdentifier() != id)
             mNetworkHandler->send(entry.second.getNetworkIdentifier(), emote, mCodecContext);
     }
+}
+
+// the client animates its own swing and paddles: the others only see them through this packet
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const AnimatePacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr || !player->isSpawned() || packet.mRuntimeActorId != player->getRuntimeId())
+        return;
+    if (packet.mAction != AnimatePacket::Action::SwingArm && packet.mAction != AnimatePacket::Action::RowRight
+        && packet.mAction != AnimatePacket::Action::RowLeft)
+        return;
+    if (packet.mAction != AnimatePacket::Action::SwingArm && !player->isRiding())
+        return;
+
+    const Vector3f &position = player->getPosition();
+    BlockActionHandler::broadcastToViewers(*this, getLevelFor(*player), position, packet, player);
+}
+
+// sounds the client plays itself (attacks, swimming, eating...) reach the players around it
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const LevelSoundEventPacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr || !player->isSpawned() || packet.mSound.empty() || packet.mSound.size() > 256
+        || packet.mActorType.size() > 256)
+        return;
+    // sent to whoever views the sender, not the position it names: a client cannot reach far players with it
+    BlockActionHandler::broadcastToViewers(*this, getLevelFor(*player), player->getPosition(), packet, player);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SetDefaultGameTypePacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr || !player->isSpawned() || !player->isOp())
+        return;
+    const int32_t mode = packet.mGamemode;
+    if ((mode < 0 || mode > 2) && mode != (int32_t) GameType::Spectator)
+        return;
+    setDefaultGameType((GameType) mode);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SetDifficultyPacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr || !player->isSpawned() || !player->isOp() || packet.mDifficulty > 3)
+        return;
+    changeDifficulty((Difficulty) packet.mDifficulty);
+}
+
+// the pause menu's player permissions: an operator promotes or demotes another player
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestPermissionsPacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr || !player->isSpawned() || !player->isOp())
+        return;
+    ServerPlayer *target = nullptr;
+    for (auto &entry: mPlayers) {
+        if (entry.second.getUniqueId() == packet.mUniqueActorId)
+            target = &entry.second;
+    }
+    if (target == nullptr || target == player)
+        return;
+
+    const bool op = packet.mPermissions == PlayerPermission::Operator;
+    if (op == target->isOp())
+        return;
+    if (op)
+        mOps.addOp(target->getName(), target->getXuid());
+    else
+        mOps.removeOp(target->getName());
+    setPlayerOp(*target, op);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) {
