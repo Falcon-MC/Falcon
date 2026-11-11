@@ -68,6 +68,11 @@ public:
         return mScheduler;
     }
 
+    // runs once per tick until it returns false
+    void addTickJob(std::function<bool()> job) {
+        mTickJobs.push_back(std::move(job));
+    }
+
     const std::string &packName() const {
         return mPackName;
     }
@@ -192,6 +197,18 @@ public:
     bool setBlock(Level &level, int32_t x, int32_t y, int32_t z, const BlockState &state);
 
     JSValue makeDimension(const Level &level);
+
+    // undefined when the block lacks the component or the pack's version lacks its class
+    JSValue makeBlockComponent(Level &level, const Vector3i &position, const std::string &componentId);
+
+    // a Structure object of the shared registry
+    JSValue makeStructure(const std::string &identifier);
+
+    // the locations of a BlockVolumeBase, read through its iterator; false with a pending exception
+    bool readVolume(JSValueConst volume, std::vector<Vector3i> &locations);
+
+    // a ListBlockVolume of the given locations
+    JSValue makeListVolume(const std::vector<Vector3i> &locations);
 
     Level &levelOf(JSValueConst dimension);
 
@@ -349,6 +366,10 @@ public:
 
     void resolveTickingAreas();
 
+    JSValue structureManager() const {
+        return mStructureManager;
+    }
+
     JSValue gameRules() const {
         return mGameRules;
     }
@@ -443,6 +464,12 @@ private:
 
     void _bindBlock();
 
+    void _bindBlockSurface();
+
+    void _bindDimensionSurface();
+
+    void _bindStructures();
+
     void _bindItemStack();
 
     void _bindContainers();
@@ -502,6 +529,7 @@ private:
     // the custom block each actor stands on: fires once per step, not per tick
     std::unordered_map<int64_t, SteppedBlock> mStepping;
     ScriptScheduler mScheduler;
+    std::vector<std::function<bool()>> mTickJobs;
     PlayerHandleRegistry &mPlayers;
 
     // a deque: a native may define a class, and so a binding, while its own binding is in use
@@ -532,6 +560,8 @@ private:
     JSValue mErrors = JS_UNDEFINED;
     JSValue mBlockRegistry = JS_UNDEFINED;
     JSValue mItemRegistry = JS_UNDEFINED;
+    JSValue mStructureManager = JS_UNDEFINED;
+    JSValue mListVolume = JS_UNDEFINED;
 
     std::unordered_map<std::string, std::vector<JSValue>> mSubscribers;
     std::unordered_map<void *, std::vector<std::string>> mScriptEventNamespaces;
@@ -558,3 +588,10 @@ private:
     uint32_t mNextFormId = 1;
     std::unordered_map<uint32_t, JSValue> mFormResolvers;
 };
+
+// natives of the data bootstrap, from ScriptBlockBinding
+namespace ScriptBlockData {
+    JSCFunction *blockInfo();
+
+    JSCFunction *permutationItem();
+}

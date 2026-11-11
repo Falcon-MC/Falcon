@@ -88,6 +88,17 @@ struct ScriptBlockRef : ScriptNative {
     int32_t mZ = 0;
 };
 
+// a block component: reads the block on every access
+struct ScriptBlockPart : ScriptNative {
+    ScriptBlockRef mBlock;
+    std::string mComponentId;
+};
+
+// a structure of the shared registry, by identifier: deleting it leaves the object invalid
+struct ScriptStructureRef : ScriptNative {
+    std::string mId;
+};
+
 struct ScriptDimensionRef : ScriptNative {
     DimensionType mDimension = DimensionType::Overworld;
     uint32_t mWorldId = 0;

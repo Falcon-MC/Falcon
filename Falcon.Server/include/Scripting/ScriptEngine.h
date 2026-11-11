@@ -3,6 +3,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
+#include "Scripting/ScriptStructureRegistry.h"
 #include "Scripting/WorldClockSystem.h"
 
 #include <cstdint>
@@ -226,6 +227,30 @@ public:
     // rule is the game's lowercase name; packs whose GameRule enum lacks it get nothing
     void onGameRuleChange(const std::string &rule, bool isBool, bool boolValue, int32_t intValue);
 
+    // explosion before event: scripts may cancel or rewrite the impacted blocks; true when cancelled
+    bool beforeExplosion(Level &level, const ServerActor *source, std::vector<Vector3i> &blocks);
+
+    void onExplosion(Level &level, const ServerActor *source, const std::vector<Vector3i> &blocks);
+
+    // one destroyed block; exploded is the block before the explosion
+    void onBlockExplode(Level &level, const Vector3i &position, const BlockState &exploded, const ServerActor *source);
+
+    void onPistonActivate(Level &level, const Vector3i &position, bool expanding);
+
+    // sources: the entities on the wire, none once it releases
+    void onTripWireTrip(Level &level, const Vector3i &position, bool powered, const std::vector<Actor *> &sources);
+
+    void onTargetBlockHit(Level &level, const Vector3i &position, const Vector3f &hitVector, int32_t previousPower,
+                          int32_t power, Actor *source);
+
+    // source: the entity that pressed it, null for none
+    void onButtonPush(Level &level, const Vector3i &position, Actor *source);
+
+    void onLeverAction(Level &level, const Vector3i &position, bool powered, ServerPlayer &player);
+
+    // a plate going from off to on pushes, from on to off pops
+    void onPressurePlate(Level &level, const Vector3i &position, int32_t previousPower, int32_t power, Actor *source);
+
     // WeatherType values; scripts may rewrite newWeather and duration (ticks); true when cancelled
     bool beforeWeatherChange(const std::string &previousWeather, std::string &newWeather, int32_t &duration);
 
@@ -249,6 +274,11 @@ public:
 
     WorldClockSystem &worldClocks() {
         return mClocks;
+    }
+
+    // world.structureManager of every pack
+    ScriptStructureRegistry &structures() {
+        return mStructures;
     }
 
     // InitializeRegistry for a player who just spawned
@@ -306,6 +336,7 @@ private:
     void _broadcastClocks(const SyncWorldClocksPacket &packet);
 
     WorldClockSystem mClocks;
+    ScriptStructureRegistry mStructures;
     int64_t mLastClockSync = 0;
     // last power each redstone consumer custom block received, per level
     std::unordered_map<const Level *, std::unordered_map<int64_t, int32_t>> mRedstonePower;

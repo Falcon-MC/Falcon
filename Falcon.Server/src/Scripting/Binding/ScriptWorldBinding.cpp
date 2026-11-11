@@ -455,22 +455,9 @@ namespace {
         return JS_NewBool(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)) == "minecraft:air");
     }
 
-    JSValue blockGetPermutation(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return ScriptApi::fromContext(ctx)->makePermutation(blockIdentifier(ctx, *blockOf(ctx, thisVal)));
-    }
-
     JSValue blockGetIsValid(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const ScriptBlockRef *block = blockOf(ctx, thisVal);
         return JS_NewBool(ctx, blockLevel(ctx, *block).peekBlockPtr(block->mX, block->mY, block->mZ) != nullptr);
-    }
-
-    JSValue blockMatches(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_FALSE;
-        std::string target = toString(ctx, argv[0]);
-        if (target.find(':') == std::string::npos)
-            target = "minecraft:" + target;
-        return JS_NewBool(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)) == target);
     }
 
     JSValue blockGetLocation(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -552,16 +539,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // TODO: volume and waypoint behaviour, the constructor arguments only for now
-    JSValue blockVolumeConstructor(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        JSValue object = ScriptApi::fromContext(ctx)->makeInstance("BlockVolume", new ScriptNative());
-        if (argc >= 1)
-            JS_SetPropertyStr(ctx, object, "from", JS_DupValue(ctx, argv[0]));
-        if (argc >= 2)
-            JS_SetPropertyStr(ctx, object, "to", JS_DupValue(ctx, argv[1]));
-        return object;
-    }
-
+    // TODO: waypoint behaviour, the constructor arguments only for now
     JSValue entityWaypointConstructor(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         JSValue object = ScriptApi::fromContext(ctx)->makeInstance("EntityWaypoint", new ScriptNative());
         if (argc >= 1)
@@ -1087,7 +1065,6 @@ void ScriptApi::_bindBlock() {
     methodMagic(block, "Block", "south", blockOffset, 1, 3);
     methodMagic(block, "Block", "east", blockOffset, 1, 4);
     methodMagic(block, "Block", "west", blockOffset, 1, 5);
-    method(block, "Block", "matches", blockMatches, 2);
     property(block, "Block", "location", blockGetLocation);
     property(block, "Block", "dimension", blockGetDimension);
     property(block, "Block", "isValid", blockGetIsValid);
@@ -1097,10 +1074,9 @@ void ScriptApi::_bindBlock() {
     property(block, "Block", "typeId", blockGetTypeId);
     property(block, "Block", "type", blockGetType);
     property(block, "Block", "isAir", blockGetIsAir);
-    property(block, "Block", "permutation", blockGetPermutation);
 
-    defineClass("BlockVolume", blockVolumeConstructor, 2);
     defineClass("EntityWaypoint", entityWaypointConstructor, 3);
+    _bindBlockSurface();
 }
 
 void ScriptApi::_bindDimension() {
@@ -1115,4 +1091,5 @@ void ScriptApi::_bindDimension() {
     method(dimension, "Dimension", "spawnParticle", dimensionSpawnParticle, 3);
     method(dimension, "Dimension", "playSound", dimensionPlaySound, 3);
     method(dimension, "Dimension", "getEntities", dimensionGetEntities, 1);
+    _bindDimensionSurface();
 }

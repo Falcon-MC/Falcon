@@ -17,7 +17,10 @@ int CauldronBlock::getFillLevel() const {
 CauldronBlock::Liquid CauldronBlock::getLiquid() const {
     if (getFillLevel() == 0)
         return Liquid::Empty;
-    return getStates().getString("cauldron_liquid", "water") == "lava" ? Liquid::Lava : Liquid::Water;
+    const std::string liquid = getStates().getString("cauldron_liquid", "water");
+    if (liquid == "lava")
+        return Liquid::Lava;
+    return liquid == "powder_snow" ? Liquid::PowderSnow : Liquid::Water;
 }
 
 bool CauldronBlock::isFull() const {
@@ -38,7 +41,8 @@ BlockState CauldronBlock::withFillLevel(Liquid liquid, int fillLevel) const {
 
 BlockState CauldronBlock::makeState(Liquid liquid, int fillLevel) {
     Tag states = Tag::ofCompound();
-    states.putString("cauldron_liquid", liquid == Liquid::Lava ? "lava" : "water");
+    states.putString("cauldron_liquid",
+                     liquid == Liquid::Lava ? "lava" : liquid == Liquid::PowderSnow ? "powder_snow" : "water");
     states.putInt("fill_level", std::clamp(fillLevel, 0, 6));
     return BlockState("minecraft:cauldron", states);
 }

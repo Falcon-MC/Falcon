@@ -4,8 +4,10 @@
 #include "Core/Math/Vector3i.h"
 #include "Core/NBT/Tag.h"
 #include "World/Inventory/Container.h"
+#include "World/Actor/DynamicPropertyValue.h"
 
 #include <string>
+#include <unordered_map>
 
 class Level;
 class PacketCodecContext;
@@ -69,6 +71,12 @@ public:
 
     void unpackLoot(ServerNetworkHandler &owner);
 
+    void loadDynamicProperties(const Tag &data);
+
+    std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() {
+        return mDynamicProperties;
+    }
+
 protected:
     Vector3i mPosition;
     Level *mLevel = nullptr;
@@ -77,4 +85,5 @@ private:
     BlockState mState;
     std::string mLootTable;
     int32_t mLootSeed = 0;
+    std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;
 };

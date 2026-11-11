@@ -71,6 +71,18 @@ namespace {
         return permutationCache.get(id);
     };
 
+    const infoCache = new Map();
+    const infoOf = (id, states) => {
+        const key = id + JSON.stringify(states);
+        if (!infoCache.has(key))
+            infoCache.set(key, native.blockInfo(id, states));
+        return infoCache.get(key);
+    };
+    const water = (liquidType) => {
+        if (liquidType !== "Water")
+            throw new TypeError("Native type conversion failed.");
+    };
+
     class BlockType {
         #id;
         constructor(key, id) {
@@ -79,6 +91,9 @@ namespace {
         }
         get id() {
             return this.#id;
+        }
+        get localizationKey() {
+            return infoOf(this.#id, {}).localizationKey;
         }
     }
 
@@ -102,6 +117,42 @@ namespace {
 
         getState(name) {
             return this.#states[name];
+        }
+
+        get localizationKey() {
+            return infoOf(this.#type.id, this.#states).localizationKey;
+        }
+
+        getTags() {
+            return infoOf(this.#type.id, this.#states).tags.slice();
+        }
+
+        hasTag(tag) {
+            return infoOf(this.#type.id, this.#states).tags.includes(String(tag));
+        }
+
+        canContainLiquid(liquidType) {
+            water(liquidType);
+            return infoOf(this.#type.id, this.#states).canContainLiquid;
+        }
+
+        canBeDestroyedByLiquidSpread(liquidType) {
+            water(liquidType);
+            return infoOf(this.#type.id, this.#states).destroyedBySpread;
+        }
+
+        liquidSpreadCausesSpawn(liquidType) {
+            water(liquidType);
+            return infoOf(this.#type.id, this.#states).spawnsOnSpread;
+        }
+
+        isLiquidBlocking(liquidType) {
+            water(liquidType);
+            return infoOf(this.#type.id, this.#states).liquidBlocking;
+        }
+
+        getItemStack(amount) {
+            return native.permutationItem(this.#type.id, this.#states, amount === undefined ? 1 : amount);
         }
 
         withState(name, value) {
@@ -303,6 +354,229 @@ namespace {
 })
 )JS";
 
+    const char *VOLUMES = R"JS(
+(function (native) {
+    const token = Symbol();
+    const guard = (key, name) => {
+        if (key !== token)
+            throw new ReferenceError("No constructor for native class '" + name + "'.");
+    };
+    const vector = (value) => {
+        if (value === null || typeof value !== "object")
+            throw new TypeError("Native type conversion failed.");
+        const x = Number(value.x), y = Number(value.y), z = Number(value.z);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z))
+            throw new TypeError("Native type conversion failed.");
+        return { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) };
+    };
+
+    class BlockLocationIterator {
+        #next;
+        constructor(key, next) {
+            guard(key, "BlockLocationIterator");
+            this.#next = next;
+        }
+        [Symbol.iterator]() {
+            return this;
+        }
+        next() {
+            const value = this.#next();
+            return value === undefined ? { done: true, value: undefined } : { done: false, value };
+        }
+    }
+
+    class BlockVolumeBase {
+        constructor(key) {
+            guard(key, "BlockVolumeBase");
+        }
+        getCapacity() {
+            const span = this.getSpan();
+            return span.x * span.y * span.z;
+        }
+        getSpan() {
+            const min = this.getMin(), max = this.getMax();
+            return { x: max.x - min.x + 1, y: max.y - min.y + 1, z: max.z - min.z + 1 };
+        }
+        // sub_14DD6ADE0, sub_14DD6B520: a bounded min-heap over (key, x, y, z) as floats; a location replaces
+        // the least kept one only on a strictly larger key, then all come out from the largest
+        #nearest(count, location, sign) {
+            const n = Math.max(0, count | 0);
+            if (n === 0)
+                throw native.error("ArgumentOutOfBoundsError", "", { minValue: 1, maxValue: 4294967295, value: 0 });
+            const at = { x: Math.fround(Number(location.x)), y: Math.fround(Number(location.y)),
+                         z: Math.fround(Number(location.z)) };
+            const f = Math.fround;
+            const less = (a, b) => a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1]
+                : a[2] !== b[2] ? a[2] < b[2] : a[3] < b[3];
+            const kept = [];
+            this.forEachLocation((p) => {
+                const dx = f(p.x - at.x), dy = f(p.y - at.y), dz = f(p.z - at.z);
+                const d = f(f(dz * dz) + f(f(dy * dy) + f(dx * dx)));
+                const entry = [sign < 0 ? -d : d, p.x, p.y, p.z];
+                if (kept.length < n) {
+                    kept.push(entry);
+                    return;
+                }
+                let least = 0;
+                for (let i = 1; i < kept.length; ++i)
+                    if (less(kept[i], kept[least]))
+                        least = i;
+                if (entry[0] > kept[least][0])
+                    kept[least] = entry;
+            });
+            return kept.sort((a, b) => (less(a, b) ? 1 : less(b, a) ? -1 : 0)).map((e) => ({ x: e[1], y: e[2], z: e[3] }));
+        }
+        forEachLocation(visit) {
+            for (const location of this.getBlockLocationIterator())
+                visit(location);
+        }
+        getClosest(count, location) {
+            return this.#nearest(count, location, -1);
+        }
+        getFarthest(count, location) {
+            return this.#nearest(count, location, 1);
+        }
+    }
+
+    class BlockVolume extends BlockVolumeBase {
+        constructor(from, to) {
+            super(token);
+            this.from = vector(from);
+            this.to = vector(to);
+        }
+        getMin() {
+            const a = vector(this.from), b = vector(this.to);
+            return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), z: Math.min(a.z, b.z) };
+        }
+        getMax() {
+            const a = vector(this.from), b = vector(this.to);
+            return { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), z: Math.max(a.z, b.z) };
+        }
+        isInside(location) {
+            const at = vector(location), min = this.getMin(), max = this.getMax();
+            return at.x >= min.x && at.x <= max.x && at.y >= min.y && at.y <= max.y && at.z >= min.z && at.z <= max.z;
+        }
+        translate(delta) {
+            const d = vector(delta), a = vector(this.from), b = vector(this.to);
+            this.from = { x: a.x + d.x, y: a.y + d.y, z: a.z + d.z };
+            this.to = { x: b.x + d.x, y: b.y + d.y, z: b.z + d.z };
+        }
+        doesLocationTouchFaces(pos) {
+            const at = vector(pos), min = this.getMin(), max = this.getMax();
+            return this.isInside(at) && (at.x === min.x || at.x === max.x || at.y === min.y || at.y === max.y
+                || at.z === min.z || at.z === max.z);
+        }
+        // sub_148F89560: within one block of this volume, apart on one axis at most; from inside, on a face
+        doesVolumeTouchFaces(other) {
+            const lo = this.getMin(), hi = this.getMax(), mn = other.getMin(), mx = other.getMax();
+            let apart = 0, inside = true, onFace = false;
+            for (const k of ["x", "y", "z"]) {
+                if (mx[k] < lo[k] - 1 || mn[k] > hi[k] + 1)
+                    return false;
+                if (mx[k] < lo[k] || mn[k] > hi[k])
+                    ++apart;
+                if (mn[k] < lo[k] || mx[k] > hi[k])
+                    inside = false;
+                if (mn[k] === lo[k] || mx[k] === hi[k])
+                    onFace = true;
+            }
+            return inside ? onFace : apart <= 1;
+        }
+        // other inside this one is Contains: sub_148F89760(this, other)
+        intersects(other) {
+            const a = this.getMin(), b = this.getMax(), c = other.getMin(), d = other.getMax();
+            if (c.x > b.x || d.x < a.x || c.y > b.y || d.y < a.y || c.z > b.z || d.z < a.z)
+                return 0;
+            if (c.x >= a.x && d.x <= b.x && c.y >= a.y && d.y <= b.y && c.z >= a.z && d.z <= b.z)
+                return 1;
+            return 2;
+        }
+        // forEach runs x, then z, then y innermost: sub_148F88D80
+        forEachLocation(visit) {
+            const min = this.getMin(), max = this.getMax();
+            for (let x = min.x; x <= max.x; ++x)
+                for (let z = min.z; z <= max.z; ++z)
+                    for (let y = min.y; y <= max.y; ++y)
+                        visit({ x, y, z });
+        }
+        // x, then z, then y outermost: sub_14314C1B0
+        getBlockLocationIterator() {
+            const min = this.getMin(), max = this.getMax();
+            let x = min.x, y = min.y, z = min.z;
+            return new BlockLocationIterator(token, () => {
+                if (y > max.y)
+                    return undefined;
+                const value = { x, y, z };
+                if (++x > max.x) {
+                    x = min.x;
+                    if (++z > max.z) {
+                        z = min.z;
+                        ++y;
+                    }
+                }
+                return value;
+            });
+        }
+    }
+
+    const keyOf = (v) => v.x + "," + v.y + "," + v.z;
+
+    class ListBlockVolume extends BlockVolumeBase {
+        #locations = new Map();
+        constructor(locations) {
+            super(token);
+            this.add(locations);
+        }
+        add(locations) {
+            for (const location of locations) {
+                const v = vector(location);
+                this.#locations.set(keyOf(v), v);
+            }
+        }
+        remove(locations) {
+            for (const location of locations)
+                this.#locations.delete(keyOf(vector(location)));
+        }
+        getCapacity() {
+            return this.#locations.size;
+        }
+        getMin() {
+            const all = Array.from(this.#locations.values());
+            if (all.length === 0)
+                return { x: 0, y: 0, z: 0 };
+            return { x: Math.min(...all.map((v) => v.x)), y: Math.min(...all.map((v) => v.y)),
+                     z: Math.min(...all.map((v) => v.z)) };
+        }
+        getMax() {
+            const all = Array.from(this.#locations.values());
+            if (all.length === 0)
+                return { x: 0, y: 0, z: 0 };
+            return { x: Math.max(...all.map((v) => v.x)), y: Math.max(...all.map((v) => v.y)),
+                     z: Math.max(...all.map((v) => v.z)) };
+        }
+        isInside(location) {
+            return this.#locations.has(keyOf(vector(location)));
+        }
+        translate(delta) {
+            const d = vector(delta);
+            const moved = new Map();
+            for (const v of this.#locations.values()) {
+                const next = { x: v.x + d.x, y: v.y + d.y, z: v.z + d.z };
+                moved.set(keyOf(next), next);
+            }
+            this.#locations = moved;
+        }
+        getBlockLocationIterator() {
+            const values = Array.from(this.#locations.values()).map((v) => ({ x: v.x, y: v.y, z: v.z }));
+            let index = 0;
+            return new BlockLocationIterator(token, () => (index < values.length ? values[index++] : undefined));
+        }
+    }
+
+    return { BlockVolumeBase, BlockVolume, ListBlockVolume, BlockLocationIterator };
+})
+)JS";
+
     const char *UI = R"JS(
 (function (native) {
     const ft = (v) => (v !== null && typeof v === "object") ? (v.rawtext ? v : { rawtext: [v] }) : String(v);
@@ -419,6 +693,124 @@ namespace {
     return { ActionFormData, MessageFormData, ModalFormData };
 })
 )JS";
+
+    const char *WORLD = R"JS(
+(function (native) {
+    const token = Symbol();
+    const guard = (key, name) => {
+        if (key !== token)
+            throw new ReferenceError("No constructor for native class '" + name + "'.");
+    };
+    const participantKey = (participant) => {
+        if (participant === null || participant === undefined) return "";
+        if (typeof participant === "string") return participant;
+        if (participant.id !== undefined) return String(participant.id);
+        if (participant.displayName !== undefined) return String(participant.displayName);
+        return String(participant);
+    };
+
+    class ScoreboardObjective {
+        #id;
+        #displayName;
+        #scores = new Map();
+        constructor(key, id, displayName) {
+            guard(key, "ScoreboardObjective");
+            this.#id = id;
+            this.#displayName = displayName || id;
+        }
+        get id() {
+            return this.#id;
+        }
+        get displayName() {
+            return this.#displayName;
+        }
+        getScore(participant) {
+            const key = participantKey(participant);
+            return this.#scores.has(key) ? this.#scores.get(key) : undefined;
+        }
+        setScore(participant, value) {
+            const key = participantKey(participant);
+            this.#scores.set(key, value | 0);
+            native.setScore(this.#id, key, value | 0);
+        }
+        addScore(participant, value) {
+            const key = participantKey(participant);
+            const current = this.#scores.has(key) ? this.#scores.get(key) : 0;
+            const next = current + (value | 0);
+            this.#scores.set(key, next);
+            native.setScore(this.#id, key, next);
+            return next;
+        }
+        removeParticipant(participant) {
+            const key = participantKey(participant);
+            native.removeScore(this.#id, key);
+            return this.#scores.delete(key);
+        }
+        hasParticipant(participant) {
+            return this.#scores.has(participantKey(participant));
+        }
+        getParticipants() {
+            return Array.from(this.#scores.keys()).map((id) => ({ displayName: id, id }));
+        }
+        getScores() {
+            return Array.from(this.#scores.entries()).map(([id, score]) => ({ participant: { displayName: id, id }, score }));
+        }
+    }
+
+    class Scoreboard {
+        #objectives = new Map();
+        #displaySlots = new Map();
+        constructor(key) {
+            guard(key, "Scoreboard");
+        }
+        addObjective(id, displayName) {
+            if (this.#objectives.has(id)) return this.#objectives.get(id);
+            const objective = new ScoreboardObjective(token, id, displayName);
+            this.#objectives.set(id, objective);
+            return objective;
+        }
+        getObjective(id) {
+            return this.#objectives.get(id);
+        }
+        removeObjective(id) {
+            const key = typeof id === "string" ? id : id.id;
+            native.removeObjective(key);
+            return this.#objectives.delete(key);
+        }
+        getObjectives() {
+            return Array.from(this.#objectives.values());
+        }
+        getParticipants() {
+            const set = new Map();
+            for (const objective of this.#objectives.values())
+                for (const participant of objective.getParticipants())
+                    set.set(participant.id, participant);
+            return Array.from(set.values());
+        }
+        setObjectiveAtDisplaySlot(slot, options) {
+            const objective = options && options.objective;
+            if (!objective) return undefined;
+            native.display(slot, objective.id, objective.displayName || objective.id);
+            this.#displaySlots.set(slot, objective);
+            return objective;
+        }
+        clearObjectiveAtDisplaySlot(slot) {
+            const previous = this.#displaySlots.get(slot);
+            native.clearDisplay(slot);
+            this.#displaySlots.delete(slot);
+            return previous;
+        }
+        getObjectiveAtDisplaySlot(slot) {
+            const objective = this.#displaySlots.get(slot);
+            return objective ? { objective, sortOrder: 0 } : undefined;
+        }
+    }
+
+    return {
+        Scoreboard, ScoreboardObjective, scoreboard: new Scoreboard(token)
+    };
+})
+)JS";
 }
 
 namespace ScriptBootstraps {
@@ -432,5 +824,13 @@ namespace ScriptBootstraps {
 
     const char *ui() {
         return UI;
+    }
+
+    const char *volumes() {
+        return VOLUMES;
+    }
+
+    const char *world() {
+        return WORLD;
     }
 }

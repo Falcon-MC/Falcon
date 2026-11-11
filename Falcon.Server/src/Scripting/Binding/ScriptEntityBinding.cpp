@@ -6,6 +6,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ActorDamageSource.h"
 #include "Scripting/Binding/ScriptRaycast.h"
+#include "Scripting/Binding/ScriptRayQueries.h"
 #include "Protocol/Packets/ScriptMessagePacket.h"
 #include "Protocol/Packets/StopSoundPacket.h"
 #include "World/Actor/DamageCause.h"
@@ -2090,6 +2091,8 @@ namespace {
             return string(ctx, player->mComponentId);
         if (const ScriptItemRef *item = api->native<ScriptItemRef>(thisVal))
             return string(ctx, item->mComponentId);
+        if (const ScriptBlockPart *block = api->native<ScriptBlockPart>(thisVal))
+            return string(ctx, block->mComponentId);
         return JS_UNDEFINED;
     }
 
@@ -2099,6 +2102,10 @@ namespace {
             return JS_NewBool(ctx, componentEntity(ctx, thisVal) != nullptr);
         if (api->native<ScriptPlayerPart>(thisVal) != nullptr)
             return JS_NewBool(ctx, partOwner(ctx, thisVal) != nullptr);
+        if (const ScriptBlockPart *block = api->native<ScriptBlockPart>(thisVal))
+            return JS_NewBool(ctx, api->resolveLevel(block->mBlock.mWorldId, block->mBlock.mDimension)
+                                                   .peekBlockPtr(block->mBlock.mX, block->mBlock.mY, block->mBlock.mZ)
+                                           != nullptr);
         return JS_TRUE;
     }
 }
@@ -2211,6 +2218,98 @@ int32_t ScriptApi::parseGameMode(const std::string &name) const {
             return i == 3 ? 6 : i;
     }
     return -1;
+}
+
+bool ScriptRayQueries::blockPassesFilter(JSContext *ctx, const BlockState &state, JSValueConst filter) {
+    return blockStatePassesFilter(ctx, state, filter);
+}
+
+JSValue ScriptRayQueries::blockFromRay(JSContext *ctx, Level &level, const Vector3f &origin, const Vector3f &direction,
+                                       JSValueConst options) {
+    ScriptApi *api = ScriptApi::fromContext(ctx);
+    ScriptRaycast::BlockOptions ray;
+    if (!readRayDistance(ctx, options, ray.mMaxDistance))
+        return JS_UNDEFINED;
+    ray.mIncludeLiquids = readFlag(ctx, options, "includeLiquidBlocks");
+    ray.mIncludePassable = readFlag(ctx, options, "includePassableBlocks");
+    ray.mAccepts = [ctx, options](const BlockState &state) { return blockStatePassesFilter(ctx, state, options); };
+
+    ScriptRaycast::BlockHit hit;
+    if (!ScriptRaycast::castBlocks(level, origin, direction, ray, hit))
+        return JS_UNDEFINED;
+
+    JSValue result = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, result, "block", api->makeBlock(level, hit.mBlock.x, hit.mBlock.y, hit.mBlock.z));
+    JS_SetPropertyStr(ctx, result, "face", JS_NewString(ctx, hit.mFace));
+    JS_SetPropertyStr(ctx, result, "faceLocation",
+                      vector3(ctx, hit.mFaceLocation.x, hit.mFaceLocation.y, hit.mFaceLocation.z));
+    return result;
+}
+
+JSValue ScriptRayQueries::entitiesFromRay(JSContext *ctx, Level &level, const Vector3f &origin,
+                                          const Vector3f &direction, JSValueConst options, const Actor *except) {
+    ScriptApi *api = ScriptApi::fromContext(ctx);
+    JSValue array = JS_NewArray(ctx);
+    float distance = 0.0f;
+    if (!readRayDistance(ctx, options, distance))
+        return array;
+
+    ServerNetworkHandler &host = api->host();
+
+    // blocks stop the ray unless ignoreBlockCollision
+    if (!readFlag(ctx, options, "ignoreBlockCollision")) {
+        ScriptRaycast::BlockOptions ray;
+        ray.mMaxDistance = distance;
+        ray.mIncludeLiquids = readFlag(ctx, options, "includeLiquidBlocks");
+        ray.mIncludePassable = readFlag(ctx, options, "includePassableBlocks");
+        ScriptRaycast::BlockHit hit;
+        if (ScriptRaycast::castBlocks(level, origin, direction, ray, hit))
+            distance = std::min(distance, hit.mDistance);
+    }
+
+    std::vector<std::pair<float, JSValue>> hits;
+    const auto consider = [&](Actor &candidate, JSValue value) {
+        EntityTarget other;
+        other.mApi = api;
+        other.mRef = api->native<ScriptEntityRef>(value);
+        other.mActor = &candidate;
+        other.mPlayer = dynamic_cast<ServerPlayer *>(&candidate);
+        other.mServerActor = dynamic_cast<ServerActor *>(&candidate);
+        const ActorSize size = sizeOf(other);
+        const Vector3f &position = candidate.getPosition();
+        const float half = size.mWidth / 2.0f;
+        const float at = ScriptRaycast::intersectBox(
+                origin, direction, Vector3f(position.x - half, position.y, position.z - half),
+                Vector3f(position.x + half, position.y + size.mHeight, position.z + half));
+        if (at < 0.0f || at > distance || other.mRef == nullptr || !matchesQuery(ctx, other, options)) {
+            JS_FreeValue(ctx, value);
+            return;
+        }
+        hits.emplace_back(at, value);
+    };
+    for (auto &entry: host.getActors()) {
+        ServerActor &actor = *entry.second;
+        if (&actor != except && actor.isAlive() && actor.isIn(level))
+            consider(actor, api->makeActor(actor));
+    }
+    for (auto &entry: host.getPlayers()) {
+        ServerPlayer &player = entry.second;
+        if (&player != except && player.isSpawned() && player.isIn(level))
+            consider(player, api->makePlayer(player));
+    }
+
+    std::stable_sort(hits.begin(), hits.end(),
+                     [](const std::pair<float, JSValue> &left, const std::pair<float, JSValue> &right) {
+                         return left.first < right.first;
+                     });
+    uint32_t index = 0;
+    for (const auto &found: hits) {
+        JSValue entry = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, entry, "distance", JS_NewFloat64(ctx, found.first));
+        JS_SetPropertyStr(ctx, entry, "entity", found.second);
+        JS_SetPropertyUint32(ctx, array, index++, entry);
+    }
+    return array;
 }
 
 void ScriptApi::_bindEntity() {

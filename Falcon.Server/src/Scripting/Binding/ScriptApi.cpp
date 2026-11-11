@@ -76,7 +76,8 @@ namespace {
     }
 
     bool acceptsComponent(const ScriptNative *native) {
-        return accepts<ScriptEntityPart>(native) || accepts<ScriptPlayerPart>(native) || accepts<ScriptItemRef>(native);
+        return accepts<ScriptEntityPart>(native) || accepts<ScriptPlayerPart>(native) || accepts<ScriptItemRef>(native)
+               || accepts<ScriptBlockPart>(native);
     }
 
     bool acceptsAny(const ScriptNative *) {
@@ -116,6 +117,12 @@ namespace {
             return accepts<ScriptPlayerPart>;
         if (cls == "EntityComponent")
             return acceptsComponent;
+        if (cls.compare(0, 5, "Block") == 0 && hasSuffix(cls, "Component"))
+            return accepts<ScriptBlockPart>;
+        if (cls == "Structure")
+            return accepts<ScriptStructureRef>;
+        if (cls == "BiomeType")
+            return accepts<ScriptNamedRef>;
         if (cls.compare(0, 6, "Entity") == 0 && hasSuffix(cls, "Component"))
             return accepts<ScriptEntityPart>;
         if (cls == "Effect")
@@ -335,7 +342,21 @@ namespace {
                                         "CustomCommandErrorReason",
                                         "CustomCommandParamType",
                                         "CustomCommandSource",
-                                        "CustomCommandStatus"};
+                                        "CustomCommandStatus",
+                                        "BlockPistonState",
+                                        "BlockVolumeIntersection",
+                                        "FluidType",
+                                        "LiquidType",
+                                        "SignSide",
+                                        "StructureAnimationMode",
+                                        "StructureMirrorAxis",
+                                        "StructureRotation",
+                                        "StructureSaveMode",
+                                        "DyeColor",
+                                        "TintMethod",
+                                        "MovementType",
+                                        "StickyType",
+                                        "CloneMode"};
 
     const char *const CUSTOM_COMPONENT_CLASSES[] = {"CustomComponentParameters",
                                                     "BlockComponentBlockBreakEvent",
@@ -455,7 +476,7 @@ ScriptApi::~ScriptApi() {
 
     for (JSValue value: {mWorld, mSystem, mAfterEvents, mBeforeEvents, mSystemAfterEvents, mSystemBeforeEvents,
                          mScoreboard, mTickingAreas, mGameRules, mSystemInfo, mErrors, mBlockRegistry, mItemRegistry,
-                         mClockRegistry, mDimensionRegistry, mCommandRegistry})
+                         mClockRegistry, mDimensionRegistry, mStructureManager, mListVolume, mCommandRegistry})
         JS_FreeValue(mContext, value);
 }
 
@@ -1370,6 +1391,8 @@ void ScriptApi::_installBootstraps() {
     addFunction(mContext, data, "blockNames", paletteBlockNames, 0);
     addFunction(mContext, data, "permutations", palettePermutations, 1);
     addFunction(mContext, data, "itemTypeNames", itemTypeNames, 0);
+    addFunction(mContext, data, "blockInfo", ScriptBlockData::blockInfo(), 2);
+    addFunction(mContext, data, "permutationItem", ScriptBlockData::permutationItem(), 3);
     JSValue dataExports = runBootstrap(mContext, mPackName, ScriptBootstraps::data(), "<data>", data);
     for (const char *name:
          {"BlockPermutation", "BlockType", "BlockTypes", "BlockStateType", "BlockStates", "ItemType", "ItemTypes"}) {
@@ -1383,6 +1406,17 @@ void ScriptApi::_installBootstraps() {
     }
     JS_FreeValue(mContext, installJobs);
     JS_FreeValue(mContext, dataExports);
+
+    JSValue volumes = JS_NewObject(mContext);
+    JS_SetPropertyStr(mContext, volumes, "error", JS_GetPropertyStr(mContext, mErrors, "make"));
+    JSValue volumeExports = runBootstrap(mContext, mPackName, ScriptBootstraps::volumes(), "<volumes>", volumes);
+    for (const char *name: {"BlockVolumeBase", "BlockVolume", "ListBlockVolume", "BlockLocationIterator"}) {
+        if (mSurface.has(name))
+            mServerExports.emplace_back(name, JS_GetPropertyStr(mContext, volumeExports, name));
+    }
+    mListVolume = JS_GetPropertyStr(mContext, volumeExports, "ListBlockVolume");
+    JS_FreeValue(mContext, volumeExports);
+
 
     if (mModules.find("@minecraft/server-ui") == nullptr)
         return;
@@ -1425,6 +1459,9 @@ void ScriptApi::_defineEnums() {
     // EntityComponentTypes.Health is EntityHealthComponent.componentId
     for (const auto &value: mSurface.enumValues("EntityComponentTypes"))
         components.emplace_back("Entity" + value.first + "Component", value.second);
+    // BlockComponentTypes.Sign is BlockSignComponent.componentId
+    for (const auto &value: mSurface.enumValues("BlockComponentTypes"))
+        components.emplace_back("Block" + value.first + "Component", value.second);
     for (const auto &component: components) {
         JSValue constructor = constructorOf(component.first);
         if (!JS_IsUndefined(constructor) && mSurface.has(component.first + ".static componentId"))

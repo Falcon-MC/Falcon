@@ -271,6 +271,25 @@ public:
     const char *getBlockActorId() const override {
         return BLOCK_ACTOR_ID;
     }
+
+    Tag saveNbt() const override;
+
+    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    Tag getSpawnCompound() const override;
+
+    bool isPlaying() const {
+        return !mFinishedRecording;
+    }
+
+    void setPlaying(bool playing) {
+        mFinishedRecording = !playing;
+        mTicksPlaying = 0;
+    }
+
+private:
+    bool mFinishedRecording = true;
+    int mTicksPlaying = 0;
 };
 
 class LecternBlockActor final : public ContainerBlockActor {

@@ -41,6 +41,7 @@ void ScriptApi::install() {
     _bindRegistries();
     _bindSystem();
     _bindWorld();
+    _bindStructures();
     _bindClocks();
     _bindScoreboard();
     _bindCommands();
@@ -52,6 +53,12 @@ void ScriptApi::install() {
 
 void ScriptApi::tick(int64_t currentTick) {
     mScheduler.tick(currentTick);
+    for (size_t index = 0; index < mTickJobs.size();) {
+        if (mTickJobs[index]())
+            ++index;
+        else
+            mTickJobs.erase(mTickJobs.begin() + (std::ptrdiff_t) index);
+    }
     if (!mPendingTickingAreas.empty())
         resolveTickingAreas();
     _emitInventoryChanges();

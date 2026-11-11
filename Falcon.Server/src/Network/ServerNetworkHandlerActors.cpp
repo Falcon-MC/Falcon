@@ -1,4 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/Systems/DetectorSystem.h"
 
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/ActorFlags.h"
@@ -1697,6 +1698,8 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 const BlockState hitState = level.getBlockState(blockX, blockY, blockZ);
+                if (DetectorSystem::isTarget(hitState))
+                    DetectorSystem::onTargetHit(*this, level, hitBlock, position, previousPosition, actor, arrowLike);
                 const Block *block = VanillaBlocks::fromIdentifier(hitState.mName);
                 if (block != nullptr && block->onProjectileHit(*this, level, hitBlock, hitState, actor)) {
                     expired.push_back(actorId);

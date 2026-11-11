@@ -855,6 +855,35 @@ bool LevelStorage::saveTickingArea(const std::string &id, const Tag &area) {
     return true;
 }
 
+std::vector<std::pair<std::string, Tag>> LevelStorage::loadSavedDataWithPrefix(const std::string &prefix) {
+    std::vector<std::pair<std::string, Tag>> entries;
+    if (mDb == nullptr)
+        return entries;
+
+    std::unique_ptr<leveldb::Iterator> iterator(mDb->NewIterator(_readOptions()));
+    for (iterator->Seek(prefix); iterator->Valid(); iterator->Next()) {
+        const std::string key = iterator->key().ToString();
+        if (key.compare(0, prefix.size(), prefix) != 0)
+            break;
+
+        ReadOnlyBinaryStream stream(iterator->value().ToString());
+        try {
+            entries.emplace_back(key.substr(prefix.size()), NbtIo::readTag(stream, NbtVariant::LittleEndian));
+        } catch (const std::exception &exception) {
+            LOG_WARN(LogAreaID::Server, "Malformed %s: %s", key.c_str(), exception.what());
+        }
+    }
+    return entries;
+}
+
+bool LevelStorage::eraseSavedData(const std::string &key) {
+    if (mDb == nullptr)
+        return false;
+
+    const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), key);
+    return _recordWrite(status.ok() || status.IsNotFound());
+}
+
 bool LevelStorage::eraseTickingArea(const std::string &id) {
     if (mDb == nullptr)
         return false;

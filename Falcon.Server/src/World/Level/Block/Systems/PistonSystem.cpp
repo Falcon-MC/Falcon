@@ -444,6 +444,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     arm.setSticky(sticky);
     arm.setFacing(face);
     arm.beginMove(extending, toMove);
+    owner.getScriptEngine().onPistonActivate(level, position, extending);
 
     for (size_t index = toMove.size(); index > 0; --index)
         level.setBlock(toMove[index - 1], BlockState(AIR), false);
