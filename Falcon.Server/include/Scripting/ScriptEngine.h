@@ -142,6 +142,22 @@ public:
 
     void onEntityContainerClosed(Actor &container, Actor &source);
 
+    // a block's container window, opened or closed by source
+    void onBlockContainerOpened(Level &level, const Vector3i &position, Actor &source);
+
+    void onBlockContainerClosed(Level &level, const Vector3i &position, Actor &source);
+
+    void onPlayerStartBreakingBlock(ServerPlayer &player, const Vector3i &position, int32_t face);
+
+    // a break that stopped before the block broke; progress: 0 to 1
+    void onPlayerCancelBreakingBlock(ServerPlayer &player, const Vector3i &position, int32_t face, double progress);
+
+    void onItemStartUseOn(ServerPlayer &player, const Vector3i &position, int32_t face);
+
+    void onItemStopUseOn(ServerPlayer &player, const Vector3i &position);
+
+    void onPlayerInputPermissionCategoryChange(ServerPlayer &player, int32_t category, bool enabled);
+
     // food only, before onCompleteUse: the food component fires it once eaten
     void onItemConsume(ServerPlayer &player, const ItemStack &used);
 
@@ -303,6 +319,13 @@ private:
     // entityContainerOpened and entityContainerClosed: sourceField is openSource or closeSource
     void _emitContainerAccess(const char *key, const char *signal, const char *sourceField, Actor &container,
                               Actor &source);
+
+    void _emitBlockContainerAccess(const char *key, const char *signal, const char *sourceField, Level &level,
+                                   const Vector3i &position, Actor &source);
+
+    // progress only for playerCancelBreakingBlock
+    void _emitBreakingBlock(const char *key, const char *signal, ServerPlayer &player, const Vector3i &position,
+                            int32_t face, const double *progress);
 
     void _onHealthChanged(Actor &entity, float oldValue, float newValue);
 

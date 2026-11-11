@@ -504,6 +504,10 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
                    || action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock) {
             BlockActionHandler::completeBreakingBlock(owner, player, action.mBlockPosition);
             player.clearLastBlockAttacked();
+        } else if (action.mAction == PlayerActionType::StartItemUseOn) {
+            owner.getScriptEngine().onItemStartUseOn(player, action.mBlockPosition, action.mFace);
+        } else if (action.mAction == PlayerActionType::StopItemUseOn) {
+            owner.getScriptEngine().onItemStopUseOn(player, action.mBlockPosition);
         }
     }
     if (packet.mHasItemUseTransaction) {

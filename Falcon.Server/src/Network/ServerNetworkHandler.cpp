@@ -1913,6 +1913,12 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerActio
         case PlayerActionType::StopSleep:
             stopSleep(*player);
             return;
+        case PlayerActionType::StartItemUseOn:
+            mScriptEngine.onItemStartUseOn(*player, packet.mBlockPosition, packet.mFace);
+            return;
+        case PlayerActionType::StopItemUseOn:
+            mScriptEngine.onItemStopUseOn(*player, packet.mBlockPosition);
+            return;
         default:
             break;
     }

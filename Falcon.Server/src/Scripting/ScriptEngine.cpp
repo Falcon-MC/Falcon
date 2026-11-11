@@ -16,6 +16,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/BehaviorPackManager.h"
 #include "Scripting/Binding/ScriptApi.h"
+#include "Scripting/Binding/ScriptRayQueries.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
@@ -1039,6 +1040,151 @@ void ScriptEngine::onEntityContainerOpened(Actor &container, Actor &source) {
 void ScriptEngine::onEntityContainerClosed(Actor &container, Actor &source) {
     _emitContainerAccess("after.entityContainerClosed", "WorldAfterEvents.entityContainerClosed", "closeSource",
                          container, source);
+}
+
+namespace {
+    bool blockMatches(JSContext *ctx, JSValueConst options, const BlockState &state) {
+        JSValue filter = JS_GetPropertyStr(ctx, options, "blockFilter");
+        const bool accepted = !JS_IsObject(filter) || ScriptRayQueries::blockPassesFilter(ctx, state, filter);
+        JS_FreeValue(ctx, filter);
+        return accepted;
+    }
+
+    // BlockContainerAccessEventOptions: blockFilter on the container, accessSourceFilter on who opened it
+    bool acceptsBlockContainerAccess(JSContext *ctx, JSValueConst options, const BlockState &state,
+                                     JSValueConst source) {
+        if (!blockMatches(ctx, options, state))
+            return false;
+        JSValue sourceFilter = JS_GetPropertyStr(ctx, options, "accessSourceFilter");
+        bool accepted = true;
+        if (JS_IsObject(sourceFilter)) {
+            JSValue filter = JS_GetPropertyStr(ctx, sourceFilter, "entityFilter");
+            accepted = entityMatches(ctx, source, filter);
+            JS_FreeValue(ctx, filter);
+        }
+        JS_FreeValue(ctx, sourceFilter);
+        return accepted;
+    }
+
+    // PlayerBreakingBlockEventOptions
+    bool acceptsBreakingBlock(JSContext *ctx, JSValueConst options, const BlockState &state, JSValueConst player) {
+        if (!blockMatches(ctx, options, state))
+            return false;
+        JSValue filter = JS_GetPropertyStr(ctx, options, "playerFilter");
+        const bool accepted = entityMatches(ctx, player, filter);
+        JS_FreeValue(ctx, filter);
+        return accepted;
+    }
+}
+
+void ScriptEngine::_emitBlockContainerAccess(const char *key, const char *signal, const char *sourceField,
+                                             Level &level, const Vector3i &position, Actor &source) {
+    const BlockState state = level.getBlockState(position.x, position.y, position.z);
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers(key))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent(signal);
+        JS_SetPropertyStr(ctx, event, "block", api->makeBlock(level, position.x, position.y, position.z));
+        JS_SetPropertyStr(ctx, event, "dimension", api->makeDimension(level));
+        JSValue opener = api->makeEntity(source);
+        JSValue access = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, access, "entity", JS_DupValue(ctx, opener));
+        JS_SetPropertyStr(ctx, event, sourceField, access);
+        api->emitFiltered(key, event, [&](JSValueConst options) {
+            return acceptsBlockContainerAccess(ctx, options, state, opener);
+        });
+        JS_FreeValue(ctx, opener);
+        _pumpJobs();
+    }
+}
+
+void ScriptEngine::onBlockContainerOpened(Level &level, const Vector3i &position, Actor &source) {
+    _emitBlockContainerAccess("after.blockContainerOpened", "WorldAfterEvents.blockContainerOpened", "openSource",
+                              level, position, source);
+}
+
+void ScriptEngine::onBlockContainerClosed(Level &level, const Vector3i &position, Actor &source) {
+    _emitBlockContainerAccess("after.blockContainerClosed", "WorldAfterEvents.blockContainerClosed", "closeSource",
+                              level, position, source);
+}
+
+void ScriptEngine::_emitBreakingBlock(const char *key, const char *signal, ServerPlayer &player,
+                                      const Vector3i &position, int32_t face, const double *progress) {
+    if (mHost == nullptr)
+        return;
+    Level &level = mHost->getLevelFor(player);
+    const BlockState state = level.getBlockState(position.x, position.y, position.z);
+    const ItemStack held = player.getInventory().getItemInHand();
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers(key))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent(signal);
+        JS_SetPropertyStr(ctx, event, "block", api->makeBlock(level, position.x, position.y, position.z));
+        JS_SetPropertyStr(ctx, event, "dimension", api->makeDimension(level));
+        JS_SetPropertyStr(ctx, event, "blockPermutation", api->makePermutation(state));
+        JS_SetPropertyStr(ctx, event, "face", JS_NewString(ctx, directionName(face)));
+        if (!held.isAir())
+            JS_SetPropertyStr(ctx, event, "heldItemStack", api->makeItem(held));
+        if (progress != nullptr)
+            JS_SetPropertyStr(ctx, event, "breakProgress", JS_NewFloat64(ctx, *progress));
+        JSValue source = api->makePlayer(player);
+        JS_SetPropertyStr(ctx, event, "player", JS_DupValue(ctx, source));
+        api->emitFiltered(key, event,
+                          [&](JSValueConst options) { return acceptsBreakingBlock(ctx, options, state, source); });
+        JS_FreeValue(ctx, source);
+        _pumpJobs();
+    }
+}
+
+void ScriptEngine::onPlayerStartBreakingBlock(ServerPlayer &player, const Vector3i &position, int32_t face) {
+    _emitBreakingBlock("after.playerStartBreakingBlock", "WorldAfterEvents.playerStartBreakingBlock", player,
+                       position, face, nullptr);
+}
+
+void ScriptEngine::onPlayerCancelBreakingBlock(ServerPlayer &player, const Vector3i &position, int32_t face,
+                                               double progress) {
+    const double clamped = std::min(std::max(progress, 0.0), 1.0);
+    _emitBreakingBlock("after.playerCancelBreakingBlock", "WorldAfterEvents.playerCancelBreakingBlock", player,
+                       position, face, &clamped);
+}
+
+void ScriptEngine::onItemStartUseOn(ServerPlayer &player, const Vector3i &position, int32_t face) {
+    _emit("after.itemStartUseOn", "WorldAfterEvents.itemStartUseOn", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        const ItemStack held = player.getInventory().getItemInHand();
+        JS_SetPropertyStr(ctx, event, "block",
+                          api.makeBlock(api.host().getLevelFor(player), position.x, position.y, position.z));
+        JS_SetPropertyStr(ctx, event, "blockFace", JS_NewString(ctx, directionName(face)));
+        if (!held.isAir())
+            JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(held));
+        JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+    });
+}
+
+void ScriptEngine::onItemStopUseOn(ServerPlayer &player, const Vector3i &position) {
+    _emit("after.itemStopUseOn", "WorldAfterEvents.itemStopUseOn", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        const ItemStack held = player.getInventory().getItemInHand();
+        JS_SetPropertyStr(ctx, event, "block",
+                          api.makeBlock(api.host().getLevelFor(player), position.x, position.y, position.z));
+        if (!held.isAir())
+            JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(held));
+        JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+    });
+}
+
+void ScriptEngine::onPlayerInputPermissionCategoryChange(ServerPlayer &player, int32_t category, bool enabled) {
+    _emit("after.playerInputPermissionCategoryChange", "WorldAfterEvents.playerInputPermissionCategoryChange", false,
+          [&](ScriptApi &api, JSValue event) {
+              JSContext *ctx = api.context();
+              JS_SetPropertyStr(ctx, event, "category", JS_NewInt32(ctx, category));
+              JS_SetPropertyStr(ctx, event, "enabled", JS_NewBool(ctx, enabled));
+              JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+          });
 }
 
 void ScriptEngine::onItemStartUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration) {

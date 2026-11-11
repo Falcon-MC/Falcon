@@ -587,8 +587,8 @@ public:
     // Player::setHudVisibility (sub_141030B10): no elements means all of them
     void setHudVisibility(bool hidden, const std::vector<int32_t> *elements = nullptr);
 
-    // ClientInputLocks: one bit per InputPermissionCategory value, set when locked
-    void setInputLocked(int32_t category, bool locked);
+    // ClientInputLocks: one bit per InputPermissionCategory value, set when locked; true when it changed
+    bool setInputLocked(int32_t category, bool locked);
 
     bool isInputLocked(int32_t category) const {
         return category >= 0 && category < 32 && (mInputLocks & (1u << category)) != 0;
