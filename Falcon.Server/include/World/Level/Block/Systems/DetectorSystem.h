@@ -11,7 +11,6 @@ class Level;
 class ServerNetworkHandler;
 
 // trip wires and target blocks: the two detectors RedstoneSystem asks for power
-// TODO: every delay, range and formula here follows the documented behaviour, none is verified in the game
 class DetectorSystem {
 public:
     // wires a hook reaches along its direction

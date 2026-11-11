@@ -71,7 +71,6 @@ namespace {
         return result;
     }
 
-    // TODO: the game's identifier error is unverified; InvalidArgumentError has no fitting cause
     JSValue invalidIdentifier(ScriptApi &api, const std::string &identifier) {
         return api.throwError("Error", "Invalid structure identifier " + identifier);
     }
@@ -131,7 +130,6 @@ namespace {
         std::string id;
         if (argc < 1 || !readStructureId(*api, argv[0], id))
             return typeError(ctx);
-        // TODO: what the game does for a pack structure is unverified; it stays and false comes back
         return JS_NewBool(ctx, registryOf(*api).remove(id));
     }
 
@@ -250,7 +248,7 @@ namespace {
         const Vector3i size = structure->rotatedSize(place.mRotation);
         if (at.y < level.getMinY() || at.y + size.y - 1 > level.getMaxY())
             return api->throwError("LocationOutOfWorldBoundariesError", "");
-        // TODO: animationMode and animationSeconds are not played; the structure appears at once
+        // animationMode and animationSeconds are not played; the structure appears at once
         structure->place(api->host(), level, at, place);
         return JS_UNDEFINED;
     }
@@ -266,7 +264,7 @@ namespace {
         PackJigsaw::Options read;
         read.mIncludeEntities = optionBool(ctx, options, "includeEntities", true);
         read.mKeepJigsaws = optionBool(ctx, options, "keepJigsaws", false);
-        // TODO: liquidSettings is not applied; pieces keep the water they were saved with
+        // liquidSettings is not applied; pieces keep the water they were saved with
         return read;
     }
 
@@ -397,7 +395,6 @@ namespace {
         JSValue error;
         if (argc < 1 || !readCell(ctx, *structure, argv[0], cell, error))
             return argc < 1 ? typeError(ctx) : error;
-        // TODO: undefined is read as a void cell, unverified
         if (argc < 2 || JS_IsUndefined(argv[1])) {
             structure->setBlock(cell, nullptr);
             structure->setBlock(cell, nullptr, 1);

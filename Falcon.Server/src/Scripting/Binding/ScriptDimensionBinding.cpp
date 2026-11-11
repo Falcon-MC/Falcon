@@ -339,7 +339,6 @@ namespace {
                               && destination.y + span.y - 1 >= low.y && destination.z <= high.z
                               && destination.z + span.z - 1 >= low.z;
         // Copy refuses an overlap, ForceCopy and Move take it
-        // TODO: the game's error for an overlapping Copy is unverified
         if (mode == 0 && overlaps)
             return api->throwError("Error", "The source and destination regions overlap.");
 
@@ -645,7 +644,6 @@ namespace {
 
     // the rule as the definitions word it: excluded biomes or tags fail at once; a superset needs one included
     // biome, else every biome must be included
-    // TODO: the sampling (every block) and the reading of the include rule are unverified in the game
     JSValue dimensionContainsBiomes(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         if (argc < 3 || !JS_IsObject(argv[0]) || !JS_IsObject(argv[1]))
@@ -729,7 +727,6 @@ namespace {
     };
 
     // features of the 26.60 strings that the sapling trees draw; their data-driven shapes are not loaded
-    // TODO: the game's own shape of each feature is unverified, the sapling tree of the same wood grows instead
     const TreeFeature TREE_FEATURES[] = {
             {"minecraft:select_oak_tree_feature", TreeWoodType::OAK},
             {"minecraft:birch_tree_feature", TreeWoodType::BIRCH},

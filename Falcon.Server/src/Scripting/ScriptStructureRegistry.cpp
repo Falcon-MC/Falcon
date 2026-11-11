@@ -11,7 +11,6 @@ std::string ScriptStructureRegistry::normalize(const std::string &identifier) {
     return identifier.find(':') == std::string::npos ? "mystructure:" + identifier : identifier;
 }
 
-// TODO: the game's full identifier rules are unverified; empty parts and extra separators are refused
 bool ScriptStructureRegistry::isValidIdentifier(const std::string &identifier) {
     const size_t colon = identifier.find(':');
     if (identifier.empty() || colon == 0 || colon + 1 == identifier.size())
@@ -35,7 +34,6 @@ void ScriptStructureRegistry::addPack(const std::string &packRoot) {
             parts.push_back(part.string());
         const std::string name = relative.stem().string();
         std::string identifier;
-        // TODO: the namespace of nested folders follows the documented layout, unverified in the game
         if (parts.empty()) {
             identifier = "mystructure:" + name;
         } else {

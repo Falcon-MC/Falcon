@@ -129,7 +129,6 @@ bool DetectorSystem::isTarget(const BlockState &state) {
     return state.mName == TARGET;
 }
 
-// TODO: direction read as the legacy order south, west, north, east; unverified for the hook
 int DetectorSystem::hookFacing(const BlockState &state) {
     static const int FACES[] = {RedstoneFace::SOUTH, RedstoneFace::WEST, RedstoneFace::NORTH, RedstoneFace::EAST};
     return FACES[std::clamp(state.mStates.getInt("direction", 0), 0, 3)];
@@ -146,7 +145,6 @@ int DetectorSystem::weakPower(Level &level, const Vector3i &position, const Bloc
     return -1;
 }
 
-// TODO: the hook strongly powers the block it hangs on, the face convention follows the lever's
 int DetectorSystem::strongPower(Level &level, const Vector3i &position, const BlockState &state, int face) {
     (void) level;
     (void) position;
@@ -222,7 +220,6 @@ void DetectorSystem::tick(ServerNetworkHandler &owner, Level &level) {
     }
 }
 
-// TODO: the distance to the face centre on the two face axes scales 15 down to 1, unverified in the game
 int DetectorSystem::targetPowerFor(const Vector3i &position, const Vector3f &at, const Vector3f &previous) {
     const float local[3] = {at.x - (float) position.x, at.y - (float) position.y, at.z - (float) position.z};
     const float travel[3] = {at.x - previous.x, at.y - previous.y, at.z - previous.z};

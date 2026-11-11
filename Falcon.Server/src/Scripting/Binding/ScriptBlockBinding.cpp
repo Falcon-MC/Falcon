@@ -346,7 +346,6 @@ namespace {
         return JS_NewInt32(ctx, at.mLevel->getSkyLightAt(at.mPosition.x, at.mPosition.y, at.mPosition.z));
     }
 
-    // TODO: which blocks answer undefined is unverified; any block reports the power it receives
     JSValue blockGetRedstonePower(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         return JS_NewInt32(ctx,
@@ -358,7 +357,6 @@ namespace {
         const int32_t amount = readAmount(ctx, argc, argv, 0);
         if (amount < 1 || amount > 255)
             return at.mApi->throwError("ArgumentOutOfBoundsError", "");
-        // TODO: withData needs the block actor data on the ItemStack, which V4 carries
         return itemOfBlock(*at.mApi, at.state(), amount);
     }
 
@@ -367,7 +365,6 @@ namespace {
         const BlockAt at = blockAt(ctx, thisVal);
         const BlockState state = at.state();
         const Tag *upper = state.mStates.get("upper_block_bit");
-        // TODO: beds and other multi-block shapes are unverified
         if (upper == nullptr)
             return JS_UNDEFINED;
         const bool isUpper = upper->getType() == Tag::Type::Byte && upper->asByte() != 0;
@@ -501,7 +498,6 @@ namespace {
         const std::string text = face != nullptr && face->isCompound() ? face->getString("Text") : std::string();
         if (magic == 0)
             return string(ctx, text);
-        // TODO: the game keeps raw text as its json; a plain text comes back as one text entry
         JSValue parsed = text.empty() || text[0] != '{' ? JS_UNDEFINED
                                                         : JS_ParseJSON(ctx, text.c_str(), text.size(), "<sign>");
         if (JS_IsObject(parsed))
@@ -654,7 +650,7 @@ namespace {
     }
 
     // a potion cauldron keeps water as its liquid and a PotionId on its block actor
-    // TODO: powder snow cauldrons are not modelled by CauldronBlock; an empty one reports Water
+    // powder snow cauldrons are not modelled by CauldronBlock; an empty one reports Water
     JSValue fluidGetFluidType(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         const CauldronBlock cauldron(at.state());
@@ -695,7 +691,6 @@ namespace {
     }
 
     // CustomColor as the game saves it: an argb int
-    // TODO: without a custom colour the cauldron shows its biome's water; Falcon's default water colour stands in
     JSValue fluidGetColor(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         CauldronBlockActor *actor = at.mLevel->getBlockActors().find<CauldronBlockActor>(at.mPosition);
@@ -726,7 +721,6 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // TODO: PotionType 0, 1, 2 for drinkable, splash and lingering follows the item ids, unverified
     JSValue fluidSetPotion(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         const ScriptItemRef *item = argc >= 1 ? at.mApi->native<ScriptItemRef>(argv[0]) : nullptr;
@@ -784,7 +778,6 @@ namespace {
             for (int channel = 0; channel < 4; ++channel)
                 color[channel] = (float) entry->mColor[channel] / 255.0f;
         } else if (magic == 1) {
-            // TODO: tinted with the default biome colours, not the biome at the block
             MapColors::getColor(state, MapBiomeColors(), color);
         }
         return rgba(ctx, color);
@@ -863,7 +856,7 @@ namespace {
             return JS_UNDEFINED;
         stopAt(at);
         jukebox->getContainer()->setContainerItem(0, ItemStack::air());
-        // TODO: the game tries up, north, south, east, west, down for a free block (sub_143C803A0); up only
+        // the game tries up, north, south, east, west, down for a free block (sub_143C803A0); up only
         const Vector3i above(at.mPosition.x, at.mPosition.y + 1, at.mPosition.z);
         ItemActorHandler::dropItem(at.mApi->host(), *at.mLevel, ItemActorHandler::randomPopPosition(above), record,
                                    ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
@@ -871,7 +864,6 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // TODO: the faces read as those that output weak power now; the game reads the component's declared faces
     JSValue redstoneGetConnectedFaces(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         JSValue array = JS_NewArray(ctx);
@@ -883,7 +875,6 @@ namespace {
         return array;
     }
 
-    // TODO: the first face with strong power stands for the declared strongly_powered_face
     JSValue redstoneGetStronglyPoweredFace(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         for (int face = 0; face < RedstoneFace::COUNT; ++face) {
@@ -967,7 +958,7 @@ namespace {
     }
 
     // per pack and per block actor, as the game keeps them
-    // TODO: not saved with the block actor yet; lost when the chunk unloads
+    // not saved with the block actor yet; lost when the chunk unloads
     using BlockProperties = std::unordered_map<std::string, DynamicPropertyValue>;
     std::map<std::tuple<const ScriptApi *, const Level *, int64_t>, BlockProperties> gBlockProperties;
 

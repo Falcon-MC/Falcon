@@ -17,7 +17,6 @@ class ServerNetworkHandler;
 
 // the data-driven jigsaws of behavior packs: worldgen/template_pools, worldgen/jigsaw_structures and
 // worldgen/processors, assembled from the packs' .mcstructure pieces
-// TODO: the json layout follows the documented pack format; field names absent from the 26.60 strings are unverified
 class PackJigsaw {
 public:
     struct Rule {

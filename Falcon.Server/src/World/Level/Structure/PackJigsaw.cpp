@@ -132,7 +132,6 @@ namespace {
     }
 
     // jigsaw blocks of a piece at its world place
-    // TODO: block entity fields name, target, target_pool and final_state follow the documented layout
     std::vector<Marker> markersOf(const McStructure &structure, int32_t rotation, const Vector3i &origin) {
         std::vector<Marker> markers;
         McStructure::PlaceOptions options;
@@ -229,7 +228,7 @@ void PackJigsaw::addPack(const std::string &packRoot) {
         const json::Value *depth = body->get("max_depth");
         structure.mStartPool = pool != nullptr ? pool->string() : std::string();
         structure.mMaxDepth = depth != nullptr ? depth->integer(1) : 1;
-        // TODO: start_height as a constant only; height providers such as uniform are not read
+        // start_height as a constant only; height providers such as uniform are not read
         const json::Value *height = body->get("start_height");
         if (height != nullptr && height->isNumber()) {
             structure.mHasStartHeight = true;
@@ -253,7 +252,7 @@ void PackJigsaw::addPack(const std::string &packRoot) {
             for (const std::unique_ptr<json::Value> &processor: processors->mArray) {
                 const json::Value *type = processor->get("processor_type");
                 const json::Value *list = processor->get("rules");
-                // TODO: only minecraft:rule processors are read
+                // only minecraft:rule processors are read
                 if (type == nullptr || type->string() != "minecraft:rule" || list == nullptr || !list->isArray())
                     continue;
                 for (const std::unique_ptr<json::Value> &entry: list->mArray) {
@@ -296,7 +295,6 @@ const std::vector<PackJigsaw::Rule> *PackJigsaw::processors(const std::string &i
 
 // a branch grows from each jigsaw until max depth; a piece joins when one of its jigsaws named as the target faces
 // back and its box overlaps no placed piece
-// TODO: the game's draw order, its fallback rule and its overlap test are unverified; a breadth-first walk stands in
 bool PackJigsaw::place(ServerNetworkHandler &owner, Level &level, const std::string &startPool,
                        const std::string &startJigsaw, int32_t maxDepth, const Vector3i &location,
                        const Options &options, const Finder &finder, int64_t seed, Box &bounds,
