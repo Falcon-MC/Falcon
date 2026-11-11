@@ -1,6 +1,7 @@
 #include "Scripting/Binding/ScriptApi.h"
 
 #include "Network/Handler/BlockActionHandler.h"
+#include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Inventory/Container.h"
@@ -27,7 +28,6 @@
 #include <map>
 #include <tuple>
 #include <unordered_map>
-#include <unordered_set>
 
 using namespace ScriptValues;
 
@@ -741,6 +741,8 @@ namespace {
 
     JukeboxBlockActor *jukeboxAt(const BlockAt &at);
 
+    std::string recordSound(const ItemStack &record);
+
     void playAt(const BlockAt &at, JukeboxBlockActor &jukebox);
 
     void stopAt(const BlockAt &at);
@@ -771,10 +773,12 @@ namespace {
             if (!at.mApi->toItemStack(data, stack))
                 return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         }
+        if (!stack.isAir() && recordSound(stack).empty())
+            return at.mApi->throwError("Error", "Item is not a record.");
         stopAt(at);
         jukebox->getContainer()->setContainerItem(0, stack);
         BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *jukebox);
-        // TODO: startPlaying is read as true when left out, unverified
+        // the one-argument overload plays (sub_14E153BD0); the other stores !startPlaying (sub_14E14CF60)
         if (argc < 2 || JS_IsUndefined(argv[1]) || JS_ToBool(ctx, argv[1]) == 1)
             playAt(at, *jukebox);
         return JS_UNDEFINED;
@@ -790,10 +794,10 @@ namespace {
             return JS_UNDEFINED;
         stopAt(at);
         jukebox->getContainer()->setContainerItem(0, ItemStack::air());
-        // TODO: the game's eject offset is unverified; the item drops on top of the jukebox
-        at.mApi->host().spawnItemActor(
-                *at.mLevel, record.mDefinition->getIdentifier(), record.mCount,
-                Vector3f((float) at.mPosition.x + 0.5f, (float) at.mPosition.y + 1.0f, (float) at.mPosition.z + 0.5f));
+        // TODO: the game tries up, north, south, east, west, down for a free block (sub_143C803A0); up only
+        const Vector3i above(at.mPosition.x, at.mPosition.y + 1, at.mPosition.z);
+        ItemActorHandler::dropItem(at.mApi->host(), *at.mLevel, ItemActorHandler::randomPopPosition(above), record,
+                                   ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
         BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *jukebox);
         return JS_UNDEFINED;
     }
@@ -850,12 +854,9 @@ namespace {
         return std::string();
     }
 
-    // TODO: playing state lives here, not in the jukebox's saved data; it ends when the server stops
-    std::unordered_map<const Level *, std::unordered_set<int64_t>> gPlaying;
-
     bool isPlayingAt(const BlockAt &at) {
-        const auto found = gPlaying.find(at.mLevel);
-        return found != gPlaying.end() && found->second.count(BlockActorStore::packPosition(at.mPosition)) != 0;
+        const JukeboxBlockActor *jukebox = jukeboxAt(at);
+        return jukebox != nullptr && jukebox->isPlaying();
     }
 
     Vector3f centerOf(const BlockAt &at) {
@@ -867,15 +868,17 @@ namespace {
         if (sound.empty())
             return;
         at.mApi->host().playBlockSound(*at.mLevel, sound, centerOf(at), at.state().getHash());
-        gPlaying[at.mLevel].insert(BlockActorStore::packPosition(at.mPosition));
+        jukebox.setPlaying(true);
+        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, jukebox);
     }
 
-    // TODO: record.null is read as the stop event, unverified
+    // no sound event: the game only raises FinishedRecording, the client stops the disc (sub_144C37130)
     void stopAt(const BlockAt &at) {
-        if (!isPlayingAt(at))
+        JukeboxBlockActor *jukebox = jukeboxAt(at);
+        if (jukebox == nullptr || !jukebox->isPlaying())
             return;
-        gPlaying[at.mLevel].erase(BlockActorStore::packPosition(at.mPosition));
-        at.mApi->host().playBlockSound(*at.mLevel, "record.null", centerOf(at), at.state().getHash());
+        jukebox->setPlaying(false);
+        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *jukebox);
     }
 
     JSValue recordPlay(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
