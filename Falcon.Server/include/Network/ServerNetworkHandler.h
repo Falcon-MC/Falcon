@@ -949,6 +949,18 @@ private:
 
     void handle(const NetworkIdentifier &id, const EmotePacket &packet) override;
 
+    void handle(const NetworkIdentifier &id, const AnimatePacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const LevelSoundEventPacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const SetDefaultGameTypePacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const SetDifficultyPacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const RequestPermissionsPacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const BookEditPacket &packet) override;
+
     void handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const ServerboundDataStorePacket &packet) override;
