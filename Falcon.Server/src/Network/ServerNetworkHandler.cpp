@@ -2490,7 +2490,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const InteractPac
         return;
 
     // riding a tamed mount, the inventory key opens the mount's window
-    // TODO: whether the client names the mount or the player here is unverified (IDA unavailable): both accepted
+    // the mount or the player: both accepted, which one the client sends is not checked
     ServerActor *mount = player->isRiding()
                                  ? dynamic_cast<ServerActor *>(RideSystem::resolve(*this, player->getVehicleId()))
                                  : nullptr;

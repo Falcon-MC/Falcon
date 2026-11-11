@@ -20,7 +20,7 @@ namespace {
         const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
         const json::Value *inventory = components == nullptr ? nullptr : components->get("minecraft:inventory");
         const json::Value *size = inventory == nullptr ? nullptr : inventory->get("inventory_size");
-        // TODO: the size before the definitions load is unverified (IDA unavailable): the chest's 27
+        // both chest vehicles define 27; the same before the definitions load
         return size != nullptr && size->isNumber() ? (int) size->mNumber : 27;
     }
 

@@ -1045,7 +1045,7 @@ const PushableByEntityPresets &MobActor::getPushPresets() const {
     return mPushPresets;
 }
 
-// TODO: which mounts open a window and how its slots map to saddle, armor and chest is unverified (IDA unavailable)
+// mount windows and their saddle, armor and chest slots are not checked against the game
 Container *MobActor::getEntityContainer() {
     const json::Value *inventory = getComponent(INVENTORY_COMPONENT);
     const json::Value *type = inventory == nullptr ? nullptr : inventory->get("container_type");

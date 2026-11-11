@@ -77,7 +77,7 @@ namespace {
     const float PLAYER_BASE_OFFSET = 1.62f;
     const char *const ENABLED_EXPERIMENTS[] = {"data_driven_vanilla_blocks_and_items"};
 
-    // TODO: the void value of the dimension generator type, its place after Overworld and Flat (1, 2) for now
+    // GeneratorType: Legacy, Overworld, Flat, Nether, TheEnd, Void (sub_147EA7020)
     const int32_t CUSTOM_DIMENSION_GENERATOR = 5;
 
     std::vector<ExperimentData> enabledExperiments() {

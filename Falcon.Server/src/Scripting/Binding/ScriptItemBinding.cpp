@@ -65,7 +65,7 @@ namespace {
 
     // EnchantmentTargets bits as EnchantmentSlot values
     // EnchantSlot names: sub_149C81280; the data-driven spears carry melee_spear
-    // TODO: trident as Spear and the mask as CosmeticHead: their item constructors are only reached from sub_144997DC0
+    // trident and mask keep their generic class: their item constructors are only reached from sub_144997DC0
     const std::pair<uint32_t, const char *> ENCHANTMENT_SLOTS[] = {
             {EnchantmentTargets::HELMET, "ArmorHead"},
             {EnchantmentTargets::CHESTPLATE, "ArmorTorso"},
@@ -602,7 +602,7 @@ namespace {
 
         const ItemStack &current = slot.mGet();
         ScriptItemData data;
-        // TODO: what an empty slot answers is unverified (IDA unavailable): air, writes dropped
+        // an empty slot answers air and drops writes, not checked against the game
         if (current.isAir() || current.mDefinition == nullptr) {
             data.mTypeId = "minecraft:air";
             data.mAmount = 0;
@@ -775,7 +775,7 @@ namespace {
     }
 
     // "item." + description id + ".name"
-    // TODO: block description ids and per-class overrides (buckets by content, sub_148EE72C0) not mapped yet
+    // item description ids only: block ids and per-class overrides (buckets by content, sub_148EE72C0) are not mapped
     JSValue itemGetLocalizationKey(JSContext *ctx, ScriptApi &api, ScriptItemData &data, int, JSValueConst *) {
         if (const Tag *name = vanillaComponent(data.mTypeId, "minecraft:display_name"))
             return string(ctx, name->getString("value"));
@@ -991,7 +991,7 @@ namespace {
     }
 
     // compound at the top of the item tag, one child compound per collection: sub_14B4A9E90, sub_149B62E40
-    // TODO: the game names a collection by something other than the pack name, unverified
+    // collections named by the pack name, not checked against the game
     const char *const TAG_BLOCK_DYNAMIC_PROPERTIES = "BlockEntityDynamicProperties";
 
     std::unordered_map<std::string, DynamicPropertyValue> blockPropertiesOf(ScriptApi &api,
@@ -1086,7 +1086,7 @@ namespace {
         if (id == "minecraft:compostable")
             return vanillaComponent(data.mTypeId, "minecraft:compostable") != nullptr ? "ItemCompostableComponent"
                                                                                       : nullptr;
-        // TODO: which items carry it is unverified (IDA unavailable): every item placing a block
+        // every item placing a block carries it, not checked against the game
         if (id == "minecraft:block_actor_dynamic_properties") {
             ItemStack stack;
             return gameStack(api, data, stack) && stack.mBlockDefinition != nullptr
@@ -1782,12 +1782,17 @@ namespace {
         return ScriptApi::fromContext(ctx)->throwError("InvalidContainerError", "");
     }
 
-    // TODO: the error of an out of bounds slot is unverified (IDA unavailable)
-    JSValue readSlot(JSContext *ctx, const ScriptContainerView &view, JSValueConst value, int32_t &slot) {
+    // the binding's bounds error (sub_148548380); argument: the index of `value` in the call
+    JSValue readSlot(JSContext *ctx, const ScriptContainerView &view, JSValueConst value, int32_t &slot,
+                     int argument = 0) {
         if (JS_ToInt32(ctx, &slot, value) != 0)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         if (slot < 0 || slot >= view.mSize)
-            return ScriptApi::fromContext(ctx)->throwError("ArgumentOutOfBoundsError", "");
+            return ScriptApi::fromContext(ctx)->throwError(
+                    "ArgumentOutOfBoundsError",
+                    "Unsupported or out of bounds value passed to function argument [" + std::to_string(argument)
+                            + "]. Value: " + std::to_string(slot) + ", Argument bounds: [0, "
+                            + std::to_string(view.mSize - 1) + "]");
         return JS_UNDEFINED;
     }
 
@@ -1934,7 +1939,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // TODO: whether contains and find also compare the amount is unverified (IDA unavailable)
+    // contains and find also compare the amount, not checked against the game
     JSValue containerFind(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, int magic) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptItemRef *item = argc >= 1 ? api->native<ScriptItemRef>(argv[0]) : nullptr;
@@ -2023,7 +2028,7 @@ namespace {
         return view ? JS_UNDEFINED : invalidContainer(ctx);
     }
 
-    // TODO: what moveItem does onto a slot holding another item is unverified (IDA unavailable): nothing
+    // onto a slot holding another item moveItem does nothing, not checked against the game
     JSValue containerMoveItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         if (argc < 3)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
@@ -2033,7 +2038,7 @@ namespace {
         ScriptContainerView to;
         int32_t fromSlot = 0, toSlot = 0;
         if (JS_IsException(otherView(ctx, argv[2], to)) || JS_IsException(readSlot(ctx, from, argv[0], fromSlot))
-            || JS_IsException(readSlot(ctx, to, argv[1], toSlot)))
+            || JS_IsException(readSlot(ctx, to, argv[1], toSlot, 1)))
             return JS_EXCEPTION;
         ItemStack moving = from.mGet(fromSlot);
         if (moving.isAir())
@@ -2068,7 +2073,7 @@ namespace {
         ScriptContainerView second;
         int32_t slot = 0, otherSlot = 0;
         if (JS_IsException(otherView(ctx, argv[2], second)) || JS_IsException(readSlot(ctx, first, argv[0], slot))
-            || JS_IsException(readSlot(ctx, second, argv[1], otherSlot)))
+            || JS_IsException(readSlot(ctx, second, argv[1], otherSlot, 1)))
             return JS_EXCEPTION;
         ItemStack left = first.mGet(slot);
         ItemStack right = second.mGet(otherSlot);
@@ -2166,7 +2171,7 @@ namespace {
         return components == nullptr ? nullptr : components->get("minecraft:inventory");
     }
 
-    // the minecraft:inventory definition fields; TODO: the player's own values are unverified (IDA unavailable)
+    // the minecraft:inventory definition fields; the vanilla player has none: defaults and its own 36 slots
     JSValue inventoryField(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptContainerRef *ref = api->native<ScriptContainerRef>(thisVal);

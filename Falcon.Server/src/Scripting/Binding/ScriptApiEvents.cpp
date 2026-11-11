@@ -514,7 +514,7 @@ namespace {
     }
 }
 
-// slots 0 to 8 are the hotbar; TODO: absolute slot indexes for both types are unverified (IDA unavailable)
+// slots 0 to 8 are the hotbar; the same absolute indexes for both types, not checked against the game
 void ScriptApi::_emitInventoryChanges() {
     if (!hasSubscribers("after.playerInventoryItemChange")) {
         mInventorySnapshots.clear();
@@ -560,8 +560,7 @@ void ScriptApi::_emitInventoryChanges() {
     mInventorySnapshots = std::move(current);
 }
 
-// TODO: the exact moments the game fires grab and release are unverified (IDA unavailable): a cursor change
-// between two ticks releases the old stack, then grabs the new one
+// a cursor change between two ticks releases the old stack, then grabs the new one; not checked against the game
 void ScriptApi::_emitCursorChanges() {
     const bool grab = hasSubscribers("after.playerCursorItemGrab");
     const bool release = hasSubscribers("after.playerCursorItemRelease");

@@ -93,7 +93,7 @@ public:
         }
     }
 
-    // TODO: a custom dimension's own height range, the overworld's for now
+    // registerCustomDimension takes no bounds: a custom dimension gets the overworld's range
     static int32_t getMinY(DimensionType dimension) {
         if (dimension == DimensionType::Overworld || isCustom(dimension)) {
             return -64;

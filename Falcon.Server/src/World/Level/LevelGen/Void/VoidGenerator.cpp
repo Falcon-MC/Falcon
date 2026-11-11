@@ -4,7 +4,7 @@
 #include "Protocol/BlockStateHasher.h"
 
 namespace {
-    // TODO: the void generator's biome, plains for now
+    // plains, not checked against the game
     const int32_t VOID_BIOME = 1;
 }
 

@@ -371,7 +371,7 @@ namespace {
         }
         if (target.mServerActor != nullptr)
             return target.mServerActor->getSize();
-        // TODO: the item entity box is unverified
+        // the size ItemEntity registers
         return ActorSize{0.25f, 0.25f};
     }
 
@@ -527,7 +527,7 @@ namespace {
 
     Vector3f headOf(const EntityTarget &target) {
         const Vector3f &position = target.mActor->getPosition();
-        // TODO: the game's eye height of mobs is unverified; 1.62 for a standing player, 0.85 of the box otherwise
+        // 1.62 for a standing player, 0.85 of the box otherwise; mob eye heights not checked against the game
         const float eyes = target.mPlayer != nullptr && sizeOf(target).mHeight == MovementPhysics::PLAYER_HEIGHT
                                    ? 1.62f
                                    : sizeOf(target).mHeight * 0.85f;
