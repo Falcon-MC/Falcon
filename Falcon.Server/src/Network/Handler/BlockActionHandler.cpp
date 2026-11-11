@@ -145,8 +145,7 @@ namespace {
                                      && (int32_t) itemData->mToolType == (int32_t) blockData->mToolType
                                      && itemData->mToolTier >= (int32_t) blockData->mToolTier);
 
-        const bool canHarvest = blockData->mToolType == BlockToolType::None || blockData->mHandHarvest || matchesTool
-                                || (heldType != nullptr && heldType->canDestroySpecial(blockData->mIdentifier));
+        const bool canHarvest = BlockActionHandler::canHarvest(*blockData, heldItem);
 
         double seconds = canHarvest ? blockHardness * 1.5 : blockHardness * 5.0;
 
@@ -543,14 +542,24 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
 void BlockActionHandler::spawnBlockDrops(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                          const BlockState &brokenState, const ItemStack &tool) {
+    const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+    for (const ItemStack &drop: blockDrops(owner, &level, position, brokenState, tool))
+        owner.dropItem(level, dropPosition, drop, ItemActorHandler::randomDropMotion(),
+                       ItemActorHandler::DROP_PICKUP_DELAY);
+}
+
+std::vector<ItemStack> BlockActionHandler::blockDrops(ServerNetworkHandler &owner, Level *level,
+                                                      const Vector3i &position, const BlockState &brokenState,
+                                                      const ItemStack &tool) {
+    std::vector<ItemStack> drops;
     const BlockData *brokenData = BlockDataTable::find(brokenState.mName.c_str());
     const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
     if (brokenData == nullptr && brokenBlock == nullptr)
-        return;
+        return drops;
     const bool silkTouch = ItemEnchantments::getLevel(tool, EnchantmentIds::SILK_TOUCH) > 0;
     const int32_t fortuneLevel = ItemEnchantments::getLevel(tool, EnchantmentIds::FORTUNE);
 
-    auto spawnDrop = [&](const std::string &identifier, int32_t count) {
+    auto addDrop = [&](const std::string &identifier, int32_t count) {
         if (identifier.empty() || count <= 0)
             return;
 
@@ -563,23 +572,20 @@ void BlockActionHandler::spawnBlockDrops(ServerNetworkHandler &owner, Level &lev
         drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsedItem.getIdentifier());
         drop.mCount = count;
 
-        if (brokenBlock != nullptr)
-            brokenBlock->writeDropContents(level, position, drop);
-
-        const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-        owner.dropItem(level, dropPosition, drop, ItemActorHandler::randomDropMotion(),
-                       ItemActorHandler::DROP_PICKUP_DELAY);
+        if (brokenBlock != nullptr && level != nullptr)
+            brokenBlock->writeDropContents(*level, position, drop);
+        drops.push_back(std::move(drop));
     };
 
     std::vector<BlockDrop> classDrops;
     if (brokenBlock != nullptr && brokenBlock->getDrops(brokenState, tool, fortuneLevel, classDrops)) {
         for (const BlockDrop &drop: classDrops)
-            spawnDrop(furnaceDropIdentifier(drop.mIdentifier), drop.mCount);
-        return;
+            addDrop(furnaceDropIdentifier(drop.mIdentifier), drop.mCount);
+        return drops;
     }
 
     if (brokenData == nullptr)
-        return;
+        return drops;
 
     std::string dropIdentifier;
     int32_t dropCount = 0;
@@ -602,7 +608,29 @@ void BlockActionHandler::spawnBlockDrops(ServerNetworkHandler &owner, Level &lev
             dropCount += rand() % (fortuneLevel + 1);
     }
 
-    spawnDrop(dropIdentifier, dropCount);
+    addDrop(dropIdentifier, dropCount);
+    return drops;
+}
+
+bool BlockActionHandler::canHarvest(const BlockData &block, const ItemStack &tool) {
+    if (block.mToolType == BlockToolType::None || block.mHandHarvest)
+        return true;
+    if (tool.isAir() || tool.mDefinition == nullptr)
+        return false;
+
+    const std::string &identifier = tool.mDefinition->getIdentifier();
+    const ItemData *itemData = ItemDataTable::find(identifier);
+    if (itemData == nullptr) {
+        const bool standardTool = block.mToolType == BlockToolType::Pickaxe || block.mToolType == BlockToolType::Shovel
+                                  || block.mToolType == BlockToolType::Axe || block.mToolType == BlockToolType::Hoe;
+        bool useEfficiency = false;
+        return CustomContentRegistry::getInstance().getDiggerSpeed(identifier, block.mName, standardTool,
+                                                                   useEfficiency) > 0;
+    }
+    if ((int32_t) itemData->mToolType == (int32_t) block.mToolType && itemData->mToolTier >= (int32_t) block.mToolTier)
+        return true;
+    const Item *type = VanillaItems::fromIdentifier(identifier);
+    return type != nullptr && type->canDestroySpecial(block.mIdentifier);
 }
 
 void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

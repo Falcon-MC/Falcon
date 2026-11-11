@@ -553,6 +553,37 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
 });
 )JS";
 
+    const char *const LOOT = R"JS(
+import { world, system, ItemStack, LootTable, LootPool, LootItem, LootTableManager, BlockPermutation, BlockTypes,
+         EntityTypes } from "@minecraft/server";
+
+const r = {};
+const errorOf = (run) => { try { run(); return "ok"; } catch (e) { return e.name + ":" + e.message; } };
+system.runTimeout(() => {
+    const m = world.getLootTableManager();
+    r.manager = m instanceof LootTableManager && m === world.getLootTableManager();
+    const t = m.getLootTable("entities/zombie");
+    r.zombie = t.path + "|" + t.pools.length + "|" + (t.pools[0] instanceof LootPool) + "|"
+        + t.pools[0].rolls.min + "-" + t.pools[0].rolls.max;
+    const entry = t.pools[0].entries[0];
+    r.entry = (entry instanceof LootItem) + "|" + entry.name.id + "|" + entry.weight + "|"
+        + entry.functions.map((f) => f.constructor.name + ":" + f.count.min + "-" + f.count.max).join(",");
+    r.conditions = t.pools[1].conditions.map((c) => c.constructor.name).join(",") + "|"
+        + t.pools[1].conditions[1].lootingMultiplier;
+    r.missing = String(m.getLootTable("entities/nope"));
+    r.roll = m.generateLootFromTable(t).every((i) => i.typeId === "minecraft:rotten_flesh" || i instanceof ItemStack);
+    r.dirt = m.generateLootFromBlockPermutation(BlockPermutation.resolve("minecraft:dirt"))
+        .map((i) => i.typeId + "x" + i.amount).join(",");
+    r.stoneHand = String(m.generateLootFromBlockType(BlockTypes.get("minecraft:stone")));
+    r.stonePick = m.generateLootFromBlockType(BlockTypes.get("minecraft:stone"),
+        new ItemStack("minecraft:wooden_pickaxe")).map((i) => i.typeId).join(",");
+    r.entityType = Array.isArray(m.generateLootFromEntityType(EntityTypes.get("minecraft:zombie")));
+    r.tool = errorOf(() => m.generateLootFromTable(t, {}));
+    r.constructor = errorOf(() => new LootTable());
+    world.setDynamicProperty("loot", JSON.stringify(r));
+}, 2);
+)JS";
+
     const char *const ITEMS = R"JS(
 import { world, system, ItemStack, ItemType, ItemTypes, Container, ContainerSlot, EnchantmentType, EnchantmentTypes,
          EnchantmentSlot, ItemLockMode, Potions, PotionEffectType, ItemDurabilityComponent, ItemEnchantableComponent,
@@ -1418,6 +1449,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                   server2 + ", {\"module_name\": \"@minecraft/server-graphics\", \"version\": \"1.0.0\"},"
                             " {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
                   GRAPHICS);
+        writePack(packs, "loot", server2, LOOT);
         writePack(packs, "undeclared", server2, UNDECLARED);
         writePack(packs, "net", server2 + ", {\"module_name\": \"@minecraft/server-net\", \"version\": \"1.0.0-beta\"}",
                   NOT_IMPLEMENTED);
@@ -1466,7 +1498,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             const Tag *states = property.mProperties.get("properties");
             require(states != nullptr && states->getList().size() == 2, "states not sent");
         }
-        require(engine.loadPacks(manager.getPacks()) == 11, "only the eleven valid packs start");
+        require(engine.loadPacks(manager.getPacks()) == 12, "only the twelve valid packs start");
 
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
@@ -1880,6 +1912,21 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*graphics, "type", "TypeError:Native type conversion failed.");
         expect(*graphics, "biome", "TypeError:Native type conversion failed.");
         expect(*graphics, "constructor", "ReferenceError:No constructor for native class 'BiomeWater'.");
+
+        const std::unique_ptr<json::Value> loot = result(owner, "loot");
+        expect(*loot, "manager", "true");
+        expect(*loot, "zombie", "entities/zombie|3|true|1-1");
+        expect(*loot, "entry",
+               "true|minecraft:rotten_flesh|1|SetItemCountFunction:0-2,LootingEnchantFunction:0-1");
+        expect(*loot, "conditions", "KilledByPlayerOrPetsCondition,RandomChanceWithLootingCondition|0.01");
+        expect(*loot, "missing", "undefined");
+        expect(*loot, "roll", "true");
+        expect(*loot, "dirt", "minecraft:dirtx1");
+        expect(*loot, "stoneHand", "undefined");
+        expect(*loot, "stonePick", "minecraft:cobblestone");
+        expect(*loot, "entityType", "true");
+        expect(*loot, "tool", "TypeError:Native type conversion failed.");
+        expect(*loot, "constructor", "ReferenceError:No constructor for native class 'LootTable'.");
 
         // custom commands: in the command map under both names, parsed from a player and gated by cheats
         CommandMap &commands = owner.getCommands();

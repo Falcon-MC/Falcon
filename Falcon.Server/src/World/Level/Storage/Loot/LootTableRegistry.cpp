@@ -10,11 +10,11 @@ LootTableRegistry &LootTableRegistry::getInstance() {
 }
 
 LootTableRegistry::LootTableRegistry() {
-    const std::unique_ptr<json::Value> root = json::parse(FalconLootData::kLootTablesJson);
-    if (root == nullptr || !root->isObject())
+    mDefinitions = json::parse(FalconLootData::kLootTablesJson);
+    if (mDefinitions == nullptr || !mDefinitions->isObject())
         return;
 
-    for (const auto &entry: root->mObject) {
+    for (const auto &entry: mDefinitions->mObject) {
         if (entry.second->isObject())
             mTables[_normalize(entry.first)] = std::make_unique<LootTable>(*entry.second);
     }
@@ -30,6 +30,22 @@ LootTableRegistry::LootTableRegistry() {
 const LootTable *LootTableRegistry::get(const std::string &path) const {
     const auto table = mTables.find(_normalize(path));
     return table == mTables.end() ? nullptr : table->second.get();
+}
+
+const json::Value *LootTableRegistry::getDefinition(const std::string &path) const {
+    if (mDefinitions == nullptr || !mDefinitions->isObject())
+        return nullptr;
+    const std::string normalized = _normalize(path);
+    for (const auto &entry: mDefinitions->mObject) {
+        if (_normalize(entry.first) == normalized)
+            return entry.second.get();
+    }
+    return nullptr;
+}
+
+std::string LootTableRegistry::getEntityTablePath(const std::string &identifier) const {
+    const auto path = mEntityTables.find(identifier);
+    return path == mEntityTables.end() ? std::string() : path->second;
 }
 
 const LootTable *LootTableRegistry::getForEntity(const std::string &identifier) const {

@@ -1379,6 +1379,203 @@ namespace {
 )JS";
 }
 
+namespace {
+    const char *LOOT = R"JS(
+(function (native) {
+    const token = Symbol();
+    const conversion = () => new TypeError("Native type conversion failed.");
+    const fields = new WeakMap();
+    const define = (name, parent, keys) => {
+        const cls = parent ? class extends parent {}
+            : class {
+                constructor(key, data) {
+                    if (key !== token)
+                        throw new ReferenceError("No constructor for native class '" + new.target.name + "'.");
+                    fields.set(this, data);
+                }
+            };
+        Object.defineProperty(cls, "name", { value: name });
+        for (const key of keys)
+            Object.defineProperty(cls.prototype, key, { configurable: true, get() { return fields.get(this)[key]; } });
+        return cls;
+    };
+    const number = (value, fallback) => (typeof value === "number" && Number.isFinite(value) ? value : fallback);
+    // a number, a [min, max] pair or a {min, max} object, as the table files write ranges
+    const range = (value, fallback) => {
+        if (typeof value === "number")
+            return { min: value, max: value };
+        if (Array.isArray(value))
+            return { min: number(value[0], 0), max: number(value[1], number(value[0], 0)) };
+        if (value !== null && typeof value === "object")
+            return { min: number(value.min, 0), max: number(value.max, number(value.min, 0)) };
+        return { min: fallback, max: fallback };
+    };
+    const strings = (value) => (Array.isArray(value) ? value.map(String) : []);
+    const unprefixed = (name) => String(name || "").replace(/^minecraft:/, "");
+    // "loot_tables/chests/x.json" as scripts name it: "chests/x"
+    const tablePath = (name) => String(name || "").replace(/^loot_tables\//, "").replace(/\.json$/, "");
+
+    const classes = {};
+    const add = (name, parent, keys) => (classes[name] = define(name, parent, keys));
+    const LootItemCondition = add("LootItemCondition", null, []);
+    const LootItemFunction = add("LootItemFunction", null, ["conditions"]);
+    const LootPoolEntry = add("LootPoolEntry", null, ["quality", "subTable", "weight"]);
+    const LootItem = add("LootItem", LootPoolEntry, ["conditions", "functions", "name"]);
+    const LootTableReference = add("LootTableReference", LootPoolEntry, ["path"]);
+    const LootTableEntry = add("LootTableEntry", LootPoolEntry, ["lootTable"]);
+    const EmptyLootItem = add("EmptyLootItem", LootPoolEntry, []);
+    const LootPool = add("LootPool", null, ["bonusRolls", "conditions", "entries", "rolls", "tiers"]);
+    const LootPoolTiers = add("LootPoolTiers", null, ["bonusChance", "bonusRolls", "initialRange"]);
+    const LootTable = add("LootTable", null, ["path", "pools"]);
+    const EnchantInfo = add("EnchantInfo", null, ["enchantment", "range"]);
+
+    const enchantInfo = (entry) => new EnchantInfo(token, {
+        enchantment: String(entry.id ?? entry.enchantment ?? ""), range: range(entry.level ?? entry.levels, 1) });
+    const difficultyChances = (json) => {
+        const fallback = number(json.default_chance, 0);
+        return ["peaceful", "easy", "normal", "hard"].map((key) => number(json[key], fallback));
+    };
+    // condition files name, class, fields
+    const CONDITIONS = {
+        random_chance: ["RandomChanceCondition", (j) => ({ chance: number(j.chance, 0) })],
+        random_chance_with_looting: ["RandomChanceWithLootingCondition",
+            (j) => ({ chance: number(j.chance, 0), lootingMultiplier: number(j.looting_multiplier, 0) })],
+        random_difficulty_chance: ["RandomDifficultyChanceCondition", (j) => ({ chances: difficultyChances(j) })],
+        random_regional_difficulty_chance: ["RandomRegionalDifficultyChanceCondition",
+            (j) => ({ maxChance: number(j.max_chance, 0) })],
+        killed_by_player: ["KilledByPlayerCondition", () => ({})],
+        killed_by_player_or_pets: ["KilledByPlayerOrPetsCondition", () => ({})],
+        is_baby: ["IsBabyCondition", () => ({})],
+        killed_by_entity: ["KilledByEntityCondition", (j) => ({ entityType: String(j.entity_type ?? "") })],
+        entity_killed: ["EntityKilledCondition", (j) => ({ entityType: String(j.entity_type ?? "") })],
+        damaged_by_entity: ["DamagedByEntityCondition", (j) => ({ entityType: String(j.entity_type ?? "") })],
+        passenger_of_entity: ["PassengerOfEntityCondition", (j) => ({ entityType: String(j.entity_type ?? "") })],
+        has_mark_variant: ["EntityHasMarkVariantCondition", (j) => ({ value: number(j.value, 0) })],
+        has_variant: ["EntityHasVariantCondition", (j) => ({ value: number(j.value, 0) })],
+        match_tool: ["MatchToolCondition", (j) => ({
+            count: range(j.count, 0), durability: range(j.durability, 0),
+            enchantments: Array.isArray(j.enchantments) ? j.enchantments.map(enchantInfo) : [],
+            itemName: String(j.item ?? ""), itemTagsAll: strings(j["minecraft:match_tool_filter_all"]),
+            itemTagsAny: strings(j["minecraft:match_tool_filter_any"]),
+            itemTagsNone: strings(j["minecraft:match_tool_filter_none"]) })],
+    };
+    const FUNCTIONS = {
+        set_count: ["SetItemCountFunction", (j) => ({ count: range(j.count, 1) })],
+        set_damage: ["SetItemDamageFunction", (j) => ({ damage: range(j.damage, 1) })],
+        set_data: ["SetItemDataFunction", (j) => ({ data: range(j.data, 0) })],
+        looting_enchant: ["LootingEnchantFunction", (j) => ({ count: range(j.count, 0) })],
+        explosion_decay: ["ExplosionDecayFunction", () => ({})],
+        enchant_random_gear: ["EnchantRandomEquipmentFunction", (j) => ({ chance: number(j.chance, 0) })],
+        enchant_randomly: ["EnchantRandomlyFunction", (j) => ({ treasure: j.treasure === true })],
+        enchant_with_levels: ["EnchantWithLevelsFunction",
+            (j) => ({ levels: range(j.levels, 0), treasure: j.treasure === true })],
+        set_potion: ["SetPotionFunction", (j) => ({ id: String(j.id ?? "") })],
+        exploration_map: ["ExplorationMapFunction", (j) => ({ destination: String(j.destination ?? "") })],
+        specific_enchants: ["SpecificEnchantFunction",
+            (j) => ({ enchantments: Array.isArray(j.enchants) ? j.enchants.map(enchantInfo) : [] })],
+        furnace_smelt: ["SmeltItemFunction", () => ({})],
+        set_data_from_color_index: ["SetDataFromColorIndexFunction", () => ({})],
+        set_armor_trim: ["SetArmorTrimFunction",
+            (j) => ({ material: String(j.material ?? ""), pattern: String(j.pattern ?? "") })],
+        set_ominous_bottle_amplifier: ["SetOminousBottleFunction", (j) => ({ amplifier: range(j.amplifier, 0) })],
+        random_aux_value: ["RandomAuxValueFunction", (j) => ({ values: range(j.values, 0) })],
+        random_block_state: ["RandomBlockStateFunction",
+            (j) => ({ blockState: String(j.block_state ?? ""), values: range(j.values, 0) })],
+        random_dye: ["RandomDyeFunction", () => ({})],
+        set_banner_details: ["SetBannerDetailsFunction", (j) => ({ type: number(j.type, 0) })],
+        set_stew_effect: ["SetStewEffectFunction", (j) => ({
+            effects: Array.isArray(j.effects) ? j.effects.map((e) => number(e !== null && typeof e === "object" ? e.id : e, 0)) : [] })],
+        set_book_contents: ["SetBookContentsFunction",
+            (j) => ({ author: String(j.author ?? ""), pages: strings(j.pages), title: String(j.title ?? "") })],
+        set_lore: ["SetItemLoreFunction", (j) => ({ lore: strings(j.lore) })],
+        set_name: ["SetItemNameFunction", (j) => ({ name: String(j.name ?? "") })],
+        set_actor_id: ["SetSpawnEggFunction", (j) => ({ id: String(j.id ?? "") })],
+        fill_container: ["FillContainerFunction", (j) => ({ lootTable: String(j.loot_table ?? "") })],
+    };
+    for (const spec of Object.values(CONDITIONS))
+        add(spec[0], LootItemCondition, Object.keys(spec[1]({})));
+    for (const spec of Object.values(FUNCTIONS))
+        add(spec[0], LootItemFunction, Object.keys(spec[1]({})));
+
+    const condition = (json) => {
+        const spec = CONDITIONS[unprefixed(json && json.condition)];
+        return spec ? new classes[spec[0]](token, spec[1](json)) : new LootItemCondition(token, {});
+    };
+    const conditions = (list) => (Array.isArray(list) ? list.map(condition) : []);
+    const lootFunction = (json) => {
+        const spec = FUNCTIONS[unprefixed(json && json.function)];
+        const data = spec ? spec[1](json) : {};
+        data.conditions = conditions(json && json.conditions);
+        return new (spec ? classes[spec[0]] : LootItemFunction)(token, data);
+    };
+    const entry = (json) => {
+        const base = { quality: number(json.quality, 0), weight: number(json.weight, 1), subTable: undefined };
+        if (Array.isArray(json.pools))
+            base.subTable = new LootTableEntry(token, Object.assign({}, base, { lootTable: table("", json) }));
+        switch (json.type) {
+            case "item":
+                return new LootItem(token, Object.assign(base, { conditions: conditions(json.conditions),
+                    functions: Array.isArray(json.functions) ? json.functions.map(lootFunction) : [],
+                    name: native.ItemTypes ? native.ItemTypes.get(String(json.name ?? "")) : undefined }));
+            case "loot_table":
+                return new LootTableReference(token, Object.assign(base, { path: tablePath(json.name) }));
+            default:
+                return new EmptyLootItem(token, base);
+        }
+    };
+    const pool = (json) => new LootPool(token, {
+        bonusRolls: range(json.bonus_rolls, 0), conditions: conditions(json.conditions),
+        entries: Array.isArray(json.entries) ? json.entries.map(entry) : [], rolls: range(json.rolls, 1),
+        tiers: json.tiers !== null && typeof json.tiers === "object" ? new LootPoolTiers(token, {
+            bonusChance: number(json.tiers.bonus_chance, 0), bonusRolls: number(json.tiers.bonus_rolls, 0),
+            initialRange: number(json.tiers.initial_range, 1) }) : undefined });
+    const table = (path, json) => new LootTable(token, {
+        path, pools: Array.isArray(json.pools) ? json.pools.map(pool) : [] });
+
+    const tool = (value) => {
+        if (value !== undefined && !native.isItemStack(value))
+            throw conversion();
+        return value;
+    };
+    const LootTableManager = add("LootTableManager", null, []);
+    Object.assign(LootTableManager.prototype, {
+        getLootTable(path) {
+            if (typeof path !== "string")
+                throw conversion();
+            const json = native.definition(path);
+            return json === undefined ? undefined : table(tablePath(path), json);
+        },
+        generateLootFromTable(lootTable, item) {
+            if (!(lootTable instanceof LootTable))
+                throw conversion();
+            return native.fromTable(lootTable.path, tool(item));
+        },
+        generateLootFromBlock(block, item) {
+            return native.fromBlock(block, tool(item));
+        },
+        generateLootFromBlockPermutation(permutation, item) {
+            return native.fromPermutation(permutation, tool(item));
+        },
+        generateLootFromBlockType(blockType, item) {
+            if (blockType === null || typeof blockType !== "object" || typeof blockType.id !== "string")
+                throw conversion();
+            return native.fromBlockType(blockType.id, tool(item));
+        },
+        generateLootFromEntity(entity, item) {
+            return native.fromEntity(entity, tool(item));
+        },
+        generateLootFromEntityType(entityType, item) {
+            return native.fromEntityType(entityType, tool(item));
+        },
+    });
+    for (const key of Object.keys(LootTableManager.prototype))
+        Object.defineProperty(LootTableManager.prototype, key, { enumerable: false });
+    classes.manager = new LootTableManager(token, {});
+    return classes;
+})
+)JS";
+}
+
 namespace ScriptBootstraps {
     const char *errors() {
         return ERRORS;
@@ -1398,5 +1595,9 @@ namespace ScriptBootstraps {
 
     const char *volumes() {
         return VOLUMES;
+    }
+
+    const char *loot() {
+        return LOOT;
     }
 }

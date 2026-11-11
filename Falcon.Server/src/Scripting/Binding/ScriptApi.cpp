@@ -600,7 +600,8 @@ ScriptApi::~ScriptApi() {
 
     for (JSValue value: {mWorld, mSystem, mAfterEvents, mBeforeEvents, mSystemAfterEvents, mSystemBeforeEvents,
                          mScoreboard, mTickingAreas, mGameRules, mSystemInfo, mErrors, mBlockRegistry, mItemRegistry,
-                         mClockRegistry, mDimensionRegistry, mStructureManager, mListVolume, mCommandRegistry})
+                         mClockRegistry, mDimensionRegistry, mStructureManager, mListVolume, mCommandRegistry,
+                         mLootTableManager})
         JS_FreeValue(mContext, value);
 }
 
@@ -1545,7 +1546,26 @@ void ScriptApi::_installBootstraps() {
         JS_FreeValue(mContext, result);
     }
     JS_FreeValue(mContext, installJobs);
+
+    JSValue lootExports = runBootstrap(mContext, mPackName, ScriptBootstraps::loot(), "<loot>",
+                                       _lootNatives(JS_GetPropertyStr(mContext, dataExports, "ItemTypes")));
     JS_FreeValue(mContext, dataExports);
+    JSPropertyEnum *lootNames = nullptr;
+    uint32_t lootCount = 0;
+    if (JS_IsObject(lootExports)
+        && JS_GetOwnPropertyNames(mContext, &lootNames, &lootCount, lootExports, JS_GPN_STRING_MASK) == 0) {
+        for (uint32_t index = 0; index < lootCount; ++index) {
+            const char *name = JS_AtomToCString(mContext, lootNames[index].atom);
+            if (name != nullptr && mSurface.has(name))
+                mServerExports.emplace_back(name, JS_GetProperty(mContext, lootExports, lootNames[index].atom));
+            if (name != nullptr)
+                JS_FreeCString(mContext, name);
+        }
+        JS_FreePropertyEnum(mContext, lootNames, lootCount);
+    }
+    mLootTableManager = JS_GetPropertyStr(mContext, lootExports, "manager");
+    JS_FreeValue(mContext, lootExports);
+    _bindLootTableManager();
 
     JSValue volumes = JS_NewObject(mContext);
     JS_SetPropertyStr(mContext, volumes, "error", JS_GetPropertyStr(mContext, mErrors, "make"));
