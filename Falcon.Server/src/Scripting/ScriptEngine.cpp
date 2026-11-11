@@ -18,6 +18,7 @@
 #include "Scripting/Binding/ScriptApi.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Level/Storage/Loot/LootTableRegistry.h"
 #include "Protocol/Packets/SyncWorldClocksPacket.h"
 
 #include <chrono>
@@ -408,8 +409,9 @@ void ScriptEngine::_installConsole(JSContext *context) {
 size_t ScriptEngine::loadPacks(const std::vector<BehaviorPack> &packs) {
     size_t loaded = 0;
     for (const BehaviorPack &pack: packs) {
-        // structures come from every pack, scripted or not
+        // structures and loot tables come from every pack, scripted or not
         mStructures.addPack(pack.mPath);
+        LootTableRegistry::getInstance().addPack(pack.mPath);
         if (pack.hasScript() && _loadPack(pack))
             loaded++;
     }
