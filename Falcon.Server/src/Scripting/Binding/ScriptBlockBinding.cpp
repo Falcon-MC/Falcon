@@ -540,7 +540,19 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // TODO: only the default opaque black is verified; other dye text colours are not mapped
+    // ItemColor order with the dye texture rgb (qword_14F103E50); the sign keeps opaque rgb
+    struct SignDye {
+        const char *name;
+        int32_t rgb;
+    };
+    const SignDye SIGN_DYES[] = {
+            {"Black", 0x1D1D21},     {"Red", 0xB02E26},     {"Green", 0x5E7C16},  {"Brown", 0x835432},
+            {"Blue", 0x3C44AA},      {"Purple", 0x8932B8},  {"Cyan", 0x169C9C},   {"Silver", 0x9D9D97},
+            {"Gray", 0x474F52},      {"Pink", 0xF38BAA},    {"Lime", 0x80C71F},   {"Yellow", 0xFED83D},
+            {"LightBlue", 0x3AB3DA}, {"Magenta", 0xC74EBD}, {"Orange", 0xF9801D}, {"White", 0xF0F0F0},
+    };
+
+    // only an exact dye rgb answers: the default black text (0) is undefined, sub_141A66520
     JSValue signGetTextDyeColor(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         SignBlockActor *sign = signAt(at);
@@ -554,7 +566,11 @@ namespace {
         const Tag *face = saved.get(side);
         const int32_t color = face != nullptr && face->isCompound() ? face->getInt("SignTextColor", -16777216)
                                                                     : -16777216;
-        return color == -16777216 ? JS_NewString(ctx, "Black") : JS_UNDEFINED;
+        for (const SignDye &dye: SIGN_DYES) {
+            if ((color & 0xFFFFFF) == dye.rgb)
+                return JS_NewString(ctx, dye.name);
+        }
+        return JS_UNDEFINED;
     }
 
     JSValue signGetIsWaxed(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -988,7 +1004,7 @@ namespace {
         return JS_NewInt64(ctx, dynamicPropertyByteCount(propertiesAt(blockAt(ctx, thisVal))));
     }
 
-    // only the default opaque black is a verified colour: other dyes need the game's text colour table
+    // undefined writes opaque black, a dye its texture rgb with full alpha (sub_14C8C4BD0)
     JSValue signSetTextDyeColor(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         SignBlockActor *sign = signAt(at);
@@ -996,16 +1012,20 @@ namespace {
         const char *side = signSide(ctx, argc, argv, 1, valid);
         if (!valid)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        const bool black = argc < 1 || JS_IsUndefined(argv[0]) || toString(ctx, argv[0]) == "Black";
-        // TODO: dye text colours other than black are unverified without IDA
-        if (!black)
-            return at.mApi->throwError("Error",
-                                       "Sign text dye colour " + toString(ctx, argv[0]) + " is not supported.");
+        int32_t color = -16777216;
+        if (argc >= 1 && !JS_IsUndefined(argv[0])) {
+            const std::string name = toString(ctx, argv[0]);
+            const auto dye = std::find_if(std::begin(SIGN_DYES), std::end(SIGN_DYES),
+                                          [&name](const SignDye &entry) { return name == entry.name; });
+            if (dye == std::end(SIGN_DYES))
+                return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+            color = (int32_t) (0xFF000000u | (uint32_t) dye->rgb);
+        }
         if (sign == nullptr)
             return JS_UNDEFINED;
         Tag data = sign->saveNbt();
         Tag face = data.get(side) != nullptr ? *data.get(side) : Tag::ofCompound();
-        face.putInt("SignTextColor", -16777216);
+        face.putInt("SignTextColor", color);
         data.put(side, face);
         writeSign(at, *sign, data);
         return JS_UNDEFINED;
