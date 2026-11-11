@@ -398,6 +398,14 @@ public:
     static std::vector<BlockDrop> grassDrops(const std::string &shearedItem, int32_t shearedCount,
                                              const ItemStack &tool);
 
+    // what a comparator reads from this block, -1 when it gives none and the comparator reads redstone
+    virtual int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+        (void) level;
+        (void) position;
+        (void) state;
+        return -1;
+    }
+
     virtual bool isSignalSource() const {
         return false;
     }

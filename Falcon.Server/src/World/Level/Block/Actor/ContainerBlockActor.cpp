@@ -7,6 +7,8 @@ namespace {
     const char *TAG_SECONDARY = "Secondary";
     const char *TAG_PAGE = "page";
     const char *TAG_TOTAL_PAGES = "totalPages";
+    const char *TAG_HAS_BOOK = "hasBook";
+    const char *TAG_BOOK = "book";
     const char *TAG_FACING = "facing";
     const char *TAG_RECORD_ITEM = "RecordItem";
     const char *TAG_FINISHED_RECORDING = "FinishedRecording";
@@ -51,17 +53,44 @@ void BeaconBlockActor::loadNbt(const Tag &data, const PacketCodecContext &contex
     mSecondaryEffect = data.getInt(TAG_SECONDARY);
 }
 
+// sub_144C3E4B0: nothing at all without a book, else the book and where it is open
 Tag LecternBlockActor::saveNbt() const {
-    Tag data = ContainerBlockActor::saveNbt();
+    Tag data = Tag::ofCompound();
+    if (!hasBook())
+        return data;
+    data.putBool(TAG_HAS_BOOK, true);
     data.putInt(TAG_PAGE, mPage);
     data.putInt(TAG_TOTAL_PAGES, mTotalPages);
+    data.put(TAG_BOOK, ItemStackNbt::write(getBook()));
     return data;
 }
 
 void LecternBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
-    ContainerBlockActor::loadNbt(data, context);
+    mInventory.setContainerItem(0, ItemStack::air());
+    mPage = 0;
+    mTotalPages = 0;
+    const Tag *book = data.get(TAG_BOOK);
+    if (!data.getBool(TAG_HAS_BOOK, false) || book == nullptr)
+        return;
+    mInventory.setContainerItem(0, ItemStackNbt::read(*book, context));
     mPage = data.getInt(TAG_PAGE);
     mTotalPages = data.getInt(TAG_TOTAL_PAGES);
+}
+
+void LecternBlockActor::setBook(ItemStack book) {
+    book.mCount = 1;
+    const Tag *pages = book.mTag.isCompound() ? book.mTag.get("pages") : nullptr;
+    mTotalPages = pages != nullptr && pages->isList() ? (int) pages->getList().size() : 0;
+    mPage = 0;
+    mInventory.setContainerItem(0, std::move(book));
+}
+
+ItemStack LecternBlockActor::takeBook() {
+    ItemStack book = getBook();
+    mInventory.setContainerItem(0, ItemStack::air());
+    mPage = 0;
+    mTotalPages = 0;
+    return book;
 }
 
 // the record alone goes to disk; TicksPlaying and FinishedRecording ride the update packet only (sub_144C358E0)

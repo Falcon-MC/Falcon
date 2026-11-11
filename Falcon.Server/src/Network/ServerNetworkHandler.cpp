@@ -31,6 +31,7 @@
 #include "Network/Handler/BadPacketHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/BookHandler.h"
+#include "Network/Handler/LecternHandler.h"
 #include "Network/Handler/ChatHandler.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "World/Inventory/InventoryManager.h"
@@ -106,6 +107,7 @@
 #include "Protocol/Packets/ActorPickRequestPacket.h"
 #include "Protocol/Packets/AnimatePacket.h"
 #include "Protocol/Packets/BookEditPacket.h"
+#include "Protocol/Packets/LecternUpdatePacket.h"
 #include "Protocol/Packets/EmotePacket.h"
 #include "Protocol/Packets/RequestPermissionsPacket.h"
 #include "Protocol/Packets/SetDefaultGameTypePacket.h"
@@ -1442,6 +1444,7 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
             MinecraftPacketIds::SetDifficulty,
             MinecraftPacketIds::RequestPermissions,
             MinecraftPacketIds::BookEdit,
+            MinecraftPacketIds::LecternUpdate,
             MinecraftPacketIds::PlayerSkin,
     };
 
@@ -2026,6 +2029,14 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BookEditPac
         return;
 
     BookHandler::handleEdit(*this, *player, packet);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const LecternUpdatePacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr || !player->isSpawned())
+        return;
+
+    LecternHandler::handleUpdate(*this, *player, packet);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) {
