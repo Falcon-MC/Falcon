@@ -1134,16 +1134,14 @@ namespace {
         }
     }
 
-    // TODO: the game's formula is unverified (IDA unavailable), max / (level + 1) for now
-    JSValue durabilityGetDamageChance(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+    // Item::getDamageChance ignores the component range: sub_141A53D40
+    JSValue durabilityGetDamageChance(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         int32_t unbreaking = 0;
         if (argc >= 1 && !JS_IsUndefined(argv[0]) && JS_ToInt32(ctx, &unbreaking, argv[0]) != 0)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         if (unbreaking < 0 || unbreaking > 3)
             return ScriptApi::fromContext(ctx)->throwError("ArgumentOutOfBoundsError", "");
-        int32_t min = 0, max = 0;
-        damageChanceRange(componentData(ctx, thisVal), min, max);
-        return JS_NewInt32(ctx, max / (unbreaking + 1));
+        return JS_NewInt32(ctx, 100 / (unbreaking + 1));
     }
 
     JSValue durabilityGetDamageChanceRange(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
