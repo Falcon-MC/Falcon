@@ -10,6 +10,7 @@
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/PistonArmBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
+#include "World/Level/Block/BlockLightProperties.h"
 #include "World/Level/Block/BlockPickItem.h"
 #include "World/Level/Block/BlockPrecipitation.h"
 #include "World/Level/Block/BlockTags.h"
@@ -279,9 +280,11 @@ namespace {
         return at.mApi->makeBlock(*at.mLevel, target.x, target.y, target.z);
     }
 
-    // TODO: the game's combined value is unverified: the brighter of block light and sky light less the darkening
+    // sub_1432D1500: a block filtering all light reads 0, else the brighter of block light and darkened sky light
     JSValue blockGetLightLevel(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
+        if (BlockLightProperties::lightFilter(BlockLightProperties::packed(at.state())) >= 15)
+            return JS_NewInt32(ctx, 0);
         const int block = at.mLevel->getBlockLightAt(at.mPosition.x, at.mPosition.y, at.mPosition.z);
         const int sky = at.mLevel->getSkyLightAt(at.mPosition.x, at.mPosition.y, at.mPosition.z)
                         - at.mLevel->getSkyLightSubtracted();
