@@ -979,12 +979,15 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     const int32_t timerFlag = timerFlagIndex(behavior);
     if (timerFlag >= 0) {
+        // absent: on_end keeps running on interruption as before the field existed
+        const json::Value *onEndWhenInterrupted = component.get("trigger_on_end_when_interrupted");
         return std::make_unique<TimerFlagGoal>(
                 TIMER_FLAGS[timerFlag], rangeTicks(component, "duration_range", "min", TIMER_FLAG_DEFAULT_DURATION),
                 rangeTicks(component, "duration_range", "max", TIMER_FLAG_DEFAULT_DURATION),
                 rangeTicks(component, "cooldown_range", "min", TIMER_FLAG_DEFAULT_COOLDOWN),
                 rangeTicks(component, "cooldown_range", "max", TIMER_FLAG_DEFAULT_COOLDOWN),
-                triggerOf(component, "on_start"), triggerOf(component, "on_end"), controlFlagsOf(component));
+                triggerOf(component, "on_start"), triggerOf(component, "on_end"),
+                onEndWhenInterrupted == nullptr || onEndWhenInterrupted->boolean(true), controlFlagsOf(component));
     }
 
     return nullptr;

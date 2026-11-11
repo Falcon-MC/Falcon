@@ -17,9 +17,10 @@ namespace {
 
 TimerFlagGoal::TimerFlagGoal(ActorFlag flag, int32_t minDuration, int32_t maxDuration, int32_t minCooldown,
                              int32_t maxCooldown, std::shared_ptr<json::Value> onStart,
-                             std::shared_ptr<json::Value> onEnd, uint8_t controlFlags)
+                             std::shared_ptr<json::Value> onEnd, bool onEndWhenInterrupted, uint8_t controlFlags)
         : mFlag(flag), mMinDuration(minDuration), mMaxDuration(maxDuration), mMinCooldown(minCooldown),
-          mMaxCooldown(maxCooldown), mOnStart(std::move(onStart)), mOnEnd(std::move(onEnd)) {
+          mMaxCooldown(maxCooldown), mOnStart(std::move(onStart)), mOnEnd(std::move(onEnd)),
+          mOnEndWhenInterrupted(onEndWhenInterrupted) {
     setRequiredControlFlags(controlFlags);
 }
 
@@ -57,7 +58,9 @@ void TimerFlagGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
 }
 
 void TimerFlagGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
+    const bool interrupted = owner.getCurrentTick() < mEndTick;
     mCooldownEndTick = owner.getCurrentTick() + std::max(1, _roll(mMinCooldown, mMaxCooldown));
     _setFlag(owner, mob, false);
-    EntityEvents::fireTrigger(owner, mob, mOnEnd.get());
+    if (!interrupted || mOnEndWhenInterrupted)
+        EntityEvents::fireTrigger(owner, mob, mOnEnd.get());
 }
