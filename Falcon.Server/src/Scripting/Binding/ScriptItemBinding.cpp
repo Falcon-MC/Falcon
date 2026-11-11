@@ -925,9 +925,9 @@ namespace {
         return JS_TRUE;
     }
 
-    // per pack storage of a block item: the pack name keys its own compound
-    // TODO: the NBT key and the per pack key are unverified (IDA unavailable)
-    const char *const TAG_BLOCK_DYNAMIC_PROPERTIES = "BlockActorDynamicProperties";
+    // compound at the top of the item tag, one child compound per collection: sub_14B4A9E90, sub_149B62E40
+    // TODO: the game names a collection by something other than the pack name, unverified
+    const char *const TAG_BLOCK_DYNAMIC_PROPERTIES = "BlockEntityDynamicProperties";
 
     std::unordered_map<std::string, DynamicPropertyValue> blockPropertiesOf(ScriptApi &api,
                                                                             const ScriptItemData &data) {
